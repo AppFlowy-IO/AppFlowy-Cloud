@@ -72,7 +72,7 @@ jobs:
 
       - name: Check sqlx-data.json is up-to-date
         run: |
-          cargo sqlx prepare --check -- --bin appflowy_server
+          cargo sqlx prepare --check -- --bin http_server
 
       - name: Run cargo test
         run: cargo test

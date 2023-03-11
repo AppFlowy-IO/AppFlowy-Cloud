@@ -1,8 +1,0 @@
-[workspace]
-members = [
-    "http_server",
-    "http-flowy",
-]
-
-[profile.dev]
-split-debuginfo = "unpacked"

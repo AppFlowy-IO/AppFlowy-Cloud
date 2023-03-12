@@ -1,3 +1,4 @@
+use crate::component::auth::AuthError;
 use crate::telemetry::spawn_blocking_with_tracing;
 use anyhow::Context;
 use argon2::password_hash::SaltString;
@@ -6,7 +7,7 @@ use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
 
 pub struct Credentials {
-    pub username: String,
+    pub email: String,
     pub password: Secret<String>,
 }
 
@@ -14,8 +15,8 @@ pub struct Credentials {
 pub async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
-) -> Result<uuid::Uuid, anyhow::Error> {
-    let mut user_id = None;
+) -> Result<uuid::Uuid, AuthError> {
+    let mut uid = None;
     let mut expected_hash_password = Secret::new(
         "$argon2id$v=19$m=15000,t=2,p=1$\
         gZiV/M1gPc22ElAH/Jh1Hw$\
@@ -23,10 +24,10 @@ pub async fn validate_credentials(
             .to_string(),
     );
 
-    if let Some((stored_user_id, stored_hash_password)) =
-        get_stored_credentials(&credentials.username, pool).await?
+    if let Some((stored_uid, stored_hash_password)) =
+        get_stored_credentials(&credentials.email, pool).await?
     {
-        user_id = Some(stored_user_id);
+        uid = Some(stored_uid);
         expected_hash_password = stored_hash_password;
     }
 
@@ -36,7 +37,8 @@ pub async fn validate_credentials(
     .await
     .context("Failed to spawn blocking task.")??;
 
-    user_id.ok_or_else(|| anyhow::anyhow!("Unknown username."))
+    uid.ok_or_else(|| anyhow::anyhow!("Unknown email."))
+        .map_err(AuthError::InvalidCredentials)
 }
 
 #[tracing::instrument(name = "Change password", skip(password, pool))]

@@ -1,5 +1,5 @@
 use crate::component::auth::{
-    login, register, InputParamsError, LoginRequest, RegisterRequestParams,
+    login, logout, register, InputParamsError, LoggedUser, LoginRequest, RegisterRequestParams,
 };
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
@@ -27,12 +27,9 @@ async fn login_handler(req: Json<LoginRequest>, state: Data<State>) -> Result<Ht
     Ok(HttpResponse::Ok().json(resp))
 }
 
-async fn logout_handler(
-    payload: Payload,
-    id: Identity,
-    state: Data<State>,
-) -> Result<HttpResponse> {
-    todo!()
+async fn logout_handler(logged_user: LoggedUser, state: Data<State>) -> Result<HttpResponse> {
+    logout(logged_user, state.cache.clone());
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[tracing::instrument(level = "debug", skip(state))]

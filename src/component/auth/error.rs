@@ -18,7 +18,7 @@ pub enum AuthError {
     Unauthorized,
 
     #[error("User internal error")]
-    InternalError(#[source] anyhow::Error),
+    InternalError(#[from] anyhow::Error),
 
     #[error("Parser uuid failed: {}", err)]
     InvalidUuid { err: String },

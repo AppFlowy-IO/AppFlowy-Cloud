@@ -1,5 +1,5 @@
-use crate::test_server::spawn_server;
-use appflowy_server::component::auth::RegisterResponse;
+use crate::test_server::{error_msg_from_resp, spawn_server};
+use appflowy_server::component::auth::{InputParamsError, RegisterResponse};
 use reqwest::StatusCode;
 
 #[tokio::test]
@@ -12,7 +12,6 @@ async fn register_success() {
 
     let bytes = http_resp.bytes().await.unwrap();
     let response: RegisterResponse = serde_json::from_slice(&bytes).unwrap();
-
     println!("{:?}", response);
 }
 
@@ -21,22 +20,27 @@ async fn register_with_invalid_password() {
     let server = spawn_server().await;
     let http_resp = server.register("user 1", "fake@appflowy.io", "123").await;
     assert_eq!(http_resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(error_msg_from_resp(http_resp).await, InputParamsError::InvalidPassword.to_string());
 }
 
 #[tokio::test]
 async fn register_with_invalid_name() {
     let server = spawn_server().await;
+    let name = "".to_string();
     let http_resp = server
-        .register("", "fake@appflowy.io", "FakePassword!123")
+        .register(&name, "fake@appflowy.io", "FakePassword!123")
         .await;
     assert_eq!(http_resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(error_msg_from_resp(http_resp).await, InputParamsError::InvalidName(name).to_string());
 }
 
 #[tokio::test]
 async fn register_with_invalid_email() {
     let server = spawn_server().await;
+    let email = "appflowy.io".to_string();
     let http_resp = server
-        .register("me", "appflowy.io", "FakePassword!123")
+        .register("me", &email, "FakePassword!123")
         .await;
     assert_eq!(http_resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(error_msg_from_resp(http_resp).await, InputParamsError::InvalidEmail(email).to_string());
 }

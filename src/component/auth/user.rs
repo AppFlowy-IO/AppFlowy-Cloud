@@ -29,16 +29,16 @@ pub async fn login(
         password: Secret::new(password),
     };
 
-    match validate_credentials(credentials, &pg_pool).await? {
+    match validate_credentials(credentials, &pg_pool).await {
         Ok(uid) => {
             let uid = uid.to_string();
             let token = Token::create_token(&uid)?.into();
-            let logged_user = LoggedUser::new(uid);
+            let logged_user = LoggedUser::new(uid.clone());
             cache.write().await.authorized(logged_user);
 
             Ok(LoginResponse {
                 token,
-                user_id: uid,
+                uid,
             })
         }
         Err(err) => Err(err),
@@ -120,13 +120,12 @@ async fn is_email_exist(
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
-    pub name: String,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct LoginResponse {
     pub token: String,
-    pub user_id: String,
+    pub uid: String,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]

@@ -3,10 +3,11 @@ use actix_web::{dev::Server, middleware, web, web::Data, App, HttpServer};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
+use tracing_actix_web::TracingLogger;
 
 use crate::api::{token_scope, user_scope};
 
-use crate::config::config::{Config, DatabaseSettings};
+use crate::config::config::{Config, DatabaseSetting};
 use crate::config::env::{domain, secret};
 use crate::middleware::cors::default_cors;
 use crate::state::State;
@@ -46,6 +47,7 @@ pub fn run(listener: TcpListener, state: State) -> Result<Server, std::io::Error
             .wrap(middleware::Logger::default())
             .wrap(IdentityMiddleware::default())
             .wrap(default_cors())
+            .wrap(TracingLogger::default())
             .app_data(web::JsonConfig::default().limit(4096))
             .service(user_scope())
             .service(token_scope())
@@ -72,7 +74,7 @@ pub async fn init_state(configuration: &Config) -> State {
     }
 }
 
-pub async fn get_connection_pool(setting: &DatabaseSettings) -> Result<PgPool, sqlx::Error> {
+pub async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .connect_timeout(std::time::Duration::from_secs(5))
         .connect_with(setting.with_db())

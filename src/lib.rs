@@ -4,3 +4,4 @@ pub mod component;
 pub mod config;
 pub mod middleware;
 pub mod state;
+pub mod telemetry;

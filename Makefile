@@ -1,4 +1,4 @@
-ROOT = "./scripts"
+ROOT = "./build"
 SEMVER_VERSION=$(shell grep version Cargo.toml | awk -F"\"" '{print $$2}' | head -n 1)
 
 .PHONY: init_database docker_image local_server docker_test
@@ -8,7 +8,7 @@ init_database:
 
 docker_image:
 	source $(ROOT)/docker_env.sh && docker-compose up -d postgres_db
-	source $(ROOT)/docker_env.sh && docker-compose up -d http_server
+	source $(ROOT)/docker_env.sh && docker-compose up -d appflowy_server
 
 local_server:
 	cargo run

@@ -1,19 +1,58 @@
 {
   "db": "PostgreSQL",
-  "e8c487b4314c267f6da2667b95f6c8003fabc2461c10df2d6d39d081e74e167f": {
-    "query": "\n            INSERT INTO user (uid, username, password, email,create_time)\n            VALUES ($1, $2, $3, $4, $5)\n        ",
+  "1775f308cda63b61c0aaf4d8d1c7cf00f6bff5041e821575f65867c32d42f1b0": {
     "describe": {
       "columns": [],
+      "nullable": [],
       "parameters": {
         "Left": [
           "Uuid",
           "Text",
           "Text",
-          "Text",
-          "Timestamptz"
+          "Timestamptz",
+          "Text"
         ]
-      },
-      "nullable": []
-    }
+      }
+    },
+    "query": "\n            INSERT INTO users (uid, email, username, create_time, password)\n            VALUES ($1, $2, $3, $4, $5)\n        "
+  },
+  "b188bb8915fa0fc8c5dfefa27f1b086b839633c3c4dc6e4991b43a608d46a170": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Uuid"
+        },
+        {
+          "name": "password",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n        SELECT uid, password\n        FROM users\n        WHERE email = $1\n        "
+  },
+  "b754835f0a1543fc32acbfee436f775e542036888e7a2051622efa435debb318": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Uuid"
+        ]
+      }
+    },
+    "query": "\n        UPDATE users\n        SET password= $1\n        WHERE uid = $2\n        "
   }
 }

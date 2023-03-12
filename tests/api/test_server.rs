@@ -9,9 +9,13 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
-    let default_filter_level = "info".to_string();
+    let level = "trace".to_string();
+    let mut filters = vec![];
+    filters.push(format!("appflowy_server={}", level));
+    filters.push(format!("hyper={}", level));
+
     let subscriber_name = "test".to_string();
-    let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::stdout);
+    let subscriber = get_subscriber(subscriber_name, filters.join(","), std::io::stdout);
     init_subscriber(subscriber);
 });
 
@@ -42,7 +46,6 @@ impl TestServer {
 
 pub async fn spawn_server() -> TestServer {
     Lazy::force(&TRACING);
-
     let database_name = Uuid::new_v4().to_string();
     let config = {
         let mut config = get_configuration().expect("Failed to read configuration.");
@@ -58,17 +61,17 @@ pub async fn spawn_server() -> TestServer {
         .await
         .expect("Failed to build application.");
 
+    let port = application.port();
+    let address = format!("http://localhost:{}", port);
+    let _ = tokio::spawn(async {
+        let _ = application.run_until_stopped().await;
+    });
+
     let api_client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .cookie_store(true)
         .build()
         .unwrap();
-
-    let port = application.port();
-    let address = format!("http://localhost:{}", port);
-    let _ = tokio::spawn(async {
-        let _ = application.run_until_stopped();
-    });
 
     TestServer {
         state,
@@ -99,4 +102,32 @@ async fn configure_database(config: &DatabaseSetting) -> PgPool {
         .expect("Failed to migrate the database");
 
     connection_pool
+}
+
+#[derive(serde::Serialize)]
+pub struct TestUser {
+    name: String,
+    pub email: String,
+    pub password: String,
+}
+
+impl TestUser {
+    pub fn generate() -> Self {
+        Self {
+            name: "Me".to_string(),
+            email: "me@appflowy.io".to_string(),
+            password: "HelloAppFlowy123".to_string(),
+        }
+    }
+
+    pub async fn register(&self, test_server: &TestServer) {
+        let url = format!("{}/api/user/register", test_server.address);
+        test_server
+            .api_client
+            .post(&url)
+            .json(&self)
+            .send()
+            .await
+            .expect("Fail to register user");
+    }
 }

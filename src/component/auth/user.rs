@@ -1,20 +1,56 @@
-use crate::component::auth::{compute_hash_password, internal_error, AuthError};
+use crate::component::auth::{
+    compute_hash_password, internal_error, validate_credentials, AuthError, Credentials,
+};
 use crate::config::env::{domain, jwt_secret};
 use crate::state::Cache;
 use actix_web::http::header::HeaderValue;
 use actix_web::{FromRequest, HttpRequest};
-use anyhow::Context;
+use anyhow::{Context, Error};
 use chrono::Utc;
 use chrono::{Duration, Local};
 use futures_util::future::{ready, Ready};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
-pub async fn register_user(
+pub async fn login(
+    pg_pool: PgPool,
+    cache: Arc<RwLock<Cache>>,
+    email: String,
+    password: String,
+) -> Result<LoginResponse, AuthError> {
+    let credentials = Credentials {
+        email,
+        password: Secret::new(password),
+    };
+
+    match validate_credentials(credentials, &pg_pool).await? {
+        Ok(uid) => {
+            let uid = uid.to_string();
+            let token = Token::create_token(&uid)?.into();
+            let logged_user = LoggedUser::new(uid);
+            cache.write().await.authorized(logged_user);
+
+            Ok(LoginResponse {
+                token,
+                user_id: uid,
+            })
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<Cache>>) -> Result<(), AuthError> {
+    cache.write().await.unauthorized(logged_user);
+    Ok(())
+}
+
+pub async fn register(
     pg_pool: PgPool,
     cache: Arc<RwLock<Cache>>,
     username: String,
@@ -88,6 +124,12 @@ pub struct LoginRequest {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
+pub struct LoginResponse {
+    pub token: String,
+    pub user_id: String,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct RegisterRequestParams {
     pub email: String,
     pub password: String,
@@ -101,20 +143,18 @@ pub struct RegisterResponse {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Ord, PartialOrd)]
 pub struct LoggedUser {
-    pub user_id: String,
+    pub uid: String,
 }
 
 impl std::convert::From<Claim> for LoggedUser {
     fn from(c: Claim) -> Self {
-        Self {
-            user_id: c.user_id(),
-        }
+        Self { uid: c.user_id() }
     }
 }
 
 impl LoggedUser {
     pub fn new(user_id: String) -> Self {
-        Self { user_id }
+        Self { uid: user_id }
     }
 
     pub fn from_token(token: String) -> Result<Self, AuthError> {
@@ -123,7 +163,7 @@ impl LoggedUser {
     }
 
     pub fn as_uuid(&self) -> Result<uuid::Uuid, anyhow::Error> {
-        let uuid = uuid::Uuid::parse_str(&self.user_id).context("Invalid uuid")?;
+        let uuid = uuid::Uuid::parse_str(&self.uid).context("Invalid uuid")?;
         Ok(uuid)
     }
 }

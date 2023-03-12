@@ -5,10 +5,10 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
 
-use crate::api::{token_scope, user_scope};
+use crate::api::{password_scope, token_scope, user_scope};
 
 use crate::config::config::{Config, DatabaseSetting};
-use crate::config::env::{domain, secret};
+
 use crate::middleware::cors::default_cors;
 use crate::state::State;
 
@@ -39,9 +39,6 @@ impl Application {
 }
 
 pub fn run(listener: TcpListener, state: State) -> Result<Server, std::io::Error> {
-    let domain = domain();
-    let secret: String = secret();
-
     let server = HttpServer::new(move || {
         App::new()
             .wrap(middleware::Logger::default())
@@ -51,6 +48,7 @@ pub fn run(listener: TcpListener, state: State) -> Result<Server, std::io::Error
             .app_data(web::JsonConfig::default().limit(4096))
             .service(user_scope())
             .service(token_scope())
+            .service(password_scope())
             .app_data(Data::new(state.clone()))
     })
     .listen(listener)?
@@ -76,7 +74,7 @@ pub async fn init_state(configuration: &Config) -> State {
 
 pub async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
-        .connect_timeout(std::time::Duration::from_secs(5))
+        .acquire_timeout(std::time::Duration::from_secs(5))
         .connect_with(setting.with_db())
         .await
 }

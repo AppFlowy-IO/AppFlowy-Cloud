@@ -1,4 +1,4 @@
-use crate::api::LoggedUser;
+use crate::component::auth::LoggedUser;
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use std::collections::BTreeMap;
@@ -12,7 +12,7 @@ pub struct State {
 }
 
 impl State {
-    pub async fn load_users(pool: &PgPool) {
+    pub async fn load_users(_pool: &PgPool) {
         todo!()
     }
 }
@@ -55,12 +55,11 @@ impl Cache {
         }
     }
 
-    pub fn store_auth(&mut self, user: LoggedUser, is_auth: bool) {
-        let status = if is_auth {
-            AuthStatus::Authorized(Utc::now())
-        } else {
-            AuthStatus::NotAuthorized
-        };
-        self.user.insert(user, status);
+    pub fn authorized(&mut self, user: LoggedUser) {
+        self.user.insert(user, AuthStatus::Authorized(Utc::now()));
+    }
+
+    pub fn unauthorized(&mut self, user: LoggedUser) {
+        self.user.insert(user, AuthStatus::NotAuthorized);
     }
 }

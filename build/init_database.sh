@@ -22,7 +22,7 @@ DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
 DB_PORT="${POSTGRES_PORT:=5432}"
 DB_HOST="${POSTGRES_HOST:=localhost}"
-DB_NAME="${POSTGRES_DB:=flowy}"
+DB_NAME="${POSTGRES_DB:=appflowy_pg}"
 
 if [[ -z "${SKIP_DOCKER}" ]]
 then
@@ -39,7 +39,7 @@ then
       -e POSTGRES_DB="${DB_NAME}" \
       -p "${DB_PORT}":5432 \
       -d \
-      --name "flowy_postgres_$(date '+%s')" \
+      --name "af_postgres_$(date '+%s')" \
       postgres -N 1000
 fi
 

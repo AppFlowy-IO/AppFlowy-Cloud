@@ -40,7 +40,21 @@ impl TestServer {
             .json(&payload)
             .send()
             .await
-            .expect("Fail to register user")
+            .expect("Register failed")
+    }
+
+    pub async fn login(&self, email: &str, password: &str) -> reqwest::Response {
+        let payload = serde_json::json!({
+            "password": password,
+            "email": email
+        });
+        let url = format!("{}/api/user/login", self.address);
+        self.api_client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .expect("Login failed")
     }
 }
 
@@ -116,7 +130,7 @@ impl TestUser {
         Self {
             name: "Me".to_string(),
             email: "me@appflowy.io".to_string(),
-            password: "HelloAppFlowy123".to_string(),
+            password: "Hello@AppFlowy123".to_string(),
         }
     }
 
@@ -125,9 +139,14 @@ impl TestUser {
         test_server
             .api_client
             .post(&url)
-            .json(&self)
+            .json(self)
             .send()
             .await
             .expect("Fail to register user");
     }
+}
+
+pub async fn error_msg_from_resp(resp: reqwest::Response) -> String {
+    let bytes = resp.bytes().await.unwrap();
+    String::from_utf8(bytes.to_vec()).unwrap()
 }

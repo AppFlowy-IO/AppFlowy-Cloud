@@ -36,10 +36,10 @@ derive_more = {version = "0.99"}
 
 # tracing
 tracing = { version = "0.1.37" }
-tracing-futures = "0.2.5"
 tracing-subscriber = { version = "0.3.16", features = ["registry", "env-filter", "ansi", "json"] }
 tracing-bunyan-formatter = "0.3.6"
-tracing-appender = "0.2.2"
+tracing-actix-web = "0.7"
+tracing-log = "0.1.1"
 
 ormx = { version = "0.10.0", features = ["postgres"]}
 [dependencies.sqlx]
@@ -56,7 +56,7 @@ features = [
 ]
 
 [[bin]]
-name = "http_server"
+name = "appflowy_server"
 path = "src/main.rs"
 
 

@@ -68,11 +68,11 @@ jobs:
       - name: Migrate database
         run: |
           sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true POSTGRES_PORT=5433 ./scripts/init_database.sh
+          SKIP_DOCKER=true POSTGRES_PORT=5433 ./build/init_database.sh
 
       - name: Check sqlx-data.json is up-to-date
         run: |
-          cargo sqlx prepare --check -- --bin http_server
+          cargo sqlx prepare --check -- --bin appflowy_server
 
       - name: Run cargo test
         run: cargo test
@@ -140,7 +140,7 @@ jobs:
       - name: Migrate database
         run: |
           sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true POSTGRES_PORT=5433 ./scripts/init_database.sh
+          SKIP_DOCKER=true POSTGRES_PORT=5433 ./build/init_database.sh
           
       - run: rustup component add clippy
       - run: cargo clippy -- -D warnings

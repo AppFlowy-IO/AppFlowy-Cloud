@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct Config {
-    pub database: DatabaseSettings,
+    pub database: DatabaseSetting,
     pub application: ApplicationSettings,
 }
 
@@ -25,7 +25,7 @@ pub struct ApplicationSettings {
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
-pub struct DatabaseSettings {
+pub struct DatabaseSetting {
     pub username: String,
     pub password: String,
     #[serde(deserialize_with = "deserialize_number_from_string")]
@@ -35,7 +35,7 @@ pub struct DatabaseSettings {
     pub require_ssl: bool,
 }
 
-impl DatabaseSettings {
+impl DatabaseSetting {
     pub fn without_db(&self) -> PgConnectOptions {
         let ssl_mode = if self.require_ssl {
             PgSslMode::Require

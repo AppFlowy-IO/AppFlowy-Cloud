@@ -5,7 +5,7 @@ use actix_web::dev::Payload;
 use actix_web::{FromRequest, HttpRequest};
 use secrecy::{ExposeSecret, Secret};
 use std::future::{ready, Ready};
-use uuid::Uuid;
+
 
 pub struct SessionToken(Session);
 

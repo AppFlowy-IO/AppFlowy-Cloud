@@ -3,7 +3,8 @@ use appflowy_server::config::config::{get_configuration, DatabaseSetting};
 use appflowy_server::state::State;
 use appflowy_server::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
-use serde_json::json;
+
+use appflowy_server::component::auth::{RegisterResponse, HEADER_TOKEN};
 use sqlx::types::Uuid;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 
@@ -56,6 +57,28 @@ impl TestServer {
             .await
             .expect("Login failed")
     }
+
+    pub async fn change_password(
+        &self,
+        token: String,
+        current_password: &str,
+        new_password: &str,
+        new_password_confirm: &str,
+    ) -> reqwest::Response {
+        let payload = serde_json::json!({
+            "current_password": current_password,
+            "new_password": new_password,
+            "new_password_confirm": new_password_confirm
+        });
+        let url = format!("{}/api/user/password", self.address);
+        self.api_client
+            .post(&url)
+            .header(HEADER_TOKEN, token)
+            .json(&payload)
+            .send()
+            .await
+            .expect("Change password failed")
+    }
 }
 
 pub async fn spawn_server() -> TestServer {
@@ -73,7 +96,7 @@ pub async fn spawn_server() -> TestServer {
     let state = init_state(&config).await;
     let application = Application::build(config.clone(), state.clone())
         .await
-        .expect("Failed to build application.");
+        .expect("Failed to build application");
 
     let port = application.port();
     let address = format!("http://localhost:{}", port);
@@ -134,15 +157,19 @@ impl TestUser {
         }
     }
 
-    pub async fn register(&self, test_server: &TestServer) {
+    pub async fn register(&self, test_server: &TestServer) -> String {
         let url = format!("{}/api/user/register", test_server.address);
-        test_server
+        let resp = test_server
             .api_client
             .post(&url)
             .json(self)
             .send()
             .await
             .expect("Fail to register user");
+
+        let bytes = resp.bytes().await.unwrap();
+        let response: RegisterResponse = serde_json::from_slice(&bytes).unwrap();
+        response.token
     }
 }
 

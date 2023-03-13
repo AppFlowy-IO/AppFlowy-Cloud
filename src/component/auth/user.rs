@@ -3,21 +3,20 @@ use crate::component::auth::{
 };
 use crate::config::env::{domain, jwt_secret};
 use crate::state::Cache;
+use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::http::header::HeaderValue;
 use actix_web::{FromRequest, HttpRequest};
-use anyhow::{Context, Error};
+use anyhow::Context;
 use chrono::Utc;
 use chrono::{Duration, Local};
 use futures_util::future::{ready, Ready};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use secrecy::zeroize::DefaultIsZeroes;
-use secrecy::{Secret, Zeroize};
+use secrecy::{ExposeSecret, Secret, Zeroize};
 use serde::{Deserialize, Serialize};
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use uuid::Uuid;
 
 pub async fn login(
     pg_pool: PgPool,
@@ -44,13 +43,15 @@ pub async fn login(
                 Secret::new(token),
             ))
         }
-        Err(err) => Err(err),
+        Err(err) => {
+            //
+            Err(err)
+        }
     }
 }
 
-pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<Cache>>) -> Result<(), AuthError> {
+pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<Cache>>) {
     cache.write().await.unauthorized(logged_user);
-    Ok(())
 }
 
 pub async fn register(
@@ -85,7 +86,7 @@ pub async fn register(
         email,
         username,
         Utc::now(),
-        password,
+        password.expose_secret(),
     )
     .execute(&mut transaction)
     .await
@@ -104,6 +105,78 @@ pub async fn register(
     Ok(RegisterResponse {
         token: token.into(),
     })
+}
+
+pub async fn change_password(
+    pg_pool: PgPool,
+    logged_user: LoggedUser,
+    current_password: String,
+    new_password: String,
+) -> Result<(), AuthError> {
+    let mut transaction = pg_pool
+        .begin()
+        .await
+        .context("Failed to acquire a Postgres connection to change password")
+        .map_err(internal_error)?;
+
+    let email = get_user_email(logged_user.expose_secret(), &mut transaction).await?;
+
+    // check password
+    let credentials = Credentials {
+        email,
+        password: Secret::new(current_password),
+    };
+    let _ = validate_credentials(credentials, &pg_pool).await?;
+
+    // Hash password
+    let new_hash_password =
+        spawn_blocking_with_tracing(move || compute_hash_password(new_password.as_bytes()))
+            .await
+            .context("Failed to hash password")??;
+
+    let uid =
+        uuid::Uuid::parse_str(logged_user.expose_secret()).map_err(|e| AuthError::InvalidUuid {
+            err: format!("{}", e),
+        })?;
+    // Save password to disk
+    sqlx::query!(
+        r#"
+        UPDATE users
+        SET password = $1
+        WHERE uid = $2
+        "#,
+        new_hash_password.expose_secret(),
+        uid
+    )
+    .execute(&mut transaction)
+    .await
+    .context("Failed to change user's password in the database.")?;
+
+    transaction
+        .commit()
+        .await
+        .context("Failed to commit SQL transaction to change user's password")
+        .map_err(internal_error)?;
+    Ok(())
+}
+
+pub async fn get_user_email(
+    uid: &str,
+    transaction: &mut Transaction<'_, Postgres>,
+) -> Result<String, anyhow::Error> {
+    let uid = uuid::Uuid::parse_str(uid)?;
+    let row = sqlx::query!(
+        r#"
+        SELECT email 
+        FROM users
+        WHERE uid = $1
+        "#,
+        uid,
+    )
+    .fetch_one(transaction)
+    .await
+    .context("Failed to retrieve the username`")?;
+    Ok(row.email)
 }
 
 /// TODO: cache this state in [State]
@@ -125,7 +198,7 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Default, Serialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct LoginResponse {
     pub token: String,
     pub uid: String,
@@ -138,35 +211,49 @@ pub struct RegisterRequest {
     pub name: String,
 }
 
-#[derive(Default, Serialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct RegisterResponse {
     pub token: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Ord, PartialOrd)]
+#[derive(Default, Deserialize, Debug)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+    pub new_password_confirm: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct LoggedUser {
-    pub uid: String,
+    uid: Secret<String>,
 }
 
 impl std::convert::From<Claim> for LoggedUser {
     fn from(c: Claim) -> Self {
-        Self { uid: c.user_id() }
+        Self {
+            uid: Secret::new(c.user_id()),
+        }
     }
 }
 
 impl LoggedUser {
-    pub fn new(user_id: String) -> Self {
-        Self { uid: user_id }
+    pub fn new(uid: String) -> Self {
+        Self {
+            uid: Secret::new(uid),
+        }
     }
 
     pub fn from_token(token: String) -> Result<Self, AuthError> {
         let user: LoggedUser = Token::decode_token(&token.into())?.into();
         Ok(user)
     }
+}
 
-    pub fn as_uuid(&self) -> Result<uuid::Uuid, anyhow::Error> {
-        let uuid = uuid::Uuid::parse_str(&self.uid).context("Invalid uuid")?;
-        Ok(uuid)
+impl std::ops::Deref for LoggedUser {
+    type Target = Secret<String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.uid
     }
 }
 
@@ -210,23 +297,23 @@ pub struct Claim {
     iat: i64,
     // expiry
     exp: i64,
-    user_id: String,
+    uid: String,
 }
 
 impl Claim {
-    pub fn with_user_id(user_id: &str) -> Self {
+    pub fn with_user_id(uid: &str) -> Self {
         let domain = domain();
         Self {
             iss: domain,
             sub: "auth".to_string(),
-            user_id: user_id.to_string(),
+            uid: uid.to_string(),
             iat: Local::now().timestamp(),
             exp: (Local::now() + Duration::days(EXPIRED_DURATION_DAYS)).timestamp(),
         }
     }
 
     pub fn user_id(self) -> String {
-        self.user_id
+        self.uid
     }
 }
 
@@ -259,7 +346,7 @@ impl Token {
             &Validation::new(DEFAULT_ALGORITHM),
         )
         .map(|data| Ok(data.claims))
-        .map_err(|err| AuthError::Unauthorized)?
+        .map_err(|_err| AuthError::Unauthorized)?
     }
 
     pub fn parser_from_request(request: &HttpRequest) -> Result<Self, AuthError> {
@@ -272,6 +359,7 @@ impl Token {
         }
     }
 }
+
 impl std::convert::From<String> for Token {
     fn from(val: String) -> Self {
         Self(val)
@@ -288,7 +376,7 @@ impl FromRequest for Token {
     type Error = AuthError;
     type Future = Ready<Result<Self, Self::Error>>;
 
-    fn from_request(req: &HttpRequest, payload: &mut actix_http::Payload) -> Self::Future {
+    fn from_request(req: &HttpRequest, _payload: &mut actix_http::Payload) -> Self::Future {
         match Token::parser_from_request(req) {
             Ok(token) => ready(Ok(token)),
             Err(err) => ready(Err(err)),

@@ -1,11 +1,10 @@
+use crate::api::{token_scope, user_scope};
 use actix_identity::IdentityMiddleware;
 use actix_web::{dev::Server, middleware, web, web::Data, App, HttpServer};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
-
-use crate::api::{password_scope, token_scope, user_scope};
 
 use crate::config::config::{Config, DatabaseSetting};
 

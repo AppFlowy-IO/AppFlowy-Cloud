@@ -14,6 +14,9 @@ pub enum AuthError {
     #[error("{} is already used", email)]
     UserAlreadyExist { email: String },
 
+    #[error("Invalid password")]
+    InvalidPassword,
+
     #[error("User is unauthorized")]
     Unauthorized,
 
@@ -34,6 +37,7 @@ impl actix_web::error::ResponseError for AuthError {
             AuthError::InvalidCredentials(_) => StatusCode::UNAUTHORIZED,
             AuthError::UserNotExist(_) => StatusCode::UNAUTHORIZED,
             AuthError::UserAlreadyExist { .. } => StatusCode::BAD_REQUEST,
+            AuthError::InvalidPassword => StatusCode::UNAUTHORIZED,
             AuthError::Unauthorized => StatusCode::UNAUTHORIZED,
             AuthError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AuthError::InvalidUuid { .. } => StatusCode::UNAUTHORIZED,
@@ -55,6 +59,9 @@ pub enum InputParamsError {
 
     #[error("Invalid password")]
     InvalidPassword,
+
+    #[error("You entered two different new passwords")]
+    PasswordNotMatch,
 }
 
 impl actix_web::error::ResponseError for InputParamsError {
@@ -63,6 +70,7 @@ impl actix_web::error::ResponseError for InputParamsError {
             InputParamsError::InvalidName(_) => StatusCode::BAD_REQUEST,
             InputParamsError::InvalidEmail(_) => StatusCode::BAD_REQUEST,
             InputParamsError::InvalidPassword => StatusCode::BAD_REQUEST,
+            InputParamsError::PasswordNotMatch => StatusCode::BAD_REQUEST,
         }
     }
 

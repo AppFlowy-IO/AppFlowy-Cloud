@@ -2,11 +2,13 @@ use config::{Config as InnerConfig, FileFormat};
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::convert::{TryFrom, TryInto};
+use secrecy::Secret;
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct Config {
     pub database: DatabaseSetting,
     pub application: ApplicationSettings,
+    pub redis_uri: Secret<String>,
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our
@@ -22,6 +24,7 @@ pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
+    pub secret_key: Secret<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]

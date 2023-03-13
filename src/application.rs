@@ -1,15 +1,19 @@
 use crate::api::{token_scope, user_scope};
+use crate::component::auth::HEADER_TOKEN;
+use crate::config::config::{Config, DatabaseSetting};
+use crate::middleware::cors::default_cors;
+use crate::state::State;
 use actix_identity::IdentityMiddleware;
-use actix_web::{dev::Server, middleware, web, web::Data, App, HttpServer};
+
+use actix_session::storage::RedisSessionStore;
+use actix_session::SessionMiddleware;
+use actix_web::cookie::Key;
+use actix_web::{dev::Server, web, web::Data, App, HttpServer};
+use secrecy::{ExposeSecret, Secret};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tracing_actix_web::TracingLogger;
-
-use crate::config::config::{Config, DatabaseSetting};
-
-use crate::middleware::cors::default_cors;
-use crate::state::State;
 
 pub struct Application {
     port: u16,
@@ -17,14 +21,18 @@ pub struct Application {
 }
 
 impl Application {
-    pub async fn build(configuration: Config, state: State) -> Result<Self, std::io::Error> {
-        let address = format!(
-            "{}:{}",
-            configuration.application.host, configuration.application.port
-        );
+    pub async fn build(config: Config, state: State) -> Result<Self, anyhow::Error> {
+        let address = format!("{}:{}", config.application.host, config.application.port);
         let listener = TcpListener::bind(&address)?;
         let port = listener.local_addr().unwrap().port();
-        let server = run(listener, state)?;
+        let server = run(
+            listener,
+            state,
+            config.application.secret_key.clone(),
+            config.redis_uri.clone(),
+        )
+        .await?;
+
         Ok(Self { port, server })
     }
 
@@ -37,17 +45,28 @@ impl Application {
     }
 }
 
-pub fn run(listener: TcpListener, state: State) -> Result<Server, std::io::Error> {
+pub async fn run(
+    listener: TcpListener,
+    state: State,
+    secret_key: Secret<String>,
+    redis_uri: Secret<String>,
+) -> Result<Server, anyhow::Error> {
+    let redis_store = RedisSessionStore::new(redis_uri.expose_secret()).await?;
     let server = HttpServer::new(move || {
+        let secret_key = Key::from(secret_key.expose_secret().as_bytes());
         App::new()
-            .wrap(middleware::Logger::default())
+            // Session middleware
+            .wrap(
+                SessionMiddleware::builder(redis_store.clone(), secret_key.clone())
+                    .cookie_name(HEADER_TOKEN.to_string())
+                    .build(),
+            )
             .wrap(IdentityMiddleware::default())
             .wrap(default_cors())
             .wrap(TracingLogger::default())
             .app_data(web::JsonConfig::default().limit(4096))
             .service(user_scope())
             .service(token_scope())
-            .service(password_scope())
             .app_data(Data::new(state.clone()))
     })
     .listen(listener)?

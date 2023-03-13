@@ -1,9 +1,11 @@
 application:
   port: 8000
   host: 0.0.0.0
+  secret_key: "d8b242c8a47de60e1ebf4e6bb7d3315cdd4b4071919fe1065566f23a354753ae"
 database:
   host: "localhost"
   port: 5433
   username: "postgres"
   password: "password"
   database_name: "appflowy_pg"
+redis_uri: "redis://127.0.0.1:6379"

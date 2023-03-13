@@ -4,7 +4,7 @@ use anyhow::Context;
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use secrecy::{ExposeSecret, Secret};
-use serde::Deserialize;
+
 use sqlx::PgPool;
 
 pub struct Credentials {
@@ -42,43 +42,16 @@ pub async fn validate_credentials(
         .map_err(AuthError::InvalidCredentials)
 }
 
-#[tracing::instrument(skip(password, pool))]
-pub async fn change_password(
-    uid: uuid::Uuid,
-    password: Secret<String>,
-    pool: &PgPool,
-) -> Result<(), anyhow::Error> {
-    let hash_password = spawn_blocking_with_tracing(move || {
-        let s = compute_hash_password(password.expose_secret().as_bytes())?;
-        Ok::<Secret<String>, anyhow::Error>(Secret::new(s))
-    })
-    .await?
-    .context("Failed to hash password")?;
-
-    sqlx::query!(
-        r#"
-        UPDATE users
-        SET password= $1
-        WHERE uid = $2
-        "#,
-        hash_password.expose_secret(),
-        uid
-    )
-    .execute(pool)
-    .await
-    .context("Failed to change user's password in the database.")?;
-    Ok(())
-}
-
-pub fn compute_hash_password(password: &[u8]) -> Result<String, anyhow::Error> {
+pub fn compute_hash_password(password: &[u8]) -> Result<Secret<String>, anyhow::Error> {
     let salt = SaltString::generate(&mut rand::thread_rng());
-    Ok(Argon2::new(
+    let password = Argon2::new(
         Algorithm::Argon2id,
         Version::V0x13,
         Params::new(15000, 2, 1, None).unwrap(),
     )
     .hash_password(password, &salt)?
-    .to_string())
+    .to_string();
+    Ok(Secret::new(password))
 }
 
 #[tracing::instrument(skip(email, pool))]
@@ -104,7 +77,7 @@ async fn get_stored_credentials(
 fn verify_password_hash(
     expected_password_hash: Secret<String>,
     password_candidate: Secret<String>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), AuthError> {
     let expected_hash_password = PasswordHash::new(expected_password_hash.expose_secret())
         .context("Failed to parse hash in PHC string format.")?;
 
@@ -114,11 +87,5 @@ fn verify_password_hash(
             &expected_hash_password,
         )
         .context("Invalid password.")
-}
-
-#[derive(Default, Deserialize, Debug)]
-pub struct ChangePasswordRequest {
-    pub new_password: String,
-    pub current_password: String,
-    pub current_password_check: String,
+        .map_err(|_| AuthError::InvalidPassword)
 }

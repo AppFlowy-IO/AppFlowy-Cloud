@@ -1,5 +1,6 @@
 use crate::component::auth::LoggedUser;
 use chrono::{DateTime, Utc};
+use secrecy::ExposeSecret;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -27,7 +28,7 @@ pub const EXPIRED_DURATION_DAYS: i64 = 30;
 
 #[derive(Debug, Default)]
 pub struct Cache {
-    user: BTreeMap<LoggedUser, AuthStatus>,
+    user: BTreeMap<String, AuthStatus>,
 }
 
 impl Cache {
@@ -36,7 +37,7 @@ impl Cache {
     }
 
     pub fn is_authorized(&self, user: &LoggedUser) -> bool {
-        match self.user.get(user) {
+        match self.user.get(user.expose_secret()) {
             None => {
                 tracing::debug!("user not login yet or server was reboot");
                 false
@@ -56,10 +57,14 @@ impl Cache {
     }
 
     pub fn authorized(&mut self, user: LoggedUser) {
-        self.user.insert(user, AuthStatus::Authorized(Utc::now()));
+        self.user.insert(
+            user.expose_secret().to_owned(),
+            AuthStatus::Authorized(Utc::now()),
+        );
     }
 
     pub fn unauthorized(&mut self, user: LoggedUser) {
-        self.user.insert(user, AuthStatus::NotAuthorized);
+        self.user
+            .insert(user.expose_secret().to_owned(), AuthStatus::NotAuthorized);
     }
 }

@@ -9,9 +9,9 @@ pub fn token_scope() -> Scope {
 }
 
 async fn renew(
-    payload: Payload,
-    id: Identity,
-    state: Data<State>,
+    _payload: Payload,
+    _id: Identity,
+    _state: Data<State>,
 ) -> Result<HttpResponse, AuthError> {
     todo!()
 }

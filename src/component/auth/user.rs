@@ -10,7 +10,8 @@ use chrono::Utc;
 use chrono::{Duration, Local};
 use futures_util::future::{ready, Ready};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use secrecy::Secret;
+use secrecy::zeroize::DefaultIsZeroes;
+use secrecy::{Secret, Zeroize};
 use serde::{Deserialize, Serialize};
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
@@ -23,7 +24,7 @@ pub async fn login(
     cache: Arc<RwLock<Cache>>,
     email: String,
     password: String,
-) -> Result<LoginResponse, AuthError> {
+) -> Result<(LoginResponse, Secret<Token>), AuthError> {
     let credentials = Credentials {
         email,
         password: Secret::new(password),
@@ -32,14 +33,16 @@ pub async fn login(
     match validate_credentials(credentials, &pg_pool).await {
         Ok(uid) => {
             let uid = uid.to_string();
-            let token = Token::create_token(&uid)?.into();
+            let token = Token::create_token(&uid)?;
             let logged_user = LoggedUser::new(uid.clone());
             cache.write().await.authorized(logged_user);
-
-            Ok(LoginResponse {
-                token,
-                uid,
-            })
+            Ok((
+                LoginResponse {
+                    token: token.clone().into(),
+                    uid,
+                },
+                Secret::new(token),
+            ))
         }
         Err(err) => Err(err),
     }
@@ -116,26 +119,26 @@ async fn is_email_exist(
     Ok(result.is_some())
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Deserialize, Debug)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Debug)]
 pub struct LoginResponse {
     pub token: String,
     pub uid: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
-pub struct RegisterRequestParams {
+#[derive(Default, Deserialize, Debug)]
+pub struct RegisterRequest {
     pub email: String,
     pub password: String,
     pub name: String,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Debug)]
 pub struct RegisterResponse {
     pub token: String,
 }
@@ -227,8 +230,15 @@ impl Claim {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Token(pub String);
+
+impl Zeroize for Token {
+    fn zeroize(&mut self) {
+        self.0.zeroize()
+    }
+}
+
 impl Token {
     pub fn create_token(user_id: &str) -> Result<Self, AuthError> {
         let claims = Claim::with_user_id(user_id);

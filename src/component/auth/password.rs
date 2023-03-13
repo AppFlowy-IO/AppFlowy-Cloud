@@ -4,6 +4,7 @@ use anyhow::Context;
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use secrecy::{ExposeSecret, Secret};
+use serde::Deserialize;
 use sqlx::PgPool;
 
 pub struct Credentials {
@@ -11,7 +12,7 @@ pub struct Credentials {
     pub password: Secret<String>,
 }
 
-#[tracing::instrument(name = "Validate credentials", skip(credentials, pool))]
+#[tracing::instrument(skip(credentials, pool))]
 pub async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
@@ -41,7 +42,7 @@ pub async fn validate_credentials(
         .map_err(AuthError::InvalidCredentials)
 }
 
-#[tracing::instrument(name = "Change password", skip(password, pool))]
+#[tracing::instrument(skip(password, pool))]
 pub async fn change_password(
     uid: uuid::Uuid,
     password: Secret<String>,
@@ -80,7 +81,7 @@ pub fn compute_hash_password(password: &[u8]) -> Result<String, anyhow::Error> {
     .to_string())
 }
 
-#[tracing::instrument(name = "Get stored credentials", skip(email, pool))]
+#[tracing::instrument(skip(email, pool))]
 async fn get_stored_credentials(
     email: &str,
     pool: &PgPool,
@@ -100,10 +101,6 @@ async fn get_stored_credentials(
     Ok(row)
 }
 
-#[tracing::instrument(
-    name = "Validate credentials",
-    skip(expected_password_hash, password_candidate)
-)]
 fn verify_password_hash(
     expected_password_hash: Secret<String>,
     password_candidate: Secret<String>,
@@ -117,4 +114,11 @@ fn verify_password_hash(
             &expected_hash_password,
         )
         .context("Invalid password.")
+}
+
+#[derive(Default, Deserialize, Debug)]
+pub struct ChangePasswordRequest {
+    pub new_password: String,
+    pub current_password: String,
+    pub current_password_check: String,
 }

@@ -139,18 +139,13 @@ pub async fn change_password(
             err: format!("{}", e),
         })?;
     // Save password to disk
-    sqlx::query!(
-        r#"
-        UPDATE users
-        SET password = $1
-        WHERE uid = $2
-        "#,
-        new_hash_password.expose_secret(),
-        uid
-    )
-    .execute(&mut transaction)
-    .await
-    .context("Failed to change user's password in the database.")?;
+    let sql = "update users set password = ? where uid = ?";
+    let _ = sqlx::query(sql)
+        .bind(new_hash_password.expose_secret())
+        .bind(uid)
+        .execute(&mut transaction)
+        .await
+        .context("Failed to change user's password in the database.")?;
 
     transaction
         .commit()
@@ -228,7 +223,7 @@ pub struct LoggedUser {
     uid: Secret<String>,
 }
 
-impl std::convert::From<Claim> for LoggedUser {
+impl From<Claim> for LoggedUser {
     fn from(c: Claim) -> Self {
         Self {
             uid: Secret::new(c.user_id()),
@@ -269,7 +264,7 @@ impl FromRequest for LoggedUser {
     }
 }
 
-impl std::convert::TryFrom<&HeaderValue> for LoggedUser {
+impl TryFrom<&HeaderValue> for LoggedUser {
     type Error = AuthError;
 
     fn try_from(header: &HeaderValue) -> Result<Self, Self::Error> {
@@ -360,13 +355,13 @@ impl Token {
     }
 }
 
-impl std::convert::From<String> for Token {
+impl From<String> for Token {
     fn from(val: String) -> Self {
         Self(val)
     }
 }
 
-impl std::convert::Into<String> for Token {
+impl Into<String> for Token {
     fn into(self) -> String {
         self.0
     }

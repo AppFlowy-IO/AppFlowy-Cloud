@@ -1,4 +1,4 @@
-use crate::api::{token_scope, user_scope};
+use crate::api::{token_scope, user_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting};
 use crate::middleware::cors::default_cors;
@@ -67,6 +67,7 @@ pub async fn run(
             .app_data(web::JsonConfig::default().limit(4096))
             .service(user_scope())
             .service(token_scope())
+            .service(ws_scope())
             .app_data(Data::new(state.clone()))
     })
     .listen(listener)?

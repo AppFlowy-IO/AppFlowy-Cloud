@@ -1,18 +1,11 @@
-use crate::component::ws::entities::{
-    Connect, Disconnect, Session, WSError, WSSessionId, WebSocketMessage,
-};
+use crate::component::ws::entities::{Connect, Disconnect, WSError, WebSocketMessage};
 use actix::{Actor, Context, Handler};
-use dashmap::DashMap;
 
-pub struct WSServer {
-    sessions: DashMap<WSSessionId, Session>,
-}
+pub struct WSServer {}
 
 impl std::default::Default for WSServer {
     fn default() -> Self {
-        Self {
-            sessions: DashMap::new(),
-        }
+        Self {}
     }
 }
 impl WSServer {
@@ -32,17 +25,14 @@ impl Actor for WSServer {
 
 impl Handler<Connect> for WSServer {
     type Result = Result<(), WSError>;
-    fn handle(&mut self, msg: Connect, _ctx: &mut Context<Self>) -> Self::Result {
-        let session: Session = msg.into();
-        self.sessions.insert(session.id.clone(), session);
+    fn handle(&mut self, _msg: Connect, _ctx: &mut Context<Self>) -> Self::Result {
         Ok(())
     }
 }
 
 impl Handler<Disconnect> for WSServer {
     type Result = Result<(), WSError>;
-    fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
-        self.sessions.remove(&msg.sid);
+    fn handle(&mut self, _msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
         Ok(())
     }
 }

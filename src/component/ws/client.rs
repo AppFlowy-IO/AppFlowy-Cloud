@@ -27,12 +27,12 @@ impl MessageReceivers {
         MessageReceivers::default()
     }
 
-    pub fn set(&mut self, channel: u8, receiver: Arc<dyn MessageReceiver>) {
+    pub fn insert(&mut self, channel: u8, receiver: Arc<dyn MessageReceiver>) {
         self.inner.insert(channel, receiver);
     }
 
-    pub fn get(&self, source: u8) -> Option<Arc<dyn MessageReceiver>> {
-        self.inner.get(&source).cloned()
+    pub fn get(&self, source: u8) -> Option<&Arc<dyn MessageReceiver>> {
+        self.inner.get(&source)
     }
 }
 
@@ -102,7 +102,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WSClient {
                 ctx.pong(&msg);
             }
             Ok(Pong(_msg)) => {
-                // tracing::debug!("Receive {} pong {:?}", &self.session_id, &msg);
+                tracing::trace!("Receive {} pong {:?}", &self.session_id, &msg);
                 self.hb = Instant::now();
             }
             Ok(Binary(bytes)) => {

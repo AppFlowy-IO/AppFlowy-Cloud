@@ -69,10 +69,6 @@ pub struct SocketMessagePayload {
 }
 
 impl SocketMessagePayload {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
-    }
-
     pub fn from_bytes<T: AsRef<[u8]>>(bytes: T) -> Self {
         bincode::deserialize(bytes.as_ref()).unwrap()
     }

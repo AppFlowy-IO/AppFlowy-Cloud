@@ -1,5 +1,6 @@
 use crate::component::auth::LoggedUser;
 use crate::component::ws::{MessageReceivers, WSClient, WSServer};
+use crate::state::State;
 use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
@@ -14,14 +15,14 @@ pub async fn establish_ws_connection(
     request: HttpRequest,
     payload: Payload,
     token: Path<String>,
+    _state: Data<State>,
     server: Data<Addr<WSServer>>,
     msg_receivers: Data<MessageReceivers>,
 ) -> Result<HttpResponse> {
     tracing::info!("establish_ws_connection");
     let user = LoggedUser::from_token(token.clone())?;
     let client = WSClient::new(user, server.get_ref().clone(), msg_receivers);
-    let result = ws::start(client, &request, payload);
-    match result {
+    match ws::start(client, &request, payload) {
         Ok(response) => Ok(response),
         Err(e) => {
             tracing::error!("ws connection error: {:?}", e);

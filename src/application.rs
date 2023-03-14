@@ -87,7 +87,7 @@ pub async fn init_state(configuration: &Config) -> State {
 
     State {
         pg_pool,
-        cache: Arc::new(Default::default()),
+        user: Arc::new(Default::default()),
     }
 }
 

@@ -2,7 +2,7 @@ use crate::component::auth::{
     compute_hash_password, internal_error, validate_credentials, AuthError, Credentials,
 };
 use crate::config::env::{domain, jwt_secret};
-use crate::state::Cache;
+use crate::state::UserCache;
 use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::http::header::HeaderValue;
 use actix_web::{FromRequest, HttpRequest};
@@ -20,7 +20,7 @@ use tokio::sync::RwLock;
 
 pub async fn login(
     pg_pool: PgPool,
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<UserCache>>,
     email: String,
     password: String,
 ) -> Result<(LoginResponse, Secret<Token>), AuthError> {
@@ -50,13 +50,13 @@ pub async fn login(
     }
 }
 
-pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<Cache>>) {
+pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<UserCache>>) {
     cache.write().await.unauthorized(logged_user);
 }
 
 pub async fn register(
     pg_pool: PgPool,
-    cache: Arc<RwLock<Cache>>,
+    cache: Arc<RwLock<UserCache>>,
     username: String,
     email: String,
     password: String,

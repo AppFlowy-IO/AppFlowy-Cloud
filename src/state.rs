@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct State {
     pub pg_pool: PgPool,
-    pub cache: Arc<RwLock<Cache>>,
+    pub user: Arc<RwLock<UserCache>>,
 }
 
 impl State {
@@ -27,13 +27,14 @@ enum AuthStatus {
 pub const EXPIRED_DURATION_DAYS: i64 = 30;
 
 #[derive(Debug, Default)]
-pub struct Cache {
+pub struct UserCache {
+    // Keep track the user authentication state
     user: BTreeMap<String, AuthStatus>,
 }
 
-impl Cache {
+impl UserCache {
     pub fn new() -> Self {
-        Cache::default()
+        UserCache::default()
     }
 
     pub fn is_authorized(&self, user: &LoggedUser) -> bool {

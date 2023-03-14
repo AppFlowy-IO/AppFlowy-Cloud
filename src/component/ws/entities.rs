@@ -63,15 +63,27 @@ impl std::ops::Deref for WebSocketMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SocketMessagePayload {
+pub struct MessagePayload {
     pub(crate) channel: u8,
-    pub(crate) data: Vec<u8>,
+    pub(crate) detail: MessageDetail,
 }
 
-impl SocketMessagePayload {
+impl MessagePayload {
     pub fn from_bytes<T: AsRef<[u8]>>(bytes: T) -> Self {
-        bincode::deserialize(bytes.as_ref()).unwrap()
+        serde_json::from_slice(bytes.as_ref()).unwrap()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum MessageDetail {
+    Document(MessageContent),
+    Database(MessageContent),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MessageContent {
+    content: String,
 }
 
 #[derive(Debug)]

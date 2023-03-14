@@ -1,6 +1,6 @@
 use crate::component::auth::LoggedUser;
 use crate::component::ws::entities::{
-    Connect, Disconnect, Socket, SocketMessagePayload, WebSocketMessage,
+    Connect, Disconnect, MessageDetail, MessagePayload, Socket, WebSocketMessage,
 };
 use crate::component::ws::server::WSServer;
 use crate::component::ws::{HEARTBEAT_INTERVAL, PING_TIMEOUT};
@@ -36,10 +36,10 @@ impl MessageReceivers {
     }
 }
 
+#[allow(dead_code)]
 pub struct WSClientData {
-    pub(crate) user: Arc<LoggedUser>,
     pub(crate) socket: Socket,
-    pub(crate) data: Bytes,
+    pub(crate) detail: MessageDetail,
 }
 
 pub struct WSClient {
@@ -77,17 +77,13 @@ impl WSClient {
     }
 
     fn handle_binary_message(&self, bytes: Bytes, socket: Socket) {
-        let payload = SocketMessagePayload::from_bytes(&bytes);
-        match self.msg_receivers.get(payload.channel) {
+        let MessagePayload { channel, detail } = MessagePayload::from_bytes(&bytes);
+        match self.msg_receivers.get(channel) {
             None => {
-                tracing::error!("Can't find the receiver for {:?}", payload.channel);
+                tracing::error!("Can't find the receiver for {:?}", channel);
             }
             Some(handler) => {
-                let client_data = WSClientData {
-                    user: self.user.clone(),
-                    socket,
-                    data: Bytes::from(payload.data),
-                };
+                let client_data = WSClientData { socket, detail };
                 handler.receive(client_data);
             }
         }
@@ -102,7 +98,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WSClient {
                 ctx.pong(&msg);
             }
             Ok(Pong(_msg)) => {
-                tracing::trace!("Receive {} pong {:?}", &self.session_id, &msg);
+                // tracing::trace!("Receive {} pong {:?}", &self.session_id, &msg);
                 self.hb = Instant::now();
             }
             Ok(Binary(bytes)) => {

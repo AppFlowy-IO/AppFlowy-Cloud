@@ -30,7 +30,7 @@ async fn login_handler(
     let password = UserPassword::parse(req.password)
         .map_err(|_| InputParamsError::InvalidPassword)?
         .0;
-    let (resp, token) = login(state.pg_pool.clone(), state.cache.clone(), email, password).await?;
+    let (resp, token) = login(state.pg_pool.clone(), state.user.clone(), email, password).await?;
 
     // Renews the session key, assigning existing session state to new key.
     session.renew();
@@ -43,7 +43,7 @@ async fn login_handler(
 }
 
 async fn logout_handler(logged_user: LoggedUser, state: Data<State>) -> Result<HttpResponse> {
-    logout(logged_user, state.cache.clone()).await;
+    logout(logged_user, state.user.clone()).await;
     Ok(HttpResponse::Ok().finish())
 }
 
@@ -62,7 +62,7 @@ async fn register_handler(req: Json<RegisterRequest>, state: Data<State>) -> Res
 
     let resp = register(
         state.pg_pool.clone(),
-        state.cache.clone(),
+        state.user.clone(),
         name,
         email,
         password,

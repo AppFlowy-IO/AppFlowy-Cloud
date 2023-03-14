@@ -1,8 +1,8 @@
 use config::{Config as InnerConfig, FileFormat};
+use secrecy::Secret;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::convert::{TryFrom, TryInto};
-use secrecy::Secret;
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct Config {

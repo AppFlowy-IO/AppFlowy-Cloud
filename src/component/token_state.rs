@@ -6,7 +6,6 @@ use actix_web::{FromRequest, HttpRequest};
 use secrecy::{ExposeSecret, Secret};
 use std::future::{ready, Ready};
 
-
 pub struct SessionToken(Session);
 
 impl SessionToken {

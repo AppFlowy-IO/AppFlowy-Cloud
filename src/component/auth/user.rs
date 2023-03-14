@@ -139,7 +139,7 @@ pub async fn change_password(
             err: format!("{}", e),
         })?;
     // Save password to disk
-    let sql = "update users set password = ? where uid = ?";
+    let sql = "UPDATE users SET password = $1 where uid = $2";
     let _ = sqlx::query(sql)
         .bind(new_hash_password.expose_secret())
         .bind(uid)

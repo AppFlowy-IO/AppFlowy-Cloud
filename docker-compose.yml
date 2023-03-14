@@ -1,13 +1,13 @@
 version: '3'
 services:
   postgres_db:
-    image: 'postgres:9.6-alpine'
+    image: postgres:14
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     ports:
-      - "5434:5432"
+      - "5432:5432"
   appflowy_server:
     restart: on-failure
     environment:

@@ -12,7 +12,7 @@ pub struct Credentials {
     pub password: Secret<String>,
 }
 
-#[tracing::instrument(skip(credentials, pool))]
+#[tracing::instrument(level = "debug", skip(credentials, pool))]
 pub async fn validate_credentials(
     credentials: Credentials,
     pool: &PgPool,
@@ -54,7 +54,7 @@ pub fn compute_hash_password(password: &[u8]) -> Result<Secret<String>, anyhow::
     Ok(Secret::new(password))
 }
 
-#[tracing::instrument(skip(email, pool))]
+#[tracing::instrument(level = "debug", skip(email, pool))]
 async fn get_stored_credentials(
     email: &str,
     pool: &PgPool,

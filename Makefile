@@ -4,7 +4,7 @@ SEMVER_VERSION=$(shell grep version Cargo.toml | awk -F"\"" '{print $$2}' | head
 .PHONY: init_database docker_image local_server docker_test
 
 init_database:
-	POSTGRES_PORT=5433 ${ROOT}/init_database.sh
+	POSTGRES_PORT=5432 ${ROOT}/init_database.sh
 
 docker_image:
 	source $(ROOT)/docker_env.sh && docker-compose up -d postgres_db

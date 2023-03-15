@@ -3,6 +3,7 @@ use appflowy_server::config::config::{get_configuration, DatabaseSetting};
 use appflowy_server::state::State;
 use appflowy_server::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
+use reqwest::Certificate;
 
 use appflowy_server::component::auth::{RegisterResponse, HEADER_TOKEN};
 use sqlx::types::Uuid;
@@ -99,14 +100,17 @@ pub async fn spawn_server() -> TestServer {
         .expect("Failed to build application");
 
     let port = application.port();
-    let address = format!("http://localhost:{}", port);
+    let address = format!("https://localhost:{}", port);
     let _ = tokio::spawn(async {
         let _ = application.run_until_stopped().await;
     });
 
     let api_client = reqwest::Client::builder()
+        .add_root_certificate(Certificate::from_pem(include_bytes!("../../cert/cert.pem")).unwrap())
         .redirect(reqwest::redirect::Policy::none())
+        .danger_accept_invalid_certs(true)
         .cookie_store(true)
+        .no_proxy()
         .build()
         .unwrap();
 

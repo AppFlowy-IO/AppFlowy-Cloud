@@ -2,13 +2,16 @@ use crate::api::{token_scope, user_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting};
 use crate::middleware::cors::default_cors;
+use crate::self_signed::create_certificate;
 use crate::state::State;
 use actix_identity::IdentityMiddleware;
-
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
+
+use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
+use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
@@ -51,6 +54,7 @@ pub async fn run(
     secret_key: Secret<String>,
     redis_uri: Secret<String>,
 ) -> Result<Server, anyhow::Error> {
+    let (cert, _server_key) = create_certificate()?;
     let redis_store = RedisSessionStore::new(redis_uri.expose_secret()).await?;
     let server = HttpServer::new(move || {
         let secret_key = Key::from(secret_key.expose_secret().as_bytes());
@@ -70,7 +74,7 @@ pub async fn run(
             .service(ws_scope())
             .app_data(Data::new(state.clone()))
     })
-    .listen(listener)?
+    .listen_openssl(listener, make_ssl_acceptor_builder(cert))?
     .run();
     Ok(server)
 }
@@ -96,4 +100,23 @@ pub async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, sq
         .acquire_timeout(std::time::Duration::from_secs(5))
         .connect_with(setting.with_db())
         .await
+}
+
+fn make_ssl_acceptor_builder(cert: String) -> SslAcceptorBuilder {
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    let x509_cert = X509::from_pem(cert.as_bytes()).unwrap();
+    builder.set_certificate(&x509_cert).unwrap();
+    builder
+        .set_private_key_file("./cert/key.pem", SslFiletype::PEM)
+        .unwrap();
+    builder
+        .set_certificate_chain_file("./cert/cert.pem")
+        .unwrap();
+    builder
+        .set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))
+        .unwrap();
+    builder
+        .set_max_proto_version(Some(openssl::ssl::SslVersion::TLS1_3))
+        .unwrap();
+    builder
 }

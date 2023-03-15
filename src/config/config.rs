@@ -1,3 +1,4 @@
+use crate::self_signed::create_certificate;
 use config::{Config as InnerConfig, FileFormat};
 use secrecy::Secret;
 use serde_aux::field_attributes::deserialize_number_from_string;
@@ -24,7 +25,8 @@ pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
-    pub secret_key: Secret<String>,
+    pub certificate: Secret<String>,
+    pub server_key: Secret<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -61,6 +63,7 @@ impl DatabaseSetting {
 pub fn get_configuration() -> Result<Config, config::ConfigError> {
     let base_path = std::env::current_dir().expect("Failed to determine the current directory");
     let configuration_dir = base_path.join("configuration");
+    let (certificate, server_key) = create_certificate()?;
 
     let environment: Environment = std::env::var("APP_ENVIRONMENT")
         .unwrap_or_else(|_| "local".into())

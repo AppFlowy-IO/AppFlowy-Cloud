@@ -1,4 +1,5 @@
 use crate::component::auth::LoggedUser;
+use crate::config::config::Config;
 use chrono::{DateTime, Utc};
 use secrecy::ExposeSecret;
 use sqlx::PgPool;
@@ -9,6 +10,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct State {
     pub pg_pool: PgPool,
+    pub config: Arc<Config>,
     pub user: Arc<RwLock<UserCache>>,
 }
 

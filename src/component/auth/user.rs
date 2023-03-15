@@ -1,21 +1,20 @@
 use crate::component::auth::{
     compute_hash_password, internal_error, validate_credentials, AuthError, Credentials,
 };
-use crate::config::env::{domain, jwt_secret};
+use crate::config::env::domain;
 use crate::state::UserCache;
 use crate::telemetry::spawn_blocking_with_tracing;
-use actix_web::http::header::HeaderValue;
-use actix_web::{FromRequest, HttpRequest};
+use actix_web::HttpRequest;
 use anyhow::Context;
+use chrono::Duration;
 use chrono::Utc;
-use chrono::{Duration, Local};
-use futures_util::future::{ready, Ready};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+
 use secrecy::{ExposeSecret, Secret, Zeroize};
 use serde::{Deserialize, Serialize};
 use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
+use token::{create_token, parse_token, TokenError};
 use tokio::sync::RwLock;
 
 pub async fn login(
@@ -23,6 +22,7 @@ pub async fn login(
     cache: Arc<RwLock<UserCache>>,
     email: String,
     password: String,
+    server_key: &Secret<String>,
 ) -> Result<(LoginResponse, Secret<Token>), AuthError> {
     let credentials = Credentials {
         email,
@@ -32,7 +32,7 @@ pub async fn login(
     match validate_credentials(credentials, &pg_pool).await {
         Ok(uid) => {
             let uid = uid.to_string();
-            let token = Token::create_token(&uid)?;
+            let token = Token::create_token(&uid, server_key)?;
             let logged_user = LoggedUser::new(uid.clone());
             cache.write().await.authorized(logged_user);
             Ok((
@@ -60,6 +60,7 @@ pub async fn register(
     username: String,
     email: String,
     password: String,
+    server_key: &Secret<String>,
 ) -> Result<RegisterResponse, AuthError> {
     let mut transaction = pg_pool
         .begin()
@@ -75,7 +76,7 @@ pub async fn register(
     }
 
     let uuid = uuid::Uuid::new_v4();
-    let token = Token::create_token(&uuid.to_string())?;
+    let token = Token::create_token(&uuid.to_string(), server_key)?;
     let password = compute_hash_password(password.as_bytes()).map_err(internal_error)?;
     let _ = sqlx::query!(
         r#"
@@ -226,7 +227,7 @@ pub struct LoggedUser {
 impl From<Claim> for LoggedUser {
     fn from(c: Claim) -> Self {
         Self {
-            uid: Secret::new(c.user_id()),
+            uid: Secret::new(c.uid),
         }
     }
 }
@@ -238,8 +239,8 @@ impl LoggedUser {
         }
     }
 
-    pub fn from_token(token: String) -> Result<Self, AuthError> {
-        let user: LoggedUser = Token::decode_token(&token.into())?.into();
+    pub fn from_token(server_key: &Secret<String>, token: &str) -> Result<Self, AuthError> {
+        let user: LoggedUser = Token::decode_token(server_key, token)?.into();
         Ok(user)
     }
 }
@@ -252,63 +253,21 @@ impl std::ops::Deref for LoggedUser {
     }
 }
 
-impl FromRequest for LoggedUser {
-    type Error = AuthError;
-    type Future = Ready<Result<Self, Self::Error>>;
-
-    fn from_request(req: &HttpRequest, _payload: &mut actix_http::Payload) -> Self::Future {
-        match Token::parser_from_request(req) {
-            Ok(token) => ready(LoggedUser::from_token(token.0)),
-            Err(err) => ready(Err(err)),
-        }
-    }
-}
-
-impl TryFrom<&HeaderValue> for LoggedUser {
-    type Error = AuthError;
-
-    fn try_from(header: &HeaderValue) -> Result<Self, Self::Error> {
-        match header.to_str() {
-            Ok(val) => LoggedUser::from_token(val.to_owned()),
-            Err(e) => {
-                tracing::error!("Header to string failed: {:?}", e);
-                Err(AuthError::Unauthorized)
-            }
-        }
-    }
-}
-
 pub const HEADER_TOKEN: &str = "token";
-const DEFAULT_ALGORITHM: Algorithm = Algorithm::HS256;
 pub const EXPIRED_DURATION_DAYS: i64 = 30;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claim {
-    // issuer
     iss: String,
-    // subject
-    sub: String,
-    // issue at
-    iat: i64,
-    // expiry
-    exp: i64,
     uid: String,
 }
 
 impl Claim {
     pub fn with_user_id(uid: &str) -> Self {
-        let domain = domain();
         Self {
-            iss: domain,
-            sub: "auth".to_string(),
+            iss: domain(),
             uid: uid.to_string(),
-            iat: Local::now().timestamp(),
-            exp: (Local::now() + Duration::days(EXPIRED_DURATION_DAYS)).timestamp(),
         }
-    }
-
-    pub fn user_id(self) -> String {
-        self.uid
     }
 }
 
@@ -322,36 +281,49 @@ impl Zeroize for Token {
 }
 
 impl Token {
-    pub fn create_token(user_id: &str) -> Result<Self, AuthError> {
-        let claims = Claim::with_user_id(user_id);
-        encode(
-            &Header::new(DEFAULT_ALGORITHM),
-            &claims,
-            &EncodingKey::from_secret(jwt_secret().as_ref()),
+    pub fn create_token(user_id: &str, server_key: &Secret<String>) -> Result<Self, AuthError> {
+        let claim = Claim::with_user_id(user_id);
+        let token = create_token(
+            server_key.expose_secret().as_str(),
+            claim,
+            Duration::days(EXPIRED_DURATION_DAYS),
         )
-        .map(Into::into)
-        .context("Create user token failed")
-        .map_err(|err| AuthError::InternalError(err))
+        .map_err(|e| match e {
+            TokenError::Jwt(_) => AuthError::Unauthorized,
+            TokenError::Expired => AuthError::Unauthorized,
+        })?;
+        Ok(Self(token))
     }
 
-    pub fn decode_token(token: &Self) -> Result<Claim, AuthError> {
-        decode::<Claim>(
-            &token.0,
-            &DecodingKey::from_secret(jwt_secret().as_ref()),
-            &Validation::new(DEFAULT_ALGORITHM),
-        )
-        .map(|data| Ok(data.claims))
-        .map_err(|_err| AuthError::Unauthorized)?
+    pub fn decode_token(server_key: &Secret<String>, token: &str) -> Result<Claim, AuthError> {
+        parse_token::<Claim>(server_key.expose_secret().as_str(), token)
+            .map_err(|_| AuthError::Unauthorized)
     }
+}
 
-    pub fn parser_from_request(request: &HttpRequest) -> Result<Self, AuthError> {
-        match request.headers().get(HEADER_TOKEN) {
-            Some(header) => match header.to_str() {
-                Ok(val) => Ok(Token(val.to_owned())),
-                Err(_) => Err(AuthError::Unauthorized),
-            },
-            None => Err(AuthError::Unauthorized),
-        }
+pub fn logged_user_from_request(
+    request: &HttpRequest,
+    server_key: &Secret<String>,
+) -> Result<LoggedUser, AuthError> {
+    match request.headers().get(HEADER_TOKEN) {
+        None => Err(AuthError::Unauthorized),
+        Some(header) => match header.to_str() {
+            Ok(token_str) => LoggedUser::from_token(server_key, token_str),
+            Err(_) => Err(AuthError::Unauthorized),
+        },
+    }
+}
+
+pub fn uid_from_request(
+    request: &HttpRequest,
+    server_key: &Secret<String>,
+) -> Result<Secret<String>, AuthError> {
+    match request.headers().get(HEADER_TOKEN) {
+        Some(header) => match header.to_str() {
+            Ok(val) => Token::decode_token(server_key, val).map(|claim| Secret::new(claim.uid)),
+            Err(_) => Err(AuthError::Unauthorized),
+        },
+        None => Err(AuthError::Unauthorized),
     }
 }
 
@@ -364,17 +336,5 @@ impl From<String> for Token {
 impl Into<String> for Token {
     fn into(self) -> String {
         self.0
-    }
-}
-
-impl FromRequest for Token {
-    type Error = AuthError;
-    type Future = Ready<Result<Self, Self::Error>>;
-
-    fn from_request(req: &HttpRequest, _payload: &mut actix_http::Payload) -> Self::Future {
-        match Token::parser_from_request(req) {
-            Ok(token) => ready(Ok(token)),
-            Err(err) => ready(Err(err)),
-        }
     }
 }

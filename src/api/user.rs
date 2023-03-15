@@ -1,14 +1,14 @@
 use crate::component::auth::{
-    change_password, login, logout, register, ChangePasswordRequest, InputParamsError, LoggedUser,
-    LoginRequest, RegisterRequest,
+    change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
+    InputParamsError, LoginRequest, RegisterRequest,
 };
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
 
 use actix_web::web::{Data, Json};
-use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
+use actix_web::{HttpRequest, Result};
 
 pub fn user_scope() -> Scope {
     web::scope("/api/user")
@@ -30,19 +30,27 @@ async fn login_handler(
     let password = UserPassword::parse(req.password)
         .map_err(|_| InputParamsError::InvalidPassword)?
         .0;
-    let (resp, token) = login(state.pg_pool.clone(), state.user.clone(), email, password).await?;
+    let (resp, token) = login(
+        state.pg_pool.clone(),
+        state.user.clone(),
+        email,
+        password,
+        &state.config.application.server_key,
+    )
+    .await?;
 
     // Renews the session key, assigning existing session state to new key.
     session.renew();
     if let Err(err) = session.insert_token(token) {
         // It needs to navigate to login page in web application
-        tracing::error!("Insert session failed: {}", err);
+        tracing::error!("Insert session failed: {:?}", err);
     }
 
     Ok(HttpResponse::Ok().json(resp))
 }
 
-async fn logout_handler(logged_user: LoggedUser, state: Data<State>) -> Result<HttpResponse> {
+async fn logout_handler(req: HttpRequest, state: Data<State>) -> Result<HttpResponse> {
+    let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;
     logout(logged_user, state.user.clone()).await;
     Ok(HttpResponse::Ok().finish())
 }
@@ -66,6 +74,7 @@ async fn register_handler(req: Json<RegisterRequest>, state: Data<State>) -> Res
         name,
         email,
         password,
+        &state.config.application.server_key,
     )
     .await?;
 
@@ -73,24 +82,25 @@ async fn register_handler(req: Json<RegisterRequest>, state: Data<State>) -> Res
 }
 
 async fn change_password_handler(
-    req: Json<ChangePasswordRequest>,
-    logged_user: LoggedUser,
+    req: HttpRequest,
+    payload: Json<ChangePasswordRequest>,
     // session: SessionToken,
     state: Data<State>,
 ) -> Result<HttpResponse> {
-    let req = req.into_inner();
-    if req.new_password != req.new_password_confirm {
+    let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;
+    let payload = payload.into_inner();
+    if payload.new_password != payload.new_password_confirm {
         return Err(InputParamsError::PasswordNotMatch.into());
     }
 
-    let new_password = UserPassword::parse(req.new_password)
+    let new_password = UserPassword::parse(payload.new_password)
         .map_err(|_| InputParamsError::InvalidPassword)?
         .0;
 
     change_password(
         state.pg_pool.clone(),
         logged_user.clone(),
-        req.current_password,
+        payload.current_password,
         new_password,
     )
     .await?;

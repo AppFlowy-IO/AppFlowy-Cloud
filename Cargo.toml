@@ -76,4 +76,5 @@ path = "src/lib.rs"
 [workspace]
 members = [
     "crates/token",
+    "crates/revdb",
 ]

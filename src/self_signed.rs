@@ -4,7 +4,7 @@ use secrecy::Secret;
 pub const CA_CRT: &str = include_str!("../cert/cert.pem");
 pub const CA_KEY: &str = include_str!("../cert/key.pem");
 
-pub fn create_certificate() -> Result<(Secret<String>, Secret<String>), RcgenError> {
+pub fn create_self_signed_certificate() -> Result<(Secret<String>, Secret<String>), RcgenError> {
     let key = KeyPair::from_pem(CA_KEY)?;
     let params = CertificateParams::from_ca_cert_pem(CA_CRT, key)?;
     let ca_cert = Certificate::from_params(params)?;

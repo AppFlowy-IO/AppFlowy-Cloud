@@ -15,12 +15,12 @@ pub async fn establish_ws_connection(
     request: HttpRequest,
     payload: Payload,
     token: Path<String>,
-    _state: Data<State>,
+    state: Data<State>,
     server: Data<Addr<WSServer>>,
     msg_receivers: Data<MessageReceivers>,
 ) -> Result<HttpResponse> {
     tracing::info!("establish_ws_connection");
-    let user = LoggedUser::from_token(token.clone())?;
+    let user = LoggedUser::from_token(&state.config.application.server_key, token.as_str())?;
     let client = WSClient::new(user, server.get_ref().clone(), msg_receivers);
     match ws::start(client, &request, payload) {
         Ok(response) => Ok(response),

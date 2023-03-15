@@ -31,7 +31,9 @@ impl Application {
         let server = run(
             listener,
             state,
-            config.application.secret_key.clone(),
+            certificate,
+            server_key,
+            // config.application.server_key.clone(),
             config.redis_uri.clone(),
         )
         .await?;
@@ -51,10 +53,10 @@ impl Application {
 pub async fn run(
     listener: TcpListener,
     state: State,
+    certificate: Secret<String>,
     secret_key: Secret<String>,
     redis_uri: Secret<String>,
 ) -> Result<Server, anyhow::Error> {
-    let (cert, _server_key) = create_certificate()?;
     let redis_store = RedisSessionStore::new(redis_uri.expose_secret()).await?;
     let server = HttpServer::new(move || {
         let secret_key = Key::from(secret_key.expose_secret().as_bytes());

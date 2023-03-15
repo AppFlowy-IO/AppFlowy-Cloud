@@ -1,7 +1,7 @@
 application:
   port: 8000
   host: 0.0.0.0
-  secret_key: "d8b242c8a47de60e1ebf4e6bb7d3315cdd4b4071919fe1065566f23a354753ae"
+  server_key: ""
 database:
   host: "localhost"
   port: 5432

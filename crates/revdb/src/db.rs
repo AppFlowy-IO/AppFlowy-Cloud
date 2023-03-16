@@ -1,5 +1,6 @@
+use crate::document::Document;
 use crate::error::RevDBError;
-use sled::Db;
+use sled::{Batch, Db, IVec};
 use std::path::Path;
 
 pub struct RevDB {
@@ -12,24 +13,44 @@ impl RevDB {
         Ok(Self { db })
     }
 
-    pub fn insert(&self, uid: i64, rev_id: i64, data: &[u8]) -> Result<(), RevDBError> {
-        let key = make_seq_key(uid, rev_id);
-        let _ = self.db.insert(key, data)?;
+    pub fn document(&self) -> Document {
+        Document { db: self }
+    }
+
+    pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<IVec>, RevDBError> {
+        let value = self.db.get(key)?;
+        Ok(value)
+    }
+
+    pub fn batch_get<K: AsRef<[u8]>>(
+        &self,
+        from_key: K,
+        to_key: K,
+    ) -> Result<Vec<IVec>, RevDBError> {
+        let iter = self.db.range(from_key..to_key);
+        let mut items = vec![];
+        for item in iter {
+            let (_, value) = item?;
+            items.push(value)
+        }
+        Ok(items)
+    }
+
+    pub fn insert<K: AsRef<[u8]>>(&self, key: K, value: &[u8]) -> Result<(), RevDBError> {
+        let _ = self.db.insert(key, value)?;
         Ok(())
     }
 
-    pub fn get(&self, uid: i64, rev_id: i64) -> Result<Option<Vec<u8>>, RevDBError> {
-        let key = make_seq_key(uid, rev_id);
-        let value = self.db.get(key)?;
-        Ok(value.map(|value| value.to_vec()))
+    pub fn batch_insert<'a, K: AsRef<[u8]>>(
+        &self,
+        items: impl IntoIterator<Item = (K, &'a [u8])>,
+    ) -> Result<(), RevDBError> {
+        let mut batch = Batch::default();
+        let items = items.into_iter();
+        items.for_each(|(key, value)| {
+            batch.insert(key.as_ref(), value);
+        });
+        let _ = self.db.apply_batch(batch)?;
+        Ok(())
     }
-}
-
-// Optimize your data layout: Sled's B-Tree implementation works best when the keys are sequential,
-// so try to organize the data in a way that maximizes sequential access.
-fn make_seq_key(uid: i64, rev_id: i64) -> [u8; 16] {
-    let mut key = [0; 16];
-    key[0..8].copy_from_slice(&uid.to_be_bytes());
-    key[8..16].copy_from_slice(&rev_id.to_be_bytes());
-    key
 }

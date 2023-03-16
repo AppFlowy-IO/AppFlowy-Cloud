@@ -12,11 +12,10 @@ impl<'a> Document<'a> {
         &self,
         uid: i64,
         document_id: i64,
-        rev_id: i64,
-        data: &[u8],
+        value: DocumentRevData,
     ) -> Result<(), RevDBError> {
-        let key = make_document_key(uid, document_id, rev_id);
-        let _ = self.db.insert(key, data)?;
+        let key = make_document_key(uid, document_id, value.rev_id);
+        let _ = self.db.insert(key, &value.to_vec()?)?;
         Ok(())
     }
 
@@ -25,18 +24,24 @@ impl<'a> Document<'a> {
         uid: i64,
         document_id: i64,
         rev_id: i64,
-    ) -> Result<Option<Vec<u8>>, RevDBError> {
+    ) -> Result<Option<DocumentRevData>, RevDBError> {
         let key = make_document_key(uid, document_id, rev_id);
-        let value = self.db.get(key)?;
-        Ok(value.map(|value| value.to_vec()))
+        match self.db.get(key)? {
+            None => Ok(None),
+            Some(value) => {
+                let data = DocumentRevData::from_vec(value.as_ref())?;
+                Ok(Some(data))
+            }
+        }
     }
 
-    pub fn get_with_range(
+    pub fn get_with_range<R: Into<RevRange>>(
         &self,
         uid: i64,
         document_id: i64,
-        range: RevRange,
+        range: R,
     ) -> Result<Vec<DocumentRevData>, RevDBError> {
+        let range = range.into();
         let from = make_document_key(uid, document_id, range.start);
         let to = make_document_key(uid, document_id, range.end);
         self.batch_get(from, to)
@@ -64,7 +69,7 @@ impl<'a> Document<'a> {
         self.batch_get(from, to)
     }
 
-    pub fn batch_get<K: AsRef<[u8]>>(
+    fn batch_get<K: AsRef<[u8]>>(
         &self,
         from: K,
         to: K,
@@ -79,7 +84,7 @@ impl<'a> Document<'a> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentRevData {
     #[serde(rename = "rid")]
     pub rev_id: i64,

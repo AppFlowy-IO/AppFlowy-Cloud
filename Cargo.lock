@@ -2253,6 +2253,7 @@ dependencies = [
  "bincode",
  "serde",
  "sled",
+ "tempfile",
  "thiserror",
 ]
 

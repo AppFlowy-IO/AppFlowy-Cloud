@@ -15,7 +15,7 @@ impl<'a> Document<'a> {
         value: DocumentRevData,
     ) -> Result<(), RevDBError> {
         let key = make_document_key(uid, document_id, value.rev_id);
-        let _ = self.db.insert(key, &value.to_vec()?)?;
+        self.db.insert(key, &value.to_vec()?)?;
         Ok(())
     }
 

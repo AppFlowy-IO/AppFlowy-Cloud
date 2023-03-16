@@ -50,7 +50,7 @@ impl RevDB {
         items.for_each(|(key, value)| {
             batch.insert(key.as_ref(), value);
         });
-        let _ = self.db.apply_batch(batch)?;
+        self.db.apply_batch(batch)?;
         Ok(())
     }
 }

@@ -25,7 +25,7 @@ async fn login_handler(
 ) -> Result<HttpResponse> {
     let req = req.into_inner();
     let email = UserEmail::parse(req.email)
-        .map_err(|e| InputParamsError::InvalidEmail(e))?
+        .map_err(InputParamsError::InvalidEmail)?
         .0;
     let password = UserPassword::parse(req.password)
         .map_err(|_| InputParamsError::InvalidPassword)?
@@ -52,10 +52,10 @@ async fn logout_handler(req: HttpRequest, state: Data<State>) -> Result<HttpResp
 async fn register_handler(req: Json<RegisterRequest>, state: Data<State>) -> Result<HttpResponse> {
     let req = req.into_inner();
     let name = UserName::parse(req.name)
-        .map_err(|e| InputParamsError::InvalidName(e))?
+        .map_err(InputParamsError::InvalidName)?
         .0;
     let email = UserEmail::parse(req.email)
-        .map_err(|e| InputParamsError::InvalidEmail(e))?
+        .map_err(InputParamsError::InvalidEmail)?
         .0;
     let password = UserPassword::parse(req.password)
         .map_err(|_| InputParamsError::InvalidPassword)?

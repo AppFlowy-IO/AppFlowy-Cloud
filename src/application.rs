@@ -13,9 +13,11 @@ use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
+use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing_actix_web::TracingLogger;
 
 pub struct Application {
@@ -96,6 +98,7 @@ pub async fn init_state(config: &Config) -> State {
         pg_pool,
         config: Arc::new(config.clone()),
         user: Arc::new(Default::default()),
+        id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     }
 }
 

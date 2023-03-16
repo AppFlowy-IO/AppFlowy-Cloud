@@ -60,7 +60,9 @@ tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
 sqlx = { version = "0.6", default-features = false, features = ["runtime-actix-rustls", "macros", "postgres", "uuid", "chrono", "migrate", "offline"] }
 
+#Local crate
 token = { path = "./crates/token" }
+snowflake = { path = "./crates/snowflake" }
 
 [dev-dependencies]
 once_cell = "1.7.2"

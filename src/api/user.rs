@@ -30,14 +30,7 @@ async fn login_handler(
     let password = UserPassword::parse(req.password)
         .map_err(|_| InputParamsError::InvalidPassword)?
         .0;
-    let (resp, token) = login(
-        state.pg_pool.clone(),
-        state.user.clone(),
-        email,
-        password,
-        &state.config.application.server_key,
-    )
-    .await?;
+    let (resp, token) = login(email, password, &state).await?;
 
     // Renews the session key, assigning existing session state to new key.
     session.renew();
@@ -68,16 +61,7 @@ async fn register_handler(req: Json<RegisterRequest>, state: Data<State>) -> Res
         .map_err(|_| InputParamsError::InvalidPassword)?
         .0;
 
-    let resp = register(
-        state.pg_pool.clone(),
-        state.user.clone(),
-        name,
-        email,
-        password,
-        &state.config.application.server_key,
-    )
-    .await?;
-
+    let resp = register(name, email, password, &state).await?;
     Ok(HttpResponse::Ok().json(resp))
 }
 

@@ -461,6 +461,7 @@ dependencies = [
  "serde",
  "serde-aux",
  "serde_json",
+ "snowflake",
  "sqlx",
  "thiserror",
  "token",

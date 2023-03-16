@@ -1,7 +1,7 @@
 use crate::component::auth::LoggedUser;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
-use secrecy::ExposeSecret;
+use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -12,11 +12,16 @@ pub struct State {
     pub pg_pool: PgPool,
     pub config: Arc<Config>,
     pub user: Arc<RwLock<UserCache>>,
+    pub id_gen: Arc<RwLock<Snowflake>>,
 }
 
 impl State {
     pub async fn load_users(_pool: &PgPool) {
         todo!()
+    }
+
+    pub async fn next_user_id(&self) -> i64 {
+        self.id_gen.write().await.next_id()
     }
 }
 
@@ -31,7 +36,7 @@ pub const EXPIRED_DURATION_DAYS: i64 = 30;
 #[derive(Debug, Default)]
 pub struct UserCache {
     // Keep track the user authentication state
-    user: BTreeMap<String, AuthStatus>,
+    user: BTreeMap<i64, AuthStatus>,
 }
 
 impl UserCache {

@@ -2,51 +2,46 @@ use crate::component::auth::{
     compute_hash_password, internal_error, validate_credentials, AuthError, Credentials,
 };
 use crate::config::env::domain;
-use crate::state::UserCache;
+use crate::state::{State, UserCache};
 use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::HttpRequest;
 use anyhow::Context;
 use chrono::Duration;
 use chrono::Utc;
 
-use secrecy::{ExposeSecret, Secret, Zeroize};
+use secrecy::zeroize::DefaultIsZeroes;
+use secrecy::{CloneableSecret, DebugSecret, ExposeSecret, Secret, Zeroize};
 use serde::{Deserialize, Serialize};
-use sqlx::types::uuid;
 use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
 use token::{create_token, parse_token, TokenError};
 use tokio::sync::RwLock;
 
 pub async fn login(
-    pg_pool: PgPool,
-    cache: Arc<RwLock<UserCache>>,
     email: String,
     password: String,
-    server_key: &Secret<String>,
+    state: &State,
 ) -> Result<(LoginResponse, Secret<Token>), AuthError> {
     let credentials = Credentials {
         email,
         password: Secret::new(password),
     };
+    let server_key = &state.config.application.server_key;
 
-    match validate_credentials(credentials, &pg_pool).await {
+    match validate_credentials(credentials, &state.pg_pool).await {
         Ok(uid) => {
-            let uid = uid.to_string();
-            let token = Token::create_token(&uid, server_key)?;
-            let logged_user = LoggedUser::new(uid.clone());
-            cache.write().await.authorized(logged_user);
+            let token = Token::create_token(uid, server_key)?;
+            let logged_user = LoggedUser::new(uid);
+            state.user.write().await.authorized(logged_user);
             Ok((
                 LoginResponse {
                     token: token.clone().into(),
-                    uid,
+                    uid: uid.to_string(),
                 },
                 Secret::new(token),
             ))
         }
-        Err(err) => {
-            //
-            Err(err)
-        }
+        Err(err) => Err(err),
     }
 }
 
@@ -55,13 +50,13 @@ pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<UserCache>>) {
 }
 
 pub async fn register(
-    pg_pool: PgPool,
-    cache: Arc<RwLock<UserCache>>,
     username: String,
     email: String,
     password: String,
-    server_key: &Secret<String>,
+    state: &State,
 ) -> Result<RegisterResponse, AuthError> {
+    let pg_pool = state.pg_pool.clone();
+    let server_key = &state.config.application.server_key;
     let mut transaction = pg_pool
         .begin()
         .await
@@ -75,15 +70,15 @@ pub async fn register(
         return Err(AuthError::UserAlreadyExist { email });
     }
 
-    let uuid = uuid::Uuid::new_v4();
-    let token = Token::create_token(&uuid.to_string(), server_key)?;
+    let uid = state.id_gen.write().await.next_id();
+    let token = Token::create_token(uid, server_key)?;
     let password = compute_hash_password(password.as_bytes()).map_err(internal_error)?;
     let _ = sqlx::query!(
         r#"
             INSERT INTO users (uid, email, username, create_time, password)
             VALUES ($1, $2, $3, $4, $5)
         "#,
-        uuid,
+        uid,
         email,
         username,
         Utc::now(),
@@ -100,8 +95,8 @@ pub async fn register(
         .context("Failed to commit SQL transaction to register user.")
         .map_err(internal_error)?;
 
-    let logged_user = LoggedUser::new(uuid.to_string());
-    cache.write().await.authorized(logged_user);
+    let logged_user = LoggedUser::new(uid);
+    state.user.write().await.authorized(logged_user);
 
     Ok(RegisterResponse {
         token: token.into(),
@@ -120,7 +115,7 @@ pub async fn change_password(
         .context("Failed to acquire a Postgres connection to change password")
         .map_err(internal_error)?;
 
-    let email = get_user_email(logged_user.expose_secret(), &mut transaction).await?;
+    let email = get_user_email(*logged_user.expose_secret(), &mut transaction).await?;
 
     // check password
     let credentials = Credentials {
@@ -135,15 +130,11 @@ pub async fn change_password(
             .await
             .context("Failed to hash password")??;
 
-    let uid =
-        uuid::Uuid::parse_str(logged_user.expose_secret()).map_err(|e| AuthError::InvalidUuid {
-            err: format!("{}", e),
-        })?;
     // Save password to disk
     let sql = "UPDATE users SET password = $1 where uid = $2";
     let _ = sqlx::query(sql)
         .bind(new_hash_password.expose_secret())
-        .bind(uid)
+        .bind(logged_user.expose_secret())
         .execute(&mut transaction)
         .await
         .context("Failed to change user's password in the database.")?;
@@ -157,10 +148,9 @@ pub async fn change_password(
 }
 
 pub async fn get_user_email(
-    uid: &str,
+    uid: i64,
     transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<String, anyhow::Error> {
-    let uid = uuid::Uuid::parse_str(uid)?;
     let row = sqlx::query!(
         r#"
         SELECT email 
@@ -219,37 +209,47 @@ pub struct ChangePasswordRequest {
     pub new_password_confirm: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct LoggedUser {
-    uid: Secret<String>,
+#[derive(Clone)]
+pub struct WrapI64(i64);
+impl Default for WrapI64 {
+    fn default() -> Self {
+        Self(0)
+    }
 }
+impl Copy for WrapI64 {}
+impl DefaultIsZeroes for WrapI64 {}
+impl DebugSecret for WrapI64 {}
+impl CloneableSecret for WrapI64 {}
+
+impl std::ops::Deref for WrapI64 {
+    type Target = i64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoggedUser(Secret<WrapI64>);
 
 impl From<Claim> for LoggedUser {
     fn from(c: Claim) -> Self {
-        Self {
-            uid: Secret::new(c.uid),
-        }
+        Self(Secret::new(WrapI64(c.uid)))
     }
 }
 
 impl LoggedUser {
-    pub fn new(uid: String) -> Self {
-        Self {
-            uid: Secret::new(uid),
-        }
+    pub fn new(uid: i64) -> Self {
+        Self(Secret::new(WrapI64(uid)))
     }
 
     pub fn from_token(server_key: &Secret<String>, token: &str) -> Result<Self, AuthError> {
         let user: LoggedUser = Token::decode_token(server_key, token)?.into();
         Ok(user)
     }
-}
 
-impl std::ops::Deref for LoggedUser {
-    type Target = Secret<String>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.uid
+    pub fn expose_secret(&self) -> &i64 {
+        self.0.expose_secret()
     }
 }
 
@@ -259,15 +259,12 @@ pub const EXPIRED_DURATION_DAYS: i64 = 30;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claim {
     iss: String,
-    uid: String,
+    uid: i64,
 }
 
 impl Claim {
-    pub fn with_user_id(uid: &str) -> Self {
-        Self {
-            iss: domain(),
-            uid: uid.to_string(),
-        }
+    pub fn with_user_id(uid: i64) -> Self {
+        Self { iss: domain(), uid }
     }
 }
 
@@ -281,8 +278,8 @@ impl Zeroize for Token {
 }
 
 impl Token {
-    pub fn create_token(user_id: &str, server_key: &Secret<String>) -> Result<Self, AuthError> {
-        let claim = Claim::with_user_id(user_id);
+    pub fn create_token(uid: i64, server_key: &Secret<String>) -> Result<Self, AuthError> {
+        let claim = Claim::with_user_id(uid);
         let token = create_token(
             server_key.expose_secret().as_str(),
             claim,
@@ -317,7 +314,7 @@ pub fn logged_user_from_request(
 pub fn uid_from_request(
     request: &HttpRequest,
     server_key: &Secret<String>,
-) -> Result<Secret<String>, AuthError> {
+) -> Result<Secret<i64>, AuthError> {
     match request.headers().get(HEADER_TOKEN) {
         Some(header) => match header.to_str() {
             Ok(val) => Token::decode_token(server_key, val).map(|claim| Secret::new(claim.uid)),

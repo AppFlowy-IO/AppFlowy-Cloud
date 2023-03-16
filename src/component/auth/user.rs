@@ -35,7 +35,7 @@ pub async fn login(
             state.user.write().await.authorized(logged_user);
             Ok((
                 LoginResponse {
-                    token: token.clone().into(),
+                    token: token.0.clone(),
                     uid: uid.to_string(),
                 },
                 Secret::new(token),
@@ -99,7 +99,7 @@ pub async fn register(
     state.user.write().await.authorized(logged_user);
 
     Ok(RegisterResponse {
-        token: token.into(),
+        token: token.0.clone(),
     })
 }
 
@@ -209,13 +209,8 @@ pub struct ChangePasswordRequest {
     pub new_password_confirm: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WrapI64(i64);
-impl Default for WrapI64 {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 impl Copy for WrapI64 {}
 impl DefaultIsZeroes for WrapI64 {}
 impl DebugSecret for WrapI64 {}
@@ -321,17 +316,5 @@ pub fn uid_from_request(
             Err(_) => Err(AuthError::Unauthorized),
         },
         None => Err(AuthError::Unauthorized),
-    }
-}
-
-impl From<String> for Token {
-    fn from(val: String) -> Self {
-        Self(val)
-    }
-}
-
-impl Into<String> for Token {
-    fn into(self) -> String {
-        self.0
     }
 }

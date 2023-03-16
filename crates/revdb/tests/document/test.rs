@@ -19,6 +19,7 @@ fn insert_text() {
     assert_eq!(value.content, restored_data.content);
 }
 
+//noinspection RsExternalLinter
 #[test]
 fn insert_multi_text() {
     let db = make_test_db();
@@ -51,6 +52,7 @@ fn insert_multi_text() {
     assert_eq!(expected_str, restored_str);
 }
 
+//noinspection RsExternalLinter
 fn insert_100_string_to_document(uid: i64, document_id: i64, document: &Document) {
     let mut base_rev_id = 0;
     for i in 0..=100 {

@@ -1,13 +1,9 @@
 use crate::component::ws::entities::{Connect, Disconnect, WSError, WebSocketMessage};
 use actix::{Actor, Context, Handler};
 
+#[derive(Default)]
 pub struct WSServer {}
 
-impl std::default::Default for WSServer {
-    fn default() -> Self {
-        Self {}
-    }
-}
 impl WSServer {
     pub fn new() -> Self {
         WSServer::default()

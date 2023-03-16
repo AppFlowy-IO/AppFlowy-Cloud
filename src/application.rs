@@ -54,7 +54,7 @@ pub async fn run(
     let key = pair
         .as_ref()
         .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
-        .unwrap_or(Key::generate());
+        .unwrap_or_else(Key::generate);
     let mut server = HttpServer::new(move || {
         App::new()
             // Session middleware

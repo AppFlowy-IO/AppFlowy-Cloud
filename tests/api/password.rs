@@ -13,8 +13,8 @@ async fn change_password_with_unmatched_password() {
         .change_password(
             token,
             &test_user.password,
-            &new_password,
-            &new_password_confirm,
+            new_password,
+            new_password_confirm,
         )
         .await;
     assert_eq!(http_resp.status(), StatusCode::BAD_REQUEST);
@@ -28,7 +28,7 @@ async fn login_fail_after_change_password() {
 
     let new_password = "HelloWorld@1a";
     let http_resp = server
-        .change_password(token, &test_user.password, &new_password, &new_password)
+        .change_password(token, &test_user.password, new_password, new_password)
         .await;
     assert_eq!(http_resp.status(), StatusCode::OK);
 
@@ -44,10 +44,10 @@ async fn login_success_with_new_password() {
 
     let new_password = "HelloWorld@1a";
     let http_resp = server
-        .change_password(token, &test_user.password, &new_password, &new_password)
+        .change_password(token, &test_user.password, new_password, new_password)
         .await;
     assert_eq!(http_resp.status(), StatusCode::OK);
 
-    let http_resp = server.login(&test_user.email, &new_password).await;
+    let http_resp = server.login(&test_user.email, new_password).await;
     assert_eq!(http_resp.status(), StatusCode::OK);
 }

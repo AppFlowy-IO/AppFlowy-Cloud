@@ -6,7 +6,7 @@
       "nullable": [],
       "parameters": {
         "Left": [
-          "Uuid",
+          "Int8",
           "Text",
           "Text",
           "Timestamptz",
@@ -16,13 +16,33 @@
     },
     "query": "\n            INSERT INTO users (uid, email, username, create_time, password)\n            VALUES ($1, $2, $3, $4, $5)\n        "
   },
+  "3502aac2e0b7e80c2afdf7aba85cd1bfa9dd7f6b95d711bb1dee50c6fae2f061": {
+    "describe": {
+      "columns": [
+        {
+          "name": "email",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "\n        SELECT email \n        FROM users\n        WHERE uid = $1\n        "
+  },
   "b188bb8915fa0fc8c5dfefa27f1b086b839633c3c4dc6e4991b43a608d46a170": {
     "describe": {
       "columns": [
         {
           "name": "uid",
           "ordinal": 0,
-          "type_info": "Uuid"
+          "type_info": "Int8"
         },
         {
           "name": "password",
@@ -41,18 +61,5 @@
       }
     },
     "query": "\n        SELECT uid, password\n        FROM users\n        WHERE email = $1\n        "
-  },
-  "b754835f0a1543fc32acbfee436f775e542036888e7a2051622efa435debb318": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Text",
-          "Uuid"
-        ]
-      }
-    },
-    "query": "\n        UPDATE users\n        SET password= $1\n        WHERE uid = $2\n        "
   }
 }

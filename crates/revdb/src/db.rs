@@ -27,7 +27,7 @@ impl RevDB {
         from_key: K,
         to_key: K,
     ) -> Result<Vec<IVec>, RevDBError> {
-        let iter = self.db.range(from_key..to_key);
+        let iter = self.db.range(from_key..=to_key);
         let mut items = vec![];
         for item in iter {
             let (_, value) = item?;

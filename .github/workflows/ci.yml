@@ -50,7 +50,7 @@ jobs:
         run: |
           cargo sqlx prepare --check -- --bin appflowy_server
       - name: Run tests
-        run: cargo tes
+        run: cargo test
         
   fmt:
     name: Rustfmt

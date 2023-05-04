@@ -49,7 +49,15 @@ pub async fn run(
     state: State,
     config: Config,
 ) -> Result<Server, anyhow::Error> {
-    let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret()).await?;
+    let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to connect to Redis at {:?}: {:?}",
+                config.redis_uri,
+                e
+            )
+        })?;
     let pair = get_certificate_and_server_key(&config);
     let key = pair
         .as_ref()
@@ -85,6 +93,7 @@ pub async fn run(
 fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Secret<String>)> {
     let tls_config = config.application.tls_config.as_ref()?;
     match tls_config {
+        TlsConfig::NoTls => None,
         TlsConfig::SelfSigned => Some(create_self_signed_certificate().unwrap()),
     }
 }

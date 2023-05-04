@@ -28,9 +28,22 @@ pub struct ApplicationSettings {
     pub tls_config: Option<TlsConfig>,
 }
 
+impl ApplicationSettings {
+    pub fn use_https(&self) -> bool {
+        match &self.tls_config {
+            None => false,
+            Some(config) => match config {
+                TlsConfig::NoTls => false,
+                TlsConfig::SelfSigned => true,
+            },
+        }
+    }
+}
+
 #[derive(serde::Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TlsConfig {
+    NoTls,
     SelfSigned,
 }
 

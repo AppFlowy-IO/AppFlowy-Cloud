@@ -1,12 +1,20 @@
-FROM rust:1.56.1 as builder
+FROM lukemathwalker/cargo-chef:latest-rust-1.65.0 as chef
 WORKDIR /app
+RUN apt update && apt install lld clang -y
 
+FROM chef as planner
 COPY . .
-WORKDIR /app/services/appflowy_server
+# Compute a lock-like file for our project
+RUN cargo chef prepare  --recipe-path recipe.json
+
+FROM chef as builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build our project dependencies
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
 ENV SQLX_OFFLINE true
-RUN RUSTFLAGS="-C opt-level=2" cargo build --release --bin appflowy_server
-# Size optimization
-#RUN strip ./target/release/appflowy_server
+# Build the project
+RUN cargo build --release --bin appflowy_server
 
 FROM debian:bullseye-slim AS runtime
 WORKDIR /app
@@ -17,7 +25,8 @@ RUN apt-get update -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/services/target/release/appflowy_server /usr/local/bin/appflowy_server
-COPY --from=builder /app/services/appflowy_server/configuration configuration
+COPY --from=builder /app/target/release/appflowy_server /usr/local/bin/appflowy_server
+COPY --from=builder /app/configuration configuration
 ENV APP_ENVIRONMENT production
+ENV RUST_BACKTRACE 1
 CMD ["appflowy_server"]

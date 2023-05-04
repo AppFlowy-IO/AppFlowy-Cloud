@@ -28,4 +28,5 @@ RUN apt-get update -y \
 COPY --from=builder /app/target/release/appflowy_server /usr/local/bin/appflowy_server
 COPY --from=builder /app/configuration configuration
 ENV APP_ENVIRONMENT production
+ENV RUST_BACKTRACE 1
 CMD ["appflowy_server"]

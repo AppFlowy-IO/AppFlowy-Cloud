@@ -1,6 +1,6 @@
 version: '3'
 services:
-  appflowy_postgres:
+  postgres:
     image: postgres:14
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -9,7 +9,7 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST}
     ports:
       - "5432:5432"
-  appflowy_redis:
+  redis:
     image: redis:7
     ports:
       - "6379:6379"
@@ -21,7 +21,7 @@ services:
       dockerfile: ./Dockerfile
     image: appflowy_server:${BACKEND_VERSION}
     depends_on:
-      - appflowy_redis
-      - appflowy_postgres
+      - redis
+      - postgres
     ports:
       - 8000:8000

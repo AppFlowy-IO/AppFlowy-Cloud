@@ -10,6 +10,7 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
+use anyhow::bail;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -49,7 +50,10 @@ pub async fn run(
     state: State,
     config: Config,
 ) -> Result<Server, anyhow::Error> {
-    let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret()).await?;
+    let redis_store = match RedisSessionStore::new(config.redis_uri.expose_secret()).await {
+        Ok(redis_store) => Ok(redis_store),
+        Err(_) => bail!("Failed to connect to Redis"),
+    }?;
     let pair = get_certificate_and_server_key(&config);
     let key = pair
         .as_ref()

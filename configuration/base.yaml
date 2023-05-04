@@ -8,5 +8,5 @@ database:
   port: 5432
   username: "postgres"
   password: "password"
-  database_name: "appflowy_pg"
+  database_name: "appflowy"
 redis_uri: "redis://127.0.0.1:6379"

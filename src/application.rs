@@ -50,10 +50,15 @@ pub async fn run(
     state: State,
     config: Config,
 ) -> Result<Server, anyhow::Error> {
-    let redis_store = match RedisSessionStore::new(config.redis_uri.expose_secret()).await {
-        Ok(redis_store) => Ok(redis_store),
-        Err(_) => bail!("Failed to connect to Redis"),
-    }?;
+    let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
+        .await
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to connect to Redis at {:?}: {:?}",
+                config.redis_uri,
+                e
+            )
+        })?;
     let pair = get_certificate_and_server_key(&config);
     let key = pair
         .as_ref()

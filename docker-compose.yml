@@ -8,11 +8,11 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_HOST=${POSTGRES_HOST}
     ports:
-      - "5432:5432"
+      - "5433:5432"
   redis:
     image: redis:7
     ports:
-      - "6379:6379"
+      - "6380:6379"
   appflowy_server:
     restart: on-failure
     environment:

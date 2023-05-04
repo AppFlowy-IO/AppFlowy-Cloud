@@ -6,6 +6,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_HOST=${POSTGRES_HOST}
     ports:
       - "5432:5432"
   appflowy_redis:
@@ -16,12 +17,11 @@ services:
     restart: on-failure
     environment:
       - APP_ENVIRONMENT=production
-      - DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}"
     build:
       dockerfile: ./Dockerfile
     image: appflowy_server:${BACKEND_VERSION}
     depends_on:
-      - postgres_db
+      - appflowy_redis
       - appflowy_postgres
     ports:
       - 8000:8000

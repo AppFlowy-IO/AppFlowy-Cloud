@@ -2,6 +2,5 @@ application:
   host: 0.0.0.0
   tls_config: "no_tls"
 database:
-  host: "postgres_db"
   port: 5432
-  require_ssl: true
+  require_ssl: false

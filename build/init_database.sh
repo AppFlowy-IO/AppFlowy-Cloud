@@ -22,11 +22,11 @@ DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
 DB_PORT="${POSTGRES_PORT:=5432}"
 DB_HOST="${POSTGRES_HOST:=localhost}"
-DB_NAME="${POSTGRES_DB:=appflowy_pg}"
+DB_NAME="${POSTGRES_DB:=appflowy}"
 
 if [[ -z "${SKIP_DOCKER}" ]]
 then
-  RUNNING_POSTGRES_CONTAINER=$(docker ps --filter 'name=postgres' --format '{{.ID}}')
+  RUNNING_POSTGRES_CONTAINER=$(docker ps --filter 'name=appflowy_postgres' --format '{{.ID}}')
   if [[ -n $RUNNING_POSTGRES_CONTAINER ]]; then
     echo >&2 "there is a postgres container already running, kill it with"
     echo >&2 "    docker kill ${RUNNING_POSTGRES_CONTAINER}"
@@ -39,8 +39,8 @@ then
       -e POSTGRES_DB="${DB_NAME}" \
       -p "${DB_PORT}":5432 \
       -d \
-      --name "af_postgres_$(date '+%s')" \
-      postgres -N 1000
+      --name "appflowy_postgres_$(date '+%s')" \
+      postgres:14 -N 1000
 fi
 
 
@@ -53,7 +53,7 @@ done
 
 >&2 echo "Postgres is up and running on port ${DB_PORT} - running migrations now!"
 
-export DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@localhost:${DB_PORT}/${DB_NAME}
+export DATABASE_URL=postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
 sqlx database create
 sqlx migrate run
 

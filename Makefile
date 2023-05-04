@@ -1,20 +1,14 @@
 ROOT = "./build"
 SEMVER_VERSION=$(shell grep version Cargo.toml | awk -F"\"" '{print $$2}' | head -n 1)
 
-.PHONY: init_database docker_image local_server docker_test
+.PHONY: prerequisite local_test
 
-init_database:
+prerequisite:
 	POSTGRES_PORT=5432 ${ROOT}/init_database.sh
+	${ROOT}/init_redis.sh
 
-docker_image:
-	source $(ROOT)/docker_env.sh && docker-compose up -d postgres_db
+appflowy_server_image:
 	source $(ROOT)/docker_env.sh && docker-compose up -d appflowy_server
-
-local_server:
-	cargo run
-
-docker_test:
-	sh $(ROOT)/docker_test.sh
 
 local_test:
 	# 🔥 Must run init_database first

@@ -7,7 +7,6 @@ init_database:
 	POSTGRES_PORT=5432 ${ROOT}/init_database.sh
 
 docker_image:
-	source $(ROOT)/docker_env.sh && docker-compose up -d postgres_db
 	source $(ROOT)/docker_env.sh && docker-compose up -d appflowy_server
 
 local_server:

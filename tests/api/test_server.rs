@@ -1,5 +1,5 @@
 use appflowy_server::application::{init_state, Application};
-use appflowy_server::config::config::{get_configuration, DatabaseSetting};
+use appflowy_server::config::config::{get_configuration, DatabaseSetting, TlsConfig};
 use appflowy_server::state::State;
 use appflowy_server::telemetry::{get_subscriber, init_subscriber};
 use once_cell::sync::Lazy;
@@ -100,12 +100,18 @@ pub async fn spawn_server() -> TestServer {
         .expect("Failed to build application");
 
     let port = application.port();
-    let address = format!("https://localhost:{}", port);
     let _ = tokio::spawn(async {
         let _ = application.run_until_stopped().await;
     });
-
-    let api_client = reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder();
+    let mut address = format!("http://localhost:{}", port);
+    if config.application.use_https() {
+        address = format!("https://localhost:{}", port);
+        builder = builder.add_root_certificate(
+            Certificate::from_pem(include_bytes!("../../cert/cert.pem")).unwrap(),
+        );
+    }
+    let api_client = builder
         .add_root_certificate(Certificate::from_pem(include_bytes!("../../cert/cert.pem")).unwrap())
         .redirect(reqwest::redirect::Policy::none())
         .danger_accept_invalid_certs(true)

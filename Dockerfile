@@ -1,4 +1,4 @@
-FROM rust:1.56.1 as builder
+FROM rust:1.65 as builder
 WORKDIR /app
 
 COPY . .
@@ -17,7 +17,7 @@ RUN apt-get update -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/services/target/release/appflowy_server /usr/local/bin/appflowy_server
-COPY --from=builder /app/services/appflowy_server/configuration configuration
+COPY --from=builder /app/target/release/appflowy_server /usr/local/bin/appflowy_server
+COPY --from=builder /app/configuration configuration
 ENV APP_ENVIRONMENT production
 CMD ["appflowy_server"]

@@ -2,7 +2,7 @@ application:
   port: 8000
   host: 0.0.0.0
   server_key: "Should-Use-The-Custom-Server-Key"
-  tls_config: "self_signed"
+  tls_config: "no_tls"
 database:
   host: "localhost"
   port: 5432

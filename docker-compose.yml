@@ -1,6 +1,6 @@
 version: '3'
 services:
-  postgres_db:
+  appflowy_postgres:
     image: postgres:14
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
@@ -8,16 +8,20 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
+  appflowy_redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
   appflowy_server:
     restart: on-failure
     environment:
       - APP_ENVIRONMENT=production
       - DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}"
     build:
-      context: ../../
-      dockerfile: ./services/appflowy_server/Dockerfile
+      dockerfile: ./Dockerfile
     image: appflowy_server:${BACKEND_VERSION}
     depends_on:
       - postgres_db
+      - appflowy_postgres
     ports:
       - 8000:8000

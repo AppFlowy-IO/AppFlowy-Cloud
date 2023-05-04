@@ -85,6 +85,7 @@ pub async fn run(
 fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Secret<String>)> {
     let tls_config = config.application.tls_config.as_ref()?;
     match tls_config {
+        TlsConfig::NoTls => None,
         TlsConfig::SelfSigned => Some(create_self_signed_certificate().unwrap()),
     }
 }

@@ -22,9 +22,9 @@ cargo install --version="~0.6" sqlx-cli --no-default-features --features rustls,
 
 ```bash
 # Ubuntu 
-sudo apt-get install lld clang libssl-dev postgresql-client
+sudo apt-get install libssl-dev postgresql-client
 # Arch 
-sudo pacman -S lld clang postgresql
+sudo pacman -S postgresql
 ```
 
 ```
@@ -32,10 +32,6 @@ cargo install --version="~0.6" sqlx-cli --no-default-features --features rustls,
 ```
 
 ### MacOS
-
-```bash
-brew install michaeleisel/zld/zld
-```
 
 ```
 cargo install --version="~0.6" sqlx-cli --no-default-features --features rustls,postgres

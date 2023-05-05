@@ -1,9 +1,11 @@
-use crate::component::ws::entities::{Connect, Disconnect, WSError, WebSocketMessage, ServerBroadcastMessage, ServerMessage};
+use crate::entities::{
+  Connect, Disconnect, ServerBroadcastMessage, ServerMessage, WebSocketMessage,
+};
+use crate::error::WSError;
 use actix::{Actor, Context, Handler, Recipient};
 use collab_sync::server::CollabGroup;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 pub type CollabId = String;
 
@@ -35,6 +37,10 @@ impl Actor for CollabServer {
 impl Handler<Connect> for CollabServer {
   type Result = Result<(), WSError>;
   fn handle(&mut self, msg: Connect, _ctx: &mut Context<Self>) -> Self::Result {
+    let broadcast_msg = ServerBroadcastMessage {
+      collab_id: msg.collab_id.clone(),
+    };
+    self.broadcast_message(broadcast_msg);
     Ok(())
   }
 }

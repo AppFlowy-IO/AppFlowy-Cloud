@@ -1,4 +1,4 @@
-use crate::test_server::{spawn_server, TestUser};
+use crate::util::{spawn_server, TestUser};
 use actix_web::http::StatusCode;
 use appflowy_server::component::auth::LoginResponse;
 

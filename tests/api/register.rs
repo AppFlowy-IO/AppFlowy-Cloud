@@ -1,4 +1,4 @@
-use crate::test_server::{error_msg_from_resp, spawn_server};
+use crate::util::{error_msg_from_resp, spawn_server};
 use appflowy_server::component::auth::{InputParamsError, RegisterResponse};
 use reqwest::StatusCode;
 

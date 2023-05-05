@@ -1,4 +1,4 @@
-use crate::component::auth::LoggedUser;
+use crate::error::WSError;
 use actix::{Message, Recipient};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -7,21 +7,8 @@ use std::sync::Arc;
 
 pub type Socket = Recipient<WebSocketMessage>;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
-pub struct WSSessionId(pub String);
-
-impl<T: AsRef<str>> std::convert::From<T> for WSSessionId {
-  fn from(s: T) -> Self {
-    WSSessionId(s.as_ref().to_owned())
-  }
-}
-
-impl std::fmt::Display for WSSessionId {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    let desc = &self.0.to_string();
-    f.write_str(desc)
-  }
-}
+#[derive(Debug)]
+pub struct LoggedUser();
 
 pub struct Session {
   pub user: Arc<LoggedUser>,
@@ -40,6 +27,7 @@ impl std::convert::From<Connect> for Session {
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), WSError>")]
 pub struct Connect {
+  pub collab_id: String,
   pub socket: Socket,
   pub user: Arc<LoggedUser>,
 }
@@ -60,35 +48,6 @@ impl std::ops::Deref for WebSocketMessage {
   fn deref(&self) -> &Self::Target {
     &self.0
   }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MessagePayload {
-  pub(crate) channel: u8,
-  pub(crate) detail: MessageDetail,
-}
-
-impl MessagePayload {
-  pub fn from_bytes<T: AsRef<[u8]>>(bytes: T) -> Self {
-    serde_json::from_slice(bytes.as_ref()).unwrap()
-  }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum MessageDetail {
-  Document(MessageContent),
-  Database(MessageContent),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MessageContent {
-  content: String,
-}
-
-#[derive(Debug)]
-pub enum WSError {
-  Internal,
 }
 
 #[derive(Message)]

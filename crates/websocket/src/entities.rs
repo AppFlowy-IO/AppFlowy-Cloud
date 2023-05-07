@@ -1,61 +1,57 @@
 use crate::error::WSError;
 use actix::{Message, Recipient};
 use bytes::Bytes;
+use collab_sync::msg::CollabMessage;
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-pub type Socket = Recipient<WebSocketMessage>;
-
-#[derive(Debug)]
-pub struct LoggedUser();
-
-pub struct Session {
-  pub user: Arc<LoggedUser>,
-  pub socket: Socket,
+#[derive(Debug, Clone)]
+pub struct WSUser {
+  pub user_id: Secret<String>,
 }
 
-impl std::convert::From<Connect> for Session {
-  fn from(c: Connect) -> Self {
-    Self {
-      user: c.user,
-      socket: c.socket,
-    }
+impl Hash for WSUser {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    let uid: &String = self.user_id.expose_secret();
+    uid.hash(state);
   }
 }
+
+impl PartialEq<Self> for WSUser {
+  fn eq(&self, other: &Self) -> bool {
+    let uid: &String = self.user_id.expose_secret();
+    let other_uid: &String = other.user_id.expose_secret();
+    uid == other_uid
+  }
+}
+
+impl Eq for WSUser {}
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), WSError>")]
 pub struct Connect {
-  pub collab_id: String,
-  pub socket: Socket,
-  pub user: Arc<LoggedUser>,
+  pub socket: Recipient<ServerMessage>,
+  pub user: Arc<WSUser>,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), WSError>")]
 pub struct Disconnect {
-  pub user: Arc<LoggedUser>,
+  pub user: Arc<WSUser>,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
-pub struct WebSocketMessage(pub Bytes);
-
-impl std::ops::Deref for WebSocketMessage {
-  type Target = Bytes;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
+pub struct ClientMessage {
+  pub user: Arc<WSUser>,
+  pub collab_msg: CollabMessage,
 }
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct ServerMessage(pub String);
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
-pub struct ServerBroadcastMessage {
-  pub collab_id: String,
+pub struct ServerMessage {
+  pub collab_msg: CollabMessage,
 }

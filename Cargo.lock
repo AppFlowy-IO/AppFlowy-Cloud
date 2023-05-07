@@ -446,6 +446,7 @@ dependencies = [
  "bincode",
  "bytes",
  "chrono",
+ "collab-persistence",
  "collab-sync",
  "collab-ws",
  "config",
@@ -476,6 +477,7 @@ dependencies = [
  "unicode-segmentation",
  "uuid",
  "validator",
+ "websocket",
 ]
 
 [[package]]
@@ -813,7 +815,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
- "collab-persistence",
  "lib0",
  "parking_lot 0.12.1",
  "serde",
@@ -3604,12 +3605,19 @@ name = "websocket"
 version = "0.1.0"
 dependencies = [
  "actix",
+ "actix-web-actors",
  "bytes",
+ "collab",
+ "collab-persistence",
  "collab-sync",
  "collab-ws",
+ "futures-util",
  "parking_lot 0.12.1",
+ "secrecy",
  "serde",
  "thiserror",
+ "tokio",
+ "tokio-stream",
  "tracing",
 ]
 

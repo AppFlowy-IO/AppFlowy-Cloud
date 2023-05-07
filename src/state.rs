@@ -1,6 +1,7 @@
 use crate::component::auth::LoggedUser;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
+use collab_persistence::kv::rocks_kv::RocksCollabDB;
 use collab_sync::server::CollabGroup;
 use snowflake::Snowflake;
 use sqlx::PgPool;
@@ -11,6 +12,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct State {
   pub pg_pool: PgPool,
+  pub rocksdb: Arc<RocksCollabDB>,
   pub config: Arc<Config>,
   pub user: Arc<RwLock<UserCache>>,
   pub id_gen: Arc<RwLock<Snowflake>>,

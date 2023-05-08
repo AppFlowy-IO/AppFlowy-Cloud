@@ -1,10 +1,9 @@
 use crate::error::WSError;
 use actix::{Message, Recipient};
-use bytes::Bytes;
+
 use collab_sync::msg::CollabMessage;
 use secrecy::{ExposeSecret, Secret};
-use serde::{Deserialize, Serialize};
-use std::fmt::Formatter;
+
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 

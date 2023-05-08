@@ -69,7 +69,7 @@ websocket = { path = "./crates/websocket" }
 
 [dev-dependencies]
 once_cell = "1.7.2"
-collab-ws = { version = "0.1.0" }
+collab-client-ws = { version = "0.1.0" }
 
 [[bin]]
 name = "appflowy_server"
@@ -89,6 +89,7 @@ members = [
 [patch.crates-io]
 #collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "935868"  }
 collab = { path = "./crates/AppFlowy-Collab/collab" }
-collab-ws = { path = "./crates/AppFlowy-Collab/collab-ws" }
+collab-client-ws = { path = "./crates/AppFlowy-Collab/collab-client-ws" }
 collab-sync = { path = "./crates/AppFlowy-Collab/collab-sync" }
 collab-persistence = { path = "./crates/AppFlowy-Collab/collab-persistence" }
+collab-plugins = { path = "./crates/AppFlowy-Collab/collab-plugins"}

@@ -7,10 +7,10 @@ use actix::{
 };
 use actix_web_actors::ws;
 use bytes::Bytes;
-use collab_sync::error::SyncError;
+
 use collab_sync::msg::CollabMessage;
 use futures_util::Sink;
-use std::fmt::Debug;
+
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -77,7 +77,7 @@ impl Actor for CollabSession {
         user: self.user.clone(),
       })
       .into_actor(self)
-      .then(|res, session, ctx| {
+      .then(|res, _session, ctx| {
         match res {
           Ok(Ok(_)) => {
             tracing::trace!("Send connect message to server success")
@@ -143,17 +143,18 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession {
   }
 }
 
+/// A helper struct that wraps the [Recipient] type to implement the [Sink] trait
 pub struct ClientSink(pub Recipient<ServerMessage>);
 
-impl Sink<ServerMessage> for ClientSink {
+impl Sink<CollabMessage> for ClientSink {
   type Error = WSError;
 
   fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
   }
 
-  fn start_send(self: Pin<&mut Self>, item: ServerMessage) -> Result<(), Self::Error> {
-    let _ = self.0.do_send(item);
+  fn start_send(self: Pin<&mut Self>, item: CollabMessage) -> Result<(), Self::Error> {
+    self.0.do_send(ServerMessage { collab_msg: item });
     Ok(())
   }
 

@@ -10,6 +10,8 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
+use actix::Actor;
+
 use collab_persistence::kv::rocks_kv::RocksCollabDB;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -19,6 +21,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
 use tracing_actix_web::TracingLogger;
 use websocket::CollabServer;
 
@@ -66,15 +69,15 @@ pub async fn run(
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server = CollabServer::new(state.rocksdb.clone()).unwrap();
+  let collab_server = CollabServer::new(state.rocksdb.clone()).unwrap().start();
   let mut server = HttpServer::new(move || {
     App::new()
-            // Session middleware
             .wrap(
                 SessionMiddleware::builder(redis_store.clone(), key.clone())
                     .cookie_name(HEADER_TOKEN.to_string())
                     .build(),
             )
+            // .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, add_error_header))
             .wrap(IdentityMiddleware::default())
             .wrap(default_cors())
             .wrap(TracingLogger::default())
@@ -109,7 +112,6 @@ pub async fn init_state(config: &Config) -> State {
     .unwrap_or_else(|_| panic!("Failed to connect to Postgres at {:?}.", config.database));
 
   std::fs::create_dir_all(config.application.rocksdb_db_dir()).expect("create rocksdb db dir");
-  println!("{:?}", config.application.rocksdb_db_dir());
   let rocksdb = Arc::new(RocksCollabDB::open(config.application.rocksdb_db_dir()).unwrap());
   State {
     pg_pool,
@@ -145,3 +147,10 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
     .unwrap();
   builder
 }
+
+// fn add_error_header<B>(
+//   res: dev::ServiceResponse<B>,
+// ) -> Result<ErrorHandlerResponse<B>, actix_web::Error> {
+//   tracing::error!("{:?}", res.request());
+//   Ok(ErrorHandlerResponse::Response(res.map_into_left_body()))
+// }

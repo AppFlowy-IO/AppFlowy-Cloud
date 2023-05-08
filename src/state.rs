@@ -2,10 +2,10 @@ use crate::component::auth::LoggedUser;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
 use collab_persistence::kv::rocks_kv::RocksCollabDB;
-use collab_sync::server::CollabGroup;
+
 use snowflake::Snowflake;
 use sqlx::PgPool;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

@@ -446,9 +446,9 @@ dependencies = [
  "bincode",
  "bytes",
  "chrono",
+ "collab-client-ws",
  "collab-persistence",
  "collab-sync",
- "collab-ws",
  "config",
  "dashmap",
  "derive_more",
@@ -826,6 +826,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "collab-client-ws"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-retry",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tracing",
+]
+
+[[package]]
 name = "collab-persistence"
 version = "0.1.0"
 dependencies = [
@@ -841,6 +857,19 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "yrs",
+]
+
+[[package]]
+name = "collab-plugins"
+version = "0.1.0"
+dependencies = [
+ "collab",
+ "collab-client-ws",
+ "collab-persistence",
+ "collab-sync",
+ "tracing",
+ "y-sync",
  "yrs",
 ]
 
@@ -863,22 +892,6 @@ dependencies = [
  "tracing",
  "y-sync",
  "yrs",
-]
-
-[[package]]
-name = "collab-ws"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "futures-util",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-retry",
- "tokio-stream",
- "tokio-tungstenite",
- "tracing",
 ]
 
 [[package]]
@@ -3609,8 +3622,9 @@ dependencies = [
  "bytes",
  "collab",
  "collab-persistence",
+ "collab-plugins",
  "collab-sync",
- "collab-ws",
+ "dashmap",
  "futures-util",
  "parking_lot 0.12.1",
  "secrecy",

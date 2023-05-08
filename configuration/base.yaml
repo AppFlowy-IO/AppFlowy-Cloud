@@ -3,6 +3,7 @@ application:
   host: 0.0.0.0
   server_key: "Should-Use-The-Custom-Server-Key"
   tls_config: "no_tls"
+  data_dir: "./data"
 database:
   host: "localhost"
   port: 5432

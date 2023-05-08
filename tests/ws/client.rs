@@ -1,28 +1,35 @@
-use collab_client_ws::WSClient;
-use collab_persistence::kv::rocks_kv::RocksCollabDB;
-use collab_sync::server::{CollabMsgCodec, CollabSink, CollabStream};
+use collab::core::collab::MutexCollab;
+use collab::core::origin::{CollabClient, CollabOrigin};
+use collab::preclude::MapRefExtension;
+use collab_client_ws::{WSClient, WSMessageHandler};
+use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
+use collab_plugins::disk::rocksdb::RocksdbDiskPlugin;
+use collab_plugins::sync::SyncPlugin;
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tempfile::TempDir;
 
 pub async fn spawn_client(
   uid: i64,
   object_id: &str,
   address: String,
-) -> std::io::Result<(Arc<RocksCollabDB>, Arc<MutexCollab>)> {
+) -> std::io::Result<TestClient> {
   let ws_client = WSClient::new(address, 100);
-  let origin = origin_from_tcp_stream(&ws_client);
-  let (reader, writer) = stream.into_split();
-  let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
+  let addr = ws_client.connect().await.unwrap().unwrap();
+  let origin = origin_from_tcp_stream(&addr);
+  let handler = ws_client.subscribe(object_id.to_string()).await.unwrap();
 
-  // sync
-  let stream = CollabStream::new(reader, CollabMsgCodec::default());
-  let sink = CollabSink::new(writer, CollabMsgCodec::default());
+  //
+  let (sink, stream) = (handler.sink(), handler.stream());
+  let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
   let sync_plugin = SyncPlugin::new(origin, object_id, collab.clone(), sink, stream);
   collab.lock().add_plugin(Arc::new(sync_plugin));
 
   // disk
   let tempdir = TempDir::new().unwrap();
-  let path = tempdir.into_path();
-  let db = Arc::new(RocksCollabDB::open(path).unwrap());
+  let db_path = tempdir.into_path();
+  let db = Arc::new(RocksCollabDB::open(db_path.clone()).unwrap());
   let disk_plugin = RocksdbDiskPlugin::new(uid, db.clone()).unwrap();
   collab.lock().add_plugin(Arc::new(disk_plugin));
   collab.initial();
@@ -36,11 +43,43 @@ pub async fn spawn_client(
     });
   }
 
-  Ok((db, collab))
+  let cleaner = Cleaner::new(db_path);
+  Ok(TestClient {
+    ws_client,
+    db,
+    collab,
+    cleaner,
+  })
 }
 
-fn origin_from_tcp_stream(ws_client: &WSClient) -> CollabOrigin {
-  let address = stream.local_addr().unwrap();
-  let origin = CollabClient::new(address.port() as i64, &address.to_string());
+fn origin_from_tcp_stream(addr: &SocketAddr) -> CollabOrigin {
+  let origin = CollabClient::new(addr.port() as i64, &addr.to_string());
   CollabOrigin::Client(origin)
+}
+
+pub struct TestClient {
+  ws_client: WSClient,
+  pub db: Arc<RocksCollabDB>,
+  pub collab: Arc<MutexCollab>,
+
+  #[allow(dead_code)]
+  cleaner: Cleaner,
+}
+
+struct Cleaner(PathBuf);
+
+impl Cleaner {
+  fn new(dir: PathBuf) -> Self {
+    Cleaner(dir)
+  }
+
+  fn cleanup(dir: &PathBuf) {
+    let _ = std::fs::remove_dir_all(dir);
+  }
+}
+
+impl Drop for Cleaner {
+  fn drop(&mut self) {
+    Self::cleanup(&self.0)
+  }
 }

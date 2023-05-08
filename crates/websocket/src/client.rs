@@ -8,9 +8,9 @@ use actix::{
 use actix_web_actors::ws;
 use bytes::Bytes;
 
-use collab_sync::msg::CollabMessage;
 use futures_util::Sink;
 
+use collab_plugins::sync::msg::CollabMessage;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};

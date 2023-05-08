@@ -1,9 +1,7 @@
 use crate::error::WSError;
 use actix::{Message, Recipient};
-
-use collab_sync::msg::CollabMessage;
+use collab_plugins::sync::msg::CollabMessage;
 use secrecy::{ExposeSecret, Secret};
-
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 

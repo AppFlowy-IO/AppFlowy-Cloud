@@ -5,19 +5,17 @@ use crate::ClientSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab_persistence::kv::rocks_kv::RocksCollabDB;
-use collab_persistence::kv::KVStore;
-use collab_plugins::disk_plugin::rocksdb_server::RocksdbServerDiskPlugin;
-use collab_sync::server::{
+use collab_plugins::disk::keys::make_collab_id_key;
+use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
+use collab_plugins::disk::kv::KVStore;
+use collab_plugins::disk::rocksdb_server::RocksdbServerDiskPlugin;
+use collab_plugins::sync::msg::CollabMessage;
+use collab_plugins::sync::server::{
   CollabBroadcast, CollabGroup, CollabIDGen, CollabId, NonZeroNodeId, COLLAB_ID_LEN,
 };
 use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
-
-use collab_persistence::keys::make_collab_id_key;
-use collab_sync::msg::CollabMessage;
-
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;

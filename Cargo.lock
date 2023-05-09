@@ -831,6 +831,7 @@ name = "collab-client-ws"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "collab-sync",
  "futures-util",
  "serde",
  "serde_json",

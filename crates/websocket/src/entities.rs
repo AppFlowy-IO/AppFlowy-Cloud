@@ -2,12 +2,19 @@ use crate::error::WSError;
 use actix::{Message, Recipient};
 use collab_plugins::sync::msg::CollabMessage;
 use secrecy::{ExposeSecret, Secret};
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
 pub struct WSUser {
   pub user_id: Secret<String>,
+}
+
+impl Display for WSUser {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&self.user_id.expose_secret())
+  }
 }
 
 impl Hash for WSUser {
@@ -43,6 +50,7 @@ pub struct Disconnect {
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
 pub struct ClientMessage {
+  pub handler_id: String,
   pub user: Arc<WSUser>,
   pub collab_msg: CollabMessage,
 }

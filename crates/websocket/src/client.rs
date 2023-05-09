@@ -11,6 +11,7 @@ use bytes::Bytes;
 use futures_util::Sink;
 
 use collab_plugins::sync::msg::CollabMessage;
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -48,10 +49,13 @@ impl CollabSession {
     });
   }
 
-  fn send_to_server(&self, bytes: Bytes) {
-    match CollabMessage::from_vec(bytes.to_vec()) {
-      Ok(collab_msg) => {
+  fn forward_binary(&self, bytes: Bytes) {
+    match WSMessage::from_vec(bytes.to_vec()) {
+      Ok(ws_message) => {
+        tracing::trace!("[WSClient]: forward message to server");
+        let collab_msg = CollabMessage::from_vec(ws_message.payload).unwrap();
         self.server.do_send(ClientMessage {
+          handler_id: ws_message.handler_id,
           user: self.user.clone(),
           collab_msg,
         });
@@ -83,7 +87,7 @@ impl Actor for CollabSession {
             tracing::trace!("Send connect message to server success")
           },
           _ => {
-            tracing::error!("Send connect message to server failed");
+            tracing::error!("🔴Send connect message to server failed");
             ctx.stop();
           },
         }
@@ -104,6 +108,7 @@ impl Handler<ServerMessage> for CollabSession {
   type Result = ();
 
   fn handle(&mut self, msg: ServerMessage, ctx: &mut Self::Context) {
+    tracing::trace!("[WSClient]: forward message to client");
     ctx.binary(msg.collab_msg);
   }
 }
@@ -129,7 +134,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession {
       },
       ws::Message::Text(_) => {},
       ws::Message::Binary(bytes) => {
-        self.send_to_server(bytes);
+        self.forward_binary(bytes);
       },
       ws::Message::Close(reason) => {
         ctx.close(reason);
@@ -153,8 +158,12 @@ impl Sink<CollabMessage> for ClientSink {
     Poll::Ready(Ok(()))
   }
 
-  fn start_send(self: Pin<&mut Self>, item: CollabMessage) -> Result<(), Self::Error> {
-    self.0.do_send(ServerMessage { collab_msg: item });
+  fn start_send(self: Pin<&mut Self>, collab_msg: CollabMessage) -> Result<(), Self::Error> {
+    tracing::trace!(
+      "[WSClient]: send {:?} message to application client",
+      collab_msg.msg_id()
+    );
+    self.0.do_send(ServerMessage { collab_msg });
     Ok(())
   }
 
@@ -164,5 +173,17 @@ impl Sink<CollabMessage> for ClientSink {
 
   fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WSMessage {
+  pub handler_id: String,
+  pub payload: Vec<u8>,
+}
+
+impl WSMessage {
+  pub fn from_vec(bytes: Vec<u8>) -> Result<Self, serde_json::Error> {
+    serde_json::from_slice(&bytes)
   }
 }

@@ -1,11 +1,12 @@
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab::preclude::MapRefExtension;
-use collab_client_ws::{WSClient, WSMessageHandler};
+
+use collab_client_ws::WSClient;
 use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use collab_plugins::disk::rocksdb::RocksdbDiskPlugin;
 use collab_plugins::sync::SyncPlugin;
 use std::net::SocketAddr;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -34,15 +35,6 @@ pub async fn spawn_client(
   collab.lock().add_plugin(Arc::new(disk_plugin));
   collab.initial();
 
-  {
-    let client = collab.lock();
-    client.with_transact_mut(|txn| {
-      let map = client.create_map_with_txn(txn, "map");
-      map.insert_with_txn(txn, "task1", "a");
-      map.insert_with_txn(txn, "task2", "b");
-    });
-  }
-
   let cleaner = Cleaner::new(db_path);
   Ok(TestClient {
     ws_client,
@@ -58,6 +50,7 @@ fn origin_from_tcp_stream(addr: &SocketAddr) -> CollabOrigin {
 }
 
 pub struct TestClient {
+  #[allow(dead_code)]
   ws_client: WSClient,
   pub db: Arc<RocksCollabDB>,
   pub collab: Arc<MutexCollab>,
@@ -81,5 +74,13 @@ impl Cleaner {
 impl Drop for Cleaner {
   fn drop(&mut self) {
     Self::cleanup(&self.0)
+  }
+}
+
+impl Deref for TestClient {
+  type Target = Arc<MutexCollab>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.collab
   }
 }

@@ -17,6 +17,7 @@ use dashmap::DashMap;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -106,10 +107,15 @@ impl Actor for CollabServer {
 impl Handler<Connect> for CollabServer {
   type Result = Result<(), WSError>;
 
-  fn handle(&mut self, msg: Connect, _ctx: &mut Context<Self>) -> Self::Result {
+  fn handle(&mut self, new_conn: Connect, _ctx: &mut Context<Self>) -> Self::Result {
+    tracing::trace!("[WSServer]: {} connect", new_conn.user);
     let (stream_tx, rx) = tokio::sync::mpsc::channel(100);
-    let stream = ClientStream::new(ClientSink(msg.socket), ReceiverStream::new(rx), stream_tx);
-    self.client_streams.write().insert(msg.user, stream);
+    let stream = ClientStream::new(
+      ClientSink(new_conn.socket),
+      ReceiverStream::new(rx),
+      stream_tx,
+    );
+    self.client_streams.write().insert(new_conn.user, stream);
     Ok(())
   }
 }
@@ -117,6 +123,7 @@ impl Handler<Connect> for CollabServer {
 impl Handler<Disconnect> for CollabServer {
   type Result = Result<(), WSError>;
   fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
+    tracing::trace!("[WSServer]: {} disconnect", msg.user);
     self.client_streams.write().remove(&msg.user);
     Ok(())
   }
@@ -125,13 +132,13 @@ impl Handler<Disconnect> for CollabServer {
 impl Handler<ClientMessage> for CollabServer {
   type Result = ResponseFuture<()>;
 
-  fn handle(&mut self, msg: ClientMessage, _ctx: &mut Context<Self>) -> Self::Result {
-    let object_id = msg.collab_msg.object_id();
+  fn handle(&mut self, client_msg: ClientMessage, _ctx: &mut Context<Self>) -> Self::Result {
+    let object_id = client_msg.collab_msg.object_id();
     if let Ok(collab_id) = self.get_or_create_collab_id(object_id) {
       if let Some(collab_group) = self.collab_groups.write().get_mut(&collab_id) {
-        if let Some(stream) = self.client_streams.write().get_mut(&msg.user) {
-          if let Some((sink, stream)) = stream.split() {
-            let origin = match msg.collab_msg.origin() {
+        if let Some(client_stream) = self.client_streams.write().get_mut(&client_msg.user) {
+          if let Some((sink, stream)) = client_stream.split() {
+            let origin = match client_msg.collab_msg.origin() {
               None => CollabOrigin::Empty,
               Some(client) => client.clone(),
             };
@@ -145,8 +152,19 @@ impl Handler<ClientMessage> for CollabServer {
 
       let client_streams = self.client_streams.clone();
       Box::pin(async move {
-        if let Some(client_stream) = client_streams.read().get(&msg.user) {
-          let _ = client_stream.stream_tx.send(Ok(msg.collab_msg)).await;
+        if let Some(client_stream) = client_streams.read().get(&client_msg.user) {
+          tracing::trace!(
+            "[WSServer]: receives client message: {:?}",
+            client_msg.collab_msg.msg_id()
+          );
+          match client_stream
+            .stream_tx
+            .send(Ok(client_msg.collab_msg))
+            .await
+          {
+            Ok(_) => {},
+            Err(e) => tracing::trace!("send error: {:?}", e),
+          }
         }
       })
     } else {

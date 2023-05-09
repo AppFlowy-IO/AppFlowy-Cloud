@@ -71,6 +71,7 @@ once_cell = "1.7.2"
 collab = { version = "0.1.0" }
 collab-client-ws = { version = "0.1.0" }
 tempfile = "3.4.0"
+assert-json-diff = "2.0.2"
 
 [[bin]]
 name = "appflowy_server"

@@ -10,4 +10,7 @@ database:
   username: "postgres"
   password: "password"
   database_name: "appflowy"
+websocket:
+  heartbeat_interval: 8
+  client_timeout: 10
 redis_uri: "redis://127.0.0.1:6379"

@@ -30,7 +30,9 @@ pub struct CollabServer {
   collab_id_gen: Arc<Mutex<CollabIDGen>>,
   /// Memory cache for fast lookup of collab_id from object_id
   collab_id_by_object_id: Arc<DashMap<String, CollabId>>,
+  /// Keep track of all collab groups
   collab_groups: Arc<RwLock<HashMap<CollabId, CollabGroup>>>,
+  /// Keep track of all client streams
   client_streams: Arc<RwLock<HashMap<Arc<WSUser>, WSClientStream>>>,
 }
 

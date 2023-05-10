@@ -20,7 +20,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
-  let level = "debug".to_string();
+  let level = "trace".to_string();
   let mut filters = vec![];
   filters.push(format!("appflowy_server={}", level));
   filters.push(format!("collab_client_ws={}", level));

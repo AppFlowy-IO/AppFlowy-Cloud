@@ -9,6 +9,7 @@ edition = "2021"
 actix = "0.13"
 actix-web-actors = { version = "4.2.0" }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 thiserror = "1.0.30"
 bytes = "1.0"
 secrecy = { version = "0.8", features = ["serde"] }
@@ -20,6 +21,4 @@ tokio = { version = "1.26", features = ["sync"] }
 dashmap = "5.4.0"
 
 collab = { version = "0.1.0"}
-collab-sync = { version = "0.1.0"}
-collab-persistence = { version = "0.1.0"}
-collab-plugins = { version = "0.1.0", features = ["disk_rocksdb"]}
+collab-plugins = { version = "0.1.0", features = ["disk_rocksdb", "sync"]}

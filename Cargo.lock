@@ -442,13 +442,14 @@ dependencies = [
  "actix-web-flash-messages",
  "anyhow",
  "argon2",
+ "assert-json-diff",
  "async-stream",
  "bincode",
  "bytes",
  "chrono",
+ "collab",
  "collab-client-ws",
- "collab-persistence",
- "collab-sync",
+ "collab-plugins",
  "config",
  "dashmap",
  "derive_more",
@@ -466,6 +467,7 @@ dependencies = [
  "serde_json",
  "snowflake",
  "sqlx",
+ "tempfile",
  "thiserror",
  "token",
  "tokio",
@@ -534,6 +536,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "assert-json-diff"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47e4f2b81832e72834d7518d8487a0396a28cc408186a2e8854c0f98011faf12"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -812,6 +824,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af4941#af4941ba5394157869eca56d4c937dbec1f0a0e3"
 dependencies = [
  "anyhow",
  "bytes",
@@ -828,8 +841,10 @@ dependencies = [
 [[package]]
 name = "collab-client-ws"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af4941#af4941ba5394157869eca56d4c937dbec1f0a0e3"
 dependencies = [
  "bytes",
+ "collab-sync",
  "futures-util",
  "serde",
  "serde_json",
@@ -844,6 +859,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af4941#af4941ba5394157869eca56d4c937dbec1f0a0e3"
 dependencies = [
  "bincode",
  "chrono",
@@ -863,11 +879,14 @@ dependencies = [
 [[package]]
 name = "collab-plugins"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af4941#af4941ba5394157869eca56d4c937dbec1f0a0e3"
 dependencies = [
  "collab",
  "collab-client-ws",
  "collab-persistence",
  "collab-sync",
+ "futures-util",
+ "tokio",
  "tracing",
  "y-sync",
  "yrs",
@@ -876,6 +895,7 @@ dependencies = [
 [[package]]
 name = "collab-sync"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=af4941#af4941ba5394157869eca56d4c937dbec1f0a0e3"
 dependencies = [
  "bytes",
  "collab",
@@ -3621,14 +3641,13 @@ dependencies = [
  "actix-web-actors",
  "bytes",
  "collab",
- "collab-persistence",
  "collab-plugins",
- "collab-sync",
  "dashmap",
  "futures-util",
  "parking_lot 0.12.1",
  "secrecy",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",

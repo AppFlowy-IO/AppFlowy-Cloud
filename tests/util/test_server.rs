@@ -2,9 +2,17 @@ use appflowy_server::application::{init_state, Application};
 use appflowy_server::config::config::{get_configuration, DatabaseSetting};
 use appflowy_server::state::State;
 use appflowy_server::telemetry::{get_subscriber, init_subscriber};
+use collab::core::collab::MutexCollab;
+use collab::core::origin::CollabOrigin;
+
+use collab_plugins::disk::keys::make_collab_id_key;
+
+use collab_plugins::disk::rocksdb_server::RocksdbServerDiskPlugin;
+use collab_plugins::sync::server::{CollabId, COLLAB_ID_LEN};
 use once_cell::sync::Lazy;
 use reqwest::Certificate;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use appflowy_server::component::auth::{RegisterResponse, HEADER_TOKEN};
 use sqlx::types::Uuid;
@@ -12,11 +20,13 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
-  let level = "trace".to_string();
+  let level = "debug".to_string();
   let mut filters = vec![];
   filters.push(format!("appflowy_server={}", level));
   filters.push(format!("collab_client_ws={}", level));
-  filters.push(format!("hyper={}", level));
+  filters.push(format!("websocket={}", level));
+  filters.push(format!("collab_sync={}", level));
+  // filters.push(format!("hyper={}", level));
   filters.push(format!("actix_web={}", level));
 
   let subscriber_name = "test".to_string();
@@ -88,6 +98,25 @@ impl TestServer {
       .send()
       .await
       .expect("Change password failed")
+  }
+
+  pub fn get_doc(&self, object_id: &str) -> serde_json::Value {
+    let collab = MutexCollab::new(CollabOrigin::Empty, object_id, vec![]);
+    let collab_id = self.collab_id_from_object_id(object_id);
+    let plugin = RocksdbServerDiskPlugin::new(collab_id, self.state.rocksdb.clone()).unwrap();
+    collab.lock().add_plugin(Arc::new(plugin));
+    collab.initial();
+    let collab = collab.lock();
+    collab.to_json_value()
+  }
+
+  pub fn collab_id_from_object_id(&self, object_id: &str) -> CollabId {
+    let read_txn = self.state.rocksdb.read_txn();
+    let collab_key = make_collab_id_key(object_id.as_ref());
+    let value = read_txn.get(collab_key.as_ref()).unwrap().unwrap();
+    let mut bytes = [0; COLLAB_ID_LEN];
+    bytes[0..COLLAB_ID_LEN].copy_from_slice(value.as_ref());
+    CollabId::from_be_bytes(bytes)
   }
 }
 

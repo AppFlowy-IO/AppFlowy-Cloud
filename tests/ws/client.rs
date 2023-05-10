@@ -1,7 +1,7 @@
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 
-use collab_client_ws::{WSClient, WSMessageHandler};
+use collab_client_ws::{WSBusinessHandler, WSClient, WSClientConfig};
 use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use collab_plugins::disk::rocksdb::RocksdbDiskPlugin;
 use collab_plugins::sync::SyncPlugin;
@@ -9,6 +9,7 @@ use std::net::SocketAddr;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 
 pub async fn spawn_client(
@@ -16,10 +17,13 @@ pub async fn spawn_client(
   object_id: &str,
   address: String,
 ) -> std::io::Result<TestClient> {
-  let ws_client = WSClient::new(address, 100);
+  let ws_client = WSClient::new(address, WSClientConfig::default());
   let addr = ws_client.connect().await.unwrap().unwrap();
   let origin = origin_from_tcp_stream(&addr);
-  let handler = ws_client.subscribe("collab".to_string()).await.unwrap();
+  let handler = ws_client
+    .subscribe_business("collab".to_string())
+    .await
+    .unwrap();
 
   //
   let (sink, stream) = (handler.sink(), handler.stream());
@@ -60,7 +64,7 @@ pub struct TestClient {
   cleaner: Cleaner,
 
   #[allow(dead_code)]
-  handlers: Vec<Arc<WSMessageHandler>>,
+  handlers: Vec<Arc<WSBusinessHandler>>,
 }
 
 struct Cleaner(PathBuf);
@@ -87,4 +91,8 @@ impl Deref for TestClient {
   fn deref(&self) -> &Self::Target {
     &self.collab
   }
+}
+
+pub async fn wait(secs: u64) {
+  tokio::time::sleep(Duration::from_secs(secs)).await;
 }

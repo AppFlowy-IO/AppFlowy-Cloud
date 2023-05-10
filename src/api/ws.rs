@@ -5,6 +5,7 @@ use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use secrecy::Secret;
+use std::time::Duration;
 
 use websocket::entities::WSUser;
 use websocket::{CollabServer, CollabSession};
@@ -23,7 +24,12 @@ pub async fn establish_ws_connection(
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = LoggedUser::from_token(&state.config.application.server_key, token.as_str())?;
-  let client = CollabSession::new(user.into(), server.get_ref().clone());
+  let client = CollabSession::new(
+    user.into(),
+    server.get_ref().clone(),
+    Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
+    Duration::from_secs(state.config.websocket.client_timeout as u64),
+  );
   match ws::start(client, &request, payload) {
     Ok(response) => Ok(response),
     Err(e) => {

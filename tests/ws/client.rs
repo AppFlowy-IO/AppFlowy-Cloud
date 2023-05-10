@@ -21,7 +21,7 @@ pub async fn spawn_client(
   let addr = ws_client.connect().await.unwrap().unwrap();
   let origin = origin_from_tcp_stream(&addr);
   let handler = ws_client
-    .subscribe_business("collab".to_string())
+    .subscribe_business("collab".to_string(), object_id.to_string())
     .await
     .unwrap();
 

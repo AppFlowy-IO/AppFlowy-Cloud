@@ -61,12 +61,14 @@ pub struct ClientMessage {
 #[rtype(result = "()")]
 pub struct ServerMessage {
   pub business_id: String,
+  pub object_id: String,
   pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WSMessage {
   pub business_id: String,
+  pub object_id: String,
   pub payload: Vec<u8>,
 }
 
@@ -87,6 +89,7 @@ impl From<ServerMessage> for WSMessage {
   fn from(server_msg: ServerMessage) -> Self {
     Self {
       business_id: server_msg.business_id,
+      object_id: server_msg.object_id,
       payload: server_msg.payload,
     }
   }
@@ -96,6 +99,7 @@ impl From<CollabMessage> for WSMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
       business_id: msg.business_id().to_string(),
+      object_id: msg.object_id().to_string(),
       payload: msg.to_vec(),
     }
   }
@@ -105,6 +109,7 @@ impl From<CollabMessage> for ServerMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
       business_id: msg.business_id().to_string(),
+      object_id: msg.object_id().to_string(),
       payload: msg.to_vec(),
     }
   }
@@ -114,6 +119,7 @@ impl From<ClientMessage> for WSMessage {
   fn from(client_msg: ClientMessage) -> Self {
     Self {
       business_id: client_msg.business_id,
+      object_id: client_msg.collab_msg.object_id().to_string(),
       payload: client_msg.collab_msg.to_vec(),
     }
   }

@@ -4,9 +4,9 @@ use appflowy_server::state::State;
 use appflowy_server::telemetry::{get_subscriber, init_subscriber};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
+
 use collab_plugins::disk::keys::make_collab_id_key;
-use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
+
 use collab_plugins::disk::rocksdb_server::RocksdbServerDiskPlugin;
 use collab_plugins::sync::server::{CollabId, COLLAB_ID_LEN};
 use once_cell::sync::Lazy;
@@ -20,7 +20,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
-  let level = "trace".to_string();
+  let level = "debug".to_string();
   let mut filters = vec![];
   filters.push(format!("appflowy_server={}", level));
   filters.push(format!("collab_client_ws={}", level));

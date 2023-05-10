@@ -1,7 +1,7 @@
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 
-use collab_client_ws::WSClient;
+use collab_client_ws::{WSClient, WSMessageHandler};
 use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use collab_plugins::disk::rocksdb::RocksdbDiskPlugin;
 use collab_plugins::sync::SyncPlugin;
@@ -19,7 +19,7 @@ pub async fn spawn_client(
   let ws_client = WSClient::new(address, 100);
   let addr = ws_client.connect().await.unwrap().unwrap();
   let origin = origin_from_tcp_stream(&addr);
-  let handler = ws_client.subscribe(object_id.to_string()).await.unwrap();
+  let handler = ws_client.subscribe("collab".to_string()).await.unwrap();
 
   //
   let (sink, stream) = (handler.sink(), handler.stream());
@@ -41,6 +41,7 @@ pub async fn spawn_client(
     db,
     collab,
     cleaner,
+    handlers: vec![handler],
   })
 }
 
@@ -57,6 +58,9 @@ pub struct TestClient {
 
   #[allow(dead_code)]
   cleaner: Cleaner,
+
+  #[allow(dead_code)]
+  handlers: Vec<Arc<WSMessageHandler>>,
 }
 
 struct Cleaner(PathBuf);

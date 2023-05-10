@@ -19,7 +19,12 @@ async fn ws_conn_test() {
   wait_a_sec().await;
 
   let value = server.get_doc("1");
-  assert_json_diff::assert_json_eq!(value, json!(""));
+  assert_json_diff::assert_json_eq!(
+    value,
+    json!({
+      "1": "a"
+    })
+  );
 }
 
 async fn wait_a_sec() {

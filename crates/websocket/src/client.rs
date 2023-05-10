@@ -10,32 +10,36 @@ use bytes::Bytes;
 use std::ops::Deref;
 
 use collab_plugins::sync::msg::CollabMessage;
-
 use std::sync::Arc;
-
 use std::time::{Duration, Instant};
-
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
-const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct CollabSession {
   user: Arc<WSUser>,
   hb: Instant,
   pub server: Addr<CollabServer>,
+  heartbeat_interval: Duration,
+  client_timeout: Duration,
 }
 
 impl CollabSession {
-  pub fn new(user: WSUser, server: Addr<CollabServer>) -> Self {
+  pub fn new(
+    user: WSUser,
+    server: Addr<CollabServer>,
+    heartbeat_interval: Duration,
+    client_timeout: Duration,
+  ) -> Self {
     Self {
       user: Arc::new(user),
       hb: Instant::now(),
       server,
+      heartbeat_interval,
+      client_timeout,
     }
   }
 
   fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
-    ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
-      if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
+    ctx.run_interval(self.heartbeat_interval, |act, ctx| {
+      if Instant::now().duration_since(act.hb) > act.client_timeout {
         act.server.do_send(Disconnect {
           user: act.user.clone(),
         });

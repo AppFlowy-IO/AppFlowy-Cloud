@@ -8,7 +8,8 @@ use std::path::PathBuf;
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct Config {
   pub database: DatabaseSetting,
-  pub application: ApplicationSettings,
+  pub application: ApplicationSetting,
+  pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
 }
 
@@ -21,7 +22,7 @@ pub struct Config {
 // it to 0.0.0.0 in our Docker images.
 //
 #[derive(serde::Deserialize, Clone, Debug)]
-pub struct ApplicationSettings {
+pub struct ApplicationSetting {
   #[serde(deserialize_with = "deserialize_number_from_string")]
   pub port: u16,
   pub host: String,
@@ -30,7 +31,7 @@ pub struct ApplicationSettings {
   pub tls_config: Option<TlsConfig>,
 }
 
-impl ApplicationSettings {
+impl ApplicationSetting {
   pub fn use_https(&self) -> bool {
     match &self.tls_config {
       None => false,
@@ -89,7 +90,7 @@ pub fn get_configuration() -> Result<Config, config::ConfigError> {
   let configuration_dir = base_path.join("configuration");
 
   let environment: Environment = std::env::var("APP_ENVIRONMENT")
-    .unwrap_or_else(|_| "local".into())
+    .unwrap_or_else(|_| "local".to_string())
     .try_into()
     .expect("Failed to parse APP_ENVIRONMENT.");
 
@@ -142,4 +143,9 @@ impl TryFrom<String> for Environment {
       )),
     }
   }
+}
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct WebsocketSetting {
+  pub heartbeat_interval: u8,
+  pub client_timeout: u8,
 }

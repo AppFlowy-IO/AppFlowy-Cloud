@@ -88,14 +88,14 @@ members = [
 ]
 
 [patch.crates-io]
-#collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4941"  }
-#collab-client-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4941"  }
-#collab-sync= { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4941" }
-#collab-persistence = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4941" }
-#collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "af4941" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c"  }
+collab-client-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c"  }
+collab-sync= { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c" }
+collab-persistence = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c" }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c" }
 
-collab = { path = "./crates/AppFlowy-Collab/collab" }
-collab-client-ws = { path = "./crates/AppFlowy-Collab/collab-client-ws" }
-collab-persistence = { path = "./crates/AppFlowy-Collab/collab-persistence" }
-collab-sync = { path = "./crates/AppFlowy-Collab/collab-sync" }
-collab-plugins = { path = "./crates/AppFlowy-Collab/collab-plugins"}
+#collab = { path = "./crates/AppFlowy-Collab/collab" }
+#collab-client-ws = { path = "./crates/AppFlowy-Collab/collab-client-ws" }
+#collab-persistence = { path = "./crates/AppFlowy-Collab/collab-persistence" }
+#collab-sync = { path = "./crates/AppFlowy-Collab/collab-sync" }
+#collab-plugins = { path = "./crates/AppFlowy-Collab/collab-plugins"}

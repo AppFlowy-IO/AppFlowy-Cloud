@@ -12,7 +12,7 @@ use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
 
-use collab_persistence::kv::rocks_kv::RocksCollabDB;
+use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};

@@ -1,8 +1,8 @@
 use crate::component::auth::LoggedUser;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
-use collab_persistence::kv::rocks_kv::RocksCollabDB;
 
+use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::collections::BTreeMap;

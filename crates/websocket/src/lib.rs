@@ -1,3 +1,4 @@
+mod channel_ext;
 mod client;
 pub mod entities;
 mod error;

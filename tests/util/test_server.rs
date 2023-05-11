@@ -207,7 +207,7 @@ impl TestUser {
   pub fn generate() -> Self {
     Self {
       name: "Me".to_string(),
-      email: "me@appflowy.io".to_string(),
+      email: format!("{}@appflowy.io", Uuid::new_v4()),
       password: "Hello@AppFlowy123".to_string(),
     }
   }

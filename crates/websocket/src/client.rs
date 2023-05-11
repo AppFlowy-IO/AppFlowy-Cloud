@@ -54,7 +54,6 @@ impl CollabSession {
   fn forward_binary_to_ws_server(&self, bytes: Bytes) {
     match WSMessage::from_vec(bytes.to_vec()) {
       Ok(ws_message) => {
-        tracing::trace!("[WSClient]: forward message to server");
         let collab_msg = CollabMessage::from_vec(&ws_message.payload).unwrap();
         self.server.do_send(ClientMessage {
           business_id: ws_message.business_id,
@@ -110,7 +109,6 @@ impl Handler<ServerMessage> for CollabSession {
   type Result = ();
 
   fn handle(&mut self, server_msg: ServerMessage, ctx: &mut Self::Context) {
-    tracing::trace!("[WSClient]: forward message to client");
     ctx.binary(WSMessage::from(server_msg));
   }
 }

@@ -52,7 +52,7 @@ pub struct Disconnect {
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
 pub struct ClientMessage {
-  pub business_id: String,
+  pub business_id: u8,
   pub user: Arc<WSUser>,
   pub collab_msg: CollabMessage,
 }
@@ -60,14 +60,14 @@ pub struct ClientMessage {
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
 pub struct ServerMessage {
-  pub business_id: String,
+  pub business_id: u8,
   pub object_id: String,
   pub payload: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WSMessage {
-  pub business_id: String,
+  pub business_id: u8,
   pub object_id: String,
   pub payload: Vec<u8>,
 }
@@ -98,7 +98,7 @@ impl From<ServerMessage> for WSMessage {
 impl From<CollabMessage> for WSMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
-      business_id: msg.business_id().to_string(),
+      business_id: msg.business_id(),
       object_id: msg.object_id().to_string(),
       payload: msg.to_vec(),
     }
@@ -108,7 +108,7 @@ impl From<CollabMessage> for WSMessage {
 impl From<CollabMessage> for ServerMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
-      business_id: msg.business_id().to_string(),
+      business_id: msg.business_id(),
       object_id: msg.object_id().to_string(),
       payload: msg.to_vec(),
     }

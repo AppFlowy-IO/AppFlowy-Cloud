@@ -3,36 +3,38 @@ use appflowy_server::client::client;
 
 #[tokio::test]
 async fn register_success() {
-  let c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
   let email = format!("deep_fake{}@appflowy.io", timestamp_nano());
-  let token = c
-    .register("user1", &email, "DeepFakePassword!123")
+  c.register("user1", &email, "DeepFakePassword!123")
     .await
     .unwrap();
-  assert!(token.len() > 0);
+  assert!(c.logged_in_token().is_some())
 }
 
 #[tokio::test]
 async fn register_with_invalid_password() {
-  let c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
   let email = format!("deep_fake{}@appflowy.io", timestamp_nano());
-  let token = c.register("user1", &email, "123").await;
-  assert!(token.is_err());
+  let res = c.register("user1", &email, "123").await;
+  assert!(res.is_err());
+  assert!(c.logged_in_token().is_none())
 }
 
 #[tokio::test]
 async fn register_with_invalid_name() {
-  let c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
   let email = format!("deep_fake{}@appflowy.io", timestamp_nano());
-  let token = c.register("", &email, "DeepFakePassword!123").await;
-  assert!(token.is_err());
+  let res = c.register("", &email, "DeepFakePassword!123").await;
+  assert!(res.is_err());
+  assert!(c.logged_in_token().is_none())
 }
 
 #[tokio::test]
 async fn register_with_invalid_email() {
-  let c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
-  let token = c
+  let mut c = client::Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let res = c
     .register("user1", "appflowy.io", "DeepFakePassword!123")
     .await;
-  assert!(token.is_err());
+  assert!(res.is_err());
+  assert!(c.logged_in_token().is_none())
 }

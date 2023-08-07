@@ -3,6 +3,7 @@ use anyhow::{anyhow, Error};
 pub struct Client {
   http_client: reqwest::Client,
   base_url: String,
+  token: Option<String>,
 }
 
 impl Client {
@@ -10,10 +11,19 @@ impl Client {
     Self {
       base_url: base_url.to_string(),
       http_client: c,
+      token: None,
     }
   }
 
-  pub async fn register(&self, name: &str, email: &str, password: &str) -> Result<String, Error> {
+  // returns logged_in token if logged_in
+  pub fn logged_in_token(&self) -> Option<&str> {
+    match &self.token {
+      Some(s) => Some(&s),
+      None => None,
+    }
+  }
+
+  pub async fn register(&mut self, name: &str, email: &str, password: &str) -> Result<(), Error> {
     let url = format!("{}/api/user/register", self.base_url);
     let payload = serde_json::json!({
         "name": name,
@@ -22,11 +32,24 @@ impl Client {
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
     let token: Token = from(resp).await?;
-    Ok(token.token)
+    self.token = Some(token.token);
+    Ok(())
   }
 
   // TODO: change to password hash instead
-  pub async fn login(&self, email: &str, password: &str) -> Result<String, Error> {
+  pub async fn login(&mut self, email: &str, password: &str) -> Result<(), Error> {
+    let url = format!("{}/api/user/login", self.base_url);
+    let payload = serde_json::json!({
+        "password": password,
+        "email": email,
+    });
+    let resp = self.http_client.post(&url).json(&payload).send().await?;
+    let token: Token = from(resp).await?;
+    self.token = Some(token.token);
+    Ok(())
+  }
+
+  pub async fn change_password(&self, email: &str, password: &str) -> Result<String, Error> {
     let url = format!("{}/api/user/login", self.base_url);
     let payload = serde_json::json!({
         "password": password,

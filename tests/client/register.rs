@@ -1,7 +1,5 @@
+use crate::client::utils::{timestamp_nano, LOCALHOST_URL};
 use appflowy_server::client::client;
-use std::time::SystemTime;
-
-const LOCALHOST_URL: &str = "http://127.0.0.1:8000"; //TODO: change to default port
 
 #[tokio::test]
 async fn register_success() {
@@ -37,12 +35,4 @@ async fn register_with_invalid_email() {
     .register("user1", "appflowy.io", "DeepFakePassword!123")
     .await;
   assert!(token.is_err());
-}
-
-// Utils
-fn timestamp_nano() -> u128 {
-  SystemTime::now()
-    .duration_since(SystemTime::UNIX_EPOCH)
-    .unwrap()
-    .as_nanos()
 }

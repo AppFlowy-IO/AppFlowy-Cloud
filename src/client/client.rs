@@ -24,6 +24,18 @@ impl Client {
     let token: Token = from(resp).await?;
     Ok(token.token)
   }
+
+  // TODO: change to password hash instead
+  pub async fn login(&self, email: &str, password: &str) -> Result<String, Error> {
+    let url = format!("{}/api/user/login", self.base_url);
+    let payload = serde_json::json!({
+        "password": password,
+        "email": email,
+    });
+    let resp = self.http_client.post(&url).json(&payload).send().await?;
+    let token: Token = from(resp).await?;
+    Ok(token.token)
+  }
 }
 
 async fn from<T>(resp: reqwest::Response) -> Result<T, Error>

@@ -1,4 +1,5 @@
 use crate::util::{spawn_server, TestUser};
+use std::time::Duration;
 
 use collab_client_ws::{WSClient, WSClientConfig};
 
@@ -18,5 +19,10 @@ async fn ws_retry_connect() {
     },
   );
   let _addr = ws_client.connect().await.unwrap().unwrap();
-  // wait(20).await;
+  // wait(10).await;
+}
+
+#[allow(dead_code)]
+async fn wait(secs: u64) {
+  tokio::time::sleep(Duration::from_secs(secs)).await;
 }

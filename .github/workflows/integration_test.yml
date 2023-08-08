@@ -12,14 +12,6 @@ env:
   # SQLX
   DATABASE_URL: postgres://postgres:password@postgres:5432/appflowy
 
-  # docker-compose
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: password
-  POSTGRES_PORT: 5432
-  POSTGRES_HOST: postgres
-  POSTGRES_DB: appflowy
-  BACKEND_VERSION: v0.0.1
-
   # AppFlowy-Cloud settings
   APP__DATABASE__HOST: postgres
   APP__REDIS_URI: redis://redis:6379
@@ -35,12 +27,19 @@ jobs:
       - name: Install necessary packages
         run: |
           sudo apt update
-          sudo apt install docker-compose libssl-dev pkg-config clang postgresql
+          sudo apt install docker-compose libssl-dev \
+            pkg-config clang postgresql
           sudo systemctl start docker
 
-      - name: Install Rust Toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            AppFlowy-Cloud
+          cache-all-crates: true
+
+      - name: Build Server
         run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          cargo build --release
 
       - name: Start Docker Compose
         run: |

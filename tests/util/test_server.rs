@@ -46,60 +46,6 @@ pub struct TestServer {
 }
 
 impl TestServer {
-  pub async fn register(&self, name: &str, email: &str, password: &str) -> reqwest::Response {
-    let payload = serde_json::json!({
-        "name": name,
-        "password": password,
-        "email": email
-    });
-    let url = format!("{}/api/user/register", self.address);
-    self
-      .api_client
-      .post(&url)
-      .json(&payload)
-      .send()
-      .await
-      .expect("Register failed")
-  }
-
-  pub async fn login(&self, email: &str, password: &str) -> reqwest::Response {
-    let payload = serde_json::json!({
-        "password": password,
-        "email": email
-    });
-    let url = format!("{}/api/user/login", self.address);
-    self
-      .api_client
-      .post(&url)
-      .json(&payload)
-      .send()
-      .await
-      .expect("Login failed")
-  }
-
-  pub async fn change_password(
-    &self,
-    token: String,
-    current_password: &str,
-    new_password: &str,
-    new_password_confirm: &str,
-  ) -> reqwest::Response {
-    let payload = serde_json::json!({
-        "current_password": current_password,
-        "new_password": new_password,
-        "new_password_confirm": new_password_confirm
-    });
-    let url = format!("{}/api/user/password", self.address);
-    self
-      .api_client
-      .post(&url)
-      .header(HEADER_TOKEN, token)
-      .json(&payload)
-      .send()
-      .await
-      .expect("Change password failed")
-  }
-
   pub fn get_doc(&self, object_id: &str) -> serde_json::Value {
     let collab = MutexCollab::new(CollabOrigin::Empty, object_id, vec![]);
     let collab_id = self.collab_id_from_object_id(object_id);

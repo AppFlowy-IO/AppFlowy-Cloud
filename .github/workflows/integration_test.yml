@@ -19,6 +19,7 @@ env:
 jobs:
   test:
     name: Integration test
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
@@ -33,7 +34,7 @@ jobs:
 
       - name: Start Docker Compose
         run: |
-          docker-compose docker-compose.yml up -d
+          docker-compose up -d
 
       - name: SQLX Migration
         run: |

@@ -38,6 +38,8 @@ jobs:
           cache-all-crates: true
 
       - name: Build Server
+        env:
+          ENV SQLX_OFFLINE: true
         run: |
           cargo build --release
 

@@ -19,14 +19,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
       - name: Install necessary packages
       - run: |
           sudo apt update
           sudo apt install docker-compose libssl-dev pkg-config clang postgresql
           sudo systemctl start docker
+
+      - name: Install Rust Toolchain
+      - run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
 
       - name: Start Docker Compose
         run: |

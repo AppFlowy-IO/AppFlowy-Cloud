@@ -19,13 +19,13 @@ jobs:
 
     steps:
       - name: Install necessary packages
-      - run: |
+        run: |
           sudo apt update
           sudo apt install docker-compose libssl-dev pkg-config clang postgresql
           sudo systemctl start docker
 
       - name: Install Rust Toolchain
-      - run: |
+        run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
 
       - name: Start Docker Compose

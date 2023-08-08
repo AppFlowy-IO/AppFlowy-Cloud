@@ -1,0 +1,46 @@
+name: CI with Docker Compose
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  # sqlx
+  DATABASE_URL: postgres://postgres:password@postgres:5432/appflowy
+
+  # app config
+  APP__DATABASE__HOST: postgres
+  APP__REDIS_URI: redis://redis:6379
+
+jobs:
+  test:
+    name: Integration test
+
+    steps:
+      uses: actions/checkout@v3
+      uses: dtolnay/rust-toolchain@stable
+      uses: Swatinem/rust-cache@v2
+
+      name: Install necessary packages
+      run: |
+        sudo apt update
+        sudo apt install docker-compose libssl-dev pkg-config clang postgresql
+        sudo systemctl start docker
+
+      name: Start Docker Compose
+      run: |
+        docker-compose docker-compose.yml up -d
+
+      name: SQLX Migration
+      run: |
+        cargo install sqlx-cli
+        sqlx database create
+        sqlx migrate run
+
+      name: Run Client test
+      run: |
+        cargo test

@@ -18,6 +18,7 @@ services:
     environment:
       - APP_ENVIRONMENT=production
     build:
+      context: .
       dockerfile: ./Dockerfile
     image: appflowy_server:${BACKEND_VERSION}
     depends_on:

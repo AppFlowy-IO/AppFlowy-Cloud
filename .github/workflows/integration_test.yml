@@ -38,9 +38,8 @@ jobs:
           cache-all-crates: true
 
       - name: Build Server
-        env:
-          ENV SQLX_OFFLINE: true
         run: |
+          export SQLX_OFFLINE=true
           cargo build --release
 
       - name: Start Docker Compose

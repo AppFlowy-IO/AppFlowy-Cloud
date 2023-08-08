@@ -9,7 +9,17 @@ on:
       - main
 
 env:
+  # SQLX
   DATABASE_URL: postgres://postgres:password@postgres:5432/appflowy
+
+  # docker-compose
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: password
+  POSTGRES_PORT: 5432
+  POSTGRES_HOST: postgres
+  POSTGRES_DB: appflowy
+
+  # AppFlowy-Cloud settings
   APP__DATABASE__HOST: postgres
   APP__REDIS_URI: redis://redis:6379
 

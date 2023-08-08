@@ -21,26 +21,26 @@ jobs:
     name: Integration test
 
     steps:
-      uses: actions/checkout@v3
-      uses: dtolnay/rust-toolchain@stable
-      uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
-      name: Install necessary packages
-      run: |
-        sudo apt update
-        sudo apt install docker-compose libssl-dev pkg-config clang postgresql
-        sudo systemctl start docker
+      - name: Install necessary packages
+      - run: |
+          sudo apt update
+          sudo apt install docker-compose libssl-dev pkg-config clang postgresql
+          sudo systemctl start docker
 
-      name: Start Docker Compose
-      run: |
-        docker-compose docker-compose.yml up -d
+      - name: Start Docker Compose
+        run: |
+          docker-compose docker-compose.yml up -d
 
-      name: SQLX Migration
-      run: |
-        cargo install sqlx-cli
-        sqlx database create
-        sqlx migrate run
+      - name: SQLX Migration
+        run: |
+          cargo install sqlx-cli
+          sqlx database create
+          sqlx migrate run
 
-      name: Run Client test
-      run: |
-        cargo test
+      - name: Run Client test
+        run: |
+          cargo test

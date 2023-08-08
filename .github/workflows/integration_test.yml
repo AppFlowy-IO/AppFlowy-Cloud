@@ -18,6 +18,7 @@ env:
   POSTGRES_PORT: 5432
   POSTGRES_HOST: postgres
   POSTGRES_DB: appflowy
+  BACKEND_VERSION: v0.0.1
 
   # AppFlowy-Cloud settings
   APP__DATABASE__HOST: postgres

@@ -14,8 +14,7 @@ env:
   APP__REDIS_URI: redis://redis:6379
 
 jobs:
-  test:
-    name: Integration test
+  integrations:
     runs-on: ubuntu-latest
 
     steps:

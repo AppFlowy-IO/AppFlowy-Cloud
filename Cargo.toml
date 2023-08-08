@@ -88,11 +88,11 @@ members = [
 ]
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c"  }
-collab-client-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c"  }
-collab-sync= { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c" }
-collab-persistence = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c" }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ad656c" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9"  }
+collab-client-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9"  }
+collab-sync= { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9" }
+collab-persistence = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9" }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9" }
 
 #collab = { path = "./crates/AppFlowy-Collab/collab" }
 #collab-client-ws = { path = "./crates/AppFlowy-Collab/collab-client-ws" }

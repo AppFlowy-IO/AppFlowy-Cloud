@@ -34,7 +34,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          key: sqlx-${{ env.SQLX_VERSION }}
+          workspaces: |
+            AppFlowy-Cloud
       - name: Install sqlx-cli
         run:
           cargo install sqlx-cli

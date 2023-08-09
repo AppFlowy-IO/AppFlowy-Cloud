@@ -1,8 +1,8 @@
 use std::time::SystemTime;
 
-use appflowy_server::client::client::Client;
+use appflowy_server::client::http::Client;
 
-pub const LOCALHOST_URL: &str = "http://127.0.0.1:8000"; //TODO: change to default port
+pub const LOCALHOST_URL: &str = "http://localhost:8000"; //TODO: change to default port
 
 pub fn timestamp_nano() -> u128 {
   SystemTime::now()

@@ -1,5 +1,5 @@
-mod change_password;
 mod login;
+mod password;
 mod register;
 
 mod utils;

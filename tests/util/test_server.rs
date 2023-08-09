@@ -14,7 +14,7 @@ use reqwest::Certificate;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use appflowy_server::component::auth::{RegisterResponse, HEADER_TOKEN};
+use appflowy_server::component::auth::RegisterResponse;
 use sqlx::types::Uuid;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 

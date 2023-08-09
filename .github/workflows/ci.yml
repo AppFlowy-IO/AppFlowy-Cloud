@@ -51,7 +51,9 @@ jobs:
           cargo sqlx prepare --check -- --bin appflowy_server
       - name: Run tests
         run: |
+          cargo build
           cargo run &
+          sleep 5 # wait some time for server to be ready
           cargo test
 
 

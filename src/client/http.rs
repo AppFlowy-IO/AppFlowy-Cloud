@@ -19,7 +19,7 @@ impl Client {
 
   // returns logged_in token if logged_in
   pub fn logged_in_token(&self) -> Option<&str> {
-    self.token.as_ref().map(|t| t.as_str())
+    self.token.as_deref()
   }
 
   pub async fn register(&mut self, name: &str, email: &str, password: &str) -> Result<(), Error> {

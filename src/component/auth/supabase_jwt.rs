@@ -9,13 +9,14 @@ lazy_static::lazy_static! {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Token {
-  Anon(Anon),
-  Authenticated(Authenticated),
+  Anonymous(Anonymous),
+  Authenticated(Box<Authenticated>),
 }
 
 impl Token {
+  #[allow(dead_code)]
   pub fn decode_from_str(&self, token: &str, secret: &[u8]) -> Result<Token, Error> {
-    let token_data = decode::<Token>(&token, &DecodingKey::from_secret(secret), &VALIDATION)?;
+    let token_data = decode::<Token>(token, &DecodingKey::from_secret(secret), &VALIDATION)?;
     Ok(token_data.claims)
   }
 }
@@ -38,7 +39,7 @@ pub struct Authenticated {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Anon {
+pub struct Anonymous {
   iss: String,
   #[serde(rename = "ref")]
   reference: String,

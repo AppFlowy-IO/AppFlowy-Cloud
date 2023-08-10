@@ -34,7 +34,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          key: sqlx-${{ env.SQLX_VERSION }}
+          workspaces: |
+            AppFlowy-Cloud
       - name: Install sqlx-cli
         run:
           cargo install sqlx-cli
@@ -50,8 +51,13 @@ jobs:
         run: |
           cargo sqlx prepare --check -- --bin appflowy_server
       - name: Run tests
-        run: cargo test
-        
+        run: |
+          cargo build
+          cargo run &
+          sleep 5 # wait some time for server to be ready
+          cargo test
+
+
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
@@ -62,8 +68,8 @@ jobs:
           components: rustfmt
       - name: Enforce formatting
         run: cargo fmt --check
-        
-        
+
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
@@ -97,5 +103,3 @@ jobs:
           SKIP_DOCKER=true ./build/init_database.sh
       - name: Linting
         run: cargo clippy -- -D warnings
-
-

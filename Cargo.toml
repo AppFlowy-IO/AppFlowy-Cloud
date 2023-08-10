@@ -14,7 +14,6 @@ actix-web-actors = { version = "4.2.0" }
 actix-service = "2.0.2"
 actix-identity = "0.5.2"
 actix-cors = "0.6.4"
-actix-web-flash-messages = { version = "0.4", features = ["cookies"] }
 actix-session = { version = "0.7", features = ["redis-rs-tls-session"] }
 openssl = "0.10.45"
 
@@ -31,7 +30,6 @@ tokio = { version = "1.26.0", features = [
     "time",
 ] }
 futures-util = "0.3.26"
-async-stream = "0.3.4"
 config = { version = "0.13.3", default-features = false, features = ["yaml"] }
 once_cell = "1.13.0"
 chrono = { version = "0.4.23", features = ["serde", "clock"], default-features = false }

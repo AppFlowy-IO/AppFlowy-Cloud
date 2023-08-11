@@ -153,7 +153,7 @@ pub async fn get_user_email(
 ) -> Result<String, anyhow::Error> {
   let row = sqlx::query!(
     r#"
-        SELECT email 
+        SELECT email
         FROM users
         WHERE uid = $1
         "#,

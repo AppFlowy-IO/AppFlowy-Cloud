@@ -1,4 +1,6 @@
-use anyhow::{anyhow, Error, Ok};
+use anyhow::{Error, Ok};
+
+use crate::utils::http_response::{check_response, from_response};
 
 const HEADER_TOKEN: &str = "token";
 
@@ -15,6 +17,16 @@ impl Client {
       http_client: c,
       token: None,
     }
+  }
+
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), Error> {
+    let url = format!("{}/api/user/sign_up", self.base_url);
+    let payload = serde_json::json!({
+        "email": email,
+        "password": password,
+    });
+    let resp = self.http_client.post(&url).json(&payload).send().await?;
+    Ok(check_response(resp).await?)
   }
 
   // returns logged_in token if logged_in
@@ -73,35 +85,6 @@ impl Client {
       .await?;
     check_response(resp).await
   }
-}
-
-async fn check_response(resp: reqwest::Response) -> Result<(), Error> {
-  let status_code = resp.status();
-  if !status_code.is_success() {
-    let body = resp.text().await?;
-    anyhow::bail!("got error code: {}, body: {}", status_code, body)
-  }
-  resp.bytes().await?;
-  Ok(())
-}
-
-async fn from_response<T>(resp: reqwest::Response) -> Result<T, Error>
-where
-  T: serde::de::DeserializeOwned,
-{
-  let status_code = resp.status();
-  if !status_code.is_success() {
-    let body = resp.text().await?;
-    anyhow::bail!("got error code: {}, body: {}", status_code, body)
-  }
-  let bytes = resp.bytes().await?;
-  serde_json::from_slice(&bytes).map_err(|e| {
-    anyhow!(
-      "deserialize error: {}, body: {}",
-      e,
-      String::from_utf8_lossy(&bytes)
-    )
-  })
 }
 
 // Models

@@ -2,6 +2,7 @@ use crate::component::auth::{
   change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
   InputParamsError, LoginRequest, RegisterRequest,
 };
+use crate::component::auth::{gotrue, InternalServerError};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
@@ -12,10 +13,26 @@ use actix_web::{HttpRequest, Result};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
+    .service(web::resource("/sign_up").route(web::post().to(sign_up_handler)))
     .service(web::resource("/login").route(web::post().to(login_handler)))
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn sign_up_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
+  let req = req.into_inner();
+  let email = UserEmail::parse(req.email)
+    .map_err(InputParamsError::InvalidEmail)?
+    .0;
+  let password = UserPassword::parse(req.password)
+    .map_err(InputParamsError::InvalidPassword)?
+    .0;
+
+  let _resp = gotrue::api::sign_up(reqwest::Client::new(), &email, &password)
+    .await
+    .map_err(InternalServerError::new)?;
+  Ok(HttpResponse::Ok().finish())
 }
 
 async fn login_handler(
@@ -28,7 +45,7 @@ async fn login_handler(
     .map_err(InputParamsError::InvalidEmail)?
     .0;
   let password = UserPassword::parse(req.password)
-    .map_err(|_| InputParamsError::InvalidPassword)?
+    .map_err(InputParamsError::InvalidPassword)?
     .0;
   let (resp, token) = login(email, password, &state).await?;
 
@@ -58,7 +75,7 @@ async fn register_handler(req: Json<RegisterRequest>, state: Data<State>) -> Res
     .map_err(InputParamsError::InvalidEmail)?
     .0;
   let password = UserPassword::parse(req.password)
-    .map_err(|_| InputParamsError::InvalidPassword)?
+    .map_err(InputParamsError::InvalidPassword)?
     .0;
 
   let resp = register(name, email, password, &state).await?;
@@ -78,7 +95,7 @@ async fn change_password_handler(
   }
 
   let new_password = UserPassword::parse(payload.new_password)
-    .map_err(|_| InputParamsError::InvalidPassword)?
+    .map_err(InputParamsError::InvalidPassword)?
     .0;
 
   change_password(

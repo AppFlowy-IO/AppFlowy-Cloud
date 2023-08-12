@@ -1,3 +1,4 @@
+use crate::component::auth::gotrue::grant::{Grant, PasswordGrant};
 use crate::component::auth::{
   change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
   InputParamsError, LoginRequest, RegisterRequest,
@@ -14,10 +15,27 @@ use actix_web::{HttpRequest, Result};
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
     .service(web::resource("/sign_up").route(web::post().to(sign_up_handler)))
+    .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
     .service(web::resource("/login").route(web::post().to(login_handler)))
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn sign_in_password_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
+  let req = req.into_inner();
+  let email = UserEmail::parse(req.email)
+    .map_err(InputParamsError::InvalidEmail)?
+    .0;
+  let password = UserPassword::parse(req.password)
+    .map_err(InputParamsError::InvalidPassword)?
+    .0;
+
+  let grant = Grant::Password(PasswordGrant { email, password });
+  let token = gotrue::api::token(reqwest::Client::new(), &grant)
+    .await
+    .map_err(InternalServerError::new)?;
+  Ok(HttpResponse::Ok().json(token))
 }
 
 async fn sign_up_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
@@ -29,10 +47,10 @@ async fn sign_up_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
     .map_err(InputParamsError::InvalidPassword)?
     .0;
 
-  let _resp = gotrue::api::sign_up(reqwest::Client::new(), &email, &password)
+  let user = gotrue::api::sign_up(reqwest::Client::new(), &email, &password)
     .await
     .map_err(InternalServerError::new)?;
-  Ok(HttpResponse::Ok().finish())
+  Ok(HttpResponse::Ok().json(user))
 }
 
 async fn login_handler(

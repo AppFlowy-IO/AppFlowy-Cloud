@@ -1,4 +1,4 @@
-use anyhow::{Error, Ok};
+use anyhow::Error;
 
 use crate::{
   component::auth::gotrue::models::{AccessTokenResponse, OAuthError, TokenResult, User},
@@ -10,7 +10,8 @@ const HEADER_TOKEN: &str = "token";
 pub struct Client {
   http_client: reqwest::Client,
   base_url: String,
-  token: Option<String>,
+  token: Option<AccessTokenResponse>,
+  token_old: Option<String>,
 }
 
 impl Client {
@@ -18,18 +19,34 @@ impl Client {
     Self {
       base_url: base_url.to_string(),
       http_client: c,
+      token_old: None,
       token: None,
     }
   }
 
-  pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<TokenResult, Error> {
+  pub fn token(&self) -> Option<&AccessTokenResponse> {
+    self.token.as_ref()
+  }
+
+  pub async fn sign_in_password(
+    &mut self,
+    email: &str,
+    password: &str,
+  ) -> Result<Result<(), OAuthError>, Error> {
     let url = format!("{}/api/user/sign_in/password", self.base_url);
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    Ok(from_response(resp).await?)
+    let token_result: TokenResult = from_response(resp).await?;
+    match token_result {
+      TokenResult::Success(s) => {
+        self.token = Some(s);
+        Ok(Ok(()))
+      },
+      TokenResult::Fail(e) => Ok(Err(e)),
+    }
   }
 
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<User, Error> {
@@ -44,7 +61,7 @@ impl Client {
 
   // returns logged_in token if logged_in
   pub fn logged_in_token(&self) -> Option<&str> {
-    self.token.as_deref()
+    self.token_old.as_deref()
   }
 
   pub async fn register(&mut self, name: &str, email: &str, password: &str) -> Result<(), Error> {
@@ -56,7 +73,7 @@ impl Client {
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
     let token: Token = from_response(resp).await?;
-    self.token = Some(token.token);
+    self.token_old = Some(token.token);
     Ok(())
   }
 
@@ -68,7 +85,7 @@ impl Client {
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
     let token: Token = from_response(resp).await?;
-    self.token = Some(token.token);
+    self.token_old = Some(token.token);
     Ok(())
   }
 
@@ -78,7 +95,7 @@ impl Client {
     new_password: &str,
     new_password_confirm: &str,
   ) -> Result<(), Error> {
-    let auth_token = match &self.token {
+    let auth_token = match &self.token_old {
       Some(t) => t.to_string(),
       None => anyhow::bail!("no token found, are you logged in?"),
     };

@@ -4,14 +4,14 @@ use crate::client::utils::LOCALHOST_URL;
 
 #[tokio::test]
 async fn sign_in_unknown_user() {
-  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
   let resp = c
     .sign_in_password("unknown999@appflowy.io", "Hello123!")
     .await;
   let resp = resp.unwrap();
   match resp {
-    TokenResult::Success(s) => panic!("should not be ok: {:?}", s),
-    TokenResult::Fail(e) => {
+    Ok(()) => panic!("should not be ok"),
+    Err(e) => {
       assert_eq!(e.error, "invalid_grant");
       assert_eq!(e.error_description.unwrap(), "Invalid login credentials");
     },
@@ -20,7 +20,7 @@ async fn sign_in_unknown_user() {
 
 #[tokio::test]
 async fn sign_in_wrong_password() {
-  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
 
   {
     let _ = c
@@ -34,8 +34,8 @@ async fn sign_in_wrong_password() {
     .await;
   let resp = resp.unwrap();
   match resp {
-    TokenResult::Success(s) => panic!("should not be ok: {:?}", s),
-    TokenResult::Fail(e) => {
+    Ok(()) => panic!("should not be ok"),
+    Err(e) => {
       assert_eq!(e.error, "invalid_grant");
       assert_eq!(e.error_description.unwrap(), "Invalid login credentials");
     },
@@ -44,7 +44,7 @@ async fn sign_in_wrong_password() {
 
 #[tokio::test]
 async fn sign_in_unconfirmed_email() {
-  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
 
   {
     let _ = c
@@ -58,8 +58,8 @@ async fn sign_in_unconfirmed_email() {
     .await;
   let resp = resp.unwrap();
   match resp {
-    TokenResult::Success(s) => panic!("should not be ok: {:?}", s),
-    TokenResult::Fail(e) => {
+    Ok(()) => panic!("should not be ok"),
+    Err(e) => {
       assert_eq!(e.error, "invalid_grant");
       assert_eq!(e.error_description.unwrap(), "Email not confirmed");
     },
@@ -68,7 +68,7 @@ async fn sign_in_unconfirmed_email() {
 
 #[tokio::test]
 async fn sign_in_success() {
-  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
 
   // pre-registered and confirmed email
   let email = "xigahi8979@tipent.com";
@@ -76,9 +76,9 @@ async fn sign_in_success() {
   let resp = c.sign_in_password(email, "Hello123!").await;
   let resp = resp.unwrap();
   match resp {
-    TokenResult::Success(s) => {
-      assert!(s.user.email_confirmed_at.is_some());
-    },
-    TokenResult::Fail(e) => panic!("should not fail: {:?}", e),
+    Ok(()) => {},
+    Err(e) => panic!("should not fail: {:?}", e),
   }
+  let token = c.token().unwrap();
+  assert!(token.user.confirmed_at.is_some());
 }

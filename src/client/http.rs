@@ -1,6 +1,9 @@
 use anyhow::{Error, Ok};
 
-use crate::utils::http_response::{check_response, from_response};
+use crate::{
+  component::auth::gotrue::models::{AccessTokenResponse, OAuthError, TokenResult, User},
+  utils::http_response::{check_response, from_response},
+};
 
 const HEADER_TOKEN: &str = "token";
 
@@ -19,14 +22,24 @@ impl Client {
     }
   }
 
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), Error> {
+  pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<TokenResult, Error> {
+    let url = format!("{}/api/user/sign_in/password", self.base_url);
+    let payload = serde_json::json!({
+        "email": email,
+        "password": password,
+    });
+    let resp = self.http_client.post(&url).json(&payload).send().await?;
+    Ok(from_response(resp).await?)
+  }
+
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<User, Error> {
     let url = format!("{}/api/user/sign_up", self.base_url);
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    Ok(check_response(resp).await?)
+    Ok(from_response(resp).await?)
   }
 
   // returns logged_in token if logged_in

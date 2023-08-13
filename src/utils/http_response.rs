@@ -20,6 +20,13 @@ where
     let body = resp.text().await?;
     anyhow::bail!("got error code: {}, body: {}", status_code, body)
   }
+  from_body(resp).await
+}
+
+pub async fn from_body<T>(resp: reqwest::Response) -> Result<T, Error>
+where
+  T: serde::de::DeserializeOwned,
+{
   let bytes = resp.bytes().await?;
   serde_json::from_slice(&bytes).map_err(|e| {
     anyhow!(

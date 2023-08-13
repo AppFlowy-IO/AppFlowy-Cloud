@@ -1,8 +1,8 @@
 use super::{
   grant::Grant,
-  models::{AccessTokenResponse, User},
+  models::{AccessTokenResponse, OAuthError, TokenResult, User},
 };
-use crate::utils::http_response::from_response;
+use crate::utils::http_response::{from_body, from_response};
 use anyhow::Error;
 use std::env;
 
@@ -26,9 +26,18 @@ pub async fn sign_up(client: reqwest::Client, email: &str, password: &str) -> Re
   from_response(resp).await
 }
 
-pub async fn token(client: reqwest::Client, grant: &Grant) -> Result<AccessTokenResponse, Error> {
+pub async fn token(client: reqwest::Client, grant: &Grant) -> Result<TokenResult, Error> {
   let url = format!("{}?grant_type={}", TOKEN_URL.as_str(), grant.type_as_str());
   let payload = grant.json_value();
+
   let resp = client.post(url.as_str()).json(&payload).send().await?;
-  from_response(resp).await
+  if resp.status().is_success() {
+    let token: AccessTokenResponse = from_body(resp).await?;
+    Ok(TokenResult::Success(token))
+  } else if resp.status().is_client_error() {
+    let err: OAuthError = from_body(resp).await?;
+    Ok(TokenResult::Fail(err))
+  } else {
+    anyhow::bail!("unexpected response status: {}", resp.status());
+  }
 }

@@ -1,6 +1,5 @@
 mod error;
 pub mod gotrue;
-mod gotrue_jwt;
 mod password;
 mod user;
 

@@ -8,9 +8,16 @@ use std::path::PathBuf;
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct Config {
   pub database: DatabaseSetting,
+  pub gotrue: GoTrueSetting,
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct GoTrueSetting {
+  pub base_url: String,
+  pub jwt_secret: Secret<String>,
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our
@@ -107,7 +114,7 @@ pub fn get_configuration() -> Result<Config, config::ConfigError> {
                 .format(FileFormat::Yaml),
         )
         // Add in settings from environment variables (with a prefix of APP and '__' as
-        // separator) E.g. `APP_APPLICATION__PORT=5001 would set
+        // separator) E.g. `APP__APPLICATION__PORT=5001 would set
         // `Settings.application.port`
         .add_source(config::Environment::with_prefix("app").separator("__"));
 

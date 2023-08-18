@@ -1,5 +1,5 @@
 use crate::component::auth::gotrue::grant::{Grant, PasswordGrant};
-use crate::component::auth::gotrue::jwt::AuthorizationBearer;
+use crate::component::auth::gotrue::jwt::{self, AuthBearerToken};
 use crate::component::auth::{
   change_password, gotrue, logged_user_from_request, login, logout, register,
   ChangePasswordRequest, InternalServerError, RegisterRequest,
@@ -13,6 +13,7 @@ use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
+use secrecy::ExposeSecret;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -28,14 +29,34 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
 
-async fn sign_out_handler(auth: AuthorizationBearer) -> Result<HttpResponse> {
-  gotrue::api::logout(reqwest::Client::new(), &auth.token)
-    .await
-    .map_err(InternalServerError::new)?;
-  Ok(HttpResponse::Ok().finish())
+async fn sign_out_handler(
+  token: AuthBearerToken,
+  state: Data<State>,
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<HttpResponse> {
+  let claims = jwt::GoTrueJWTClaims::verify(
+    &token.as_str(),
+    &state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
+  );
+  match claims {
+    Ok(_) => {
+      gotrue_client
+        .logout(token.as_str())
+        .await
+        .map_err(InternalServerError::new)?;
+      Ok(HttpResponse::Ok().finish())
+    },
+    Err(err) => {
+      tracing::error!("Invalid token: {:?}", err);
+      Err(actix_web::error::ErrorUnauthorized("Invalid token"))
+    },
+  }
 }
 
-async fn sign_in_password_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
+async fn sign_in_password_handler(
+  req: Json<LoginRequest>,
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<HttpResponse> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
     .map_err(InputParamsError::InvalidEmail)?
@@ -45,13 +66,17 @@ async fn sign_in_password_handler(req: Json<LoginRequest>) -> Result<HttpRespons
     .0;
 
   let grant = Grant::Password(PasswordGrant { email, password });
-  let token = gotrue::api::token(reqwest::Client::new(), &grant)
+  let token = gotrue_client
+    .token(&grant)
     .await
     .map_err(InternalServerError::new)?;
   Ok(HttpResponse::Ok().json(token))
 }
 
-async fn sign_up_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
+async fn sign_up_handler(
+  req: Json<LoginRequest>,
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<HttpResponse> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
     .map_err(InputParamsError::InvalidEmail)?
@@ -60,7 +85,8 @@ async fn sign_up_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {
     .map_err(InputParamsError::InvalidPassword)?
     .0;
 
-  let user = gotrue::api::sign_up(reqwest::Client::new(), &email, &password)
+  let user = gotrue_client
+    .sign_up(&email, &password)
     .await
     .map_err(InternalServerError::new)?;
   Ok(HttpResponse::Ok().json(user))

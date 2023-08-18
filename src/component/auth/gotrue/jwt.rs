@@ -8,12 +8,8 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AuthorizationBearer {
-  pub token: String,
-  pub claims: GoTrueJWTClaims,
-}
-
-impl FromRequest for AuthorizationBearer {
+pub struct AuthBearerToken(String);
+impl FromRequest for AuthBearerToken {
   type Error = actix_web::Error;
 
   type Future = std::future::Ready<Result<Self, Self::Error>>;
@@ -22,19 +18,32 @@ impl FromRequest for AuthorizationBearer {
     let bearer = req.headers().get("Authorization");
     match bearer {
       Some(bearer) => {
-        let bearer = bearer.to_str().unwrap();
-        let token = bearer.split_once("Bearer ").unwrap().1;
-        let claim = decode_from_str(token, "todo_secret".as_bytes());
-        let auth_bearer = Self {
-          token: token.to_string(),
-          claims: claim.unwrap(),
-        };
-        std::future::ready(Ok(auth_bearer))
+        let bearer = bearer.to_str();
+        match bearer {
+          Ok(bearer) => {
+            let token = bearer.split_once("Bearer ");
+            match token {
+              Some(token) => std::future::ready(Ok(Self(token.1.to_string()))),
+              None => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
+                "Invalid Authorization header, missing Bearer",
+              ))),
+            }
+          },
+          Err(_) => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
+            "Invalid Authorization header",
+          ))),
+        }
       },
       None => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
         "No Authorization header",
       ))),
     }
+  }
+}
+
+impl AuthBearerToken {
+  pub fn as_str(&self) -> &str {
+    &self.0
   }
 }
 
@@ -66,9 +75,8 @@ struct Amr {
   provider: Option<String>,
 }
 
-fn decode_from_str(
-  token: &str,
-  secret: &[u8],
-) -> Result<GoTrueJWTClaims, jsonwebtoken::errors::Error> {
-  Ok(decode(token, &DecodingKey::from_secret(secret), &VALIDATION)?.claims)
+impl GoTrueJWTClaims {
+  pub fn verify(token: &str, secret: &[u8]) -> Result<Self, jsonwebtoken::errors::Error> {
+    Ok(decode(token, &DecodingKey::from_secret(secret), &VALIDATION)?.claims)
+  }
 }

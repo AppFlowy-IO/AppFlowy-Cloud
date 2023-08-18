@@ -1,8 +1,10 @@
 use anyhow::Error;
+use reqwest::Method;
+use reqwest::RequestBuilder;
 
 use crate::{
   component::auth::gotrue::models::{AccessTokenResponse, OAuthError, TokenResult, User},
-  utils::http_response::from_response,
+  utils::http_response::{check_response, from_response},
 };
 
 pub struct Client {
@@ -55,14 +57,25 @@ impl Client {
     from_response(resp).await
   }
 
-  pub async fn sign_out(&self, email: &str, password: &str) -> Result<User, Error> {
+  pub async fn sign_out(&self) -> Result<(), Error> {
     let url = format!("{}/api/user/sign_out", self.base_url);
-    let payload = serde_json::json!({
-        "email": email,
-        "password": password,
-    });
-    let resp = self.http_client.post(&url).json(&payload).send().await?;
-    from_response(resp).await
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)?
+      .send()
+      .await?;
+    check_response(resp).await
+  }
+
+  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {
+    match &self.token {
+      None => anyhow::bail!("no token found, are you logged in?"),
+      Some(t) => Ok(
+        self
+          .http_client
+          .request(method, url)
+          .bearer_auth(t.access_token.to_string()),
+      ),
+    }
   }
 
   // pub async fn change_password(

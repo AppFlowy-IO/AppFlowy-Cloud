@@ -1,4 +1,4 @@
-use crate::client::utils::LOCALHOST_URL;
+use crate::client::constants::LOCALHOST_URL;
 use appflowy_server::client::http::Client;
 
 #[tokio::test]

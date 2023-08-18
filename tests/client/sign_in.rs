@@ -1,6 +1,6 @@
-use appflowy_server::{client::http::Client, component::auth::gotrue::models::TokenResult};
+use appflowy_server::client::http::Client;
 
-use crate::client::utils::LOCALHOST_URL;
+use crate::client::constants::LOCALHOST_URL;
 
 #[tokio::test]
 async fn sign_in_unknown_user() {

@@ -174,11 +174,6 @@ impl TestUser {
   }
 }
 
-pub async fn error_msg_from_resp(resp: reqwest::Response) -> String {
-  let bytes = resp.bytes().await.unwrap();
-  String::from_utf8(bytes.to_vec()).unwrap()
-}
-
 #[derive(Clone)]
 pub struct Cleaner {
   path: PathBuf,

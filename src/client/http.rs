@@ -92,9 +92,3 @@ impl Client {
   //   check_response(resp).await
   // }
 }
-
-// Models
-#[derive(serde::Deserialize)]
-struct Token {
-  token: String,
-}

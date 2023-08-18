@@ -1,5 +1,5 @@
 use crate::component::auth::gotrue::grant::{Grant, PasswordGrant};
-use crate::component::auth::gotrue::jwt::GoTrueJWTClaims;
+use crate::component::auth::gotrue::jwt::AuthorizationBearer;
 use crate::component::auth::{
   change_password, gotrue, logged_user_from_request, login, logout, register,
   ChangePasswordRequest, InternalServerError, RegisterRequest,
@@ -12,7 +12,7 @@ use crate::state::State;
 use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
-use actix_web::{web, FromRequest, HttpResponse, Scope};
+use actix_web::{web, HttpResponse, Scope};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -28,8 +28,11 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
 
-async fn sign_out_handler(_claims: GoTrueJWTClaims) -> Result<HttpResponse> {
-  todo!()
+async fn sign_out_handler(auth: AuthorizationBearer) -> Result<HttpResponse> {
+  gotrue::api::logout(reqwest::Client::new(), &auth.token)
+    .await
+    .map_err(InternalServerError::new)?;
+  Ok(HttpResponse::Ok().finish())
 }
 
 async fn sign_in_password_handler(req: Json<LoginRequest>) -> Result<HttpResponse> {

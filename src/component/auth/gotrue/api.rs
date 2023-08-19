@@ -35,7 +35,6 @@ impl Client {
       self.base_url.as_str(),
       grant.type_as_str()
     );
-    println!("------ url: {}", url);
     let payload = grant.json_value();
     let resp = self.client.post(url.as_str()).json(&payload).send().await?;
     if resp.status().is_success() {
@@ -57,5 +56,28 @@ impl Client {
       .send()
       .await?;
     check_response(resp).await
+  }
+
+  pub async fn update_user(
+    &self,
+    access_token: &str,
+    email: &str,
+    password: &str,
+    phone: &str,
+  ) -> Result<User, Error> {
+    let payload = serde_json::json!({
+        "email": email,
+        "password": password,
+        "phone": phone,
+
+    });
+    let resp = self
+      .client
+      .put(format!("{}/user", self.base_url.as_str()).as_str())
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(&payload)
+      .send()
+      .await?;
+    from_response(resp).await
   }
 }

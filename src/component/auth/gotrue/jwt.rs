@@ -1,49 +1,60 @@
 use actix_http::Payload;
-use actix_web::{FromRequest, HttpRequest};
+use actix_web::{web::Data, FromRequest, HttpRequest};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+
+use crate::state::State;
 
 lazy_static::lazy_static! {
   pub static ref VALIDATION: Validation = Validation::new(Algorithm::HS256);
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct AuthBearerToken(String);
-impl FromRequest for AuthBearerToken {
+pub struct Authorization {
+  pub token: String,
+  pub claims: GoTrueJWTClaims,
+}
+
+impl FromRequest for Authorization {
   type Error = actix_web::Error;
 
   type Future = std::future::Ready<Result<Self, Self::Error>>;
 
   fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+    let state = req.app_data::<Data<State>>().unwrap();
     let bearer = req.headers().get("Authorization");
     match bearer {
-      Some(bearer) => {
-        let bearer = bearer.to_str();
-        match bearer {
-          Ok(bearer) => {
-            let token = bearer.split_once("Bearer ");
-            match token {
-              Some(token) => std::future::ready(Ok(Self(token.1.to_string()))),
-              None => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
-                "Invalid Authorization header, missing Bearer",
-              ))),
-            }
-          },
-          Err(_) => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
-            "Invalid Authorization header",
-          ))),
-        }
-      },
       None => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
         "No Authorization header",
       ))),
+      Some(bearer) => {
+        let bearer = bearer.to_str();
+        match bearer {
+          Err(e) => std::future::ready(Err(actix_web::error::ErrorUnauthorized(e))),
+          Ok(bearer) => {
+            let pair_opt = bearer.split_once("Bearer "); // Authorization: Bearer <token>
+            match pair_opt {
+              None => std::future::ready(Err(actix_web::error::ErrorUnauthorized(
+                "Invalid Authorization header, missing Bearer",
+              ))),
+              Some(pair) => {
+                match GoTrueJWTClaims::verify(
+                  pair.1,
+                  state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
+                ) {
+                  Err(e) => std::future::ready(Err(actix_web::error::ErrorUnauthorized(e))),
+                  Ok(t) => std::future::ready(Ok(Authorization {
+                    token: pair.1.to_string(),
+                    claims: t,
+                  })),
+                }
+              },
+            }
+          },
+        }
+      },
     }
-  }
-}
-
-impl AuthBearerToken {
-  pub fn as_str(&self) -> &str {
-    &self.0
   }
 }
 

@@ -1,5 +1,5 @@
 use crate::component::auth::gotrue::grant::{Grant, PasswordGrant};
-use crate::component::auth::gotrue::jwt::{AuthBearerToken, GoTrueJWTClaims};
+use crate::component::auth::gotrue::jwt::Authorization;
 use crate::component::auth::{
   change_password, gotrue, logged_user_from_request, login, logout, register,
   ChangePasswordRequest, InternalServerError, RegisterRequest,
@@ -13,7 +13,6 @@ use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
-use secrecy::ExposeSecret;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -31,22 +30,18 @@ pub fn user_scope() -> Scope {
 }
 
 async fn update_handler(
-  token: AuthBearerToken,
-  state: Data<State>,
+  _auth: Authorization,
   _gotrue_client: Data<gotrue::api::Client>,
 ) -> Result<HttpResponse> {
-  let _claims = server_verify_token(&token, &state.clone())?;
   todo!()
 }
 
 async fn sign_out_handler(
-  token: AuthBearerToken,
-  state: Data<State>,
+  auth: Authorization,
   gotrue_client: Data<gotrue::api::Client>,
 ) -> Result<HttpResponse> {
-  let _ = server_verify_token(&token, &state)?;
   gotrue_client
-    .logout(token.as_str())
+    .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
   Ok(HttpResponse::Ok().finish())
@@ -163,17 +158,4 @@ async fn change_password_handler(
   .await?;
 
   Ok(HttpResponse::Ok().finish())
-}
-
-fn server_verify_token(
-  token: &AuthBearerToken,
-  state: &Data<State>,
-) -> Result<GoTrueJWTClaims, actix_web::Error> {
-  match GoTrueJWTClaims::verify(
-    &token.as_str(),
-    &state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
-  ) {
-    Ok(t) => Ok(t),
-    Err(e) => Err(actix_web::error::ErrorUnauthorized(e)),
-  }
 }

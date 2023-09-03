@@ -87,3 +87,10 @@ pub enum TokenResult {
   Success(AccessTokenResponse),
   Fail(OAuthError),
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GoTrueError {
+  pub code: i64,
+  pub msg: String,
+  pub error_id: Option<String>,
+}

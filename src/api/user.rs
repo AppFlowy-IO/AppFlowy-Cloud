@@ -30,10 +30,24 @@ pub fn user_scope() -> Scope {
 }
 
 async fn update_handler(
-  _auth: Authorization,
-  _gotrue_client: Data<gotrue::api::Client>,
+  auth: Authorization,
+  req: Json<LoginRequest>,
+  gotrue_client: Data<gotrue::api::Client>,
 ) -> Result<HttpResponse> {
-  todo!()
+  let req = req.into_inner();
+  let email = UserEmail::parse(req.email)
+    .map_err(InputParamsError::InvalidEmail)?
+    .0;
+  let password = UserPassword::parse(req.password)
+    .map_err(InputParamsError::InvalidPassword)?
+    .0;
+
+  let new_user = gotrue_client
+    .update_user(&auth.token, &email, &password)
+    .await
+    .map_err(InternalServerError::new)?;
+
+  Ok(HttpResponse::Ok().json(new_user))
 }
 
 async fn sign_out_handler(

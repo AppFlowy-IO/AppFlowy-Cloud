@@ -7,8 +7,8 @@ prerequisite:
 	POSTGRES_PORT=5432 ${ROOT}/init_database.sh
 	${ROOT}/init_redis.sh
 
-appflowy_server_image:
-	source $(ROOT)/docker_env.sh && docker-compose up -d appflowy_server
+appflowy_cloud_image:
+	source $(ROOT)/docker_env.sh && docker-compose up -d appflowy_cloud
 
 local_test:
 	# 🔥 Must run init_database first

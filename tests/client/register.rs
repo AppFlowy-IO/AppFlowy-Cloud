@@ -1,6 +1,6 @@
 use crate::client::utils::timestamp_nano;
 use crate::client::utils::LOCALHOST_URL;
-use appflowy_server::client::http;
+use appflowy_cloud::client::http;
 
 #[tokio::test]
 async fn register_success() {

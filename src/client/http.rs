@@ -1,11 +1,17 @@
-use anyhow::{anyhow, Error, Ok};
+use anyhow::Error;
+use reqwest::Method;
+use reqwest::RequestBuilder;
 
-const HEADER_TOKEN: &str = "token";
+use crate::component::auth::gotrue::models::GoTrueError;
+use crate::{
+  component::auth::gotrue::models::{AccessTokenResponse, OAuthError, TokenResult, User},
+  utils::http_response::{check_response, from_response},
+};
 
 pub struct Client {
   http_client: reqwest::Client,
   base_url: String,
-  token: Option<String>,
+  token: Option<AccessTokenResponse>,
 }
 
 impl Client {
@@ -17,95 +23,109 @@ impl Client {
     }
   }
 
-  // returns logged_in token if logged_in
-  pub fn logged_in_token(&self) -> Option<&str> {
-    self.token.as_deref()
+  pub fn token(&self) -> Option<&AccessTokenResponse> {
+    self.token.as_ref()
   }
 
-  pub async fn register(&mut self, name: &str, email: &str, password: &str) -> Result<(), Error> {
-    let url = format!("{}/api/user/register", self.base_url);
+  pub async fn sign_in_password(
+    &mut self,
+    email: &str,
+    password: &str,
+  ) -> Result<Result<(), OAuthError>, Error> {
+    let url = format!("{}/api/user/sign_in/password", self.base_url);
     let payload = serde_json::json!({
-        "name": name,
-        "password": password,
         "email": email,
+        "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    let token: Token = from_response(resp).await?;
-    self.token = Some(token.token);
-    Ok(())
+    let token_result: TokenResult = from_response(resp).await?;
+    match token_result {
+      TokenResult::Success(s) => {
+        self.token = Some(s);
+        Ok(Ok(()))
+      },
+      TokenResult::Fail(e) => Ok(Err(e)),
+    }
   }
 
-  pub async fn login(&mut self, email: &str, password: &str) -> Result<(), Error> {
-    let url = format!("{}/api/user/login", self.base_url);
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<User, Error> {
+    let url = format!("{}/api/user/sign_up", self.base_url);
     let payload = serde_json::json!({
-        "password": password,
         "email": email,
+        "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    let token: Token = from_response(resp).await?;
-    self.token = Some(token.token);
-    Ok(())
+    from_response(resp).await
   }
 
-  pub async fn change_password(
-    &self,
-    current_password: &str,
-    new_password: &str,
-    new_password_confirm: &str,
-  ) -> Result<(), Error> {
-    let auth_token = match &self.token {
-      Some(t) => t.to_string(),
-      None => anyhow::bail!("no token found, are you logged in?"),
-    };
-
-    let url = format!("{}/api/user/password", self.base_url);
-    let payload = serde_json::json!({
-        "current_password": current_password,
-        "new_password": new_password,
-        "new_password_confirm": new_password_confirm,
-    });
+  pub async fn sign_out(&self) -> Result<(), Error> {
+    let url = format!("{}/api/user/sign_out", self.base_url);
     let resp = self
-      .http_client
-      .post(&url)
-      .header(HEADER_TOKEN, auth_token)
-      .json(&payload)
+      .http_client_with_auth(Method::POST, &url)?
       .send()
       .await?;
     check_response(resp).await
   }
-}
 
-async fn check_response(resp: reqwest::Response) -> Result<(), Error> {
-  let status_code = resp.status();
-  if !status_code.is_success() {
-    let body = resp.text().await?;
-    anyhow::bail!("got error code: {}, body: {}", status_code, body)
+  pub async fn update(&mut self, email: &str, password: &str) -> Result<(), Error> {
+    let url = format!("{}/api/user/update", self.base_url);
+    let payload = serde_json::json!({
+        "email": email,
+        "password": password,
+    });
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)?
+      .json(&payload)
+      .send()
+      .await?;
+    let new_user: Result<User, GoTrueError> = from_response(resp).await?;
+    match new_user {
+      Ok(new_user) => {
+        if let Some(t) = self.token.as_mut() {
+          t.user = new_user;
+        }
+        Ok(())
+      },
+      Err(e) => anyhow::bail!("update failed: {:?}", e),
+    }
   }
-  resp.bytes().await?;
-  Ok(())
-}
 
-async fn from_response<T>(resp: reqwest::Response) -> Result<T, Error>
-where
-  T: serde::de::DeserializeOwned,
-{
-  let status_code = resp.status();
-  if !status_code.is_success() {
-    let body = resp.text().await?;
-    anyhow::bail!("got error code: {}, body: {}", status_code, body)
+  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {
+    match &self.token {
+      None => anyhow::bail!("no token found, are you logged in?"),
+      Some(t) => Ok(
+        self
+          .http_client
+          .request(method, url)
+          .bearer_auth(t.access_token.to_string()),
+      ),
+    }
   }
-  let bytes = resp.bytes().await?;
-  serde_json::from_slice(&bytes).map_err(|e| {
-    anyhow!(
-      "deserialize error: {}, body: {}",
-      e,
-      String::from_utf8_lossy(&bytes)
-    )
-  })
-}
 
-// Models
-#[derive(serde::Deserialize)]
-struct Token {
-  token: String,
+  // pub async fn change_password(
+  //   &self,
+  //   current_password: &str,
+  //   new_password: &str,
+  //   new_password_confirm: &str,
+  // ) -> Result<(), Error> {
+  //   let auth_token = match &self.token_old {
+  //     Some(t) => t.to_string(),
+  //     None => anyhow::bail!("no token found, are you logged in?"),
+  //   };
+
+  //   let url = format!("{}/api/user/password", self.base_url);
+  //   let payload = serde_json::json!({
+  //       "current_password": current_password,
+  //       "new_password": new_password,
+  //       "new_password_confirm": new_password_confirm,
+  //   });
+  //   let resp = self
+  //     .http_client
+  //     .post(&url)
+  //     .header(HEADER_TOKEN, auth_token)
+  //     .json(&payload)
+  //     .send()
+  //     .await?;
+  //   check_response(resp).await
+  // }
 }

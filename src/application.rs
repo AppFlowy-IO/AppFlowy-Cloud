@@ -1,5 +1,5 @@
 use crate::api::{user_scope, ws_scope};
-use crate::component::auth::HEADER_TOKEN;
+use crate::component::auth::{gotrue, HEADER_TOKEN};
 use crate::config::config::{Config, DatabaseSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
@@ -73,20 +73,23 @@ pub async fn run(
   let collab_server_addr = CollabServer::new(state.rocksdb.clone()).unwrap().start();
   let mut server = HttpServer::new(move || {
     App::new()
-            .wrap(
-                SessionMiddleware::builder(redis_store.clone(), key.clone())
-                    .cookie_name(HEADER_TOKEN.to_string())
-                    .build(),
-            )
-            // .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, add_error_header))
-            .wrap(IdentityMiddleware::default())
-            .wrap(default_cors())
-            .wrap(TracingLogger::default())
-            .app_data(web::JsonConfig::default().limit(4096))
-            .service(user_scope())
-            .service(ws_scope())
-            .app_data(Data::new(collab_server_addr.clone()))
-            .app_data(Data::new(state.clone()))
+      .wrap(
+        SessionMiddleware::builder(redis_store.clone(), key.clone())
+          .cookie_name(HEADER_TOKEN.to_string())
+          .build(),
+      )
+      // .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, add_error_header))
+      .wrap(IdentityMiddleware::default())
+      .wrap(default_cors())
+      .wrap(TracingLogger::default())
+      .app_data(web::JsonConfig::default().limit(4096))
+      .service(user_scope())
+      .service(ws_scope())
+      .app_data(Data::new(collab_server_addr.clone()))
+      .app_data(Data::new(state.clone()))
+      .app_data(Data::new(gotrue::api::Client::new(
+        reqwest::Client::new(),
+        &config.gotrue.base_url)))
   });
 
   server = match pair {

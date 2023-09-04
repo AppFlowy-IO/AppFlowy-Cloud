@@ -1,5 +1,5 @@
 use crate::client::utils::{register_deep_fake, LOCALHOST_URL};
-use appflowy_server::client::http;
+use appflowy_cloud::client::http;
 
 #[tokio::test]
 async fn change_password_with_unmatch_password() {

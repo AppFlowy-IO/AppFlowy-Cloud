@@ -49,7 +49,7 @@ jobs:
           SKIP_DOCKER=true ./build/init_database.sh
       - name: Check sqlx-data.json is up-to-date
         run: |
-          cargo sqlx prepare --check -- --bin appflowy_server
+          cargo sqlx prepare --check -- --bin appflowy_cloud
       - name: Run tests
         run: |
           cargo build

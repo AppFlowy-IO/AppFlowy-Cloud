@@ -1,5 +1,5 @@
 use crate::client::constants::LOCALHOST_URL;
-use appflowy_server::client::http::Client;
+use appflowy_cloud::client::http::Client;
 
 #[tokio::test]
 async fn sign_up_success() {

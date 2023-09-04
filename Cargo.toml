@@ -1,5 +1,5 @@
 [package]
-name = "appflowy-server"
+name = "appflowy-cloud"
 version = "0.1.0"
 edition = "2021"
 
@@ -73,7 +73,7 @@ tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 
 [[bin]]
-name = "appflowy_server"
+name = "appflowy_cloud"
 path = "src/main.rs"
 
 [lib]

@@ -1,4 +1,4 @@
-use appflowy_server::client::http::Client;
+use appflowy_cloud::client::http::Client;
 
 use crate::client::constants::LOCALHOST_URL;
 

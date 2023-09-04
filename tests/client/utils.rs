@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use appflowy_server::client::http::Client;
+use appflowy_cloud::client::http::Client;
 
 pub const LOCALHOST_URL: &str = "http://localhost:8000"; //TODO: change to default port, use https
 

@@ -1,0 +1,65 @@
+{
+  "db": "PostgreSQL",
+  "1775f308cda63b61c0aaf4d8d1c7cf00f6bff5041e821575f65867c32d42f1b0": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Int8",
+          "Text",
+          "Text",
+          "Timestamptz",
+          "Text"
+        ]
+      }
+    },
+    "query": "\n            INSERT INTO users (uid, email, username, create_time, password)\n            VALUES ($1, $2, $3, $4, $5)\n        "
+  },
+  "b188bb8915fa0fc8c5dfefa27f1b086b839633c3c4dc6e4991b43a608d46a170": {
+    "describe": {
+      "columns": [
+        {
+          "name": "uid",
+          "ordinal": 0,
+          "type_info": "Int8"
+        },
+        {
+          "name": "password",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n        SELECT uid, password\n        FROM users\n        WHERE email = $1\n        "
+  },
+  "fdcaf51ec4b03ad8af6bddfe1f3a62ba08a1dd94d0a3bf26db506c7a948e2b5e": {
+    "describe": {
+      "columns": [
+        {
+          "name": "email",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "\n        SELECT email\n        FROM users\n        WHERE uid = $1\n        "
+  }
+}

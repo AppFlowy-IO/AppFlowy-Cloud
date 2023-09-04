@@ -1,11 +1,11 @@
-use appflowy_server::application::{init_state, Application};
-use appflowy_server::config::config::get_configuration;
-use appflowy_server::telemetry::{get_subscriber, init_subscriber};
+use appflowy_cloud::application::{init_state, Application};
+use appflowy_cloud::config::config::get_configuration;
+use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
   let subscriber = get_subscriber(
-    "appflowy_server".to_string(),
+    "appflowy_cloud".to_string(),
     "info".to_string(),
     std::io::stdout,
   );

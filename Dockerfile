@@ -14,7 +14,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 ENV SQLX_OFFLINE true
 # Build the project
-RUN cargo build --release --bin appflowy_server
+RUN cargo build --release --bin appflowy_cloud
 
 FROM debian:bullseye-slim AS runtime
 WORKDIR /app
@@ -25,8 +25,8 @@ RUN apt-get update -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/appflowy_server /usr/local/bin/appflowy_server
+COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
 COPY --from=builder /app/configuration configuration
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
-CMD ["appflowy_server"]
+CMD ["appflowy_cloud"]

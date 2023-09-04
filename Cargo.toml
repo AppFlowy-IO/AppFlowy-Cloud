@@ -1,5 +1,5 @@
 [package]
-name = "appflowy-server"
+name = "appflowy-cloud"
 version = "0.1.0"
 edition = "2021"
 
@@ -40,7 +40,7 @@ secrecy = { version = "0.8", features = ["serde"] }
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.40"
 thiserror = "1.0.24"
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+reqwest = { version = "0.11.20", default-features = false, features = ["json", "rustls-tls", "cookies"] }
 unicode-segmentation = "1.0"
 lazy_static = "1.4.0"
 fancy-regex = "0.11.0"
@@ -73,7 +73,7 @@ tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 
 [[bin]]
-name = "appflowy_server"
+name = "appflowy_cloud"
 path = "src/main.rs"
 
 [lib]

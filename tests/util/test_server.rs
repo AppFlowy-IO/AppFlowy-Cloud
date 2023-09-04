@@ -1,7 +1,7 @@
-use appflowy_server::application::{init_state, Application};
-use appflowy_server::config::config::{get_configuration, DatabaseSetting};
-use appflowy_server::state::State;
-use appflowy_server::telemetry::{get_subscriber, init_subscriber};
+use appflowy_cloud::application::{init_state, Application};
+use appflowy_cloud::config::config::{get_configuration, DatabaseSetting};
+use appflowy_cloud::state::State;
+use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 
@@ -14,7 +14,7 @@ use reqwest::Certificate;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use appflowy_server::component::auth::RegisterResponse;
+use appflowy_cloud::component::auth::RegisterResponse;
 use sqlx::types::Uuid;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 
@@ -22,7 +22,7 @@ use sqlx::{Connection, Executor, PgConnection, PgPool};
 static TRACING: Lazy<()> = Lazy::new(|| {
   let level = "trace".to_string();
   let mut filters = vec![];
-  filters.push(format!("appflowy_server={}", level));
+  filters.push(format!("appflowy_cloud={}", level));
   filters.push(format!("collab_client_ws={}", level));
   filters.push(format!("websocket={}", level));
   filters.push(format!("collab_sync={}", level));
@@ -172,11 +172,6 @@ impl TestUser {
     let response: RegisterResponse = serde_json::from_slice(&bytes).unwrap();
     response.token
   }
-}
-
-pub async fn error_msg_from_resp(resp: reqwest::Response) -> String {
-  let bytes = resp.bytes().await.unwrap();
-  String::from_utf8(bytes.to_vec()).unwrap()
 }
 
 #[derive(Clone)]

@@ -13,14 +13,14 @@ services:
     image: redis:7
     ports:
       - "6380:6379"
-  appflowy_server:
+  appflowy_cloud:
     restart: on-failure
     environment:
       - APP_ENVIRONMENT=production
     build:
       context: .
       dockerfile: ./Dockerfile
-    image: appflowy_server:${BACKEND_VERSION:-latest}
+    image: appflowy_cloud:${BACKEND_VERSION:-latest}
     depends_on:
       - redis
       - postgres

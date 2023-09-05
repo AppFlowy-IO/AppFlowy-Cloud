@@ -13,7 +13,7 @@ env:
   SQLX_FEATURES: "rustls,postgres"
   APP__GOTRUE__BASE_URL: http://localhost:3000
   APP__GOTRUE__JWT_SECRET: hello123
-  GOTRUE_SMTP_PASS: ${{ GOTRUE_SMTP_PASS }}
+  GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
 
 jobs:
   test:

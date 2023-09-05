@@ -61,7 +61,7 @@ jobs:
         run: |
           GOTRUE_MAILER_AUTOCONFIRM=true
           docker-compose up -d
-          curl localhost:9998/token\?grant_type=password \
+          curl localhost:9998/signup \
             --data-raw '{"email":"xigahi8979@tipent.com","password":"Hello123!"}' \
             --header 'Content-Type: application/json'
           GOTRUE_MAILER_AUTOCONFIRM=false

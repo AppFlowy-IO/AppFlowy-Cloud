@@ -69,7 +69,7 @@ pub struct AccessTokenResponse {
   pub access_token: String,
   pub token_type: String,
   pub expires_in: i64,
-  pub expires_at: i64,
+  pub expires_at: Option<i64>, // older versions of GoTrue do not return this
   pub refresh_token: String,
   pub user: User,
   pub provider_access_token: Option<String>,

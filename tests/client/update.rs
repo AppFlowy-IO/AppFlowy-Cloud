@@ -15,9 +15,7 @@ async fn update_password_same_password() {
   let email = "xigahi8979@tipent.com";
   let password = "Hello123!";
   c.sign_in_password(email, password).await.unwrap().unwrap();
-
-  let res = c.update(email, "Hello123!").await;
-  assert!(res.is_err());
+  c.update(email, "Hello123!").await.unwrap();
 }
 
 #[tokio::test]

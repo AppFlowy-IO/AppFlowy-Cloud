@@ -9,7 +9,7 @@ database:
   port: 5432
   username: "postgres"
   password: "password"
-  database_name: "appflowy"
+  database_name: "postgres"
 websocket:
   heartbeat_interval: 8
   client_timeout: 10

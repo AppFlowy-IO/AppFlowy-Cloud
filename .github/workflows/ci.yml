@@ -13,61 +13,32 @@ env:
   SQLX_FEATURES: "rustls,postgres"
   APP__GOTRUE__BASE_URL: http://localhost:3000
   APP__GOTRUE__JWT_SECRET: hello123
+  GOTRUE_SMTP_PASS: ${{ GOTRUE_SMTP_PASS }}
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
+
     steps:
       - uses: actions/checkout@v3
 
-      - name: Run GoTrue
-        run:
-          ./build/init_gotrue.sh
-          ./build/init_gotrue_registered_user.sh
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            AppFlowy-Cloud
-
-      - name: Install sqlx-cli
-        run:
-          cargo install sqlx-cli
-          --version=${{ env.SQLX_VERSION }}
-          --features ${{ env.SQLX_FEATURES }}
-          --no-default-features
-          --locked
-
-      - name: Migrate database
+      - name: Run Docker-Compose
         run: |
-          sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true ./build/init_database.sh
+          docker-compose up -d
 
-      - name: Check sqlx-data.json is up-to-date
+      - name: Add registered user
         run: |
-          cargo sqlx prepare --check -- --bin appflowy_cloud
+          GOTRUE_MAILER_AUTOCONFIRM=true
+          docker-compose up -d
+          curl localhost:9998/token\?grant_type=password \
+            --data-raw '{"email":"xigahi8979@tipent.com","password":"Hello123!"}' \
+            --header 'Content-Type: application/json'
+          GOTRUE_MAILER_AUTOCONFIRM=false
+          docker-compose up -d
 
       - name: Run tests
         run: |
-          cargo build
-          cargo run &
-          sleep 5 # wait some time for server to be ready
           cargo test
 
 

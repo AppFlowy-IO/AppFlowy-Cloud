@@ -33,11 +33,19 @@ jobs:
           - 6379:6379
     steps:
       - uses: actions/checkout@v3
+
+      - name: Run GoTrue
+        run:
+          ./build/init_gotrue.sh
+          ./build/init_gotrue_registered_user.sh
+
       - uses: dtolnay/rust-toolchain@stable
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             AppFlowy-Cloud
+
       - name: Install sqlx-cli
         run:
           cargo install sqlx-cli
@@ -45,13 +53,16 @@ jobs:
           --features ${{ env.SQLX_FEATURES }}
           --no-default-features
           --locked
+
       - name: Migrate database
         run: |
           sudo apt-get install libpq-dev -y
           SKIP_DOCKER=true ./build/init_database.sh
+
       - name: Check sqlx-data.json is up-to-date
         run: |
           cargo sqlx prepare --check -- --bin appflowy_cloud
+
       - name: Run tests
         run: |
           cargo build

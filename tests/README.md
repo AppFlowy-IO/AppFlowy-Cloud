@@ -5,6 +5,7 @@
 - SMTP server
 - enviromental variables
 ```bash
+# put in .env in the same directory
 GOTRUE_JWT_SECRET=some_secret_key # self defined
 GOTRUE_SMTP_HOST=smtp.gmail.com   # using gmail smtp as example, change if needed
 GOTRUE_SMTP_PORT=465
@@ -32,7 +33,6 @@ curl localhost:9998/signup \
   --header 'Content-Type: application/json'
 ```
 - click on the link
-
 
 #### Auto
 - skips the clicking on email

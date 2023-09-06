@@ -35,6 +35,6 @@ async fn login_success_after_change_password() {
     .change_password(&old_password, new_password, new_password)
     .await;
   assert!(res.is_ok());
-  let res = c.login(&email, &new_password).await;
+  let res = c.login(&email, new_password).await;
   assert!(res.is_ok())
 }

@@ -57,18 +57,19 @@ tracing-subscriber = { version = "0.3.16", features = ["registry", "env-filter",
 tracing-bunyan-formatter = "0.3.6"
 tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
-sqlx = { version = "0.6", default-features = false, features = ["runtime-actix-rustls", "macros", "postgres", "uuid", "chrono", "migrate", "offline"] }
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 
 #Local crate
 token = { path = "./crates/token" }
 snowflake = { path = "./crates/snowflake" }
-websocket = { path = "./crates/websocket" }
-collab-plugins = { version = "0.1.0", features = ["sync", "disk_rocksdb"] }
+realtime = { path = "crates/realtime" }
+storage = { path = "crates/storage" }
 
 [dev-dependencies]
 once_cell = "1.7.2"
 collab = { version = "0.1.0" }
-collab-client-ws = { version = "0.1.0" }
+collab-ws = { version = "0.1.0" }
+collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 
@@ -83,18 +84,18 @@ path = "src/lib.rs"
 members = [
     "crates/token",
     "crates/snowflake",
-    "crates/websocket",
+    "crates/realtime",
+    "crates/storage",
 ]
 
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9"  }
-collab-client-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9"  }
-collab-sync= { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9" }
-collab-persistence = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9" }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "47a4e9" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
+collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
+collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
 
 #collab = { path = "./crates/AppFlowy-Collab/collab" }
-#collab-client-ws = { path = "./crates/AppFlowy-Collab/collab-client-ws" }
-#collab-persistence = { path = "./crates/AppFlowy-Collab/collab-persistence" }
-#collab-sync = { path = "./crates/AppFlowy-Collab/collab-sync" }
 #collab-plugins = { path = "./crates/AppFlowy-Collab/collab-plugins"}

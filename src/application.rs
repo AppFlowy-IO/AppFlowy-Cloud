@@ -12,7 +12,6 @@ use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
 
-use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -23,8 +22,9 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use realtime::core::CollabServer;
+use storage::collab::CollabStorage;
 use tracing_actix_web::TracingLogger;
-use websocket::CollabServer;
 
 pub struct Application {
   port: u16,
@@ -70,7 +70,9 @@ pub async fn run(
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server_addr = CollabServer::new(state.rocksdb.clone()).unwrap().start();
+  let collab_server_addr = CollabServer::new(state.collab_storage.clone())
+    .unwrap()
+    .start();
   let mut server = HttpServer::new(move || {
     App::new()
       .wrap(
@@ -111,26 +113,24 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 }
 
 pub async fn init_state(config: &Config) -> State {
-  let pg_pool = get_connection_pool(&config.database)
-    .await
-    .unwrap_or_else(|_| panic!("Failed to connect to Postgres at {:?}.", config.database));
+  let pg_pool = get_connection_pool(&config.database).await;
+  let collab_storage = init_collab_storage(config, pg_pool.clone()).await;
 
-  std::fs::create_dir_all(config.application.rocksdb_db_dir()).expect("create rocksdb db dir");
-  let rocksdb = Arc::new(RocksCollabDB::open(config.application.rocksdb_db_dir()).unwrap());
   State {
     pg_pool,
-    rocksdb,
+    collab_storage,
     config: Arc::new(config.clone()),
     user: Arc::new(Default::default()),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
   }
 }
 
-pub async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, sqlx::Error> {
+async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
   PgPoolOptions::new()
     .acquire_timeout(std::time::Duration::from_secs(5))
     .connect_with(setting.with_db())
     .await
+    .expect("Failed to connect to Postgres")
 }
 
 fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder {
@@ -150,6 +150,11 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
     .set_max_proto_version(Some(openssl::ssl::SslVersion::TLS1_3))
     .unwrap();
   builder
+}
+
+async fn init_collab_storage(_config: &Config, pg_pool: PgPool) -> Arc<CollabStorage> {
+  let storage = CollabStorage::new(pg_pool);
+  Arc::new(storage)
 }
 
 // fn add_error_header<B>(

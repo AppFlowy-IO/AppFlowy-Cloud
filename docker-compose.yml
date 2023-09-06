@@ -1,18 +1,46 @@
 version: '3'
 services:
   postgres:
-    image: postgres:14
+    image: postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
     ports:
-      - "5433:5432"
+      - 5433:5432
+    volumes:
+      - ./build/init.sql:/docker-entrypoint-initdb.d/init.sql
+
   redis:
-    image: redis:7
+    image: redis
     ports:
-      - "6380:6379"
+      - 6380:6379
+
+  gotrue:
+    image: supabase/gotrue
+    restart: on-failure
+    depends_on:
+      - postgres
+    environment:
+      - GOTRUE_SITE_URL=http://localhost:3000 # redirected site
+      - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET:-hello123}
+      - GOTRUE_DB_DRIVER=postgres
+      - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
+      - API_EXTERNAL_URL=http://localhost:9998 # verify site
+      - PORT=9999
+      - GOTRUE_SMTP_HOST=smtp.gmail.com
+      - GOTRUE_SMTP_PORT=465
+      - GOTRUE_SMTP_USER=noreply@appflowy.io
+      - GOTRUE_SMTP_PASS=${GOTRUE_SMTP_PASS:-}
+      - GOTRUE_SMTP_ADMIN_EMAIL=internal@appflowy.io
+      - GOTRUE_RATE_LIMIT_EMAIL_SENT=${GOTRUE_RATE_LIMIT_EMAIL_SENT:-100000}
+      - GOTRUE_SMTP_MAX_FREQUENCY=1ns
+      - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/verify
+      - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false}
+    ports:
+      - 9998:9999
+
   appflowy_cloud:
     restart: on-failure
     environment:
@@ -24,5 +52,6 @@ services:
     depends_on:
       - redis
       - postgres
+      - gotrue
     ports:
       - 8000:8000

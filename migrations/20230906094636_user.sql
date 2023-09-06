@@ -1,4 +1,3 @@
--- Add migration script here
 -- Required by uuid_generate_v4()
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- user table

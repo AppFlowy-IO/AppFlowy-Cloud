@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS af_collab_update (
     encrypt INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
-    PRIMARY KEY (oid, key, partition_key)
+    PRIMARY KEY (oid, partition_key)
 ) PARTITION BY LIST (partition_key);
 CREATE TABLE af_collab_update_document PARTITION OF af_collab_update FOR
 VALUES IN (0);

@@ -16,26 +16,6 @@
     },
     "query": "\n            INSERT INTO users (uid, email, username, create_time, password)\n            VALUES ($1, $2, $3, $4, $5)\n        "
   },
-  "3502aac2e0b7e80c2afdf7aba85cd1bfa9dd7f6b95d711bb1dee50c6fae2f061": {
-    "describe": {
-      "columns": [
-        {
-          "name": "email",
-          "ordinal": 0,
-          "type_info": "Text"
-        }
-      ],
-      "nullable": [
-        false
-      ],
-      "parameters": {
-        "Left": [
-          "Int8"
-        ]
-      }
-    },
-    "query": "\n        SELECT email \n        FROM users\n        WHERE uid = $1\n        "
-  },
   "b188bb8915fa0fc8c5dfefa27f1b086b839633c3c4dc6e4991b43a608d46a170": {
     "describe": {
       "columns": [
@@ -61,5 +41,25 @@
       }
     },
     "query": "\n        SELECT uid, password\n        FROM users\n        WHERE email = $1\n        "
+  },
+  "fdcaf51ec4b03ad8af6bddfe1f3a62ba08a1dd94d0a3bf26db506c7a948e2b5e": {
+    "describe": {
+      "columns": [
+        {
+          "name": "email",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Int8"
+        ]
+      }
+    },
+    "query": "\n        SELECT email\n        FROM users\n        WHERE uid = $1\n        "
   }
 }

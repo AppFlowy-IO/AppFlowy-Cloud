@@ -42,13 +42,13 @@ cargo install --version="~0.6" sqlx-cli --no-default-features --features rustls,
 Run `the init_db.sh` to create a Postgres database container in Docker:
 
 ```bash
-./scripts/init_db.sh
+./build/init_database.sh
 ```
 
 Run the `init_redis.sh` to create a Redis container in Docker:
 
 ```bash
-./scripts/init_redis.sh
+./build/init_redis.sh
 ```
 
 Build the project:

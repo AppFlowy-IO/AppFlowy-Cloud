@@ -58,7 +58,7 @@ pub enum InputParamsError {
   InvalidEmail(String),
 
   #[error("Invalid password")]
-  InvalidPassword,
+  InvalidPassword(String),
 
   #[error("You entered two different new passwords")]
   PasswordNotMatch,
@@ -69,12 +69,35 @@ impl actix_web::error::ResponseError for InputParamsError {
     match *self {
       InputParamsError::InvalidName(_) => StatusCode::BAD_REQUEST,
       InputParamsError::InvalidEmail(_) => StatusCode::BAD_REQUEST,
-      InputParamsError::InvalidPassword => StatusCode::BAD_REQUEST,
+      InputParamsError::InvalidPassword(_) => StatusCode::BAD_REQUEST,
       InputParamsError::PasswordNotMatch => StatusCode::BAD_REQUEST,
     }
   }
 
   fn error_response(&self) -> HttpResponse {
+    HttpResponse::build(self.status_code()).body(self.to_string())
+  }
+}
+
+#[derive(Debug, Error)]
+#[error("Internal server error")]
+pub struct InternalServerError {
+  error: anyhow::Error,
+}
+
+impl InternalServerError {
+  pub fn new(error: anyhow::Error) -> Self {
+    Self { error }
+  }
+}
+
+impl actix_web::error::ResponseError for InternalServerError {
+  fn status_code(&self) -> StatusCode {
+    StatusCode::INTERNAL_SERVER_ERROR
+  }
+
+  fn error_response(&self) -> HttpResponse {
+    tracing::error!("Internal server error: {}", self.error);
     HttpResponse::build(self.status_code()).body(self.to_string())
   }
 }

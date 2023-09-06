@@ -1,6 +1,6 @@
 mod error;
+pub mod gotrue;
 mod password;
-mod supabase_jwt;
 mod user;
 
 pub use error::*;

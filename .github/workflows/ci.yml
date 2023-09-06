@@ -11,6 +11,8 @@ env:
   CARGO_TERM_COLOR: always
   SQLX_VERSION: 0.6.2
   SQLX_FEATURES: "rustls,postgres"
+  APP__GOTRUE__BASE_URL: ${{ secrets.APP__GOTRUE__BASE_URL }}
+  APP__GOTRUE__JWT_SECRET: ${{ secrets.APP__GOTRUE__JWT_SECRET }}
 
 jobs:
   test:
@@ -49,7 +51,7 @@ jobs:
           SKIP_DOCKER=true ./build/init_database.sh
       - name: Check sqlx-data.json is up-to-date
         run: |
-          cargo sqlx prepare --check -- --bin appflowy_server
+          cargo sqlx prepare --check -- --bin appflowy_cloud
       - name: Run tests
         run: |
           cargo build

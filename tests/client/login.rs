@@ -8,7 +8,7 @@ async fn login_success() {
   let initial_token = c.logged_in_token().unwrap().to_string();
   c.login(&email, &password).await.unwrap();
   let relogin_token = c.logged_in_token().unwrap();
-  assert!(&initial_token != relogin_token);
+  assert_ne!(&initial_token, relogin_token);
   assert!(c.logged_in_token().is_some())
 }
 

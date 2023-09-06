@@ -4,11 +4,11 @@ use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
+use realtime::core::{CollabServer, CollabSession};
 use secrecy::Secret;
 use std::time::Duration;
 
-use websocket::entities::WSUser;
-use websocket::{CollabServer, CollabSession};
+use realtime::entities::RealtimeUser;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
@@ -39,7 +39,7 @@ pub async fn establish_ws_connection(
   }
 }
 
-impl From<LoggedUser> for WSUser {
+impl From<LoggedUser> for RealtimeUser {
   fn from(user: LoggedUser) -> Self {
     Self {
       user_id: Secret::new(user.expose_secret().to_string()),

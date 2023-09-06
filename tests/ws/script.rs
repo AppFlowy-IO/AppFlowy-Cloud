@@ -3,17 +3,16 @@ use crate::util::{spawn_server, TestServer, TestUser};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
-use collab_client_ws::{WSClient, WSClientConfig, WSObjectHandler};
-use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
-use collab_plugins::disk::rocksdb::RocksdbDiskPlugin;
-use collab_plugins::sync::SyncPlugin;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
+use collab_ws::{WSClient, WSClientConfig, WSObjectHandler};
+use realtime::collab::CollabStoragePlugin;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use storage::collab::CollabStorage;
 use tempfile::TempDir;
 use tokio::sync::RwLock;
 
@@ -117,7 +116,7 @@ impl ScriptTest {
         collab.lock().add_plugin(Arc::new(sync_plugin));
 
         // Disk
-        let disk_plugin = RocksdbDiskPlugin::new(uid, client.db.clone()).unwrap();
+        let disk_plugin = CollabStoragePlugin::new(client.db.clone()).unwrap();
         collab.lock().add_plugin(Arc::new(disk_plugin));
 
         collab.initial();
@@ -175,7 +174,7 @@ fn origin_from_tcp_stream(addr: &SocketAddr) -> CollabOrigin {
 
 pub struct TestClient {
   pub ws: WSClient,
-  pub db: Arc<RocksCollabDB>,
+  pub db: Arc<CollabStorage>,
   pub origin: CollabOrigin,
   pub collab_by_object_id: HashMap<String, Arc<MutexCollab>>,
   pub handlers: Vec<Arc<WSObjectHandler>>,

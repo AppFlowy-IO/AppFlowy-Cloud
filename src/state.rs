@@ -2,17 +2,17 @@ use crate::component::auth::LoggedUser;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
 
-use collab_plugins::disk::kv::rocks_kv::RocksCollabDB;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use storage::collab::CollabStorage;
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct State {
   pub pg_pool: PgPool,
-  pub rocksdb: Arc<RocksCollabDB>,
+  pub collab_storage: Arc<CollabStorage>,
   pub config: Arc<Config>,
   pub user: Arc<RwLock<UserCache>>,
   pub id_gen: Arc<RwLock<Snowflake>>,

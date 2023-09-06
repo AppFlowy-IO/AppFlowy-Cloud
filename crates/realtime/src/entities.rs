@@ -1,7 +1,7 @@
-use crate::error::WSError;
+use crate::error::CollabSyncError;
 use actix::{Message, Recipient};
 use bytes::Bytes;
-use collab_plugins::sync::msg::CollabMessage;
+use collab_sync_protocol::CollabMessage;
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -9,24 +9,24 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
-pub struct WSUser {
+pub struct RealtimeUser {
   pub user_id: Secret<String>,
 }
 
-impl Display for WSUser {
+impl Display for RealtimeUser {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_str(self.user_id.expose_secret())
   }
 }
 
-impl Hash for WSUser {
+impl Hash for RealtimeUser {
   fn hash<H: Hasher>(&self, state: &mut H) {
     let uid: &String = self.user_id.expose_secret();
     uid.hash(state);
   }
 }
 
-impl PartialEq<Self> for WSUser {
+impl PartialEq<Self> for RealtimeUser {
   fn eq(&self, other: &Self) -> bool {
     let uid: &String = self.user_id.expose_secret();
     let other_uid: &String = other.user_id.expose_secret();
@@ -34,26 +34,26 @@ impl PartialEq<Self> for WSUser {
   }
 }
 
-impl Eq for WSUser {}
+impl Eq for RealtimeUser {}
 
 #[derive(Debug, Message, Clone)]
-#[rtype(result = "Result<(), WSError>")]
+#[rtype(result = "Result<(), CollabSyncError>")]
 pub struct Connect {
   pub socket: Recipient<ServerMessage>,
-  pub user: Arc<WSUser>,
+  pub user: Arc<RealtimeUser>,
 }
 
 #[derive(Debug, Message, Clone)]
-#[rtype(result = "Result<(), WSError>")]
+#[rtype(result = "Result<(), CollabSyncError>")]
 pub struct Disconnect {
-  pub user: Arc<WSUser>,
+  pub user: Arc<RealtimeUser>,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "()")]
 pub struct ClientMessage {
   pub business_id: u8,
-  pub user: Arc<WSUser>,
+  pub user: Arc<RealtimeUser>,
   pub collab_msg: CollabMessage,
 }
 
@@ -66,26 +66,26 @@ pub struct ServerMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WSMessage {
+pub struct RealtimeMessage {
   pub business_id: u8,
   pub object_id: String,
   pub payload: Vec<u8>,
 }
 
-impl WSMessage {
+impl RealtimeMessage {
   pub fn from_vec(bytes: Vec<u8>) -> Result<Self, serde_json::Error> {
     serde_json::from_slice(&bytes)
   }
 }
 
-impl From<WSMessage> for Bytes {
-  fn from(msg: WSMessage) -> Self {
+impl From<RealtimeMessage> for Bytes {
+  fn from(msg: RealtimeMessage) -> Self {
     let bytes = serde_json::to_vec(&msg).unwrap_or_default();
     Bytes::from(bytes)
   }
 }
 
-impl From<ServerMessage> for WSMessage {
+impl From<ServerMessage> for RealtimeMessage {
   fn from(server_msg: ServerMessage) -> Self {
     Self {
       business_id: server_msg.business_id,
@@ -95,7 +95,7 @@ impl From<ServerMessage> for WSMessage {
   }
 }
 
-impl From<CollabMessage> for WSMessage {
+impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
       business_id: msg.business_id(),
@@ -115,7 +115,7 @@ impl From<CollabMessage> for ServerMessage {
   }
 }
 
-impl From<ClientMessage> for WSMessage {
+impl From<ClientMessage> for RealtimeMessage {
   fn from(client_msg: ClientMessage) -> Self {
     Self {
       business_id: client_msg.business_id,

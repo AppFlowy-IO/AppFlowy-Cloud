@@ -1,5 +1,5 @@
-mod api;
+// mod api;
 mod client;
 mod gotrue;
-mod util;
-mod ws;
+// mod realtime;
+// mod util;

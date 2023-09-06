@@ -8,6 +8,7 @@ use actix_web::HttpRequest;
 use anyhow::Context;
 use chrono::Duration;
 use chrono::Utc;
+use std::ops::DerefMut;
 
 use secrecy::zeroize::DefaultIsZeroes;
 use secrecy::{CloneableSecret, DebugSecret, ExposeSecret, Secret, Zeroize};
@@ -84,7 +85,7 @@ pub async fn register(
     Utc::now(),
     password.expose_secret(),
   )
-  .execute(&mut transaction)
+  .execute(transaction.deref_mut())
   .await
   .context("Save user to disk failed")
   .map_err(internal_error)?;
@@ -135,7 +136,7 @@ pub async fn change_password(
   let _ = sqlx::query(sql)
     .bind(new_hash_password.expose_secret())
     .bind(logged_user.expose_secret())
-    .execute(&mut transaction)
+    .execute(transaction.deref_mut())
     .await
     .context("Failed to change user's password in the database.")?;
 
@@ -159,7 +160,7 @@ pub async fn get_user_email(
         "#,
     uid,
   )
-  .fetch_one(transaction)
+  .fetch_one(transaction.deref_mut())
   .await
   .context("Failed to retrieve the username`")?;
   Ok(row.email)
@@ -172,7 +173,7 @@ async fn is_email_exist(
 ) -> Result<bool, anyhow::Error> {
   let result = sqlx::query(r#"SELECT email FROM users WHERE email = $1"#)
     .bind(email)
-    .fetch_optional(transaction)
+    .fetch_optional(transaction.deref_mut())
     .await?;
 
   Ok(result.is_some())

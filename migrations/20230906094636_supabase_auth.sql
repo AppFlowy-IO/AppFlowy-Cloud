@@ -1,3 +1,4 @@
+-- Add migration script here
 CREATE USER supabase_admin LOGIN CREATEROLE CREATEDB REPLICATION BYPASSRLS;
 
 -- Supabase super admin

@@ -1,7 +1,7 @@
 use crate::util::{spawn_server, TestUser};
 use std::time::Duration;
 
-use collab_client_ws::{WSClient, WSClientConfig};
+use collab_ws::{WSClient, WSClientConfig};
 
 #[actix_rt::test]
 async fn ws_retry_connect() {

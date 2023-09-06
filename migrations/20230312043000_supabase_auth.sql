@@ -1,4 +1,18 @@
 -- Add migration script here
+-- Create the anon and authenticated roles if they don't exist
+CREATE OR REPLACE FUNCTION create_roles(roles text []) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE role_name text;
+BEGIN FOREACH role_name IN ARRAY roles LOOP IF NOT EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = role_name
+) THEN EXECUTE 'CREATE ROLE ' || role_name;
+END IF;
+END LOOP;
+END;
+$$;
+SELECT create_roles(ARRAY ['anon', 'authenticated']);
+
 -- Create supabase_admin user if it does not exist
 DO $$ BEGIN IF NOT EXISTS (
     SELECT

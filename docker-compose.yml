@@ -23,21 +23,20 @@ services:
     depends_on:
       - postgres
     environment:
-      - GOTRUE_SITE_URL=http://localhost:3000 # redirected site
-      - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET:-hello123}
+      - GOTRUE_SITE_URL=http://localhost:3000                         # redirected to AppFlowy application
+      - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
+      - API_EXTERNAL_URL=${API_EXTERNAL_URL:-http://localhost:9998}   # change 'localhost' to the public host of machine that is running on
       - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
-      - API_EXTERNAL_URL=http://localhost:9998 # verify site
       - PORT=9999
-      - GOTRUE_SMTP_HOST=smtp.gmail.com
-      - GOTRUE_SMTP_PORT=465
-      - GOTRUE_SMTP_USER=noreply@appflowy.io
-      - GOTRUE_SMTP_PASS=${GOTRUE_SMTP_PASS:-}
-      - GOTRUE_SMTP_ADMIN_EMAIL=internal@appflowy.io
-      - GOTRUE_RATE_LIMIT_EMAIL_SENT=${GOTRUE_RATE_LIMIT_EMAIL_SENT:-100000}
-      - GOTRUE_SMTP_MAX_FREQUENCY=1ns
+      - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST:-}                        # e.g. smtp.gmail.com
+      - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT:-}                        # e.g. 465
+      - GOTRUE_SMTP_USER=${GOTRUE_SMTP_USER:-}                        # email sender, e.g. noreply@appflowy.io
+      - GOTRUE_SMTP_PASS=${GOTRUE_SMTP_PASS:-}                        # email password
+      - GOTRUE_SMTP_ADMIN_EMAIL=${GOTRUE_SMTP_ADMIN_EMAIL:-}          # email with admin privileges e.g. internal@appflowy.io
+      - GOTRUE_SMTP_MAX_FREQUENCY=${GOTRUE_SMTP_MAX_FREQUENCY:-1ns}   # set to 1ns for running tests
       - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/verify
-      - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false}
+      - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false} # change this to true to skip email confirmation
     ports:
       - 9998:9999
 
@@ -45,6 +44,7 @@ services:
     restart: on-failure
     environment:
       - APP_ENVIRONMENT=production
+      - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
     build:
       context: .
       dockerfile: ./Dockerfile

@@ -1,3 +1,37 @@
+# AppFlowy Cloud
+- Cloud Server for AppFlowy
+
+## Quick Deploy (Docker Compose)
+
+### Environmental Variables before starting
+```bash
+# authentication key, change this and keep the key safe and secret
+export GOTRUE_JWT_SECRET=secret_auth_pass
+
+# enabled by default, if you dont want need email confirmation, set to false
+export GOTRUE_MAILER_AUTOCONFIRM=true
+# if you enable mail confirmation, you need to set the SMTP configuration below
+export GOTRUE_SMTP_HOST=smtp.gmail.com
+export GOTRUE_SMTP_PORT=465
+export GOTRUE_SMTP_USER=email_sender@some_company.com
+export GOTRUE_SMTP_PASS=email_sender_password
+export GOTRUE_SMTP_ADMIN_EMAIL=comp_admin@@some_company.com
+# Change 'localhost' to the public host of machine that is running on.
+# This is for email confirmation link
+export API_EXTERNAL_URL=${API_EXTERNAL_URL:-http://localhost:9998}
+```
+- additional settings can be modified in `docker-compose.yml`
+
+### Start Cloud Server
+```bash
+docker-compose up -d
+```
+
+### Ports
+Host Server is required to expose the following Ports:
+- `8000`
+- `9998`
+
 ## Pre-requisites
 
 You'll need to install:
@@ -21,9 +55,9 @@ cargo install --version="~0.6" sqlx-cli --no-default-features --features rustls,
 ### Linux
 
 ```bash
-# Ubuntu 
+# Ubuntu
 sudo apt-get install libssl-dev postgresql-client
-# Arch 
+# Arch
 sudo pacman -S postgresql
 ```
 

@@ -11,9 +11,15 @@ env:
   CARGO_TERM_COLOR: always
   SQLX_VERSION: 0.6.2
   SQLX_FEATURES: "rustls,postgres"
-  APP__GOTRUE__BASE_URL: http://localhost:3000
-  APP__GOTRUE__JWT_SECRET: hello123
+
+  GOTRUE_JWT_SECRET: some_secret_key
+  GOTRUE_SMTP_HOST: smtp.gmail.com
+  GOTRUE_SMTP_PORT: 465
+  GOTRUE_SMTP_USER: noreply@appflowy.io
   GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
+  GOTRUE_SMTP_ADMIN_EMAIL: internal@appflowy.io
+  GOTRUE_REGISTERED_EMAIL: zack@appflowy.io
+  GOTRUE_REGISTERED_PASSWORD: Hello123!
 
 jobs:
   test:
@@ -62,7 +68,7 @@ jobs:
           export GOTRUE_MAILER_AUTOCONFIRM=true
           docker-compose up -d
           curl localhost:9998/signup \
-            --data-raw '{"email":"xigahi8979@tipent.com","password":"Hello123!"}' \
+            --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
             --header 'Content-Type: application/json'
           export GOTRUE_MAILER_AUTOCONFIRM=false
           docker-compose up -d

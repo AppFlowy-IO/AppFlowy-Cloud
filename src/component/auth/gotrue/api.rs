@@ -1,8 +1,9 @@
 use anyhow::Error;
+use futures_util::TryFutureExt;
 
 use super::{
   grant::Grant,
-  models::{AccessTokenResponse, GoTrueError, OAuthError, TokenResult, User},
+  models::{AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, TokenResult, User},
 };
 use crate::utils::http_response::{check_response, from_body, from_response};
 
@@ -19,14 +20,35 @@ impl Client {
     }
   }
 
+  pub async fn settings(&self) -> Result<GoTrueSettings, Error> {
+    let url: String = format!("{}/settings", self.base_url);
+    let resp = self.client.get(url).send().await?;
+    from_response(resp).await
+  }
+
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<User, Error> {
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let url: String = format!("{}/signup", self.base_url);
-    let resp = self.client.post(url).json(&payload).send().await?;
-    from_response(resp).await
+
+    let (settings, resp) = tokio::try_join!(
+      self.settings(),
+      self
+        .client
+        .post(&url)
+        .json(&payload)
+        .send()
+        .map_err(Error::from),
+    )?;
+
+    if settings.mailer_autoconfirm {
+      let token: AccessTokenResponse = from_response(resp).await?;
+      Ok(token.user)
+    } else {
+      from_response(resp).await
+    }
   }
 
   pub async fn token(&self, grant: &Grant) -> Result<TokenResult, Error> {

@@ -11,8 +11,9 @@ env:
   CARGO_TERM_COLOR: always
   SQLX_VERSION: 0.6.2
   SQLX_FEATURES: "rustls,postgres"
-  APP__GOTRUE__BASE_URL: ${{ secrets.APP__GOTRUE__BASE_URL }}
-  APP__GOTRUE__JWT_SECRET: ${{ secrets.APP__GOTRUE__JWT_SECRET }}
+  APP__GOTRUE__BASE_URL: http://localhost:3000
+  APP__GOTRUE__JWT_SECRET: hello123
+  GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
 
 jobs:
   test:
@@ -31,6 +32,7 @@ jobs:
         image: redis:7
         ports:
           - 6379:6379
+
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -52,11 +54,21 @@ jobs:
       - name: Check sqlx-data.json is up-to-date
         run: |
           cargo sqlx prepare --check -- --bin appflowy_cloud
+      - name: Run Docker-Compose
+        run: |
+          docker-compose up -d
+      - name: Add registered user
+        run: |
+          export GOTRUE_MAILER_AUTOCONFIRM=true
+          docker-compose up -d
+          curl localhost:9998/signup \
+            --data-raw '{"email":"xigahi8979@tipent.com","password":"Hello123!"}' \
+            --header 'Content-Type: application/json'
+          export GOTRUE_MAILER_AUTOCONFIRM=false
+          docker-compose up -d
+
       - name: Run tests
         run: |
-          cargo build
-          cargo run &
-          sleep 5 # wait some time for server to be ready
           cargo test
 
 

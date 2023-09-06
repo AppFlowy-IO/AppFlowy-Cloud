@@ -1,11 +1,12 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1.65.0 as chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.69.0 as chef
+
 WORKDIR /app
 RUN apt update && apt install lld clang -y
 
 FROM chef as planner
 COPY . .
 # Compute a lock-like file for our project
-RUN cargo chef prepare  --recipe-path recipe.json
+RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef as builder
 COPY --from=planner /app/recipe.json recipe.json

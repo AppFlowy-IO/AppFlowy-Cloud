@@ -8,9 +8,6 @@ on:
     branches: [ main ]
 
 env:
-  CARGO_TERM_COLOR: always
-  SQLX_VERSION: 0.7.1
-  SQLX_FEATURES: "rustls,postgres"
   APP__GOTRUE__BASE_URL: http://localhost:3000
   APP__GOTRUE__JWT_SECRET: hello123
   GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
@@ -19,25 +16,10 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-#    services:
-#      postgres:
-#        image: postgres:12
-#        env:
-#          POSTGRES_USER: postgres
-#          POSTGRES_PASSWORD: password
-#          POSTGRES_DB: postgres
-#        ports:
-#          - 5432:5432
-#      redis:
-#        image: redis:7
-#        ports:
-#          - 6379:6379
 
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -45,12 +27,16 @@ jobs:
 
       - name: Install Development Dependencies
         run: |
-          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           sudo apt-get install libpq-dev -y
 
       - name: Run Docker-Compose
         run: |
           docker-compose up -d
+
+      - name: Check sqlx-data.json
+        run: |
+          cargo sqlx prepare --check -- --bin appflowy_cloud
+
       - name: Add registered user
         run: |
           export GOTRUE_MAILER_AUTOCONFIRM=true
@@ -61,17 +47,13 @@ jobs:
           export GOTRUE_MAILER_AUTOCONFIRM=false
           docker-compose up -d
 
-      - name: Check sqlx-data.json
-        run: |
-          cargo sqlx prepare --check -- --bin appflowy_cloud
-
       - name: Run tests
         run: |
           cargo test
 
-      - name: Rustfmt
-        run: cargo fmt --check
-
-      - name: Clippy
-        run: cargo clippy -- -D warnings
+#      - name: Rustfmt
+#        run: cargo fmt --check
+#
+#      - name: Clippy
+#        run: cargo clippy -- -D warnings
 

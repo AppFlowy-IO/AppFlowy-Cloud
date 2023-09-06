@@ -4,6 +4,6 @@ spec.yaml
 target/
 deploy/
 tests/
-Dockerfile
+docker/Dockerfile
 scripts/
 migrations/

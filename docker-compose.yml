@@ -2,6 +2,9 @@ version: '3'
 services:
   postgres:
     image: postgres
+    build:
+      context: .
+      dockerfile: docker/Dockerfile_postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
@@ -47,7 +50,7 @@ services:
       - APP_ENVIRONMENT=production
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: docker/Dockerfile
     image: appflowy_cloud:${BACKEND_VERSION:-latest}
     depends_on:
       - redis

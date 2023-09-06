@@ -19,41 +19,35 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
+#    services:
+#      postgres:
+#        image: postgres:12
+#        env:
+#          POSTGRES_USER: postgres
+#          POSTGRES_PASSWORD: password
+#          POSTGRES_DB: postgres
+#        ports:
+#          - 5432:5432
+#      redis:
+#        image: redis:7
+#        ports:
+#          - 6379:6379
 
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             AppFlowy-Cloud
-      - name: Install sqlx-cli
-        run:
-          cargo install sqlx-cli
-          --version=${{ env.SQLX_VERSION }}
-          --features ${{ env.SQLX_FEATURES }}
-          --no-default-features
-          --locked
-      - name: Migrate database
+
+      - name: Install Development Dependencies
         run: |
+          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true ./build/init_database.sh
-      - name: Check sqlx-data.json is up-to-date
-        run: |
-          cargo sqlx prepare --check -- --bin appflowy_cloud
+
       - name: Run Docker-Compose
         run: |
           docker-compose up -d
@@ -67,53 +61,17 @@ jobs:
           export GOTRUE_MAILER_AUTOCONFIRM=false
           docker-compose up -d
 
+      - name: Check sqlx-data.json
+        run: |
+          cargo sqlx prepare --check -- --bin appflowy_cloud
+
       - name: Run tests
         run: |
           cargo test
 
-
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Enforce formatting
+      - name: Rustfmt
         run: cargo fmt --check
 
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: sqlx-${{ env.SQLX_VERSION }}
-      - name: Install sqlx-cli
-        run:
-          cargo install sqlx-cli
-          --version=${{ env.SQLX_VERSION }}
-          --features ${{ env.SQLX_FEATURES }}
-          --no-default-features
-          --locked
-      - name: Migrate database
-        run: |
-          sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true ./build/init_database.sh
-      - name: Linting
+      - name: Clippy
         run: cargo clippy -- -D warnings
+

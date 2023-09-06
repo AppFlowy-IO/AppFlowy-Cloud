@@ -12,13 +12,12 @@ CREATE UNIQUE INDEX idx_af_collab_oid ON af_collab (oid);
 -- collab update table.
 CREATE TABLE IF NOT EXISTS af_collab_update (
     oid TEXT REFERENCES af_collab(oid) ON DELETE CASCADE,
-    key BIGSERIAL,
-    value BYTEA NOT NULL,
-    value_size INTEGER,
+    blob BYTEA NOT NULL,
+    len INTEGER,
     partition_key INTEGER NOT NULL,
-    uid BIGINT NOT NULL,
     md5 TEXT DEFAULT '',
     did TEXT DEFAULT '',
+    encrypt INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
     PRIMARY KEY (oid, key, partition_key)
@@ -114,8 +113,9 @@ CREATE TABLE IF NOT EXISTS af_collab_snapshot (
     oid TEXT NOT NULL,
     name TEXT DEFAULT '',
     blob BYTEA NOT NULL,
-    blob_size INTEGER NOT NULL,
+    len INTEGER NOT NULL,
     edit_count BIGINT NOT NULL DEFAULT 0,
+    encrypt INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 -- This trigger is fired after an insert operation on the af_collab_snapshot table. It automatically sets the edit_count

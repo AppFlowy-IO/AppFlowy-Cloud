@@ -59,12 +59,12 @@ jobs:
           docker-compose up -d
       - name: Add registered user
         run: |
-          GOTRUE_MAILER_AUTOCONFIRM=true
+          export GOTRUE_MAILER_AUTOCONFIRM=true
           docker-compose up -d
           curl localhost:9998/signup \
             --data-raw '{"email":"xigahi8979@tipent.com","password":"Hello123!"}' \
             --header 'Content-Type: application/json'
-          GOTRUE_MAILER_AUTOCONFIRM=false
+          export GOTRUE_MAILER_AUTOCONFIRM=false
           docker-compose up -d
 
       - name: Run tests

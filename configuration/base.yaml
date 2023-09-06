@@ -14,3 +14,6 @@ websocket:
   heartbeat_interval: 8
   client_timeout: 10
 redis_uri: "redis://127.0.0.1:6379"
+gotrue:
+  base_url: "http://gotrue:9999"
+  jwt_secret: "hello123"

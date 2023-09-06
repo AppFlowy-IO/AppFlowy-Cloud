@@ -9,7 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  SQLX_VERSION: 0.6.2
+  SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"
   APP__GOTRUE__BASE_URL: http://localhost:3000
   APP__GOTRUE__JWT_SECRET: hello123

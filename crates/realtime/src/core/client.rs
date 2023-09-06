@@ -1,6 +1,7 @@
-use crate::entities::{ClientMessage, Connect, Disconnect, ServerMessage, WSMessage, WSUser};
+use crate::entities::{
+  ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser, ServerMessage,
+};
 
-use crate::CollabServer;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   Recipient, Running, StreamHandler, WrapFuture,
@@ -9,12 +10,13 @@ use actix_web_actors::ws;
 use bytes::Bytes;
 use std::ops::Deref;
 
-use collab_plugins::sync::msg::CollabMessage;
+use crate::core::CollabServer;
+use collab_sync_protocol::CollabMessage;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub struct CollabSession {
-  user: Arc<WSUser>,
+  user: Arc<RealtimeUser>,
   hb: Instant,
   pub server: Addr<CollabServer>,
   heartbeat_interval: Duration,
@@ -23,7 +25,7 @@ pub struct CollabSession {
 
 impl CollabSession {
   pub fn new(
-    user: WSUser,
+    user: RealtimeUser,
     server: Addr<CollabServer>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
@@ -52,7 +54,7 @@ impl CollabSession {
   }
 
   fn forward_binary_to_ws_server(&self, bytes: Bytes) {
-    match WSMessage::from_vec(bytes.to_vec()) {
+    match RealtimeMessage::from_vec(bytes.to_vec()) {
       Ok(ws_message) => {
         let collab_msg = CollabMessage::from_vec(&ws_message.payload).unwrap();
         self.server.do_send(ClientMessage {
@@ -109,7 +111,7 @@ impl Handler<ServerMessage> for CollabSession {
   type Result = ();
 
   fn handle(&mut self, server_msg: ServerMessage, ctx: &mut Self::Context) {
-    ctx.binary(WSMessage::from(server_msg));
+    ctx.binary(RealtimeMessage::from(server_msg));
   }
 }
 

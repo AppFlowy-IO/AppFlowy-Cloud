@@ -1,10 +1,17 @@
+use dotenv::dotenv;
 use std::time::SystemTime;
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-  pub static ref REGISTERED_EMAIL: String = std::env::var("GOTRUE_REGISTERED_EMAIL").unwrap();
-  pub static ref REGISTERED_PASSWORD: String = std::env::var("GOTRUE_REGISTERED_PASSWORD").unwrap();
+  pub static ref REGISTERED_EMAIL: String = {
+    dotenv().ok();
+    std::env::var("GOTRUE_REGISTERED_EMAIL").unwrap()
+  };
+  pub static ref REGISTERED_PASSWORD: String = {
+    dotenv().ok();
+    std::env::var("GOTRUE_REGISTERED_PASSWORD").unwrap()
+  };
 }
 
 pub fn timestamp_nano() -> u128 {

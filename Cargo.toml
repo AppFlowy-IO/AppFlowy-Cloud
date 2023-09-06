@@ -16,6 +16,7 @@ actix-identity = "0.5.2"
 actix-cors = "0.6.4"
 actix-session = { version = "0.7", features = ["redis-rs-tls-session"] }
 openssl = "0.10.45"
+dotenv = "0.15.0"
 
 # serde
 serde_json = "1.0"

@@ -1,8 +1,7 @@
 use std::time::SystemTime;
 
-use appflowy_cloud::client::http::Client;
-
-pub const LOCALHOST_URL: &str = "http://localhost:8000"; //TODO: change to default port, use https
+pub const REGISTERED_EMAIL: &str = "xigahi8979@tipent.com";
+pub const REGISTERED_PASSWORD: &str = "Hello123!";
 
 pub fn timestamp_nano() -> u128 {
   SystemTime::now()
@@ -11,12 +10,6 @@ pub fn timestamp_nano() -> u128 {
     .as_nanos()
 }
 
-pub async fn register_deep_fake(c: &mut Client) -> (String, String, String) {
-  let email = format!("deep_fake{}@appflowy.io", timestamp_nano());
-  let user = "user1";
-  let password = "DeepFakePassword!123";
-  c.register(user, &email, password).await.unwrap();
-
-  assert!(c.logged_in_token().is_some());
-  (email, user.to_string(), password.to_string())
+pub fn generate_unique_email() -> String {
+  format!("{}@appflowy.io", timestamp_nano())
 }

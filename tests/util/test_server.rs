@@ -2,8 +2,6 @@ use appflowy_cloud::application::{init_state, Application};
 use appflowy_cloud::config::config::{get_configuration, DatabaseSetting};
 use appflowy_cloud::state::State;
 use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
-use collab::core::collab::MutexCollab;
-use collab::core::origin::CollabOrigin;
 
 // use collab_plugins::disk::keys::make_collab_id_key;
 // use collab_plugins::disk::rocksdb_server::RocksdbServerDiskPlugin;
@@ -23,7 +21,6 @@ static TRACING: Lazy<()> = Lazy::new(|| {
   filters.push(format!("appflowy_cloud={}", level));
   filters.push(format!("collab_client_ws={}", level));
   filters.push(format!("websocket={}", level));
-  filters.push(format!("collab_sync={}", level));
   // filters.push(format!("hyper={}", level));
   filters.push(format!("actix_web={}", level));
 

@@ -1,4 +1,4 @@
-use crate::ws::script::{ScriptTest, TestScript::*};
+use crate::realtime::script::{ScriptTest, TestScript::*};
 use serde_json::json;
 
 #[actix_rt::test]

@@ -451,6 +451,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab",
+ "collab-plugins",
  "collab-ws",
  "config",
  "dashmap",
@@ -768,7 +769,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b1e13e25ff3db898cb64e8959757ed53a58331b5#b1e13e25ff3db898cb64e8959757ed53a58331b5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c3f886f5129db290665925d4c8edf940321027a8#c3f886f5129db290665925d4c8edf940321027a8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -785,23 +786,41 @@ dependencies = [
 ]
 
 [[package]]
-name = "collab-sync"
+name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b1e13e25ff3db898cb64e8959757ed53a58331b5#b1e13e25ff3db898cb64e8959757ed53a58331b5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c3f886f5129db290665925d4c8edf940321027a8#c3f886f5129db290665925d4c8edf940321027a8"
 dependencies = [
- "bytes",
+ "anyhow",
  "collab",
+ "serde",
+ "serde_repr",
+ "uuid",
+]
+
+[[package]]
+name = "collab-plugins"
+version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c3f886f5129db290665925d4c8edf940321027a8#c3f886f5129db290665925d4c8edf940321027a8"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "collab",
+ "collab-define",
+ "collab-sync-protocol",
+ "collab-ws",
  "futures-util",
  "lib0",
- "md5",
  "parking_lot 0.12.1",
+ "rand 0.8.5",
  "serde",
  "serde_json",
+ "similar",
  "thiserror",
  "tokio",
+ "tokio-retry",
  "tokio-stream",
- "tokio-util",
  "tracing",
+ "uuid",
  "y-sync",
  "yrs",
 ]
@@ -809,7 +828,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b1e13e25ff3db898cb64e8959757ed53a58331b5#b1e13e25ff3db898cb64e8959757ed53a58331b5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c3f886f5129db290665925d4c8edf940321027a8#c3f886f5129db290665925d4c8edf940321027a8"
 dependencies = [
  "bytes",
  "collab",
@@ -823,10 +842,10 @@ dependencies = [
 [[package]]
 name = "collab-ws"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b1e13e25ff3db898cb64e8959757ed53a58331b5#b1e13e25ff3db898cb64e8959757ed53a58331b5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c3f886f5129db290665925d4c8edf940321027a8#c3f886f5129db290665925d4c8edf940321027a8"
 dependencies = [
  "bytes",
- "collab-sync",
+ "collab-sync-protocol",
  "futures-util",
  "serde",
  "serde_json",
@@ -2606,6 +2625,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_repr"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8725e1dfadb3a50f7e5ce0b1a540466f6ed3fe7a0fca2ac2b8b831d31316bd00"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.28",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2656,6 +2686,12 @@ checksum = "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "similar"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
 
 [[package]]
 name = "simple_asn1"

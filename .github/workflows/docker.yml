@@ -1,4 +1,4 @@
-name: Server
+name: AppFlowyCloud
 
 on:
   push:
@@ -14,7 +14,7 @@ env:
 
 jobs:
   test:
-    name: Test
+    name: Docker
     runs-on: ubuntu-latest
 
     steps:
@@ -38,3 +38,7 @@ jobs:
             --header 'Content-Type: application/json'
           export GOTRUE_MAILER_AUTOCONFIRM=false
           docker-compose up -d
+
+      - name: Run tests
+        run: |
+          cargo test

@@ -1,4 +1,4 @@
-name: Server
+name: AppFlowyCloud
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
 
 jobs:
   test:
-    name: Test
+    name: Unit Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -35,6 +35,4 @@ jobs:
         run: |
           cargo sqlx prepare --check -- --bin appflowy_cloud
 
-      - name: Run tests
-        run: |
-          cargo test
+      

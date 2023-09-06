@@ -57,7 +57,7 @@ tracing-subscriber = { version = "0.3.16", features = ["registry", "env-filter",
 tracing-bunyan-formatter = "0.3.6"
 tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
-sqlx = { version = "0.6", default-features = false, features = ["runtime-actix-rustls", "macros", "postgres", "uuid", "chrono", "migrate", "offline"] }
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 
 #Local crate
 token = { path = "./crates/token" }
@@ -88,12 +88,14 @@ members = [
     "crates/storage",
 ]
 
+[profile.dev.package.sqlx-macros]
+opt-level = 3
+
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c3f886f5129db290665925d4c8edf940321027a8"  }
-collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c3f886f5129db290665925d4c8edf940321027a8"  }
-collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c3f886f5129db290665925d4c8edf940321027a8" }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c3f886f5129db290665925d4c8edf940321027a8" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
+collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
+collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
 
 #collab = { path = "./crates/AppFlowy-Collab/collab" }
-#collab-client-ws = { path = "./crates/AppFlowy-Collab/collab-client-ws" }
 #collab-plugins = { path = "./crates/AppFlowy-Collab/collab-plugins"}

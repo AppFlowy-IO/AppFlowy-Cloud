@@ -25,5 +25,5 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: SQLX_OFFLINE=true cargo clippy -- -D warnings
 

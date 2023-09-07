@@ -23,7 +23,7 @@ services:
     depends_on:
       - postgres
     environment:
-      - GOTRUE_SITE_URL=http://localhost:3000                         # redirected to AppFlowy application
+      - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL:-http://localhost:9998}   # change 'localhost' to the public host of machine that is running on

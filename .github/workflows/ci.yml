@@ -1,4 +1,4 @@
-name: Server
+name: AppFlowyCloud
 
 on:
   push:
@@ -8,37 +8,13 @@ on:
     branches: [ main ]
 
 env:
-  CARGO_TERM_COLOR: always
   SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"
 
-  GOTRUE_JWT_SECRET: some_secret_key
-  GOTRUE_SMTP_HOST: smtp.gmail.com
-  GOTRUE_SMTP_PORT: 465
-  GOTRUE_SMTP_USER: noreply@appflowy.io
-  GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
-  GOTRUE_SMTP_ADMIN_EMAIL: internal@appflowy.io
-  GOTRUE_REGISTERED_EMAIL: zack@appflowy.io
-  GOTRUE_REGISTERED_PASSWORD: Hello123!
-  DATABASE_URL: postgres://postgres:password@localhost:5433/appflowy
-
 jobs:
   test:
-    name: Test
+    name: Unit Tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:12
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
 
     steps:
       - uses: actions/checkout@v3
@@ -47,80 +23,16 @@ jobs:
         with:
           workspaces: |
             AppFlowy-Cloud
-      - name: Install sqlx-cli
-        run:
-          cargo install sqlx-cli
-          --version=${{ env.SQLX_VERSION }}
-          --features ${{ env.SQLX_FEATURES }}
-          --no-default-features
-          --locked
-      - name: Migrate database
+
+      - name: Install Development Dependencies
         run: |
+          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true ./build/init_database.sh
-      - name: Check sqlx-data.json is up-to-date
+          ./build/init_database.sh
+          ./build/init_redis.sh
+
+      - name: Check sqlx-data.json
         run: |
           cargo sqlx prepare --check -- --bin appflowy_cloud
-      - name: Run Docker-Compose
-        run: |
-          docker-compose up -d
-      - name: Add registered user
-        run: |
-          export GOTRUE_MAILER_AUTOCONFIRM=true
-          docker-compose up -d
-          curl localhost:9998/signup \
-            --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
-            --header 'Content-Type: application/json'
-          export GOTRUE_MAILER_AUTOCONFIRM=false
-          docker-compose up -d
 
-      - name: Run tests
-        run: |
-          cargo test
-
-
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Enforce formatting
-        run: cargo fmt --check
-
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: sqlx-${{ env.SQLX_VERSION }}
-      - name: Install sqlx-cli
-        run:
-          cargo install sqlx-cli
-          --version=${{ env.SQLX_VERSION }}
-          --features ${{ env.SQLX_FEATURES }}
-          --no-default-features
-          --locked
-      - name: Migrate database
-        run: |
-          sudo apt-get install libpq-dev -y
-          SKIP_DOCKER=true ./build/init_database.sh
-      - name: Linting
-        run: cargo clippy -- -D warnings
+      

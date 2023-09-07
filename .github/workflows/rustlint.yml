@@ -1,0 +1,29 @@
+name: Rust Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ main ]
+
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            AppFlowy-Cloud
+
+      - name: Rustfmt
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: SQLX_OFFLINE=true cargo clippy -- -D warnings
+

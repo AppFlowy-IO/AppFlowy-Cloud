@@ -7,7 +7,6 @@ use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::HttpRequest;
 use anyhow::Context;
 use chrono::Duration;
-use chrono::Utc;
 use std::ops::DerefMut;
 
 use secrecy::zeroize::DefaultIsZeroes;
@@ -76,13 +75,12 @@ pub async fn register(
   let password = compute_hash_password(password.as_bytes()).map_err(internal_error)?;
   let _ = sqlx::query!(
     r#"
-            INSERT INTO users (uid, email, username, create_time, password)
-            VALUES ($1, $2, $3, $4, $5)
-        "#,
+       INSERT INTO af_user (uid, email, name, password)
+       VALUES ($1, $2, $3, $4)
+     "#,
     uid,
     email,
     username,
-    Utc::now(),
     password.expose_secret(),
   )
   .execute(transaction.deref_mut())
@@ -132,7 +130,7 @@ pub async fn change_password(
       .context("Failed to hash password")??;
 
   // Save password to disk
-  let sql = "UPDATE users SET password = $1 where uid = $2";
+  let sql = "UPDATE af_user SET password = $1 where uid = $2";
   let _ = sqlx::query(sql)
     .bind(new_hash_password.expose_secret())
     .bind(logged_user.expose_secret())
@@ -155,14 +153,14 @@ pub async fn get_user_email(
   let row = sqlx::query!(
     r#"
         SELECT email
-        FROM users
+        FROM af_user
         WHERE uid = $1
         "#,
     uid,
   )
   .fetch_one(transaction.deref_mut())
   .await
-  .context("Failed to retrieve the username`")?;
+  .context("Failed to retrieve the user email`")?;
   Ok(row.email)
 }
 
@@ -171,7 +169,7 @@ async fn is_email_exist(
   transaction: &mut Transaction<'_, Postgres>,
   email: &str,
 ) -> Result<bool, anyhow::Error> {
-  let result = sqlx::query(r#"SELECT email FROM users WHERE email = $1"#)
+  let result = sqlx::query(r#"SELECT email FROM af_user WHERE email = $1"#)
     .bind(email)
     .fetch_optional(transaction.deref_mut())
     .await?;

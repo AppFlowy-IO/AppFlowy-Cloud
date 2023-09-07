@@ -1,0 +1,50 @@
+name: AppFlowyCloud
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ main ]
+
+env:
+  GOTRUE_JWT_SECRET: some_secret_key
+  GOTRUE_SMTP_HOST: smtp.gmail.com
+  GOTRUE_SMTP_PORT: 465
+  GOTRUE_SMTP_USER: noreply@appflowy.io
+  GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
+  GOTRUE_SMTP_ADMIN_EMAIL: internal@appflowy.io
+  GOTRUE_REGISTERED_EMAIL: zack@appflowy.io
+  GOTRUE_REGISTERED_PASSWORD: Hello123!
+  DATABASE_URL: postgres://postgres:password@localhost:5433/appflowy
+
+jobs:
+  test:
+    name: Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            AppFlowy-Cloud
+
+      - name: Run Docker-Compose
+        run: |
+          docker-compose up -d
+
+      - name: Add registered user
+        run: |
+          export GOTRUE_MAILER_AUTOCONFIRM=true
+          docker-compose up -d
+          curl localhost:9998/signup \
+            --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
+            --header 'Content-Type: application/json'
+          export GOTRUE_MAILER_AUTOCONFIRM=false
+          docker-compose up -d
+
+      - name: Run tests
+        run: |
+          cargo test

@@ -1,4 +1,4 @@
-name: AppFlowyCloud
+name: AppFlowy-Cloud Integrations
 
 on:
   push:
@@ -42,7 +42,7 @@ jobs:
         run: cp dev.env .env
 
       - name: Replace values in .env
-        run: | 
+        run: |
           sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER }}/' .env
           sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS }}/' .env
           sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env

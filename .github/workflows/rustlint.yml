@@ -1,4 +1,4 @@
-name: AppFlowyCloud
+name: AppFlowy-Cloud Lint
 
 on:
   push:
@@ -15,20 +15,6 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
-    # The services configuration is set up based on the base.yaml file.
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
 
     steps:
       - uses: actions/checkout@v3
@@ -40,6 +26,9 @@ jobs:
 
       - name: Copy and rename dev.env to .env
         run: cp dev.env .env
+
+      - name: Run the dependency services
+        run: docker-compose --file docker-compose-dev.yml up -d
 
       - name: Install Development Dependencies
         run: |
@@ -56,5 +45,3 @@ jobs:
 
       - name: Clippy
         run: SQLX_OFFLINE=true cargo clippy -- -D warnings
-
-      

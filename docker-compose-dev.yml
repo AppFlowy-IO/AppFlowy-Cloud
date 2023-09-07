@@ -10,7 +10,7 @@ services:
     ports:
       - 5433:5432
     volumes:
-      - ./build/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./migrations:/docker-entrypoint-initdb.d
 
   redis:
     image: redis

@@ -10,7 +10,7 @@ INSERT TO anon,
     authenticated WITH CHECK (true);
 -- Policy for UPDATE
 CREATE POLICY af_user_update_policy ON public.af_user FOR
-UPDATE USING (auth.jwt()->>'email' = email) WITH CHECK (auth.jwt()->>'email' = email);
+UPDATE USING (true) WITH CHECK (true);
 -- Policy for SELECT
 CREATE POLICY af_user_select_policy ON public.af_user FOR
 SELECT TO anon,

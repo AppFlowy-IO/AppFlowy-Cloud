@@ -27,28 +27,3 @@ END;
 $$ LANGUAGE plpgsql;
 CREATE TRIGGER trigger_prevent_reset_encryption_sign BEFORE
 UPDATE ON af_user FOR EACH ROW EXECUTE FUNCTION prevent_reset_encryption_sign_func();
-
--- auth schema
-CREATE SCHEMA IF NOT EXISTS auth;
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS pgjwt;
-DO $$ BEGIN IF NOT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_proc p
-        JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
-    WHERE p.proname = 'jwt'
-        AND n.nspname = 'auth'
-) THEN EXECUTE '
-        CREATE OR REPLACE FUNCTION auth.jwt()
-        RETURNS jsonb
-        LANGUAGE sql
-        STABLE
-        AS $function$
-            SELECT
-                coalesce(
-                    nullif(current_setting(''request.jwt.claim'', true), ''''),
-                    nullif(current_setting(''request.jwt.claims'', true), '''')
-                )::jsonb
-        $function$';
-END IF;
-END $$;

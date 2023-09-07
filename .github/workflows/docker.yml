@@ -10,6 +10,8 @@ on:
 env:
   GOTRUE_REGISTERED_EMAIL: zack@appflowy.io
   GOTRUE_REGISTERED_PASSWORD: Hello123!
+  SQLX_VERSION: 0.7.1
+  SQLX_FEATURES: "rustls,postgres"
 
 jobs:
   test:
@@ -58,4 +60,7 @@ jobs:
 
       - name: Run tests
         run: |
+          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
+          cargo sqlx database create
+          cargo sqlx migrate run
           cargo test

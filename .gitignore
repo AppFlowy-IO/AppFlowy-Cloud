@@ -11,3 +11,4 @@ yarn.lock
 node_modules
 **/crates/AppFlowy-Collab/
 data/
+.env

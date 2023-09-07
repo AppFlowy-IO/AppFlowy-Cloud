@@ -94,3 +94,39 @@ pub struct GoTrueError {
   pub msg: String,
   pub error_id: Option<String>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GoTrueSettings {
+  pub external: GoTrueProviderSettings,
+  pub disable_signup: bool,
+  pub mailer_autoconfirm: bool,
+  pub phone_autoconfirm: bool,
+  pub sms_provider: String,
+  pub mfa_enabled: Option<bool>, // older versions of GoTrue do not return this
+  pub saml_enabled: Option<bool>, // older versions of GoTrue do not return this
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GoTrueProviderSettings {
+  pub apple: bool,
+  pub azure: bool,
+  pub bitbucket: bool,
+  pub discord: bool,
+  pub facebook: bool,
+  pub figma: Option<bool>, // older versions of GoTrue do not return this
+  pub github: bool,
+  pub gitlab: bool,
+  pub google: bool,
+  pub keycloak: bool,
+  pub kakao: Option<bool>, // older versions of GoTrue do not return this
+  pub linkedin: bool,
+  pub notion: bool,
+  pub spotify: bool,
+  pub slack: bool,
+  pub workos: bool,
+  pub twitch: bool,
+  pub twitter: bool,
+  pub email: bool,
+  pub phone: bool,
+  pub zoom: bool,
+}

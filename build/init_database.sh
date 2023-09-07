@@ -33,6 +33,8 @@ then
     exit 1
   fi
 
+  docker build -t postgres_with_pgjwt -f ./docker/Dockerfile_postgres .
+
   docker run \
       -e POSTGRES_USER=${DB_USER} \
       -e POSTGRES_PASSWORD=${DB_PASSWORD} \
@@ -40,7 +42,7 @@ then
       -p "${DB_PORT}":5432 \
       -d \
       --name "appflowy_postgres_$(date '+%s')" \
-      postgres:14 -N 1000
+      postgres_with_pgjwt -N 1000
 fi
 
 

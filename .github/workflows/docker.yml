@@ -18,7 +18,7 @@ jobs:
     # The services configuration is set up based on the base.yaml file.
     services:
       postgres:
-        image: postgres:12
+        image: postgres:14
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: password

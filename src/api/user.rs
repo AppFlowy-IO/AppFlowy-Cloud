@@ -1,3 +1,4 @@
+use crate::biz;
 use crate::component::auth::{
   change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
   InternalServerError, RegisterRequest,
@@ -12,10 +13,12 @@ use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
-use gotrue::{Grant, PasswordGrant};
+use gotrue::grant::{Grant, PasswordGrant};
+use gotrue::models::{GoTrueError, TokenResult, User};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
+
     // auth server integration
     .service(web::resource("/sign_up").route(web::post().to(sign_up_handler)))
     .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
@@ -32,8 +35,8 @@ pub fn user_scope() -> Scope {
 async fn update_handler(
   auth: Authorization,
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::Client>,
-) -> Result<HttpResponse> {
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<Json<Result<User, GoTrueError>>> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
     .map_err(InputParamsError::InvalidEmail)?
@@ -42,29 +45,28 @@ async fn update_handler(
     .map_err(InputParamsError::InvalidPassword)?
     .0;
 
-  let new_user = gotrue_client
+  let res = gotrue_client
     .update_user(&auth.token, &email, &password)
     .await
     .map_err(InternalServerError::new)?;
-
-  Ok(HttpResponse::Ok().json(new_user))
+  Ok(Json(res))
 }
 
 async fn sign_out_handler(
   auth: Authorization,
-  gotrue_client: Data<gotrue::Client>,
-) -> Result<HttpResponse> {
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<Json<()>> {
   gotrue_client
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
-  Ok(HttpResponse::Ok().finish())
+  Ok(Json(()))
 }
 
 async fn sign_in_password_handler(
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::Client>,
-) -> Result<HttpResponse> {
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<Json<TokenResult>> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
     .map_err(InputParamsError::InvalidEmail)?
@@ -78,13 +80,13 @@ async fn sign_in_password_handler(
     .token(&grant)
     .await
     .map_err(InternalServerError::new)?;
-  Ok(HttpResponse::Ok().json(token))
+  Ok(Json(token))
 }
 
 async fn sign_up_handler(
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::Client>,
-) -> Result<HttpResponse> {
+  gotrue_client: Data<gotrue::api::Client>,
+) -> Result<Json<()>> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
     .map_err(InputParamsError::InvalidEmail)?
@@ -93,11 +95,8 @@ async fn sign_up_handler(
     .map_err(InputParamsError::InvalidPassword)?
     .0;
 
-  let user = gotrue_client
-    .sign_up(&email, &password)
-    .await
-    .map_err(InternalServerError::new)?;
-  Ok(HttpResponse::Ok().json(user))
+  biz::user::sign_up(&gotrue_client, &email, &password).await?;
+  Ok(Json(()))
 }
 
 async fn login_handler(

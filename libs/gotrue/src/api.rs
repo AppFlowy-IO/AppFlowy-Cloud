@@ -7,6 +7,7 @@ use super::{
 };
 use infra::reqwest::{check_response, from_body, from_response};
 
+#[derive(Clone)]
 pub struct Client {
   client: reqwest::Client,
   base_url: String,
@@ -26,7 +27,11 @@ impl Client {
     from_response(resp).await
   }
 
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<User, Error> {
+  pub async fn sign_up(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<Result<User, GoTrueError>, Error> {
     let payload = serde_json::json!({
         "email": email,
         "password": password,
@@ -43,12 +48,12 @@ impl Client {
         .map_err(Error::from),
     )?;
 
-    if settings.mailer_autoconfirm {
+    Ok(if settings.mailer_autoconfirm {
       let token: AccessTokenResponse = from_response(resp).await?;
       Ok(token.user)
     } else {
-      from_response(resp).await
-    }
+      Ok(from_response(resp).await?)
+    })
   }
 
   pub async fn token(&self, grant: &Grant) -> Result<TokenResult, Error> {

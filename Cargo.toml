@@ -66,6 +66,9 @@ snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 storage = { path = "libs/storage" }
 gotrue = { path = "libs/gotrue" }
+infra = { path = "libs/infra" }
+server_error = { path = "libs/server-error" }
+
 
 [dev-dependencies]
 once_cell = "1.7.2"

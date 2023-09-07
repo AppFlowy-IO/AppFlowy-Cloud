@@ -1,4 +1,4 @@
-name: AppFlowyCloud
+name: Unit Tests
 
 on:
   push:

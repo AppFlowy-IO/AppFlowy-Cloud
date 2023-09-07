@@ -1,4 +1,4 @@
-name: AppFlowyCloud
+name: Dependency Services Integration Test
 
 on:
   push:

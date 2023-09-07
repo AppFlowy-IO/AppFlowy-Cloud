@@ -2,11 +2,8 @@ use anyhow::Error;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 
-use crate::component::auth::gotrue::models::GoTrueError;
-use crate::{
-  component::auth::gotrue::models::{AccessTokenResponse, OAuthError, TokenResult, User},
-  utils::http_response::{check_response, from_response},
-};
+use gotrue::models::{AccessTokenResponse, GoTrueError, OAuthError, TokenResult, User};
+use infra::reqwest::{check_response, from_response};
 
 pub struct Client {
   http_client: reqwest::Client,

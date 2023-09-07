@@ -15,20 +15,6 @@ jobs:
   test:
     name: Docker
     runs-on: ubuntu-latest
-    # The services configuration is set up based on the base.yaml file.
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        ports:
-          - 6379:6379
 
     steps:
       - uses: actions/checkout@v3
@@ -56,9 +42,13 @@ jobs:
 
       - name: Add registered user
         run: |
-            curl localhost:9998/signup \
+          export GOTRUE_MAILER_AUTOCONFIRM=true
+          docker-compose up -d
+          curl localhost:9998/signup \
             --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
             --header 'Content-Type: application/json'
+          export GOTRUE_MAILER_AUTOCONFIRM=false
+          docker-compose up -d
 
       - name: Run tests
         run: |

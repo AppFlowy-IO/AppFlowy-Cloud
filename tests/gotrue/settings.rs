@@ -1,4 +1,4 @@
-use appflowy_cloud::component::auth::gotrue::api::Client;
+use gotrue::Client;
 
 #[tokio::test]
 async fn gotrue_settings() {

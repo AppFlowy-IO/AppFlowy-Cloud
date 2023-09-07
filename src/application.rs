@@ -1,5 +1,5 @@
 use crate::api::{user_scope, ws_scope};
-use crate::component::auth::{gotrue, HEADER_TOKEN};
+use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
@@ -89,7 +89,7 @@ pub async fn run(
       .service(ws_scope())
       .app_data(Data::new(collab_server_addr.clone()))
       .app_data(Data::new(state.clone()))
-      .app_data(Data::new(gotrue::api::Client::new(
+      .app_data(Data::new(gotrue::Client::new(
         reqwest::Client::new(),
         &config.gotrue.base_url)))
   });

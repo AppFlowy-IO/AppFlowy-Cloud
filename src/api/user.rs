@@ -1,18 +1,18 @@
-use crate::component::auth::gotrue::grant::{Grant, PasswordGrant};
-use crate::component::auth::gotrue::jwt::Authorization;
 use crate::component::auth::{
-  change_password, gotrue, logged_user_from_request, login, logout, register,
-  ChangePasswordRequest, InternalServerError, RegisterRequest,
+  change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
+  InternalServerError, RegisterRequest,
 };
 use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
 
+use crate::component::auth::jwt::Authorization;
 use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
+use gotrue::{Grant, PasswordGrant};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -32,7 +32,7 @@ pub fn user_scope() -> Scope {
 async fn update_handler(
   auth: Authorization,
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::api::Client>,
+  gotrue_client: Data<gotrue::Client>,
 ) -> Result<HttpResponse> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
@@ -52,7 +52,7 @@ async fn update_handler(
 
 async fn sign_out_handler(
   auth: Authorization,
-  gotrue_client: Data<gotrue::api::Client>,
+  gotrue_client: Data<gotrue::Client>,
 ) -> Result<HttpResponse> {
   gotrue_client
     .logout(&auth.token)
@@ -63,7 +63,7 @@ async fn sign_out_handler(
 
 async fn sign_in_password_handler(
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::api::Client>,
+  gotrue_client: Data<gotrue::Client>,
 ) -> Result<HttpResponse> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
@@ -83,7 +83,7 @@ async fn sign_in_password_handler(
 
 async fn sign_up_handler(
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::api::Client>,
+  gotrue_client: Data<gotrue::Client>,
 ) -> Result<HttpResponse> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)

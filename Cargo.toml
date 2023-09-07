@@ -61,16 +61,18 @@ tracing-log = "0.1.1"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 
 #Local crate
-token = { path = "./crates/token" }
-snowflake = { path = "./crates/snowflake" }
-realtime = { path = "crates/realtime" }
-storage = { path = "crates/storage" }
+token = { path = "libs/token" }
+snowflake = { path = "libs/snowflake" }
+realtime = { path = "libs/realtime" }
+storage = { path = "libs/storage" }
+gotrue = { path = "libs/gotrue" }
 
 [dev-dependencies]
 once_cell = "1.7.2"
 collab = { version = "0.1.0" }
 collab-ws = { version = "0.1.0" }
 collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
+client-api = { path = "libs/client-api" }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 
@@ -83,10 +85,12 @@ path = "src/lib.rs"
 
 [workspace]
 members = [
-    "crates/token",
-    "crates/snowflake",
-    "crates/realtime",
-    "crates/storage",
+    "libs/token",
+    "libs/snowflake",
+    "libs/realtime",
+    "libs/storage",
+    "libs/client-api",
+    "libs/infra",
 ]
 
 [profile.dev.package.sqlx-macros]

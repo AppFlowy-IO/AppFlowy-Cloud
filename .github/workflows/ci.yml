@@ -15,6 +15,20 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    # The services configuration is set up based on the base.yaml file.
+    services:
+      postgres:
+        image: postgres:12
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
 
     steps:
       - uses: actions/checkout@v3
@@ -24,16 +38,14 @@ jobs:
           workspaces: |
             AppFlowy-Cloud
 
-      - name: Create env
-        run: |
-          touch .env
-          echo DATABASE_URL=postgres://postgres:password@localhost:5433/appflowy >> .env
+      - name: Copy and rename dev.env to .env
+        run: cp dev.env .env
 
       - name: Install Development Dependencies
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           sudo apt-get install libpq-dev -y
-          ./build/init_database.sh
+          SKIP_DOCKER=true ./build/init_database.sh
           ./build/init_redis.sh
 
       - name: Check sqlx-data.json

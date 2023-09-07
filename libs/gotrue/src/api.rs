@@ -5,7 +5,7 @@ use super::{
   grant::Grant,
   models::{AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, TokenResult, User},
 };
-use crate::utils::http_response::{check_response, from_body, from_response};
+use infra::reqwest::{check_response, from_body, from_response};
 
 pub struct Client {
   client: reqwest::Client,

@@ -1,5 +1,5 @@
 use crate::client::{constants::LOCALHOST_URL, utils::generate_unique_email};
-use appflowy_cloud::client::http::Client;
+use client_api::Client;
 
 #[tokio::test]
 async fn sign_up_success() {

@@ -46,7 +46,6 @@ jobs:
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           sudo apt-get install libpq-dev -y
           SKIP_DOCKER=true ./build/init_database.sh
-          ./build/init_redis.sh
 
       - name: Check sqlx-data.json
         run: |

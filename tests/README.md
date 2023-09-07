@@ -39,7 +39,7 @@ curl localhost:9998/signup \
 ```bash
 export GOTRUE_MAILER_AUTOCONFIRM=true
 docker-compose up -d
-
+source .env
 curl localhost:9998/signup \
   --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
   --header 'Content-Type: application/json'

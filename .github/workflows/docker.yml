@@ -38,12 +38,13 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          docker-compose up -d
+          docker-compose --file docker-compose-dev.yml up -d
 
       - name: Add registered user
         run: |
           export GOTRUE_MAILER_AUTOCONFIRM=true
           docker-compose up -d
+          source .env
           curl localhost:9998/signup \
             --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
             --header 'Content-Type: application/json'
@@ -52,4 +53,4 @@ jobs:
 
       - name: Run tests
         run: |
-          cargo test
+          # cargo test

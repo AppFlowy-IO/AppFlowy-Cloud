@@ -39,17 +39,23 @@ jobs:
       - name: Run Docker-Compose
         run: |
           docker-compose --file docker-compose-dev.yml up -d
+          docker ps -a
 
       - name: Add registered user
         run: |
           export GOTRUE_MAILER_AUTOCONFIRM=true
           docker-compose --file docker-compose-dev.yml up -d
+          sleep 5
           source .env
           curl localhost:9998/signup \
             --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
             --header 'Content-Type: application/json'
           export GOTRUE_MAILER_AUTOCONFIRM=false
+          docker ps -a
           docker-compose --file docker-compose-dev.yml up -d
+          curl localhost:9998/token?grant_type=password \
+            --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
+            --header 'Content-Type: application/json'
 
       - name: Run tests
         run: |

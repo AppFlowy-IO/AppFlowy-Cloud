@@ -7,6 +7,10 @@ on:
     types: [ opened, synchronize, reopened ]
     branches: [ main ]
 
+env:
+  GOTRUE_REGISTERED_EMAIL: zack@appflowy.io
+  GOTRUE_REGISTERED_PASSWORD: Hello123!
+
 jobs:
   test:
     name: Docker
@@ -28,8 +32,8 @@ jobs:
           sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER }}/' .env
           sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS }}/' .env
           sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
-          sed -i 's/GOTRUE_REGISTERED_EMAIL=.*/GOTRUE_REGISTERED_EMAIL=zack@appflowy.io/' .env
-          sed -i 's/GOTRUE_REGISTERED_PASSWORD=.*/GOTRUE_REGISTERED_PASSWORD=Hello123!/' .env
+          sed -i 's/GOTRUE_REGISTERED_EMAIL=.*/GOTRUE_REGISTERED_EMAIL=$GOTRUE_REGISTERED_EMAIL/' .env
+          sed -i 's/GOTRUE_REGISTERED_PASSWORD=.*/GOTRUE_REGISTERED_PASSWORD=$GOTRUE_REGISTERED_PASSWORD/' .env
 
       - name: Run Docker-Compose
         run: |

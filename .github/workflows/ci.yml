@@ -24,6 +24,9 @@ jobs:
           workspaces: |
             AppFlowy-Cloud
 
+      - name: Copy and rename dev.env to .env
+        run: cp dev.env .env
+
       - name: Install Development Dependencies
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
@@ -34,5 +37,11 @@ jobs:
       - name: Check sqlx-data.json
         run: |
           cargo sqlx prepare --check -- --bin appflowy_cloud
+
+      - name: Rustfmt
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: SQLX_OFFLINE=true cargo clippy -- -D warnings
 
       

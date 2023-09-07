@@ -16,7 +16,7 @@ async fn sign_out_but_not_sign_in() {
 async fn sign_out_after_sign_in() {
   let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
 
-  c.sign_in_password(REGISTERED_EMAIL, REGISTERED_PASSWORD)
+  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap()
     .unwrap();

@@ -41,19 +41,3 @@ services:
       - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false} # change this to true to skip email confirmation
     ports:
       - 9998:9999
-
-  appflowy_cloud:
-    restart: on-failure
-    environment:
-      - APP_ENVIRONMENT=production
-      - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
-    image: appflowy_cloud:${BACKEND_VERSION:-latest}
-    depends_on:
-      - redis
-      - postgres
-      - gotrue
-    ports:
-      - 8000:8000

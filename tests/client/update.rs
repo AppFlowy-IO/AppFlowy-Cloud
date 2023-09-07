@@ -17,11 +17,11 @@ async fn update_but_not_logged_in() {
 #[tokio::test]
 async fn update_password_same_password() {
   let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
-  c.sign_in_password(REGISTERED_EMAIL, REGISTERED_PASSWORD)
+  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap()
     .unwrap();
-  c.update(REGISTERED_EMAIL, REGISTERED_PASSWORD)
+  c.update(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
 }
@@ -32,20 +32,20 @@ async fn update_password_and_revert() {
   {
     // change password to new_password
     let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
-    c.sign_in_password(REGISTERED_EMAIL, REGISTERED_PASSWORD)
+    c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
       .await
       .unwrap()
       .unwrap();
-    c.update(REGISTERED_EMAIL, new_password).await.unwrap();
+    c.update(&REGISTERED_EMAIL, new_password).await.unwrap();
   }
   {
     // revert password to old_password
     let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
-    c.sign_in_password(REGISTERED_EMAIL, new_password)
+    c.sign_in_password(&REGISTERED_EMAIL, new_password)
       .await
       .unwrap()
       .unwrap();
-    c.update(REGISTERED_EMAIL, REGISTERED_PASSWORD)
+    c.update(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
       .await
       .unwrap();
   }

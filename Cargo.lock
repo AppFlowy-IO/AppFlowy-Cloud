@@ -456,6 +456,7 @@ dependencies = [
  "config",
  "dashmap",
  "derive_more",
+ "dotenv",
  "fancy-regex",
  "futures-util",
  "jsonwebtoken",
@@ -1118,6 +1119,12 @@ dependencies = [
  "quote",
  "syn 2.0.28",
 ]
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dotenvy"

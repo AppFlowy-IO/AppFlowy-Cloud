@@ -7,17 +7,6 @@ on:
     types: [ opened, synchronize, reopened ]
     branches: [ main ]
 
-env:
-  GOTRUE_JWT_SECRET: some_secret_key
-  GOTRUE_SMTP_HOST: smtp.gmail.com
-  GOTRUE_SMTP_PORT: 465
-  GOTRUE_SMTP_USER: noreply@appflowy.io
-  GOTRUE_SMTP_PASS: ${{ secrets.GOTRUE_SMTP_PASS }}
-  GOTRUE_SMTP_ADMIN_EMAIL: internal@appflowy.io
-  GOTRUE_REGISTERED_EMAIL: zack@appflowy.io
-  GOTRUE_REGISTERED_PASSWORD: Hello123!
-  DATABASE_URL: postgres://postgres:password@localhost:5433/appflowy
-
 jobs:
   test:
     name: Docker
@@ -30,6 +19,18 @@ jobs:
         with:
           workspaces: |
             AppFlowy-Cloud
+
+      - name: Copy and rename dev.env to .env
+        run: cp dev.env .env
+
+      - name: Replace GOTRUE_SMTP_PASS value in .env
+        run: | 
+          sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER }}/' .env
+          sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS }}/' .env
+          sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
+          sed -i 's/GOTRUE_REGISTERED_EMAIL=.*/GOTRUE_REGISTERED_EMAIL=zack@appflowy.io/' .env
+          sed -i 's/GOTRUE_REGISTERED_PASSWORD=.*/GOTRUE_REGISTERED_PASSWORD=Hello123!/' .env
+          cat .env
 
       - name: Run Docker-Compose
         run: |

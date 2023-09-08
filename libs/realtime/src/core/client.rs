@@ -55,16 +55,18 @@ impl CollabSession {
 
   fn forward_binary_to_ws_server(&self, bytes: Bytes) {
     match RealtimeMessage::from_vec(bytes.to_vec()) {
-      Ok(ws_message) => {
-        let collab_msg = CollabMessage::from_vec(&ws_message.payload).unwrap();
-        self.server.do_send(ClientMessage {
-          business_id: ws_message.business_id,
-          user: self.user.clone(),
-          collab_msg,
-        });
+      Ok(message) => match CollabMessage::from_vec(&message.payload) {
+        Ok(collab_msg) => {
+          self.server.do_send(ClientMessage {
+            business_id: message.business_id,
+            user: self.user.clone(),
+            content: collab_msg,
+          });
+        },
+        Err(e) => tracing::error!("Parser CollabMessage failed: {:?}", e),
       },
       Err(e) => {
-        tracing::error!("Error parsing message: {:?}", e);
+        tracing::error!("Parser binary message error: {:?}", e);
       },
     }
   }
@@ -151,8 +153,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession {
 }
 
 /// A helper struct that wraps the [Recipient] type to implement the [Sink] trait
-pub struct ClientSink(pub Recipient<ServerMessage>);
-impl Deref for ClientSink {
+pub struct ClientWebsocketSink(pub Recipient<ServerMessage>);
+impl Deref for ClientWebsocketSink {
   type Target = Recipient<ServerMessage>;
 
   fn deref(&self) -> &Self::Target {

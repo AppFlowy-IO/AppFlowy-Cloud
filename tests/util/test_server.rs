@@ -6,6 +6,8 @@ use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 // use collab_plugins::disk::keys::make_collab_id_key;
 // use collab_plugins::disk::rocksdb_server::RocksdbServerDiskPlugin;
 // use collab_plugins::sync::server::{CollabId, COLLAB_ID_LEN};
+use collab::core::collab::MutexCollab;
+use collab::core::origin::CollabOrigin;
 use once_cell::sync::Lazy;
 use reqwest::Certificate;
 use std::path::PathBuf;
@@ -41,25 +43,20 @@ pub struct TestServer {
 }
 
 impl TestServer {
-  pub fn get_doc(&self, _object_id: &str) -> serde_json::Value {
-    // let collab = MutexCollab::new(CollabOrigin::Empty, object_id, vec![]);
-    // let collab_id = self.collab_id_from_object_id(object_id);
-    // let plugin = RocksdbServerDiskPlugin::new(collab_id, self.state.rocksdb.clone()).unwrap();
-    // collab.lock().add_plugin(Arc::new(plugin));
-    // collab.initial();
-    // let collab = collab.lock();
-    // collab.to_json_value()
-    todo!()
-  }
+  pub async fn get_doc(&self, object_id: &str) -> serde_json::Value {
+    let raw_data = self
+      .state
+      .collab_storage
+      .get_collab(object_id)
+      .await
+      .unwrap();
+    let collab =
+      MutexCollab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![raw_data], vec![])
+        .unwrap();
+    collab.async_initialize().await;
 
-  // pub fn collab_id_from_object_id(&self, object_id: &str) -> CollabId {
-  //   let read_txn = self.state.rocksdb.read_txn();
-  //   let collab_key = make_collab_id_key(object_id.as_ref());
-  //   let value = read_txn.get(collab_key.as_ref()).unwrap().unwrap();
-  //   let mut bytes = [0; COLLAB_ID_LEN];
-  //   bytes[0..COLLAB_ID_LEN].copy_from_slice(value.as_ref());
-  //   CollabId::from_be_bytes(bytes)
-  // }
+    collab.to_json_value()
+  }
 }
 
 pub async fn spawn_server() -> TestServer {
@@ -81,7 +78,7 @@ pub async fn spawn_server() -> TestServer {
     .expect("Failed to build application");
 
   let port = application.port();
-  let _ = tokio::spawn(async {
+  tokio::spawn(async {
     let _ = application.run_until_stopped().await;
   });
   let mut builder = reqwest::Client::builder();

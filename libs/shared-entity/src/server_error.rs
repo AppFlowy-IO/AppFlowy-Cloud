@@ -10,6 +10,7 @@ pub enum ErrorCode {
 
   InvalidEmail = 1001,
   InvalidPassword = 1002,
+  OAuthError = 1003,
 }
 
 pub fn invalid_email_error(email: &str) -> AppError {

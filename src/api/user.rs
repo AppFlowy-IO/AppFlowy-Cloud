@@ -7,15 +7,14 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
-use shared_entity::data::{app_ok, AppData};
+use gotrue::models::AccessTokenResponse;
+use shared_entity::data::{app_ok, app_ok_data, AppData};
 
 use crate::component::auth::jwt::Authorization;
 use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
-use gotrue::grant::{Grant, PasswordGrant};
-use gotrue::models::TokenResult;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -67,21 +66,10 @@ async fn sign_out_handler(
 async fn sign_in_password_handler(
   req: Json<LoginRequest>,
   gotrue_client: Data<gotrue::api::Client>,
-) -> Result<Json<TokenResult>> {
+) -> Result<Json<AppData<AccessTokenResponse>>> {
   let req = req.into_inner();
-  let email = UserEmail::parse(req.email)
-    .map_err(InputParamsError::InvalidEmail)?
-    .0;
-  let password = UserPassword::parse(req.password)
-    .map_err(InputParamsError::InvalidPassword)?
-    .0;
-
-  let grant = Grant::Password(PasswordGrant { email, password });
-  let token = gotrue_client
-    .token(&grant)
-    .await
-    .map_err(InternalServerError::new)?;
-  Ok(Json(token))
+  let token = biz::user::sign_in(&gotrue_client, req.email, req.password).await?;
+  Ok(Json(app_ok_data(token)))
 }
 
 async fn sign_up_handler(

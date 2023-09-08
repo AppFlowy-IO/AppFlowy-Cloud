@@ -1,18 +1,19 @@
 use std::fmt::Display;
 
-use crate::{data::AppData, server_error::ErrorCode};
+use crate::server_error::ErrorCode;
 use actix_web::{http::StatusCode, HttpResponse};
-use gotrue::models::GoTrueError;
+use gotrue::models::{GoTrueError, OAuthError};
+use serde::{Deserialize, Serialize};
 
-pub type AppError = AppData<()>;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppError {
+  pub code: ErrorCode,
+  pub message: String,
+}
 
 impl AppError {
   pub fn new(code: ErrorCode, message: String) -> Self {
-    Self {
-      code,
-      message,
-      data: (),
-    }
+    Self { code, message }
   }
 }
 
@@ -44,19 +45,25 @@ impl From<anyhow::Error> for AppError {
 
 impl From<GoTrueError> for AppError {
   fn from(err: GoTrueError) -> Self {
-    match err.code {
-      // Example:
-      // 404 => AppError::new(
-      // ...
-      // ),
-      _ => AppError::new(
-        ErrorCode::Unhandled,
-        format!(
-          "gotrue error: {}, id: {}",
-          err.code,
-          err.error_id.unwrap_or("".to_string())
-        ),
+    AppError::new(
+      ErrorCode::Unhandled,
+      format!(
+        "gotrue error: {}, id: {}",
+        err.code,
+        err.error_id.unwrap_or("".to_string())
       ),
+    )
+  }
+}
+
+impl From<OAuthError> for AppError {
+  fn from(err: OAuthError) -> Self {
+    match err.error_description {
+      Some(desc) => AppError::new(
+        ErrorCode::OAuthError,
+        format!("oauth error: {}: {}", err.error, desc),
+      ),
+      None => AppError::new(ErrorCode::OAuthError, format!("oauth error: {}", err.error)),
     }
   }
 }

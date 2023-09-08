@@ -3,8 +3,9 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppData;
 
-use gotrue::models::{AccessTokenResponse, GoTrueError, OAuthError, TokenResult, User};
+use gotrue::models::{AccessTokenResponse, GoTrueError, User};
 use infra::reqwest::{check_response, from_response};
+use shared_entity::error::AppError;
 
 pub struct Client {
   http_client: reqwest::Client,
@@ -29,31 +30,34 @@ impl Client {
     &mut self,
     email: &str,
     password: &str,
-  ) -> Result<Result<(), OAuthError>, Error> {
+  ) -> Result<Result<(), AppError>, Error> {
     let url = format!("{}/api/user/sign_in/password", self.base_url);
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    let token_result: TokenResult = from_response(resp).await?;
-    match token_result {
-      TokenResult::Success(s) => {
-        self.token = Some(s);
+    let token: AppData<AccessTokenResponse> = from_response(resp).await?;
+    let res: Result<Option<AccessTokenResponse>, AppError> = token.into_result();
+    match res {
+      Ok(t) => {
+        self.token = Some(t.unwrap());
         Ok(Ok(()))
       },
-      TokenResult::Fail(e) => Ok(Err(e)),
+      Err(e) => return Ok(Err(e)),
     }
   }
 
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<AppData<()>, Error> {
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<Result<(), AppError>, Error> {
     let url = format!("{}/api/user/sign_up", self.base_url);
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    from_response(resp).await
+    let res: AppData<()> = from_response(resp).await?;
+    let res = res.into_result().map(|_| ());
+    Ok(res)
   }
 
   pub async fn sign_out(&self) -> Result<(), Error> {

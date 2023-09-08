@@ -83,12 +83,6 @@ pub struct OAuthError {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum TokenResult {
-  Success(AccessTokenResponse),
-  Fail(OAuthError),
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct GoTrueError {
   pub code: i64,
   pub msg: String,

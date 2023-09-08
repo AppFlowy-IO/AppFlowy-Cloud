@@ -4,13 +4,13 @@ use crate::{error::AppError, server_error::ErrorCode};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppData<T> {
-  pub data: T,
+  pub data: Option<T>,
   pub code: ErrorCode,
   pub message: String,
 }
 
 impl<T> AppData<T> {
-  pub fn into_inner(self) -> Result<T, AppError> {
+  pub fn into_result(self) -> Result<Option<T>, AppError> {
     if self.code == ErrorCode::Ok {
       Ok(self.data)
     } else {
@@ -21,7 +21,7 @@ impl<T> AppData<T> {
 
 pub fn app_ok() -> AppData<()> {
   AppData {
-    data: (),
+    data: None,
     code: ErrorCode::Ok,
     message: "OK".to_string(),
   }
@@ -29,7 +29,7 @@ pub fn app_ok() -> AppData<()> {
 
 pub fn app_ok_data<T>(data: T) -> AppData<T> {
   AppData {
-    data,
+    data: Some(data),
     code: ErrorCode::Ok,
     message: "OK".to_string(),
   }

@@ -3,7 +3,7 @@ use futures_util::TryFutureExt;
 
 use super::{
   grant::Grant,
-  models::{AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, TokenResult, User},
+  models::{AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, User},
 };
 use infra::reqwest::{check_response, from_body, from_response};
 
@@ -56,16 +56,19 @@ impl Client {
     })
   }
 
-  pub async fn token(&self, grant: &Grant) -> Result<TokenResult, Error> {
+  pub async fn token(
+    &self,
+    grant: &Grant,
+  ) -> Result<Result<AccessTokenResponse, OAuthError>, Error> {
     let url = format!("{}/token?grant_type={}", self.base_url, grant.type_as_str());
     let payload = grant.json_value();
     let resp = self.client.post(url).json(&payload).send().await?;
     if resp.status().is_success() {
       let token: AccessTokenResponse = from_body(resp).await?;
-      Ok(TokenResult::Success(token))
+      Ok(Ok(token))
     } else if resp.status().is_client_error() {
       let err: OAuthError = from_body(resp).await?;
-      Ok(TokenResult::Fail(err))
+      Ok(Err(err))
     } else {
       anyhow::bail!("unexpected response status: {}", resp.status());
     }

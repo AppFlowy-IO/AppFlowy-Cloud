@@ -63,10 +63,7 @@ async fn sign_in_unconfirmed_email() {
   match resp {
     Ok(()) => panic!("should not be ok"),
     Err(e) => {
-      assert_eq!(
-        e.message,
-        "oauth error: invalid_grant: Email not confirmed"
-      );
+      assert_eq!(e.message, "oauth error: invalid_grant: Email not confirmed");
       assert_eq!(e.code, ErrorCode::OAuthError);
     },
   }

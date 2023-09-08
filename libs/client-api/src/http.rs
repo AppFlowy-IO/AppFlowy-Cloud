@@ -71,7 +71,11 @@ impl Client {
     Ok(res)
   }
 
-  pub async fn update(&mut self, email: &str, password: &str) -> Result<(), Error> {
+  pub async fn update(
+    &mut self,
+    email: &str,
+    password: &str,
+  ) -> Result<Result<(), AppError>, Error> {
     let url = format!("{}/api/user/update", self.base_url);
     let payload = serde_json::json!({
         "email": email,
@@ -82,15 +86,16 @@ impl Client {
       .json(&payload)
       .send()
       .await?;
-    let new_user: Result<User, GoTrueError> = from_response(resp).await?;
+    let new_user: AppData<User> = from_response(resp).await?;
+    let new_user = new_user.into_result();
     match new_user {
       Ok(new_user) => {
         if let Some(t) = self.token.as_mut() {
-          t.user = new_user;
+          t.user = new_user.unwrap();
         }
-        Ok(())
+        Ok(Ok(()))
       },
-      Err(e) => anyhow::bail!("update failed: {:?}", e),
+      Err(e) => Ok(Err(e)),
     }
   }
 

@@ -7,7 +7,7 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
-use gotrue::models::AccessTokenResponse;
+use gotrue::models::{AccessTokenResponse, User};
 use shared_entity::data::{app_ok, app_ok_data, AppData};
 
 use crate::component::auth::jwt::Authorization;
@@ -36,20 +36,10 @@ async fn update_handler(
   auth: Authorization,
   req: Json<LoginRequest>,
   gotrue_client: Data<gotrue::api::Client>,
-) -> Result<Json<AppData<()>>> {
+) -> Result<Json<AppData<User>>> {
   let req = req.into_inner();
-  let email = UserEmail::parse(req.email)
-    .map_err(InputParamsError::InvalidEmail)?
-    .0;
-  let password = UserPassword::parse(req.password)
-    .map_err(InputParamsError::InvalidPassword)?
-    .0;
-
-  let _ = gotrue_client
-    .update_user(&auth.token, &email, &password)
-    .await
-    .map_err(InternalServerError::new)?;
-  Ok(Json(app_ok()))
+  let user = biz::user::update(&gotrue_client, &auth.token, &req.email, &req.password).await?;
+  Ok(Json(app_ok_data(user)))
 }
 
 async fn sign_out_handler(

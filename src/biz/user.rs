@@ -1,7 +1,7 @@
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
-  models::AccessTokenResponse,
+  models::{AccessTokenResponse, User},
 };
 use shared_entity::{error::AppError, server_error};
 use validator::validate_email;
@@ -27,6 +27,17 @@ pub async fn sign_in(
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
   Ok(token)
+}
+
+pub async fn update(
+  gotrue_client: &Client,
+  token: &str,
+  email: &str,
+  password: &str,
+) -> Result<User, AppError> {
+  validate_email_password(email, password)?;
+  let user = gotrue_client.update_user(token, email, password).await??;
+  Ok(user)
 }
 
 fn validate_email_password(email: &str, password: &str) -> Result<(), AppError> {

@@ -1,4 +1,4 @@
-name: Rust Lint
+name: AppFlowy-Cloud Lint
 
 on:
   push:
@@ -7,23 +7,41 @@ on:
     types: [ opened, synchronize, reopened ]
     branches: [ main ]
 
+env:
+  SQLX_VERSION: 0.7.1
+  SQLX_FEATURES: "rustls,postgres"
 
 jobs:
   test:
+    name: Unit Tests
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             AppFlowy-Cloud
+
+      - name: Copy and rename dev.env to .env
+        run: cp dev.env .env
+
+      - name: Run the dependency services
+        run: docker-compose --file docker-compose-dev.yml up -d
+
+      - name: Install Development Dependencies
+        run: |
+          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
+          cargo sqlx database create
+          cargo sqlx migrate run
+
+      - name: Check sqlx-data.json
+        run: |
+          cargo sqlx prepare --check -- --bin appflowy_cloud
 
       - name: Rustfmt
         run: cargo fmt --check
 
       - name: Clippy
         run: SQLX_OFFLINE=true cargo clippy -- -D warnings
-

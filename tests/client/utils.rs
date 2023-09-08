@@ -1,7 +1,18 @@
+use dotenv::dotenv;
 use std::time::SystemTime;
 
-pub const REGISTERED_EMAIL: &str = "xigahi8979@tipent.com";
-pub const REGISTERED_PASSWORD: &str = "Hello123!";
+use lazy_static::lazy_static;
+
+lazy_static! {
+  pub static ref REGISTERED_EMAIL: String = {
+    dotenv().ok();
+    std::env::var("GOTRUE_REGISTERED_EMAIL").unwrap()
+  };
+  pub static ref REGISTERED_PASSWORD: String = {
+    dotenv().ok();
+    std::env::var("GOTRUE_REGISTERED_PASSWORD").unwrap()
+  };
+}
 
 pub fn timestamp_nano() -> u128 {
   SystemTime::now()

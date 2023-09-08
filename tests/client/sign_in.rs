@@ -1,4 +1,4 @@
-use appflowy_cloud::client::http::Client;
+use client_api::Client;
 
 use crate::client::{
   constants::LOCALHOST_URL,
@@ -69,7 +69,7 @@ async fn sign_in_success() {
   let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
 
   let resp = c
-    .sign_in_password(REGISTERED_EMAIL, REGISTERED_PASSWORD)
+    .sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await;
   let resp = resp.unwrap();
   match resp {

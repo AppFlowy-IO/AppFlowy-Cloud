@@ -33,8 +33,6 @@ jobs:
       - name: Install Development Dependencies
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
-          cargo sqlx database create
-          cargo sqlx migrate run
 
       - name: Check sqlx-data.json
         run: |

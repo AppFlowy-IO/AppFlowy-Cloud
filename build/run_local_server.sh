@@ -16,6 +16,4 @@ until PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -U "${DB_USER}" -p "${DB_
   >&2 echo "Postgres is still unavailable - sleeping"
   sleep 1
 done
-sqlx database create
-sqlx migrate run
 cargo run

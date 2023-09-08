@@ -61,6 +61,4 @@ jobs:
       - name: Run tests
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
-          cargo sqlx database create
-          cargo sqlx migrate run
           cargo test

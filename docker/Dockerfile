@@ -28,7 +28,6 @@ RUN apt-get update -y \
 
 COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
 COPY --from=builder /app/configuration configuration
-COPY --from=builder /app/.sqlx .sqlx
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
 CMD ["appflowy_cloud"]

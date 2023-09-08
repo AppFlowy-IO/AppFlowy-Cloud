@@ -8,7 +8,6 @@ DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
 DB_PORT="${POSTGRES_PORT:=5433}"
 DB_HOST="${POSTGRES_HOST:=localhost}"
-DB_NAME="${POSTGRES_DB:=postgres}"
 
 docker-compose --file ./docker-compose-dev.yml up -d --build
 

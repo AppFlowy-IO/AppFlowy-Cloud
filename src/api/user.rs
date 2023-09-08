@@ -55,12 +55,12 @@ async fn update_handler(
 async fn sign_out_handler(
   auth: Authorization,
   gotrue_client: Data<gotrue::api::Client>,
-) -> Result<Json<()>> {
+) -> Result<Json<AppData<()>>> {
   gotrue_client
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
-  Ok(Json(()))
+  Ok(Json(app_ok()))
 }
 
 async fn sign_in_password_handler(

@@ -4,7 +4,7 @@ use reqwest::RequestBuilder;
 use shared_entity::data::AppData;
 
 use gotrue::models::{AccessTokenResponse, GoTrueError, User};
-use infra::reqwest::{check_response, from_response};
+use infra::reqwest::from_response;
 use shared_entity::error::AppError;
 
 pub struct Client {
@@ -60,13 +60,15 @@ impl Client {
     Ok(res)
   }
 
-  pub async fn sign_out(&self) -> Result<(), Error> {
+  pub async fn sign_out(&self) -> Result<Result<(), AppError>, Error> {
     let url = format!("{}/api/user/sign_out", self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)?
       .send()
       .await?;
-    check_response(resp).await
+    let res: AppData<()> = from_response(resp).await?;
+    let res = res.into_result().map(|_| ());
+    Ok(res)
   }
 
   pub async fn update(&mut self, email: &str, password: &str) -> Result<(), Error> {

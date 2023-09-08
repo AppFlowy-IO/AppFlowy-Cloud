@@ -1,5 +1,5 @@
 use crate::collab::{CollabBroadcast, Subscription};
-use crate::error::CollabSyncError;
+use crate::error::RealtimeError;
 use bytes::{Bytes, BytesMut};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
@@ -7,9 +7,10 @@ use collab::preclude::Collab;
 use collab_sync_protocol::CollabMessage;
 use std::collections::HashMap;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::task::spawn_blocking;
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimitedCodec};
 
-/// A group used to manage a single document
+/// A group used to manage a single [Collab] object
 pub struct CollabGroup {
   /// [Collab] wrapped in a mutex
   pub collab: MutexCollab,
@@ -32,13 +33,26 @@ impl CollabGroup {
     let collab = self.collab.lock();
     f(&collab);
   }
+
+  pub fn is_empty(&self) -> bool {
+    self.subscribers.is_empty()
+  }
+
+  /// Flush the [Collab] to the storage.
+  /// When there is no subscriber, perform the flush in a blocking task.
+  pub fn flush_collab(&self) {
+    let collab = self.collab.clone();
+    spawn_blocking(move || {
+      collab.lock().flush();
+    });
+  }
 }
 
 #[derive(Debug, Default)]
 pub struct CollabMsgCodec(LengthDelimitedCodec);
 
 impl Encoder<CollabMessage> for CollabMsgCodec {
-  type Error = CollabSyncError;
+  type Error = RealtimeError;
 
   fn encode(&mut self, item: CollabMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
     let bytes = item.to_vec();
@@ -49,7 +63,7 @@ impl Encoder<CollabMessage> for CollabMsgCodec {
 
 impl Decoder for CollabMsgCodec {
   type Item = CollabMessage;
-  type Error = CollabSyncError;
+  type Error = RealtimeError;
 
   fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
     if let Some(bytes) = self.0.decode(src)? {

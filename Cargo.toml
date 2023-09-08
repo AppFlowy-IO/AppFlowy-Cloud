@@ -60,8 +60,8 @@ tracing-log = "0.1.1"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 
 #Local crate
-token = { path = "./crates/token" }
-snowflake = { path = "./crates/snowflake" }
+token = { path = "crates/token" }
+snowflake = { path = "crates/snowflake" }
 realtime = { path = "crates/realtime" }
 storage = { path = "crates/storage" }
 
@@ -69,7 +69,7 @@ storage = { path = "crates/storage" }
 once_cell = "1.7.2"
 collab = { version = "0.1.0" }
 collab-ws = { version = "0.1.0" }
-collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
+collab-plugins = { version = "0.1.0", features = ["sync_plugin", "rocksdb_plugin"] }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 
@@ -92,10 +92,13 @@ members = [
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
-collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
-collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
+#collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
+#collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
+#collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22"  }
+#collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "d13b22" }
 
-#collab = { path = "./crates/AppFlowy-Collab/collab" }
-#collab-plugins = { path = "./crates/AppFlowy-Collab/collab-plugins"}
+# Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
+collab = { path = "crates/AppFlowy-Collab/collab" }
+collab-sync-protocol = { path = "crates/AppFlowy-Collab/collab-sync-protocol" }
+collab-ws = { path = "crates/AppFlowy-Collab/collab-ws" }
+collab-plugins = { path = "crates/AppFlowy-Collab/collab-plugins" }

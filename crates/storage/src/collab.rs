@@ -1,8 +1,10 @@
-use crate::entities::CreateCollab;
-use anyhow::Result;
+use crate::entities::CreateCollabParams;
+use crate::error::StorageError;
 use sqlx::PgPool;
 
-pub type CollabRawData = Vec<u8>;
+pub type Result<T, E = StorageError> = core::result::Result<T, E>;
+
+pub type RawData = Vec<u8>;
 
 pub struct CollabStorage {
   #[allow(dead_code)]
@@ -18,15 +20,15 @@ impl CollabStorage {
     todo!()
   }
 
-  pub async fn create_collab(&self, _params: CreateCollab) -> Result<()> {
+  pub async fn create_collab(&self, _params: CreateCollabParams) -> Result<()> {
     todo!()
   }
 
-  pub async fn update_collab(&self, _object_id: &str, _data: CollabRawData) -> Result<()> {
+  pub async fn update_collab(&self, _object_id: &str, _data: RawData) -> Result<()> {
     todo!()
   }
 
-  pub async fn get_collab(&self, _object_id: &str) -> Result<Option<CollabRawData>> {
+  pub async fn get_collab(&self, _object_id: &str) -> Result<RawData> {
     todo!()
   }
 

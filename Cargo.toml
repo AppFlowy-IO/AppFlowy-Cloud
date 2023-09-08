@@ -67,7 +67,7 @@ realtime = { path = "libs/realtime" }
 storage = { path = "libs/storage" }
 gotrue = { path = "libs/gotrue" }
 infra = { path = "libs/infra" }
-server_error = { path = "libs/server-error" }
+shared_entity = { path = "libs/shared-entity" }
 
 
 [dev-dependencies]
@@ -94,6 +94,7 @@ members = [
     "libs/storage",
     "libs/client-api",
     "libs/infra",
+    "libs/shared-entity",
 ]
 
 [profile.dev.package.sqlx-macros]

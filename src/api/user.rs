@@ -7,6 +7,7 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
+use shared_entity::data::{app_ok, AppData};
 
 use crate::component::auth::jwt::Authorization;
 use actix_web::web::{Data, Json};
@@ -14,7 +15,7 @@ use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
 use gotrue::grant::{Grant, PasswordGrant};
-use gotrue::models::{GoTrueError, TokenResult, User};
+use gotrue::models::TokenResult;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -36,7 +37,7 @@ async fn update_handler(
   auth: Authorization,
   req: Json<LoginRequest>,
   gotrue_client: Data<gotrue::api::Client>,
-) -> Result<Json<Result<User, GoTrueError>>> {
+) -> Result<Json<AppData<()>>> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
     .map_err(InputParamsError::InvalidEmail)?
@@ -45,11 +46,11 @@ async fn update_handler(
     .map_err(InputParamsError::InvalidPassword)?
     .0;
 
-  let res = gotrue_client
+  let _ = gotrue_client
     .update_user(&auth.token, &email, &password)
     .await
     .map_err(InternalServerError::new)?;
-  Ok(Json(res))
+  Ok(Json(app_ok()))
 }
 
 async fn sign_out_handler(
@@ -86,17 +87,9 @@ async fn sign_in_password_handler(
 async fn sign_up_handler(
   req: Json<LoginRequest>,
   gotrue_client: Data<gotrue::api::Client>,
-) -> Result<Json<()>> {
-  let req = req.into_inner();
-  let email = UserEmail::parse(req.email)
-    .map_err(InputParamsError::InvalidEmail)?
-    .0;
-  let password = UserPassword::parse(req.password)
-    .map_err(InputParamsError::InvalidPassword)?
-    .0;
-
-  biz::user::sign_up(&gotrue_client, &email, &password).await?;
-  Ok(Json(()))
+) -> Result<Json<AppData<()>>> {
+  biz::user::sign_up(&gotrue_client, &req.email, &req.password).await?;
+  Ok(Json(app_ok()))
 }
 
 async fn login_handler(

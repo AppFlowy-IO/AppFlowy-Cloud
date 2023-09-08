@@ -465,7 +465,7 @@ dependencies = [
  "serde",
  "serde-aux",
  "serde_json",
- "server_error",
+ "shared_entity",
  "snowflake",
  "sqlx",
  "storage",
@@ -774,6 +774,7 @@ dependencies = [
  "infra",
  "reqwest",
  "serde_json",
+ "shared_entity",
 ]
 
 [[package]]
@@ -2774,17 +2775,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "server_error"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "anyhow",
- "gotrue",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2813,6 +2803,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "900fba806f70c630b0a382d0d825e17a0f19fcd059a2ade1ff237bcddf446b31"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared_entity"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "anyhow",
+ "gotrue",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

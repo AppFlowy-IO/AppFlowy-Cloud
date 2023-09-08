@@ -1,6 +1,7 @@
 use anyhow::Error;
 use reqwest::Method;
 use reqwest::RequestBuilder;
+use shared_entity::data::AppData;
 
 use gotrue::models::{AccessTokenResponse, GoTrueError, OAuthError, TokenResult, User};
 use infra::reqwest::{check_response, from_response};
@@ -45,7 +46,7 @@ impl Client {
     }
   }
 
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<User, Error> {
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<AppData<()>, Error> {
     let url = format!("{}/api/user/sign_up", self.base_url);
     let payload = serde_json::json!({
         "email": email,

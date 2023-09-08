@@ -22,5 +22,5 @@ pub fn timestamp_nano() -> u128 {
 }
 
 pub fn generate_unique_email() -> String {
-  format!("{}@appflowy.io", timestamp_nano())
+  format!("user_{}@appflowy.io", timestamp_nano())
 }

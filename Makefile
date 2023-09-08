@@ -14,4 +14,8 @@ local_test:
 	# 🔥 Must run init_database first
 	 SQLX_OFFLINE=true cargo test
 
+run:
+	${ROOT}/run_local_server.sh
 
+test:
+	${ROOT}/run_local_test.sh

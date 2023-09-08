@@ -7,9 +7,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use collab_plugins::sync_plugin::SyncPlugin;
+use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 use collab_ws::{WSClient, WSClientConfig, WSObjectHandler};
 
+use collab_plugins::kv::rocks_kv::RocksCollabDB;
+use collab_plugins::local_storage::rocksdb::RocksdbDiskPlugin;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -86,9 +88,11 @@ impl ScriptTest {
         let origin = origin_from_tcp_stream(&addr);
         let tempdir = TempDir::new().unwrap();
         let db_path = tempdir.into_path();
+        let db = Arc::new(RocksCollabDB::open(db_path.clone()).unwrap());
         let cleaner = Cleaner::new(db_path);
         let client = TestClient {
           ws,
+          db,
           origin,
           collab_by_object_id: Default::default(),
           handlers: vec![],
@@ -103,10 +107,11 @@ impl ScriptTest {
         let (sink, stream) = (handler.sink(), handler.stream());
         let collab = Arc::new(MutexCollab::new(client.origin.clone(), &object_id, vec![]));
 
+        let object = SyncObject::new(&object_id, "1");
         // Sync
         let sync_plugin = SyncPlugin::new(
           client.origin.clone(),
-          &object_id,
+          object,
           Arc::downgrade(&collab),
           sink,
           stream,
@@ -114,8 +119,8 @@ impl ScriptTest {
         collab.lock().add_plugin(Arc::new(sync_plugin));
 
         // Disk
-        // let disk_plugin = CollabStoragePlugin::new(client.db.clone()).unwrap();
-        // collab.lock().add_plugin(Arc::new(disk_plugin));
+        let disk_plugin = RocksdbDiskPlugin::new(uid, Arc::downgrade(&client.db));
+        collab.lock().add_plugin(Arc::new(disk_plugin));
 
         collab.async_initialize().await;
         client.handlers.push(handler);
@@ -136,14 +141,14 @@ impl ScriptTest {
         object_id,
         expected,
       } => {
-        // let value = self.server.get_doc(&object_id);
-        // assert_json_diff::assert_json_eq!(value, expected);
+        let value = self.server.get_doc(&object_id).await;
+        assert_json_diff::assert_json_eq!(value, expected);
       },
       TestScript::AssertClientEqualToServer { uid, object_id } => {
-        // let server_value = self.server.get_doc(&object_id);
-        // let client_value = self.get_client_doc_value(uid, &object_id).await;
-        // assert_eq!(client_value, server_value);
-        // assert_json_diff::assert_json_eq!(client_value, server_value);
+        let server_value = self.server.get_doc(&object_id).await;
+        let client_value = self.get_client_doc_value(uid, &object_id).await;
+        assert_eq!(client_value, server_value);
+        assert_json_diff::assert_json_eq!(client_value, server_value);
       },
       TestScript::ModifyClientCollab { uid, object_id, f } => {
         let mut clients = self.clients.write().await;
@@ -170,8 +175,10 @@ fn origin_from_tcp_stream(addr: &SocketAddr) -> CollabOrigin {
   CollabOrigin::Client(origin)
 }
 
+/// Used to simulate a client with AppFlowy application
 pub struct TestClient {
   pub ws: WSClient,
+  pub db: Arc<RocksCollabDB>,
   pub origin: CollabOrigin,
   pub collab_by_object_id: HashMap<String, Arc<MutexCollab>>,
   pub handlers: Vec<Arc<WSObjectHandler>>,

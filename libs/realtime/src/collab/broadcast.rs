@@ -16,10 +16,10 @@ use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, UpdateSubscription};
 
-use crate::error::CollabSyncError;
+use crate::error::{internal_error, RealtimeError};
 use collab_sync_protocol::{handle_msg, DefaultSyncProtocol};
 use collab_sync_protocol::{
-  CSAwarenessUpdate, CSServerAck, CSServerBroadcast, CSServerResponse, CollabMessage,
+  CSAwarenessUpdate, CollabMessage, CollabServerAck, CollabServerBroadcast, CollabServerResponse,
 };
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -58,7 +58,7 @@ impl CollabBroadcast {
         .observe_update_v1(move |txn, event| {
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = CSServerBroadcast::new(origin, cloned_oid.clone(), payload);
+          let msg = CollabServerBroadcast::new(origin, cloned_oid.clone(), payload);
           if let Err(_e) = sink.send(msg.into()) {
             tracing::trace!("Broadcast group is closed");
           }
@@ -145,7 +145,7 @@ impl CollabBroadcast {
           let mut sink = sink.lock().await;
           if let Err(e) = sink.send(msg).await {
             tracing::error!("[💭Server]: broadcast client message failed: {:?}", e);
-            return Err(CollabSyncError::Internal(Box::new(e)));
+            return Err(RealtimeError::Internal(anyhow::Error::from(e)));
           }
         }
         Ok(())
@@ -162,7 +162,7 @@ impl CollabBroadcast {
       let object_id = self.object_id.clone();
       tokio::spawn(async move {
         while let Some(res) = stream.next().await {
-          let collab_msg = res.map_err(|e| CollabSyncError::Internal(Box::new(e)))?;
+          let collab_msg = res.map_err(internal_error)?;
           // Continue if the message is empty
           if collab_msg.is_empty() {
             continue;
@@ -187,11 +187,8 @@ impl CollabBroadcast {
                 // Send the response to the corresponding client
                 if let Some(resp) = resp {
                   let msg =
-                    CSServerResponse::new(origin.cloned(), object_id.clone(), resp.encode_v1());
-                  sink
-                    .send(msg.into())
-                    .await
-                    .map_err(|e| CollabSyncError::Internal(Box::new(e)))?;
+                    CollabServerResponse::new(origin.cloned(), object_id.clone(), resp.encode_v1());
+                  sink.send(msg.into()).await.map_err(internal_error)?;
                 }
               },
               _ => break,
@@ -208,7 +205,7 @@ impl CollabBroadcast {
             };
 
             // Send the ack message to the client
-            let ack = CSServerAck::new(object_id.clone(), msg_id, payload);
+            let ack = CollabServerAck::new(object_id.clone(), msg_id, payload);
             let _ = sink.send(ack.into()).await;
           }
         }
@@ -236,8 +233,8 @@ fn encode_server_sv(collab: &MutexCollab) -> Vec<u8> {
 /// connection error or closed connection).
 #[derive(Debug)]
 pub struct Subscription {
-  sink_task: JoinHandle<Result<(), CollabSyncError>>,
-  stream_task: JoinHandle<Result<(), CollabSyncError>>,
+  sink_task: JoinHandle<Result<(), RealtimeError>>,
+  stream_task: JoinHandle<Result<(), RealtimeError>>,
 }
 
 impl Subscription {
@@ -245,7 +242,7 @@ impl Subscription {
   /// closed because of failure, an error which caused it to happen will be returned.
   ///
   /// This method doesn't invoke close procedure. If you need that, drop current subscription instead.
-  pub async fn completed(self) -> Result<(), CollabSyncError> {
+  pub async fn completed(self) -> Result<(), RealtimeError> {
     let res = select! {
         r1 = self.sink_task => r1?,
         r2 = self.stream_task => r2?,
@@ -265,7 +262,7 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
 fn gen_awareness_update_message(
   awareness: &Awareness,
   event: &awareness::Event,
-) -> Result<AwarenessUpdate, CollabSyncError> {
+) -> Result<AwarenessUpdate, RealtimeError> {
   let added = event.added();
   let updated = event.updated();
   let removed = event.removed();

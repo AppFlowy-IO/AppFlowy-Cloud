@@ -1,6 +1,7 @@
-use crate::error::CollabSyncError;
+use crate::error::RealtimeError;
 use actix::{Message, Recipient};
 use bytes::Bytes;
+use collab::core::origin::CollabOrigin;
 use collab_sync_protocol::CollabMessage;
 use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
@@ -37,24 +38,24 @@ impl PartialEq<Self> for RealtimeUser {
 impl Eq for RealtimeUser {}
 
 #[derive(Debug, Message, Clone)]
-#[rtype(result = "Result<(), CollabSyncError>")]
+#[rtype(result = "Result<(), RealtimeError>")]
 pub struct Connect {
   pub socket: Recipient<ServerMessage>,
   pub user: Arc<RealtimeUser>,
 }
 
 #[derive(Debug, Message, Clone)]
-#[rtype(result = "Result<(), CollabSyncError>")]
+#[rtype(result = "Result<(), RealtimeError>")]
 pub struct Disconnect {
   pub user: Arc<RealtimeUser>,
 }
 
 #[derive(Debug, Message, Clone)]
-#[rtype(result = "()")]
+#[rtype(result = "Result<(), RealtimeError>")]
 pub struct ClientMessage {
   pub business_id: u8,
   pub user: Arc<RealtimeUser>,
-  pub collab_msg: CollabMessage,
+  pub content: CollabMessage,
 }
 
 #[derive(Debug, Message, Clone)]
@@ -119,8 +120,14 @@ impl From<ClientMessage> for RealtimeMessage {
   fn from(client_msg: ClientMessage) -> Self {
     Self {
       business_id: client_msg.business_id,
-      object_id: client_msg.collab_msg.object_id().to_string(),
-      payload: client_msg.collab_msg.to_vec(),
+      object_id: client_msg.content.object_id().to_string(),
+      payload: client_msg.content.to_vec(),
     }
   }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+pub(crate) struct EditCollab {
+  pub object_id: String,
+  pub origin: CollabOrigin,
 }

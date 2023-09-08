@@ -786,7 +786,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d13b22#d13b224c66734b28924632009373c15fd7bc31b7"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c8a63b3#c8a63b32c14b606066f749b0fa88f100a4cb8d87"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -805,7 +805,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d13b22#d13b224c66734b28924632009373c15fd7bc31b7"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c8a63b3#c8a63b32c14b606066f749b0fa88f100a4cb8d87"
 dependencies = [
  "anyhow",
  "collab",
@@ -817,7 +817,7 @@ dependencies = [
 [[package]]
 name = "collab-plugins"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d13b22#d13b224c66734b28924632009373c15fd7bc31b7"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c8a63b3#c8a63b32c14b606066f749b0fa88f100a4cb8d87"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -845,7 +845,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d13b22#d13b224c66734b28924632009373c15fd7bc31b7"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c8a63b3#c8a63b32c14b606066f749b0fa88f100a4cb8d87"
 dependencies = [
  "bytes",
  "collab",
@@ -859,7 +859,7 @@ dependencies = [
 [[package]]
 name = "collab-ws"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d13b22#d13b224c66734b28924632009373c15fd7bc31b7"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c8a63b3#c8a63b32c14b606066f749b0fa88f100a4cb8d87"
 dependencies = [
  "bytes",
  "collab-sync-protocol",
@@ -3134,6 +3134,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror",
  "tokio",
 ]
 
@@ -3202,18 +3203,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.44"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "611040a08a0439f8248d1990b111c95baa9c704c805fa1f62104b39655fd7f90"
+checksum = "9d6d7a740b8a666a7e828dd00da9c0dc290dff53154ea77ac109281de90589b7"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.44"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "090198534930841fab3a5d1bb637cde49e339654e606195f8d9c76eeb081dc96"
+checksum = "49922ecae66cc8a249b77e68d1d0623c1b2c514f0060c27cdc68bd62a1219d35"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -9,6 +9,6 @@
 package-lock.json
 yarn.lock
 node_modules
-**/crates/AppFlowy-Collab/
+**/libs/AppFlowy-Collab/
 data/
 .env

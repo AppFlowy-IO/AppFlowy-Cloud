@@ -1,4 +1,4 @@
-use crate::error::CollabSyncError;
+use crate::error::RealtimeError;
 use futures_util::Sink;
 use std::fmt::Debug;
 use std::pin::Pin;
@@ -16,7 +16,7 @@ impl<T> Sink<T> for UnboundedSenderSink<T>
 where
   T: Send + Sync + 'static + Debug,
 {
-  type Error = CollabSyncError;
+  type Error = RealtimeError;
 
   fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     // An unbounded channel can always accept messages without blocking, so we always return Ready.

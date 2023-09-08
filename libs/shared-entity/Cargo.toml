@@ -1,14 +1,14 @@
 [package]
-name = "client-api"
+name = "shared_entity"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11.20", default-features = false }
 anyhow = "1.0.75"
-gotrue = { path = "../gotrue" }
-infra = { path = "../infra" }
+serde = "1.0.188"
 serde_json = "1.0.105"
-shared_entity = { path = "../shared-entity" }
+serde_repr = "0.1.16"
+gotrue = { path = "../gotrue" }
+actix-web = "4.4.0"

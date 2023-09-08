@@ -89,7 +89,7 @@ pub async fn run(
       .service(ws_scope())
       .app_data(Data::new(collab_server_addr.clone()))
       .app_data(Data::new(state.clone()))
-      .app_data(Data::new(gotrue::Client::new(
+      .app_data(Data::new(gotrue::api::Client::new(
         reqwest::Client::new(),
         &config.gotrue.base_url)))
   });

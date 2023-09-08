@@ -23,6 +23,7 @@ async fn update_password_same_password() {
     .unwrap();
   c.update(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
+    .unwrap()
     .unwrap();
 }
 
@@ -36,7 +37,10 @@ async fn update_password_and_revert() {
       .await
       .unwrap()
       .unwrap();
-    c.update(&REGISTERED_EMAIL, new_password).await.unwrap();
+    c.update(&REGISTERED_EMAIL, new_password)
+      .await
+      .unwrap()
+      .unwrap();
   }
   {
     // revert password to old_password
@@ -47,6 +51,7 @@ async fn update_password_and_revert() {
       .unwrap();
     c.update(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
       .await
+      .unwrap()
       .unwrap();
   }
 }

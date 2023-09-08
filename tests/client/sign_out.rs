@@ -20,5 +20,5 @@ async fn sign_out_after_sign_in() {
     .await
     .unwrap()
     .unwrap();
-  c.sign_out().await.unwrap();
+  c.sign_out().await.unwrap().unwrap();
 }

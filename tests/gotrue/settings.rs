@@ -1,4 +1,4 @@
-use gotrue::Client;
+use gotrue::api::Client;
 
 #[tokio::test]
 async fn gotrue_settings() {

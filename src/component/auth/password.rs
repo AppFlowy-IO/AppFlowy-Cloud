@@ -16,8 +16,8 @@ pub struct Credentials {
 pub async fn validate_credentials(
   credentials: Credentials,
   pool: &PgPool,
-) -> Result<i64, AuthError> {
-  let mut uid = None;
+) -> Result<uuid::Uuid, AuthError> {
+  let mut uid: Option<uuid::Uuid> = None;
   let mut expected_hash_password = Secret::new(
     "$argon2id$v=19$m=15000,t=2,p=1$\
         gZiV/M1gPc22ElAH/Jh1Hw$\
@@ -38,9 +38,11 @@ pub async fn validate_credentials(
   .await
   .context("Failed to spawn blocking task.")??;
 
-  uid
-    .ok_or_else(|| anyhow::anyhow!("Unknown email."))
-    .map_err(AuthError::InvalidCredentials)
+  Ok(
+    uid
+      .ok_or_else(|| anyhow::anyhow!("Unknown email."))
+      .map_err(AuthError::InvalidCredentials)?,
+  )
 }
 
 pub fn compute_hash_password(password: &[u8]) -> Result<Secret<String>, anyhow::Error> {
@@ -59,11 +61,11 @@ pub fn compute_hash_password(password: &[u8]) -> Result<Secret<String>, anyhow::
 async fn get_stored_credentials(
   email: &str,
   pool: &PgPool,
-) -> Result<Option<(i64, Secret<String>)>, anyhow::Error> {
+) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
   let row = sqlx::query!(
     r#"
         SELECT uid, password
-        FROM af_user 
+        FROM af_user
         WHERE email = $1
         "#,
     email,

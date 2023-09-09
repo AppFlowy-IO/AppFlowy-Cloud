@@ -9,7 +9,12 @@ use validator::validate_email;
 use crate::domain::validate_password;
 use sqlx::PgPool;
 
-pub async fn sign_up(pg_pool: &PgPool, gotrue_client: &Client, email: &str, password: &str) -> Result<(), AppError> {
+pub async fn sign_up(
+  pg_pool: &PgPool,
+  gotrue_client: &Client,
+  email: &str,
+  password: &str,
+) -> Result<(), AppError> {
   validate_email_password(email, password)?;
 
   let user = gotrue_client.sign_up(email, password).await??;

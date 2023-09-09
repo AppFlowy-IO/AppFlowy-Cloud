@@ -134,7 +134,10 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {
   let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
-  gotrue_client.health().await.expect("Failed to connect to GoTrue");
+  gotrue_client
+    .health()
+    .await
+    .expect("Failed to connect to GoTrue");
   gotrue_client
 }
 

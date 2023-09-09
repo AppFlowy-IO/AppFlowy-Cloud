@@ -1,2 +1,2 @@
-mod settings;
 mod health;
+mod settings;

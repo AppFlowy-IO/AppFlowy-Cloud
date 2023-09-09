@@ -1,12 +1,16 @@
+use actix_web::web::Json;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 use crate::{error::AppError, server_error::ErrorCode};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+pub type JsonAppData<T> = Json<AppData<T>>;
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AppData<T> {
   pub data: Option<T>,
   pub code: ErrorCode,
-  pub message: String,
+  pub message: Cow<'static, str>,
 }
 
 impl<T> AppData<T> {
@@ -14,23 +18,32 @@ impl<T> AppData<T> {
     if self.code == ErrorCode::Ok {
       Ok(self.data)
     } else {
-      Err(AppError::new(self.code, self.message))
+      Err(AppError::new(self.code, self.message.into()))
     }
   }
-}
 
-pub fn app_ok() -> AppData<()> {
-  AppData {
-    data: None,
-    code: ErrorCode::Ok,
-    message: "OK".to_string(),
+  #[allow(non_snake_case, missing_docs)]
+  pub fn Ok() -> Self {
+    Self {
+      data: None,
+      code: ErrorCode::Ok,
+      message: "OK".into(),
+    }
+  }
+
+  pub fn with_data(mut self, data: T) -> Self {
+    self.data = Some(data);
+    self
+  }
+
+  pub fn with_message(mut self, message: Cow<'static, str>) -> Self {
+    self.message = message;
+    self
   }
 }
 
-pub fn app_ok_data<T>(data: T) -> AppData<T> {
-  AppData {
-    data: Some(data),
-    code: ErrorCode::Ok,
-    message: "OK".to_string(),
+impl<T> From<AppData<T>> for JsonAppData<T> {
+  fn from(data: AppData<T>) -> Self {
+    Json(data)
   }
 }

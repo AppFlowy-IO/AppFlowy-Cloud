@@ -3,7 +3,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use crate::error::AppError;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr)]
-#[repr(i64)]
+#[repr(i32)]
 pub enum ErrorCode {
   Ok = 0,
   Unhandled = -1,

@@ -38,11 +38,9 @@ pub async fn validate_credentials(
   .await
   .context("Failed to spawn blocking task.")??;
 
-  Ok(
-    uid
-      .ok_or_else(|| anyhow::anyhow!("Unknown email."))
-      .map_err(AuthError::InvalidCredentials)?,
-  )
+  uid
+    .ok_or_else(|| anyhow::anyhow!("Unknown email."))
+    .map_err(AuthError::InvalidCredentials)
 }
 
 pub fn compute_hash_password(password: &[u8]) -> Result<Secret<String>, anyhow::Error> {

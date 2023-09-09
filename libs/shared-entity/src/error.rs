@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 
 use crate::server_error::ErrorCode;
@@ -8,12 +9,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
   pub code: ErrorCode,
-  pub message: String,
+  pub message: Cow<'static, str>,
 }
 
 impl AppError {
-  pub fn new(code: ErrorCode, message: String) -> Self {
-    Self { code, message }
+  pub fn new(code: ErrorCode, message: impl Into<Cow<'static, str>>) -> Self {
+    Self {
+      code,
+      message: message.into(),
+    }
   }
 }
 
@@ -22,7 +26,7 @@ impl Display for AppError {
     write!(f, "{}", self.message)
   }
 }
-
+//
 impl actix_web::error::ResponseError for AppError {
   fn status_code(&self) -> StatusCode {
     StatusCode::OK
@@ -36,7 +40,7 @@ impl actix_web::error::ResponseError for AppError {
       })
   }
 }
-
+//
 impl From<anyhow::Error> for AppError {
   fn from(err: anyhow::Error) -> Self {
     AppError::new(ErrorCode::Unhandled, format!("unhandled error: {}", err))

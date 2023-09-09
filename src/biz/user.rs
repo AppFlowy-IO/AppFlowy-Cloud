@@ -10,7 +10,7 @@ use crate::domain::validate_password;
 use sqlx::PgPool;
 
 pub async fn sign_up(
-  pg_pool: &PgPool,
+  _pg_pool: &PgPool,
   gotrue_client: &Client,
   email: &str,
   password: &str,

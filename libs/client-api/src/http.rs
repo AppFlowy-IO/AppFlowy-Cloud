@@ -3,7 +3,7 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppData;
 
-use gotrue::models::{AccessTokenResponse, GoTrueError, User};
+use gotrue::models::{AccessTokenResponse, User};
 use infra::reqwest::from_response;
 use shared_entity::error::AppError;
 

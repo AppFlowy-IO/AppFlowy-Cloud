@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS af_workspace (
     workspace_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     database_storage_id UUID DEFAULT uuid_generate_v4(),
-    owner_uid BIGINT REFERENCES af_user(uid) ON DELETE CASCADE,
+    owner_uid UUID REFERENCES af_user(uid) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     -- 0: Free
     workspace_type INTEGER NOT NULL DEFAULT 0,
@@ -21,7 +21,7 @@ AFTER
 INSERT ON af_user FOR EACH ROW EXECUTE FUNCTION create_af_workspace_func();
 -- af_workspace_member contains all the members associated with a workspace and their roles.
 CREATE TABLE IF NOT EXISTS af_workspace_member (
-    uid BIGINT NOT NULL,
+    uid UUID NOT NULL,
     role_id INT NOT NULL REFERENCES af_roles(id),
     workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,

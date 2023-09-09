@@ -21,6 +21,12 @@ impl Client {
     }
   }
 
+  pub async fn health(&self) -> Result<(), Error> {
+    let url: String = format!("{}/health", self.base_url);
+    let resp = self.client.get(url).send().await?;
+    check_response(resp).await
+  }
+
   pub async fn settings(&self) -> Result<GoTrueSettings, Error> {
     let url: String = format!("{}/settings", self.base_url);
     let resp = self.client.get(url).send().await?;

@@ -3,9 +3,7 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- user table
 CREATE TABLE IF NOT EXISTS af_user (
-    uid BIGSERIAL PRIMARY KEY,
-    email TEXT NOT NULL DEFAULT '' UNIQUE,
-    password TEXT NOT NULL,
+    uid UUID PRIMARY KEY, -- related to gotrue user when authenticated
     name TEXT NOT NULL DEFAULT '',
     encryption_sign TEXT,
     deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,

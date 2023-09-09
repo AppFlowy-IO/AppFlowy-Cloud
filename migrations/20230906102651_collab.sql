@@ -1,7 +1,7 @@
 -- af_collab contains all the collabs.
 CREATE TABLE IF NOT EXISTS af_collab(
     oid TEXT PRIMARY KEY,
-    owner_uid BIGINT NOT NULL,
+    owner_uid UUID NOT NULL,
     workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
     -- 0: Private, 1: Shared
     access_level INTEGER NOT NULL DEFAULT 0,
@@ -57,7 +57,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER insert_into_af_collab_trigger BEFORE
 INSERT ON af_collab_update FOR EACH ROW EXECUTE FUNCTION insert_into_af_collab_if_not_exists();
 CREATE TABLE af_collab_member (
-    uid BIGINT REFERENCES af_user(uid) ON DELETE CASCADE,
+    uid UUID REFERENCES af_user(uid) ON DELETE CASCADE,
     oid TEXT REFERENCES af_collab(oid) ON DELETE CASCADE,
     role_id INTEGER REFERENCES af_roles(id),
     PRIMARY KEY(uid, oid)
@@ -144,7 +144,7 @@ FROM af_collab_snapshot AS a
     JOIN af_collab_statistics AS b ON a.oid = b.oid;
 -- Insert a workspace member if the user with given uid is the owner of the workspace
 CREATE OR REPLACE FUNCTION insert_af_workspace_member_if_owner(
-        p_uid BIGINT,
+        p_uid UUID,
         p_role_id INT,
         p_workspace_id UUID
     ) RETURNS VOID AS $$ BEGIN -- If user is the owner, proceed with the insert operation

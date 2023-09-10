@@ -1,8 +1,10 @@
+use anyhow::Result;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
   models::{AccessTokenResponse, User},
 };
+
 use shared_entity::{error::AppError, server_error};
 use validator::validate_email;
 

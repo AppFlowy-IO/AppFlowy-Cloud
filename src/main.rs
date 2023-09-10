@@ -1,4 +1,4 @@
-use appflowy_cloud::application::{init_state, Application};
+use appflowy_cloud::application::{init_state, init_storage, Application};
 use appflowy_cloud::config::config::get_configuration;
 use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 
@@ -13,7 +13,8 @@ async fn main() -> anyhow::Result<()> {
 
   let configuration = get_configuration().expect("Failed to read configuration.");
   let state = init_state(&configuration).await;
-  let application = Application::build(configuration, state).await?;
+  let storage = init_storage(&configuration, state.pg_pool.clone()).await;
+  let application = Application::build(configuration, state, storage).await?;
   application.run_until_stopped().await?;
 
   Ok(())

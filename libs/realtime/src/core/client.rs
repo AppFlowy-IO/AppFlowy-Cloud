@@ -14,22 +14,24 @@ use crate::core::CollabManager;
 use collab_sync_protocol::CollabMessage;
 
 use std::time::{Duration, Instant};
+use storage::collab::CollabStorage;
 
-pub struct CollabSession<U> {
+pub struct CollabSession<U, S: Unpin + 'static> {
   user: U,
   hb: Instant,
-  pub server: Addr<CollabManager>,
+  pub server: Addr<CollabManager<S>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
 }
 
-impl<U> CollabSession<U>
+impl<U, S> CollabSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
+  S: CollabStorage + Unpin,
 {
   pub fn new(
     user: U,
-    server: Addr<CollabManager>,
+    server: Addr<CollabManager<S>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
   ) -> Self {
@@ -75,9 +77,10 @@ where
   }
 }
 
-impl<U> Actor for CollabSession<U>
+impl<U, S> Actor for CollabSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
+  S: Unpin + CollabStorage,
 {
   type Context = ws::WebsocketContext<Self>;
 
@@ -115,9 +118,10 @@ where
   }
 }
 
-impl<U> Handler<ServerMessage> for CollabSession<U>
+impl<U, S> Handler<ServerMessage> for CollabSession<U, S>
 where
   U: Unpin + RealtimeUser,
+  S: Unpin + CollabStorage,
 {
   type Result = ();
 
@@ -127,9 +131,10 @@ where
 }
 
 /// WebSocket message handler
-impl<U> StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession<U>
+impl<U, S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
+  S: Unpin + CollabStorage,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let msg = match msg {

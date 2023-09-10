@@ -7,6 +7,7 @@ use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Result};
 
 use actix_web_actors::ws;
+use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use once_cell::sync::Lazy;
@@ -14,11 +15,12 @@ use realtime::core::{CollabManager, CollabSession};
 use realtime::entities::RealtimeUser;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use std::path::PathBuf;
-use std::sync::Arc;
+
 use std::time::Duration;
 
 use crate::util::log::{get_subscriber, init_subscriber};
-use storage::collab::CollabStorage;
+use storage::collab::{CollabStorage, RawData};
+use storage::entities::CreateCollabParams;
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
@@ -38,16 +40,12 @@ pub struct TestServer {
   pub address: String,
   pub port: u16,
   pub ws_addr: String,
+  pub storage: CollabStorageMemoryImpl,
 }
 
 impl TestServer {
   pub async fn get_doc(&self, object_id: &str) -> serde_json::Value {
-    let raw_data = self
-      .state
-      .collab_storage
-      .get_collab(object_id)
-      .await
-      .unwrap();
+    let raw_data = self.storage.get_collab(object_id).await.unwrap();
     let collab =
       MutexCollab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![raw_data], vec![])
         .unwrap();
@@ -61,7 +59,8 @@ pub async fn spawn_server() -> TestServer {
   Lazy::force(&TRACING);
   let config = Config::default();
   let state = init_state(config.clone()).await;
-  let application = Application::build(config, state.clone())
+  let storage = CollabStorageMemoryImpl {};
+  let application = Application::build(config, state.clone(), storage.clone())
     .await
     .expect("Failed to build application");
 
@@ -83,6 +82,7 @@ pub async fn spawn_server() -> TestServer {
 
   TestServer {
     state,
+    storage,
     api_client,
     address,
     ws_addr,
@@ -123,11 +123,14 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build(config: Config, state: State) -> Result<Self, anyhow::Error> {
+  pub async fn build<S>(config: Config, state: State, storage: S) -> Result<Self, anyhow::Error>
+  where
+    S: CollabStorage + Unpin,
+  {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config).await?;
+    let server = run(listener, state, config, storage).await?;
 
     Ok(Self { port, server })
   }
@@ -141,16 +144,22 @@ impl Application {
   }
 }
 
-pub async fn run(
+pub async fn run<S>(
   listener: TcpListener,
   state: State,
   _config: Config,
-) -> Result<Server, anyhow::Error> {
-  let collab_server = CollabManager::new(state.collab_storage).unwrap().start();
+  storage: S,
+) -> Result<Server, anyhow::Error>
+where
+  S: CollabStorage + Unpin,
+{
+  let collab_server = CollabManager::new(storage.clone()).unwrap().start();
   let server = HttpServer::new(move || {
     App::new()
       .service(web::scope("/ws").service(establish_ws_connection))
       .app_data(Data::new(collab_server.clone()))
+      .app_data(Data::new(state.clone()))
+      .app_data(Data::new(storage.clone()))
   })
   .listen(listener)?;
   Ok(server.run())
@@ -200,7 +209,6 @@ pub struct ApplicationSetting {
 #[derive(Clone)]
 pub struct State {
   pub config: Config,
-  pub collab_storage: Arc<CollabStorage>,
 }
 pub async fn init_state(_config: Config) -> State {
   todo!()
@@ -212,7 +220,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   token: Path<String>,
   state: Data<State>,
-  server: Data<Addr<CollabManager>>,
+  server: Data<Addr<CollabManager<CollabStorageMemoryImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = TestLoggedUser {
@@ -247,5 +255,31 @@ impl Display for TestLoggedUser {
 impl RealtimeUser for TestLoggedUser {
   fn user_id(&self) -> &i64 {
     &self.user_id
+  }
+}
+
+#[derive(Clone)]
+pub struct CollabStorageMemoryImpl {}
+
+#[async_trait]
+impl CollabStorage for CollabStorageMemoryImpl {
+  async fn is_exist(&self, _object_id: &str) -> bool {
+    todo!()
+  }
+
+  async fn create_collab(&self, _params: CreateCollabParams) -> storage::collab::Result<()> {
+    todo!()
+  }
+
+  async fn update_collab(&self, _object_id: &str, _data: RawData) -> storage::collab::Result<()> {
+    todo!()
+  }
+
+  async fn get_collab(&self, _object_id: &str) -> storage::collab::Result<RawData> {
+    todo!()
+  }
+
+  async fn delete_collab(&self, _object_id: &str) -> storage::collab::Result<()> {
+    todo!()
   }
 }

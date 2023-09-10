@@ -7,6 +7,8 @@ use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::HttpRequest;
 use anyhow::Context;
 use chrono::Duration;
+use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::ops::DerefMut;
 
 use secrecy::zeroize::DefaultIsZeroes;
@@ -244,6 +246,28 @@ impl LoggedUser {
 
   pub fn expose_secret(&self) -> &i64 {
     self.0.expose_secret()
+  }
+}
+
+impl Hash for LoggedUser {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.expose_secret().hash(state);
+  }
+}
+
+impl PartialEq<Self> for LoggedUser {
+  fn eq(&self, other: &Self) -> bool {
+    let uid = self.expose_secret();
+    let other_uid = other.expose_secret();
+    uid == other_uid
+  }
+}
+
+impl Eq for LoggedUser {}
+
+impl Display for LoggedUser {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str("LoggedUser")
   }
 }
 

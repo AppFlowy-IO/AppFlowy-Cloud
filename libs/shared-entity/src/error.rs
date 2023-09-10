@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Display;
 
 use crate::server_error::ErrorCode;
@@ -8,12 +9,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
   pub code: ErrorCode,
-  pub message: String,
+  pub message: Cow<'static, str>,
 }
 
 impl AppError {
-  pub fn new(code: ErrorCode, message: String) -> Self {
-    Self { code, message }
+  pub fn new(code: ErrorCode, message: impl Into<Cow<'static, str>>) -> Self {
+    Self {
+      code,
+      message: message.into(),
+    }
   }
 }
 
@@ -23,23 +27,24 @@ impl Display for AppError {
   }
 }
 
+impl std::error::Error for AppError {}
+
+//
 impl actix_web::error::ResponseError for AppError {
   fn status_code(&self) -> StatusCode {
     StatusCode::OK
   }
 
   fn error_response(&self) -> HttpResponse {
-    serde_json::to_string(self)
-      .map(|json| HttpResponse::build(StatusCode::OK).body(json))
-      .unwrap_or_else(|e| {
-        HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).body(e.to_string())
-      })
+    HttpResponse::Ok().json(self)
   }
 }
-
+//
 impl From<anyhow::Error> for AppError {
   fn from(err: anyhow::Error) -> Self {
-    AppError::new(ErrorCode::Unhandled, format!("unhandled error: {}", err))
+    err
+      .downcast::<AppError>()
+      .unwrap_or(ErrorCode::Unhandled.into())
   }
 }
 
@@ -58,12 +63,12 @@ impl From<GoTrueError> for AppError {
 
 impl From<OAuthError> for AppError {
   fn from(err: OAuthError) -> Self {
-    match err.error_description {
-      Some(desc) => AppError::new(
-        ErrorCode::OAuthError,
-        format!("oauth error: {}: {}", err.error, desc),
-      ),
-      None => AppError::new(ErrorCode::OAuthError, format!("oauth error: {}", err.error)),
-    }
+    AppError::new(ErrorCode::OAuthError, err.to_string())
+  }
+}
+
+impl From<ErrorCode> for AppError {
+  fn from(value: ErrorCode) -> Self {
+    AppError::new(value, value.to_string())
   }
 }

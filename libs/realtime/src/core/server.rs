@@ -11,6 +11,7 @@ use collab::core::origin::CollabOrigin;
 use collab_sync_protocol::CollabMessage;
 use parking_lot::RwLock;
 
+use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio_stream::StreamExt;
@@ -20,8 +21,19 @@ use crate::core::ClientWebsocketSink;
 use storage::collab::CollabStorage;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
+#[async_trait]
+pub trait CollabServer {
+  async fn new_connection(
+    &self,
+    user: Arc<RealtimeUser>,
+    socket: ClientWebsocketSink,
+  ) -> Result<(), RealtimeError>;
+  async fn close_connection(&self, user: Arc<RealtimeUser>) -> Result<(), RealtimeError>;
+  async fn handle_client_message(&self, client_msg: ClientMessage) -> Result<(), RealtimeError>;
+}
+
 #[derive(Clone)]
-pub struct CollabServer {
+pub struct CollabManager {
   #[allow(dead_code)]
   storage: Arc<CollabStorage>,
   /// Keep track of all collab groups
@@ -32,7 +44,7 @@ pub struct CollabServer {
   client_streams: Arc<RwLock<HashMap<Arc<RealtimeUser>, RealtimeClientStream>>>,
 }
 
-impl CollabServer {
+impl CollabManager {
   pub fn new(storage: Arc<CollabStorage>) -> Result<Self, RealtimeError> {
     let groups = Arc::new(CollabGroupCache::new(storage.clone()));
     let edit_collab_by_user = Arc::new(RwLock::new(HashMap::new()));
@@ -45,11 +57,11 @@ impl CollabServer {
   }
 }
 
-impl Actor for CollabServer {
+impl Actor for CollabManager {
   type Context = Context<Self>;
 }
 
-impl Handler<Connect> for CollabServer {
+impl Handler<Connect> for CollabManager {
   type Result = Result<(), RealtimeError>;
 
   fn handle(&mut self, new_conn: Connect, _ctx: &mut Context<Self>) -> Self::Result {
@@ -62,7 +74,7 @@ impl Handler<Connect> for CollabServer {
   }
 }
 
-impl Handler<Disconnect> for CollabServer {
+impl Handler<Disconnect> for CollabManager {
   type Result = Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[CollabServer]: {} disconnect", msg.user);
@@ -85,7 +97,7 @@ impl Handler<Disconnect> for CollabServer {
   }
 }
 
-impl Handler<ClientMessage> for CollabServer {
+impl Handler<ClientMessage> for CollabManager {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, client_msg: ClientMessage, _ctx: &mut Context<Self>) -> Self::Result {
@@ -227,8 +239,8 @@ fn remove_user_from_group(groups: &Arc<CollabGroupCache>, edit_collab: &EditColl
   }
 }
 
-impl actix::Supervised for CollabServer {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer>) {
+impl actix::Supervised for CollabManager {
+  fn restarting(&mut self, _ctx: &mut Context<CollabManager>) {
     tracing::warn!("restarting");
   }
 }

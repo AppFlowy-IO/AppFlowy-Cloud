@@ -4,7 +4,7 @@ use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use realtime::core::{CollabServer, CollabSession};
+use realtime::core::{CollabManager, CollabSession};
 use secrecy::Secret;
 use std::time::Duration;
 
@@ -20,7 +20,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   token: Path<String>,
   state: Data<State>,
-  server: Data<Addr<CollabServer>>,
+  server: Data<Addr<CollabManager>>,
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = LoggedUser::from_token(&state.config.application.server_key, token.as_str())?;

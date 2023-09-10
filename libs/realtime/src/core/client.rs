@@ -10,7 +10,7 @@ use actix_web_actors::ws;
 use bytes::Bytes;
 use std::ops::Deref;
 
-use crate::core::CollabServer;
+use crate::core::CollabManager;
 use collab_sync_protocol::CollabMessage;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 pub struct CollabSession {
   user: Arc<RealtimeUser>,
   hb: Instant,
-  pub server: Addr<CollabServer>,
+  pub server: Addr<CollabManager>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
 }
@@ -26,7 +26,7 @@ pub struct CollabSession {
 impl CollabSession {
   pub fn new(
     user: RealtimeUser,
-    server: Addr<CollabServer>,
+    server: Addr<CollabManager>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
   ) -> Self {

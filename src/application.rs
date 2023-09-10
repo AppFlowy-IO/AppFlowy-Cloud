@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use realtime::core::CollabServer;
+use realtime::core::CollabManager;
 use storage::collab::CollabStorage;
 use tracing_actix_web::TracingLogger;
 
@@ -70,7 +70,7 @@ pub async fn run(
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server_addr = CollabServer::new(state.collab_storage.clone())
+  let collab_server = CollabManager::new(state.collab_storage.clone())
     .unwrap()
     .start();
   let mut server = HttpServer::new(move || {
@@ -87,7 +87,7 @@ pub async fn run(
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())
       .service(ws_scope())
-      .app_data(Data::new(collab_server_addr.clone()))
+      .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(gotrue::api::Client::new(
         reqwest::Client::new(),

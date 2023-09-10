@@ -23,8 +23,19 @@ pub enum ErrorCode {
   OAuthError = 1003,
 }
 
+/// Implements conversion from `anyhow::Error` to `ErrorCode`.
+///
+/// This implementation checks if the `anyhow::Error` can be downcasted
+/// to an `AppError` or `ErrorCode`. If the error is of type `AppError`,
+/// it returns the associated error code. If the error can be downcasted
+/// to `ErrorCode`, it returns the error code directly. Otherwise, it
+/// defaults to `ErrorCode::Unhandled`.
 impl From<anyhow::Error> for ErrorCode {
   fn from(err: anyhow::Error) -> Self {
+    if let Some(err) = err.downcast_ref::<AppError>() {
+      return err.code;
+    }
+
     err.downcast::<ErrorCode>().unwrap_or(ErrorCode::Unhandled)
   }
 }

@@ -1,7 +1,6 @@
 use actix_web::http::StatusCode;
 use actix_web::web::Json;
 use actix_web::HttpResponse;
-use gotrue::models::{GoTrueError, OAuthError};
 
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
@@ -9,6 +8,7 @@ use std::borrow::Cow;
 use std::fmt::{Debug, Display};
 
 use crate::server_error::ErrorCode;
+/// A macro to generate static AppResponse functions with predefined error codes.
 macro_rules! static_app_response {
   ($name:ident, $code:expr) => {
     #[allow(non_snake_case, missing_docs)]
@@ -19,12 +19,18 @@ macro_rules! static_app_response {
 }
 pub type JsonAppResponse<T> = Json<AppResponse<T>>;
 
+/// Represents a standardized application response.
+///
+/// This structure is used to send consistent responses from the server,
+/// containing optional data, an error code, and a message.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppResponse<T> {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub data: Option<T>,
+
   #[serde(default)]
   pub code: ErrorCode,
+
   #[serde(default)]
   pub message: Cow<'static, str>,
 }
@@ -52,6 +58,14 @@ impl<T> AppResponse<T> {
     }
   }
 
+  pub fn into_error(self) -> Option<AppError> {
+    if matches!(self.code, ErrorCode::Ok) {
+      None
+    } else {
+      Some(AppError::new(self.code, self.message))
+    }
+  }
+
   pub fn with_data(mut self, data: T) -> Self {
     self.data = Some(data);
     self
@@ -68,11 +82,7 @@ impl<T> AppResponse<T> {
   }
 
   pub fn is_ok(&self) -> bool {
-    self.code == ErrorCode::Ok
-  }
-
-  pub fn unwrap_error(self) -> AppError {
-    AppError::new(self.code, self.message)
+    matches!(self.code, ErrorCode::Ok)
   }
 }
 
@@ -81,7 +91,7 @@ where
   T: Display,
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("{}:{}]", self.code, self.message,))
+    f.write_fmt(format_args!("{}:{}", self.code, self.message))
   }
 }
 
@@ -93,35 +103,18 @@ impl<T> From<AppResponse<T>> for JsonAppResponse<T> {
 
 impl<T> std::error::Error for AppResponse<T> where T: Debug + Display {}
 
-impl<T> From<anyhow::Error> for AppResponse<T>
+/// Provides a conversion from `T1` to `AppResponse<T>`.
+///
+/// This implementation allows for automatic conversion of any type `T1` that can be
+/// transformed into an `AppError` into an `AppResponse<T>`. This is useful for
+/// seamlessly converting various error types into a standardized application response.
+///
+impl<T, T1> From<T1> for AppResponse<T>
 where
-  T: Debug + Display + Send + Sync + 'static,
+  T1: Into<AppError>,
 {
-  fn from(err: anyhow::Error) -> Self {
-    err
-      .downcast::<AppResponse<T>>()
-      .unwrap_or_else(|err| AppResponse::Unhandled().with_message(err.to_string()))
-  }
-}
-
-impl<T> From<GoTrueError> for AppResponse<T> {
-  fn from(err: GoTrueError) -> Self {
-    AppResponse::Unhandled().with_message(format!(
-      "gotrue error: {}, id: {}",
-      err.code,
-      err.error_id.unwrap_or("".to_string())
-    ))
-  }
-}
-
-impl<T> From<OAuthError> for AppResponse<T> {
-  fn from(err: OAuthError) -> Self {
-    AppResponse::OAuthError().with_message(err.to_string())
-  }
-}
-
-impl From<AppError> for AppResponse<()> {
-  fn from(err: AppError) -> Self {
+  fn from(value: T1) -> Self {
+    let err: AppError = value.into();
     AppResponse::new(err.code, err.message)
   }
 }

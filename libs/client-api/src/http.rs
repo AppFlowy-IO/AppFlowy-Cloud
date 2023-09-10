@@ -47,10 +47,9 @@ impl Client {
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
     let res: AppResponse<()> = from_response(resp).await?;
-    if res.code == ErrorCode::Ok {
-      Ok(())
-    } else {
-      Err(res.code.into())
+    match res.into_error() {
+      None => Ok(()),
+      Some(e) => Err(e.into()),
     }
   }
 

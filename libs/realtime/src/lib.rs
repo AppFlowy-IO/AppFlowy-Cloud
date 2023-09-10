@@ -1,4 +1,3 @@
-mod actix;
 pub mod collab;
 pub mod core;
 pub mod entities;

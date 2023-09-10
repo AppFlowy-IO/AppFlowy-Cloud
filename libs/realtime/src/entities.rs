@@ -3,58 +3,33 @@ use actix::{Message, Recipient};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab_sync_protocol::CollabMessage;
-use secrecy::{ExposeSecret, Secret};
+
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
 
-#[derive(Debug, Clone)]
-pub struct RealtimeUser {
-  pub user_id: Secret<String>,
+pub trait RealtimeUser: Clone + Debug + Send + Sync + 'static + Display {
+  fn user_id(&self) -> &i64;
 }
-
-impl Display for RealtimeUser {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_str(self.user_id.expose_secret())
-  }
-}
-
-impl Hash for RealtimeUser {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    let uid: &String = self.user_id.expose_secret();
-    uid.hash(state);
-  }
-}
-
-impl PartialEq<Self> for RealtimeUser {
-  fn eq(&self, other: &Self) -> bool {
-    let uid: &String = self.user_id.expose_secret();
-    let other_uid: &String = other.user_id.expose_secret();
-    uid == other_uid
-  }
-}
-
-impl Eq for RealtimeUser {}
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct Connect {
+pub struct Connect<U> {
   pub socket: Recipient<ServerMessage>,
-  pub user: Arc<RealtimeUser>,
+  pub user: U,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct Disconnect {
-  pub user: Arc<RealtimeUser>,
+pub struct Disconnect<U> {
+  pub user: U,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct ClientMessage {
+pub struct ClientMessage<U> {
   pub business_id: u8,
-  pub user: Arc<RealtimeUser>,
+  pub user: U,
   pub content: CollabMessage,
 }
 
@@ -116,8 +91,11 @@ impl From<CollabMessage> for ServerMessage {
   }
 }
 
-impl From<ClientMessage> for RealtimeMessage {
-  fn from(client_msg: ClientMessage) -> Self {
+impl<U> From<ClientMessage<U>> for RealtimeMessage
+where
+  U: RealtimeUser,
+{
+  fn from(client_msg: ClientMessage<U>) -> Self {
     Self {
       business_id: client_msg.business_id,
       object_id: client_msg.content.object_id().to_string(),

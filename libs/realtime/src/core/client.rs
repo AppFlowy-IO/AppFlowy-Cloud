@@ -10,28 +10,33 @@ use actix_web_actors::ws;
 use bytes::Bytes;
 use std::ops::Deref;
 
-use crate::core::CollabServer;
+use crate::core::CollabManager;
 use collab_sync_protocol::CollabMessage;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
-pub struct CollabSession {
-  user: Arc<RealtimeUser>,
+use std::time::{Duration, Instant};
+use storage::collab::CollabStorage;
+
+pub struct CollabSession<U, S: Unpin + 'static> {
+  user: U,
   hb: Instant,
-  pub server: Addr<CollabServer>,
+  pub server: Addr<CollabManager<S>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
 }
 
-impl CollabSession {
+impl<U, S> CollabSession<U, S>
+where
+  U: Unpin + RealtimeUser + Clone,
+  S: CollabStorage + Unpin,
+{
   pub fn new(
-    user: RealtimeUser,
-    server: Addr<CollabServer>,
+    user: U,
+    server: Addr<CollabManager<S>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
   ) -> Self {
     Self {
-      user: Arc::new(user),
+      user,
       hb: Instant::now(),
       server,
       heartbeat_interval,
@@ -72,7 +77,11 @@ impl CollabSession {
   }
 }
 
-impl Actor for CollabSession {
+impl<U, S> Actor for CollabSession<U, S>
+where
+  U: Unpin + RealtimeUser + Clone,
+  S: Unpin + CollabStorage,
+{
   type Context = ws::WebsocketContext<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
@@ -109,7 +118,11 @@ impl Actor for CollabSession {
   }
 }
 
-impl Handler<ServerMessage> for CollabSession {
+impl<U, S> Handler<ServerMessage> for CollabSession<U, S>
+where
+  U: Unpin + RealtimeUser,
+  S: Unpin + CollabStorage,
+{
   type Result = ();
 
   fn handle(&mut self, server_msg: ServerMessage, ctx: &mut Self::Context) {
@@ -118,7 +131,11 @@ impl Handler<ServerMessage> for CollabSession {
 }
 
 /// WebSocket message handler
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession {
+impl<U, S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession<U, S>
+where
+  U: Unpin + RealtimeUser + Clone,
+  S: Unpin + CollabStorage,
+{
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let msg = match msg {
       Err(_) => {

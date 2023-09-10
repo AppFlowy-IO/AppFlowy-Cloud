@@ -6,13 +6,12 @@ use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use storage::collab::CollabStorage;
+
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct State {
   pub pg_pool: PgPool,
-  pub collab_storage: Arc<CollabStorage>,
   pub config: Arc<Config>,
   pub user: Arc<RwLock<UserCache>>,
   pub id_gen: Arc<RwLock<Snowflake>>,
@@ -26,6 +25,11 @@ impl State {
   pub async fn next_user_id(&self) -> i64 {
     self.id_gen.write().await.next_id()
   }
+}
+
+#[derive(Clone)]
+pub struct Storage<CollabStorage: Clone> {
+  pub collab_storage: CollabStorage,
 }
 
 #[derive(Clone, Debug, Copy)]

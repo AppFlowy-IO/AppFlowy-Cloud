@@ -21,55 +21,75 @@ use storage::collab::CollabStorage;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
 #[derive(Clone)]
-pub struct CollabServer {
+pub struct CollabManager<S> {
   #[allow(dead_code)]
-  storage: Arc<CollabStorage>,
+  storage: S,
   /// Keep track of all collab groups
-  groups: Arc<CollabGroupCache>,
+  groups: Arc<CollabGroupCache<S>>,
   /// Keep track of all object ids that a user is subscribed to
-  edit_collab_by_user: Arc<RwLock<HashMap<Arc<RealtimeUser>, HashSet<EditCollab>>>>,
+  edit_collab_by_user: Arc<RwLock<HashMap<i64, HashSet<EditCollab>>>>,
   /// Keep track of all client streams
-  client_streams: Arc<RwLock<HashMap<Arc<RealtimeUser>, RealtimeClientStream>>>,
+  client_stream_by_user: Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
 }
 
-impl CollabServer {
-  pub fn new(storage: Arc<CollabStorage>) -> Result<Self, RealtimeError> {
+impl<S> CollabManager<S>
+where
+  S: CollabStorage + Clone,
+{
+  pub fn new(storage: S) -> Result<Self, RealtimeError> {
     let groups = Arc::new(CollabGroupCache::new(storage.clone()));
     let edit_collab_by_user = Arc::new(RwLock::new(HashMap::new()));
     Ok(Self {
       storage,
       groups,
       edit_collab_by_user,
-      client_streams: Default::default(),
+      client_stream_by_user: Default::default(),
     })
   }
 }
 
-impl Actor for CollabServer {
+impl<S> Actor for CollabManager<S>
+where
+  S: 'static + Unpin,
+{
   type Context = Context<Self>;
 }
 
-impl Handler<Connect> for CollabServer {
+impl<U, S> Handler<Connect<U>> for CollabManager<S>
+where
+  U: RealtimeUser,
+  S: 'static + Unpin,
+{
   type Result = Result<(), RealtimeError>;
 
-  fn handle(&mut self, new_conn: Connect, _ctx: &mut Context<Self>) -> Self::Result {
+  fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[CollabServer]: {} connect", new_conn.user);
 
     let stream = RealtimeClientStream::new(ClientWebsocketSink(new_conn.socket));
-    self.client_streams.write().insert(new_conn.user, stream);
+    self
+      .client_stream_by_user
+      .write()
+      .insert(*new_conn.user.user_id(), stream);
 
     Ok(())
   }
 }
 
-impl Handler<Disconnect> for CollabServer {
+impl<U, S> Handler<Disconnect<U>> for CollabManager<S>
+where
+  U: RealtimeUser,
+  S: CollabStorage + Unpin,
+{
   type Result = Result<(), RealtimeError>;
-  fn handle(&mut self, msg: Disconnect, _: &mut Context<Self>) -> Self::Result {
+  fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[CollabServer]: {} disconnect", msg.user);
-    self.client_streams.write().remove(&msg.user);
+    self
+      .client_stream_by_user
+      .write()
+      .remove(msg.user.user_id());
 
     // Remove the user from all collab groups that the user is subscribed to
-    let edits = self.edit_collab_by_user.write().remove(&msg.user);
+    let edits = self.edit_collab_by_user.write().remove(msg.user.user_id());
     if let Some(edits) = edits {
       if !edits.is_empty() {
         let groups = self.groups.clone();
@@ -85,11 +105,15 @@ impl Handler<Disconnect> for CollabServer {
   }
 }
 
-impl Handler<ClientMessage> for CollabServer {
+impl<U, S> Handler<ClientMessage<U>> for CollabManager<S>
+where
+  U: RealtimeUser,
+  S: CollabStorage + Unpin,
+{
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
-  fn handle(&mut self, client_msg: ClientMessage, _ctx: &mut Context<Self>) -> Self::Result {
-    let client_streams = self.client_streams.clone();
+  fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
+    let client_streams = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
     let edit_collab_by_user = self.edit_collab_by_user.clone();
 
@@ -107,11 +131,13 @@ impl Handler<ClientMessage> for CollabServer {
   }
 }
 
-async fn forward_message_to_collab_group(
-  client_msg: &ClientMessage,
-  client_streams: &Arc<RwLock<HashMap<Arc<RealtimeUser>, RealtimeClientStream>>>,
-) {
-  if let Some(client_stream) = client_streams.read().get(&client_msg.user) {
+async fn forward_message_to_collab_group<U>(
+  client_msg: &ClientMessage<U>,
+  client_streams: &Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
+) where
+  U: RealtimeUser,
+{
+  if let Some(client_stream) = client_streams.read().get(client_msg.user.user_id()) {
     tracing::trace!(
       "[CollabServer]: receives: [oid:{}|msg_id:{:?}]",
       client_msg.content.object_id(),
@@ -127,12 +153,16 @@ async fn forward_message_to_collab_group(
   }
 }
 
-async fn subscribe_collab_group_change_if_need(
-  client_msg: &ClientMessage,
-  groups: &Arc<CollabGroupCache>,
-  edit_collab_by_user: &Arc<RwLock<HashMap<Arc<RealtimeUser>, HashSet<EditCollab>>>>,
-  client_streams: &Arc<RwLock<HashMap<Arc<RealtimeUser>, RealtimeClientStream>>>,
-) -> Result<(), RealtimeError> {
+async fn subscribe_collab_group_change_if_need<U, S>(
+  client_msg: &ClientMessage<U>,
+  groups: &Arc<CollabGroupCache<S>>,
+  edit_collab_by_user: &Arc<RwLock<HashMap<i64, HashSet<EditCollab>>>>,
+  client_streams: &Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
+) -> Result<(), RealtimeError>
+where
+  U: RealtimeUser,
+  S: CollabStorage,
+{
   let object_id = client_msg.content.object_id();
   if !groups.read().contains_key(object_id) {
     // When create a group, the message must be the init sync message.
@@ -168,7 +198,7 @@ async fn subscribe_collab_group_change_if_need(
     return Ok(());
   }
 
-  match client_streams.write().get_mut(&client_msg.user) {
+  match client_streams.write().get_mut(client_msg.user.user_id()) {
     None => tracing::error!("🔴The client stream is not found"),
     Some(client_stream) => {
       if let Some(collab_group) = groups.write().get_mut(object_id) {
@@ -184,7 +214,7 @@ async fn subscribe_collab_group_change_if_need(
 
             edit_collab_by_user
               .write()
-              .entry(client_msg.user.clone())
+              .entry(*client_msg.user.user_id())
               .or_default()
               .insert(EditCollab {
                 object_id: object_id.to_string(),
@@ -209,7 +239,10 @@ async fn subscribe_collab_group_change_if_need(
   Ok(())
 }
 
-fn remove_user_from_group(groups: &Arc<CollabGroupCache>, edit_collab: &EditCollab) {
+fn remove_user_from_group<S>(groups: &Arc<CollabGroupCache<S>>, edit_collab: &EditCollab)
+where
+  S: CollabStorage,
+{
   let mut write_guard = groups.write();
 
   let should_remove_group = write_guard.get_mut(&edit_collab.object_id).map(|group| {
@@ -227,8 +260,11 @@ fn remove_user_from_group(groups: &Arc<CollabGroupCache>, edit_collab: &EditColl
   }
 }
 
-impl actix::Supervised for CollabServer {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer>) {
+impl<S> actix::Supervised for CollabManager<S>
+where
+  S: 'static + Unpin,
+{
+  fn restarting(&mut self, _ctx: &mut Context<CollabManager<S>>) {
     tracing::warn!("restarting");
   }
 }

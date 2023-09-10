@@ -4,7 +4,7 @@ use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+
 use storage::collab::{CollabStorage, RawData};
 use storage::entities::CreateCollabParams;
 use storage::error::StorageError;
@@ -13,15 +13,15 @@ use y_sync::awareness::Awareness;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
-pub struct CollabStoragePlugin {
+pub struct CollabStoragePlugin<S> {
   workspace_id: String,
-  storage: Arc<CollabStorage>,
+  storage: S,
   did_load: AtomicBool,
   update_count: AtomicU32,
 }
 
-impl CollabStoragePlugin {
-  pub fn new(workspace_id: &str, storage: Arc<CollabStorage>) -> Result<Self, RealtimeError> {
+impl<S> CollabStoragePlugin<S> {
+  pub fn new(workspace_id: &str, storage: S) -> Result<Self, RealtimeError> {
     let workspace_id = workspace_id.to_string();
     let did_load = AtomicBool::new(false);
     let update_count = AtomicU32::new(0);
@@ -45,7 +45,10 @@ fn init_collab_with_raw_data(raw_data: RawData, doc: &Doc) -> Result<(), Realtim
 }
 
 #[async_trait]
-impl CollabPlugin for CollabStoragePlugin {
+impl<S> CollabPlugin for CollabStoragePlugin<S>
+where
+  S: CollabStorage,
+{
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     match self.storage.get_collab(object_id).await {
       Ok(raw_data) => match init_collab_with_raw_data(raw_data, doc) {

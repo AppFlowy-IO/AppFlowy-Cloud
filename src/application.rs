@@ -3,7 +3,7 @@ use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::State;
+use crate::state::{State, Storage};
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -22,8 +22,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use realtime::core::CollabServer;
-use storage::collab::CollabStorage;
+use realtime::core::CollabManager;
+use storage::collab::{CollabStorage, CollabStoragePGImpl};
 use tracing_actix_web::TracingLogger;
 
 pub struct Application {
@@ -32,11 +32,18 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build(config: Config, state: State) -> Result<Self, anyhow::Error> {
+  pub async fn build<S>(
+    config: Config,
+    state: State,
+    storage: Storage<S>,
+  ) -> Result<Self, anyhow::Error>
+  where
+    S: CollabStorage + Unpin,
+  {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config).await?;
+    let server = run(listener, state, config, storage).await?;
 
     Ok(Self { port, server })
   }
@@ -50,11 +57,15 @@ impl Application {
   }
 }
 
-pub async fn run(
+pub async fn run<S>(
   listener: TcpListener,
   state: State,
   config: Config,
-) -> Result<Server, anyhow::Error> {
+  storage: Storage<S>,
+) -> Result<Server, anyhow::Error>
+where
+  S: CollabStorage + Unpin,
+{
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
     .map_err(|e| {
@@ -70,7 +81,7 @@ pub async fn run(
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server_addr = CollabServer::new(state.collab_storage.clone())
+  let collab_server = CollabManager::new(storage.collab_storage.clone())
     .unwrap()
     .start();
   let mut server = HttpServer::new(move || {
@@ -87,8 +98,9 @@ pub async fn run(
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())
       .service(ws_scope())
-      .app_data(Data::new(collab_server_addr.clone()))
+      .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
+      .app_data(Data::new(storage.clone()))
       .app_data(Data::new(gotrue::api::Client::new(
         reqwest::Client::new(),
         &config.gotrue.base_url)))
@@ -114,11 +126,9 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 
 pub async fn init_state(config: &Config) -> State {
   let pg_pool = get_connection_pool(&config.database).await;
-  let collab_storage = init_collab_storage(config, pg_pool.clone()).await;
 
   State {
     pg_pool,
-    collab_storage,
     config: Arc::new(config.clone()),
     user: Arc::new(Default::default()),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
@@ -152,14 +162,7 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
   builder
 }
 
-async fn init_collab_storage(_config: &Config, pg_pool: PgPool) -> Arc<CollabStorage> {
-  let storage = CollabStorage::new(pg_pool);
-  Arc::new(storage)
+pub async fn init_storage(_config: &Config, pg_pool: PgPool) -> Storage<CollabStoragePGImpl> {
+  let collab_storage = CollabStoragePGImpl::new(pg_pool);
+  Storage { collab_storage }
 }
-
-// fn add_error_header<B>(
-//   res: dev::ServiceResponse<B>,
-// ) -> Result<ErrorHandlerResponse<B>, actix_web::Error> {
-//   tracing::error!("{:?}", res.request());
-//   Ok(ErrorHandlerResponse::Response(res.map_into_left_body()))
-// }

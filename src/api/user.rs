@@ -8,7 +8,7 @@ use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
 use gotrue::models::{AccessTokenResponse, User};
-use shared_entity::data::{app_ok, app_ok_data, AppData};
+use shared_entity::data::{AppResponse, JsonAppResponse};
 
 use crate::component::auth::jwt::Authorization;
 use actix_web::web::{Data, Json};
@@ -36,32 +36,35 @@ async fn update_handler(
   auth: Authorization,
   req: Json<LoginRequest>,
   state: Data<State>,
-) -> Result<Json<AppData<User>>> {
+) -> Result<JsonAppResponse<User>> {
   let req = req.into_inner();
   let user =
     biz::user::update(&state.gotrue_client, &auth.token, &req.email, &req.password).await?;
-  Ok(Json(app_ok_data(user)))
+  Ok(AppResponse::Ok().with_data(user).into())
 }
 
-async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<Json<AppData<()>>> {
+async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<JsonAppResponse<()>> {
   state
     .gotrue_client
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
-  Ok(Json(app_ok()))
+  Ok(AppResponse::Ok().into())
 }
 
 async fn sign_in_password_handler(
   req: Json<LoginRequest>,
   state: Data<State>,
-) -> Result<Json<AppData<AccessTokenResponse>>> {
+) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
   let token = biz::user::sign_in(&state.gotrue_client, req.email, req.password).await?;
-  Ok(Json(app_ok_data(token)))
+  Ok(AppResponse::Ok().with_data(token).into())
 }
 
-async fn sign_up_handler(req: Json<LoginRequest>, state: Data<State>) -> Result<Json<AppData<()>>> {
+async fn sign_up_handler(
+  req: Json<LoginRequest>,
+  state: Data<State>,
+) -> Result<JsonAppResponse<()>> {
   biz::user::sign_up(
     &state.pg_pool,
     &state.gotrue_client,
@@ -69,7 +72,7 @@ async fn sign_up_handler(req: Json<LoginRequest>, state: Data<State>) -> Result<
     &req.password,
   )
   .await?;
-  Ok(Json(app_ok()))
+  Ok(AppResponse::Ok().into())
 }
 
 async fn login_handler(

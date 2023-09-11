@@ -8,13 +8,16 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use storage::collab::CollabStorage;
 
-pub struct CollabGroupCache {
+pub struct CollabGroupCache<S> {
   collab_group_by_object_id: RwLock<HashMap<String, CollabGroup>>,
-  storage: Arc<CollabStorage>,
+  storage: S,
 }
 
-impl CollabGroupCache {
-  pub fn new(storage: Arc<CollabStorage>) -> Self {
+impl<S> CollabGroupCache<S>
+where
+  S: CollabStorage + Clone,
+{
+  pub fn new(storage: S) -> Self {
     Self {
       collab_group_by_object_id: RwLock::new(HashMap::new()),
       storage,
@@ -54,7 +57,10 @@ impl CollabGroupCache {
   }
 }
 
-impl Deref for CollabGroupCache {
+impl<S> Deref for CollabGroupCache<S>
+where
+  S: CollabStorage,
+{
   type Target = RwLock<HashMap<String, CollabGroup>>;
 
   fn deref(&self) -> &Self::Target {
@@ -62,7 +68,10 @@ impl Deref for CollabGroupCache {
   }
 }
 
-impl DerefMut for CollabGroupCache {
+impl<S> DerefMut for CollabGroupCache<S>
+where
+  S: CollabStorage,
+{
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.collab_group_by_object_id
   }

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Identity {
@@ -80,6 +81,15 @@ pub struct AccessTokenResponse {
 pub struct OAuthError {
   pub error: String,
   pub error_description: Option<String>,
+}
+
+impl Display for OAuthError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self.error_description {
+      Some(ref desc) => write!(f, "{}: {}", self.error, desc),
+      None => write!(f, "{}", self.error),
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

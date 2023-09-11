@@ -13,3 +13,4 @@ serde_repr = "0.1.16"
 gotrue = { path = "../gotrue" }
 actix-web = { version = "4.4.0", default-features = false, features = ["http2"] }
 thiserror = "1.0.47"
+reqwest = "0.11.18"

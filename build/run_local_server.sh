@@ -32,4 +32,7 @@ fi
 # Kill any existing instances
 pkill -f appflowy_cloud || true
 
+# Run the migrations
+cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare
+
 cargo run

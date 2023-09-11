@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS af_user (
     email TEXT NOT NULL DEFAULT '' UNIQUE, -- not needed when authenticated with gotrue
     password TEXT NOT NULL DEFAULT '', -- not needed when authenticated with gotrue
     name TEXT NOT NULL DEFAULT '',
-    encryption_sign TEXT,
+    encryption_sign TEXT DEFAULT NULL, -- used to encrypt the user's data
     deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

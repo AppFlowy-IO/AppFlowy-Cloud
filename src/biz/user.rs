@@ -28,11 +28,8 @@ pub async fn sign_in(
 ) -> Result<AccessTokenResponse, AppError> {
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
-  storage::workspace::create_workspace_if_not_exists(
-    pg_pool,
-    uuid::Uuid::from_str(&token.user.id)?,
-  )
-  .await?;
+  storage::workspace::create_user_if_not_exists(pg_pool, uuid::Uuid::from_str(&token.user.id)?)
+    .await?;
   Ok(token)
 }
 

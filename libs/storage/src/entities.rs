@@ -28,7 +28,7 @@ impl CreateCollabParams {
 pub struct AfWorkspace {
   pub workspace_id: Uuid,
   pub database_storage_id: Option<Uuid>,
-  pub owner_uid: Option<Uuid>,
+  pub owner_uid: Option<i64>,
   pub created_at: Option<DateTime<Utc>>,
   pub workspace_type: i32,
   pub deleted_at: Option<DateTime<Utc>>,

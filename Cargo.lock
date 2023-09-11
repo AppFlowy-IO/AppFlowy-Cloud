@@ -832,6 +832,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -850,6 +851,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
 dependencies = [
  "anyhow",
  "collab",
@@ -861,6 +863,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
 dependencies = [
  "async-trait",
  "bincode",
@@ -881,6 +884,7 @@ dependencies = [
 [[package]]
 name = "collab-plugins"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -909,6 +913,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
 dependencies = [
  "bytes",
  "collab",
@@ -922,6 +927,7 @@ dependencies = [
 [[package]]
 name = "collab-ws"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
 dependencies = [
  "bytes",
  "collab-sync-protocol",

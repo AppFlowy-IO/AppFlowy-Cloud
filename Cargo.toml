@@ -75,6 +75,7 @@ collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
 client-api = { path = "libs/client-api" }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
+dotenv = "0.15.0"
 
 [[bin]]
 name = "appflowy_cloud"

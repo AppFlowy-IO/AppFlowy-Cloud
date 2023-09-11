@@ -1,4 +1,8 @@
 use serde::{Deserialize, Serialize};
+use sqlx::types::{
+  chrono::{DateTime, Utc},
+  uuid::Uuid,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCollabParams {
@@ -18,4 +22,15 @@ impl CreateCollabParams {
       workspace_id: workspace_id.to_string(),
     }
   }
+}
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct AfWorkspace {
+  pub workspace_id: Uuid,
+  pub database_storage_id: Option<Uuid>,
+  pub owner_uid: Option<Uuid>,
+  pub created_at: Option<DateTime<Utc>>,
+  pub workspace_type: i32,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub workspace_name: Option<String>,
 }

@@ -29,7 +29,7 @@ pub async fn sign_in(
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
   storage::workspace::create_workspace_if_not_exists(
-    pg_pool.clone(),
+    pg_pool,
     uuid::Uuid::from_str(&token.user.id)?,
   )
   .await?;

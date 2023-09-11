@@ -52,7 +52,15 @@ impl<T> AppResponse<T> {
   static_app_response!(InvalidPassword, ErrorCode::InvalidPassword);
   static_app_response!(OAuthError, ErrorCode::OAuthError);
 
-  pub fn into_inner(self) -> Result<Option<T>, AppError> {
+  pub fn split(self) -> (Option<T>, AppError) {
+    if self.code == ErrorCode::Ok {
+      (self.data, AppError::new(self.code, self.message))
+    } else {
+      (None, AppError::new(self.code, self.message))
+    }
+  }
+
+  pub fn into_data(self) -> Result<Option<T>, AppError> {
     if self.code == ErrorCode::Ok {
       Ok(self.data)
     } else {
@@ -141,5 +149,22 @@ impl From<AppResponse<()>> for Result<(), AppError> {
     } else {
       Err(AppError::new(value.code, value.message))
     }
+  }
+}
+
+impl<T> AppResponse<T>
+where
+  T: serde::de::DeserializeOwned + 'static,
+{
+  pub async fn from_response(resp: reqwest::Response) -> Result<Self, anyhow::Error> {
+    let status_code = resp.status();
+    if !status_code.is_success() {
+      let body = resp.text().await?;
+      anyhow::bail!("got error code: {}, body: {}", status_code, body)
+    }
+
+    let bytes = resp.bytes().await?;
+    let resp = serde_json::from_slice(&bytes)?;
+    Ok(resp)
   }
 }

@@ -4,7 +4,7 @@ use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
 
 use gotrue::models::{AccessTokenResponse, User};
-use infra::reqwest::from_response;
+
 use shared_entity::error::AppError;
 
 use shared_entity::server_error::ErrorCode;
@@ -35,8 +35,7 @@ impl Client {
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    let token: AppResponse<AccessTokenResponse> = from_response(resp).await?;
-    self.token = token.into_inner()?;
+    self.token = AppResponse::from_response(resp).await?.into_data()?;
     Ok(())
   }
 
@@ -47,8 +46,7 @@ impl Client {
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    let app_resp = from_response::<AppResponse<()>>(resp).await?;
-    app_resp.into()
+    AppResponse::<()>::from_response(resp).await?.into()
   }
 
   pub async fn sign_out(&self) -> Result<(), AppError> {
@@ -57,8 +55,7 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)?
       .send()
       .await?;
-    let res: AppResponse<()> = from_response(resp).await?;
-    res.into()
+    AppResponse::<()>::from_response(resp).await?.into()
   }
 
   pub async fn update(&mut self, email: &str, password: &str) -> Result<(), AppError> {
@@ -72,9 +69,9 @@ impl Client {
       .json(&payload)
       .send()
       .await?;
-    let new_user: AppResponse<User> = from_response(resp).await?;
-    let new_user = new_user
-      .into_inner()?
+    let new_user = AppResponse::<User>::from_response(resp)
+      .await?
+      .into_data()?
       .ok_or::<Error>(ErrorCode::Unhandled.into())?;
     if let Some(t) = self.token.as_mut() {
       t.user = new_user;

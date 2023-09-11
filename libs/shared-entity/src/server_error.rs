@@ -13,6 +13,9 @@ pub enum ErrorCode {
   #[error("An unhandled error occurred.")]
   Unhandled = -1,
 
+  #[error("Record not found")]
+  RecordNotFound = -2,
+
   #[error("Invalid email format.")]
   InvalidEmail = 1001,
 

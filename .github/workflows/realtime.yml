@@ -27,5 +27,5 @@ jobs:
             AppFlowy-Cloud/libs/realtime
 
       - name: Tests
-        working-directory: AppFlowy-Cloud/libs/realtime
+        working-directory: libs/realtime
         run: cargo test

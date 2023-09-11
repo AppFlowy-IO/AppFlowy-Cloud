@@ -5,6 +5,7 @@ use shared_entity::data::AppResponse;
 
 use gotrue::models::{AccessTokenResponse, User};
 use infra::reqwest::from_response;
+use shared_entity::error::AppError;
 
 use shared_entity::server_error::ErrorCode;
 
@@ -27,7 +28,7 @@ impl Client {
     self.token.as_ref()
   }
 
-  pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), Error> {
+  pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_in/password", self.base_url);
     let payload = serde_json::json!({
         "email": email,
@@ -39,31 +40,28 @@ impl Client {
     Ok(())
   }
 
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), Error> {
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_up", self.base_url);
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    let res: AppResponse<()> = from_response(resp).await?;
-    match res.into_error() {
-      None => Ok(()),
-      Some(e) => Err(e.into()),
-    }
+    let app_resp = from_response::<AppResponse<()>>(resp).await?;
+    app_resp.into()
   }
 
-  pub async fn sign_out(&self) -> Result<AppResponse<()>, Error> {
+  pub async fn sign_out(&self) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_out", self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)?
       .send()
       .await?;
     let res: AppResponse<()> = from_response(resp).await?;
-    Ok(res)
+    res.into()
   }
 
-  pub async fn update(&mut self, email: &str, password: &str) -> Result<(), Error> {
+  pub async fn update(&mut self, email: &str, password: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/update", self.base_url);
     let payload = serde_json::json!({
         "email": email,

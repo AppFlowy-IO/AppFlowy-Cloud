@@ -11,5 +11,5 @@ serde_json = "1.0.105"
 futures-util = "0.3.8"
 anyhow = "1.0.75"
 reqwest = { version = "0.11.20", default-features = false, features = ["json", "rustls-tls", "cookies"] }
-tokio = { version = "1.0.1", features = ["sync"] }
+tokio = { version = "1.0.1", features = ["sync", "macros"] }
 infra = { path = "../infra" }

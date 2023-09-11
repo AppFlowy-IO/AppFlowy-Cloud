@@ -57,4 +57,6 @@ async fn sign_in_success() {
     .unwrap();
   let token = c.token().unwrap();
   assert!(token.user.confirmed_at.is_some());
+
+  // TODO: check that workspace is created for user
 }

@@ -35,18 +35,17 @@ pub fn user_scope() -> Scope {
 async fn update_handler(
   auth: Authorization,
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::api::Client>,
-) -> Result<Json<AppResponse<User>>> {
+  state: Data<State>,
+) -> Result<JsonAppResponse<User>> {
   let req = req.into_inner();
-  let user = biz::user::update(&gotrue_client, &auth.token, &req.email, &req.password).await?;
+  let user =
+    biz::user::update(&state.gotrue_client, &auth.token, &req.email, &req.password).await?;
   Ok(AppResponse::Ok().with_data(user).into())
 }
 
-async fn sign_out_handler(
-  auth: Authorization,
-  gotrue_client: Data<gotrue::api::Client>,
-) -> Result<JsonAppResponse<()>> {
-  gotrue_client
+async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<JsonAppResponse<()>> {
+  state
+    .gotrue_client
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
@@ -55,18 +54,24 @@ async fn sign_out_handler(
 
 async fn sign_in_password_handler(
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::api::Client>,
+  state: Data<State>,
 ) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
-  let token = biz::user::sign_in(&gotrue_client, req.email, req.password).await?;
+  let token = biz::user::sign_in(
+    &state.pg_pool,
+    &state.gotrue_client,
+    req.email,
+    req.password,
+  )
+  .await?;
   Ok(AppResponse::Ok().with_data(token).into())
 }
 
 async fn sign_up_handler(
   req: Json<LoginRequest>,
-  gotrue_client: Data<gotrue::api::Client>,
+  state: Data<State>,
 ) -> Result<JsonAppResponse<()>> {
-  biz::user::sign_up(&gotrue_client, &req.email, &req.password).await?;
+  biz::user::sign_up(&state.gotrue_client, &req.email, &req.password).await?;
   Ok(AppResponse::Ok().into())
 }
 

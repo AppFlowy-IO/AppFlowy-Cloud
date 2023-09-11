@@ -6,6 +6,7 @@ use actix_web::{http::StatusCode, HttpResponse};
 use gotrue::models::{GoTrueError, OAuthError};
 use serde::{Deserialize, Serialize};
 use sqlx::types::uuid;
+use serde_json::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
@@ -43,9 +44,10 @@ impl actix_web::error::ResponseError for AppError {
 //
 impl From<anyhow::Error> for AppError {
   fn from(err: anyhow::Error) -> Self {
-    err
-      .downcast::<AppError>()
-      .unwrap_or(ErrorCode::Unhandled.into())
+    match err.downcast_ref::<AppError>() {
+      None => AppError::new(ErrorCode::Unhandled, err.to_string()),
+      Some(err) => err.clone(),
+    }
   }
 }
 
@@ -83,5 +85,17 @@ impl From<uuid::Error> for AppError {
 impl From<sqlx::Error> for AppError {
   fn from(err: sqlx::Error) -> Self {
     AppError::new(ErrorCode::Unhandled, format!("sqlx error: {}", err))
+  }
+}
+
+impl From<reqwest::Error> for AppError {
+  fn from(value: reqwest::Error) -> Self {
+    AppError::new(ErrorCode::Unhandled, value.to_string())
+  }
+}
+
+impl From<serde_json::Error> for AppError {
+  fn from(value: Error) -> Self {
+    AppError::new(ErrorCode::Unhandled, value.to_string())
   }
 }

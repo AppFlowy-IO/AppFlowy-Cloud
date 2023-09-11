@@ -125,7 +125,7 @@ impl CollabBroadcast {
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: std::error::Error + Send + Sync + 'static,
   {
-    tracing::trace!("[💭Server]: new subscriber");
+    tracing::trace!("[💭Server]: new subscriber: {}", origin);
     let sink = Arc::new(Mutex::new(sink));
     // Receive a update from the document observer and forward the applied update to all
     // connected subscribers using its Sink.

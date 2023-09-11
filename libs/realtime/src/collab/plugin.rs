@@ -4,6 +4,7 @@ use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 
 use storage::collab::{CollabStorage, RawData};
 use storage::entities::CreateCollabParams;
@@ -15,7 +16,7 @@ use yrs::{ReadTxn, StateVector, Transact, Update};
 
 pub struct CollabStoragePlugin<S> {
   workspace_id: String,
-  storage: S,
+  storage: Arc<S>,
   did_load: AtomicBool,
   update_count: AtomicU32,
 }
@@ -27,7 +28,7 @@ impl<S> CollabStoragePlugin<S> {
     let update_count = AtomicU32::new(0);
     Ok(Self {
       workspace_id,
-      storage,
+      storage: Arc::new(storage),
       did_load,
       update_count,
     })
@@ -83,15 +84,26 @@ where
     self.did_load.store(true, Ordering::SeqCst);
   }
 
-  fn receive_update(&self, object_id: &str, _txn: &TransactionMut, update: &[u8]) {
+  fn receive_update(&self, object_id: &str, txn: &TransactionMut, update: &[u8]) {
     if !self.did_load.load(Ordering::SeqCst) {
       return;
     }
     tracing::trace!("🔵Receive {} update with len: {}", object_id, update.len());
-    let update_count = self.update_count.fetch_add(1, Ordering::SeqCst);
-    if update_count > 100 {
-      // Save the collab to disk
-    }
+    let _ = self.update_count.fetch_add(1, Ordering::SeqCst);
+    let workspace_id = self.workspace_id.clone();
+    let object_id = object_id.to_string();
+    let update = txn.encode_state_as_update_v1(&StateVector::default());
+
+    let weak_storage = Arc::downgrade(&self.storage);
+    tokio::spawn(async move {
+      if let Some(storage) = weak_storage.upgrade() {
+        let params = CreateCollabParams::from_raw_data(&object_id, update, &workspace_id);
+        match storage.update_collab(&object_id, params.raw_data).await {
+          Ok(_) => {},
+          Err(err) => tracing::error!("🔴Update collab failed: {:?}", err),
+        }
+      }
+    });
   }
 
   fn flush(&self, object_id: &str, _update: &[u8]) {

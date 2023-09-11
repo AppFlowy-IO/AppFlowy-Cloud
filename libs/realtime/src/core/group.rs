@@ -43,7 +43,7 @@ where
   async fn init_group(&self, workspace_id: &str, object_id: &str) -> CollabGroup {
     tracing::trace!("Create new group for object_id:{}", object_id);
 
-    let collab = MutexCollab::new(CollabOrigin::Empty, object_id, vec![]);
+    let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
     let plugin = CollabStoragePlugin::new(workspace_id, self.storage.clone()).unwrap();
     collab.lock().add_plugin(Arc::new(plugin));
     collab.async_initialize().await;

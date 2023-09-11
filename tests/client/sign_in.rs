@@ -12,8 +12,9 @@ async fn sign_in_unknown_user() {
   let email = generate_unique_email();
   let password = "Hello123!";
   let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
-  let resp = c.sign_in_password(&email, password).await;
-  assert_eq!(ErrorCode::from(resp.unwrap_err()), ErrorCode::OAuthError);
+  let err = c.sign_in_password(&email, password).await.unwrap_err();
+  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert!(!err.message.is_empty());
 }
 
 #[tokio::test]
@@ -26,8 +27,12 @@ async fn sign_in_wrong_password() {
   c.sign_up(&email, password).await.unwrap();
 
   let wrong_password = "Hllo123!";
-  let resp = c.sign_in_password(&email, wrong_password).await;
-  assert_eq!(ErrorCode::from(resp.unwrap_err()), ErrorCode::OAuthError);
+  let err = c
+    .sign_in_password(&email, wrong_password)
+    .await
+    .unwrap_err();
+  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert!(!err.message.is_empty());
 }
 
 #[tokio::test]
@@ -39,9 +44,9 @@ async fn sign_in_unconfirmed_email() {
 
   c.sign_up(&email, password).await.unwrap();
 
-  let resp = c.sign_in_password(&email, password).await;
-  assert!(resp.is_err());
-  assert_eq!(ErrorCode::from(resp.unwrap_err()), ErrorCode::OAuthError);
+  let err = c.sign_in_password(&email, password).await.unwrap_err();
+  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert!(!err.message.is_empty());
 }
 
 #[tokio::test]

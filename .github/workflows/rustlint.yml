@@ -10,6 +10,7 @@ on:
 env:
   SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"
+  SQLX_OFFLINE: true
 
 jobs:
   test:
@@ -42,4 +43,4 @@ jobs:
         run: cargo fmt --check
 
       - name: Clippy
-        run: SQLX_OFFLINE=true cargo clippy -- -D warnings
+        run: cargo clippy -- -D warnings

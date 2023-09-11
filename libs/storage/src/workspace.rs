@@ -1,6 +1,9 @@
-use sqlx::{types::uuid, PgPool};
+use sqlx::{
+  types::{uuid, Uuid},
+  PgPool,
+};
 
-use crate::entities::AfWorkspace;
+use crate::entities::{AfUserProfileView, AfWorkspace};
 
 pub async fn create_user_if_not_exists(
   pool: &PgPool,
@@ -33,5 +36,21 @@ pub async fn select_all_workspaces_owned(
     owner_uid
   )
   .fetch_all(pool)
+  .await
+}
+
+pub async fn select_user_profile_view_by_uuid(
+  pool: &PgPool,
+  gotrue_uuid: Uuid,
+) -> Result<Option<AfUserProfileView>, sqlx::Error> {
+  sqlx::query_as!(
+    AfUserProfileView,
+    r#"
+        SELECT *
+        FROM public.af_user_profile_view WHERE uuid = $1
+        "#,
+    gotrue_uuid
+  )
+  .fetch_optional(pool)
   .await
 }

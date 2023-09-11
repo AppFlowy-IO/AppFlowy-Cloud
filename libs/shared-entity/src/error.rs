@@ -5,6 +5,7 @@ use crate::server_error::ErrorCode;
 use actix_web::{http::StatusCode, HttpResponse};
 use gotrue::models::{GoTrueError, OAuthError};
 use serde::{Deserialize, Serialize};
+use sqlx::types::uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {

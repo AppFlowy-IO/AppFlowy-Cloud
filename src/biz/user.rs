@@ -11,7 +11,7 @@ use shared_entity::{error::AppError, server_error};
 use validator::validate_email;
 
 use crate::domain::validate_password;
-use sqlx::PgPool;
+use sqlx::{types::uuid, PgPool};
 
 pub async fn sign_up(gotrue_client: &Client, email: &str, password: &str) -> Result<(), AppError> {
   validate_email_password(email, password)?;

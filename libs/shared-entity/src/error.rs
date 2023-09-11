@@ -72,3 +72,15 @@ impl From<ErrorCode> for AppError {
     AppError::new(value, value.to_string())
   }
 }
+
+impl From<uuid::Error> for AppError {
+  fn from(err: uuid::Error) -> Self {
+    AppError::new(ErrorCode::Unhandled, format!("uuid error: {}", err))
+  }
+}
+
+impl From<sqlx::Error> for AppError {
+  fn from(err: sqlx::Error) -> Self {
+    AppError::new(ErrorCode::Unhandled, format!("sqlx error: {}", err))
+  }
+}

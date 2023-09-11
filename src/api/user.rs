@@ -57,7 +57,13 @@ async fn sign_in_password_handler(
   state: Data<State>,
 ) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
-  let token = biz::user::sign_in(&state.gotrue_client, req.email, req.password).await?;
+  let token = biz::user::sign_in(
+    &state.pg_pool,
+    &state.gotrue_client,
+    req.email,
+    req.password,
+  )
+  .await?;
   Ok(AppResponse::Ok().with_data(token).into())
 }
 
@@ -65,13 +71,7 @@ async fn sign_up_handler(
   req: Json<LoginRequest>,
   state: Data<State>,
 ) -> Result<JsonAppResponse<()>> {
-  biz::user::sign_up(
-    &state.pg_pool,
-    &state.gotrue_client,
-    &req.email,
-    &req.password,
-  )
-  .await?;
+  biz::user::sign_up(&state.gotrue_client, &req.email, &req.password).await?;
   Ok(AppResponse::Ok().into())
 }
 

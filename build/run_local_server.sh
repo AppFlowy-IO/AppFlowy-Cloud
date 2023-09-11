@@ -29,6 +29,11 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   exit 1
 fi
 
+until curl localhost:9998/health; do
+  >&2 echo "Waiting on GoTrue"
+  sleep 1
+done
+
 # Kill any existing instances
 pkill -f appflowy_cloud || true
 

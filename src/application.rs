@@ -134,11 +134,18 @@ pub async fn init_state(config: &Config) -> State {
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
-  PgPoolOptions::new()
+  let pool = PgPoolOptions::new()
     .acquire_timeout(std::time::Duration::from_secs(5))
     .connect_with(setting.with_db())
     .await
-    .expect("Failed to connect to Postgres")
+    .expect("Failed to connect to Postgres");
+
+  sqlx::migrate!("./migrations")
+    .run(&pool)
+    .await
+    .expect("Failed to run migrations");
+
+  todo!()
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {

@@ -3,7 +3,8 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- user table
 CREATE TABLE IF NOT EXISTS af_user (
-    uid UUID PRIMARY KEY, -- related to gotrue user when authenticated
+    uid BIGSERIAL PRIMARY KEY,
+    uuid UUID NOT NULL, -- related to gotrue
     email TEXT NOT NULL DEFAULT '' UNIQUE, -- not needed when authenticated with gotrue
     password TEXT NOT NULL DEFAULT '', -- not needed when authenticated with gotrue
     name TEXT NOT NULL DEFAULT '',

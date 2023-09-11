@@ -16,8 +16,8 @@ pub struct Credentials {
 pub async fn validate_credentials(
   credentials: Credentials,
   pool: &PgPool,
-) -> Result<uuid::Uuid, AuthError> {
-  let mut uid: Option<uuid::Uuid> = None;
+) -> Result<i64, AuthError> {
+  let mut uid = None;
   let mut expected_hash_password = Secret::new(
     "$argon2id$v=19$m=15000,t=2,p=1$\
         gZiV/M1gPc22ElAH/Jh1Hw$\
@@ -59,7 +59,7 @@ pub fn compute_hash_password(password: &[u8]) -> Result<Secret<String>, anyhow::
 async fn get_stored_credentials(
   email: &str,
   pool: &PgPool,
-) -> Result<Option<(uuid::Uuid, Secret<String>)>, anyhow::Error> {
+) -> Result<Option<(i64, Secret<String>)>, anyhow::Error> {
   let row = sqlx::query!(
     r#"
         SELECT uid, password

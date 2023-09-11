@@ -27,9 +27,9 @@ pub struct CollabManager<S> {
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S>>,
   /// Keep track of all object ids that a user is subscribed to
-  edit_collab_by_user: Arc<RwLock<HashMap<uuid::Uuid, HashSet<EditCollab>>>>,
+  edit_collab_by_user: Arc<RwLock<HashMap<i64, HashSet<EditCollab>>>>,
   /// Keep track of all client streams
-  client_stream_by_user: Arc<RwLock<HashMap<uuid::Uuid, RealtimeClientStream>>>,
+  client_stream_by_user: Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
 }
 
 impl<S> CollabManager<S>
@@ -133,7 +133,7 @@ where
 
 async fn forward_message_to_collab_group<U>(
   client_msg: &ClientMessage<U>,
-  client_streams: &Arc<RwLock<HashMap<uuid::Uuid, RealtimeClientStream>>>,
+  client_streams: &Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
 ) where
   U: RealtimeUser,
 {
@@ -156,8 +156,8 @@ async fn forward_message_to_collab_group<U>(
 async fn subscribe_collab_group_change_if_need<U, S>(
   client_msg: &ClientMessage<U>,
   groups: &Arc<CollabGroupCache<S>>,
-  edit_collab_by_user: &Arc<RwLock<HashMap<uuid::Uuid, HashSet<EditCollab>>>>,
-  client_streams: &Arc<RwLock<HashMap<uuid::Uuid, RealtimeClientStream>>>,
+  edit_collab_by_user: &Arc<RwLock<HashMap<i64, HashSet<EditCollab>>>>,
+  client_streams: &Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
 ) -> Result<(), RealtimeError>
 where
   U: RealtimeUser,

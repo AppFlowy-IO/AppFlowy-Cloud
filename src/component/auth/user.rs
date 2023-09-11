@@ -72,8 +72,7 @@ pub async fn register(
     return Err(AuthError::UserAlreadyExist { email });
   }
 
-  // let uid = state.id_gen.write().await.next_id();
-  let uid = uuid::Uuid::new_v4();
+  let uid = state.id_gen.write().await.next_id();
   let token = Token::create_token(uid, server_key)?;
   let password = compute_hash_password(password.as_bytes()).map_err(internal_error)?;
   let _ = sqlx::query!(
@@ -150,7 +149,7 @@ pub async fn change_password(
 }
 
 pub async fn get_user_email(
-  uid: uuid::Uuid,
+  uid: i64,
   transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<String, anyhow::Error> {
   let row = sqlx::query!(
@@ -212,14 +211,14 @@ pub struct ChangePasswordRequest {
 }
 
 #[derive(Clone, Default)]
-pub struct SecretUuid(uuid::Uuid);
-impl Copy for SecretUuid {}
-impl DefaultIsZeroes for SecretUuid {}
-impl DebugSecret for SecretUuid {}
-impl CloneableSecret for SecretUuid {}
+pub struct SecretI64(i64);
+impl Copy for SecretI64 {}
+impl DefaultIsZeroes for SecretI64 {}
+impl DebugSecret for SecretI64 {}
+impl CloneableSecret for SecretI64 {}
 
-impl std::ops::Deref for SecretUuid {
-  type Target = uuid::Uuid;
+impl std::ops::Deref for SecretI64 {
+  type Target = i64;
 
   fn deref(&self) -> &Self::Target {
     &self.0
@@ -227,17 +226,17 @@ impl std::ops::Deref for SecretUuid {
 }
 
 #[derive(Debug, Clone)]
-pub struct LoggedUser(Secret<SecretUuid>);
+pub struct LoggedUser(Secret<SecretI64>);
 
 impl From<Claim> for LoggedUser {
   fn from(c: Claim) -> Self {
-    Self(Secret::new(SecretUuid(c.uid)))
+    Self(Secret::new(SecretI64(c.uid)))
   }
 }
 
 impl LoggedUser {
-  pub fn new(uid: uuid::Uuid) -> Self {
-    Self(Secret::new(SecretUuid(uid)))
+  pub fn new(uid: i64) -> Self {
+    Self(Secret::new(SecretI64(uid)))
   }
 
   pub fn from_token(server_key: &Secret<String>, token: &str) -> Result<Self, AuthError> {
@@ -245,7 +244,7 @@ impl LoggedUser {
     Ok(user)
   }
 
-  pub fn expose_secret(&self) -> &uuid::Uuid {
+  pub fn expose_secret(&self) -> &i64 {
     self.0.expose_secret()
   }
 }
@@ -278,11 +277,11 @@ pub const EXPIRED_DURATION_DAYS: i64 = 30;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claim {
   iss: String,
-  uid: uuid::Uuid,
+  uid: i64,
 }
 
 impl Claim {
-  pub fn with_user_id(uid: uuid::Uuid) -> Self {
+  pub fn with_user_id(uid: i64) -> Self {
     Self { iss: domain(), uid }
   }
 }
@@ -297,7 +296,7 @@ impl Zeroize for Token {
 }
 
 impl Token {
-  pub fn create_token(uid: uuid::Uuid, server_key: &Secret<String>) -> Result<Self, AuthError> {
+  pub fn create_token(uid: i64, server_key: &Secret<String>) -> Result<Self, AuthError> {
     let claim = Claim::with_user_id(uid);
     let token = create_token(
       server_key.expose_secret().as_str(),

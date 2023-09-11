@@ -44,7 +44,7 @@ pub const EXPIRED_DURATION_DAYS: i64 = 30;
 #[derive(Debug, Default)]
 pub struct UserCache {
   // Keep track the user authentication state
-  user: BTreeMap<uuid::Uuid, AuthStatus>,
+  user: BTreeMap<i64, AuthStatus>,
 }
 
 impl UserCache {

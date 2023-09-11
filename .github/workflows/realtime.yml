@@ -1,0 +1,33 @@
+name: Realtime
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "libs/realtime/**"
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ main ]
+    paths:
+      - "libs/realtime/**"
+
+
+jobs:
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            AppFlowy-Cloud/libs/realtime
+
+      - name: Tests
+        run: cargo test
+        with:
+          workspaces: |
+            AppFlowy-Cloud/libs/realtime

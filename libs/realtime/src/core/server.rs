@@ -63,7 +63,7 @@ where
   type Result = Result<(), RealtimeError>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    tracing::trace!("[CollabServer]: {} connect", new_conn.user);
+    tracing::trace!("[💭Server]: {} connect", new_conn.user);
 
     let stream = RealtimeClientStream::new(ClientWebsocketSink(new_conn.socket));
     self
@@ -82,7 +82,7 @@ where
 {
   type Result = Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    tracing::trace!("[CollabServer]: {} disconnect", msg.user);
+    tracing::trace!("[💭Server]: {} disconnect", msg.user);
     self
       .client_stream_by_user
       .write()
@@ -139,7 +139,7 @@ async fn forward_message_to_collab_group<U>(
 {
   if let Some(client_stream) = client_streams.read().get(client_msg.user.user_id()) {
     tracing::trace!(
-      "[CollabServer]: receives: [oid:{}|msg_id:{:?}]",
+      "[💭Server]: receives: [oid:{}|msg_id:{:?}]",
       client_msg.content.object_id(),
       client_msg.content.msg_id()
     );
@@ -148,7 +148,9 @@ async fn forward_message_to_collab_group<U>(
       .send(Ok(RealtimeMessage::from(client_msg.clone())))
     {
       Ok(_) => {},
-      Err(e) => tracing::error!("🔴send error: {:?}", e),
+      Err(e) => {
+        tracing::error!("🔴send error: {}", e)
+      },
     }
   }
 }
@@ -192,7 +194,7 @@ where
   if groups
     .read()
     .get(object_id)
-    .map(|group| group.subscribers.get(origin))
+    .and_then(|group| group.subscribers.get(origin))
     .is_some()
   {
     return Ok(());
@@ -207,7 +209,7 @@ where
           .entry(origin.clone())
           .or_insert_with(|| {
             tracing::trace!(
-              "[CollabServer]: {} subscribe group:{}",
+              "[💭Server]: {} subscribe group:{}",
               client_msg.user,
               client_msg.content.object_id()
             );

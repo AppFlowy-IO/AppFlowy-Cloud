@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::net::TcpListener;
 
@@ -15,18 +16,25 @@ use realtime::core::{CollabManager, CollabSession};
 use realtime::entities::RealtimeUser;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use std::time::Duration;
+use tokio::sync::RwLock;
 
 use crate::util::log::{get_subscriber, init_subscriber};
 use storage::collab::{CollabStorage, RawData};
 use storage::entities::CreateCollabParams;
+use storage::error::StorageError;
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
-  let level = "trace".to_string();
+  let level = "info".to_string();
   let mut filters = vec![];
   filters.push(format!("actix_web={}", level));
+  filters.push(format!("collab={}", level));
+  filters.push(format!("collab_sync={}", level));
+  filters.push(format!("collab_plugins={}", level));
+  filters.push(format!("realtime={}", level));
 
   let subscriber_name = "test".to_string();
   let subscriber = get_subscriber(subscriber_name, filters.join(","), std::io::stdout);
@@ -47,10 +55,9 @@ impl TestServer {
   pub async fn get_doc(&self, object_id: &str) -> serde_json::Value {
     let raw_data = self.storage.get_collab(object_id).await.unwrap();
     let collab =
-      MutexCollab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![raw_data], vec![])
+      MutexCollab::new_with_raw_data(CollabOrigin::Server, object_id, vec![raw_data], vec![])
         .unwrap();
     collab.async_initialize().await;
-
     collab.to_json_value()
   }
 }
@@ -59,7 +66,7 @@ pub async fn spawn_server() -> TestServer {
   Lazy::force(&TRACING);
   let config = Config::default();
   let state = init_state(config.clone()).await;
-  let storage = CollabStorageMemoryImpl {};
+  let storage = CollabStorageMemoryImpl::default();
   let application = Application::build(config, state.clone(), storage.clone())
     .await
     .expect("Failed to build application");
@@ -72,14 +79,7 @@ pub async fn spawn_server() -> TestServer {
   let address = format!("http://localhost:{}", port);
   let ws_addr = format!("ws://localhost:{}/ws", port);
 
-  let api_client = builder
-    .redirect(reqwest::redirect::Policy::none())
-    .danger_accept_invalid_certs(true)
-    .cookie_store(true)
-    .no_proxy()
-    .build()
-    .unwrap();
-
+  let api_client = builder.no_proxy().build().unwrap();
   TestServer {
     state,
     storage,
@@ -97,7 +97,7 @@ pub struct Cleaner {
 }
 
 impl Cleaner {
-  fn new(path: PathBuf) -> Self {
+  pub(crate) fn new(path: PathBuf) -> Self {
     Self {
       path,
       should_clean: true,
@@ -190,7 +190,8 @@ impl Default for Config {
   fn default() -> Self {
     Self {
       application: ApplicationSetting {
-        port: 8000,
+        // Use a random OS port
+        port: 0,
         host: "0.0.0.0".to_string(),
         server_key: "".to_string(),
       },
@@ -210,8 +211,8 @@ pub struct ApplicationSetting {
 pub struct State {
   pub config: Config,
 }
-pub async fn init_state(_config: Config) -> State {
-  todo!()
+pub async fn init_state(config: Config) -> State {
+  State { config }
 }
 
 #[get("/{token}")]
@@ -258,28 +259,55 @@ impl RealtimeUser for TestLoggedUser {
   }
 }
 
-#[derive(Clone)]
-pub struct CollabStorageMemoryImpl {}
+#[derive(Clone, Default)]
+pub struct CollabStorageMemoryImpl {
+  collab_data_by_object_id: Arc<RwLock<HashMap<String, RawData>>>,
+}
 
 #[async_trait]
 impl CollabStorage for CollabStorageMemoryImpl {
-  async fn is_exist(&self, _object_id: &str) -> bool {
-    todo!()
+  async fn is_exist(&self, object_id: &str) -> bool {
+    self
+      .collab_data_by_object_id
+      .read()
+      .await
+      .contains_key(object_id)
   }
 
-  async fn create_collab(&self, _params: CreateCollabParams) -> storage::collab::Result<()> {
-    todo!()
+  async fn create_collab(&self, params: CreateCollabParams) -> storage::collab::Result<()> {
+    self
+      .collab_data_by_object_id
+      .write()
+      .await
+      .insert(params.object_id.to_string(), params.raw_data);
+    Ok(())
   }
 
-  async fn update_collab(&self, _object_id: &str, _data: RawData) -> storage::collab::Result<()> {
-    todo!()
+  async fn update_collab(&self, object_id: &str, data: RawData) -> storage::collab::Result<()> {
+    self
+      .collab_data_by_object_id
+      .write()
+      .await
+      .insert(object_id.to_string(), data);
+    Ok(())
   }
 
-  async fn get_collab(&self, _object_id: &str) -> storage::collab::Result<RawData> {
-    todo!()
+  async fn get_collab(&self, object_id: &str) -> storage::collab::Result<RawData> {
+    self
+      .collab_data_by_object_id
+      .read()
+      .await
+      .get(object_id)
+      .cloned()
+      .ok_or(StorageError::RecordNotFound)
   }
 
-  async fn delete_collab(&self, _object_id: &str) -> storage::collab::Result<()> {
-    todo!()
+  async fn delete_collab(&self, object_id: &str) -> storage::collab::Result<()> {
+    self
+      .collab_data_by_object_id
+      .write()
+      .await
+      .remove(object_id);
+    Ok(())
   }
 }

@@ -63,7 +63,7 @@ async fn get_stored_credentials(
   let row = sqlx::query!(
     r#"
         SELECT uid, password
-        FROM af_user 
+        FROM af_user
         WHERE email = $1
         "#,
     email,

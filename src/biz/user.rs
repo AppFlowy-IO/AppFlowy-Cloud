@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::Result;
 use gotrue::{
   api::Client,
@@ -9,25 +11,25 @@ use shared_entity::{error::AppError, server_error};
 use validator::validate_email;
 
 use crate::domain::validate_password;
+use sqlx::{types::uuid, PgPool};
 
 pub async fn sign_up(gotrue_client: &Client, email: &str, password: &str) -> Result<(), AppError> {
   validate_email_password(email, password)?;
-
   let user = gotrue_client.sign_up(email, password).await??;
-  tracing::info!("user: {:?}", user);
-
-  // TODO: set up workspace for new user
-
+  tracing::info!("user sign up: {:?}", user);
   Ok(())
 }
 
 pub async fn sign_in(
+  pg_pool: &PgPool,
   gotrue_client: &Client,
   email: String,
   password: String,
 ) -> Result<AccessTokenResponse, AppError> {
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
+  storage::workspace::create_user_if_not_exists(pg_pool, uuid::Uuid::from_str(&token.user.id)?)
+    .await?;
   Ok(token)
 }
 

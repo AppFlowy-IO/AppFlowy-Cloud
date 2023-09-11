@@ -15,6 +15,7 @@ pub struct State {
   pub config: Arc<Config>,
   pub user: Arc<RwLock<UserCache>>,
   pub id_gen: Arc<RwLock<Snowflake>>,
+  pub gotrue_client: gotrue::api::Client,
 }
 
 impl State {

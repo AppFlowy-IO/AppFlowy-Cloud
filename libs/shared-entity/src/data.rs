@@ -142,10 +142,16 @@ where
   }
 }
 
-impl From<AppResponse<()>> for Result<(), AppError> {
-  fn from(value: AppResponse<()>) -> Self {
+impl<T> From<AppResponse<T>> for Result<T, AppError> {
+  fn from(value: AppResponse<T>) -> Self {
     if matches!(value.code, ErrorCode::Ok) {
-      Ok(())
+      match value.data {
+        None => Err(AppError::new(
+          ErrorCode::MissingPayload,
+          "missing payload".to_string(),
+        )),
+        Some(data) => Ok(data),
+      }
     } else {
       Err(AppError::new(value.code, value.message))
     }

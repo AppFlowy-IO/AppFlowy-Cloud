@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use realtime::core::CollabManager;
+use realtime::core::CollabServer;
 use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use tracing_actix_web::TracingLogger;
 
@@ -81,18 +81,17 @@ where
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server = CollabManager::new(storage.collab_storage.clone())
+  let collab_server = CollabServer::new(storage.collab_storage.clone())
     .unwrap()
     .start();
   let mut server = HttpServer::new(move || {
     App::new()
+      .wrap(IdentityMiddleware::default())
       .wrap(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
           .cookie_name(HEADER_TOKEN.to_string())
           .build(),
       )
-      // .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, add_error_header))
-      .wrap(IdentityMiddleware::default())
       .wrap(default_cors())
       .wrap(TracingLogger::default())
       .app_data(web::JsonConfig::default().limit(4096))
@@ -101,6 +100,7 @@ where
       .service(collab_scope())
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
+      .app_data(Data::new(storage.clone()))
   });
 
   server = match pair {

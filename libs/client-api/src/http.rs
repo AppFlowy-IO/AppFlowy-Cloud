@@ -8,9 +8,10 @@ use gotrue::models::{AccessTokenResponse, User};
 use shared_entity::error::AppError;
 
 use shared_entity::server_error::ErrorCode;
-use storage::entities::AFUserProfileView;
-use storage::entities::AFWorkspace;
+use storage::collab::RawData;
 use storage::entities::AFWorkspaces;
+use storage::entities::{AFUserProfileView, InsertCollabParams};
+use storage::entities::{AFWorkspace, DeleteCollabParams};
 
 pub struct Client {
   http_client: reqwest::Client,
@@ -106,6 +107,46 @@ impl Client {
       t.user = new_user;
     }
     Ok(())
+  }
+
+  pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
+    let url = format!("{}/api/collab", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)?
+      .json(&params)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into()
+  }
+
+  pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
+    let url = format!("{}/api/collab", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)?
+      .json(&params)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into()
+  }
+
+  pub async fn get_collab(&self, params: InsertCollabParams) -> Result<RawData, AppError> {
+    let url = format!("{}/api/collab", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)?
+      .json(&params)
+      .send()
+      .await?;
+    AppResponse::<RawData>::from_response(resp).await?.into()
+  }
+
+  pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
+    let url = format!("{}/api/collab", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)?
+      .json(&params)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into()
   }
 
   fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {

@@ -17,6 +17,13 @@ pub struct InsertCollabParams {
   pub workspace_id: String,
   pub collab_type: CollabType,
 }
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct DeleteCollabParams {
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+}
+
 fn validate_not_empty_str(s: &str) -> Result<(), ValidationError> {
   if s.is_empty() {
     return Err(ValidationError::new("should not be empty string"));

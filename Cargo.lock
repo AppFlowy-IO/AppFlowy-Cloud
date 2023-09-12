@@ -3024,6 +3024,7 @@ dependencies = [
  "serde_repr",
  "sqlx",
  "thiserror",
+ "validator",
 ]
 
 [[package]]

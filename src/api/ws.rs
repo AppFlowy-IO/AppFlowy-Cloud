@@ -9,7 +9,7 @@ use realtime::core::{CollabManager, CollabSession};
 use std::time::Duration;
 
 use realtime::entities::RealtimeUser;
-use storage::collab::CollabStoragePGImpl;
+use storage::collab::CollabPostgresDBStorageImpl;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
@@ -21,7 +21,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   token: Path<String>,
   state: Data<State>,
-  server: Data<Addr<CollabManager<CollabStoragePGImpl>>>,
+  server: Data<Addr<CollabManager<CollabPostgresDBStorageImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = LoggedUser::from_token(&state.config.application.server_key, token.as_str())?;

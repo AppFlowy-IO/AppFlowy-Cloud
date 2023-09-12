@@ -23,7 +23,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use realtime::core::CollabManager;
-use storage::collab::{CollabStorage, CollabStoragePGImpl};
+use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use tracing_actix_web::TracingLogger;
 
 pub struct Application {
@@ -178,7 +178,10 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
   builder
 }
 
-pub async fn init_storage(_config: &Config, pg_pool: PgPool) -> Storage<CollabStoragePGImpl> {
-  let collab_storage = CollabStoragePGImpl::new(pg_pool);
+pub async fn init_storage(
+  _config: &Config,
+  pg_pool: PgPool,
+) -> Storage<CollabPostgresDBStorageImpl> {
+  let collab_storage = CollabPostgresDBStorageImpl::new(pg_pool);
   Storage { collab_storage }
 }

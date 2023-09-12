@@ -50,3 +50,21 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER manage_af_workspace_member_role_trigger
 AFTER
 INSERT ON af_workspace FOR EACH ROW EXECUTE FUNCTION manage_af_workspace_member_role_func();
+-- Insert a workspace member if the user with given uid is the owner of the workspace
+CREATE OR REPLACE FUNCTION insert_af_workspace_member_if_owner(
+        p_uid BIGINT,
+        p_role_id INT,
+        p_workspace_id UUID
+    ) RETURNS VOID AS $$ BEGIN -- If user is the owner, proceed with the insert operation
+INSERT INTO af_workspace_member (uid, role_id, workspace_id)
+SELECT p_uid,
+       p_role_id,
+       p_workspace_id
+FROM af_workspace
+WHERE workspace_id = p_workspace_id
+  AND owner_uid = p_uid;
+-- Check if the insert operation was successful. If not, user is not the owner of the workspace.
+IF NOT FOUND THEN RAISE EXCEPTION 'Unsupported operation: User is not the owner of the workspace.';
+END IF;
+END;
+$$ LANGUAGE plpgsql;

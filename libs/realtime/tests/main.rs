@@ -1,3 +1,2 @@
-mod util;
-
 mod realtime;
+mod util;

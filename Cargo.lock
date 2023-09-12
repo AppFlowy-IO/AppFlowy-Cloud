@@ -825,6 +825,7 @@ dependencies = [
  "reqwest",
  "serde_json",
  "shared_entity",
+ "storage",
 ]
 
 [[package]]

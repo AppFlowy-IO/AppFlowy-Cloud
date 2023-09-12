@@ -24,6 +24,9 @@ pub enum ErrorCode {
 
   #[error("OAuth authentication error.")]
   OAuthError = 1003,
+
+  #[error("Missing Payload")]
+  MissingPayload = 1004,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

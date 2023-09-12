@@ -8,15 +8,41 @@ use gotrue::{
 };
 
 use shared_entity::{error::AppError, server_error};
+use storage::entities::{AfUserProfileView, AfWorkspaces};
 use validator::validate_email;
 
 use crate::domain::validate_password;
 use sqlx::{types::uuid, PgPool};
 
-pub async fn sign_up(gotrue_client: &Client, email: &str, password: &str) -> Result<(), AppError> {
+pub async fn user_workspaces(
+  pg_pool: &PgPool,
+  uuid: &uuid::Uuid,
+) -> Result<AfWorkspaces, AppError> {
+  let workspaces = storage::workspace::select_all_workspaces_owned(pg_pool, uuid).await?;
+  Ok(AfWorkspaces(workspaces))
+}
+
+pub async fn user_profile(
+  pg_pool: &PgPool,
+  uuid: &uuid::Uuid,
+) -> Result<AfUserProfileView, AppError> {
+  let profile = storage::workspace::select_user_profile_view_by_uuid(pg_pool, uuid)
+    .await?
+    .ok_or(sqlx::Error::RowNotFound)?;
+  Ok(profile)
+}
+
+pub async fn sign_up(
+  pg_pool: &PgPool,
+  gotrue_client: &Client,
+  email: &str,
+  password: &str,
+) -> Result<(), AppError> {
   validate_email_password(email, password)?;
   let user = gotrue_client.sign_up(email, password).await??;
-  tracing::info!("user sign up: {:?}", user);
+  if user.confirmed_at.is_some() {
+    storage::workspace::create_user_if_not_exists(pg_pool, uuid::Uuid::from_str(&user.id)?).await?;
+  }
   Ok(())
 }
 

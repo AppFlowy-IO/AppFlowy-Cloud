@@ -12,3 +12,4 @@ gotrue = { path = "../gotrue" }
 infra = { path = "../infra" }
 serde_json = "1.0.105"
 shared_entity = { path = "../shared-entity" }
+storage = { path = "../storage" }

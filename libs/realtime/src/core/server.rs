@@ -27,9 +27,9 @@ pub struct CollabManager<S> {
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S>>,
   /// Keep track of all object ids that a user is subscribed to
-  edit_collab_by_user: Arc<RwLock<HashMap<i64, HashSet<EditCollab>>>>,
+  edit_collab_by_user: Arc<RwLock<HashMap<String, HashSet<EditCollab>>>>,
   /// Keep track of all client streams
-  client_stream_by_user: Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
+  client_stream_by_user: Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
 }
 
 impl<S> CollabManager<S>
@@ -69,7 +69,7 @@ where
     self
       .client_stream_by_user
       .write()
-      .insert(*new_conn.user.user_id(), stream);
+      .insert(new_conn.user.id().to_string(), stream);
 
     Ok(())
   }
@@ -83,13 +83,10 @@ where
   type Result = Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[💭Server]: {} disconnect", msg.user);
-    self
-      .client_stream_by_user
-      .write()
-      .remove(msg.user.user_id());
+    self.client_stream_by_user.write().remove(msg.user.id());
 
     // Remove the user from all collab groups that the user is subscribed to
-    let edits = self.edit_collab_by_user.write().remove(msg.user.user_id());
+    let edits = self.edit_collab_by_user.write().remove(msg.user.id());
     if let Some(edits) = edits {
       if !edits.is_empty() {
         let groups = self.groups.clone();
@@ -133,11 +130,11 @@ where
 
 async fn forward_message_to_collab_group<U>(
   client_msg: &ClientMessage<U>,
-  client_streams: &Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
+  client_streams: &Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
 ) where
   U: RealtimeUser,
 {
-  if let Some(client_stream) = client_streams.read().get(client_msg.user.user_id()) {
+  if let Some(client_stream) = client_streams.read().get(client_msg.user.id()) {
     tracing::trace!(
       "[💭Server]: receives: [oid:{}|msg_id:{:?}]",
       client_msg.content.object_id(),
@@ -158,8 +155,8 @@ async fn forward_message_to_collab_group<U>(
 async fn subscribe_collab_group_change_if_need<U, S>(
   client_msg: &ClientMessage<U>,
   groups: &Arc<CollabGroupCache<S>>,
-  edit_collab_by_user: &Arc<RwLock<HashMap<i64, HashSet<EditCollab>>>>,
-  client_streams: &Arc<RwLock<HashMap<i64, RealtimeClientStream>>>,
+  edit_collab_by_user: &Arc<RwLock<HashMap<String, HashSet<EditCollab>>>>,
+  client_streams: &Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
 ) -> Result<(), RealtimeError>
 where
   U: RealtimeUser,
@@ -204,7 +201,7 @@ where
     return Ok(());
   }
 
-  match client_streams.write().get_mut(client_msg.user.user_id()) {
+  match client_streams.write().get_mut(client_msg.user.id()) {
     None => tracing::error!("🔴The client stream is not found"),
     Some(client_stream) => {
       if let Some(collab_group) = groups.write().get_mut(object_id) {
@@ -221,7 +218,7 @@ where
 
             edit_collab_by_user
               .write()
-              .entry(*client_msg.user.user_id())
+              .entry(client_msg.user.id().to_string())
               .or_default()
               .insert(EditCollab {
                 object_id: object_id.to_string(),

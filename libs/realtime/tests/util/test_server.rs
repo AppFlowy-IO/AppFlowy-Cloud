@@ -179,7 +179,7 @@ pub async fn establish_ws_connection(
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = TestLoggedUser {
-    user_id: token.as_str().parse().unwrap(),
+    user_id: token.as_str().to_string(),
   };
   let client = CollabSession::new(
     user,
@@ -248,7 +248,7 @@ pub async fn init_state(config: Config) -> State {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TestLoggedUser {
-  pub user_id: i64,
+  pub user_id: String,
 }
 
 impl Display for TestLoggedUser {
@@ -258,7 +258,7 @@ impl Display for TestLoggedUser {
 }
 
 impl RealtimeUser for TestLoggedUser {
-  fn user_id(&self) -> &i64 {
+  fn id(&self) -> &str {
     &self.user_id
   }
 }

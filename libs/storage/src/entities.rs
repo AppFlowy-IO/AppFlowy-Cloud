@@ -53,7 +53,7 @@ pub struct QueryCollabParams {
   pub collab_type: CollabType,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
 pub struct AfWorkspace {
   pub workspace_id: uuid::Uuid,
   pub database_storage_id: Option<sqlx::types::uuid::Uuid>,
@@ -64,21 +64,23 @@ pub struct AfWorkspace {
   pub workspace_name: Option<String>,
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, sqlx::FromRow, Deserialize, Serialize)]
 pub struct AfUserProfileView {
-  pub uid: Option<i64>,         // Made this field nullable based on the error
-  pub uuid: Option<uuid::Uuid>, // Made this field nullable based on the error
-  pub email: Option<String>,    // Made this field nullable based on the error
-  pub password: Option<String>, // Made this field nullable based on the error
-  pub name: Option<String>,     // Made this field nullable based on the error
-  pub encryption_sign: Option<String>, // Made this field nullable based on the error
+  pub uid: Option<i64>,
+  pub uuid: Option<uuid::Uuid>,
+  pub email: Option<String>,
+  pub password: Option<String>,
+  pub name: Option<String>,
+  pub encryption_sign: Option<String>,
   pub deleted_at: Option<DateTime<Utc>>,
   pub updated_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
   pub latest_workspace_id: Option<uuid::Uuid>,
 }
 
+#[derive(Debug, sqlx::FromRow, Deserialize, Serialize)]
 pub struct AfWorkspaces(pub Vec<AfWorkspace>);
+
 impl AfWorkspaces {
   pub fn get_latest(&self, profile: AfUserProfileView) -> Option<AfWorkspace> {
     match profile.latest_workspace_id {

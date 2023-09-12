@@ -58,5 +58,9 @@ async fn sign_in_success() {
   let token = c.token().unwrap();
   assert!(token.user.confirmed_at.is_some());
 
-  // TODO: check that workspace is created for user
+  let workspaces = c.workspaces().await.unwrap();
+  assert!(!workspaces.0.is_empty());
+  let profile = c.profile().await.unwrap();
+  let latest_workspace = workspaces.get_latest(profile);
+  assert!(latest_workspace.is_some());
 }

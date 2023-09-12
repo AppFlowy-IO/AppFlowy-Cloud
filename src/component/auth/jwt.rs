@@ -3,6 +3,7 @@ use actix_web::{web::Data, FromRequest, HttpRequest};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
 
 use crate::state::State;
 
@@ -12,6 +13,14 @@ lazy_static::lazy_static! {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserUuid(pub uuid::Uuid);
+
+impl Deref for UserUuid {
+  type Target = uuid::Uuid;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
 
 impl FromRequest for UserUuid {
   type Error = actix_web::Error;

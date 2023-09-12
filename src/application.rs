@@ -1,4 +1,4 @@
-use crate::api::{user_scope, ws_scope};
+use crate::api::{collab_scope, user_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
@@ -98,6 +98,7 @@ where
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())
       .service(ws_scope())
+      .service(collab_scope())
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
   });

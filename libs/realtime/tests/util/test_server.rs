@@ -258,7 +258,7 @@ impl Display for TestLoggedUser {
 }
 
 impl RealtimeUser for TestLoggedUser {
-  fn user_id(&self) -> &i64 {
+  fn id(&self) -> &i64 {
     &self.user_id
   }
 }

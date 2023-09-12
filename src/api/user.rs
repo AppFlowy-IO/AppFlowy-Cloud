@@ -63,15 +63,22 @@ async fn update_handler(
   Ok(AppResponse::Ok().with_data(user).into())
 }
 
-async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<JsonAppResponse<()>> {
+async fn sign_out_handler(
+  auth: Authorization,
+  uuid: UserUuid,
+  state: Data<State>,
+) -> Result<JsonAppResponse<()>> {
   state
     .gotrue_client
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
 
-  // let logged_user = LoggedUser::new(uid);
-  // state.user.write().await.unauthorized(logged_user);
+  if let Ok(uid) = storage::workspace::get_user_id(&state.pg_pool, &uuid).await {
+    let logged_user = LoggedUser::new(uid);
+    state.user.write().await.unauthorized(logged_user);
+  }
+
   Ok(AppResponse::Ok().into())
 }
 

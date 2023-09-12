@@ -41,7 +41,7 @@ pub async fn establish_ws_connection(
 }
 
 impl RealtimeUser for LoggedUser {
-  fn user_id(&self) -> &i64 {
+  fn id(&self) -> &i64 {
     self.expose_secret()
   }
 }

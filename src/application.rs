@@ -122,6 +122,8 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 
 pub async fn init_state(config: &Config) -> State {
   let pg_pool = get_connection_pool(&config.database).await;
+  migrate(&pg_pool).await;
+
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
   State {
@@ -139,6 +141,13 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
     .connect_with(setting.with_db())
     .await
     .expect("Failed to connect to Postgres")
+}
+
+async fn migrate(pool: &PgPool) {
+  sqlx::migrate!("./migrations")
+    .run(pool)
+    .await
+    .expect("Failed to run migrations");
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {

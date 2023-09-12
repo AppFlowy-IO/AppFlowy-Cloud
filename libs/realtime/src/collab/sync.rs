@@ -5,6 +5,7 @@ use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_sync_protocol::CollabMessage;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::task::spawn_blocking;
@@ -12,7 +13,6 @@ use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LengthDelimit
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
-  /// [Collab] wrapped in a mutex
   pub collab: MutexCollab,
 
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -21,7 +21,7 @@ pub struct CollabGroup {
 
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
-  pub subscribers: HashMap<CollabOrigin, Subscription>,
+  pub subscribers: RwLock<HashMap<CollabOrigin, Subscription>>,
 }
 
 impl CollabGroup {
@@ -35,7 +35,7 @@ impl CollabGroup {
   }
 
   pub fn is_empty(&self) -> bool {
-    self.subscribers.is_empty()
+    self.subscribers.read().is_empty()
   }
 
   /// Flush the [Collab] to the storage.

@@ -1,7 +1,13 @@
-use crate::entities::CreateCollabParams;
+use crate::entities::{InsertCollabParams, QueryCollabParams};
 use crate::error::StorageError;
+use anyhow::Context;
 use async_trait::async_trait;
-use sqlx::PgPool;
+use collab_define::CollabType;
+use sqlx::types::{chrono, Uuid};
+use sqlx::{PgPool, Transaction};
+use std::ops::DerefMut;
+use std::str::FromStr;
+use validator::Validate;
 
 pub type Result<T, E = StorageError> = core::result::Result<T, E>;
 
@@ -13,6 +19,7 @@ pub type RawData = Vec<u8>;
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Clone + Send + Sync + 'static {
+  fn config(&self) -> &Config;
   /// Checks if a collaboration with the given object ID exists in the storage.
   ///
   /// # Arguments
@@ -22,7 +29,7 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// # Returns
   ///
   /// * `bool` - `true` if the collaboration exists, `false` otherwise.
-  async fn is_exist(&self, _object_id: &str) -> bool;
+  async fn is_exist(&self, object_id: &str) -> bool;
 
   /// Creates a new collaboration in the storage.
   ///
@@ -33,36 +40,24 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn create_collab(&self, _params: CreateCollabParams) -> Result<()>;
-
-  /// Updates an existing collaboration in the storage.
-  ///
-  /// # Arguments
-  ///
-  /// * `_object_id` - A string slice that holds the ID of the collaboration to update.
-  /// * `_data` - The new data for the collaboration.
-  ///
-  /// # Returns
-  ///
-  /// * `Result<()>` - Returns `Ok(())` if the collaboration was updated successfully, `Err` otherwise.
-  async fn update_collab(&self, object_id: &str, _data: RawData) -> Result<()>;
+  async fn insert_collab(&self, params: InsertCollabParams) -> Result<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
   /// # Arguments
   ///
-  /// * `_object_id` - A string slice that holds the ID of the collaboration to retrieve.
+  /// * `params` - The parameters required to query a collab object.
   ///
   /// # Returns
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
-  async fn get_collab(&self, object_id: &str) -> Result<RawData>;
+  async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData>;
 
   /// Deletes a collaboration from the storage.
   ///
   /// # Arguments
   ///
-  /// * `_object_id` - A string slice that holds the ID of the collaboration to delete.
+  /// * `object_id` - A string slice that holds the ID of the collaboration to delete.
   ///
   /// # Returns
   ///
@@ -70,37 +65,208 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   async fn delete_collab(&self, object_id: &str) -> Result<()>;
 }
 
-#[derive(Clone)]
-pub struct CollabStoragePGImpl {
-  #[allow(dead_code)]
-  pg_pool: PgPool,
+#[derive(Debug, Clone)]
+pub struct Config {
+  pub flush_per_update: u32,
 }
 
-impl CollabStoragePGImpl {
+impl Default for Config {
+  fn default() -> Self {
+    Self {
+      flush_per_update: 10,
+    }
+  }
+}
+
+#[derive(Clone)]
+pub struct CollabPostgresDBStorageImpl {
+  #[allow(dead_code)]
+  pg_pool: PgPool,
+  config: Config,
+}
+
+impl CollabPostgresDBStorageImpl {
   pub fn new(pg_pool: PgPool) -> Self {
-    Self { pg_pool }
+    let config = Config {
+      flush_per_update: 100,
+    };
+    Self { pg_pool, config }
   }
 }
 
 #[async_trait]
-impl CollabStorage for CollabStoragePGImpl {
-  async fn is_exist(&self, _object_id: &str) -> bool {
-    todo!()
+impl CollabStorage for CollabPostgresDBStorageImpl {
+  fn config(&self) -> &Config {
+    &self.config
   }
 
-  async fn create_collab(&self, _params: CreateCollabParams) -> Result<()> {
-    todo!()
+  async fn is_exist(&self, object_id: &str) -> bool {
+    let result = sqlx::query!(
+      "SELECT oid FROM af_collab WHERE oid = $1 LIMIT 1",
+      object_id
+    )
+    .fetch_optional(&self.pg_pool)
+    .await
+    .unwrap_or(None);
+    result.is_some()
   }
 
-  async fn update_collab(&self, _object_id: &str, _data: RawData) -> Result<()> {
-    todo!()
+  async fn insert_collab(&self, params: InsertCollabParams) -> Result<()> {
+    params.validate()?;
+
+    let mut transaction = self
+      .pg_pool
+      .begin()
+      .await
+      .context("Failed to acquire a Postgres transaction to insert collab")?;
+    insert_or_update(&mut transaction, params).await?;
+    transaction
+      .commit()
+      .await
+      .context("Failed to commit transaction to insert collab")?;
+    Ok(())
   }
 
-  async fn get_collab(&self, _object_id: &str) -> Result<RawData> {
-    todo!()
+  async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
+    params.validate()?;
+
+    let partition_key = params.collab_type.value();
+    let record = sqlx::query!(
+      r#"
+        SELECT blob
+        FROM af_collab 
+        WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
+        "#,
+      params.object_id,
+      partition_key,
+    )
+    .fetch_one(&self.pg_pool)
+    .await?;
+    let blob_data: Vec<u8> = record.blob;
+    Ok(blob_data)
   }
 
-  async fn delete_collab(&self, _object_id: &str) -> Result<()> {
-    todo!()
+  async fn delete_collab(&self, object_id: &str) -> Result<()> {
+    let delete_time = chrono::Utc::now();
+    sqlx::query!(
+      r#"
+        UPDATE af_collab
+        SET deleted_at = $2
+        WHERE oid = $1;
+        "#,
+      object_id,
+      delete_time
+    )
+    .execute(&self.pg_pool)
+    .await?;
+    Ok(())
+  }
+}
+
+/// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
+/// provided `object_id`.Additionally, if the row is being inserted for the first time, a corresponding
+/// entry will be added to the `af_collab_member` table.
+///
+/// # Arguments
+///
+/// * `tx` - A mutable reference to a PostgreSQL transaction.
+/// * `params` - Parameters required for the insertion or update operation, encapsulated in
+/// the `InsertCollabParams` struct.
+///
+/// # Returns
+///
+/// * `Ok(())` if the operation is successful.
+/// * `Err(StorageError::Internal)` if there's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
+/// * `Err(sqlx::Error)` for other database-related errors.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// * There's a database operation failure.
+/// * There's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
+///
+async fn insert_or_update(
+  tx: &mut Transaction<'_, sqlx::Postgres>,
+  params: InsertCollabParams,
+) -> Result<()> {
+  params.validate()?;
+
+  let encrypt = 0;
+  let partition_key = params.collab_type.value();
+  let workspace_id = Uuid::from_str(&params.workspace_id)?;
+  // Check if the row exists and get its workspace_id
+  let existing_workspace_id: Option<Uuid> = sqlx::query_scalar!(
+    "SELECT workspace_id FROM af_collab WHERE oid = $1",
+    &params.object_id
+  )
+  .fetch_optional(tx.deref_mut())
+  .await?;
+
+  match existing_workspace_id {
+    Some(existing_id) if existing_id == workspace_id => {
+      sqlx::query!(
+        "UPDATE af_collab \
+        SET blob = $2, len = $3, partition_key = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1",
+        params.object_id,
+        params.raw_data,
+        params.len,
+        partition_key,
+        encrypt,
+        params.uid,
+      )
+      .execute(tx.deref_mut())
+      .await?;
+    },
+    Some(_) => {
+      return Err(StorageError::Internal(anyhow::anyhow!(
+        "Inserting a row with an existing object_id but different workspace_id"
+      )));
+    },
+    None => {
+      // Get the 'Owner' role_id from af_roles
+      let role_id: i32 = sqlx::query_scalar!("SELECT id FROM af_roles WHERE name = 'Owner'")
+        .fetch_one(tx.deref_mut())
+        .await?;
+
+      // Insert into af_collab_member
+      sqlx::query!(
+        "INSERT INTO af_collab_member (oid, uid, role_id) VALUES ($1, $2, $3)",
+        params.object_id,
+        params.uid,
+        role_id
+      )
+      .execute(tx.deref_mut())
+      .await?;
+
+      sqlx::query!(
+        "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
+          VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        params.object_id,
+        params.raw_data,
+        params.len,
+        partition_key,
+        encrypt,
+        params.uid,
+        workspace_id,
+      )
+      .execute(tx.deref_mut())
+      .await?;
+    },
+  }
+
+  Ok(())
+}
+
+const AF_COLLAB_TABLE: &str = "af_collab";
+
+#[allow(dead_code)]
+fn table_name(ty: &CollabType) -> String {
+  match ty {
+    CollabType::DatabaseRow => format!("{}_database_row", AF_COLLAB_TABLE),
+    CollabType::Document => format!("{}_document", AF_COLLAB_TABLE),
+    CollabType::Database => format!("{}_database", AF_COLLAB_TABLE),
+    CollabType::WorkspaceDatabase => format!("{}_w_database", AF_COLLAB_TABLE),
+    CollabType::Folder => format!("{}_folder", AF_COLLAB_TABLE),
+    CollabType::UserAwareness => format!("{}_user_awareness", AF_COLLAB_TABLE),
   }
 }

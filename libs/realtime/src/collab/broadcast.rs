@@ -175,7 +175,7 @@ impl CollabBroadcast {
             tracing::error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
             continue;
           }
-          tracing::trace!("[💭Server]: {}", collab_msg,);
+          tracing::debug!("[💭Server]: {}", collab_msg,);
           let payload = collab_msg.payload().unwrap();
           let mut decoder = DecoderV1::from(payload.as_ref());
           let mut sink = sink.lock().await;

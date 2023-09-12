@@ -170,8 +170,12 @@ where
     // When create a group, the message must be the init sync message.
     match &client_msg.content {
       CollabMessage::ClientInit(client_init) => {
+        let uid = client_init
+          .origin
+          .client_user_id()
+          .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
         groups
-          .create_group(&client_init.workspace_id, object_id)
+          .create_group(uid, &client_init.workspace_id, object_id)
           .await;
       },
       _ => {
@@ -194,8 +198,8 @@ where
   if groups
     .read()
     .get(object_id)
-    .and_then(|group| group.subscribers.get(origin))
-    .is_some()
+    .map(|group| group.subscribers.read().get(origin).is_some())
+    .unwrap_or(false)
   {
     return Ok(());
   }
@@ -206,6 +210,7 @@ where
       if let Some(collab_group) = groups.write().get_mut(object_id) {
         collab_group
           .subscribers
+          .write()
           .entry(origin.clone())
           .or_insert_with(|| {
             tracing::trace!(
@@ -241,6 +246,7 @@ where
   Ok(())
 }
 
+/// Remove the user from the group and remove the group from the cache if the group is empty.
 fn remove_user_from_group<S>(groups: &Arc<CollabGroupCache<S>>, edit_collab: &EditCollab)
 where
   S: CollabStorage,
@@ -248,8 +254,8 @@ where
   let mut write_guard = groups.write();
 
   let should_remove_group = write_guard.get_mut(&edit_collab.object_id).map(|group| {
-    group.subscribers.remove(&edit_collab.origin);
-    let should_remove = group.subscribers.is_empty();
+    group.subscribers.write().remove(&edit_collab.origin);
+    let should_remove = group.is_empty();
     if should_remove {
       group.flush_collab();
     }

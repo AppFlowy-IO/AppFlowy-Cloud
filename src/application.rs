@@ -143,7 +143,7 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
     .expect("Failed to connect to Postgres")
 }
 
-async fn migrate(pool: &PgPool) -> () {
+async fn migrate(pool: &PgPool) {
   sqlx::migrate!("./migrations")
     .run(pool)
     .await

@@ -3,7 +3,7 @@ use sqlx::{
   PgPool,
 };
 
-use crate::entities::{AfUserProfileView, AfWorkspace};
+use crate::entities::{AFUserProfileView, AFWorkspace};
 
 pub async fn create_user_if_not_exists(
   pool: &PgPool,
@@ -45,9 +45,9 @@ pub async fn get_user_id(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64,
 pub async fn select_all_workspaces_owned(
   pool: &PgPool,
   owner_uuid: &Uuid,
-) -> Result<Vec<AfWorkspace>, sqlx::Error> {
+) -> Result<Vec<AFWorkspace>, sqlx::Error> {
   sqlx::query_as!(
-    AfWorkspace,
+    AFWorkspace,
     r#"
         SELECT * FROM public.af_workspace WHERE owner_uid = (
             SELECT uid FROM public.af_user WHERE uuid = $1
@@ -62,9 +62,9 @@ pub async fn select_all_workspaces_owned(
 pub async fn select_user_profile_view_by_uuid(
   pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<Option<AfUserProfileView>, sqlx::Error> {
+) -> Result<Option<AFUserProfileView>, sqlx::Error> {
   sqlx::query_as!(
-    AfUserProfileView,
+    AFUserProfileView,
     r#"
         SELECT *
         FROM public.af_user_profile_view WHERE uuid = $1

@@ -328,18 +328,3 @@ pub fn logged_user_from_request(
     },
   }
 }
-
-pub fn uid_from_request(
-  request: &HttpRequest,
-  server_key: &Secret<String>,
-) -> Result<Secret<String>, AuthError> {
-  match request.headers().get(HEADER_TOKEN) {
-    Some(header) => match header.to_str() {
-      Ok(val) => {
-        Token::decode_token(server_key, val).map(|claim| Secret::new(claim.uid.to_string()))
-      },
-      Err(_) => Err(AuthError::Unauthorized),
-    },
-    None => Err(AuthError::Unauthorized),
-  }
-}

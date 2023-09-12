@@ -8,9 +8,9 @@ use gotrue::models::{AccessTokenResponse, User};
 use shared_entity::error::AppError;
 
 use shared_entity::server_error::ErrorCode;
-use storage::entities::AfUserProfileView;
-use storage::entities::AfWorkspace;
-use storage::entities::AfWorkspaces;
+use storage::entities::AFUserProfileView;
+use storage::entities::AFWorkspace;
+use storage::entities::AFWorkspaces;
 
 pub struct Client {
   http_client: reqwest::Client,
@@ -31,30 +31,30 @@ impl Client {
     self.token.as_ref()
   }
 
-  pub async fn profile(&self) -> Result<AfUserProfileView, AppError> {
+  pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)?
       .send()
       .await?;
-    let profile = AppResponse::<AfUserProfileView>::from_response(resp)
+    let profile = AppResponse::<AFUserProfileView>::from_response(resp)
       .await?
       .into_data()?
       .ok_or::<AppError>(ErrorCode::MissingPayload.into())?;
     Ok(profile)
   }
 
-  pub async fn workspaces(&mut self) -> Result<AfWorkspaces, AppError> {
+  pub async fn workspaces(&mut self) -> Result<AFWorkspaces, AppError> {
     let url = format!("{}/api/user/workspaces", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)?
       .send()
       .await?;
-    let workspaces = AppResponse::<Vec<AfWorkspace>>::from_response(resp)
+    let workspaces = AppResponse::<Vec<AFWorkspace>>::from_response(resp)
       .await?
       .into_data()?
       .ok_or::<AppError>(ErrorCode::MissingPayload.into())?;
-    Ok(AfWorkspaces(workspaces))
+    Ok(AFWorkspaces(workspaces))
   }
 
   pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {

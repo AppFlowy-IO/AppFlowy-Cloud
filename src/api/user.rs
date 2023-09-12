@@ -1,7 +1,7 @@
 use crate::biz;
 use crate::component::auth::{
   change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
-  InternalServerError, LoggedUser, RegisterRequest,
+  InternalServerError, RegisterRequest,
 };
 use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
@@ -9,7 +9,7 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
 use gotrue::models::{AccessTokenResponse, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use storage::entities::{AfUserProfileView, AfWorkspaces};
+use storage::entities::{AFUserProfileView, AFWorkspaces};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
@@ -39,16 +39,16 @@ pub fn user_scope() -> Scope {
 async fn profile_handler(
   uuid: UserUuid,
   state: Data<State>,
-) -> Result<JsonAppResponse<AfUserProfileView>> {
-  let profile = biz::user::user_profile(&state.pg_pool, &uuid.0).await?;
+) -> Result<JsonAppResponse<AFUserProfileView>> {
+  let profile = biz::user::user_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
 async fn workspaces_handler(
   uuid: UserUuid,
   state: Data<State>,
-) -> Result<JsonAppResponse<AfWorkspaces>> {
-  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid.0).await?;
+) -> Result<JsonAppResponse<AFWorkspaces>> {
+  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
@@ -63,21 +63,12 @@ async fn update_handler(
   Ok(AppResponse::Ok().with_data(user).into())
 }
 
-async fn sign_out_handler(
-  auth: Authorization,
-  uuid: UserUuid,
-  state: Data<State>,
-) -> Result<JsonAppResponse<()>> {
+async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<JsonAppResponse<()>> {
   state
     .gotrue_client
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
-
-  if let Ok(uid) = storage::workspace::get_user_id(&state.pg_pool, &uuid).await {
-    let logged_user = LoggedUser::new(uid);
-    state.user.write().await.unauthorized(logged_user);
-  }
 
   Ok(AppResponse::Ok().into())
 }
@@ -87,16 +78,13 @@ async fn sign_in_password_handler(
   state: Data<State>,
 ) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
-  let (token, uid) = biz::user::sign_in(
+  let token = biz::user::sign_in(
     &state.pg_pool,
     &state.gotrue_client,
     req.email,
     req.password,
   )
   .await?;
-
-  let logged_user = LoggedUser::new(uid);
-  state.user.write().await.authorized(logged_user);
 
   Ok(AppResponse::Ok().with_data(token).into())
 }
@@ -105,7 +93,7 @@ async fn sign_up_handler(
   req: Json<LoginRequest>,
   state: Data<State>,
 ) -> Result<JsonAppResponse<()>> {
-  let uid = biz::user::sign_up(
+  biz::user::sign_up(
     &state.gotrue_client,
     &req.email,
     &req.password,
@@ -113,10 +101,6 @@ async fn sign_up_handler(
   )
   .await?;
 
-  if let Some(uid) = uid {
-    let logged_user = LoggedUser::new(uid);
-    state.user.write().await.authorized(logged_user);
-  }
   Ok(AppResponse::Ok().into())
 }
 

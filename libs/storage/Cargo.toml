@@ -21,6 +21,8 @@ sqlx = { version = "0.7", default-features = false, features = ["postgres", "chr
 tracing = { version = "0.1.37" }
 validator = { version = "0.16", features = ["validator_derive", "derive"] }
 uuid = { version = "1.4.1", features = ["serde", "v4"] }
+chrono = {version="0.4",features = ["serde"]}
+
 
 [features]
 default = []

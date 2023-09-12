@@ -9,8 +9,9 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
 use gotrue::models::{AccessTokenResponse, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
+use storage::entities::{AfUserProfileView, AfWorkspaces};
 
-use crate::component::auth::jwt::Authorization;
+use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
@@ -25,11 +26,30 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/sign_out").route(web::post().to(sign_out_handler)))
     .service(web::resource("/update").route(web::post().to(update_handler)))
 
+    .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
+    .service(web::resource("/profile").route(web::get().to(profile_handler)))
+
     // native
     .service(web::resource("/login").route(web::post().to(login_handler)))
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn profile_handler(
+  uuid: UserUuid,
+  state: Data<State>,
+) -> Result<JsonAppResponse<AfUserProfileView>> {
+  let profile = biz::user::user_profile(&state.pg_pool, &uuid.0).await?;
+  Ok(AppResponse::Ok().with_data(profile).into())
+}
+
+async fn workspaces_handler(
+  uuid: UserUuid,
+  state: Data<State>,
+) -> Result<JsonAppResponse<AfWorkspaces>> {
+  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid.0).await?;
+  Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
 async fn update_handler(
@@ -86,8 +106,10 @@ async fn sign_up_handler(
   )
   .await?;
 
-  let logged_user = LoggedUser::new(uid);
-  state.user.write().await.authorized(logged_user);
+  if let Some(uid) = uid {
+    let logged_user = LoggedUser::new(uid);
+    state.user.write().await.authorized(logged_user);
+  }
   Ok(AppResponse::Ok().into())
 }
 

@@ -44,14 +44,16 @@ pub async fn get_user_id(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64,
 
 pub async fn select_all_workspaces_owned(
   pool: &PgPool,
-  owner_uid: i64,
+  owner_uuid: &Uuid,
 ) -> Result<Vec<AfWorkspace>, sqlx::Error> {
   sqlx::query_as!(
     AfWorkspace,
     r#"
-        SELECT * FROM public.af_workspace WHERE owner_uid = $1
+        SELECT * FROM public.af_workspace WHERE owner_uid = (
+            SELECT uid FROM public.af_user WHERE uuid = $1
+            )
         "#,
-    owner_uid
+    owner_uuid
   )
   .fetch_all(pool)
   .await
@@ -59,7 +61,7 @@ pub async fn select_all_workspaces_owned(
 
 pub async fn select_user_profile_view_by_uuid(
   pool: &PgPool,
-  gotrue_uuid: Uuid,
+  user_uuid: &Uuid,
 ) -> Result<Option<AfUserProfileView>, sqlx::Error> {
   sqlx::query_as!(
     AfUserProfileView,
@@ -67,7 +69,7 @@ pub async fn select_user_profile_view_by_uuid(
         SELECT *
         FROM public.af_user_profile_view WHERE uuid = $1
         "#,
-    gotrue_uuid
+    user_uuid
   )
   .fetch_optional(pool)
   .await

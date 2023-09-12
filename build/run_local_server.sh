@@ -29,10 +29,19 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   exit 1
 fi
 
+until curl localhost:9998/health; do
+  >&2 echo "Waiting on GoTrue"
+  sleep 1
+done
+
 # Kill any existing instances
 pkill -f appflowy_cloud || true
 
-# Run the migrations
+# Require if there are any changes to the database schema
+# To build AppFlowy-Cloud binary, we requires the .sqlx files
+# To generate the .sqlx files, we need to run the following command
+# After the .sqlx files are generated, we build in SQLX_OFFLINE=true
+# where we don't need to connect to the database
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare
 
 cargo run

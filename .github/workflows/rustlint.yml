@@ -10,6 +10,7 @@ on:
 env:
   SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"
+  SQLX_OFFLINE: true
 
 jobs:
   test:
@@ -36,10 +37,11 @@ jobs:
 
       - name: Check sqlx-data.json
         run: |
+          cargo sqlx migrate run
           cargo sqlx prepare --check -- --bin appflowy_cloud
 
       - name: Rustfmt
         run: cargo fmt --check
 
       - name: Clippy
-        run: SQLX_OFFLINE=true cargo clippy -- -D warnings
+        run: cargo clippy -- -D warnings

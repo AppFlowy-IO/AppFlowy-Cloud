@@ -1,6 +1,6 @@
--- Enable RLS on the af_collab_update table
-ALTER TABLE af_collab_update ENABLE ROW LEVEL SECURITY;
-CREATE POLICY af_collab_update_policy ON af_collab_update FOR ALL TO anon,
+-- Enable RLS on the af_collab table
+ALTER TABLE af_collab ENABLE ROW LEVEL SECURITY;
+CREATE POLICY af_collab_policy ON af_collab FOR ALL TO anon,
 authenticated USING (true);
 -- Enable RLS on the af_user table
 -- Policy for INSERT

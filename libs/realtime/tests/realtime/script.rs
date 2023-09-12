@@ -32,7 +32,7 @@ impl CollabTest {
     }
   }
 
-  pub async fn get_client_doc(&self, uid: i64, object_id: &str) -> Value {
+  pub async fn get_client_collab(&self, uid: i64, object_id: &str) -> Value {
     self
       .clients
       .read()
@@ -50,7 +50,7 @@ impl CollabTest {
     let address = format!("{}/{}", self.server.ws_addr, uid);
     let ws = WSClient::new(address, WSClientConfig::default());
     let addr = ws.connect().await.unwrap().unwrap();
-    let origin = origin_from_tcp_stream(&addr);
+    let origin = origin_from_tcp_stream(uid, &addr);
     let tempdir = TempDir::new().unwrap().into_path();
     let db_path = tempdir.join(uuid::Uuid::new_v4().to_string());
     std::fs::create_dir_all(&db_path).unwrap();
@@ -111,13 +111,13 @@ impl CollabTest {
     tokio::time::sleep(Duration::from_secs(secs)).await;
   }
 
-  pub async fn get_server_doc(&self, object_id: &str) -> Value {
-    self.server.get_doc(object_id).await
+  pub async fn get_server_collab(&self, object_id: &str) -> Value {
+    self.server.get_collab(object_id).await
   }
 }
 
-fn origin_from_tcp_stream(addr: &SocketAddr) -> CollabOrigin {
-  let origin = CollabClient::new(addr.port() as i64, addr.to_string());
+fn origin_from_tcp_stream(uid: i64, addr: &SocketAddr) -> CollabOrigin {
+  let origin = CollabClient::new(uid, addr.to_string());
   CollabOrigin::Client(origin)
 }
 

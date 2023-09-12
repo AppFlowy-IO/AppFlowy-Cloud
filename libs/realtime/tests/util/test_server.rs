@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::net::TcpListener;
 
@@ -8,7 +7,7 @@ use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Result};
 
 use actix_web_actors::ws;
-use async_trait::async_trait;
+
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use once_cell::sync::Lazy;
@@ -16,19 +15,18 @@ use realtime::core::{CollabManager, CollabSession};
 use realtime::entities::RealtimeUser;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use std::path::PathBuf;
-use std::sync::Arc;
 
+use collab_define::CollabType;
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 use crate::util::log::{get_subscriber, init_subscriber};
-use storage::collab::{CollabStorage, RawData};
-use storage::entities::CreateCollabParams;
-use storage::error::StorageError;
+use crate::util::storage_impl::CollabMemoryStorageImpl;
+use storage::collab::CollabStorage;
+use storage::entities::QueryCollabParams;
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
-  let level = "info".to_string();
+  let level = "trace".to_string();
   let mut filters = vec![];
   filters.push(format!("actix_web={}", level));
   filters.push(format!("collab={}", level));
@@ -48,12 +46,16 @@ pub struct TestServer {
   pub address: String,
   pub port: u16,
   pub ws_addr: String,
-  pub storage: CollabStorageMemoryImpl,
+  pub storage: CollabMemoryStorageImpl,
 }
 
 impl TestServer {
-  pub async fn get_doc(&self, object_id: &str) -> serde_json::Value {
-    let raw_data = self.storage.get_collab(object_id).await.unwrap();
+  pub async fn get_collab(&self, object_id: &str) -> serde_json::Value {
+    let params = QueryCollabParams {
+      object_id: object_id.to_string(),
+      collab_type: CollabType::Document,
+    };
+    let raw_data = self.storage.get_collab(params).await.unwrap();
     let collab =
       MutexCollab::new_with_raw_data(CollabOrigin::Server, object_id, vec![raw_data], vec![])
         .unwrap();
@@ -66,7 +68,9 @@ pub async fn spawn_server() -> TestServer {
   Lazy::force(&TRACING);
   let config = Config::default();
   let state = init_state(config.clone()).await;
-  let storage = CollabStorageMemoryImpl::default();
+  let storage = CollabMemoryStorageImpl::new(storage::collab::Config {
+    flush_per_update: 0,
+  });
   let application = Application::build(config, state.clone(), storage.clone())
     .await
     .expect("Failed to build application");
@@ -165,6 +169,33 @@ where
   Ok(server.run())
 }
 
+#[get("/{token}")]
+pub async fn establish_ws_connection(
+  request: HttpRequest,
+  payload: Payload,
+  token: Path<String>,
+  state: Data<State>,
+  server: Data<Addr<CollabManager<CollabMemoryStorageImpl>>>,
+) -> Result<HttpResponse> {
+  tracing::trace!("{:?}", request);
+  let user = TestLoggedUser {
+    user_id: token.as_str().parse().unwrap(),
+  };
+  let client = CollabSession::new(
+    user,
+    server.get_ref().clone(),
+    Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
+    Duration::from_secs(state.config.websocket.client_timeout as u64),
+  );
+  match ws::start(client, &request, payload) {
+    Ok(response) => Ok(response),
+    Err(e) => {
+      tracing::error!("🔴ws connection error: {:?}", e);
+      Err(e)
+    },
+  }
+}
+
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct WebsocketSetting {
   pub heartbeat_interval: u8,
@@ -215,33 +246,6 @@ pub async fn init_state(config: Config) -> State {
   State { config }
 }
 
-#[get("/{token}")]
-pub async fn establish_ws_connection(
-  request: HttpRequest,
-  payload: Payload,
-  token: Path<String>,
-  state: Data<State>,
-  server: Data<Addr<CollabManager<CollabStorageMemoryImpl>>>,
-) -> Result<HttpResponse> {
-  tracing::trace!("{:?}", request);
-  let user = TestLoggedUser {
-    user_id: token.as_str().parse().unwrap(),
-  };
-  let client = CollabSession::new(
-    user,
-    server.get_ref().clone(),
-    Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
-    Duration::from_secs(state.config.websocket.client_timeout as u64),
-  );
-  match ws::start(client, &request, payload) {
-    Ok(response) => Ok(response),
-    Err(e) => {
-      tracing::error!("🔴ws connection error: {:?}", e);
-      Err(e)
-    },
-  }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TestLoggedUser {
   pub user_id: i64,
@@ -256,58 +260,5 @@ impl Display for TestLoggedUser {
 impl RealtimeUser for TestLoggedUser {
   fn user_id(&self) -> &i64 {
     &self.user_id
-  }
-}
-
-#[derive(Clone, Default)]
-pub struct CollabStorageMemoryImpl {
-  collab_data_by_object_id: Arc<RwLock<HashMap<String, RawData>>>,
-}
-
-#[async_trait]
-impl CollabStorage for CollabStorageMemoryImpl {
-  async fn is_exist(&self, object_id: &str) -> bool {
-    self
-      .collab_data_by_object_id
-      .read()
-      .await
-      .contains_key(object_id)
-  }
-
-  async fn create_collab(&self, params: CreateCollabParams) -> storage::collab::Result<()> {
-    self
-      .collab_data_by_object_id
-      .write()
-      .await
-      .insert(params.object_id.to_string(), params.raw_data);
-    Ok(())
-  }
-
-  async fn update_collab(&self, object_id: &str, data: RawData) -> storage::collab::Result<()> {
-    self
-      .collab_data_by_object_id
-      .write()
-      .await
-      .insert(object_id.to_string(), data);
-    Ok(())
-  }
-
-  async fn get_collab(&self, object_id: &str) -> storage::collab::Result<RawData> {
-    self
-      .collab_data_by_object_id
-      .read()
-      .await
-      .get(object_id)
-      .cloned()
-      .ok_or(StorageError::RecordNotFound)
-  }
-
-  async fn delete_collab(&self, object_id: &str) -> storage::collab::Result<()> {
-    self
-      .collab_data_by_object_id
-      .write()
-      .await
-      .remove(object_id);
-    Ok(())
   }
 }

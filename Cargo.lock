@@ -829,7 +829,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -848,7 +848,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
 dependencies = [
  "anyhow",
  "collab",
@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
 dependencies = [
  "async-trait",
  "bincode",
@@ -881,7 +881,7 @@ dependencies = [
 [[package]]
 name = "collab-plugins"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -910,7 +910,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
 dependencies = [
  "bytes",
  "collab",
@@ -924,7 +924,7 @@ dependencies = [
 [[package]]
 name = "collab-ws"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=482a33#482a33f052ccc7e6229f2b5e7d762e946757ae45"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
 dependencies = [
  "bytes",
  "collab-sync-protocol",
@@ -1744,6 +1744,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "if_chain"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb56e1aa765b4b4f3aadfab769793b7087bb03a4ea4920644a6d238e2df5b9ed"
+
+[[package]]
 name = "impl-more"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2413,6 +2419,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-error"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+dependencies = [
+ "proc-macro-error-attr",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+ "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "version_check",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2543,6 +2573,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "collab",
+ "collab-define",
  "collab-plugins",
  "collab-sync-protocol",
  "collab-ws",
@@ -3331,6 +3362,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "collab",
+ "collab-define",
  "collab-sync-protocol",
  "secrecy",
  "serde",
@@ -3338,6 +3370,8 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "tracing",
+ "validator",
 ]
 
 [[package]]
@@ -3837,6 +3871,33 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "url",
+ "validator_derive",
+]
+
+[[package]]
+name = "validator_derive"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc44ca3088bb3ba384d9aecf40c6a23a676ce23e09bdaca2073d99c207f864af"
+dependencies = [
+ "if_chain",
+ "lazy_static",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 1.0.109",
+ "validator_types",
+]
+
+[[package]]
+name = "validator_types"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "111abfe30072511849c5910134e8baf8dc05de4c0e5903d681cbd5c9c4d611e3"
+dependencies = [
+ "proc-macro2",
+ "syn 1.0.109",
 ]
 
 [[package]]

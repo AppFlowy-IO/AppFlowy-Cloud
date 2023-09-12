@@ -19,5 +19,5 @@ async fn sign_out_after_sign_in() {
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
-  assert!(c.sign_out().await.unwrap().is_ok());
+  c.sign_out().await.unwrap();
 }

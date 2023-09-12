@@ -50,7 +50,6 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER manage_af_workspace_member_role_trigger
 AFTER
 INSERT ON af_workspace FOR EACH ROW EXECUTE FUNCTION manage_af_workspace_member_role_func();
-
 -- Insert a workspace member if the user with given uid is the owner of the workspace
 CREATE OR REPLACE FUNCTION insert_af_workspace_member_if_owner(
         p_uid BIGINT,

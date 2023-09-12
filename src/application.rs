@@ -1,6 +1,6 @@
 use crate::api::{user_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
-use crate::config::config::{Config, DatabaseSetting, TlsConfig};
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{State, Storage};
@@ -100,10 +100,6 @@ where
       .service(ws_scope())
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
-      .app_data(Data::new(storage.clone()))
-      .app_data(Data::new(gotrue::api::Client::new(
-        reqwest::Client::new(),
-        &config.gotrue.base_url)))
   });
 
   server = match pair {
@@ -126,12 +122,14 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 
 pub async fn init_state(config: &Config) -> State {
   let pg_pool = get_connection_pool(&config.database).await;
+  let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
   State {
     pg_pool,
     config: Arc::new(config.clone()),
     user: Arc::new(Default::default()),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
+    gotrue_client,
   }
 }
 
@@ -141,6 +139,15 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
     .connect_with(setting.with_db())
     .await
     .expect("Failed to connect to Postgres")
+}
+
+async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {
+  let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
+  gotrue_client
+    .health()
+    .await
+    .expect("Failed to connect to GoTrue");
+  gotrue_client
 }
 
 fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder {

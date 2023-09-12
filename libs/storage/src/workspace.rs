@@ -15,6 +15,9 @@ pub async fn create_user_if_not_exists(
         INSERT INTO af_user (uuid, email)
         SELECT $1, $2
         WHERE NOT EXISTS (
+            SELECT 1 FROM public.af_user WHERE email = $2
+        )
+        AND NOT EXISTS (
             SELECT 1 FROM public.af_user WHERE uuid = $1
         )
         "#,

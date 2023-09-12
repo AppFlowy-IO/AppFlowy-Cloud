@@ -49,6 +49,9 @@ async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<Jso
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
+
+  // let logged_user = LoggedUser::new(uid);
+  // state.user.write().await.unauthorized(logged_user);
   Ok(AppResponse::Ok().into())
 }
 

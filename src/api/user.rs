@@ -1,7 +1,7 @@
 use crate::biz;
 use crate::component::auth::{
   change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
-  InternalServerError, RegisterRequest,
+  InternalServerError, LoggedUser, RegisterRequest,
 };
 use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
@@ -57,13 +57,17 @@ async fn sign_in_password_handler(
   state: Data<State>,
 ) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
-  let token = biz::user::sign_in(
+  let (token, uid) = biz::user::sign_in(
     &state.pg_pool,
     &state.gotrue_client,
     req.email,
     req.password,
   )
   .await?;
+
+  let logged_user = LoggedUser::new(uid);
+  state.user.write().await.authorized(logged_user);
+
   Ok(AppResponse::Ok().with_data(token).into())
 }
 
@@ -71,7 +75,16 @@ async fn sign_up_handler(
   req: Json<LoginRequest>,
   state: Data<State>,
 ) -> Result<JsonAppResponse<()>> {
-  biz::user::sign_up(&state.gotrue_client, &req.email, &req.password).await?;
+  let uid = biz::user::sign_up(
+    &state.gotrue_client,
+    &req.email,
+    &req.password,
+    &state.pg_pool,
+  )
+  .await?;
+
+  let logged_user = LoggedUser::new(uid);
+  state.user.write().await.authorized(logged_user);
   Ok(AppResponse::Ok().into())
 }
 

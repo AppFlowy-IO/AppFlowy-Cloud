@@ -9,7 +9,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 pub trait RealtimeUser: Clone + Debug + Send + Sync + 'static + Display {
-  fn user_id(&self) -> &i64;
+  fn id(&self) -> &str;
 }
 
 #[derive(Debug, Message, Clone)]

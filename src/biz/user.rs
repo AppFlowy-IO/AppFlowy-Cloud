@@ -8,44 +8,48 @@ use gotrue::{
 };
 
 use shared_entity::{error::AppError, server_error};
-use storage::entities::{AfUserProfileView, AfWorkspaces};
+use storage::entities::{AFUserProfileView, AFWorkspaces};
 use validator::validate_email;
 
 use crate::domain::validate_password;
 use sqlx::{types::uuid, PgPool};
+use tracing::instrument;
 
+#[instrument(level = "info", skip_all, err)]
+pub async fn sign_up(
+  gotrue_client: &Client,
+  email: &str,
+  password: &str,
+  pg_pool: &PgPool,
+) -> Result<(), AppError> {
+  validate_email_password(email, password)?;
+  let user = gotrue_client.sign_up(email, password).await??;
+  tracing::info!("user sign up: {:?}", user);
+  if user.confirmed_at.is_some() {
+    let gotrue_uuid = uuid::Uuid::from_str(&user.id)?;
+    storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &user.email).await?;
+  }
+  Ok(())
+}
 pub async fn user_workspaces(
   pg_pool: &PgPool,
   uuid: &uuid::Uuid,
-) -> Result<AfWorkspaces, AppError> {
+) -> Result<AFWorkspaces, AppError> {
   let workspaces = storage::workspace::select_all_workspaces_owned(pg_pool, uuid).await?;
-  Ok(AfWorkspaces(workspaces))
+  Ok(AFWorkspaces(workspaces))
 }
 
 pub async fn user_profile(
   pg_pool: &PgPool,
   uuid: &uuid::Uuid,
-) -> Result<AfUserProfileView, AppError> {
+) -> Result<AFUserProfileView, AppError> {
   let profile = storage::workspace::select_user_profile_view_by_uuid(pg_pool, uuid)
     .await?
     .ok_or(sqlx::Error::RowNotFound)?;
   Ok(profile)
 }
 
-pub async fn sign_up(
-  pg_pool: &PgPool,
-  gotrue_client: &Client,
-  email: &str,
-  password: &str,
-) -> Result<(), AppError> {
-  validate_email_password(email, password)?;
-  let user = gotrue_client.sign_up(email, password).await??;
-  if user.confirmed_at.is_some() {
-    storage::workspace::create_user_if_not_exists(pg_pool, uuid::Uuid::from_str(&user.id)?).await?;
-  }
-  Ok(())
-}
-
+#[instrument(level = "info", skip_all, err)]
 pub async fn sign_in(
   pg_pool: &PgPool,
   gotrue_client: &Client,
@@ -54,8 +58,9 @@ pub async fn sign_in(
 ) -> Result<AccessTokenResponse, AppError> {
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
-  storage::workspace::create_user_if_not_exists(pg_pool, uuid::Uuid::from_str(&token.user.id)?)
-    .await?;
+
+  let gotrue_uuid = uuid::Uuid::from_str(&token.user.id)?;
+  storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &token.user.email).await?;
   Ok(token)
 }
 

@@ -9,7 +9,7 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
 use gotrue::models::{AccessTokenResponse, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use storage::entities::{AfUserProfileView, AfWorkspaces};
+use storage::entities::{AFUserProfileView, AFWorkspaces};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
@@ -39,16 +39,16 @@ pub fn user_scope() -> Scope {
 async fn profile_handler(
   uuid: UserUuid,
   state: Data<State>,
-) -> Result<JsonAppResponse<AfUserProfileView>> {
-  let profile = biz::user::user_profile(&state.pg_pool, &uuid.0).await?;
+) -> Result<JsonAppResponse<AFUserProfileView>> {
+  let profile = biz::user::user_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
 async fn workspaces_handler(
   uuid: UserUuid,
   state: Data<State>,
-) -> Result<JsonAppResponse<AfWorkspaces>> {
-  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid.0).await?;
+) -> Result<JsonAppResponse<AFWorkspaces>> {
+  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
@@ -69,6 +69,7 @@ async fn sign_out_handler(auth: Authorization, state: Data<State>) -> Result<Jso
     .logout(&auth.token)
     .await
     .map_err(InternalServerError::new)?;
+
   Ok(AppResponse::Ok().into())
 }
 
@@ -84,6 +85,7 @@ async fn sign_in_password_handler(
     req.password,
   )
   .await?;
+
   Ok(AppResponse::Ok().with_data(token).into())
 }
 
@@ -92,12 +94,13 @@ async fn sign_up_handler(
   state: Data<State>,
 ) -> Result<JsonAppResponse<()>> {
   biz::user::sign_up(
-    &state.pg_pool,
     &state.gotrue_client,
     &req.email,
     &req.password,
+    &state.pg_pool,
   )
   .await?;
+
   Ok(AppResponse::Ok().into())
 }
 

@@ -54,7 +54,7 @@ pub struct QueryCollabParams {
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
-pub struct AfWorkspace {
+pub struct AFWorkspace {
   pub workspace_id: uuid::Uuid,
   pub database_storage_id: Option<sqlx::types::uuid::Uuid>,
   pub owner_uid: Option<i64>,
@@ -65,7 +65,7 @@ pub struct AfWorkspace {
 }
 
 #[derive(Debug, sqlx::FromRow, Deserialize, Serialize)]
-pub struct AfUserProfileView {
+pub struct AFUserProfileView {
   pub uid: Option<i64>,
   pub uuid: Option<uuid::Uuid>,
   pub email: Option<String>,
@@ -79,10 +79,10 @@ pub struct AfUserProfileView {
 }
 
 #[derive(Debug, sqlx::FromRow, Deserialize, Serialize)]
-pub struct AfWorkspaces(pub Vec<AfWorkspace>);
+pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 
-impl AfWorkspaces {
-  pub fn get_latest(&self, profile: AfUserProfileView) -> Option<AfWorkspace> {
+impl AFWorkspaces {
+  pub fn get_latest(&self, profile: AFUserProfileView) -> Option<AFWorkspace> {
     match profile.latest_workspace_id {
       Some(ws_id) => self.0.iter().find(|ws| ws.workspace_id == ws_id).cloned(),
       None => None,

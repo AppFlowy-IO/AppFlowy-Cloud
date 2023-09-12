@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO af_user (uuid, email)\n        SELECT $1, $2\n        WHERE NOT EXISTS (\n            SELECT 1 FROM public.af_user WHERE uuid = $1\n        )\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4b68ed5c7ef1a62cdb3ab1d1c114e7d1d8aff11b2ab7ff08e863c0b88dd86f1d"
+}

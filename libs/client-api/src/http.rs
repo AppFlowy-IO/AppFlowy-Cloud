@@ -38,33 +38,38 @@ impl Client {
     let mut provider_access_token: Option<String> = None;
     let mut provider_refresh_token: Option<String> = None;
 
-    let a = url::Url::parse(url)?;
-    a.query_pairs().for_each(|(k, v)| {
-      match k.as_ref() {
-        "access_token" => {
-          access_token = Some(v.into_owned());
-        },
-        "token_type" => {
-          token_type = Some(v.into_owned());
-        },
-        "expires_in" => {
-          expires_in = Some(v.parse::<i64>().unwrap());
-        },
-        "expires_at" => {
-          expires_at = Some(v.parse::<i64>().unwrap());
-        },
-        "refresh_token" => {
-          refresh_token = Some(v.into_owned());
-        },
-        "provider_access_token" => {
-          provider_access_token = Some(v.into_owned());
-        },
-        "provider_refresh_token" => {
-          provider_refresh_token = Some(v.into_owned());
-        },
-        _ => {},
-      };
-    });
+    url::Url::parse(url)?
+      .fragment()
+      .ok_or(url_missing_param("fragment"))?
+      .split("&")
+      .into_iter()
+      .for_each(|f| {
+        let (k, v) = f.split_once("=").unwrap();
+        match k.as_ref() {
+          "access_token" => {
+            access_token = Some(v.to_string());
+          },
+          "token_type" => {
+            token_type = Some(v.to_string());
+          },
+          "expires_in" => {
+            expires_in = Some(v.parse::<i64>().unwrap());
+          },
+          "expires_at" => {
+            expires_at = Some(v.parse::<i64>().unwrap());
+          },
+          "refresh_token" => {
+            refresh_token = Some(v.to_string());
+          },
+          "provider_access_token" => {
+            provider_access_token = Some(v.to_string());
+          },
+          "provider_refresh_token" => {
+            provider_refresh_token = Some(v.to_string());
+          },
+          _ => {},
+        };
+      });
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
     let user = self.user_info(&access_token).await?;
@@ -260,3 +265,4 @@ impl Client {
   //   check_response(resp).await
   // }
 }
+

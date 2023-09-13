@@ -1,5 +1,4 @@
-pub mod collab;
-pub mod core;
+pub mod collaborate;
 pub mod entities;
 mod error;
 mod util;

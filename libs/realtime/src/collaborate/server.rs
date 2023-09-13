@@ -15,8 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio_stream::StreamExt;
 
-use crate::core::group::CollabGroupCache;
-use crate::core::ClientWebsocketSink;
+use crate::collaborate::client::ClientWebsocketSink;
+use crate::collaborate::group::CollabGroupCache;
 use storage::collab::CollabStorage;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 

@@ -3,8 +3,8 @@ use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use realtime::core::{CollabServer, CollabSession};
 
+use realtime::collaborate::{CollabServer, CollabSession};
 use std::time::Duration;
 
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};

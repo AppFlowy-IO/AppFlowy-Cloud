@@ -10,9 +10,9 @@ use actix_web_actors::ws;
 use bytes::Bytes;
 use std::ops::Deref;
 
-use crate::core::CollabServer;
 use collab_sync_protocol::CollabMessage;
 
+use crate::collaborate::server::CollabServer;
 use std::time::{Duration, Instant};
 use storage::collab::CollabStorage;
 

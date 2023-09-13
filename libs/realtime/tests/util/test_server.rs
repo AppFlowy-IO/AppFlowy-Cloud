@@ -11,12 +11,12 @@ use actix_web_actors::ws;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use once_cell::sync::Lazy;
-use realtime::core::{CollabServer, CollabSession};
 use realtime::entities::RealtimeUser;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use std::path::PathBuf;
 
 use collab_define::CollabType;
+use realtime::collaborate::{CollabServer, CollabSession};
 use std::time::Duration;
 
 use crate::util::log::{get_subscriber, init_subscriber};
@@ -175,7 +175,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   token: Path<String>,
   state: Data<State>,
-  server: Data<Addr<CollabServer<CollabMemoryStorageImpl>>>,
+  collab_server: Data<Addr<CollabServer<CollabMemoryStorageImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = TestLoggedUser {
@@ -183,7 +183,7 @@ pub async fn establish_ws_connection(
   };
   let client = CollabSession::new(
     user,
-    server.get_ref().clone(),
+    collab_server.get_ref().clone(),
     Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
     Duration::from_secs(state.config.websocket.client_timeout as u64),
   );

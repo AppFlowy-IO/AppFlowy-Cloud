@@ -13,7 +13,7 @@ use storage::collab::CollabStorage;
 use storage::error::StorageError;
 use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
 
-use crate::collab::CollabGroup;
+use crate::collaborate::group::CollabGroup;
 use y_sync::awareness::Awareness;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};

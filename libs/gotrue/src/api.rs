@@ -88,6 +88,16 @@ impl Client {
     check_response(resp).await
   }
 
+  pub async fn user_info(&self, access_token: &str) -> Result<Result<User, GoTrueError>, Error> {
+    let resp = self
+      .client
+      .get(format!("{}/logout", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
+    from_response(resp).await
+  }
+
   pub async fn update_user(
     &self,
     access_token: &str,

@@ -29,7 +29,7 @@ impl Client {
   }
 
   // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
-  pub fn sign_in_url(&mut self, url: &str) -> Result<(), AppError> {
+  pub async fn sign_in_url(&mut self, url: &str) -> Result<(), AppError> {
     let mut access_token: Option<String> = None;
     let mut token_type: Option<String> = None;
     let mut expires_in: Option<i64> = None;
@@ -67,7 +67,7 @@ impl Client {
     });
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    let user = self.user_info(&access_token)?;
+    let user = self.user_info(&access_token).await?;
 
     self.token = Some(AccessTokenResponse {
       access_token,
@@ -82,8 +82,13 @@ impl Client {
     Ok(())
   }
 
-  pub fn user_info(&self, _access_token: &str) -> Result<User, AppError> {
-    todo!()
+  pub async fn user_info(&self, access_token: &str) -> Result<User, AppError> {
+    let url = format!("{}/api/user/info/{}", self.base_url, access_token);
+    let resp = self.http_client.get(&url).send().await?;
+    let user = AppResponse::<User>::from_response(resp)
+      .await?
+      .into_data()?;
+    Ok(user)
   }
 
   pub fn token(&self) -> Option<&AccessTokenResponse> {

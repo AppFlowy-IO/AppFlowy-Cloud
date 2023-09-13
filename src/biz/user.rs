@@ -34,6 +34,10 @@ pub async fn sign_up(
   Ok(())
 }
 
+pub async fn info(gotrue_client: &Client, access_token: &str) -> Result<User, AppError> {
+  Ok(gotrue_client.user_info(access_token).await??)
+}
+
 pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OAuthURL, AppError> {
   let settings = gotrue_client.settings().await?;
   if settings.external.has_provider(&provider) {

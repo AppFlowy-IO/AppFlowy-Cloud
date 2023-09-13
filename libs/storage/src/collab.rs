@@ -6,7 +6,10 @@ use sqlx::types::{chrono, Uuid};
 use sqlx::{PgPool, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
-use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
+use storage_entity::{
+  AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
+  QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
+};
 use validator::Validate;
 
 pub type Result<T, E = StorageError> = core::result::Result<T, E>;
@@ -61,6 +64,13 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
   async fn delete_collab(&self, object_id: &str) -> Result<()>;
+
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> Result<()>;
+
+  async fn get_snapshot_data(&self, params: QuerySnapshotParams) -> Result<RawData>;
+
+  async fn get_all_snapshots(&self, params: QueryObjectSnapshotParams)
+    -> Result<AFCollabSnapshots>;
 }
 
 #[derive(Debug, Clone)]
@@ -117,7 +127,7 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
       .begin()
       .await
       .context("Failed to acquire a Postgres transaction to insert collab")?;
-    insert_or_update(&mut transaction, params).await?;
+    insert_af_collab(&mut transaction, params).await?;
     transaction
       .commit()
       .await
@@ -162,6 +172,62 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
     .await?;
     Ok(())
   }
+
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> Result<()> {
+    params.validate()?;
+
+    let encrypt = 0;
+    let workspace_id = Uuid::from_str(&params.workspace_id)?;
+    sqlx::query!(
+      r#"
+        INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)
+        VALUES ($1, $2, $3, $4, $5)
+        "#,
+      params.object_id,
+      params.raw_data,
+      params.len,
+      encrypt,
+      workspace_id,
+    )
+    .execute(&self.pg_pool)
+    .await?;
+    Ok(())
+  }
+
+  async fn get_snapshot_data(&self, params: QuerySnapshotParams) -> Result<RawData> {
+    let record = sqlx::query!(
+      r#"
+        SELECT blob
+        FROM af_collab_snapshot 
+        WHERE sid = $1 AND deleted_at IS NULL;
+        "#,
+      params.snapshot_id,
+    )
+    .fetch_optional(&self.pg_pool)
+    .await?;
+
+    match record {
+      Some(record) => Ok(record.blob),
+      None => Err(StorageError::RecordNotFound),
+    }
+  }
+
+  async fn get_all_snapshots(
+    &self,
+    params: QueryObjectSnapshotParams,
+  ) -> Result<AFCollabSnapshots> {
+    let snapshots: Vec<AFCollabSnapshot> = sqlx::query_as!(
+      AFCollabSnapshot,
+      r#"
+        SELECT sid as "snapshot_id", oid as "object_id", created_at
+        FROM af_collab_snapshot where oid = $1 AND deleted_at IS NULL;
+        "#,
+      params.object_id
+    )
+    .fetch_all(&self.pg_pool)
+    .await?;
+    Ok(AFCollabSnapshots(snapshots))
+  }
 }
 
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
@@ -186,12 +252,10 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
 /// * There's a database operation failure.
 /// * There's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
 ///
-async fn insert_or_update(
+async fn insert_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   params: InsertCollabParams,
 ) -> Result<()> {
-  params.validate()?;
-
   let encrypt = 0;
   let partition_key = params.collab_type.value();
   let workspace_id = Uuid::from_str(&params.workspace_id)?;

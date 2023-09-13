@@ -104,7 +104,7 @@ impl Client {
   }
 
   pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)?
       .json(&params)
@@ -114,7 +114,7 @@ impl Client {
   }
 
   pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)?
       .json(&params)
@@ -124,7 +124,7 @@ impl Client {
   }
 
   pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)?
       .json(&params)
@@ -136,7 +136,7 @@ impl Client {
   }
 
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)?
       .json(&params)

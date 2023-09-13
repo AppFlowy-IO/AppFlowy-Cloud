@@ -1,5 +1,6 @@
 use crate::client::constants::LOCALHOST_URL;
 use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
+use crate::collab::workspace_id_from_client;
 use client_api::Client;
 use collab_define::CollabType;
 use shared_entity::server_error::ErrorCode;
@@ -117,14 +118,4 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .unwrap_err();
 
   assert_eq!(error.code, ErrorCode::StorageError);
-}
-
-async fn workspace_id_from_client(c: &Client) -> String {
-  c.workspaces()
-    .await
-    .unwrap()
-    .first()
-    .unwrap()
-    .workspace_id
-    .to_string()
 }

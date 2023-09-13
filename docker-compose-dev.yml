@@ -31,13 +31,17 @@ services:
       - API_EXTERNAL_URL=${API_EXTERNAL_URL:-http://localhost:9998}   # change 'localhost' to the public host of machine that is running on
       - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
       - PORT=9999
-      - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST:-}                        # e.g. smtp.gmail.com
-      - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT:-}                        # e.g. 465
-      - GOTRUE_SMTP_USER=${GOTRUE_SMTP_USER:-}                        # email sender, e.g. noreply@appflowy.io
-      - GOTRUE_SMTP_PASS=${GOTRUE_SMTP_PASS:-}                        # email password
-      - GOTRUE_SMTP_ADMIN_EMAIL=${GOTRUE_SMTP_ADMIN_EMAIL:-}          # email with admin privileges e.g. internal@appflowy.io
+      - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST}                          # e.g. smtp.gmail.com
+      - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT}                          # e.g. 465
+      - GOTRUE_SMTP_USER=${GOTRUE_SMTP_USER}                          # email sender, e.g. noreply@appflowy.io
+      - GOTRUE_SMTP_PASS=${GOTRUE_SMTP_PASS}                          # email password
+      - GOTRUE_SMTP_ADMIN_EMAIL=${GOTRUE_SMTP_ADMIN_EMAIL}            # email with admin privileges e.g. internal@appflowy.io
       - GOTRUE_SMTP_MAX_FREQUENCY=${GOTRUE_SMTP_MAX_FREQUENCY:-1ns}   # set to 1ns for running tests
       - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/verify
       - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false} # change this to true to skip email confirmation
+      - GOTRUE_EXTERNAL_GOOGLE_ENABLED=${GOTRUE_EXTERNAL_GOOGLE_ENABLED}
+      - GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID}
+      - GOTRUE_EXTERNAL_GOOGLE_SECRET=${GOTRUE_EXTERNAL_GOOGLE_SECRET}
+      - GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
     ports:
       - 9998:9999

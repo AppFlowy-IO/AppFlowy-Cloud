@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Identity {
@@ -101,7 +101,7 @@ pub struct GoTrueError {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GoTrueSettings {
-  pub external: GoTrueProviderSettings,
+  pub external: GoTrueOAuthProviderSettings,
   pub disable_signup: bool,
   pub mailer_autoconfirm: bool,
   pub phone_autoconfirm: bool,
@@ -111,26 +111,100 @@ pub struct GoTrueSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GoTrueProviderSettings {
-  pub apple: bool,
-  pub azure: bool,
-  pub bitbucket: bool,
-  pub discord: bool,
-  pub facebook: bool,
-  pub figma: Option<bool>, // older versions of GoTrue do not return this
-  pub github: bool,
-  pub gitlab: bool,
-  pub google: bool,
-  pub keycloak: bool,
-  pub kakao: Option<bool>, // older versions of GoTrue do not return this
-  pub linkedin: bool,
-  pub notion: bool,
-  pub spotify: bool,
-  pub slack: bool,
-  pub workos: bool,
-  pub twitch: bool,
-  pub twitter: bool,
-  pub email: bool,
-  pub phone: bool,
-  pub zoom: bool,
+pub struct GoTrueOAuthProviderSettings(BTreeMap<String, bool>);
+
+impl GoTrueOAuthProviderSettings {
+  pub fn has_provider(&self, p: &OAuthProvider) -> bool {
+    let a = self.0.get(p.as_str());
+    match a {
+      Some(v) => *v,
+      None => false,
+    }
+  }
+}
+
+pub enum OAuthProvider {
+  Apple,
+  Azure,
+  Bitbucket,
+  Discord,
+  Facebook,
+  Figma,
+  Github,
+  Gitlab,
+  Google,
+  Keycloak,
+  Kakao,
+  Linkedin,
+  Notion,
+  Spotify,
+  Slack,
+  Workos,
+  Twitch,
+  Twitter,
+  Email,
+  Phone,
+  Zoom,
+}
+
+impl OAuthProvider {
+  pub fn as_str(&self) -> &str {
+    match self {
+      OAuthProvider::Apple => "apple",
+      OAuthProvider::Azure => "azure",
+      OAuthProvider::Bitbucket => "bitbucket",
+      OAuthProvider::Discord => "discord",
+      OAuthProvider::Facebook => "facebook",
+      OAuthProvider::Figma => "figma",
+      OAuthProvider::Github => "github",
+      OAuthProvider::Gitlab => "gitlab",
+      OAuthProvider::Google => "google",
+      OAuthProvider::Keycloak => "keycloak",
+      OAuthProvider::Kakao => "kakao",
+      OAuthProvider::Linkedin => "linkedin",
+      OAuthProvider::Notion => "notion",
+      OAuthProvider::Spotify => "spotify",
+      OAuthProvider::Slack => "slack",
+      OAuthProvider::Workos => "workos",
+      OAuthProvider::Twitch => "twitch",
+      OAuthProvider::Twitter => "twitter",
+      OAuthProvider::Email => "email",
+      OAuthProvider::Phone => "phone",
+      OAuthProvider::Zoom => "zoom",
+    }
+  }
+}
+
+impl OAuthProvider {
+  pub fn from<A: AsRef<str>>(value: A) -> Option<OAuthProvider> {
+    match value.as_ref() {
+      "apple" => Some(OAuthProvider::Apple),
+      "azure" => Some(OAuthProvider::Azure),
+      "bitbucket" => Some(OAuthProvider::Bitbucket),
+      "discord" => Some(OAuthProvider::Discord),
+      "facebook" => Some(OAuthProvider::Facebook),
+      "figma" => Some(OAuthProvider::Figma),
+      "github" => Some(OAuthProvider::Github),
+      "gitlab" => Some(OAuthProvider::Gitlab),
+      "google" => Some(OAuthProvider::Google),
+      "keycloak" => Some(OAuthProvider::Keycloak),
+      "kakao" => Some(OAuthProvider::Kakao),
+      "linkedin" => Some(OAuthProvider::Linkedin),
+      "notion" => Some(OAuthProvider::Notion),
+      "spotify" => Some(OAuthProvider::Spotify),
+      "slack" => Some(OAuthProvider::Slack),
+      "workos" => Some(OAuthProvider::Workos),
+      "twitch" => Some(OAuthProvider::Twitch),
+      "twitter" => Some(OAuthProvider::Twitter),
+      "email" => Some(OAuthProvider::Email),
+      "phone" => Some(OAuthProvider::Phone),
+      "zoom" => Some(OAuthProvider::Zoom),
+      _ => None,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OAuthURL {
+  pub url: String,
 }

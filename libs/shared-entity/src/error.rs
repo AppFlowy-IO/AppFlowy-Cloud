@@ -1,9 +1,11 @@
-use std::borrow::Cow;
 use std::fmt::Display;
+use std::num::ParseIntError;
+use std::{borrow::Cow, str};
 
-use crate::server_error::ErrorCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
+
+use crate::error_code::ErrorCode;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
@@ -51,14 +53,17 @@ impl From<anyhow::Error> for AppError {
 #[cfg(feature = "cloud")]
 impl From<gotrue_entity::GoTrueError> for AppError {
   fn from(err: gotrue_entity::GoTrueError) -> Self {
-    AppError::new(
-      ErrorCode::Unhandled,
-      format!(
-        "gotrue error: {}, id: {}",
-        err.code,
-        err.error_id.unwrap_or("".to_string())
+    match err.code {
+      401 => AppError::new(ErrorCode::OAuthError, err.msg),
+      _ => AppError::new(
+        ErrorCode::Unhandled,
+        format!(
+          "gotrue error: {}, id: {}",
+          err.code,
+          err.error_id.unwrap_or("".to_string())
+        ),
       ),
-    )
+    }
   }
 }
 
@@ -102,8 +107,27 @@ impl From<serde_json::Error> for AppError {
 }
 
 #[cfg(feature = "cloud")]
+impl From<opener::OpenError> for AppError {
+  fn from(value: opener::OpenError) -> Self {
+    AppError::new(ErrorCode::OpenError, value.to_string())
+  }
+}
+
+#[cfg(feature = "cloud")]
 impl From<validator::ValidationErrors> for AppError {
   fn from(value: validator::ValidationErrors) -> Self {
     AppError::new(ErrorCode::InvalidRequestParams, value.to_string())
+  }
+}
+
+impl From<url::ParseError> for AppError {
+  fn from(value: url::ParseError) -> Self {
+    AppError::new(ErrorCode::InvalidUrl, value.to_string())
+  }
+}
+
+impl From<ParseIntError> for AppError {
+  fn from(value: ParseIntError) -> Self {
+    AppError::new(ErrorCode::InvalidUrl, value.to_string())
   }
 }

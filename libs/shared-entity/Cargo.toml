@@ -17,6 +17,8 @@ actix-web = { version = "4.4.0", default-features = false, features = ["http2"],
 sqlx = { version = "0.7", default-features = false, features = ["postgres"], optional = true }
 validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }
 gotrue-entity = { path = "../gotrue-entity", optional = true }
+opener = "0.6.1"
+url = "2.4.1"
 
 [features]
 cloud = ["actix-web", "sqlx", "validator", "gotrue-entity"]

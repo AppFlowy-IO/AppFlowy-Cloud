@@ -114,15 +114,19 @@ fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::
   let bearer = req
     .headers()
     .get("Authorization")
-    .ok_or_else(|| actix_web::error::ErrorUnauthorized("No Authorization header"))?;
+    .ok_or(actix_web::error::ErrorUnauthorized(
+      "No Authorization header",
+    ))?;
 
   let bearer_str = bearer
     .to_str()
     .map_err(actix_web::error::ErrorUnauthorized)?;
 
-  let (_, token) = bearer_str.split_once("Bearer ").ok_or_else(|| {
-    actix_web::error::ErrorUnauthorized("Invalid Authorization header, missing Bearer")
-  })?;
+  let (_, token) = bearer_str
+    .split_once("Bearer ")
+    .ok_or(actix_web::error::ErrorUnauthorized(
+      "Invalid Authorization header, missing Bearer",
+    ))?;
 
   authorization_from_token(token, state)
 }

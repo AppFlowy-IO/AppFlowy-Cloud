@@ -1,7 +1,10 @@
-use crate::client::utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD};
-use crate::client_api_client;
+use gotrue_entity::OAuthProvider;
+use shared_entity::error_code::ErrorCode;
 
-use shared_entity::server_error::ErrorCode;
+use crate::{
+  client::utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD},
+  client_api_client,
+};
 
 #[tokio::test]
 async fn sign_up_success() {
@@ -37,4 +40,15 @@ async fn sign_up_but_existing_user() {
   c.sign_up(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn sign_up_oauth_not_available() {
+  let c = client_api_client();
+  assert_eq!(
+    // Change Zoom to any other valid OAuth provider
+    // to manually open the browser and login
+    c.oauth_login(OAuthProvider::Zoom).await.err().unwrap().code,
+    ErrorCode::InvalidOAuthProvider
+  );
 }

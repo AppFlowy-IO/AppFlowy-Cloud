@@ -1,4 +1,6 @@
 use anyhow::Error;
+use gotrue_entity::OAuthProvider;
+use gotrue_entity::OAuthURL;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
@@ -6,7 +8,8 @@ use shared_entity::data::AppResponse;
 use gotrue_entity::{AccessTokenResponse, User};
 
 use shared_entity::error::AppError;
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::url_missing_param;
+use shared_entity::error_code::ErrorCode;
 use storage_entity::{AFUserProfileView, InsertCollabParams};
 use storage_entity::{AFWorkspaces, QueryCollabParams};
 use storage_entity::{DeleteCollabParams, RawData};
@@ -28,8 +31,87 @@ impl Client {
     }
   }
 
+  // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
+  pub async fn sign_in_url(&mut self, url: &str) -> Result<(), AppError> {
+    let mut access_token: Option<String> = None;
+    let mut token_type: Option<String> = None;
+    let mut expires_in: Option<i64> = None;
+    let mut expires_at: Option<i64> = None;
+    let mut refresh_token: Option<String> = None;
+    let mut provider_access_token: Option<String> = None;
+    let mut provider_refresh_token: Option<String> = None;
+
+    url::Url::parse(url)?
+      .fragment()
+      .ok_or(url_missing_param("fragment"))?
+      .split("&")
+      .into_iter()
+      .try_for_each(|f| -> Result<(), AppError> {
+        let (k, v) = f.split_once("=").ok_or(url_missing_param("key=value"))?;
+        match k.as_ref() {
+          "access_token" => {
+            access_token = Some(v.to_string());
+          },
+          "token_type" => {
+            token_type = Some(v.to_string());
+          },
+          "expires_in" => {
+            expires_in = Some(v.parse::<i64>()?);
+          },
+          "expires_at" => {
+            expires_at = Some(v.parse::<i64>()?);
+          },
+          "refresh_token" => {
+            refresh_token = Some(v.to_string());
+          },
+          "provider_access_token" => {
+            provider_access_token = Some(v.to_string());
+          },
+          "provider_refresh_token" => {
+            provider_refresh_token = Some(v.to_string());
+          },
+          _ => {},
+        };
+        Ok(())
+      })?;
+
+    let access_token = access_token.ok_or(url_missing_param("access_token"))?;
+    let user = self.user_info(&access_token).await?;
+
+    self.token = Some(AccessTokenResponse {
+      access_token,
+      token_type: token_type.ok_or(url_missing_param("token_type"))?,
+      expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
+      expires_at,
+      refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
+      user,
+      provider_access_token,
+      provider_refresh_token,
+    });
+    Ok(())
+  }
+
+  pub async fn user_info(&self, access_token: &str) -> Result<User, AppError> {
+    let url = format!("{}/api/user/info/{}", self.base_url, access_token);
+    let resp = self.http_client.get(&url).send().await?;
+    let user = AppResponse::<User>::from_response(resp)
+      .await?
+      .into_data()?;
+    Ok(user)
+  }
+
   pub fn token(&self) -> Option<&AccessTokenResponse> {
     self.token.as_ref()
+  }
+
+  pub async fn oauth_login(&self, provider: OAuthProvider) -> Result<(), AppError> {
+    let url = format!("{}/api/user/oauth/{}", self.base_url, provider.as_str());
+    let resp = self.http_client.get(&url).send().await?;
+    let oauth_url = AppResponse::<OAuthURL>::from_response(resp)
+      .await?
+      .into_data()?;
+    opener::open(oauth_url.url.as_str())?;
+    Ok(())
   }
 
   pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {

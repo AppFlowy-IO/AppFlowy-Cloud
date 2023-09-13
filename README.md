@@ -22,6 +22,15 @@ GOTRUE_SMTP_ADMIN_EMAIL=comp_admin@@some_company.com
 # Change 'localhost' to the public host of machine that is running on.
 # This is for email confirmation link
 API_EXTERNAL_URL=http://localhost:9998
+
+# Enable Google OAuth2, default: false, quick link for set up:
+# https://console.cloud.google.com/apis/credentials
+# https://console.cloud.google.com/apis/credentials/consent
+GOTRUE_EXTERNAL_GOOGLE_ENABLED=false
+GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=some_id
+GOTRUE_EXTERNAL_GOOGLE_SECRET=some_secret
+# Change 'localhost' to the public host of machine that is running on.
+GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
 ```
 - additional settings can be modified in `docker-compose.yml`
 

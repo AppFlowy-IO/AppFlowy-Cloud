@@ -9,7 +9,7 @@ use std::borrow::Cow;
 
 use std::fmt::{Debug, Display};
 
-use crate::server_error::ErrorCode;
+use crate::error_code::ErrorCode;
 /// A macro to generate static AppResponse functions with predefined error codes.
 macro_rules! static_app_response {
   ($name:ident, $code:expr) => {

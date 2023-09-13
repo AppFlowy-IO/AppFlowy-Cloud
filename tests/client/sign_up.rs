@@ -40,3 +40,18 @@ async fn sign_up_but_existing_user() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn sign_up_oauth_not_available() {
+  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  assert_eq!(
+    // Change Zoom to any other valid OAuth provider
+    // to manually open the browser and login
+    c.oauth_login(gotrue::models::OAuthProvider::Zoom)
+      .await
+      .err()
+      .unwrap()
+      .code,
+    ErrorCode::InvalidOAuthProvider
+  );
+}

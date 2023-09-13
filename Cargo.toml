@@ -62,9 +62,11 @@ token = { path = "libs/token" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 storage = { path = "libs/storage" }
+storage-entity = { path = "libs/storage-entity" }
 gotrue = { path = "libs/gotrue" }
+gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
-shared_entity = { path = "libs/shared-entity" }
+shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 
 
 [dev-dependencies]
@@ -91,9 +93,12 @@ members = [
     "libs/snowflake",
     "libs/realtime",
     "libs/storage",
+    "libs/storage-entity",
     "libs/client-api",
     "libs/infra",
     "libs/shared-entity",
+    "libs/gotrue",
+    "libs/gotrue-entity"
 ]
 
 [profile.dev.package.sqlx-macros]

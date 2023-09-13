@@ -3,6 +3,7 @@ use crate::client::{
   utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD},
 };
 use client_api::Client;
+use gotrue_entity::OAuthProvider;
 use shared_entity::server_error::ErrorCode;
 
 #[tokio::test]
@@ -47,11 +48,7 @@ async fn sign_up_oauth_not_available() {
   assert_eq!(
     // Change Zoom to any other valid OAuth provider
     // to manually open the browser and login
-    c.oauth_login(gotrue::models::OAuthProvider::Zoom)
-      .await
-      .err()
-      .unwrap()
-      .code,
+    c.oauth_login(OAuthProvider::Zoom).await.err().unwrap().code,
     ErrorCode::InvalidOAuthProvider
   );
 }

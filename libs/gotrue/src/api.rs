@@ -1,10 +1,8 @@
 use anyhow::Error;
 use futures_util::TryFutureExt;
 
-use super::{
-  grant::Grant,
-  models::{AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, User},
-};
+use super::grant::Grant;
+use gotrue_entity::{AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, User};
 use infra::reqwest::{check_response, from_body, from_response};
 
 #[derive(Clone)]

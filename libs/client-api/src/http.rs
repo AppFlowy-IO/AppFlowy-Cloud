@@ -1,18 +1,17 @@
 use anyhow::Error;
-use gotrue::models::OAuthProvider;
-use gotrue::models::OAuthURL;
+use gotrue_entity::OAuthProvider;
+use gotrue_entity::OAuthURL;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
 
-use gotrue::models::{AccessTokenResponse, User};
+use gotrue_entity::{AccessTokenResponse, User};
 
 use shared_entity::error::AppError;
-
-use storage::collab::RawData;
-use storage::entities::DeleteCollabParams;
-use storage::entities::{AFUserProfileView, InsertCollabParams};
-use storage::entities::{AFWorkspaces, QueryCollabParams};
+use shared_entity::server_error::ErrorCode;
+use storage_entity::{AFUserProfileView, InsertCollabParams};
+use storage_entity::{AFWorkspaces, QueryCollabParams};
+use storage_entity::{DeleteCollabParams, RawData};
 
 pub struct Client {
   http_client: reqwest::Client,
@@ -42,8 +41,7 @@ impl Client {
     let resp = self.http_client.get(&url).send().await?;
     let oauth_url = AppResponse::<OAuthURL>::from_response(resp)
       .await?
-      .into_data()?
-      .ok_or::<AppError>(ErrorCode::MissingPayload.into())?;
+      .into_data()?;
     opener::open(oauth_url.url.as_str())?;
     Ok(())
   }

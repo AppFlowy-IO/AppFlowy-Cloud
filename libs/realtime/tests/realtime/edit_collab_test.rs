@@ -1,7 +1,7 @@
 use crate::realtime::script::CollabTest;
 use serde_json::json;
 
-#[tokio::test]
+#[actix_rt::test]
 async fn single_client_write_collab_test() {
   let mut test = CollabTest::new().await;
   test.create_client(0).await;

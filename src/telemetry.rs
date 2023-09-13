@@ -10,24 +10,27 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 /// Compose multiple layers into a `tracing`'s subscriber.
 pub fn get_subscriber<Sink>(
   name: String,
-  env_filter: String,
+  env_filter: Option<String>,
   sink: Sink,
 ) -> impl Subscriber + Sync + Send
 where
   Sink: for<'a> MakeWriter<'a> + Send + Sync + 'static,
 {
-  let env_filter = match EnvFilter::try_from_default_env() {
-    Ok(env_filter) => {
+  let env_filter = match env_filter {
+    None => {
       dbg!("Using default env filter");
-      env_filter
+      EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
     },
-    Err(_) => EnvFilter::new(env_filter),
+    Some(env_filter) => EnvFilter::new(env_filter),
   };
+
   let formatting_layer = BunyanFormattingLayer::new(name, sink);
   tracing_subscriber::fmt()
     .with_ansi(true)
     .with_target(true)
     .with_max_level(tracing::Level::TRACE)
+    .with_thread_ids(false)
+    .with_file(false)
     .pretty()
     .finish()
     .with(env_filter)

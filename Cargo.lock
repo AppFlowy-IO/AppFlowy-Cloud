@@ -836,7 +836,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b3ef46#b3ef4620dbce71bd364f6081633261b10c05ff05"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -855,7 +855,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b3ef46#b3ef4620dbce71bd364f6081633261b10c05ff05"
 dependencies = [
  "anyhow",
  "collab",
@@ -867,7 +867,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b3ef46#b3ef4620dbce71bd364f6081633261b10c05ff05"
 dependencies = [
  "async-trait",
  "bincode",
@@ -888,7 +888,7 @@ dependencies = [
 [[package]]
 name = "collab-plugins"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b3ef46#b3ef4620dbce71bd364f6081633261b10c05ff05"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -917,7 +917,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b3ef46#b3ef4620dbce71bd364f6081633261b10c05ff05"
 dependencies = [
  "bytes",
  "collab",
@@ -931,7 +931,7 @@ dependencies = [
 [[package]]
 name = "collab-ws"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f802a46#f802a46eecd9485ead06ce1c3de75203f3dfc89e"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b3ef46#b3ef4620dbce71bd364f6081633261b10c05ff05"
 dependencies = [
  "bytes",
  "collab-sync-protocol",
@@ -2601,6 +2601,7 @@ dependencies = [
  "serde",
  "serde-aux",
  "serde_json",
+ "serde_repr",
  "storage",
  "storage-entity",
  "tempfile",
@@ -4226,9 +4227,9 @@ dependencies = [
 
 [[package]]
 name = "yrs"
-version = "0.16.10"
+version = "0.16.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c48071f2693893c866cffdad3e6a931aefcd14e4400d45353a0e3f91a96e80b"
+checksum = "4c2aef2bf89b4f7c003f9c73f1c8097427ca32e1d006443f3f607f11e79a797b"
 dependencies = [
  "atomic_refcell",
  "lib0",

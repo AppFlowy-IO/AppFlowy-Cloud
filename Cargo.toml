@@ -106,11 +106,11 @@ members = [
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "f802a46"  }
-collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "f802a46" }
-collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "f802a46"  }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "f802a46" }
-collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "f802a46" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b3ef46"  }
+collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b3ef46" }
+collab-ws = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b3ef46"  }
+collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b3ef46" }
+collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b3ef46" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

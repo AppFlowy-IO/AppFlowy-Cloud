@@ -4,7 +4,7 @@ use crate::client::{
 };
 use client_api::Client;
 use gotrue_entity::OAuthProvider;
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::ErrorCode;
 
 #[tokio::test]
 async fn sign_up_success() {

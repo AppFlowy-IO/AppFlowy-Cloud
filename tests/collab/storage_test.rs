@@ -2,7 +2,7 @@ use crate::client::constants::LOCALHOST_URL;
 use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
 use client_api::Client;
 use collab_define::CollabType;
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::ErrorCode;
 use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 use uuid::Uuid;
 

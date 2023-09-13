@@ -1,8 +1,5 @@
-use actix_http::Uri;
-use actix_web::dev::Url;
 use client_api::Client;
-
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::ErrorCode;
 
 use crate::client::{
   constants::LOCALHOST_URL,

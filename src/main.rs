@@ -4,9 +4,18 @@ use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
+  let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
+  let mut filters = vec![];
+  filters.push(format!("actix_web={}", level));
+  filters.push(format!("collab={}", level));
+  filters.push(format!("collab_sync={}", level));
+  filters.push(format!("appflowy_cloud={}", level));
+  filters.push(format!("collab_plugins={}", level));
+  filters.push(format!("realtime={}", level));
+
   let subscriber = get_subscriber(
     "appflowy_cloud".to_string(),
-    "info".to_string(),
+    filters.join(","),
     std::io::stdout,
   );
   init_subscriber(subscriber);

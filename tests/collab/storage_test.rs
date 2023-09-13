@@ -1,6 +1,7 @@
-use crate::client::constants::LOCALHOST_URL;
 use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
-use client_api::Client;
+use crate::client_api_client;
+use crate::collab::workspace_id_from_client;
+
 use collab_define::CollabType;
 use shared_entity::error_code::ErrorCode;
 use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
@@ -8,7 +9,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn success_insert_collab_test() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
@@ -39,7 +40,7 @@ async fn success_insert_collab_test() {
 
 #[tokio::test]
 async fn success_delete_collab_test() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
@@ -76,7 +77,7 @@ async fn success_delete_collab_test() {
 
 #[tokio::test]
 async fn fail_insert_collab_with_empty_payload_test() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
@@ -98,7 +99,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
 
 #[tokio::test]
 async fn fail_insert_collab_with_invalid_workspace_id_test() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
@@ -117,14 +118,4 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .unwrap_err();
 
   assert_eq!(error.code, ErrorCode::StorageError);
-}
-
-async fn workspace_id_from_client(c: &Client) -> String {
-  c.workspaces()
-    .await
-    .unwrap()
-    .first()
-    .unwrap()
-    .workspace_id
-    .to_string()
 }

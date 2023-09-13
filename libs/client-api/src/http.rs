@@ -36,6 +36,10 @@ impl Client {
     self.token.as_ref()
   }
 
+  pub async fn oauth_login(&self, _provider: OAuthProvider) -> Result<(), AppError> {
+    todo!()
+  }
+
   pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self

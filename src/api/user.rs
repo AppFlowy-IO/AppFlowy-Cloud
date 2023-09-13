@@ -27,7 +27,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
     .service(web::resource("/sign_out").route(web::post().to(sign_out_handler)))
     .service(web::resource("/update").route(web::post().to(update_handler)))
-    .service(web::resource("/oauth/{provider}").route(web::post().to(oauth_handler)))
+    .service(web::resource("/oauth/{provider}").route(web::get().to(oauth_handler)))
 
     .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))

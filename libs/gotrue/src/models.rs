@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Identity {
@@ -111,11 +111,15 @@ pub struct GoTrueSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GoTrueOAuthProviderSettings(BTreeSet<String>);
+pub struct GoTrueOAuthProviderSettings(BTreeMap<String, bool>);
 
 impl GoTrueOAuthProviderSettings {
   pub fn has_provider(&self, p: &OAuthProvider) -> bool {
-    self.0.contains(p.as_str())
+    let a = self.0.get(p.as_str());
+    match a {
+      Some(v) => *v,
+      None => false,
+    }
   }
 }
 

@@ -10,7 +10,7 @@ use crate::state::State;
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::error::AppError;
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::ErrorCode;
 use storage_entity::{AFUserProfileView, AFWorkspaces};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};

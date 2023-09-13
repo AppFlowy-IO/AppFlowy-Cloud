@@ -13,3 +13,4 @@ gotrue-entity = { path = "../gotrue-entity" }
 shared_entity = { path = "../shared-entity" }
 storage-entity = { path = "../storage-entity" }
 opener = "0.6.1"
+url = "2.4.1"

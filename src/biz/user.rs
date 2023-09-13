@@ -8,7 +8,7 @@ use gotrue::{
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::{
   error::AppError,
-  server_error::{self, ErrorCode},
+  error_code::{invalid_email_error, invalid_password_error, ErrorCode},
 };
 use storage_entity::{AFUserProfileView, AFWorkspaces};
 use validator::validate_email;
@@ -95,9 +95,9 @@ pub async fn update(
 
 fn validate_email_password(email: &str, password: &str) -> Result<(), AppError> {
   if !validate_email(email) {
-    Err(server_error::invalid_email_error(email))
+    Err(invalid_email_error(email))
   } else if !validate_password(password) {
-    Err(server_error::invalid_password_error(password))
+    Err(invalid_password_error(password))
   } else {
     Ok(())
   }

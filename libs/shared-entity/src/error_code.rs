@@ -16,6 +16,9 @@ pub enum ErrorCode {
   #[error("Record not found")]
   RecordNotFound = -2,
 
+  #[error("Record already exist")]
+  RecordAlreadyExists = -3,
+
   #[error("Invalid email format.")]
   InvalidEmail = 1001,
 
@@ -28,8 +31,8 @@ pub enum ErrorCode {
   #[error("Missing Payload")]
   MissingPayload = 1004,
 
-  #[error("Invalid OAuth Provider")]
-  InvalidOAuthProvider = 1005,
+  #[error("Storage error")]
+  StorageError = 1005,
 
   #[error("Open Error")]
   OpenError = 1006,
@@ -37,8 +40,14 @@ pub enum ErrorCode {
   #[error("Invalid Url")]
   InvalidUrl = 1007,
 
+  #[error("Invalid Request Parameters")]
+  InvalidRequestParams = 1008,
+
   #[error("Url Missing Parameter")]
-  UrlMissingParameter = 1008,
+  UrlMissingParameter = 1009,
+
+  #[error("Invalid OAuth Provider")]
+  InvalidOAuthProvider = 1010,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

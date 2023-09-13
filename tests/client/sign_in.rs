@@ -1,3 +1,5 @@
+use actix_http::Uri;
+use actix_web::dev::Url;
 use client_api::Client;
 
 use shared_entity::server_error::ErrorCode;
@@ -63,4 +65,13 @@ async fn sign_in_success() {
   let profile = c.profile().await.unwrap();
   let latest_workspace = workspaces.get_latest(profile);
   assert!(latest_workspace.is_some());
+}
+
+#[tokio::test]
+async fn sign_in_with_url() {
+  // TODO: ...
+  // let url_str = "..."
+  // //let url = Url::new(uri)
+
+  // let c = Client::from_url(url).unwrap();
 }

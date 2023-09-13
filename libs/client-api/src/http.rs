@@ -8,7 +8,7 @@ use shared_entity::data::AppResponse;
 use gotrue_entity::{AccessTokenResponse, User};
 
 use shared_entity::error::AppError;
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::url_missing_param;
 use storage_entity::{AFUserProfileView, InsertCollabParams};
 use storage_entity::{AFWorkspaces, QueryCollabParams};
 use storage_entity::{DeleteCollabParams, RawData};
@@ -28,7 +28,61 @@ impl Client {
     }
   }
 
-  pub fn from_token(_token: &str) -> Self {
+  // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
+  pub fn sign_in_url(&mut self, url: &str) -> Result<(), AppError> {
+    let mut access_token: Option<String> = None;
+    let mut token_type: Option<String> = None;
+    let mut expires_in: Option<i64> = None;
+    let mut expires_at: Option<i64> = None;
+    let mut refresh_token: Option<String> = None;
+    let mut provider_access_token: Option<String> = None;
+    let mut provider_refresh_token: Option<String> = None;
+
+    let a = url::Url::parse(url)?;
+    a.query_pairs().for_each(|(k, v)| {
+      match k.as_ref() {
+        "access_token" => {
+          access_token = Some(v.into_owned());
+        },
+        "token_type" => {
+          token_type = Some(v.into_owned());
+        },
+        "expires_in" => {
+          expires_in = Some(v.parse::<i64>().unwrap());
+        },
+        "expires_at" => {
+          expires_at = Some(v.parse::<i64>().unwrap());
+        },
+        "refresh_token" => {
+          refresh_token = Some(v.into_owned());
+        },
+        "provider_access_token" => {
+          provider_access_token = Some(v.into_owned());
+        },
+        "provider_refresh_token" => {
+          provider_refresh_token = Some(v.into_owned());
+        },
+        _ => {},
+      };
+    });
+
+    let access_token = access_token.ok_or(url_missing_param("access_token"))?;
+    let user = self.user_info(&access_token)?;
+
+    self.token = Some(AccessTokenResponse {
+      access_token,
+      token_type: token_type.ok_or(url_missing_param("token_type"))?,
+      expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
+      expires_at,
+      refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
+      user,
+      provider_access_token,
+      provider_refresh_token,
+    });
+    Ok(())
+  }
+
+  pub fn user_info(&self, _access_token: &str) -> Result<User, AppError> {
     todo!()
   }
 

@@ -842,6 +842,7 @@ dependencies = [
  "serde_json",
  "shared_entity",
  "storage-entity",
+ "url",
 ]
 
 [[package]]
@@ -3069,6 +3070,7 @@ dependencies = [
  "serde_repr",
  "sqlx",
  "thiserror",
+ "url",
  "validator",
 ]
 

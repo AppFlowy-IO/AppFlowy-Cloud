@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
-use crate::server_error::ErrorCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
+
+use crate::error_code::ErrorCode;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
@@ -111,5 +112,11 @@ impl From<opener::OpenError> for AppError {
 impl From<validator::ValidationErrors> for AppError {
   fn from(value: validator::ValidationErrors) -> Self {
     AppError::new(ErrorCode::InvalidRequestParams, value.to_string())
+  }
+}
+
+impl From<url::ParseError> for AppError {
+  fn from(value: url::ParseError) -> Self {
+    AppError::new(ErrorCode::InvalidUrl, value.to_string())
   }
 }

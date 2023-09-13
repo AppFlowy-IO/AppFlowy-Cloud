@@ -44,4 +44,4 @@ pkill -f appflowy_cloud || true
 # where we don't need to connect to the database
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
 
-cargo run
+RUST_LOG=debug cargo run

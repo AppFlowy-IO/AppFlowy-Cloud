@@ -1,17 +1,13 @@
-use client_api::Client;
-
 use shared_entity::server_error::ErrorCode;
 
-use crate::client::{
-  constants::LOCALHOST_URL,
-  utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD},
-};
+use crate::client::utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD};
+use crate::client_api_client;
 
 #[tokio::test]
 async fn sign_in_unknown_user() {
   let email = generate_unique_email();
   let password = "Hello123!";
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
   let err = c.sign_in_password(&email, password).await.unwrap_err();
   assert_eq!(err.code, ErrorCode::OAuthError);
   assert!(!err.message.is_empty());
@@ -19,7 +15,7 @@ async fn sign_in_unknown_user() {
 
 #[tokio::test]
 async fn sign_in_wrong_password() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
 
   let email = generate_unique_email();
   let password = "Hello123!";
@@ -37,7 +33,7 @@ async fn sign_in_wrong_password() {
 
 #[tokio::test]
 async fn sign_in_unconfirmed_email() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
 
   let email = generate_unique_email();
   let password = "Hello123!";
@@ -51,7 +47,7 @@ async fn sign_in_unconfirmed_email() {
 
 #[tokio::test]
 async fn sign_in_success() {
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL);
+  let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();

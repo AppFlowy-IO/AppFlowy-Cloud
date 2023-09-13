@@ -444,6 +444,7 @@ dependencies = [
  "collab",
  "collab-define",
  "collab-plugins",
+ "collab-sync-protocol",
  "collab-ws",
  "config",
  "derive_more",

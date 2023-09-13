@@ -23,7 +23,7 @@ pub async fn establish_ws_connection(
   state: Data<State>,
   server: Data<Addr<CollabServer<CollabPostgresDBStorageImpl>>>,
 ) -> Result<HttpResponse> {
-  tracing::trace!("{:?}", request);
+  tracing::info!("ws connect: {:?}", request);
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
   let client = CollabSession::new(

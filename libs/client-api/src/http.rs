@@ -6,6 +6,7 @@ use shared_entity::data::AppResponse;
 use gotrue_entity::{AccessTokenResponse, User};
 
 use shared_entity::error::AppError;
+use shared_entity::server_error::ErrorCode;
 use storage_entity::{AFUserProfileView, InsertCollabParams};
 use storage_entity::{AFWorkspaces, QueryCollabParams};
 use storage_entity::{DeleteCollabParams, RawData};
@@ -13,13 +14,15 @@ use storage_entity::{DeleteCollabParams, RawData};
 pub struct Client {
   http_client: reqwest::Client,
   base_url: String,
+  ws_addr: String,
   token: Option<AccessTokenResponse>,
 }
 
 impl Client {
-  pub fn from(c: reqwest::Client, base_url: &str) -> Self {
+  pub fn from(c: reqwest::Client, base_url: &str, ws_addr: &str) -> Self {
     Self {
       base_url: base_url.to_string(),
+      ws_addr: ws_addr.to_string(),
       http_client: c,
       token: None,
     }
@@ -143,6 +146,16 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub fn ws_url(&self) -> Result<String, AppError> {
+    match self.token() {
+      None => Err(AppError::new(
+        ErrorCode::OAuthError,
+        "No token found".to_string(),
+      )),
+      Some(token) => Ok(format!("{}/{}", self.ws_addr, token.access_token)),
+    }
   }
 
   fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {

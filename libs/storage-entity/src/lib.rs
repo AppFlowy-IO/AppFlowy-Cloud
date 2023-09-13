@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use collab_define::CollabType;
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 use std::ops::Deref;
 use validator::{Validate, ValidationError};
 
@@ -89,10 +90,10 @@ pub struct QueryCollabParams {
   pub collab_type: CollabType,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow, Serialize, Deserialize)]
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AFWorkspace {
   pub workspace_id: uuid::Uuid,
-  pub database_storage_id: Option<sqlx::types::uuid::Uuid>,
+  pub database_storage_id: Option<uuid::Uuid>,
   pub owner_uid: Option<i64>,
   pub created_at: Option<DateTime<Utc>>,
   pub workspace_type: i32,
@@ -100,7 +101,7 @@ pub struct AFWorkspace {
   pub workspace_name: Option<String>,
 }
 
-#[derive(Debug, sqlx::FromRow, Deserialize, Serialize)]
+#[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct AFUserProfileView {
   pub uid: Option<i64>,
   pub uuid: Option<uuid::Uuid>,
@@ -114,7 +115,7 @@ pub struct AFUserProfileView {
   pub latest_workspace_id: Option<uuid::Uuid>,
 }
 
-#[derive(Debug, sqlx::FromRow, Deserialize, Serialize)]
+#[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 
 impl Deref for AFWorkspaces {

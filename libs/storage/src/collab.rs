@@ -1,4 +1,3 @@
-use crate::entities::{InsertCollabParams, QueryCollabParams};
 use crate::error::StorageError;
 use anyhow::Context;
 use async_trait::async_trait;
@@ -7,11 +6,10 @@ use sqlx::types::{chrono, Uuid};
 use sqlx::{PgPool, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
+use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
 use validator::Validate;
 
 pub type Result<T, E = StorageError> = core::result::Result<T, E>;
-
-pub type RawData = Vec<u8>;
 
 /// Represents a storage mechanism for collaborations.
 ///
@@ -19,7 +17,7 @@ pub type RawData = Vec<u8>;
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Clone + Send + Sync + 'static {
-  fn config(&self) -> &Config;
+  fn config(&self) -> &StorageConfig;
   /// Checks if a collaboration with the given object ID exists in the storage.
   ///
   /// # Arguments
@@ -66,11 +64,11 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
 }
 
 #[derive(Debug, Clone)]
-pub struct Config {
+pub struct StorageConfig {
   pub flush_per_update: u32,
 }
 
-impl Default for Config {
+impl Default for StorageConfig {
   fn default() -> Self {
     Self {
       flush_per_update: 10,
@@ -82,12 +80,12 @@ impl Default for Config {
 pub struct CollabPostgresDBStorageImpl {
   #[allow(dead_code)]
   pg_pool: PgPool,
-  config: Config,
+  config: StorageConfig,
 }
 
 impl CollabPostgresDBStorageImpl {
   pub fn new(pg_pool: PgPool) -> Self {
-    let config = Config {
+    let config = StorageConfig {
       flush_per_update: 100,
     };
     Self { pg_pool, config }
@@ -96,7 +94,7 @@ impl CollabPostgresDBStorageImpl {
 
 #[async_trait]
 impl CollabStorage for CollabPostgresDBStorageImpl {
-  fn config(&self) -> &Config {
+  fn config(&self) -> &StorageConfig {
     &self.config
   }
 

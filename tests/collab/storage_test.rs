@@ -3,7 +3,7 @@ use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
 use client_api::Client;
 use collab_define::CollabType;
 use shared_entity::server_error::ErrorCode;
-use storage::entities::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
+use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 use uuid::Uuid;
 
 #[tokio::test]

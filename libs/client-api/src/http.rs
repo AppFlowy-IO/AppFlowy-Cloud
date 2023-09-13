@@ -3,14 +3,12 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
 
-use gotrue::models::{AccessTokenResponse, User};
+use gotrue_entity::{AccessTokenResponse, User};
 
 use shared_entity::error::AppError;
-
-use storage::collab::RawData;
-use storage::entities::DeleteCollabParams;
-use storage::entities::{AFUserProfileView, InsertCollabParams};
-use storage::entities::{AFWorkspaces, QueryCollabParams};
+use storage_entity::{AFUserProfileView, InsertCollabParams};
+use storage_entity::{AFWorkspaces, QueryCollabParams};
+use storage_entity::{DeleteCollabParams, RawData};
 
 pub struct Client {
   http_client: reqwest::Client,

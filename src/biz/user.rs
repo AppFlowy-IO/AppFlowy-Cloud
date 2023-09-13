@@ -4,11 +4,10 @@ use anyhow::Result;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
-  models::{AccessTokenResponse, User},
 };
-
+use gotrue_entity::{AccessTokenResponse, User};
 use shared_entity::{error::AppError, server_error};
-use storage::entities::{AFUserProfileView, AFWorkspaces};
+use storage_entity::{AFUserProfileView, AFWorkspaces};
 use validator::validate_email;
 
 use crate::domain::validate_password;

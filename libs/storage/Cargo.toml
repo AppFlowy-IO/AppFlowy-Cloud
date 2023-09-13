@@ -8,21 +8,17 @@ edition = "2021"
 [dependencies]
 collab = { version = "0.1.0"}
 collab-define = { version = "0.1.0" }
-collab-sync-protocol = { version = "0.1.0" }
+validator = { version = "0.16", features = ["validator_derive", "derive"] }
+storage-entity = { path = "../storage-entity" }
+
 tokio = { version = "1.26", features = ["sync"] }
 async-trait = "0.1.73"
 anyhow = "1.0.75"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
 thiserror = "1.0.47"
-secrecy = { version = "0.8", features = ["serde"] }
 
 sqlx = { version = "0.7", default-features = false, features = ["postgres", "chrono", "uuid", "macros", "runtime-tokio-rustls"] }
 tracing = { version = "0.1.37" }
-validator = { version = "0.16", features = ["validator_derive", "derive"] }
 uuid = { version = "1.4.1", features = ["serde", "v4"] }
 chrono = {version="0.4",features = ["serde"]}
-
-
-[features]
-default = []

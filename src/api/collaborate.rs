@@ -12,8 +12,8 @@ use tracing::instrument;
 use validator::Validate;
 
 pub fn collab_scope() -> Scope {
-  web::scope("/api/collab").service(
-    web::resource("/")
+  web::scope("/api").service(
+    web::resource("collab")
       .route(web::post().to(create_collab_handler))
       .route(web::get().to(retrieve_collab_handler))
       .route(web::put().to(update_collab_handler))

@@ -30,6 +30,9 @@ pub enum ErrorCode {
 
   #[error("Invalid OAuth Provider")]
   InvalidOAuthProvider = 1005,
+
+  #[error("Open Error")]
+  OpenError = 1006,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

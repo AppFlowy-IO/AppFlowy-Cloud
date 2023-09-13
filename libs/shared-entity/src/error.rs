@@ -99,3 +99,9 @@ impl From<serde_json::Error> for AppError {
     AppError::new(ErrorCode::Unhandled, value.to_string())
   }
 }
+
+impl From<opener::OpenError> for AppError {
+  fn from(value: opener::OpenError) -> Self {
+    AppError::new(ErrorCode::OpenError, value.to_string())
+  }
+}

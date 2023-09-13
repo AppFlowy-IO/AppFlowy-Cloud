@@ -1,5 +1,6 @@
 use anyhow::Error;
 use gotrue::models::OAuthProvider;
+use gotrue::models::OAuthURL;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
@@ -36,8 +37,15 @@ impl Client {
     self.token.as_ref()
   }
 
-  pub async fn oauth_login(&self, _provider: OAuthProvider) -> Result<(), AppError> {
-    todo!()
+  pub async fn oauth_login(&self, provider: OAuthProvider) -> Result<(), AppError> {
+    let url = format!("{}/api/user/oauth/{}", self.base_url, provider.as_str());
+    let resp = self.http_client.get(&url).send().await?;
+    let oauth_url = AppResponse::<OAuthURL>::from_response(resp)
+      .await?
+      .into_data()?
+      .ok_or::<AppError>(ErrorCode::MissingPayload.into())?;
+    opener::open(oauth_url.url.as_str())?;
+    Ok(())
   }
 
   pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {

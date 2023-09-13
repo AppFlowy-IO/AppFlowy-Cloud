@@ -13,3 +13,4 @@ infra = { path = "../infra" }
 serde_json = "1.0.105"
 shared_entity = { path = "../shared-entity" }
 storage = { path = "../storage" }
+opener = "0.6.1"

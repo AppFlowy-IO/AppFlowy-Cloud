@@ -4,10 +4,13 @@ use anyhow::Result;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
-  models::{AccessTokenResponse, User},
+  models::{AccessTokenResponse, OAuthProvider, OAuthURL, User},
 };
 
-use shared_entity::{error::AppError, server_error};
+use shared_entity::{
+  error::AppError,
+  server_error::{self, ErrorCode},
+};
 use storage::entities::{AFUserProfileView, AFWorkspaces};
 use validator::validate_email;
 
@@ -31,6 +34,22 @@ pub async fn sign_up(
   }
   Ok(())
 }
+
+pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OAuthURL, AppError> {
+  let settings = gotrue_client.settings().await?;
+  if settings.external.has_provider(&provider) {
+    Ok(OAuthURL {
+      url: format!(
+        "{}/authorize?provider={}",
+        gotrue_client.base_url,
+        provider.as_str(),
+      ),
+    })
+  } else {
+    Err(ErrorCode::InvalidOAuthProvider.into())
+  }
+}
+
 pub async fn user_workspaces(
   pg_pool: &PgPool,
   uuid: &uuid::Uuid,

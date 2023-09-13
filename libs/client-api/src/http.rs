@@ -1,4 +1,5 @@
 use anyhow::Error;
+use gotrue::models::OAuthProvider;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
@@ -25,6 +26,10 @@ impl Client {
       http_client: c,
       token: None,
     }
+  }
+
+  pub fn from_token(_token: &str) -> Self {
+    todo!()
   }
 
   pub fn token(&self) -> Option<&AccessTokenResponse> {

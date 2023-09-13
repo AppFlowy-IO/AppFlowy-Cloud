@@ -7,8 +7,10 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
-use gotrue::models::{AccessTokenResponse, User};
+use gotrue::models::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
+use shared_entity::error::AppError;
+use shared_entity::server_error::ErrorCode;
 use storage::entities::{AFUserProfileView, AFWorkspaces};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
@@ -25,6 +27,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
     .service(web::resource("/sign_out").route(web::post().to(sign_out_handler)))
     .service(web::resource("/update").route(web::post().to(update_handler)))
+    .service(web::resource("/oauth/{provider}").route(web::post().to(oauth_handler)))
 
     .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
@@ -34,6 +37,17 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn oauth_handler(
+  path: web::Path<String>,
+  state: Data<State>,
+) -> Result<JsonAppResponse<OAuthURL>> {
+  let provider = path.into_inner();
+  let provider =
+    OAuthProvider::from(&provider).ok_or::<AppError>(ErrorCode::InvalidOAuthProvider.into())?;
+  let oauth_url = biz::user::oauth(&state.gotrue_client, provider).await?;
+  Ok(AppResponse::Ok().with_data(oauth_url).into())
 }
 
 async fn profile_handler(

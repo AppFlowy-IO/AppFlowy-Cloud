@@ -10,7 +10,7 @@ use infra::reqwest::{check_response, from_body, from_response};
 #[derive(Clone)]
 pub struct Client {
   client: reqwest::Client,
-  base_url: String,
+  pub base_url: String,
 }
 
 impl Client {

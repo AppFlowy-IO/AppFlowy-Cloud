@@ -114,7 +114,9 @@ fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::
   let bearer = req
     .headers()
     .get("Authorization")
-    .ok_or(actix_web::error::ErrorUnauthorized("No Authorization header"))?;
+    .ok_or(actix_web::error::ErrorUnauthorized(
+      "No Authorization header",
+    ))?;
 
   let bearer_str = bearer
     .to_str()

@@ -451,6 +451,7 @@ dependencies = [
  "fancy-regex",
  "futures-util",
  "gotrue",
+ "gotrue-entity",
  "infra",
  "jsonwebtoken",
  "lazy_static",
@@ -468,6 +469,7 @@ dependencies = [
  "snowflake",
  "sqlx",
  "storage",
+ "storage-entity",
  "tempfile",
  "thiserror",
  "token",
@@ -823,12 +825,11 @@ name = "client-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "gotrue",
- "infra",
+ "gotrue-entity",
  "reqwest",
  "serde_json",
  "shared_entity",
- "storage",
+ "storage-entity",
 ]
 
 [[package]]
@@ -1510,11 +1511,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures-util",
+ "gotrue-entity",
  "infra",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "gotrue-entity"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2591,6 +2601,7 @@ dependencies = [
  "serde-aux",
  "serde_json",
  "storage",
+ "storage-entity",
  "tempfile",
  "thiserror",
  "tokio",
@@ -3018,7 +3029,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
- "gotrue",
+ "gotrue-entity",
  "reqwest",
  "serde",
  "serde_json",
@@ -3370,14 +3381,26 @@ dependencies = [
  "chrono",
  "collab",
  "collab-define",
- "collab-sync-protocol",
- "secrecy",
  "serde",
  "serde_json",
  "sqlx",
+ "storage-entity",
  "thiserror",
  "tokio",
  "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "storage-entity"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "collab-define",
+ "serde",
+ "serde_json",
+ "sqlx",
  "uuid",
  "validator",
 ]

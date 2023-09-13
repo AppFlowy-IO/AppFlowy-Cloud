@@ -3,7 +3,7 @@ use sqlx::{
   PgPool,
 };
 
-use crate::entities::{AFUserProfileView, AFWorkspace};
+use storage_entity::{AFUserProfileView, AFWorkspace};
 
 pub async fn create_user_if_not_exists(
   pool: &PgPool,

@@ -1,19 +1,20 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use storage::collab::{CollabStorage, RawData};
-use storage::entities::{InsertCollabParams, QueryCollabParams};
+use storage::collab::Result;
+use storage::collab::{CollabStorage, StorageConfig};
 use storage::error::StorageError;
+use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
 use tokio::sync::RwLock;
 
 #[derive(Clone, Default)]
 pub struct CollabMemoryStorageImpl {
-  config: storage::collab::Config,
+  config: StorageConfig,
   collab_data_by_object_id: Arc<RwLock<HashMap<String, RawData>>>,
 }
 
 impl CollabMemoryStorageImpl {
-  pub fn new(config: storage::collab::Config) -> Self {
+  pub fn new(config: StorageConfig) -> Self {
     Self {
       config,
       collab_data_by_object_id: Arc::new(RwLock::new(HashMap::new())),
@@ -23,7 +24,7 @@ impl CollabMemoryStorageImpl {
 
 #[async_trait]
 impl CollabStorage for CollabMemoryStorageImpl {
-  fn config(&self) -> &storage::collab::Config {
+  fn config(&self) -> &StorageConfig {
     &self.config
   }
 
@@ -35,7 +36,7 @@ impl CollabStorage for CollabMemoryStorageImpl {
       .contains_key(object_id)
   }
 
-  async fn insert_collab(&self, params: InsertCollabParams) -> storage::collab::Result<()> {
+  async fn insert_collab(&self, params: InsertCollabParams) -> Result<()> {
     self
       .collab_data_by_object_id
       .write()
@@ -44,7 +45,7 @@ impl CollabStorage for CollabMemoryStorageImpl {
     Ok(())
   }
 
-  async fn get_collab(&self, params: QueryCollabParams) -> storage::collab::Result<RawData> {
+  async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
     self
       .collab_data_by_object_id
       .read()
@@ -54,7 +55,7 @@ impl CollabStorage for CollabMemoryStorageImpl {
       .ok_or(StorageError::RecordNotFound)
   }
 
-  async fn delete_collab(&self, object_id: &str) -> storage::collab::Result<()> {
+  async fn delete_collab(&self, object_id: &str) -> Result<()> {
     self
       .collab_data_by_object_id
       .write()

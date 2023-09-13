@@ -7,9 +7,9 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::State;
-use gotrue::models::{AccessTokenResponse, User};
+use gotrue_entity::{AccessTokenResponse, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use storage::entities::{AFUserProfileView, AFWorkspaces};
+use storage_entity::{AFUserProfileView, AFWorkspaces};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};

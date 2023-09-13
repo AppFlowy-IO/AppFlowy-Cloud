@@ -8,6 +8,7 @@ use shared_entity::server_error::ErrorCode;
 use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage, RawData};
 use storage::entities::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 use storage::error::StorageError;
+use tracing::instrument;
 use validator::Validate;
 
 pub fn collab_scope() -> Scope {
@@ -20,6 +21,7 @@ pub fn collab_scope() -> Scope {
   )
 }
 
+#[instrument(level = "debug", skip_all, err)]
 async fn create_collab_handler(
   payload: Json<InsertCollabParams>,
   storage: Data<Storage<CollabPostgresDBStorageImpl>>,

@@ -442,6 +442,7 @@ dependencies = [
  "chrono",
  "client-api",
  "collab",
+ "collab-define",
  "collab-plugins",
  "collab-ws",
  "config",

@@ -7,11 +7,10 @@ use gotrue::models::{AccessTokenResponse, User};
 
 use shared_entity::error::AppError;
 
-use shared_entity::server_error::ErrorCode;
 use storage::collab::RawData;
-use storage::entities::AFWorkspaces;
+use storage::entities::DeleteCollabParams;
 use storage::entities::{AFUserProfileView, InsertCollabParams};
-use storage::entities::{AFWorkspace, DeleteCollabParams};
+use storage::entities::{AFWorkspaces, QueryCollabParams};
 
 pub struct Client {
   http_client: reqwest::Client,
@@ -38,24 +37,20 @@ impl Client {
       .http_client_with_auth(Method::GET, &url)?
       .send()
       .await?;
-    let profile = AppResponse::<AFUserProfileView>::from_response(resp)
+    AppResponse::<AFUserProfileView>::from_response(resp)
       .await?
-      .into_data()?
-      .ok_or::<AppError>(ErrorCode::MissingPayload.into())?;
-    Ok(profile)
+      .into_data()
   }
 
-  pub async fn workspaces(&mut self) -> Result<AFWorkspaces, AppError> {
+  pub async fn workspaces(&self) -> Result<AFWorkspaces, AppError> {
     let url = format!("{}/api/user/workspaces", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)?
       .send()
       .await?;
-    let workspaces = AppResponse::<Vec<AFWorkspace>>::from_response(resp)
+    AppResponse::<AFWorkspaces>::from_response(resp)
       .await?
-      .into_data()?
-      .ok_or::<AppError>(ErrorCode::MissingPayload.into())?;
-    Ok(AFWorkspaces(workspaces))
+      .into_data()
   }
 
   pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {
@@ -76,7 +71,8 @@ impl Client {
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    AppResponse::<()>::from_response(resp).await?.into()
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
   }
 
   pub async fn sign_out(&self) -> Result<(), AppError> {
@@ -85,7 +81,8 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)?
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into()
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
   }
 
   pub async fn update(&mut self, email: &str, password: &str) -> Result<(), AppError> {
@@ -101,8 +98,7 @@ impl Client {
       .await?;
     let new_user = AppResponse::<User>::from_response(resp)
       .await?
-      .into_data()?
-      .ok_or::<AppError>(ErrorCode::Unhandled.into())?;
+      .into_data()?;
     if let Some(t) = self.token.as_mut() {
       t.user = new_user;
     }
@@ -110,43 +106,45 @@ impl Client {
   }
 
   pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)?
       .json(&params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into()
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)?
       .json(&params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into()
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn get_collab(&self, params: InsertCollabParams) -> Result<RawData, AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+  pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppError> {
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)?
       .json(&params)
       .send()
       .await?;
-    AppResponse::<RawData>::from_response(resp).await?.into()
+    AppResponse::<RawData>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab", self.base_url);
+    let url = format!("{}/api/collab/", self.base_url);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)?
       .json(&params)
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into()
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {

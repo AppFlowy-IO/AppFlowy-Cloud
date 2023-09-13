@@ -1,4 +1,3 @@
-
 use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
 use crate::client_api_client;
 use crate::collab::workspace_id_from_client;

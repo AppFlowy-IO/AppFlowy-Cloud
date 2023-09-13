@@ -1,10 +1,6 @@
-
-
 use shared_entity::server_error::ErrorCode;
 
-use crate::client::{
-  utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD},
-};
+use crate::client::utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD};
 use crate::client_api_client;
 
 #[tokio::test]

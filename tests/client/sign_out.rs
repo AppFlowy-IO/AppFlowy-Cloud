@@ -1,8 +1,4 @@
-
-
-use crate::client::{
-  utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD},
-};
+use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
 use crate::client_api_client;
 
 #[tokio::test]

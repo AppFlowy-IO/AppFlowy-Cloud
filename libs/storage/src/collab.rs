@@ -140,10 +140,13 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
       params.object_id,
       partition_key,
     )
-    .fetch_one(&self.pg_pool)
+    .fetch_optional(&self.pg_pool)
     .await?;
-    let blob_data: Vec<u8> = record.blob;
-    Ok(blob_data)
+
+    match record {
+      Some(record) => Ok(record.blob),
+      None => Err(StorageError::RecordNotFound),
+    }
   }
 
   async fn delete_collab(&self, object_id: &str) -> Result<()> {

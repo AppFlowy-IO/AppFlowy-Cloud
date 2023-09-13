@@ -16,9 +16,6 @@ pub enum ErrorCode {
   #[error("Record not found")]
   RecordNotFound = -2,
 
-  #[error("Record already exist")]
-  RecordAlreadyExists = -3,
-
   #[error("Invalid email format.")]
   InvalidEmail = 1001,
 
@@ -37,11 +34,11 @@ pub enum ErrorCode {
   #[error("Open Error")]
   OpenError = 1006,
 
-  #[error("Storage error")]
-  StorageError = 1007,
+  #[error("Invalid Url")]
+  InvalidUrl = 1007,
 
-  #[error("Invalid request params")]
-  InvalidRequestParams = 1008,
+  #[error("Url Missing Parameter")]
+  UrlMissingParameter = 1008,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.
@@ -69,5 +66,12 @@ pub fn invalid_password_error(password: &str) -> AppError {
   AppError::new(
     ErrorCode::InvalidPassword,
     format!("invalid password: {}", password),
+  )
+}
+
+pub fn url_missing_param(param: &str) -> AppError {
+  AppError::new(
+    ErrorCode::UrlMissingParameter,
+    format!("url missing parameter: {}", param),
   )
 }

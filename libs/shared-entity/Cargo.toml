@@ -16,3 +16,4 @@ thiserror = "1.0.47"
 sqlx = { version = "0.7", default-features = false, features = ["postgres"] }
 reqwest = "0.11.18"
 opener = "0.6.1"
+validator = { version = "0.16", features = ["validator_derive", "derive"] }

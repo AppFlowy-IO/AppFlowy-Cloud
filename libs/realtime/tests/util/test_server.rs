@@ -11,7 +11,7 @@ use actix_web_actors::ws;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use once_cell::sync::Lazy;
-use realtime::core::{CollabManager, CollabSession};
+use realtime::core::{CollabServer, CollabSession};
 use realtime::entities::RealtimeUser;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use std::path::PathBuf;
@@ -157,7 +157,7 @@ pub async fn run<S>(
 where
   S: CollabStorage + Unpin,
 {
-  let collab_server = CollabManager::new(storage.clone()).unwrap().start();
+  let collab_server = CollabServer::new(storage.clone()).unwrap().start();
   let server = HttpServer::new(move || {
     App::new()
       .service(web::scope("/ws").service(establish_ws_connection))
@@ -175,7 +175,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   token: Path<String>,
   state: Data<State>,
-  server: Data<Addr<CollabManager<CollabMemoryStorageImpl>>>,
+  server: Data<Addr<CollabServer<CollabMemoryStorageImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = TestLoggedUser {

@@ -442,6 +442,7 @@ dependencies = [
  "chrono",
  "client-api",
  "collab",
+ "collab-define",
  "collab-plugins",
  "collab-ws",
  "config",
@@ -3057,6 +3058,7 @@ dependencies = [
  "serde_repr",
  "sqlx",
  "thiserror",
+ "validator",
 ]
 
 [[package]]

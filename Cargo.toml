@@ -72,6 +72,7 @@ once_cell = "1.7.2"
 collab = { version = "0.1.0" }
 collab-ws = { version = "0.1.0" }
 collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
+collab-define = { version = "0.1.0" }
 client-api = { path = "libs/client-api" }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"

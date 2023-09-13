@@ -21,7 +21,7 @@ use storage::collab::CollabStorage;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
 #[derive(Clone)]
-pub struct CollabManager<S> {
+pub struct CollabServer<S> {
   #[allow(dead_code)]
   storage: S,
   /// Keep track of all collab groups
@@ -32,7 +32,7 @@ pub struct CollabManager<S> {
   client_stream_by_user: Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
 }
 
-impl<S> CollabManager<S>
+impl<S> CollabServer<S>
 where
   S: CollabStorage + Clone,
 {
@@ -48,14 +48,14 @@ where
   }
 }
 
-impl<S> Actor for CollabManager<S>
+impl<S> Actor for CollabServer<S>
 where
   S: 'static + Unpin,
 {
   type Context = Context<Self>;
 }
 
-impl<U, S> Handler<Connect<U>> for CollabManager<S>
+impl<U, S> Handler<Connect<U>> for CollabServer<S>
 where
   U: RealtimeUser,
   S: 'static + Unpin,
@@ -75,7 +75,7 @@ where
   }
 }
 
-impl<U, S> Handler<Disconnect<U>> for CollabManager<S>
+impl<U, S> Handler<Disconnect<U>> for CollabServer<S>
 where
   U: RealtimeUser,
   S: CollabStorage + Unpin,
@@ -102,7 +102,7 @@ where
   }
 }
 
-impl<U, S> Handler<ClientMessage<U>> for CollabManager<S>
+impl<U, S> Handler<ClientMessage<U>> for CollabServer<S>
 where
   U: RealtimeUser,
   S: CollabStorage + Unpin,
@@ -265,11 +265,11 @@ where
   }
 }
 
-impl<S> actix::Supervised for CollabManager<S>
+impl<S> actix::Supervised for CollabServer<S>
 where
   S: 'static + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<CollabManager<S>>) {
+  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S>>) {
     tracing::warn!("restarting");
   }
 }

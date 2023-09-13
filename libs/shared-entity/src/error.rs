@@ -7,6 +7,7 @@ use gotrue::models::{GoTrueError, OAuthError};
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
 use sqlx::types::uuid;
+use validator::ValidationErrors;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
@@ -103,5 +104,11 @@ impl From<serde_json::Error> for AppError {
 impl From<opener::OpenError> for AppError {
   fn from(value: opener::OpenError) -> Self {
     AppError::new(ErrorCode::OpenError, value.to_string())
+  }
+}
+
+impl From<validator::ValidationErrors> for AppError {
+  fn from(value: ValidationErrors) -> Self {
+    AppError::new(ErrorCode::InvalidRequestParams, value.to_string())
   }
 }

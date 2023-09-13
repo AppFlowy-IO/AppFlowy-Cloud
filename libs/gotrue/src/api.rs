@@ -91,11 +91,17 @@ impl Client {
   pub async fn user_info(&self, access_token: &str) -> Result<Result<User, GoTrueError>, Error> {
     let resp = self
       .client
-      .get(format!("{}/logout", self.base_url))
+      .get(format!("{}/user", self.base_url))
       .header("Authorization", format!("Bearer {}", access_token))
       .send()
       .await?;
-    from_response(resp).await
+    if resp.status().is_success() {
+      let user: User = from_body(resp).await?;
+      Ok(Ok(user))
+    } else {
+      let err: GoTrueError = from_body(resp).await?;
+      Ok(Err(err))
+    }
   }
 
   pub async fn update_user(

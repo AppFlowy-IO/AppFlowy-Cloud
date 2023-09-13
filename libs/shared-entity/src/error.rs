@@ -52,14 +52,17 @@ impl From<anyhow::Error> for AppError {
 #[cfg(feature = "cloud")]
 impl From<gotrue_entity::GoTrueError> for AppError {
   fn from(err: gotrue_entity::GoTrueError) -> Self {
-    AppError::new(
-      ErrorCode::Unhandled,
-      format!(
-        "gotrue error: {}, id: {}",
-        err.code,
-        err.error_id.unwrap_or("".to_string())
+    match err.code {
+      401 => AppError::new(ErrorCode::OAuthError, err.msg),
+      _ => AppError::new(
+        ErrorCode::Unhandled,
+        format!(
+          "gotrue error: {}, id: {}",
+          err.code,
+          err.error_id.unwrap_or("".to_string())
+        ),
       ),
-    )
+    }
   }
 }
 

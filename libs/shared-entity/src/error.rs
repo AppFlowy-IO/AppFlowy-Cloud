@@ -2,12 +2,8 @@ use std::borrow::Cow;
 use std::fmt::Display;
 
 use crate::server_error::ErrorCode;
-use actix_web::{http::StatusCode, HttpResponse};
-use gotrue::models::{GoTrueError, OAuthError};
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
-use sqlx::types::uuid;
-use validator::ValidationErrors;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppError {
@@ -32,14 +28,14 @@ impl Display for AppError {
 
 impl std::error::Error for AppError {}
 
-//
+#[cfg(feature = "cloud")]
 impl actix_web::error::ResponseError for AppError {
-  fn status_code(&self) -> StatusCode {
-    StatusCode::OK
+  fn status_code(&self) -> actix_web::http::StatusCode {
+    actix_web::http::StatusCode::OK
   }
 
-  fn error_response(&self) -> HttpResponse {
-    HttpResponse::Ok().json(self)
+  fn error_response(&self) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Ok().json(self)
   }
 }
 //
@@ -52,8 +48,9 @@ impl From<anyhow::Error> for AppError {
   }
 }
 
-impl From<GoTrueError> for AppError {
-  fn from(err: GoTrueError) -> Self {
+#[cfg(feature = "cloud")]
+impl From<gotrue_entity::GoTrueError> for AppError {
+  fn from(err: gotrue_entity::GoTrueError) -> Self {
     AppError::new(
       ErrorCode::Unhandled,
       format!(
@@ -65,8 +62,9 @@ impl From<GoTrueError> for AppError {
   }
 }
 
-impl From<OAuthError> for AppError {
-  fn from(err: OAuthError) -> Self {
+#[cfg(feature = "cloud")]
+impl From<gotrue_entity::OAuthError> for AppError {
+  fn from(err: gotrue_entity::OAuthError) -> Self {
     AppError::new(ErrorCode::OAuthError, err.to_string())
   }
 }
@@ -77,12 +75,14 @@ impl From<ErrorCode> for AppError {
   }
 }
 
-impl From<uuid::Error> for AppError {
-  fn from(err: uuid::Error) -> Self {
+#[cfg(feature = "cloud")]
+impl From<sqlx::types::uuid::Error> for AppError {
+  fn from(err: sqlx::types::uuid::Error) -> Self {
     AppError::new(ErrorCode::Unhandled, format!("uuid error: {}", err))
   }
 }
 
+#[cfg(feature = "cloud")]
 impl From<sqlx::Error> for AppError {
   fn from(err: sqlx::Error) -> Self {
     AppError::new(ErrorCode::Unhandled, format!("sqlx error: {}", err))
@@ -101,8 +101,9 @@ impl From<serde_json::Error> for AppError {
   }
 }
 
+#[cfg(feature = "cloud")]
 impl From<validator::ValidationErrors> for AppError {
-  fn from(value: ValidationErrors) -> Self {
+  fn from(value: validator::ValidationErrors) -> Self {
     AppError::new(ErrorCode::InvalidRequestParams, value.to_string())
   }
 }

@@ -5,9 +5,9 @@ use actix_web::{web, Scope};
 use shared_entity::data::AppResponse;
 use shared_entity::error::AppError;
 use shared_entity::server_error::ErrorCode;
-use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage, RawData};
-use storage::entities::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
+use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use storage::error::StorageError;
+use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams, RawData};
 use tracing::instrument;
 use validator::Validate;
 

@@ -21,8 +21,8 @@ use std::time::Duration;
 
 use crate::util::log::{get_subscriber, init_subscriber};
 use crate::util::storage_impl::CollabMemoryStorageImpl;
-use storage::collab::CollabStorage;
-use storage::entities::QueryCollabParams;
+use storage::collab::{CollabStorage, StorageConfig};
+use storage_entity::QueryCollabParams;
 
 // Ensure that the `tracing` stack is only initialised once using `once_cell`
 static TRACING: Lazy<()> = Lazy::new(|| {
@@ -68,7 +68,7 @@ pub async fn spawn_server() -> TestServer {
   Lazy::force(&TRACING);
   let config = Config::default();
   let state = init_state(config.clone()).await;
-  let storage = CollabMemoryStorageImpl::new(storage::collab::Config {
+  let storage = CollabMemoryStorageImpl::new(StorageConfig {
     flush_per_update: 0,
   });
   let application = Application::build(config, state.clone(), storage.clone())

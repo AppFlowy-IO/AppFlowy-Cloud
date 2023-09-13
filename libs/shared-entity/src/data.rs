@@ -60,19 +60,25 @@ impl<T> AppResponse<T> {
     }
   }
 
-  pub fn into_data(self) -> Result<Option<T>, AppError> {
+  pub fn into_data(self) -> Result<T, AppError> {
     if self.code == ErrorCode::Ok {
-      Ok(self.data)
+      match self.data {
+        None => Err(AppError::new(
+          ErrorCode::MissingPayload,
+          "missing payload".to_string(),
+        )),
+        Some(data) => Ok(data),
+      }
     } else {
       Err(AppError::new(self.code, self.message))
     }
   }
 
-  pub fn into_error(self) -> Option<AppError> {
+  pub fn into_error(self) -> Result<(), AppError> {
     if matches!(self.code, ErrorCode::Ok) {
-      None
+      Ok(())
     } else {
-      Some(AppError::new(self.code, self.message))
+      Err(AppError::new(self.code, self.message))
     }
   }
 
@@ -139,16 +145,6 @@ where
 
   fn error_response(&self) -> HttpResponse {
     HttpResponse::Ok().json(self)
-  }
-}
-
-impl From<AppResponse<()>> for Result<(), AppError> {
-  fn from(value: AppResponse<()>) -> Self {
-    if matches!(value.code, ErrorCode::Ok) {
-      Ok(())
-    } else {
-      Err(AppError::new(value.code, value.message))
-    }
   }
 }
 

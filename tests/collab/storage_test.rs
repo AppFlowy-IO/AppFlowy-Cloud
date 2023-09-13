@@ -3,7 +3,7 @@ use crate::client_api_client;
 use crate::collab::workspace_id_from_client;
 
 use collab_define::CollabType;
-use shared_entity::server_error::ErrorCode;
+use shared_entity::error_code::ErrorCode;
 use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 use uuid::Uuid;
 

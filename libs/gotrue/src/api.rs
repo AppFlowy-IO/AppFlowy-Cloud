@@ -8,7 +8,7 @@ use infra::reqwest::{check_response, from_body, from_response};
 #[derive(Clone)]
 pub struct Client {
   client: reqwest::Client,
-  base_url: String,
+  pub base_url: String,
 }
 
 impl Client {
@@ -86,6 +86,22 @@ impl Client {
       .send()
       .await?;
     check_response(resp).await
+  }
+
+  pub async fn user_info(&self, access_token: &str) -> Result<Result<User, GoTrueError>, Error> {
+    let resp = self
+      .client
+      .get(format!("{}/user", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
+    if resp.status().is_success() {
+      let user: User = from_body(resp).await?;
+      Ok(Ok(user))
+    } else {
+      let err: GoTrueError = from_body(resp).await?;
+      Ok(Err(err))
+    }
   }
 
   pub async fn update_user(

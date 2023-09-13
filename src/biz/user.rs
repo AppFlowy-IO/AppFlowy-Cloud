@@ -5,8 +5,11 @@ use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
 };
-use gotrue_entity::{AccessTokenResponse, User};
-use shared_entity::{error::AppError, server_error};
+use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
+use shared_entity::{
+  error::AppError,
+  error_code::{invalid_email_error, invalid_password_error, ErrorCode},
+};
 use storage_entity::{AFUserProfileView, AFWorkspaces};
 use validator::validate_email;
 
@@ -30,6 +33,26 @@ pub async fn sign_up(
   }
   Ok(())
 }
+
+pub async fn info(gotrue_client: &Client, access_token: &str) -> Result<User, AppError> {
+  Ok(gotrue_client.user_info(access_token).await??)
+}
+
+pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OAuthURL, AppError> {
+  let settings = gotrue_client.settings().await?;
+  if settings.external.has_provider(&provider) {
+    Ok(OAuthURL {
+      url: format!(
+        "{}/authorize?provider={}",
+        gotrue_client.base_url,
+        provider.as_str(),
+      ),
+    })
+  } else {
+    Err(ErrorCode::InvalidOAuthProvider.into())
+  }
+}
+
 pub async fn user_workspaces(
   pg_pool: &PgPool,
   uuid: &uuid::Uuid,
@@ -76,9 +99,9 @@ pub async fn update(
 
 fn validate_email_password(email: &str, password: &str) -> Result<(), AppError> {
   if !validate_email(email) {
-    Err(server_error::invalid_email_error(email))
+    Err(invalid_email_error(email))
   } else if !validate_password(password) {
-    Err(server_error::invalid_password_error(password))
+    Err(invalid_password_error(password))
   } else {
     Ok(())
   }

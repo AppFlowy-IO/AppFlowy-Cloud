@@ -34,8 +34,20 @@ pub enum ErrorCode {
   #[error("Storage error")]
   StorageError = 1005,
 
-  #[error("Invalid request params")]
-  InvalidRequestParams = 1006,
+  #[error("Open Error")]
+  OpenError = 1006,
+
+  #[error("Invalid Url")]
+  InvalidUrl = 1007,
+
+  #[error("Invalid Request Parameters")]
+  InvalidRequestParams = 1008,
+
+  #[error("Url Missing Parameter")]
+  UrlMissingParameter = 1009,
+
+  #[error("Invalid OAuth Provider")]
+  InvalidOAuthProvider = 1010,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.
@@ -63,5 +75,12 @@ pub fn invalid_password_error(password: &str) -> AppError {
   AppError::new(
     ErrorCode::InvalidPassword,
     format!("invalid password: {}", password),
+  )
+}
+
+pub fn url_missing_param(param: &str) -> AppError {
+  AppError::new(
+    ErrorCode::UrlMissingParameter,
+    format!("url missing parameter: {}", param),
   )
 }

@@ -4,7 +4,10 @@ use std::sync::Arc;
 use storage::collab::Result;
 use storage::collab::{CollabStorage, StorageConfig};
 use storage::error::StorageError;
-use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
+use storage_entity::{
+  AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
+  QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
+};
 use tokio::sync::RwLock;
 
 #[derive(Clone, Default)]
@@ -62,5 +65,20 @@ impl CollabStorage for CollabMemoryStorageImpl {
       .await
       .remove(object_id);
     Ok(())
+  }
+
+  async fn create_snapshot(&self, _params: InsertSnapshotParams) -> Result<()> {
+    Ok(())
+  }
+
+  async fn get_snapshot_data(&self, _params: QuerySnapshotParams) -> Result<RawData> {
+    Ok(vec![])
+  }
+
+  async fn get_all_snapshots(
+    &self,
+    _params: QueryObjectSnapshotParams,
+  ) -> Result<AFCollabSnapshots> {
+    Ok(AFCollabSnapshots(vec![]))
   }
 }

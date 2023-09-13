@@ -33,13 +33,15 @@ CREATE TABLE af_collab_member (
 
 -- collab snapshot. It will be used to store the snapshots of the collab.
 CREATE TABLE IF NOT EXISTS af_collab_snapshot (
-    sid BIGSERIAL PRIMARY KEY,
+    sid BIGSERIAL PRIMARY KEY,-- snapshot id
     oid TEXT NOT NULL,
-    name TEXT DEFAULT '',
     blob BYTEA NOT NULL,
     len INTEGER NOT NULL,
-    edit_count BIGINT NOT NULL DEFAULT 0,
     encrypt INTEGER DEFAULT 0,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    deleted_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+CREATE INDEX idx_af_collab_snapshot_oid ON af_collab_snapshot(oid);
+
 

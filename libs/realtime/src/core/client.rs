@@ -59,6 +59,7 @@ where
   }
 
   fn forward_binary_to_ws_server(&self, bytes: Bytes) {
+    tracing::info!("Receive binary message from client");
     match RealtimeMessage::from_vec(bytes.to_vec()) {
       Ok(message) => match CollabMessage::from_vec(&message.payload) {
         Ok(collab_msg) => {

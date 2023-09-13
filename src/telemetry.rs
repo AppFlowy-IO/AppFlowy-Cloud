@@ -28,6 +28,7 @@ where
     .with_ansi(true)
     .with_target(true)
     .with_max_level(tracing::Level::TRACE)
+    .pretty()
     .finish()
     .with(env_filter)
     .with(JsonStorageLayer)

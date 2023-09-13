@@ -43,8 +43,8 @@ impl Client {
       .ok_or(url_missing_param("fragment"))?
       .split("&")
       .into_iter()
-      .for_each(|f| {
-        let (k, v) = f.split_once("=").unwrap();
+      .try_for_each(|f| -> Result<(), AppError> {
+        let (k, v) = f.split_once("=").ok_or(url_missing_param("key=value"))?;
         match k.as_ref() {
           "access_token" => {
             access_token = Some(v.to_string());
@@ -53,10 +53,10 @@ impl Client {
             token_type = Some(v.to_string());
           },
           "expires_in" => {
-            expires_in = Some(v.parse::<i64>().unwrap());
+            expires_in = Some(v.parse::<i64>()?);
           },
           "expires_at" => {
-            expires_at = Some(v.parse::<i64>().unwrap());
+            expires_at = Some(v.parse::<i64>()?);
           },
           "refresh_token" => {
             refresh_token = Some(v.to_string());
@@ -69,7 +69,8 @@ impl Client {
           },
           _ => {},
         };
-      });
+        Ok(())
+      })?;
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
     let user = self.user_info(&access_token).await?;

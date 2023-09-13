@@ -1,5 +1,6 @@
-use std::borrow::Cow;
 use std::fmt::Display;
+use std::num::ParseIntError;
+use std::{borrow::Cow, str};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Error;
@@ -120,6 +121,12 @@ impl From<validator::ValidationErrors> for AppError {
 
 impl From<url::ParseError> for AppError {
   fn from(value: url::ParseError) -> Self {
+    AppError::new(ErrorCode::InvalidUrl, value.to_string())
+  }
+}
+
+impl From<ParseIntError> for AppError {
+  fn from(value: ParseIntError) -> Self {
     AppError::new(ErrorCode::InvalidUrl, value.to_string())
   }
 }

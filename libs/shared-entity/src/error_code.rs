@@ -48,6 +48,9 @@ pub enum ErrorCode {
 
   #[error("Invalid OAuth Provider")]
   InvalidOAuthProvider = 1010,
+
+  #[error("Not Logged In")]
+  NotLoggedIn = 1011,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

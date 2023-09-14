@@ -1,4 +1,3 @@
-use anyhow::Error;
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::OAuthURL;
 use reqwest::Method;
@@ -146,6 +145,19 @@ impl Client {
     Ok(())
   }
 
+  pub async fn refresh(&mut self) -> Result<(), AppError> {
+    let refresh_token = self
+      .token
+      .as_ref()
+      .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
+      .refresh_token
+      .as_str();
+    let url = format!("{}/api/user/refresh/{}", self.base_url, refresh_token);
+    let resp = self.http_client.get(&url).send().await?;
+    self.token = AppResponse::from_response(resp).await?.into_data()?;
+    Ok(())
+  }
+
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_up", self.base_url);
     let payload = serde_json::json!({
@@ -239,15 +251,16 @@ impl Client {
     }
   }
 
-  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {
+  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, AppError> {
     match &self.token {
-      None => anyhow::bail!("no token found, are you logged in?"),
-      Some(t) => Ok(
-        self
+      None => Err(ErrorCode::NotLoggedIn.into()),
+      Some(t) => {
+        let request_builder = self
           .http_client
           .request(method, url)
-          .bearer_auth(t.access_token.to_string()),
-      ),
+          .bearer_auth(&t.access_token);
+        Ok(request_builder)
+      },
     }
   }
 

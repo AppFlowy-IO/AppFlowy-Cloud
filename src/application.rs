@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use tracing_actix_web::TracingLogger;
@@ -33,9 +34,9 @@ pub struct Application {
 
 impl Application {
   pub async fn build<S>(
-      config: Config,
-      state: AppState,
-      storage: Storage<S>,
+    config: Config,
+    state: AppState,
+    storage: Storage<S>,
   ) -> Result<Self, anyhow::Error>
   where
     S: CollabStorage + Unpin,
@@ -58,10 +59,10 @@ impl Application {
 }
 
 pub async fn run<S>(
-    listener: TcpListener,
-    state: AppState,
-    config: Config,
-    storage: Storage<S>,
+  listener: TcpListener,
+  state: AppState,
+  config: Config,
+  storage: Storage<S>,
 ) -> Result<Server, anyhow::Error>
 where
   S: CollabStorage + Unpin,
@@ -81,7 +82,7 @@ where
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server = CollabServer::new(storage.collab_storage.clone())
+  let collab_server = CollabServer::<_, RealtimeUserImpl>::new(storage.collab_storage.clone())
     .unwrap()
     .start();
   let mut server = HttpServer::new(move || {

@@ -3,14 +3,13 @@ use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use std::fmt::{Display, Formatter, Write};
 
-use realtime::client::ClientWSSession;
+use realtime::client::{ClientWSSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
-use realtime::entities::RealtimeUser;
+
 use std::time::Duration;
 
-use crate::component::auth::jwt::{authorization_from_token, UserToken, UserUuid};
+use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
 use storage::collab::CollabPostgresDBStorageImpl;
 
@@ -24,7 +23,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<Addr<CollabServer<CollabPostgresDBStorageImpl>>>,
+  server: Data<Addr<CollabServer<CollabPostgresDBStorageImpl, RealtimeUserImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::info!("ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();
@@ -47,30 +46,5 @@ pub async fn establish_ws_connection(
       tracing::error!("🔴ws connection error: {:?}", e);
       Err(e)
     },
-  }
-}
-
-#[derive(Debug, Clone)]
-struct RealtimeUserImpl {
-  uuid: String,
-  device_id: String,
-}
-
-impl Display for RealtimeUserImpl {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "uuid:{}|device_id:{}",
-      self.uuid, self.device_id,
-    ))
-  }
-}
-
-impl RealtimeUser for RealtimeUserImpl {
-  fn id(&self) -> &str {
-    &self.uuid
-  }
-
-  fn device_id(&self) -> &str {
-    &self.device_id
   }
 }

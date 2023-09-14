@@ -158,7 +158,9 @@ pub async fn run<S>(
 where
   S: CollabStorage + Unpin,
 {
-  let collab_server = CollabServer::new(storage.clone()).unwrap().start();
+  let collab_server = CollabServer::<_, TestLoggedUser>::new(storage.clone())
+    .unwrap()
+    .start();
   let server = HttpServer::new(move || {
     App::new()
       .service(web::scope("/ws").service(establish_ws_connection))
@@ -176,7 +178,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   token: Path<String>,
   state: Data<State>,
-  collab_server: Data<Addr<CollabServer<CollabMemoryStorageImpl>>>,
+  collab_server: Data<Addr<CollabServer<CollabMemoryStorageImpl, TestLoggedUser>>>,
 ) -> Result<HttpResponse> {
   tracing::trace!("{:?}", request);
   let user = TestLoggedUser {
@@ -261,5 +263,9 @@ impl Display for TestLoggedUser {
 impl RealtimeUser for TestLoggedUser {
   fn id(&self) -> &str {
     &self.user_id
+  }
+
+  fn device_id(&self) -> &str {
+    "fake_device_id"
   }
 }

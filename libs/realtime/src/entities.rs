@@ -9,7 +9,9 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
-pub trait RealtimeUser: Clone + Debug + Send + Sync + 'static + Display {
+pub trait RealtimeUser:
+  Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
+{
   fn id(&self) -> &str;
 
   fn device_id(&self) -> &str;
@@ -87,7 +89,7 @@ where
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-pub(crate) struct EditCollab {
+pub(crate) struct Editing {
   pub object_id: String,
   pub origin: CollabOrigin,
 }

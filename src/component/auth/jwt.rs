@@ -1,10 +1,10 @@
 use actix_http::Payload;
 use actix_web::{web::Data, FromRequest, HttpRequest};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use realtime::entities::RealtimeUser;
+
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
 use crate::state::AppState;

@@ -29,6 +29,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/update").route(web::post().to(update_handler)))
     .service(web::resource("/oauth/{provider}").route(web::get().to(oauth_handler)))
     .service(web::resource("/info/{access_token}").route(web::get().to(info_handler)))
+    .service(web::resource("/refresh/{refresh_token}").route(web::get().to(refresh_handler)))
 
     .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
@@ -38,6 +39,15 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn refresh_handler(
+  path: web::Path<String>,
+  state: Data<State>,
+) -> Result<JsonAppResponse<AccessTokenResponse>> {
+  let refresh_token = path.into_inner();
+  let oauth_url = biz::user::refresh(&state.gotrue_client, refresh_token).await?;
+  Ok(AppResponse::Ok().with_data(oauth_url).into())
 }
 
 async fn info_handler(

@@ -8,7 +8,7 @@ use realtime::client::ClientWSSession;
 use realtime::collaborate::CollabServer;
 use std::time::Duration;
 
-use crate::component::auth::jwt::{authorization_from_token, UserUuid};
+use crate::component::auth::jwt::{authorization_from_token, UserToken, UserUuid};
 
 use storage::collab::CollabPostgresDBStorageImpl;
 
@@ -33,6 +33,7 @@ pub async fn establish_ws_connection(
     Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
     Duration::from_secs(state.config.websocket.client_timeout as u64),
   );
+
   match ws::start(client, &request, payload) {
     Ok(response) => Ok(response),
     Err(e) => {

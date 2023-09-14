@@ -4,7 +4,7 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use realtime::entities::RealtimeUser;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, Write};
 use std::ops::Deref;
 
 use crate::state::State;
@@ -51,6 +51,26 @@ impl Deref for UserUuid {
 
   fn deref(&self) -> &Self::Target {
     &self.uuid
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct UserToken(pub String);
+impl UserToken {
+  pub fn from_auth(auth: Authorization) -> Result<Self, actix_web::Error> {
+    Ok(Self(auth.token))
+  }
+}
+
+impl Display for UserToken {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&self.0)
+  }
+}
+
+impl RealtimeUser for UserToken {
+  fn id(&self) -> &str {
+    &self.0
   }
 }
 
@@ -108,6 +128,12 @@ impl FromRequest for Authorization {
     }
   }
 }
+
+// impl RealtimeUser for Authorization {
+//   fn id(&self) -> &str {
+//     &self.uuid_str
+//   }
+// }
 
 fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::Error> {
   let state = req.app_data::<Data<State>>().unwrap();

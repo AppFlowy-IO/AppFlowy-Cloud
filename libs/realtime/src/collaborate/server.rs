@@ -63,7 +63,7 @@ where
   type Result = Result<(), RealtimeError>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    tracing::trace!("[💭Server]: {} connect", new_conn.user);
+    tracing::trace!("[💭Server]: new connection => {} ", new_conn.user);
 
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     self
@@ -82,7 +82,7 @@ where
 {
   type Result = Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    tracing::trace!("[💭Server]: {} disconnect", msg.user);
+    tracing::trace!("[💭Server]: disconnect => {}", msg.user);
     self.client_stream_by_user.write().remove(msg.user.id());
 
     // Remove the user from all collab groups that the user is subscribed to
@@ -254,20 +254,24 @@ fn remove_user_from_group<S>(groups: &Arc<CollabGroupCache<S>>, edit_collab: &Ed
 where
   S: CollabStorage,
 {
-  let mut write_guard = groups.write();
+  let mut groups_write_guard = groups.write();
 
-  let should_remove_group = write_guard.get_mut(&edit_collab.object_id).map(|group| {
-    group.subscribers.write().remove(&edit_collab.origin);
-    let should_remove = group.is_empty();
-    if should_remove {
-      group.flush_collab();
-    }
-    should_remove
-  });
+  let should_remove_group = groups_write_guard
+    .get_mut(&edit_collab.object_id)
+    .map(|group| {
+      tracing::debug!("Remove subscriber: {}", edit_collab.origin);
+      group.subscribers.write().remove(&edit_collab.origin);
+      let should_remove = group.is_empty();
+      if should_remove {
+        group.flush_collab();
+      }
+      should_remove
+    });
 
   // If the group is empty, remove it from the cache
   if should_remove_group.unwrap_or(false) {
-    write_guard.remove(&edit_collab.object_id);
+    tracing::debug!("Remove group: {}", edit_collab.object_id);
+    groups_write_guard.remove(&edit_collab.object_id);
   }
 }
 

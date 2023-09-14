@@ -82,7 +82,7 @@ pub struct StorageConfig {
 impl Default for StorageConfig {
   fn default() -> Self {
     Self {
-      flush_per_update: 10,
+      flush_per_update: FLUSH_PER_UPDATE,
     }
   }
 }
@@ -94,10 +94,11 @@ pub struct CollabPostgresDBStorageImpl {
   config: StorageConfig,
 }
 
+pub const FLUSH_PER_UPDATE: u32 = 100;
 impl CollabPostgresDBStorageImpl {
   pub fn new(pg_pool: PgPool) -> Self {
     let config = StorageConfig {
-      flush_per_update: 100,
+      flush_per_update: FLUSH_PER_UPDATE,
     };
     Self { pg_pool, config }
   }

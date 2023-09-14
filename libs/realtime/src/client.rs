@@ -80,7 +80,7 @@ where
 
 impl<U, S> Actor for ClientWSSession<U, S>
 where
-  U: Unpin + RealtimeUser + Clone,
+  U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
 {
   type Context = ws::WebsocketContext<Self>;

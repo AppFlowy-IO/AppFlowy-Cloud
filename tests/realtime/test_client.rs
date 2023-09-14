@@ -11,9 +11,11 @@ use collab::preclude::Collab;
 use collab_define::CollabType;
 use std::sync::Arc;
 
+use assert_json_diff::assert_json_eq;
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
+use uuid::Uuid;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -57,7 +59,7 @@ impl TestClient {
     // Subscribe to object
     let handler = ws_client.subscribe(1, object_id.to_string()).await.unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
-    let origin = CollabOrigin::Client(CollabClient::new(uid, "1"));
+    let origin = CollabOrigin::Client(CollabClient::new(uid, Uuid::new_v4()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
     let object = SyncObject::new(object_id, &workspace_id, collab_type);
@@ -89,15 +91,16 @@ pub async fn assert_collab_json(
   client: &client_api::Client,
   object_id: &str,
   collab_type: &CollabType,
-  timeout: u64,
+  secs: u64,
   expected: Value,
 ) {
   let collab_type = collab_type.clone();
   let object_id = object_id.to_string();
+  let mut retry_count = 0;
 
   loop {
     tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(timeout)) => {
+       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
          panic!("Query collab timeout");
        },
        result = client.get_collab(QueryCollabParams {
@@ -107,9 +110,15 @@ pub async fn assert_collab_json(
         match result {
           Ok(data) => {
             let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.to_vec()], vec![]).unwrap().to_json_value();
+            if retry_count > 10 {
+              assert_json_eq!(json, expected);
+              break;
+            }
+
             if json == expected {
               break;
             }
+            retry_count += 1;
             tokio::time::sleep(Duration::from_millis(200)).await;
           },
           Err(_) => {

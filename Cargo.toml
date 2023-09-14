@@ -102,6 +102,17 @@ members = [
     "libs/gotrue-entity"
 ]
 
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+
+[profile.profiling]
+inherits = "release"
+codegen-units = 16
+debug = true
+lto = false
+
 [profile.dev.package.sqlx-macros]
 opt-level = 3
 

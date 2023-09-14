@@ -1,0 +1,6 @@
+FROM runtime
+COPY --from=builder /app/target/release/deps/ /app/
+COPY --from=builder /app/configuration configuration
+ENV APP_ENVIRONMENT production
+ENV RUST_BACKTRACE 1
+CMD ["bash", "-c", "find /app/ -maxdepth 1 -type f -executable ! -name '*.so' -exec ./{} \;"]

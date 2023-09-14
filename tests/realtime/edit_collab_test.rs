@@ -7,7 +7,7 @@ use crate::realtime::test_client::{assert_collab_json, TestClient};
 use std::time::Duration;
 
 #[tokio::test]
-async fn realtime_write_test() {
+async fn realtime_write_collab_test() {
   let mut client_api = client_api_client();
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;

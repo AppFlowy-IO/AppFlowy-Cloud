@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
-use storage::collab::CollabPostgresDBStorageImpl;
+use crate::component::storage_proxy::CollabStorageProxy;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
@@ -23,7 +23,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<Addr<CollabServer<CollabPostgresDBStorageImpl, RealtimeUserImpl>>>,
+  server: Data<Addr<CollabServer<CollabStorageProxy, RealtimeUserImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::info!("ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();

@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use crate::component::storage_proxy::CollabStorageProxy;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
@@ -180,10 +181,10 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
   builder
 }
 
-pub async fn init_storage(
-  _config: &Config,
-  pg_pool: PgPool,
-) -> Storage<CollabPostgresDBStorageImpl> {
+pub async fn init_storage(_config: &Config, pg_pool: PgPool) -> Storage<CollabStorageProxy> {
   let collab_storage = CollabPostgresDBStorageImpl::new(pg_pool);
-  Storage { collab_storage }
+  let proxy = CollabStorageProxy::new(collab_storage);
+  Storage {
+    collab_storage: proxy,
+  }
 }

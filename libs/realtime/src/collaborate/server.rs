@@ -25,7 +25,7 @@ pub struct CollabServer<S, U> {
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S>>,
   /// Keep track of all object ids that a user is subscribed to
-  edit_collab_by_user: Arc<RwLock<HashMap<U, HashSet<Editing>>>>,
+  editing_collab_by_user: Arc<RwLock<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
 }
@@ -41,7 +41,7 @@ where
     Ok(Self {
       storage,
       groups,
-      edit_collab_by_user,
+      editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
     })
   }
@@ -86,7 +86,7 @@ where
     self.client_stream_by_user.write().remove(&msg.user);
 
     // Remove the user from all collab groups that the user is subscribed to
-    let editing_set = self.edit_collab_by_user.write().remove(&msg.user);
+    let editing_set = self.editing_collab_by_user.write().remove(&msg.user);
     if let Some(editing_set) = editing_set {
       if !editing_set.is_empty() {
         let groups = self.groups.clone();
@@ -112,7 +112,7 @@ where
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let client_streams = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
-    let edit_collab_by_user = self.edit_collab_by_user.clone();
+    let edit_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
       subscribe_collab_group_change_if_need(

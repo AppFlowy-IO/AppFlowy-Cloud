@@ -1,3 +1,5 @@
+use shared_entity::error_code::ErrorCode;
+
 use crate::client::utils::{
   generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX,
 };
@@ -20,9 +22,16 @@ async fn update_password_same_password() {
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
     .unwrap();
-  c.update(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
+  let err = c
+    .update(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
+    .err()
     .unwrap();
+  assert_eq!(err.code, ErrorCode::InvalidPassword);
+  assert_eq!(
+    err.message,
+    "New password should be different from the old password."
+  );
 }
 
 #[tokio::test]

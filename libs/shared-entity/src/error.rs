@@ -53,14 +53,16 @@ impl From<anyhow::Error> for AppError {
 #[cfg(feature = "cloud")]
 impl From<gotrue_entity::GoTrueError> for AppError {
   fn from(err: gotrue_entity::GoTrueError) -> Self {
-    match err.code {
-      401 => AppError::new(ErrorCode::OAuthError, err.msg),
+    match (err.code, err.msg.as_str()) {
+      (401, _) => AppError::new(ErrorCode::OAuthError, err.msg),
+      (422, "New password should be different from the old password.") => {
+        AppError::new(ErrorCode::InvalidPassword, err.msg)
+      },
       _ => AppError::new(
         ErrorCode::Unhandled,
         format!(
-          "gotrue error: {}, id: {}",
-          err.code,
-          err.error_id.unwrap_or("".to_string())
+          "gotrue error: {}, message: {}, id: {:?}",
+          err.code, err.msg, err.error_id,
         ),
       ),
     }

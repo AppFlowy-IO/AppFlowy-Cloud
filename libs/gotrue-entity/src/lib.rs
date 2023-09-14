@@ -70,7 +70,7 @@ pub struct AccessTokenResponse {
   pub access_token: String,
   pub token_type: String,
   pub expires_in: i64,
-  pub expires_at: Option<i64>, // older versions of GoTrue do not return this
+  pub expires_at: i64,
   pub refresh_token: String,
   pub user: User,
   pub provider_access_token: Option<String>,
@@ -106,8 +106,8 @@ pub struct GoTrueSettings {
   pub mailer_autoconfirm: bool,
   pub phone_autoconfirm: bool,
   pub sms_provider: String,
-  pub mfa_enabled: Option<bool>, // older versions of GoTrue do not return this
-  pub saml_enabled: Option<bool>, // older versions of GoTrue do not return this
+  pub mfa_enabled: bool,
+  pub saml_enabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

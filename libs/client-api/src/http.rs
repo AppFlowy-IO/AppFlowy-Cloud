@@ -147,16 +147,16 @@ impl Client {
   }
 
   pub async fn refresh(&mut self) -> Result<(), AppError> {
-    let access_token = self
+    let refresh_token = self
       .token
       .as_ref()
       .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
-      .access_token
+      .refresh_token
       .as_str();
     let url = format!(
       "{}/api/user/refresh/{}",
       self.base_url,
-      access_token.to_string()
+      refresh_token.to_string()
     );
 
     let resp = self.http_client.get(&url).send().await?;

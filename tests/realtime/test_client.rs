@@ -34,9 +34,10 @@ impl TestClient {
       .await
       .unwrap();
 
+    let device_id = Uuid::new_v4().to_string();
     // Connect to server via websocket
     let ws_client = WSClient::new(
-      client.ws_url().unwrap(),
+      client.ws_url(&device_id).unwrap(),
       WSClientConfig {
         buffer_capacity: 100,
         ping_per_secs: 2,
@@ -59,7 +60,7 @@ impl TestClient {
     // Subscribe to object
     let handler = ws_client.subscribe(1, object_id.to_string()).await.unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
-    let origin = CollabOrigin::Client(CollabClient::new(uid, Uuid::new_v4()));
+    let origin = CollabOrigin::Client(CollabClient::new(uid, device_id));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
     let object = SyncObject::new(object_id, &workspace_id, collab_type);

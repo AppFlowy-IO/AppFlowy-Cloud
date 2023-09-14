@@ -5,7 +5,7 @@ use crate::error::{RealtimeError, StreamError};
 use anyhow::Result;
 
 use actix::{Actor, Context, Handler, ResponseFuture};
-use collab::core::origin::CollabOrigin;
+use collab::core::origin::{CollabClient, CollabOrigin};
 
 use collab_sync_protocol::CollabMessage;
 use parking_lot::RwLock;
@@ -27,7 +27,7 @@ pub struct CollabServer<S> {
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S>>,
   /// Keep track of all object ids that a user is subscribed to
-  edit_collab_by_user: Arc<RwLock<HashMap<String, HashSet<EditCollab>>>>,
+  edit_collab_by_user: Arc<RwLock<HashMap<CollabClient, HashSet<EditCollab>>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<String, CollabClientStream>>>,
 }

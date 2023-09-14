@@ -11,6 +11,8 @@ use std::hash::Hash;
 
 pub trait RealtimeUser: Clone + Debug + Send + Sync + 'static + Display {
   fn id(&self) -> &str;
+
+  fn device_id(&self) -> &str;
 }
 
 #[derive(Debug, Message, Clone)]

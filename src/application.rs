@@ -3,7 +3,7 @@ use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::{State, Storage};
+use crate::state::{AppState, Storage};
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -33,9 +33,9 @@ pub struct Application {
 
 impl Application {
   pub async fn build<S>(
-    config: Config,
-    state: State,
-    storage: Storage<S>,
+      config: Config,
+      state: AppState,
+      storage: Storage<S>,
   ) -> Result<Self, anyhow::Error>
   where
     S: CollabStorage + Unpin,
@@ -58,10 +58,10 @@ impl Application {
 }
 
 pub async fn run<S>(
-  listener: TcpListener,
-  state: State,
-  config: Config,
-  storage: Storage<S>,
+    listener: TcpListener,
+    state: AppState,
+    config: Config,
+    storage: Storage<S>,
 ) -> Result<Server, anyhow::Error>
 where
   S: CollabStorage + Unpin,
@@ -121,13 +121,13 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(config: &Config) -> State {
+pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
 
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
-  State {
+  AppState {
     pg_pool,
     config: Arc::new(config.clone()),
     user: Arc::new(Default::default()),

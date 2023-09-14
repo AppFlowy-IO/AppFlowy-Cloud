@@ -26,7 +26,7 @@ async fn realtime_write_collab_test() {
   test_client.disconnect().await;
 
   assert_collab_json(
-    &client_api,
+    &mut client_api,
     &object_id,
     &collab_type,
     5,

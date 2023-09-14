@@ -80,7 +80,7 @@ impl Client {
       access_token,
       token_type: token_type.ok_or(url_missing_param("token_type"))?,
       expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
-      expires_at,
+      expires_at: expires_at.ok_or(url_missing_param("expires_at"))?,
       refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
       user,
       provider_access_token,

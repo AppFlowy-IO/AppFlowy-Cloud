@@ -73,7 +73,9 @@ async fn sign_in_with_url() {
     Ok(()) => panic!("should not be ok"),
     Err(e) => {
       assert_eq!(e.code, ErrorCode::OAuthError);
-      assert!(e.message.starts_with("Invalid token: token is expired by"));
+      assert!(e
+        .message
+        .starts_with("invalid JWT: unable to parse or verify signature, token is expired by"));
     },
   }
 }

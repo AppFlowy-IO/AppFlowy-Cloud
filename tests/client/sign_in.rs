@@ -1,6 +1,8 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::{generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD};
+use crate::client::utils::{
+  generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX,
+};
 use crate::client_api_client;
 
 #[tokio::test]
@@ -47,6 +49,8 @@ async fn sign_in_unconfirmed_email() {
 
 #[tokio::test]
 async fn sign_in_success() {
+  let _guard = REGISTERED_USER_MUTEX.lock().await;
+
   let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
@@ -69,7 +73,9 @@ async fn sign_in_with_url() {
     Ok(()) => panic!("should not be ok"),
     Err(e) => {
       assert_eq!(e.code, ErrorCode::OAuthError);
-      assert!(e.message.starts_with("Invalid token: token is expired by"));
+      assert!(e
+        .message
+        .starts_with("invalid JWT: unable to parse or verify signature, token is expired by"));
     },
   }
 }

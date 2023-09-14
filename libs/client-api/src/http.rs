@@ -1,4 +1,3 @@
-use anyhow::Error;
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::OAuthURL;
 use reqwest::Method;
@@ -81,7 +80,7 @@ impl Client {
       access_token,
       token_type: token_type.ok_or(url_missing_param("token_type"))?,
       expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
-      expires_at,
+      expires_at: expires_at.ok_or(url_missing_param("expires_at"))?,
       refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
       user,
       provider_access_token,
@@ -142,6 +141,19 @@ impl Client {
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
+    self.token = AppResponse::from_response(resp).await?.into_data()?;
+    Ok(())
+  }
+
+  pub async fn refresh(&mut self) -> Result<(), AppError> {
+    let refresh_token = self
+      .token
+      .as_ref()
+      .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
+      .refresh_token
+      .as_str();
+    let url = format!("{}/api/user/refresh/{}", self.base_url, refresh_token);
+    let resp = self.http_client.get(&url).send().await?;
     self.token = AppResponse::from_response(resp).await?.into_data()?;
     Ok(())
   }
@@ -242,15 +254,16 @@ impl Client {
     }
   }
 
-  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, Error> {
+  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, AppError> {
     match &self.token {
-      None => anyhow::bail!("no token found, are you logged in?"),
-      Some(t) => Ok(
-        self
+      None => Err(ErrorCode::NotLoggedIn.into()),
+      Some(t) => {
+        let request_builder = self
           .http_client
           .request(method, url)
-          .bearer_auth(t.access_token.to_string()),
-      ),
+          .bearer_auth(&t.access_token);
+        Ok(request_builder)
+      },
     }
   }
 

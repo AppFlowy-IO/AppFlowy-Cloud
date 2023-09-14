@@ -1,6 +1,6 @@
 pub enum Grant {
   Password(PasswordGrant),
-  RefreshToken,
+  RefreshToken(RefreshTokenGrant),
   IdToken,
   PKCE,
 }
@@ -10,11 +10,15 @@ pub struct PasswordGrant {
   pub password: String,
 }
 
+pub struct RefreshTokenGrant {
+  pub refresh_token: String,
+}
+
 impl Grant {
   pub fn type_as_str(&self) -> &str {
     match self {
       Grant::Password(_) => "password",
-      Grant::RefreshToken => "refresh_token",
+      Grant::RefreshToken(_) => "refresh_token",
       Grant::IdToken => "id_token",
       Grant::PKCE => "password",
     }
@@ -28,7 +32,11 @@ impl Grant {
             "password": p.password,
         })
       },
-      Grant::RefreshToken => todo!(),
+      Grant::RefreshToken(r) => {
+        serde_json::json!({
+            "refresh_token": r.refresh_token,
+        })
+      },
       Grant::IdToken => todo!(),
       Grant::PKCE => todo!(),
     }

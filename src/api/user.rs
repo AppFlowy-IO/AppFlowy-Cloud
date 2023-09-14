@@ -29,6 +29,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/update").route(web::post().to(update_handler)))
     .service(web::resource("/oauth/{provider}").route(web::get().to(oauth_handler)))
     .service(web::resource("/info/{access_token}").route(web::get().to(info_handler)))
+    .service(web::resource("/refresh/{refresh_token}").route(web::get().to(refresh_handler)))
 
     .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
@@ -40,9 +41,18 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
 
+async fn refresh_handler(
+  path: web::Path<String>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<AccessTokenResponse>> {
+  let refresh_token = path.into_inner();
+  let oauth_url = biz::user::refresh(&state.gotrue_client, refresh_token).await?;
+  Ok(AppResponse::Ok().with_data(oauth_url).into())
+}
+
 async fn info_handler(
-    path: web::Path<String>,
-    state: Data<AppState>,
+  path: web::Path<String>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<User>> {
   let access_token = path.into_inner();
   let oauth_url = biz::user::info(&state.gotrue_client, &access_token).await?;
@@ -50,8 +60,8 @@ async fn info_handler(
 }
 
 async fn oauth_handler(
-    path: web::Path<String>,
-    state: Data<AppState>,
+  path: web::Path<String>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<OAuthURL>> {
   let provider = path.into_inner();
   let provider =
@@ -61,25 +71,25 @@ async fn oauth_handler(
 }
 
 async fn profile_handler(
-    uuid: UserUuid,
-    state: Data<AppState>,
+  uuid: UserUuid,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserProfileView>> {
   let profile = biz::user::user_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
 async fn workspaces_handler(
-    uuid: UserUuid,
-    state: Data<AppState>,
+  uuid: UserUuid,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFWorkspaces>> {
   let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
 async fn update_handler(
-    auth: Authorization,
-    req: Json<LoginRequest>,
-    state: Data<AppState>,
+  auth: Authorization,
+  req: Json<LoginRequest>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<User>> {
   let req = req.into_inner();
   let user =
@@ -87,7 +97,10 @@ async fn update_handler(
   Ok(AppResponse::Ok().with_data(user).into())
 }
 
-async fn sign_out_handler(auth: Authorization, state: Data<AppState>) -> Result<JsonAppResponse<()>> {
+async fn sign_out_handler(
+  auth: Authorization,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
   state
     .gotrue_client
     .logout(&auth.token)
@@ -98,8 +111,8 @@ async fn sign_out_handler(auth: Authorization, state: Data<AppState>) -> Result<
 }
 
 async fn sign_in_password_handler(
-    req: Json<LoginRequest>,
-    state: Data<AppState>,
+  req: Json<LoginRequest>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
   let token = biz::user::sign_in(
@@ -114,8 +127,8 @@ async fn sign_in_password_handler(
 }
 
 async fn sign_up_handler(
-    req: Json<LoginRequest>,
-    state: Data<AppState>,
+  req: Json<LoginRequest>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   biz::user::sign_up(
     &state.gotrue_client,
@@ -129,9 +142,9 @@ async fn sign_up_handler(
 }
 
 async fn login_handler(
-    req: Json<LoginRequest>,
-    state: Data<AppState>,
-    session: SessionToken,
+  req: Json<LoginRequest>,
+  state: Data<AppState>,
+  session: SessionToken,
 ) -> Result<HttpResponse> {
   let req = req.into_inner();
   let email = UserEmail::parse(req.email)
@@ -159,7 +172,10 @@ async fn logout_handler(req: HttpRequest, state: Data<AppState>) -> Result<HttpR
 }
 
 #[tracing::instrument(level = "debug", skip(state))]
-async fn register_handler(req: Json<RegisterRequest>, state: Data<AppState>) -> Result<HttpResponse> {
+async fn register_handler(
+  req: Json<RegisterRequest>,
+  state: Data<AppState>,
+) -> Result<HttpResponse> {
   let req = req.into_inner();
   let name = UserName::parse(req.name)
     .map_err(InputParamsError::InvalidName)?
@@ -176,9 +192,9 @@ async fn register_handler(req: Json<RegisterRequest>, state: Data<AppState>) -> 
 }
 
 async fn change_password_handler(
-    req: HttpRequest,
-    payload: Json<ChangePasswordRequest>,
-    // session: SessionToken,
+  req: HttpRequest,
+  payload: Json<ChangePasswordRequest>,
+  // session: SessionToken,
   state: Data<AppState>,
 ) -> Result<HttpResponse> {
   let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;

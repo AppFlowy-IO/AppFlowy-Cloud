@@ -31,19 +31,33 @@ where
     }
   }
 
-  pub async fn create_group(&self, uid: i64, workspace_id: &str, object_id: &str) {
+  pub async fn create_group(
+    &self,
+    uid: i64,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) {
     if self.group_by_object_id.read().contains_key(object_id) {
       return;
     }
 
-    let group = self.init_group(uid, workspace_id, object_id).await;
+    let group = self
+      .init_group(uid, workspace_id, object_id, collab_type)
+      .await;
     self
       .group_by_object_id
       .write()
       .insert(object_id.to_string(), group);
   }
 
-  async fn init_group(&self, uid: i64, workspace_id: &str, object_id: &str) -> Arc<CollabGroup> {
+  async fn init_group(
+    &self,
+    uid: i64,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Arc<CollabGroup> {
     tracing::trace!("Create new group for object_id:{}", object_id);
 
     let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
@@ -57,7 +71,7 @@ where
     let plugin = CollabStoragePlugin::new(
       uid,
       workspace_id,
-      CollabType::Document,
+      collab_type,
       self.storage.clone(),
       Arc::downgrade(&group),
     );

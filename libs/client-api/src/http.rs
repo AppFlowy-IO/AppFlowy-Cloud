@@ -152,12 +152,7 @@ impl Client {
       .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
       .refresh_token
       .as_str();
-    let url = format!(
-      "{}/api/user/refresh/{}",
-      self.base_url,
-      refresh_token.to_string()
-    );
-
+    let url = format!("{}/api/user/refresh/{}", self.base_url, refresh_token);
     let resp = self.http_client.get(&url).send().await?;
     self.token = AppResponse::from_response(resp).await?.into_data()?;
     Ok(())

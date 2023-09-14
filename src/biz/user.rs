@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::Result;
 use gotrue::{
   api::Client,
-  grant::{Grant, PasswordGrant},
+  grant::{Grant, PasswordGrant, RefreshTokenGrant},
 };
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::{
@@ -16,6 +16,15 @@ use validator::validate_email;
 use crate::domain::validate_password;
 use sqlx::{types::uuid, PgPool};
 use tracing::instrument;
+
+pub async fn refresh(
+  gotrue_client: &Client,
+  refresh_token: String,
+) -> Result<AccessTokenResponse, AppError> {
+  let grant = Grant::RefreshToken(RefreshTokenGrant { refresh_token });
+  let token = gotrue_client.token(&grant).await??;
+  Ok(token)
+}
 
 #[instrument(level = "info", skip_all, err)]
 pub async fn sign_up(

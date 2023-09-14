@@ -1,4 +1,4 @@
-use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
+use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX};
 
 use client_api::Client;
 use collab::core::collab::MutexCollab;
@@ -26,6 +26,8 @@ pub(crate) struct TestClient {
 
 impl TestClient {
   pub(crate) async fn new(client: &mut Client, object_id: &str, collab_type: CollabType) -> Self {
+    let _guard = REGISTERED_USER_MUTEX.lock().await;
+
     // Sign in
     client
       .sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)

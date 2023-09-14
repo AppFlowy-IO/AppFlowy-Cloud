@@ -1,10 +1,12 @@
-use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
+use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX};
 use crate::client_api_client;
 
 use collab_ws::{ConnectState, WSClient, WSClientConfig};
 
 #[tokio::test]
 async fn realtime_connect_test() {
+  let _guard = REGISTERED_USER_MUTEX.lock().await;
+
   let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await

@@ -3,7 +3,7 @@ services:
   postgres:
     build:
       context: .
-      dockerfile: docker/Dockerfile_postgres
+      dockerfile: docker/postgres.Dockerfile
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
@@ -20,7 +20,9 @@ services:
       - 6380:6379
 
   gotrue:
-    image: supabase/gotrue
+    build:
+      context: .
+      dockerfile: docker/gotrue.Dockerfile
     restart: on-failure
     depends_on:
       - postgres

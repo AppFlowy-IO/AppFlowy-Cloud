@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
   let subscriber = get_subscriber(
     "appflowy_cloud".to_string(),
-    filters.join(","),
+    Some(filters.join(",")),
     std::io::stdout,
   );
   init_subscriber(subscriber);

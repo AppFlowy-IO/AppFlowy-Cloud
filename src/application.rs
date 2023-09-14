@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use realtime::core::CollabServer;
+use realtime::collaborate::CollabServer;
 use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use tracing_actix_web::TracingLogger;
 

@@ -1,10 +1,9 @@
 use crate::entities::{
-  ClientMessage, Connect, Disconnect, EditCollab, RealtimeMessage, RealtimeUser, ServerMessage,
+  ClientMessage, Connect, Disconnect, EditCollab, RealtimeMessage, RealtimeUser,
 };
 use crate::error::{RealtimeError, StreamError};
 use anyhow::Result;
 
-use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use collab::core::origin::CollabOrigin;
 
@@ -13,12 +12,13 @@ use parking_lot::RwLock;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
 
-use crate::core::group::CollabGroupCache;
-use crate::core::ClientWebsocketSink;
+use crate::client::ClientWSSink;
+use crate::collaborate::group::CollabGroupCache;
+use crate::util::channel_ext::UnboundedSenderSink;
 use storage::collab::CollabStorage;
-use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
 #[derive(Clone)]
 pub struct CollabServer<S> {
@@ -29,7 +29,7 @@ pub struct CollabServer<S> {
   /// Keep track of all object ids that a user is subscribed to
   edit_collab_by_user: Arc<RwLock<HashMap<String, HashSet<EditCollab>>>>,
   /// Keep track of all client streams
-  client_stream_by_user: Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
+  client_stream_by_user: Arc<RwLock<HashMap<String, CollabClientStream>>>,
 }
 
 impl<S> CollabServer<S>
@@ -65,7 +65,7 @@ where
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[💭Server]: {} connect", new_conn.user);
 
-    let stream = RealtimeClientStream::new(ClientWebsocketSink(new_conn.socket));
+    let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     self
       .client_stream_by_user
       .write()
@@ -130,7 +130,7 @@ where
 
 async fn forward_message_to_collab_group<U>(
   client_msg: &ClientMessage<U>,
-  client_streams: &Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
+  client_streams: &Arc<RwLock<HashMap<String, CollabClientStream>>>,
 ) where
   U: RealtimeUser,
 {
@@ -156,7 +156,7 @@ async fn subscribe_collab_group_change_if_need<U, S>(
   client_msg: &ClientMessage<U>,
   groups: &Arc<CollabGroupCache<S>>,
   edit_collab_by_user: &Arc<RwLock<HashMap<String, HashSet<EditCollab>>>>,
-  client_streams: &Arc<RwLock<HashMap<String, RealtimeClientStream>>>,
+  client_streams: &Arc<RwLock<HashMap<String, CollabClientStream>>>,
 ) -> Result<(), RealtimeError>
 where
   U: RealtimeUser,
@@ -274,14 +274,22 @@ where
   }
 }
 
-pub struct RealtimeClientStream {
-  ws_sink: ClientWebsocketSink,
-  /// Used to receive messages from the collab server
-  stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
+impl TryFrom<RealtimeMessage> for CollabMessage {
+  type Error = StreamError;
+
+  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
+    CollabMessage::from_vec(&value.payload).map_err(|e| StreamError::Internal(e.to_string()))
+  }
 }
 
-impl RealtimeClientStream {
-  pub fn new(sink: ClientWebsocketSink) -> Self {
+pub struct CollabClientStream {
+  ws_sink: ClientWSSink,
+  /// Used to receive messages from the collab server
+  pub(crate) stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
+}
+
+impl CollabClientStream {
+  pub fn new(sink: ClientWSSink) -> Self {
     // When receive a new connection, create a new [ClientStream] that holds the connection's websocket
     let (stream_tx, _) = tokio::sync::broadcast::channel(1000);
     Self {
@@ -302,7 +310,8 @@ impl RealtimeClientStream {
     ReceiverStream<Result<T, StreamError>>,
   )>
   where
-    T: TryFrom<RealtimeMessage, Error = StreamError> + Into<ServerMessage> + Send + Sync + 'static,
+    T:
+      TryFrom<RealtimeMessage, Error = StreamError> + Into<RealtimeMessage> + Send + Sync + 'static,
     F1: Fn(&str, &T) -> bool + Send + Sync + 'static,
     F2: Fn(&str, &RealtimeMessage) -> bool + Send + Sync + 'static,
   {
@@ -340,13 +349,5 @@ impl RealtimeClientStream {
     // When receiving a message from the client_forward_stream, it will send the message to the broadcast
     // group. The message will be broadcast to all connected clients.
     Some((client_forward_sink, client_forward_stream))
-  }
-}
-
-impl TryFrom<RealtimeMessage> for CollabMessage {
-  type Error = StreamError;
-
-  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
-    CollabMessage::from_vec(&value.payload).map_err(|e| StreamError::Internal(e.to_string()))
   }
 }

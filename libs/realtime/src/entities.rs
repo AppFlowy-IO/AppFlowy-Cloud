@@ -5,6 +5,7 @@ use collab::core::origin::CollabOrigin;
 use collab_sync_protocol::CollabMessage;
 
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
@@ -15,7 +16,7 @@ pub trait RealtimeUser: Clone + Debug + Send + Sync + 'static + Display {
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct Connect<U> {
-  pub socket: Recipient<ServerMessage>,
+  pub socket: Recipient<RealtimeMessage>,
   pub user: U,
 }
 
@@ -25,25 +26,24 @@ pub struct Disconnect<U> {
   pub user: U,
 }
 
+#[derive(Debug, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum RealtimeBizId {
+  CollabBizId = 1,
+}
+
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct ClientMessage<U> {
-  pub business_id: u8,
+  pub business_id: RealtimeBizId,
   pub user: U,
   pub content: CollabMessage,
 }
 
-#[derive(Debug, Message, Clone)]
+#[derive(Debug, Clone, Message, Serialize, Deserialize)]
 #[rtype(result = "()")]
-pub struct ServerMessage {
-  pub business_id: u8,
-  pub object_id: String,
-  pub payload: Vec<u8>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealtimeMessage {
-  pub business_id: u8,
+  pub business_id: RealtimeBizId,
   pub object_id: String,
   pub payload: Vec<u8>,
 }
@@ -61,30 +61,10 @@ impl From<RealtimeMessage> for Bytes {
   }
 }
 
-impl From<ServerMessage> for RealtimeMessage {
-  fn from(server_msg: ServerMessage) -> Self {
-    Self {
-      business_id: server_msg.business_id,
-      object_id: server_msg.object_id,
-      payload: server_msg.payload,
-    }
-  }
-}
-
 impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
-      business_id: msg.business_id(),
-      object_id: msg.object_id().to_string(),
-      payload: msg.to_vec(),
-    }
-  }
-}
-
-impl From<CollabMessage> for ServerMessage {
-  fn from(msg: CollabMessage) -> Self {
-    Self {
-      business_id: msg.business_id(),
+      business_id: RealtimeBizId::CollabBizId,
       object_id: msg.object_id().to_string(),
       payload: msg.to_vec(),
     }

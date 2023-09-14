@@ -13,7 +13,7 @@ use storage::collab::CollabStorage;
 use storage::error::StorageError;
 use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
 
-use crate::collab::CollabGroup;
+use crate::collaborate::group::CollabGroup;
 use y_sync::awareness::Awareness;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -123,13 +123,11 @@ where
     self.did_load.store(true, Ordering::SeqCst);
   }
 
-  fn receive_update(&self, object_id: &str, _txn: &TransactionMut, update: &[u8]) {
+  fn receive_update(&self, object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
     if !self.did_load.load(Ordering::SeqCst) {
       return;
     }
-    tracing::trace!("🔵Receive {} update with len: {}", object_id, update.len());
     let count = self.update_count.fetch_add(1, Ordering::SeqCst);
-
     if count >= self.storage.config().flush_per_update {
       self.update_count.store(0, Ordering::SeqCst);
       self.flush_collab(object_id);
@@ -137,8 +135,7 @@ where
   }
 
   fn flush(&self, object_id: &str, update: &Bytes) {
-    tracing::trace!("[💭Server] start flushing collab: {}", object_id);
-
+    tracing::debug!("[💭Server] start flushing collab: {}", object_id);
     let weak_storage = Arc::downgrade(&self.storage);
     let params = InsertCollabParams::from_raw_data(
       self.uid,
@@ -152,7 +149,7 @@ where
       if let Some(storage) = weak_storage.upgrade() {
         let object_id = params.object_id.clone();
         match storage.insert_collab(params).await {
-          Ok(_) => tracing::trace!("[💭Server] end flushing collab: {}", object_id),
+          Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
           Err(err) => tracing::error!("🔴Update collab failed: {:?}", err),
         }
       }

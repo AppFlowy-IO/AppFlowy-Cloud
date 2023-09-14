@@ -3,8 +3,9 @@ use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use realtime::core::{CollabServer, CollabSession};
 
+use realtime::client::ClientWSSession;
+use realtime::collaborate::CollabServer;
 use std::time::Duration;
 
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
@@ -26,7 +27,7 @@ pub async fn establish_ws_connection(
   tracing::info!("ws connect: {:?}", request);
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let client = CollabSession::new(
+  let client = ClientWSSession::new(
     user_uuid,
     server.get_ref().clone(),
     Duration::from_secs(state.config.websocket.heartbeat_interval as u64),

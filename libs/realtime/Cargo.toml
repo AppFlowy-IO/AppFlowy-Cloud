@@ -20,6 +20,7 @@ tokio-stream = { version = "0.1.14", features = ["sync"] }
 tokio = { version = "1.26.0", features = ["net", "sync", "macros"] }
 async-trait = "0.1.73"
 anyhow = "1.0.75"
+serde_repr = "0.1.6"
 
 collab = { version = "0.1.0"}
 collab-sync-protocol = { version = "0.1.0" }

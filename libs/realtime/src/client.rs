@@ -1,6 +1,4 @@
-use crate::entities::{
-  ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser, ServerMessage,
-};
+use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
 
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
@@ -10,13 +8,15 @@ use actix_web_actors::ws;
 use bytes::Bytes;
 use std::ops::Deref;
 
-use crate::core::CollabServer;
 use collab_sync_protocol::CollabMessage;
+
+use crate::collaborate::CollabServer;
+use crate::error::RealtimeError;
 
 use std::time::{Duration, Instant};
 use storage::collab::CollabStorage;
 
-pub struct CollabSession<U, S: Unpin + 'static> {
+pub struct ClientWSSession<U, S: Unpin + 'static> {
   user: U,
   hb: Instant,
   pub server: Addr<CollabServer<S>>,
@@ -24,7 +24,7 @@ pub struct CollabSession<U, S: Unpin + 'static> {
   client_timeout: Duration,
 }
 
-impl<U, S> CollabSession<U, S>
+impl<U, S> ClientWSSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
@@ -58,27 +58,27 @@ where
     });
   }
 
-  fn forward_binary_to_ws_server(&self, bytes: Bytes) {
-    tracing::info!("Receive binary message from client");
-    match RealtimeMessage::from_vec(bytes.to_vec()) {
-      Ok(message) => match CollabMessage::from_vec(&message.payload) {
-        Ok(collab_msg) => {
-          self.server.do_send(ClientMessage {
-            business_id: message.business_id,
-            user: self.user.clone(),
-            content: collab_msg,
-          });
-        },
-        Err(e) => tracing::error!("Parser CollabMessage failed: {:?}", e),
+  fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
+    tracing::debug!("Receive binary message with len: {}", bytes.len());
+    let message = RealtimeMessage::from_vec(bytes.to_vec())?;
+    match CollabMessage::from_vec(&message.payload) {
+      Ok(collab_msg) => {
+        self.server.do_send(ClientMessage {
+          business_id: message.business_id,
+          user: self.user.clone(),
+          content: collab_msg,
+        });
       },
       Err(e) => {
-        tracing::error!("Parser binary message error: {:?}", e);
+        tracing::warn!("Parser realtime payload failed: {:?}", e);
       },
     }
+
+    Ok(())
   }
 }
 
-impl<U, S> Actor for CollabSession<U, S>
+impl<U, S> Actor for ClientWSSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
@@ -119,20 +119,20 @@ where
   }
 }
 
-impl<U, S> Handler<ServerMessage> for CollabSession<U, S>
+impl<U, S> Handler<RealtimeMessage> for ClientWSSession<U, S>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
 {
   type Result = ();
 
-  fn handle(&mut self, server_msg: ServerMessage, ctx: &mut Self::Context) {
-    ctx.binary(RealtimeMessage::from(server_msg));
+  fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
+    ctx.binary(msg);
   }
 }
 
 /// WebSocket message handler
-impl<U, S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for CollabSession<U, S>
+impl<U, S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWSSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
@@ -151,29 +151,25 @@ where
         self.hb = Instant::now();
         ctx.pong(&msg);
       },
-      ws::Message::Pong(_) => {
-        self.hb = Instant::now();
-      },
+      ws::Message::Pong(_) => self.hb = Instant::now(),
       ws::Message::Text(_) => {},
       ws::Message::Binary(bytes) => {
-        self.forward_binary_to_ws_server(bytes);
+        let _ = self.forward_binary(bytes);
       },
       ws::Message::Close(reason) => {
         ctx.close(reason);
         ctx.stop();
       },
-      ws::Message::Continuation(_) => {
-        ctx.stop();
-      },
+      ws::Message::Continuation(_) => ctx.stop(),
       ws::Message::Nop => (),
     }
   }
 }
 
 /// A helper struct that wraps the [Recipient] type to implement the [Sink] trait
-pub struct ClientWebsocketSink(pub Recipient<ServerMessage>);
-impl Deref for ClientWebsocketSink {
-  type Target = Recipient<ServerMessage>;
+pub struct ClientWSSink(pub Recipient<RealtimeMessage>);
+impl Deref for ClientWSSink {
+  type Target = Recipient<RealtimeMessage>;
 
   fn deref(&self) -> &Self::Target {
     &self.0

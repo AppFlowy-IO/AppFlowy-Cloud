@@ -20,9 +20,9 @@ use token::{create_token, parse_token, TokenError};
 use tokio::sync::RwLock;
 
 pub async fn login(
-    email: String,
-    password: String,
-    state: &AppState,
+  email: String,
+  password: String,
+  state: &AppState,
 ) -> Result<(LoginResponse, Secret<Token>), AuthError> {
   let credentials = Credentials {
     email,
@@ -52,10 +52,10 @@ pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<UserCache>>) {
 }
 
 pub async fn register(
-    username: String,
-    email: String,
-    password: String,
-    state: &AppState,
+  username: String,
+  email: String,
+  password: String,
+  state: &AppState,
 ) -> Result<RegisterResponse, AuthError> {
   let pg_pool = state.pg_pool.clone();
   let server_key = &state.config.application.server_key;

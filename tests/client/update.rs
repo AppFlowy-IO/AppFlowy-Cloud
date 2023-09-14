@@ -28,7 +28,10 @@ async fn update_password_same_password() {
     .err()
     .unwrap();
   assert_eq!(err.code, ErrorCode::InvalidPassword);
-  assert_eq!(err.message, "New password should be different from the old password.");
+  assert_eq!(
+    err.message,
+    "New password should be different from the old password."
+  );
 }
 
 #[tokio::test]

@@ -44,11 +44,10 @@ impl Client {
     url::Url::parse(url)?
       .fragment()
       .ok_or(url_missing_param("fragment"))?
-      .split("&")
-      .into_iter()
+      .split('&')
       .try_for_each(|f| -> Result<(), AppError> {
-        let (k, v) = f.split_once("=").ok_or(url_missing_param("key=value"))?;
-        match k.as_ref() {
+        let (k, v) = f.split_once('=').ok_or(url_missing_param("key=value"))?;
+        match k {
           "access_token" => {
             access_token = Some(v.to_string());
           },

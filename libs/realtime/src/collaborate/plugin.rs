@@ -7,7 +7,7 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 
 use collab_define::CollabType;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 
 use storage::collab::CollabStorage;
 use storage::error::StorageError;
@@ -21,7 +21,7 @@ use yrs::{ReadTxn, StateVector, Transact, Update};
 pub struct CollabStoragePlugin<S> {
   uid: i64,
   workspace_id: String,
-  storage: Arc<S>,
+  storage: S,
   did_load: AtomicBool,
   update_count: AtomicU32,
   group: Weak<CollabGroup>,
@@ -42,23 +42,11 @@ impl<S> CollabStoragePlugin<S> {
     Self {
       uid,
       workspace_id,
-      storage: Arc::new(storage),
+      storage,
       did_load,
       update_count,
       group,
       collab_type,
-    }
-  }
-}
-
-impl<S> CollabStoragePlugin<S>
-where
-  S: CollabStorage,
-{
-  pub fn flush_collab(&self, _object_id: &str) {
-    match self.group.upgrade() {
-      None => tracing::error!("🔴Group is dropped, skip flush collab"),
-      Some(group) => group.flush_collab(),
     }
   }
 }
@@ -123,20 +111,23 @@ where
     self.did_load.store(true, Ordering::SeqCst);
   }
 
-  fn receive_update(&self, object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
+  fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
     if !self.did_load.load(Ordering::SeqCst) {
       return;
     }
     let count = self.update_count.fetch_add(1, Ordering::SeqCst);
     if count >= self.storage.config().flush_per_update {
       self.update_count.store(0, Ordering::SeqCst);
-      self.flush_collab(object_id);
+      tracing::trace!("number of updates reach flush_per_update, start flushing");
+      match self.group.upgrade() {
+        None => tracing::error!("🔴Group is dropped, skip flush collab"),
+        Some(group) => group.flush_collab(),
+      }
     }
   }
 
   fn flush(&self, object_id: &str, update: &Bytes) {
-    tracing::debug!("[💭Server] start flushing collab: {}", object_id);
-    let weak_storage = Arc::downgrade(&self.storage);
+    let storage = self.storage.clone();
     let params = InsertCollabParams::from_raw_data(
       self.uid,
       object_id,
@@ -145,13 +136,18 @@ where
       &self.workspace_id,
     );
 
+    tracing::debug!(
+      "[💭Server] start flushing {}:{} with len: {}",
+      object_id,
+      params.collab_type,
+      params.len
+    );
+
     tokio::spawn(async move {
-      if let Some(storage) = weak_storage.upgrade() {
-        let object_id = params.object_id.clone();
-        match storage.insert_collab(params).await {
-          Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
-          Err(err) => tracing::error!("🔴Update collab failed: {:?}", err),
-        }
+      let object_id = params.object_id.clone();
+      match storage.insert_collab(params).await {
+        Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
+        Err(err) => tracing::error!("🔴Update collab failed: {:?}", err),
       }
     });
   }

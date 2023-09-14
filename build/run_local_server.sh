@@ -4,6 +4,9 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Kill any existing instances
+pkill -f appflowy_cloud || true
+
 DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
 DB_PORT="${POSTGRES_PORT:=5433}"
@@ -13,6 +16,7 @@ DB_HOST="${POSTGRES_HOST:=localhost}"
 docker-compose --file ./docker-compose-dev.yml down
 
 # Start the Docker Compose setup
+export GOTRUE_MAILER_AUTOCONFIRM=true
 docker-compose --file ./docker-compose-dev.yml up -d --build
 
 # Keep pinging Postgres until it's ready to accept commands
@@ -34,14 +38,22 @@ until curl localhost:9998/health; do
   sleep 1
 done
 
-# Kill any existing instances
-pkill -f appflowy_cloud || true
-
 # Require if there are any changes to the database schema
 # To build AppFlowy-Cloud binary, we requires the .sqlx files
 # To generate the .sqlx files, we need to run the following command
 # After the .sqlx files are generated, we build in SQLX_OFFLINE=true
 # where we don't need to connect to the database
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
+RUST_LOG=trace cargo run &
 
-RUST_LOG=debug cargo run
+
+# sometimes the gotrue server may not be ready yet
+sleep 1
+source .env
+curl localhost:9998/signup \
+	--data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
+	--header 'Content-Type: application/json'
+
+# revert to require signup email verification
+export GOTRUE_MAILER_AUTOCONFIRM=false
+docker-compose --file ./docker-compose-dev.yml up -d

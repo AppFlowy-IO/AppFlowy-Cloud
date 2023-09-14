@@ -13,6 +13,7 @@ use collab_ws::{WSClient, WSClientConfig, WSObjectHandler};
 use collab_plugins::kv::rocks_kv::RocksCollabDB;
 use collab_plugins::local_storage::rocksdb::RocksdbDiskPlugin;
 
+use collab_define::CollabType;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -74,7 +75,7 @@ impl CollabTest {
     let (sink, stream) = (handler.sink(), handler.stream());
     let collab = Arc::new(MutexCollab::new(client.origin.clone(), object_id, vec![]));
 
-    let object = SyncObject::new(object_id, "1");
+    let object = SyncObject::new(object_id, "1", CollabType::Document);
     // Sync
     let sync_plugin = SyncPlugin::new(
       client.origin.clone(),

@@ -49,6 +49,7 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+#[instrument(level = "debug", skip_all, err)]
 async fn retrieve_collab_handler(
   payload: Json<QueryCollabParams>,
   storage: Data<Storage<CollabPostgresDBStorageImpl>>,
@@ -64,6 +65,7 @@ async fn retrieve_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
+#[instrument(level = "debug", skip_all, err)]
 async fn update_collab_handler(
   payload: Json<InsertCollabParams>,
   storage: Data<Storage<CollabPostgresDBStorageImpl>>,
@@ -77,6 +79,7 @@ async fn update_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+#[instrument(level = "info", skip_all, err)]
 async fn delete_collab_handler(
   payload: Json<DeleteCollabParams>,
   storage: Data<Storage<CollabPostgresDBStorageImpl>>,

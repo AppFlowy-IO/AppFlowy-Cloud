@@ -10,6 +10,7 @@ use storage_entity::{
   AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
+
 use validator::Validate;
 
 pub type Result<T, E = StorageError> = core::result::Result<T, E>;
@@ -152,7 +153,10 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
     .await?;
 
     match record {
-      Some(record) => Ok(record.blob),
+      Some(record) => {
+        debug_assert!(!record.blob.is_empty());
+        Ok(record.blob)
+      },
       None => Err(StorageError::RecordNotFound),
     }
   }
@@ -269,6 +273,7 @@ async fn insert_af_collab(
 
   match existing_workspace_id {
     Some(existing_id) if existing_id == workspace_id => {
+      tracing::trace!("Update existing af_collab row");
       sqlx::query!(
         "UPDATE af_collab \
         SET blob = $2, len = $3, partition_key = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1",
@@ -303,6 +308,7 @@ async fn insert_af_collab(
       .execute(tx.deref_mut())
       .await?;
 
+      tracing::trace!("Insert new af_collab row");
       sqlx::query!(
         "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
           VALUES ($1, $2, $3, $4, $5, $6, $7)",

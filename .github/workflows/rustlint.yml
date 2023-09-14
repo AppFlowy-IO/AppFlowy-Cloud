@@ -38,10 +38,10 @@ jobs:
       - name: Check sqlx-data.json
         run: |
           cargo sqlx migrate run
-          cargo sqlx prepare --check -- --bin appflowy_cloud
+          cargo sqlx prepare --check --workspace
 
       - name: Rustfmt
         run: cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets --all-features -- -D warnings

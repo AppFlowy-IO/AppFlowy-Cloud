@@ -10,9 +10,10 @@ use std::net::SocketAddr;
 use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 use collab_ws::{WSClient, WSClientConfig, WSObjectHandler};
 
-use collab_plugins::kv::rocks_kv::RocksCollabDB;
-use collab_plugins::local_storage::rocksdb::RocksdbDiskPlugin;
+// use collab_plugins::kv::rocks_kv::RocksCollabDB;
+// use collab_plugins::local_storage::rocksdb::RocksdbDiskPlugin;
 
+use collab_define::CollabType;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -55,11 +56,10 @@ impl CollabTest {
     let db_path = tempdir.join(uuid::Uuid::new_v4().to_string());
     std::fs::create_dir_all(&db_path).unwrap();
 
-    let db = Arc::new(RocksCollabDB::open(db_path.clone()).unwrap());
+    // let db = Arc::new(RocksCollabDB::open(db_path.clone()).unwrap());
     let cleaner = Cleaner::new(db_path);
     let client = TestClient {
       ws,
-      db,
       origin,
       collab_by_object_id: Default::default(),
       handlers: vec![],
@@ -74,7 +74,7 @@ impl CollabTest {
     let (sink, stream) = (handler.sink(), handler.stream());
     let collab = Arc::new(MutexCollab::new(client.origin.clone(), object_id, vec![]));
 
-    let object = SyncObject::new(object_id, "1");
+    let object = SyncObject::new(object_id, "1", CollabType::Document);
     // Sync
     let sync_plugin = SyncPlugin::new(
       client.origin.clone(),
@@ -86,8 +86,8 @@ impl CollabTest {
     collab.lock().add_plugin(Arc::new(sync_plugin));
 
     // Disk
-    let disk_plugin = RocksdbDiskPlugin::new(uid, Arc::downgrade(&client.db));
-    collab.lock().add_plugin(Arc::new(disk_plugin));
+    // let disk_plugin = RocksdbDiskPlugin::new(uid, Arc::downgrade(&client.db));
+    // collab.lock().add_plugin(Arc::new(disk_plugin));
 
     collab.async_initialize().await;
     client.handlers.push(handler);
@@ -124,7 +124,6 @@ fn origin_from_tcp_stream(uid: i64, addr: &SocketAddr) -> CollabOrigin {
 /// Used to simulate a client with AppFlowy application
 pub struct TestClient {
   pub ws: WSClient,
-  pub db: Arc<RocksCollabDB>,
   pub origin: CollabOrigin,
   pub collab_by_object_id: HashMap<String, Arc<MutexCollab>>,
   pub handlers: Vec<Arc<WSObjectHandler>>,

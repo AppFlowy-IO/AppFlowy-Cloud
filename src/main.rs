@@ -12,6 +12,7 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("appflowy_cloud={}", level));
   filters.push(format!("collab_plugins={}", level));
   filters.push(format!("realtime={}", level));
+  filters.push(format!("storage={}", level));
 
   let subscriber = get_subscriber(
     "appflowy_cloud".to_string(),

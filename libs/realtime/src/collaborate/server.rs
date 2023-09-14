@@ -172,7 +172,12 @@ where
           .client_user_id()
           .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
         groups
-          .create_group(uid, &client_init.workspace_id, object_id)
+          .create_group(
+            uid,
+            &client_init.workspace_id,
+            object_id,
+            client_init.collab_type.clone(),
+          )
           .await;
       },
       _ => {
@@ -232,6 +237,7 @@ where
                 move |object_id, msg| msg.object_id == object_id,
               )
               .unwrap();
+
             collab_group
               .broadcast
               .subscribe(origin.clone(), sink, stream)

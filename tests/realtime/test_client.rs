@@ -1,70 +1,19 @@
 use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
-use crate::client_api_client;
-use serde_json::json;
 
 use client_api::Client;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab_define::CollabType;
+
 use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 use collab_ws::{WSClient, WSClientConfig, WSObjectHandler};
 
-use assert_json_diff::assert_json_eq;
 use collab::preclude::Collab;
+use collab_define::CollabType;
 use std::sync::Arc;
+
+use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
-#[tokio::test]
-async fn realtime_write_test() {
-  let mut c = client_api_client();
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let test_client = TestClient::new(&mut c, &object_id).await;
-  for i in 0..=10 {
-    test_client
-      .collab
-      .lock()
-      .insert(&i.to_string(), i.to_string());
-  }
-  tokio::time::sleep(Duration::from_secs(1)).await;
-  // when disconnect, the collab data will be persisted
-  test_client.disconnect().await;
-  tokio::time::sleep(Duration::from_secs(3)).await;
-
-  // check if the data is persisted
-  let bytes = c
-    .get_collab(QueryCollabParams {
-      object_id: object_id.clone(),
-      collab_type: CollabType::Document,
-    })
-    .await
-    .unwrap();
-
-  // check if the data is correct
-  let json = Collab::new_with_raw_data(
-    CollabOrigin::Empty,
-    &object_id,
-    vec![bytes.to_vec()],
-    vec![],
-  )
-  .unwrap()
-  .to_json_value();
-  assert_json_eq!(
-    json,
-    json!( {
-      "0": "0",
-      "1": "1",
-      "10": "10",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
-      "6": "6",
-      "7": "7",
-      "8": "8",
-      "9": "9"
-    })
-  );
-}
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -76,7 +25,7 @@ pub(crate) struct TestClient {
 }
 
 impl TestClient {
-  async fn new(client: &mut Client, object_id: &str) -> Self {
+  pub(crate) async fn new(client: &mut Client, object_id: &str, collab_type: CollabType) -> Self {
     // Sign in
     client
       .sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
@@ -111,7 +60,7 @@ impl TestClient {
     let origin = CollabOrigin::Client(CollabClient::new(uid, "1"));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
-    let object = SyncObject::new(object_id, &workspace_id);
+    let object = SyncObject::new(object_id, &workspace_id, collab_type);
     let sync_plugin = SyncPlugin::new(
       origin.clone(),
       object,
@@ -130,7 +79,63 @@ impl TestClient {
     }
   }
 
-  async fn disconnect(&self) {
+  pub(crate) async fn disconnect(&self) {
     self.ws_client.disconnect().await;
   }
+}
+
+#[allow(dead_code)]
+pub async fn assert_collab_json(
+  client: &client_api::Client,
+  object_id: &str,
+  collab_type: &CollabType,
+  timeout: u64,
+  expected: Value,
+) {
+  let collab_type = collab_type.clone();
+  let object_id = object_id.to_string();
+
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(timeout)) => {
+         panic!("Query collab timeout");
+       },
+       result = client.get_collab(QueryCollabParams {
+         object_id: object_id.clone(),
+         collab_type: collab_type.clone(),
+       }) => {
+        match result {
+          Ok(data) => {
+            let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.to_vec()], vec![]).unwrap().to_json_value();
+            if json == expected {
+              break;
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+          },
+          Err(_) => {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+          }
+        }
+       },
+    }
+  }
+}
+
+#[allow(dead_code)]
+pub async fn get_collab_json_from_server(
+  client: &client_api::Client,
+  object_id: &str,
+  collab_type: CollabType,
+) -> serde_json::Value {
+  let bytes = client
+    .get_collab(QueryCollabParams {
+      object_id: object_id.to_string(),
+      collab_type,
+    })
+    .await
+    .unwrap();
+
+  Collab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![bytes.to_vec()], vec![])
+    .unwrap()
+    .to_json_value()
 }

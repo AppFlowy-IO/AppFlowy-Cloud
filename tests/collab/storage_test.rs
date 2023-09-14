@@ -1,4 +1,4 @@
-use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD};
+use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX};
 use crate::client_api_client;
 use crate::collab::workspace_id_from_client;
 
@@ -9,6 +9,8 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn success_insert_collab_test() {
+  let _guard = REGISTERED_USER_MUTEX.lock().await;
+
   let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
@@ -40,6 +42,8 @@ async fn success_insert_collab_test() {
 
 #[tokio::test]
 async fn success_delete_collab_test() {
+  let _guard = REGISTERED_USER_MUTEX.lock().await;
+
   let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
@@ -77,6 +81,8 @@ async fn success_delete_collab_test() {
 
 #[tokio::test]
 async fn fail_insert_collab_with_empty_payload_test() {
+  let _guard = REGISTERED_USER_MUTEX.lock().await;
+
   let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await
@@ -99,6 +105,8 @@ async fn fail_insert_collab_with_empty_payload_test() {
 
 #[tokio::test]
 async fn fail_insert_collab_with_invalid_workspace_id_test() {
+  let _guard = REGISTERED_USER_MUTEX.lock().await;
+
   let mut c = client_api_client();
   c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
     .await

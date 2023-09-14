@@ -1,5 +1,6 @@
 use dotenv::dotenv;
 use std::time::SystemTime;
+use tokio::sync::Mutex;
 
 use lazy_static::lazy_static;
 
@@ -12,6 +13,7 @@ lazy_static! {
     dotenv().ok();
     std::env::var("GOTRUE_REGISTERED_PASSWORD").unwrap()
   };
+  pub static ref REGISTERED_USER_MUTEX: Mutex<()> = Mutex::new(());
 }
 
 pub fn timestamp_nano() -> u128 {

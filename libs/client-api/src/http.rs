@@ -241,13 +241,16 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub fn ws_url(&self) -> Result<String, AppError> {
+  pub fn ws_url(&self, device_id: &str) -> Result<String, AppError> {
     match self.token() {
       None => Err(AppError::new(
         ErrorCode::OAuthError,
         "No token found".to_string(),
       )),
-      Some(token) => Ok(format!("{}/{}", self.ws_addr, token.access_token)),
+      Some(token) => Ok(format!(
+        "{}/{}/{}",
+        self.ws_addr, token.access_token, device_id
+      )),
     }
   }
 

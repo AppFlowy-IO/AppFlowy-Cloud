@@ -1,11 +1,13 @@
 use crate::error::StorageError;
 use anyhow::Context;
 use async_trait::async_trait;
+use collab::core::collab::MutexCollab;
 use collab_define::CollabType;
 use sqlx::types::{chrono, Uuid};
 use sqlx::{PgPool, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
+use std::sync::Weak;
 use storage_entity::{
   AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
@@ -32,6 +34,8 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   ///
   /// * `bool` - `true` if the collaboration exists, `false` otherwise.
   async fn is_exist(&self, object_id: &str) -> bool;
+
+  async fn cache_memory_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {}
 
   /// Creates a new collaboration in the storage.
   ///
@@ -82,7 +86,7 @@ pub struct StorageConfig {
 impl Default for StorageConfig {
   fn default() -> Self {
     Self {
-      flush_per_update: 10,
+      flush_per_update: FLUSH_PER_UPDATE,
     }
   }
 }
@@ -94,10 +98,11 @@ pub struct CollabPostgresDBStorageImpl {
   config: StorageConfig,
 }
 
+pub const FLUSH_PER_UPDATE: u32 = 100;
 impl CollabPostgresDBStorageImpl {
   pub fn new(pg_pool: PgPool) -> Self {
     let config = StorageConfig {
-      flush_per_update: 100,
+      flush_per_update: FLUSH_PER_UPDATE,
     };
     Self { pg_pool, config }
   }

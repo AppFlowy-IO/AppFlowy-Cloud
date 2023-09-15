@@ -59,9 +59,12 @@ where
     collab_type: CollabType,
   ) -> Arc<CollabGroup> {
     tracing::trace!("Create new group for object_id:{}", object_id);
-
     let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
     let broadcast = CollabBroadcast::new(object_id, collab.clone(), 10);
+
+    let collab = Arc::new(collab.clone());
+
+    // The lifecycle of the collab is managed by the group.
     let group = Arc::new(CollabGroup {
       collab: collab.clone(),
       broadcast,
@@ -78,6 +81,10 @@ where
     collab.lock().add_plugin(Arc::new(plugin));
     collab.async_initialize().await;
 
+    self
+      .storage
+      .cache_memory_collab(object_id, Arc::downgrade(&collab))
+      .await;
     group
   }
 }
@@ -104,7 +111,7 @@ where
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
-  pub collab: MutexCollab,
+  pub collab: Arc<MutexCollab>,
 
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.

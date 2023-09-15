@@ -1,3 +1,4 @@
+use crate::component::storage_proxy::CollabStorageProxy;
 use crate::state::Storage;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
@@ -5,7 +6,7 @@ use actix_web::{web, Scope};
 use shared_entity::data::AppResponse;
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
-use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
+use storage::collab::CollabStorage;
 use storage::error::StorageError;
 use storage_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
@@ -30,7 +31,7 @@ pub fn collab_scope() -> Scope {
 #[instrument(level = "debug", skip_all, err)]
 async fn create_collab_handler(
   payload: Json<InsertCollabParams>,
-  storage: Data<Storage<CollabPostgresDBStorageImpl>>,
+  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<()>>> {
   let params = payload.into_inner();
   if storage.collab_storage.is_exist(&params.object_id).await {
@@ -52,7 +53,7 @@ async fn create_collab_handler(
 #[instrument(level = "debug", skip_all, err)]
 async fn retrieve_collab_handler(
   payload: Json<QueryCollabParams>,
-  storage: Data<Storage<CollabPostgresDBStorageImpl>>,
+  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
   let data = storage
     .collab_storage
@@ -68,7 +69,7 @@ async fn retrieve_collab_handler(
 #[instrument(level = "debug", skip_all, err)]
 async fn update_collab_handler(
   payload: Json<InsertCollabParams>,
-  storage: Data<Storage<CollabPostgresDBStorageImpl>>,
+  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<()>>> {
   let params = payload.into_inner();
   storage
@@ -82,7 +83,7 @@ async fn update_collab_handler(
 #[instrument(level = "info", skip_all, err)]
 async fn delete_collab_handler(
   payload: Json<DeleteCollabParams>,
-  storage: Data<Storage<CollabPostgresDBStorageImpl>>,
+  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<()>>> {
   let params = payload.into_inner();
   params.validate().map_err(AppError::from)?;
@@ -97,7 +98,7 @@ async fn delete_collab_handler(
 
 async fn retrieve_snapshot_data_handler(
   payload: Json<QuerySnapshotParams>,
-  storage: Data<Storage<CollabPostgresDBStorageImpl>>,
+  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
   let data = storage
     .collab_storage
@@ -112,7 +113,7 @@ async fn retrieve_snapshot_data_handler(
 
 async fn retrieve_snapshots_handler(
   payload: Json<QueryObjectSnapshotParams>,
-  storage: Data<Storage<CollabPostgresDBStorageImpl>>,
+  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<AFCollabSnapshots>>> {
   let data = storage
     .collab_storage

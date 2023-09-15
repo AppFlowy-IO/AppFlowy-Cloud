@@ -3,7 +3,7 @@ use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::{State, Storage};
+use crate::state::{AppState, Storage};
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -22,6 +22,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use crate::component::storage_proxy::CollabStorageProxy;
+use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use tracing_actix_web::TracingLogger;
@@ -34,7 +36,7 @@ pub struct Application {
 impl Application {
   pub async fn build<S>(
     config: Config,
-    state: State,
+    state: AppState,
     storage: Storage<S>,
   ) -> Result<Self, anyhow::Error>
   where
@@ -59,7 +61,7 @@ impl Application {
 
 pub async fn run<S>(
   listener: TcpListener,
-  state: State,
+  state: AppState,
   config: Config,
   storage: Storage<S>,
 ) -> Result<Server, anyhow::Error>
@@ -81,7 +83,7 @@ where
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server = CollabServer::new(storage.collab_storage.clone())
+  let collab_server = CollabServer::<_, RealtimeUserImpl>::new(storage.collab_storage.clone())
     .unwrap()
     .start();
   let mut server = HttpServer::new(move || {
@@ -121,13 +123,13 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(config: &Config) -> State {
+pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
 
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
-  State {
+  AppState {
     pg_pool,
     config: Arc::new(config.clone()),
     user: Arc::new(Default::default()),
@@ -179,10 +181,10 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
   builder
 }
 
-pub async fn init_storage(
-  _config: &Config,
-  pg_pool: PgPool,
-) -> Storage<CollabPostgresDBStorageImpl> {
+pub async fn init_storage(_config: &Config, pg_pool: PgPool) -> Storage<CollabStorageProxy> {
   let collab_storage = CollabPostgresDBStorageImpl::new(pg_pool);
-  Storage { collab_storage }
+  let proxy = CollabStorageProxy::new(collab_storage);
+  Storage {
+    collab_storage: proxy,
+  }
 }

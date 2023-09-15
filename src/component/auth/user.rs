@@ -2,7 +2,7 @@ use crate::component::auth::{
   compute_hash_password, internal_error, validate_credentials, AuthError, Credentials,
 };
 use crate::config::env::domain;
-use crate::state::{State, UserCache};
+use crate::state::{AppState, UserCache};
 use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::HttpRequest;
 use anyhow::Context;
@@ -22,7 +22,7 @@ use tokio::sync::RwLock;
 pub async fn login(
   email: String,
   password: String,
-  state: &State,
+  state: &AppState,
 ) -> Result<(LoginResponse, Secret<Token>), AuthError> {
   let credentials = Credentials {
     email,
@@ -55,7 +55,7 @@ pub async fn register(
   username: String,
   email: String,
   password: String,
-  state: &State,
+  state: &AppState,
 ) -> Result<RegisterResponse, AuthError> {
   let pg_pool = state.pg_pool.clone();
   let server_key = &state.config.application.server_key;
@@ -166,7 +166,7 @@ pub async fn get_user_email(
   Ok(row.email)
 }
 
-/// TODO: cache this state in [State]
+/// TODO: cache this state in [AppState]
 async fn is_email_exist(
   transaction: &mut Transaction<'_, Postgres>,
   email: &str,

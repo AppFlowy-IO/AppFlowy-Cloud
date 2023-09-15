@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
-pub struct State {
+pub struct AppState {
   pub pg_pool: PgPool,
   pub config: Arc<Config>,
   pub user: Arc<RwLock<UserCache>>,
@@ -18,7 +18,7 @@ pub struct State {
   pub gotrue_client: gotrue::api::Client,
 }
 
-impl State {
+impl AppState {
   pub async fn load_users(_pool: &PgPool) {
     todo!()
   }

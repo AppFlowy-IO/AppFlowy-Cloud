@@ -112,10 +112,12 @@ where
   }
 
   fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
+    let count = self.update_count.fetch_add(1, Ordering::SeqCst);
+    tracing::trace!("receive_update, count: {}", count);
     if !self.did_load.load(Ordering::SeqCst) {
       return;
     }
-    let count = self.update_count.fetch_add(1, Ordering::SeqCst);
+
     if count >= self.storage.config().flush_per_update {
       self.update_count.store(0, Ordering::SeqCst);
       tracing::trace!("number of updates reach flush_per_update, start flushing");

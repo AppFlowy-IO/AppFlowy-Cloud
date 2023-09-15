@@ -4,9 +4,6 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
-# Kill any existing instances
-pkill -f appflowy_cloud || true
-
 DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
 DB_PORT="${POSTGRES_PORT:=5433}"
@@ -37,6 +34,9 @@ until curl localhost:9998/health; do
   >&2 echo "Waiting on GoTrue"
   sleep 1
 done
+
+# Kill any existing instances
+pkill -f appflowy_cloud || true
 
 # Require if there are any changes to the database schema
 # To build AppFlowy-Cloud binary, we requires the .sqlx files

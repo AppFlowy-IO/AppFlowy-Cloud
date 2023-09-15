@@ -4,7 +4,7 @@ WORKDIR /app
 RUN apt update && apt install lld clang -y
 
 FROM chef as planner
-COPY .. .
+COPY . .
 # Compute a lock-like file for our project
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -12,7 +12,7 @@ FROM chef as builder
 COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies
 RUN cargo chef cook --release --recipe-path recipe.json
-COPY .. .
+COPY . .
 ENV SQLX_OFFLINE true
 # Build the project
 RUN cargo build --release --bin appflowy_cloud

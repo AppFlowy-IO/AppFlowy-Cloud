@@ -13,7 +13,7 @@ use storage::collab::FLUSH_PER_UPDATE;
 async fn realtime_write_collab_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
-  let test_client = TestClient::new(&object_id, collab_type.clone()).await;
+  let mut test_client = TestClient::new(&object_id, collab_type.clone()).await;
 
   // Edit the collab
   for i in 0..=5 {
@@ -28,7 +28,7 @@ async fn realtime_write_collab_test() {
   test_client.disconnect().await;
 
   assert_collab_json(
-    &test_client.api_client,
+    &mut test_client.api_client,
     &object_id,
     &collab_type,
     3,
@@ -48,7 +48,7 @@ async fn realtime_write_collab_test() {
 async fn one_direction_peer_sync_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
-  let client_1 = TestClient::new(&object_id, collab_type.clone()).await;
+  let mut client_1 = TestClient::new(&object_id, collab_type.clone()).await;
   let client_2 = TestClient::new(&object_id, collab_type.clone()).await;
 
   // Edit the collab from client 1 and then the server will broadcast to client 2
@@ -58,7 +58,7 @@ async fn one_direction_peer_sync_test() {
   }
 
   assert_collab_json(
-    &client_1.api_client,
+    &mut client_1.api_client,
     &object_id,
     &collab_type,
     5,
@@ -129,13 +129,13 @@ async fn multiple_collab_edit_test() {
   let collab_type = CollabType::Document;
 
   let object_id_1 = uuid::Uuid::new_v4().to_string();
-  let client_1 = TestClient::new(&object_id_1, collab_type.clone()).await;
+  let mut client_1 = TestClient::new(&object_id_1, collab_type.clone()).await;
 
   let object_id_2 = uuid::Uuid::new_v4().to_string();
-  let client_2 = TestClient::new(&object_id_2, collab_type.clone()).await;
+  let mut client_2 = TestClient::new(&object_id_2, collab_type.clone()).await;
 
   let object_id_3 = uuid::Uuid::new_v4().to_string();
-  let client_3 = TestClient::new(&object_id_3, collab_type.clone()).await;
+  let mut client_3 = TestClient::new(&object_id_3, collab_type.clone()).await;
 
   client_1.collab.lock().insert("title", "I am client 1");
   client_2.collab.lock().insert("title", "I am client 2");
@@ -143,7 +143,7 @@ async fn multiple_collab_edit_test() {
   tokio::time::sleep(Duration::from_secs(2)).await;
 
   assert_collab_json(
-    &client_1.api_client,
+    &mut client_1.api_client,
     &object_id_1,
     &collab_type,
     3,
@@ -154,7 +154,7 @@ async fn multiple_collab_edit_test() {
   .await;
 
   assert_collab_json(
-    &client_2.api_client,
+    &mut client_2.api_client,
     &object_id_2,
     &collab_type,
     3,
@@ -164,7 +164,7 @@ async fn multiple_collab_edit_test() {
   )
   .await;
   assert_collab_json(
-    &client_3.api_client,
+    &mut client_3.api_client,
     &object_id_3,
     &collab_type,
     3,

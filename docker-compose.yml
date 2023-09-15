@@ -55,7 +55,7 @@ services:
       - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
     image: appflowy_cloud:${BACKEND_VERSION:-latest}
     depends_on:
       - redis

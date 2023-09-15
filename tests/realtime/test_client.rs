@@ -4,7 +4,6 @@ use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 
 use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
-use collab_ws::{WSClient, WSClientConfig, WSObjectHandler};
 
 use collab::preclude::Collab;
 use collab_define::CollabType;
@@ -12,6 +11,7 @@ use std::sync::Arc;
 
 use crate::client_api_client;
 use assert_json_diff::assert_json_eq;
+use client_api::ws::{WSClient, WSClientConfig, WSObjectHandler};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;

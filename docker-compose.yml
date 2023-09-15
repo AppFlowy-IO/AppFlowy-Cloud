@@ -53,7 +53,7 @@ services:
     environment:
       - APP_ENVIRONMENT=production
       - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
-      - APP__GOTRUE__BASE_URL=${API_EXTERNAL_URL}
+      - APP__GOTRUE__EXT_URL=${API_EXTERNAL_URL}
     build:
       context: .
       dockerfile: Dockerfile

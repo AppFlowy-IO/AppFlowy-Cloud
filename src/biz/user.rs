@@ -53,7 +53,7 @@ pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OA
     Ok(OAuthURL {
       url: format!(
         "{}/authorize?provider={}",
-        gotrue_client.base_url,
+        gotrue_client.ext_url,
         provider.as_str(),
       ),
     })

@@ -1,6 +1,6 @@
 name: Deployment for Test Environment
 on:
-  pull_request:
+  push:
     branches: main
 
 jobs:

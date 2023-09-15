@@ -1,7 +1,3 @@
-use actix_web::http::StatusCode;
-use actix_web::web::Json;
-use actix_web::HttpResponse;
-
 use crate::error::AppError;
 
 use serde::{Deserialize, Serialize};
@@ -19,7 +15,9 @@ macro_rules! static_app_response {
     }
   };
 }
-pub type JsonAppResponse<T> = Json<AppResponse<T>>;
+
+#[cfg(feature = "cloud")]
+pub type JsonAppResponse<T> = actix_web::web::Json<AppResponse<T>>;
 
 /// Represents a standardized application response.
 ///
@@ -111,9 +109,10 @@ where
   }
 }
 
+#[cfg(feature = "cloud")]
 impl<T> From<AppResponse<T>> for JsonAppResponse<T> {
   fn from(data: AppResponse<T>) -> Self {
-    Json(data)
+    actix_web::web::Json(data)
   }
 }
 
@@ -135,16 +134,17 @@ where
   }
 }
 
+#[cfg(feature = "cloud")]
 impl<T> actix_web::error::ResponseError for AppResponse<T>
 where
   T: Debug + Display + Clone + Serialize,
 {
-  fn status_code(&self) -> StatusCode {
-    StatusCode::OK
+  fn status_code(&self) -> actix_web::http::StatusCode {
+    actix_web::http::StatusCode::OK
   }
 
-  fn error_response(&self) -> HttpResponse {
-    HttpResponse::Ok().json(self)
+  fn error_response(&self) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Ok().json(self)
   }
 }
 

@@ -446,7 +446,6 @@ dependencies = [
  "collab-define",
  "collab-plugins",
  "collab-sync-protocol",
- "collab-ws",
  "config",
  "derive_more",
  "dotenv",
@@ -777,19 +776,29 @@ name = "client-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
+ "collab-sync-protocol",
+ "futures-util",
  "gotrue-entity",
  "opener",
  "reqwest",
+ "serde",
  "serde_json",
  "shared_entity",
  "storage-entity",
+ "thiserror",
+ "tokio",
+ "tokio-retry",
+ "tokio-stream",
+ "tokio-tungstenite",
+ "tracing",
  "url",
 ]
 
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3af6a8#3af6a8dcf43360e3284ea05d65835f114af69bab"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3f235e#3f235e3e21fa520fde50d512f3b6ad54283fa732"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -808,7 +817,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3af6a8#3af6a8dcf43360e3284ea05d65835f114af69bab"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3f235e#3f235e3e21fa520fde50d512f3b6ad54283fa732"
 dependencies = [
  "anyhow",
  "collab",
@@ -820,14 +829,13 @@ dependencies = [
 [[package]]
 name = "collab-plugins"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3af6a8#3af6a8dcf43360e3284ea05d65835f114af69bab"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3f235e#3f235e3e21fa520fde50d512f3b6ad54283fa732"
 dependencies = [
  "anyhow",
  "async-trait",
  "collab",
  "collab-define",
  "collab-sync-protocol",
- "collab-ws",
  "futures-util",
  "lib0",
  "parking_lot",
@@ -848,7 +856,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3af6a8#3af6a8dcf43360e3284ea05d65835f114af69bab"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3f235e#3f235e3e21fa520fde50d512f3b6ad54283fa732"
 dependencies = [
  "bytes",
  "collab",
@@ -858,24 +866,6 @@ dependencies = [
  "serde_json",
  "y-sync",
  "yrs",
-]
-
-[[package]]
-name = "collab-ws"
-version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=3af6a8#3af6a8dcf43360e3284ea05d65835f114af69bab"
-dependencies = [
- "bytes",
- "collab-sync-protocol",
- "futures-util",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-retry",
- "tokio-stream",
- "tokio-tungstenite",
- "tracing",
 ]
 
 [[package]]
@@ -2480,7 +2470,6 @@ dependencies = [
  "collab-define",
  "collab-plugins",
  "collab-sync-protocol",
- "collab-ws",
  "futures-util",
  "lib0",
  "once_cell",

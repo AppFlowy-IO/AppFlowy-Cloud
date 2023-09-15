@@ -14,3 +14,15 @@ shared_entity = { path = "../shared-entity" }
 storage-entity = { path = "../storage-entity" }
 opener = "0.6.1"
 url = "2.4.1"
+
+# ws
+tracing = { version = "0.1" }
+thiserror = "1.0.39"
+serde = { version = "1.0", features = ["derive"] }
+tokio-tungstenite = { version = "0.18" }
+tokio = { version = "1.26", features = ["full"] }
+futures-util = "0.3.26"
+tokio-retry = "0.3"
+bytes = "1.0"
+tokio-stream = { version = "0.1.14", features = ["sync"] }
+collab-sync-protocol = { version = "0.1.0" }

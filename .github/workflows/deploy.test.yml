@@ -1,0 +1,34 @@
+name: Deployment for Test Environment
+on:
+  push:
+    branches: main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up env vars
+        run: |
+          cp dev.env .env
+
+          # jwt secret
+          sed -i 's|GOTRUE_JWT_SECRET=.*|GOTRUE_JWT_SECRET=${{ secrets.GOTRUE_JWT_SECRET_TEST }}|' .env
+          # smtp settings
+          sed -i 's|GOTRUE_SMTP_HOST=.*|GOTRUE_SMTP_HOST=smtp.gmail.com|' .env
+          sed -i 's|GOTRUE_SMTP_PORT=.*|GOTRUE_SMTP_PORT=465|' .env
+          sed -i 's|GOTRUE_SMTP_USER=.*|GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER_TEST }}|' .env
+          sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS_TEST }}|' .env
+          sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL_TEST }}|' .env
+          sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
+          # Google OAuth
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*|GOTRUE_EXTERNAL_GOOGLE_ENABLED=true|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=.*|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID_TEST }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_SECRET=.*|GOTRUE_EXTERNAL_GOOGLE_SECRET=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_SECRET_TEST }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI_TEST }}|' .env
+          # Server Host
+          sed -i 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=${{ secrets.API_EXTERNAL_URL_TEST }}|' .env
+
+      - name: Deploy docker-compose
+        run: sudo docker-compose up -d --build

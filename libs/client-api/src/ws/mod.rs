@@ -8,4 +8,3 @@ pub use client::*;
 pub use error::*;
 pub use handler::*;
 pub use msg::*;
-pub use retry::*;

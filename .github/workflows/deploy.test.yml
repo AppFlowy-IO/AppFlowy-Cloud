@@ -3,10 +3,6 @@ on:
   push:
     branches: main
 
-  # remove this right before merge
-  pull_request:
-    branches: main
-
 jobs:
   deploy:
     runs-on: self-hosted

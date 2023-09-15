@@ -45,6 +45,5 @@ tracing-log = "0.1.1"
 serde-aux = "4.2.0"
 tempfile = "3.8.0"
 collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
-collab-ws = { version = "0.1.0" }
 assert-json-diff = "2.0.2"
 uuid = { version = "1", features = ["v4"] }

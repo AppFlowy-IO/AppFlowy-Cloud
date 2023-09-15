@@ -94,7 +94,7 @@ impl TestClient {
 
 #[allow(dead_code)]
 pub async fn assert_collab_json(
-  client: &client_api::Client,
+  client: &mut client_api::Client,
   object_id: &str,
   collab_type: &CollabType,
   secs: u64,
@@ -141,7 +141,7 @@ pub async fn assert_collab_json(
 
 #[allow(dead_code)]
 pub async fn get_collab_json_from_server(
-  client: &client_api::Client,
+  client: &mut client_api::Client,
   object_id: &str,
   collab_type: CollabType,
 ) -> serde_json::Value {

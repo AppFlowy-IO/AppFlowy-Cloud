@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::OAuthURL;
 use reqwest::Method;
@@ -112,10 +114,11 @@ impl Client {
     Ok(())
   }
 
-  pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {
+  pub async fn profile(&mut self) -> Result<AFUserProfileView, AppError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::GET, &url)?
+      .http_client_with_auth(Method::GET, &url)
+      .await?
       .send()
       .await?;
     AppResponse::<AFUserProfileView>::from_response(resp)
@@ -123,10 +126,11 @@ impl Client {
       .into_data()
   }
 
-  pub async fn workspaces(&self) -> Result<AFWorkspaces, AppError> {
+  pub async fn workspaces(&mut self) -> Result<AFWorkspaces, AppError> {
     let url = format!("{}/api/user/workspaces", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::GET, &url)?
+      .http_client_with_auth(Method::GET, &url)
+      .await?
       .send()
       .await?;
     AppResponse::<AFWorkspaces>::from_response(resp)
@@ -169,10 +173,11 @@ impl Client {
     Ok(())
   }
 
-  pub async fn sign_out(&self) -> Result<(), AppError> {
+  pub async fn sign_out(&mut self) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_out", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)?
+      .http_client_with_auth(Method::POST, &url)
+      .await?
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()?;
@@ -186,7 +191,8 @@ impl Client {
         "password": password,
     });
     let resp = self
-      .http_client_with_auth(Method::POST, &url)?
+      .http_client_with_auth(Method::POST, &url)
+      .await?
       .json(&payload)
       .send()
       .await?;
@@ -199,30 +205,33 @@ impl Client {
     Ok(())
   }
 
-  pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
+  pub async fn create_collab(&mut self, params: InsertCollabParams) -> Result<(), AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)?
+      .http_client_with_auth(Method::POST, &url)
+      .await?
       .json(&params)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
+  pub async fn update_collab(&mut self, params: InsertCollabParams) -> Result<(), AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::PUT, &url)?
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
       .json(&params)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppError> {
+  pub async fn get_collab(&mut self, params: QueryCollabParams) -> Result<RawData, AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::GET, &url)?
+      .http_client_with_auth(Method::GET, &url)
+      .await?
       .json(&params)
       .send()
       .await?;
@@ -231,10 +240,11 @@ impl Client {
       .into_data()
   }
 
-  pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
+  pub async fn delete_collab(&mut self, params: DeleteCollabParams) -> Result<(), AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::DELETE, &url)?
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
       .json(&params)
       .send()
       .await?;
@@ -254,17 +264,34 @@ impl Client {
     }
   }
 
-  fn http_client_with_auth(&self, method: Method, url: &str) -> Result<RequestBuilder, AppError> {
-    match &self.token {
-      None => Err(ErrorCode::NotLoggedIn.into()),
-      Some(t) => {
-        let request_builder = self
-          .http_client
-          .request(method, url)
-          .bearer_auth(&t.access_token);
-        Ok(request_builder)
-      },
+  async fn http_client_with_auth(
+    &mut self,
+    method: Method,
+    url: &str,
+  ) -> Result<RequestBuilder, AppError> {
+    let token = self.token().ok_or(ErrorCode::NotLoggedIn)?;
+
+    // Refresh token if it's about to expire
+    let time_now_sec = SystemTime::now()
+      .duration_since(SystemTime::UNIX_EPOCH)
+      .unwrap()
+      .as_secs() as i64;
+    if time_now_sec + 60 > token.expires_at {
+      // Add 60 seconds buffer
+      self.refresh().await?;
     }
+
+    let access_token = self
+      .token()
+      .ok_or(ErrorCode::NotLoggedIn)?
+      .access_token
+      .as_str();
+
+    let request_builder = self
+      .http_client
+      .request(method, url)
+      .bearer_auth(access_token);
+    Ok(request_builder)
   }
 
   // pub async fn change_password(

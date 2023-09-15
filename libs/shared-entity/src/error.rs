@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::num::ParseIntError;
+use std::time::SystemTimeError;
 use std::{borrow::Cow, str};
 
 use serde::{Deserialize, Serialize};
@@ -131,5 +132,11 @@ impl From<url::ParseError> for AppError {
 impl From<ParseIntError> for AppError {
   fn from(value: ParseIntError) -> Self {
     AppError::new(ErrorCode::InvalidUrl, value.to_string())
+  }
+}
+
+impl From<SystemTimeError> for AppError {
+  fn from(value: SystemTimeError) -> Self {
+    AppError::new(ErrorCode::Unhandled, value.to_string())
   }
 }

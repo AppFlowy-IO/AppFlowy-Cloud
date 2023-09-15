@@ -56,6 +56,10 @@ tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 uuid = { version= "1.4.1", features = ["serde", "v4"] }
+async-trait = "0.1.73"
+
+# collab
+collab = { version = "0.1.0" }
 
 #Local crate
 token = { path = "libs/token" }
@@ -71,7 +75,6 @@ shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 
 [dev-dependencies]
 once_cell = "1.7.2"
-collab = { version = "0.1.0" }
 collab-ws = { version = "0.1.0" }
 collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
 collab-define = { version = "0.1.0" }
@@ -101,6 +104,17 @@ members = [
     "libs/gotrue",
     "libs/gotrue-entity"
 ]
+
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+
+[profile.profiling]
+inherits = "release"
+codegen-units = 16
+debug = true
+lto = false
 
 [profile.dev.package.sqlx-macros]
 opt-level = 3

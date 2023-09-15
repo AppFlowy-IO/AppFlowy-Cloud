@@ -13,7 +13,7 @@ async fn realtime_connect_test() {
     .unwrap();
 
   let ws_client = WSClient::new(
-    c.ws_url().unwrap(),
+    c.ws_url("fake_device_id").unwrap(),
     WSClientConfig {
       buffer_capacity: 100,
       ping_per_secs: 2,

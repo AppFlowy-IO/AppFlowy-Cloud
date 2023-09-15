@@ -1,32 +1,22 @@
 use actix_http::Payload;
 use actix_web::{web::Data, FromRequest, HttpRequest};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use realtime::entities::RealtimeUser;
+
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
-use crate::state::State;
+use crate::state::AppState;
 
 lazy_static::lazy_static! {
   pub static ref VALIDATION: Validation = Validation::new(Algorithm::HS256);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserUuid {
-  uuid: uuid::Uuid,
-  uuid_str: String,
-}
+pub struct UserUuid(uuid::Uuid);
 
 impl UserUuid {
-  fn new(uuid: uuid::Uuid) -> Self {
-    Self {
-      uuid,
-      uuid_str: uuid.to_string(),
-    }
-  }
-
   pub fn from_auth(auth: Authorization) -> Result<Self, actix_web::Error> {
     let uuid = auth
       .claims
@@ -42,7 +32,7 @@ impl UserUuid {
           ))
         })
       })?;
-    Ok(Self::new(uuid?))
+    Ok(Self(uuid?))
   }
 }
 
@@ -50,7 +40,21 @@ impl Deref for UserUuid {
   type Target = uuid::Uuid;
 
   fn deref(&self) -> &Self::Target {
-    &self.uuid
+    &self.0
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct UserToken(pub String);
+impl UserToken {
+  pub fn from_auth(auth: Authorization) -> Result<Self, actix_web::Error> {
+    Ok(Self(auth.token))
+  }
+}
+
+impl Display for UserToken {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_str(&self.0)
   }
 }
 
@@ -68,18 +72,6 @@ impl FromRequest for UserUuid {
       },
       Err(e) => std::future::ready(Err(e)),
     }
-  }
-}
-
-impl Display for UserUuid {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_str(&self.uuid_str)
-  }
-}
-
-impl RealtimeUser for UserUuid {
-  fn id(&self) -> &str {
-    &self.uuid_str
   }
 }
 
@@ -109,8 +101,14 @@ impl FromRequest for Authorization {
   }
 }
 
+// impl RealtimeUser for Authorization {
+//   fn id(&self) -> &str {
+//     &self.uuid_str
+//   }
+// }
+
 fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::Error> {
-  let state = req.app_data::<Data<State>>().unwrap();
+  let state = req.app_data::<Data<AppState>>().unwrap();
   let bearer = req
     .headers()
     .get("Authorization")
@@ -133,7 +131,7 @@ fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::
 
 pub fn authorization_from_token(
   token: &str,
-  state: &Data<State>,
+  state: &Data<AppState>,
 ) -> Result<Authorization, actix_web::Error> {
   let claims = gotrue_jwt_claims_from_token(token, state)?;
   Ok(Authorization {
@@ -144,7 +142,7 @@ pub fn authorization_from_token(
 
 fn gotrue_jwt_claims_from_token(
   token: &str,
-  state: &Data<State>,
+  state: &Data<AppState>,
 ) -> Result<GoTrueJWTClaims, actix_web::Error> {
   GoTrueJWTClaims::verify(
     token,

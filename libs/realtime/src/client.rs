@@ -1,4 +1,5 @@
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
+use std::fmt::{Display, Formatter};
 
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
@@ -16,10 +17,10 @@ use crate::error::RealtimeError;
 use std::time::{Duration, Instant};
 use storage::collab::CollabStorage;
 
-pub struct ClientWSSession<U, S: Unpin + 'static> {
+pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
   user: U,
   hb: Instant,
-  pub server: Addr<CollabServer<S>>,
+  pub server: Addr<CollabServer<S, U>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
 }
@@ -31,7 +32,7 @@ where
 {
   pub fn new(
     user: U,
-    server: Addr<CollabServer<S>>,
+    server: Addr<CollabServer<S, U>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
   ) -> Self {
@@ -80,7 +81,7 @@ where
 
 impl<U, S> Actor for ClientWSSession<U, S>
 where
-  U: Unpin + RealtimeUser + Clone,
+  U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
 {
   type Context = ws::WebsocketContext<Self>;
@@ -173,5 +174,30 @@ impl Deref for ClientWSSink {
 
   fn deref(&self) -> &Self::Target {
     &self.0
+  }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct RealtimeUserImpl {
+  pub uuid: String,
+  pub device_id: String,
+}
+
+impl Display for RealtimeUserImpl {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "uuid:{}|device_id:{}",
+      self.uuid, self.device_id,
+    ))
+  }
+}
+
+impl RealtimeUser for RealtimeUserImpl {
+  fn id(&self) -> &str {
+    &self.uuid
+  }
+
+  fn device_id(&self) -> &str {
+    &self.device_id
   }
 }

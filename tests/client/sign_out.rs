@@ -3,7 +3,7 @@ use crate::client_api_client;
 
 #[tokio::test]
 async fn sign_out_but_not_sign_in() {
-  let c = client_api_client();
+  let mut c = client_api_client();
   let res = c.sign_out().await;
   assert!(res.is_err());
 }

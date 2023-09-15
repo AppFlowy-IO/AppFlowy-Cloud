@@ -5,7 +5,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use crate::ws::{BusinessID, ConnectAction, RealtimeMessage, WSError, WSObjectHandler};
+use crate::ws::retry::ConnectAction;
+use crate::ws::{BusinessID, RealtimeMessage, WSError, WSObjectHandler};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
 use tokio_retry::strategy::FixedInterval;

@@ -27,8 +27,8 @@ impl WSObjectHandler {
     }
   }
 
-  pub fn business_id(&self) -> u8 {
-    self.business_id
+  pub fn business_id(&self) -> &BusinessID {
+    &self.business_id
   }
 
   pub(crate) fn recv_msg(&self, msg: &ClientRealtimeMessage) {

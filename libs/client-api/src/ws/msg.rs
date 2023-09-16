@@ -69,7 +69,7 @@ impl From<ClientRealtimeMessage> for Message {
 
 impl From<CollabMessage> for ClientRealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
-    let business_id = msg.business_id();
+    let business_id = BusinessID::CollabId;
     let object_id = msg.object_id().to_string();
     let payload = msg.to_vec();
     Self {

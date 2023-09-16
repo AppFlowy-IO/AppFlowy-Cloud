@@ -109,7 +109,6 @@ impl From<serde_json::Error> for AppError {
   }
 }
 
-#[cfg(feature = "cloud")]
 impl From<opener::OpenError> for AppError {
   fn from(value: opener::OpenError) -> Self {
     AppError::new(ErrorCode::OpenError, value.to_string())

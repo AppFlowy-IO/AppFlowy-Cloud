@@ -784,6 +784,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "serde_repr",
  "shared_entity",
  "storage-entity",
  "thiserror",

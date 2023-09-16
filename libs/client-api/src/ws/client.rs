@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::ws::retry::ConnectAction;
-use crate::ws::{BusinessID, RealtimeMessage, WSError, WSObjectHandler};
+use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WSObjectHandler};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
 use tokio_retry::strategy::FixedInterval;
@@ -87,7 +87,7 @@ impl WSClient {
         match msg {
           Message::Text(_) => {},
           Message::Binary(_) => {
-            if let Ok(msg) = RealtimeMessage::try_from(&msg) {
+            if let Ok(msg) = ClientRealtimeMessage::try_from(&msg) {
               if let Some(handlers) = weak_handlers.upgrade() {
                 if let Some(handler) = handlers
                   .read()

@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::client_api_client;
 use assert_json_diff::assert_json_eq;
-use client_api::ws::{WSClient, WSClientConfig, WSObjectHandler};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig, WSObjectHandler};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
@@ -62,7 +62,10 @@ impl TestClient {
     let uid = api_client.profile().await.unwrap().uid.unwrap();
 
     // Subscribe to object
-    let handler = ws_client.subscribe(1, object_id.to_string()).await.unwrap();
+    let handler = ws_client
+      .subscribe(BusinessID::CollabId, object_id.to_string())
+      .await
+      .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(uid, device_id));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));

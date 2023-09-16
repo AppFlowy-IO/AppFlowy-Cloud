@@ -30,7 +30,7 @@ services:
       - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
-      - API_EXTERNAL_URL=${API_EXTERNAL_URL:-http://localhost:9998}   # change 'localhost' to the public host of machine that is running on
+      - API_EXTERNAL_URL=${API_EXTERNAL_URL}
       - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
       - PORT=9999
       - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST}                          # e.g. smtp.gmail.com
@@ -53,6 +53,7 @@ services:
     environment:
       - APP_ENVIRONMENT=production
       - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
+      - APP__GOTRUE__EXT_URL=${API_EXTERNAL_URL}
     build:
       context: .
       dockerfile: Dockerfile

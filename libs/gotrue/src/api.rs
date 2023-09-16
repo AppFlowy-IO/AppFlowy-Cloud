@@ -8,14 +8,16 @@ use infra::reqwest::{check_response, from_body, from_response};
 #[derive(Clone)]
 pub struct Client {
   client: reqwest::Client,
-  pub base_url: String,
+  base_url: String,
+  pub ext_url: String,
 }
 
 impl Client {
-  pub fn new(client: reqwest::Client, url: &str) -> Self {
+  pub fn new(client: reqwest::Client, base_url: &str, ext_url: &str) -> Self {
     Self {
       client,
-      base_url: url.to_string(),
+      base_url: base_url.to_owned(),
+      ext_url: ext_url.to_owned(),
     }
   }
 

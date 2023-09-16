@@ -17,6 +17,7 @@ pub struct Config {
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct GoTrueSetting {
   pub base_url: String,
+  pub ext_url: String, // public url
   pub jwt_secret: Secret<String>,
 }
 

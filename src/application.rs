@@ -154,7 +154,8 @@ async fn migrate(pool: &PgPool) {
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {
-  let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
+  let gotrue_client =
+    gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url, &setting.ext_url);
   gotrue_client
     .health()
     .await

@@ -37,7 +37,7 @@ impl Default for WSClientConfig {
 type HandlerByObjectId = HashMap<String, Weak<WSObjectHandler>>;
 
 pub struct WSClient {
-  addr: String,
+  addr: Mutex<Option<String>>,
   state: Arc<Mutex<ConnectStateNotify>>,
   sender: Sender<Message>,
   handlers: Arc<RwLock<HashMap<BusinessID, HandlerByObjectId>>>,
@@ -45,7 +45,7 @@ pub struct WSClient {
 }
 
 impl WSClient {
-  pub fn new(addr: String, config: WSClientConfig) -> Self {
+  pub fn new(config: WSClientConfig) -> Self {
     let (sender, _) = channel(config.buffer_capacity);
     let state = Arc::new(Mutex::new(ConnectStateNotify::new()));
     let handlers = Arc::new(RwLock::new(HashMap::new()));
@@ -56,7 +56,7 @@ impl WSClient {
       config.retry_connect_per_pings,
     )));
     WSClient {
-      addr,
+      addr: Mutex::new(None),
       state,
       sender,
       handlers,
@@ -64,10 +64,12 @@ impl WSClient {
     }
   }
 
-  pub async fn connect(&self) -> Result<Option<SocketAddr>, WSError> {
+  pub async fn connect(&self, addr: String) -> Result<Option<SocketAddr>, WSError> {
+    *self.addr.lock().await = Some(addr.clone());
+
     self.set_state(ConnectState::Connecting).await;
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(3);
-    let action = ConnectAction::new(self.addr.clone());
+    let action = ConnectAction::new(addr);
     let stream = Retry::spawn(retry_strategy, action).await?;
     let addr = match stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),

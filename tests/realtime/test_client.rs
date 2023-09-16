@@ -40,15 +40,15 @@ impl TestClient {
 
     let device_id = Uuid::new_v4().to_string();
     // Connect to server via websocket
-    let ws_client = WSClient::new(
-      api_client.ws_url(&device_id).unwrap(),
-      WSClientConfig {
-        buffer_capacity: 100,
-        ping_per_secs: 2,
-        retry_connect_per_pings: 5,
-      },
-    );
-    ws_client.connect().await.unwrap();
+    let ws_client = WSClient::new(WSClientConfig {
+      buffer_capacity: 100,
+      ping_per_secs: 2,
+      retry_connect_per_pings: 5,
+    });
+    ws_client
+      .connect(api_client.ws_url(&device_id).unwrap())
+      .await
+      .unwrap();
 
     // Get workspace id and uid
     let workspace_id = api_client

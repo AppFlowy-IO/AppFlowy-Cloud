@@ -19,7 +19,7 @@ jobs:
           sed -i 's|GOTRUE_SMTP_HOST=.*|GOTRUE_SMTP_HOST=smtp.gmail.com|' .env
           sed -i 's|GOTRUE_SMTP_PORT=.*|GOTRUE_SMTP_PORT=465|' .env
           sed -i 's|GOTRUE_SMTP_USER=.*|GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER_TEST }}|' .env
-          sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS_TEST }}|' .env
+          # sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS_TEST }}|' .env
           sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL_TEST }}|' .env
           sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
           # Google OAuth
@@ -35,4 +35,5 @@ jobs:
           echo ${{ secrets.FLOWY_TEST_XYZ_KEY }} > ./nginx/ssl/private_key.key
 
       - name: Deploy docker-compose
-        run: sudo docker-compose up -d --build
+        # run: sudo docker-compose up -d --build
+        run: exit 1

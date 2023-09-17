@@ -31,8 +31,8 @@ jobs:
           sed -i 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=${{ secrets.API_EXTERNAL_URL_TEST }}|' .env
 
           # SSL
-          echo "${{ secrets.TEST_APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
-          echo "${{ secrets.TEST_APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
+          echo "${{ secrets.APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
+          echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
 
       - name: Deploy docker-compose
         run: sudo docker-compose up -d --build --force-recreate

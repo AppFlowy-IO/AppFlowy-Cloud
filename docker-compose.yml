@@ -3,7 +3,7 @@ services:
   nginx:
     image: nginx
     ports:
-      - 433:433
+      - 443:443
       - 9997:9997
     depends_on:
       - appflowy_cloud

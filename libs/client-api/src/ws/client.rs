@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::ws::retry::ConnectAction;
-use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WSObjectHandler};
+use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
 use tokio_retry::strategy::FixedInterval;
@@ -34,13 +34,13 @@ impl Default for WSClientConfig {
   }
 }
 
-type HandlerByObjectId = HashMap<String, Weak<WSObjectHandler>>;
+type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel>>;
 
 pub struct WSClient {
   addr: Mutex<Option<String>>,
   state: Arc<Mutex<ConnectStateNotify>>,
   sender: Sender<Message>,
-  handlers: Arc<RwLock<HashMap<BusinessID, HandlerByObjectId>>>,
+  channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
   ping: Arc<Mutex<ServerFixIntervalPing>>,
 }
 
@@ -48,7 +48,7 @@ impl WSClient {
   pub fn new(config: WSClientConfig) -> Self {
     let (sender, _) = channel(config.buffer_capacity);
     let state = Arc::new(Mutex::new(ConnectStateNotify::new()));
-    let handlers = Arc::new(RwLock::new(HashMap::new()));
+    let channels = Arc::new(RwLock::new(HashMap::new()));
     let ping = Arc::new(Mutex::new(ServerFixIntervalPing::new(
       Duration::from_secs(config.ping_per_secs),
       state.clone(),
@@ -59,7 +59,7 @@ impl WSClient {
       addr: Mutex::new(None),
       state,
       sender,
-      handlers,
+      channels,
       ping,
     }
   }
@@ -78,25 +78,25 @@ impl WSClient {
 
     let (mut sink, mut stream) = stream.split();
     self.set_state(ConnectState::Connected).await;
-    let weak_handlers = Arc::downgrade(&self.handlers);
+    let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
     self.ping.lock().await.run();
-    // Receive messages from the websocket, and send them to the handlers.
+    // Receive messages from the websocket, and send them to the channels.
     tokio::spawn(async move {
       while let Some(Ok(msg)) = stream.next().await {
         match msg {
           Message::Text(_) => {},
           Message::Binary(_) => {
             if let Ok(msg) = ClientRealtimeMessage::try_from(&msg) {
-              if let Some(handlers) = weak_handlers.upgrade() {
-                if let Some(handler) = handlers
+              if let Some(channels) = weak_channels.upgrade() {
+                if let Some(channel) = channels
                   .read()
                   .await
                   .get(&msg.business_id)
                   .and_then(|map| map.get(&msg.object_id))
-                  .and_then(|handler| handler.upgrade())
+                  .and_then(|channel| channel.upgrade())
                 {
-                  handler.recv_msg(&msg);
+                  channel.recv_msg(&msg);
                 }
               }
             } else {
@@ -131,30 +131,30 @@ impl WSClient {
     Ok(addr)
   }
 
-  /// Return a [WSObjectHandler] that can be used to send messages to the websocket. Caller should
-  /// keep the handler alive as long as it wants to receive messages from the websocket.
+  /// Return a [WebSocketChannel] that can be used to send messages to the websocket. Caller should
+  /// keep the channel alive as long as it wants to receive messages from the websocket.
   pub async fn subscribe(
     &self,
     business_id: BusinessID,
     object_id: String,
-  ) -> Result<Arc<WSObjectHandler>, WSError> {
-    let handler = Arc::new(WSObjectHandler::new(
-      business_id,
-      object_id.clone(),
-      self.sender.clone(),
-    ));
+  ) -> Result<Arc<WebSocketChannel>, WSError> {
+    let channel = Arc::new(WebSocketChannel::new(business_id, self.sender.clone()));
     self
-      .handlers
+      .channels
       .write()
       .await
       .entry(business_id)
       .or_insert_with(HashMap::new)
-      .insert(object_id, Arc::downgrade(&handler));
-    Ok(handler)
+      .insert(object_id, Arc::downgrade(&channel));
+    Ok(channel)
   }
 
   pub async fn subscribe_connect_state(&self) -> Receiver<ConnectState> {
     self.state.lock().await.subscribe()
+  }
+
+  pub async fn is_connected(&self) -> bool {
+    self.state.lock().await.state.is_connected()
   }
 
   pub async fn disconnect(&self) {

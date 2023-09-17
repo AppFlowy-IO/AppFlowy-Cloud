@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::client_api_client;
 use assert_json_diff::assert_json_eq;
-use client_api::ws::{BusinessID, WSClient, WSClientConfig, WSObjectHandler};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
@@ -23,7 +23,7 @@ pub(crate) struct TestClient {
   pub origin: CollabOrigin,
   pub collab: Arc<MutexCollab>,
   #[allow(dead_code)]
-  pub handler: Arc<WSObjectHandler>,
+  pub handler: Arc<WebSocketChannel>,
   pub api_client: client_api::Client,
 }
 

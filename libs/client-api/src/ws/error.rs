@@ -1,4 +1,4 @@
-use crate::ws::RealtimeMessage;
+use crate::ws::ClientRealtimeMessage;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 #[derive(Debug, thiserror::Error)]
@@ -13,7 +13,7 @@ pub enum WSError {
   SerdeError(#[from] serde_json::Error),
 
   #[error(transparent)]
-  SenderError(#[from] tokio::sync::broadcast::error::SendError<RealtimeMessage>),
+  SenderError(#[from] tokio::sync::broadcast::error::SendError<ClientRealtimeMessage>),
 
   #[error(transparent)]
   BroadcastStreamRecvError(#[from] BroadcastStreamRecvError),

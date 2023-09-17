@@ -11,9 +11,7 @@ jobs:
 
       - name: Set up env vars
         run: |
-          ls -al
           cp dev.env .env
-          ls -al
 
           # jwt secret
           sed -i 's|GOTRUE_JWT_SECRET=.*|GOTRUE_JWT_SECRET=${{ secrets.GOTRUE_JWT_SECRET_TEST }}|' .env
@@ -33,8 +31,8 @@ jobs:
           sed -i 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=${{ secrets.API_EXTERNAL_URL_TEST }}|' .env
 
           # SSL
-          echo ${{ secrets.FLOWY_TEST_XYZ_CRT }} > ./nginx/ssl/certificate.crt
-          echo ${{ secrets.FLOWY_TEST_XYZ_KEY }} > ./nginx/ssl/private_key.key
+          # echo ${{ secrets.FLOWY_TEST_XYZ_CRT }} > ./nginx/ssl/certificate.crt
+          # echo ${{ secrets.FLOWY_TEST_XYZ_KEY }} > ./nginx/ssl/private_key.key
 
       - name: Deploy docker-compose
         # run: sudo docker-compose up -d --build

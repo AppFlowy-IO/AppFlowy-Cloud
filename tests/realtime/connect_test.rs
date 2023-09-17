@@ -11,19 +11,16 @@ async fn realtime_connect_test() {
     .await
     .unwrap();
 
-  let ws_client = WSClient::new(
-    c.ws_url("fake_device_id").unwrap(),
-    WSClientConfig {
-      buffer_capacity: 100,
-      ping_per_secs: 2,
-      retry_connect_per_pings: 5,
-    },
-  );
+  let ws_client = WSClient::new(WSClientConfig {
+    buffer_capacity: 100,
+    ping_per_secs: 2,
+    retry_connect_per_pings: 5,
+  });
   let mut state = ws_client.subscribe_connect_state().await;
 
   loop {
     tokio::select! {
-        _ = ws_client.connect() => {},
+        _ = ws_client.connect(c.ws_url("fake_device_id").unwrap()) => {},
        value = state.recv() => {
         let new_state = value.unwrap();
         if new_state == ConnectState::Connected {

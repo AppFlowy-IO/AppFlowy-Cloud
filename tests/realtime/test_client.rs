@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::client_api_client;
 use assert_json_diff::assert_json_eq;
-use client_api::ws::{WSClient, WSClientConfig, WSObjectHandler};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
@@ -23,7 +23,7 @@ pub(crate) struct TestClient {
   pub origin: CollabOrigin,
   pub collab: Arc<MutexCollab>,
   #[allow(dead_code)]
-  pub handler: Arc<WSObjectHandler>,
+  pub handler: Arc<WebSocketChannel>,
   pub api_client: client_api::Client,
 }
 
@@ -40,15 +40,15 @@ impl TestClient {
 
     let device_id = Uuid::new_v4().to_string();
     // Connect to server via websocket
-    let ws_client = WSClient::new(
-      api_client.ws_url(&device_id).unwrap(),
-      WSClientConfig {
-        buffer_capacity: 100,
-        ping_per_secs: 2,
-        retry_connect_per_pings: 5,
-      },
-    );
-    ws_client.connect().await.unwrap();
+    let ws_client = WSClient::new(WSClientConfig {
+      buffer_capacity: 100,
+      ping_per_secs: 2,
+      retry_connect_per_pings: 5,
+    });
+    ws_client
+      .connect(api_client.ws_url(&device_id).unwrap())
+      .await
+      .unwrap();
 
     // Get workspace id and uid
     let workspace_id = api_client
@@ -62,7 +62,10 @@ impl TestClient {
     let uid = api_client.profile().await.unwrap().uid.unwrap();
 
     // Subscribe to object
-    let handler = ws_client.subscribe(1, object_id.to_string()).await.unwrap();
+    let handler = ws_client
+      .subscribe(BusinessID::CollabId, object_id.to_string())
+      .await
+      .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(uid, device_id));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));

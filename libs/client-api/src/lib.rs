@@ -1,4 +1,5 @@
 mod http;
+pub mod notify;
 pub mod ws;
 
 pub use http::*;

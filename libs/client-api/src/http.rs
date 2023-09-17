@@ -8,6 +8,7 @@ use shared_entity::data::AppResponse;
 
 use gotrue_entity::{AccessTokenResponse, User};
 
+use crate::notify::{ClientToken, TokenStateReceiver};
 use shared_entity::error::AppError;
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
@@ -19,7 +20,7 @@ pub struct Client {
   http_client: reqwest::Client,
   base_url: String,
   ws_addr: String,
-  token: Option<AccessTokenResponse>,
+  token: ClientToken,
 }
 
 impl Client {
@@ -28,8 +29,12 @@ impl Client {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
       http_client: c,
-      token: None,
+      token: ClientToken::new(),
     }
+  }
+
+  pub fn subscribe_token_state(&self) -> TokenStateReceiver {
+    self.token.subscribe()
   }
 
   // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
@@ -78,7 +83,7 @@ impl Client {
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
     let user = self.user_info(&access_token).await?;
 
-    self.token = Some(AccessTokenResponse {
+    self.token.set(AccessTokenResponse {
       access_token,
       token_type: token_type.ok_or(url_missing_param("token_type"))?,
       expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
@@ -88,6 +93,7 @@ impl Client {
       provider_access_token,
       provider_refresh_token,
     });
+
     Ok(())
   }
 
@@ -145,7 +151,9 @@ impl Client {
         "password": password,
     });
     let resp = self.http_client.post(&url).json(&payload).send().await?;
-    self.token = AppResponse::from_response(resp).await?.into_data()?;
+    self
+      .token
+      .set(AppResponse::from_response(resp).await?.into_data()?);
     Ok(())
   }
 
@@ -158,7 +166,9 @@ impl Client {
       .as_str();
     let url = format!("{}/api/user/refresh/{}", self.base_url, refresh_token);
     let resp = self.http_client.get(&url).send().await?;
-    self.token = AppResponse::from_response(resp).await?.into_data()?;
+    self
+      .token
+      .set(AppResponse::from_response(resp).await?.into_data()?);
     Ok(())
   }
 
@@ -181,6 +191,7 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()?;
+    self.token.unset();
     Ok(())
   }
 

@@ -16,3 +16,4 @@ websocket:
 redis_uri: "redis://127.0.0.1:6379"
 gotrue:
   base_url: "http://127.0.0.1:9999"
+  ext_url: "http://127.0.0.1:9999"

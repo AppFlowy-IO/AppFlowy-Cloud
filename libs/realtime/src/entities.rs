@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::sync::Arc;
 
 pub trait RealtimeUser:
   Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
 {
-  fn id(&self) -> &str;
-
-  fn device_id(&self) -> &str;
 }
+
+impl<T> RealtimeUser for Arc<T> where T: RealtimeUser {}
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
@@ -32,14 +32,14 @@ pub struct Disconnect<U> {
 
 #[derive(Debug, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
-pub enum RealtimeBizId {
-  CollabBizId = 1,
+pub enum BusinessID {
+  CollabId = 1,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct ClientMessage<U> {
-  pub business_id: RealtimeBizId,
+  pub business_id: BusinessID,
   pub user: U,
   pub content: CollabMessage,
 }
@@ -47,7 +47,7 @@ pub struct ClientMessage<U> {
 #[derive(Debug, Clone, Message, Serialize, Deserialize)]
 #[rtype(result = "()")]
 pub struct RealtimeMessage {
-  pub business_id: RealtimeBizId,
+  pub business_id: BusinessID,
   pub object_id: String,
   pub payload: Vec<u8>,
 }
@@ -68,7 +68,7 @@ impl From<RealtimeMessage> for Bytes {
 impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
     Self {
-      business_id: RealtimeBizId::CollabBizId,
+      business_id: BusinessID::CollabId,
       object_id: msg.object_id().to_string(),
       payload: msg.to_vec(),
     }

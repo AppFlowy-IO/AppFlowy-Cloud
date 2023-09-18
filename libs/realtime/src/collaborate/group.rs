@@ -12,17 +12,19 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use storage::collab::CollabStorage;
 
+use crate::entities::RealtimeUser;
 use tokio::task::spawn_blocking;
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
 
-pub struct CollabGroupCache<S> {
-  group_by_object_id: RwLock<HashMap<String, Arc<CollabGroup>>>,
+pub struct CollabGroupCache<S, U> {
+  group_by_object_id: RwLock<HashMap<String, Arc<CollabGroup<U>>>>,
   storage: S,
 }
 
-impl<S> CollabGroupCache<S>
+impl<S, U> CollabGroupCache<S, U>
 where
   S: CollabStorage + Clone,
+  U: RealtimeUser,
 {
   pub fn new(storage: S) -> Self {
     Self {
@@ -57,7 +59,7 @@ where
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
-  ) -> Arc<CollabGroup> {
+  ) -> Arc<CollabGroup<U>> {
     tracing::trace!("Create new group for object_id:{}", object_id);
     let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
     let broadcast = CollabBroadcast::new(object_id, collab.clone(), 10);
@@ -89,20 +91,22 @@ where
   }
 }
 
-impl<S> Deref for CollabGroupCache<S>
+impl<S, U> Deref for CollabGroupCache<S, U>
 where
   S: CollabStorage,
+  U: RealtimeUser,
 {
-  type Target = RwLock<HashMap<String, Arc<CollabGroup>>>;
+  type Target = RwLock<HashMap<String, Arc<CollabGroup<U>>>>;
 
   fn deref(&self) -> &Self::Target {
     &self.group_by_object_id
   }
 }
 
-impl<S> DerefMut for CollabGroupCache<S>
+impl<S, U> DerefMut for CollabGroupCache<S, U>
 where
   S: CollabStorage,
+  U: RealtimeUser,
 {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.group_by_object_id
@@ -110,7 +114,7 @@ where
 }
 
 /// A group used to manage a single [Collab] object
-pub struct CollabGroup {
+pub struct CollabGroup<U> {
   pub collab: Arc<MutexCollab>,
 
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -119,10 +123,13 @@ pub struct CollabGroup {
 
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
-  pub subscribers: RwLock<HashMap<CollabOrigin, Subscription>>,
+  pub subscribers: RwLock<HashMap<U, Subscription>>,
 }
 
-impl CollabGroup {
+impl<U> CollabGroup<U>
+where
+  U: RealtimeUser,
+{
   /// Mutate the [Collab] by the given closure
   pub fn get_mut_collab<F>(&self, f: F)
   where

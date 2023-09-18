@@ -5,6 +5,9 @@ use std::borrow::Cow;
 
 use std::fmt::{Debug, Display};
 
+#[cfg(feature = "cloud")]
+pub use crate::data_actix::*;
+
 use crate::error_code::ErrorCode;
 /// A macro to generate static AppResponse functions with predefined error codes.
 macro_rules! static_app_response {
@@ -15,9 +18,6 @@ macro_rules! static_app_response {
     }
   };
 }
-
-#[cfg(feature = "cloud")]
-pub type JsonAppResponse<T> = actix_web::web::Json<AppResponse<T>>;
 
 /// Represents a standardized application response.
 ///
@@ -109,13 +109,6 @@ where
   }
 }
 
-#[cfg(feature = "cloud")]
-impl<T> From<AppResponse<T>> for JsonAppResponse<T> {
-  fn from(data: AppResponse<T>) -> Self {
-    actix_web::web::Json(data)
-  }
-}
-
 impl<T> std::error::Error for AppResponse<T> where T: Debug + Display {}
 
 /// Provides a conversion from `T1` to `AppResponse<T>`.
@@ -131,20 +124,6 @@ where
   fn from(value: T1) -> Self {
     let err: AppError = value.into();
     AppResponse::new(err.code, err.message)
-  }
-}
-
-#[cfg(feature = "cloud")]
-impl<T> actix_web::error::ResponseError for AppResponse<T>
-where
-  T: Debug + Display + Clone + Serialize,
-{
-  fn status_code(&self) -> actix_web::http::StatusCode {
-    actix_web::http::StatusCode::OK
-  }
-
-  fn error_response(&self) -> actix_web::HttpResponse {
-    actix_web::HttpResponse::Ok().json(self)
   }
 }
 

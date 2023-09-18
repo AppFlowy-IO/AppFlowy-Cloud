@@ -10,7 +10,7 @@ use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
 use tokio_retry::strategy::FixedInterval;
-use tokio_retry::Retry;
+use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
 
@@ -37,7 +37,7 @@ impl Default for WSClientConfig {
 type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel>>;
 
 pub struct WSClient {
-  addr: Mutex<Option<String>>,
+  addr: Arc<parking_lot::Mutex<Option<String>>>,
   state: Arc<Mutex<ConnectStateNotify>>,
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
@@ -56,7 +56,7 @@ impl WSClient {
       config.retry_connect_per_pings,
     )));
     WSClient {
-      addr: Mutex::new(None),
+      addr: Arc::new(parking_lot::Mutex::new(None)),
       state,
       sender,
       channels,
@@ -65,12 +65,16 @@ impl WSClient {
   }
 
   pub async fn connect(&self, addr: String) -> Result<Option<SocketAddr>, WSError> {
-    *self.addr.lock().await = Some(addr.clone());
+    *self.addr.lock() = Some(addr.clone());
 
     self.set_state(ConnectState::Connecting).await;
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(3);
-    let action = ConnectAction::new(addr);
-    let stream = Retry::spawn(retry_strategy, action).await?;
+    let action = ConnectAction::new(addr.clone());
+    let cond = RetryCondition {
+      connecting_addr: addr,
+      addr: Arc::downgrade(&self.addr),
+    };
+    let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
     let addr = match stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),
       _ => None,
@@ -158,7 +162,9 @@ impl WSClient {
   }
 
   pub async fn disconnect(&self) {
+    *self.addr.lock() = None;
     let _ = self.sender.send(Message::Close(None));
+    self.set_state(ConnectState::Disconnected).await;
   }
 
   async fn set_state(&self, state: ConnectState) {
@@ -293,5 +299,22 @@ impl ConnectState {
   #[allow(dead_code)]
   fn is_disconnected(&self) -> bool {
     matches!(self, ConnectState::Disconnected)
+  }
+}
+
+struct RetryCondition {
+  connecting_addr: String,
+  addr: Weak<parking_lot::Mutex<Option<String>>>,
+}
+impl Condition<WSError> for RetryCondition {
+  fn should_retry(&mut self, _error: &WSError) -> bool {
+    self
+      .addr
+      .upgrade()
+      .map(|addr| match addr.lock().as_ref() {
+        None => false,
+        Some(addr) => addr == &self.connecting_addr,
+      })
+      .unwrap_or(false)
   }
 }

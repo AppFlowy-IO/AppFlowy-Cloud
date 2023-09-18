@@ -8,6 +8,7 @@ use crate::realtime::test_client::{assert_collab_json, TestClient};
 use assert_json_diff::assert_json_eq;
 use std::time::Duration;
 use storage::collab::FLUSH_PER_UPDATE;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn realtime_write_collab_test() {
@@ -71,6 +72,52 @@ async fn one_direction_peer_sync_test() {
   let json_1 = client_1.collab.lock().to_json_value();
   let json_2 = client_2.collab.lock().to_json_value();
   assert_json_eq!(json_1, json_2);
+}
+
+#[tokio::test]
+async fn same_user_with_same_device_id_test() {
+  let object_id = uuid::Uuid::new_v4().to_string();
+  let collab_type = CollabType::Document;
+
+  // Client_1_2 will force the server to disconnect client_1_1. So any changes made by client_1_1
+  // will not be saved to the server.
+  let device_id = Uuid::new_v4().to_string();
+  let client_1_1 =
+    TestClient::new_with_device_id(&object_id, &device_id, collab_type.clone()).await;
+  let mut client_1_2 =
+    TestClient::new_with_device_id(&object_id, &device_id, collab_type.clone()).await;
+
+  client_1_1.collab.lock().insert("1", "a");
+  client_1_2.collab.lock().insert("2", "b");
+  client_1_1.collab.lock().insert("3", "c");
+
+  tokio::time::sleep(Duration::from_millis(200)).await;
+
+  let json_1 = client_1_1.collab.lock().to_json_value();
+  let json_2 = client_1_2.collab.lock().to_json_value();
+  assert_json_eq!(
+    json_1,
+    json!({
+      "1": "a",
+      "3": "c"
+    })
+  );
+  assert_json_eq!(
+    json_2,
+    json!({
+      "2": "b"
+    })
+  );
+  assert_collab_json(
+    &mut client_1_2.api_client,
+    &object_id,
+    &collab_type,
+    5,
+    json!({
+      "2": "b"
+    }),
+  )
+  .await;
 }
 
 #[tokio::test]

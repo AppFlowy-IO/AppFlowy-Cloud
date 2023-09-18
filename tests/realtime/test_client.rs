@@ -28,7 +28,12 @@ pub(crate) struct TestClient {
 }
 
 impl TestClient {
-  pub(crate) async fn new(object_id: &str, collab_type: CollabType) -> Self {
+  pub(crate) async fn new_with_device_id(
+    object_id: &str,
+    device_id: &str,
+    collab_type: CollabType,
+  ) -> Self {
+    let device_id = device_id.to_string();
     let mut api_client = client_api_client();
     let _guard = REGISTERED_USER_MUTEX.lock().await;
 
@@ -38,7 +43,6 @@ impl TestClient {
       .await
       .unwrap();
 
-    let device_id = Uuid::new_v4().to_string();
     // Connect to server via websocket
     let ws_client = WSClient::new(WSClientConfig {
       buffer_capacity: 100,
@@ -88,6 +92,11 @@ impl TestClient {
       collab,
       handler,
     }
+  }
+
+  pub(crate) async fn new(object_id: &str, collab_type: CollabType) -> Self {
+    let device_id = Uuid::new_v4().to_string();
+    Self::new_with_device_id(object_id, &device_id, collab_type).await
   }
 
   pub(crate) async fn disconnect(&self) {

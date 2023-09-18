@@ -3,8 +3,8 @@ services:
   nginx:
     image: nginx
     ports:
+      - 80:80
       - 443:443
-      - 9997:9997
     depends_on:
       - appflowy_cloud
       - gotrue

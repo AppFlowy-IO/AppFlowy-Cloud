@@ -6,8 +6,10 @@ use collab_define::CollabType;
 use crate::realtime::test_client::{assert_collab_json, TestClient};
 
 use assert_json_diff::assert_json_eq;
+use shared_entity::error_code::ErrorCode;
 use std::time::Duration;
 use storage::collab::FLUSH_PER_UPDATE;
+use storage_entity::QueryCollabParams;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -26,7 +28,6 @@ async fn realtime_write_collab_test() {
 
   // Wait for the messages to be sent
   tokio::time::sleep(Duration::from_secs(2)).await;
-  test_client.disconnect().await;
 
   assert_collab_json(
     &mut test_client.api_client,
@@ -217,6 +218,54 @@ async fn multiple_collab_edit_test() {
     3,
     json!( {
       "title": "I am client 3"
+    }),
+  )
+  .await;
+}
+
+#[tokio::test]
+async fn ws_reconnect_sync_test() {
+  let object_id = uuid::Uuid::new_v4().to_string();
+  let collab_type = CollabType::Document;
+  let mut test_client = TestClient::new(&object_id, collab_type.clone()).await;
+
+  // Disconnect the client and edit the collab. The updates will not be sent to the server.
+  test_client.disconnect().await;
+  for i in 0..=5 {
+    test_client
+      .collab
+      .lock()
+      .insert(&i.to_string(), i.to_string());
+  }
+
+  // it will return RecordNotFound error when trying to get the collab from the server
+  let err = test_client
+    .api_client
+    .get_collab(QueryCollabParams {
+      object_id: object_id.clone(),
+      collab_type: collab_type.clone(),
+    })
+    .await
+    .unwrap_err();
+  assert_eq!(err.code, ErrorCode::RecordNotFound);
+
+  // After reconnect the collab should be synced to the server.
+  test_client.reconnect().await;
+  // Wait for the messages to be sent
+  tokio::time::sleep(Duration::from_secs(2)).await;
+
+  assert_collab_json(
+    &mut test_client.api_client,
+    &object_id,
+    &collab_type,
+    3,
+    json!( {
+      "0": "0",
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
     }),
   )
   .await;

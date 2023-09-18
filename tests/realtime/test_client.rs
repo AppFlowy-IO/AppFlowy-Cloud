@@ -25,6 +25,7 @@ pub(crate) struct TestClient {
   #[allow(dead_code)]
   pub handler: Arc<WebSocketChannel>,
   pub api_client: client_api::Client,
+  device_id: String,
 }
 
 impl TestClient {
@@ -71,7 +72,7 @@ impl TestClient {
       .await
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
-    let origin = CollabOrigin::Client(CollabClient::new(uid, device_id));
+    let origin = CollabOrigin::Client(CollabClient::new(uid, device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
     let object = SyncObject::new(object_id, &workspace_id, collab_type);
@@ -91,6 +92,7 @@ impl TestClient {
       origin,
       collab,
       handler,
+      device_id,
     }
   }
 
@@ -101,6 +103,14 @@ impl TestClient {
 
   pub(crate) async fn disconnect(&self) {
     self.ws_client.disconnect().await;
+  }
+
+  pub(crate) async fn reconnect(&self) {
+    self
+      .ws_client
+      .connect(self.api_client.ws_url(&self.device_id).unwrap())
+      .await
+      .unwrap();
   }
 }
 
@@ -139,9 +149,9 @@ pub async fn assert_collab_json(
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
           },
-          Err(_) => {
+          Err(e) => {
             if retry_count > 5 {
-              panic!("Query collab failed");
+              panic!("Query collab failed: {}", e);
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
           }

@@ -38,10 +38,11 @@ type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel>>;
 
 pub struct WSClient {
   addr: Arc<parking_lot::Mutex<Option<String>>>,
+  config: WSClientConfig,
   state: Arc<Mutex<ConnectStateNotify>>,
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
-  ping: Arc<Mutex<ServerFixIntervalPing>>,
+  ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
 }
 
 impl WSClient {
@@ -49,14 +50,10 @@ impl WSClient {
     let (sender, _) = channel(config.buffer_capacity);
     let state = Arc::new(Mutex::new(ConnectStateNotify::new()));
     let channels = Arc::new(RwLock::new(HashMap::new()));
-    let ping = Arc::new(Mutex::new(ServerFixIntervalPing::new(
-      Duration::from_secs(config.ping_per_secs),
-      state.clone(),
-      sender.clone(),
-      config.retry_connect_per_pings,
-    )));
+    let ping = Arc::new(Mutex::new(None));
     WSClient {
       addr: Arc::new(parking_lot::Mutex::new(None)),
+      config,
       state,
       sender,
       channels,
@@ -84,7 +81,16 @@ impl WSClient {
     self.set_state(ConnectState::Connected).await;
     let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
-    self.ping.lock().await.run();
+
+    let mut ping = ServerFixIntervalPing::new(
+      Duration::from_secs(self.config.ping_per_secs),
+      self.state.clone(),
+      sender.clone(),
+      self.config.retry_connect_per_pings,
+    );
+    ping.run();
+    *self.ping.lock().await = Some(ping);
+
     // Receive messages from the websocket, and send them to the channels.
     tokio::spawn(async move {
       while let Some(Ok(msg)) = stream.next().await {

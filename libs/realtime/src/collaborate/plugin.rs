@@ -14,27 +14,28 @@ use storage::error::StorageError;
 use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
 
 use crate::collaborate::group::CollabGroup;
+use crate::entities::RealtimeUser;
 use y_sync::awareness::Awareness;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
-pub struct CollabStoragePlugin<S> {
+pub struct CollabStoragePlugin<S, U> {
   uid: i64,
   workspace_id: String,
   storage: S,
   did_load: AtomicBool,
   update_count: AtomicU32,
-  group: Weak<CollabGroup>,
+  group: Weak<CollabGroup<U>>,
   collab_type: CollabType,
 }
 
-impl<S> CollabStoragePlugin<S> {
+impl<S, U> CollabStoragePlugin<S, U> {
   pub fn new(
     uid: i64,
     workspace_id: &str,
     collab_type: CollabType,
     storage: S,
-    group: Weak<CollabGroup>,
+    group: Weak<CollabGroup<U>>,
   ) -> Self {
     let workspace_id = workspace_id.to_string();
     let did_load = AtomicBool::new(false);
@@ -62,9 +63,10 @@ fn init_collab_with_raw_data(raw_data: RawData, doc: &Doc) -> Result<(), Realtim
 }
 
 #[async_trait]
-impl<S> CollabPlugin for CollabStoragePlugin<S>
+impl<S, U> CollabPlugin for CollabStoragePlugin<S, U>
 where
   S: CollabStorage,
+  U: RealtimeUser,
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams {

@@ -3,6 +3,7 @@ use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
+use std::sync::Arc;
 
 use realtime::client::{ClientWSSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
@@ -23,16 +24,13 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<Addr<CollabServer<CollabStorageProxy, RealtimeUserImpl>>>,
+  server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>>>>,
 ) -> Result<HttpResponse> {
   tracing::info!("ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let realtime_user = RealtimeUserImpl {
-    uuid: user_uuid.to_string(),
-    device_id,
-  };
+  let realtime_user = Arc::new(RealtimeUserImpl::new(user_uuid.to_string(), device_id));
   let client = ClientWSSession::new(
     realtime_user,
     server.get_ref().clone(),

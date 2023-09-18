@@ -83,7 +83,7 @@ where
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let collab_server = CollabServer::<_, RealtimeUserImpl>::new(storage.collab_storage.clone())
+  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>>::new(storage.collab_storage.clone())
     .unwrap()
     .start();
   let mut server = HttpServer::new(move || {

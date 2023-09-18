@@ -55,8 +55,8 @@ async fn info_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<User>> {
   let access_token = path.into_inner();
-  let oauth_url = biz::user::info(&state.gotrue_client, &access_token).await?;
-  Ok(AppResponse::Ok().with_data(oauth_url).into())
+  let user = biz::user::info(&state.pg_pool, &state.gotrue_client, &access_token).await?;
+  Ok(AppResponse::Ok().with_data(user).into())
 }
 
 async fn oauth_handler(
@@ -74,7 +74,7 @@ async fn profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserProfileView>> {
-  let profile = biz::user::user_profile(&state.pg_pool, &uuid).await?;
+  let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
@@ -82,7 +82,7 @@ async fn workspaces_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid).await?;
+  let workspaces = biz::user::get_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 

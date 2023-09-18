@@ -30,6 +30,7 @@ storage-entity = { path = "../storage-entity" }
 y-sync = { version = "0.3.1" }
 yrs = "0.16.5"
 lib0 = "0.16.3"
+chrono = "0.4.30"
 
 [dev-dependencies]
 actix = "0.13"

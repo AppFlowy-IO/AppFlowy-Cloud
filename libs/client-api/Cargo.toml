@@ -16,7 +16,7 @@ storage-entity = { path = "../storage-entity" }
 opener = "0.6.1"
 url = "2.4.1"
 tokio-stream = { version = "0.1.14" }
-
+parking_lot = "0.12.1"
 # ws
 tracing = { version = "0.1" }
 thiserror = "1.0.39"

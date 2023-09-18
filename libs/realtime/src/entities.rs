@@ -8,14 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::sync::Arc;
 
 pub trait RealtimeUser:
   Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
 {
-  fn id(&self) -> &str;
-
-  fn device_id(&self) -> &str;
 }
+
+impl<T> RealtimeUser for Arc<T> where T: RealtimeUser {}
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]

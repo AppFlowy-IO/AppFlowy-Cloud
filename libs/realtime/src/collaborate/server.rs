@@ -23,7 +23,7 @@ pub struct CollabServer<S, U> {
   #[allow(dead_code)]
   storage: S,
   /// Keep track of all collab groups
-  groups: Arc<CollabGroupCache<S>>,
+  groups: Arc<CollabGroupCache<S, U>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<RwLock<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
@@ -45,6 +45,18 @@ where
       client_stream_by_user: Default::default(),
     })
   }
+
+  fn remove_user(&self, user: &U) {
+    self.client_stream_by_user.write().remove(user);
+
+    let editing_set = self.editing_collab_by_user.write().remove(user);
+    if let Some(editing_set) = editing_set {
+      tracing::info!("Remove user from group: {}", user);
+      for editing in editing_set {
+        remove_user_from_group(user, &self.groups, &editing);
+      }
+    }
+  }
 }
 
 impl<S, U> Actor for CollabServer<S, U>
@@ -58,19 +70,20 @@ where
 impl<S, U> Handler<Connect<U>> for CollabServer<S, U>
 where
   U: RealtimeUser + Unpin,
-  S: 'static + Unpin,
+  S: CollabStorage + Unpin,
 {
   type Result = Result<(), RealtimeError>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[💭Server]: new connection => {} ", new_conn.user);
+    // Remove the user from the group if the user is already connected
+    self.remove_user(&new_conn.user);
 
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     self
       .client_stream_by_user
       .write()
       .insert(new_conn.user, stream);
-
     Ok(())
   }
 }
@@ -83,21 +96,7 @@ where
   type Result = Result<(), RealtimeError>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[💭Server]: disconnect => {}", msg.user);
-    self.client_stream_by_user.write().remove(&msg.user);
-
-    // Remove the user from all collab groups that the user is subscribed to
-    let editing_set = self.editing_collab_by_user.write().remove(&msg.user);
-    if let Some(editing_set) = editing_set {
-      if !editing_set.is_empty() {
-        let groups = self.groups.clone();
-        tokio::task::spawn_blocking(move || {
-          for editing in editing_set {
-            remove_user_from_group(&groups, &editing);
-          }
-        });
-      }
-    }
-
+    self.remove_user(&msg.user);
     Ok(())
   }
 }
@@ -136,7 +135,8 @@ async fn forward_message_to_collab_group<U>(
 {
   if let Some(client_stream) = client_streams.read().get(&client_msg.user) {
     tracing::trace!(
-      "[💭Server]: receives: [oid:{}|msg_id:{:?}]",
+      "[💭Server]: receives: user:{} message: [oid:{}|msg_id:{:?}]",
+      client_msg.user,
       client_msg.content.object_id(),
       client_msg.content.msg_id()
     );
@@ -154,7 +154,7 @@ async fn forward_message_to_collab_group<U>(
 
 async fn subscribe_collab_group_change_if_need<U, S>(
   client_msg: &ClientMessage<U>,
-  groups: &Arc<CollabGroupCache<S>>,
+  groups: &Arc<CollabGroupCache<S, U>>,
   edit_collab_by_user: &Arc<RwLock<HashMap<U, HashSet<Editing>>>>,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
 ) -> Result<(), RealtimeError>
@@ -200,7 +200,7 @@ where
   if groups
     .read()
     .get(object_id)
-    .map(|group| group.subscribers.read().get(origin).is_some())
+    .map(|group| group.subscribers.read().get(&client_msg.user).is_some())
     .unwrap_or(false)
   {
     return Ok(());
@@ -213,7 +213,7 @@ where
         collab_group
           .subscribers
           .write()
-          .entry(origin.clone())
+          .entry(client_msg.user.clone())
           .or_insert_with(|| {
             tracing::trace!(
               "[💭Server]: {} subscribe group:{}",
@@ -250,15 +250,16 @@ where
 }
 
 /// Remove the user from the group and remove the group from the cache if the group is empty.
-fn remove_user_from_group<S>(groups: &Arc<CollabGroupCache<S>>, editing: &Editing)
+fn remove_user_from_group<S, U>(user: &U, groups: &Arc<CollabGroupCache<S, U>>, editing: &Editing)
 where
   S: CollabStorage,
+  U: RealtimeUser,
 {
   let mut groups_write_guard = groups.write();
 
   let should_remove_group = groups_write_guard.get_mut(&editing.object_id).map(|group| {
-    tracing::debug!("Remove subscriber: {}", editing.origin);
-    group.subscribers.write().remove(&editing.origin);
+    tracing::info!("Remove subscriber: {}", editing.origin);
+    group.subscribers.write().remove(user);
     let should_remove = group.is_empty();
     if should_remove {
       group.flush_collab();

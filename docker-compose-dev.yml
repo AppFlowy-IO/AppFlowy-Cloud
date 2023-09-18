@@ -6,7 +6,6 @@ services:
       - 80:80
       - 443:443
     depends_on:
-      - appflowy_cloud
       - gotrue
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf

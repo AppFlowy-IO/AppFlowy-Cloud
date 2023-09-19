@@ -481,7 +481,6 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "unicode-segmentation",
- "uuid",
  "validator",
 ]
 
@@ -795,6 +794,7 @@ dependencies = [
  "tokio-tungstenite",
  "tracing",
  "url",
+ "uuid",
 ]
 
 [[package]]

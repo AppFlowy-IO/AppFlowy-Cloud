@@ -10,7 +10,7 @@ use shared_entity::{
   error::AppError,
   error_code::{invalid_email_error, invalid_password_error, ErrorCode},
 };
-use storage_entity::{AFUserProfileView, AFWorkspaces};
+use storage_entity::AFUserProfileView;
 use validator::validate_email;
 
 use crate::domain::validate_password;
@@ -43,8 +43,15 @@ pub async fn sign_up(
   Ok(())
 }
 
-pub async fn info(gotrue_client: &Client, access_token: &str) -> Result<User, AppError> {
-  Ok(gotrue_client.user_info(access_token).await??)
+pub async fn info(
+  pg_pool: &PgPool,
+  gotrue_client: &Client,
+  access_token: &str,
+) -> Result<User, AppError> {
+  let user = gotrue_client.user_info(access_token).await??;
+  let user_uuid = uuid::Uuid::from_str(&user.id)?;
+  storage::workspace::create_user_if_not_exists(pg_pool, &user_uuid, &user.email).await?;
+  Ok(user)
 }
 
 pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OAuthURL, AppError> {
@@ -62,15 +69,7 @@ pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OA
   }
 }
 
-pub async fn user_workspaces(
-  pg_pool: &PgPool,
-  uuid: &uuid::Uuid,
-) -> Result<AFWorkspaces, AppError> {
-  let workspaces = storage::workspace::select_all_workspaces_owned(pg_pool, uuid).await?;
-  Ok(AFWorkspaces(workspaces))
-}
-
-pub async fn user_profile(
+pub async fn get_profile(
   pg_pool: &PgPool,
   uuid: &uuid::Uuid,
 ) -> Result<AFUserProfileView, AppError> {

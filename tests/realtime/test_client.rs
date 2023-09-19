@@ -1,4 +1,4 @@
-use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX};
+use crate::client::utils::REGISTERED_USERS_MUTEX;
 
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -7,15 +7,15 @@ use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 
 use collab::preclude::Collab;
 use collab_define::CollabType;
+use sqlx::types::Uuid;
 use std::sync::Arc;
 
-use crate::client_api_client;
+use crate::user_1_signed_in;
 use assert_json_diff::assert_json_eq;
 use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
-use uuid::Uuid;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -35,14 +35,10 @@ impl TestClient {
     collab_type: CollabType,
   ) -> Self {
     let device_id = device_id.to_string();
-    let mut api_client = client_api_client();
-    let _guard = REGISTERED_USER_MUTEX.lock().await;
+    let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
     // Sign in
-    api_client
-      .sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
-      .await
-      .unwrap();
+    let mut api_client = user_1_signed_in().await;
 
     // Connect to server via websocket
     let ws_client = WSClient::new(WSClientConfig {

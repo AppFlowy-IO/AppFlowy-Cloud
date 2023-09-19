@@ -1,8 +1,6 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::{
-  generate_unique_email, REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX,
-};
+use crate::client::utils::{generate_unique_email, REGISTERED_USERS, REGISTERED_USERS_MUTEX};
 use crate::client_api_client;
 
 #[tokio::test]
@@ -49,10 +47,10 @@ async fn sign_in_unconfirmed_email() {
 
 #[tokio::test]
 async fn sign_in_success() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
   let mut c = client_api_client();
-  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
+  c.sign_in_password(&REGISTERED_USERS[0].email, &REGISTERED_USERS[0].password)
     .await
     .unwrap();
   let token = c.token().unwrap();

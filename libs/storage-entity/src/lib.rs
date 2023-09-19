@@ -164,7 +164,7 @@ impl From<Vec<AFWorkspace>> for AFWorkspaces {
 }
 
 impl AFWorkspaces {
-  pub fn get_latest(&self, profile: AFUserProfileView) -> Option<AFWorkspace> {
+  pub fn get_latest(&self, profile: &AFUserProfileView) -> Option<AFWorkspace> {
     match profile.latest_workspace_id {
       Some(ws_id) => self.0.iter().find(|ws| ws.workspace_id == ws_id).cloned(),
       None => None,

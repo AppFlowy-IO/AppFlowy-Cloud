@@ -61,7 +61,7 @@ async fn sign_in_success() {
   let workspaces = c.workspaces().await.unwrap();
   assert!(!workspaces.0.is_empty());
   let profile = c.profile().await.unwrap();
-  let latest_workspace = workspaces.get_latest(profile);
+  let latest_workspace = workspaces.get_latest(&profile);
   assert!(latest_workspace.is_some());
 }
 

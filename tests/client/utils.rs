@@ -1,5 +1,5 @@
 use dotenv::dotenv;
-use std::time::SystemTime;
+use sqlx::types::Uuid;
 use tokio::sync::Mutex;
 
 use lazy_static::lazy_static;
@@ -26,13 +26,6 @@ pub struct RegisteredUser {
   pub password: String,
 }
 
-pub fn timestamp_nano() -> u128 {
-  SystemTime::now()
-    .duration_since(SystemTime::UNIX_EPOCH)
-    .unwrap()
-    .as_nanos()
-}
-
 pub fn generate_unique_email() -> String {
-  format!("user_{}@appflowy.io", timestamp_nano())
+  format!("user_{}@appflowy.io", Uuid::new_v4())
 }

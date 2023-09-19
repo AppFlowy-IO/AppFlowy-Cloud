@@ -171,3 +171,37 @@ impl AFWorkspaces {
     }
   }
 }
+
+#[derive(Serialize, Deserialize)]
+pub enum AFRole {
+  Owner,
+  Member,
+  Guest,
+}
+
+impl AFRole {
+  pub fn id(&self) -> i32 {
+    match self {
+      AFRole::Owner => 1,
+      AFRole::Member => 2,
+      AFRole::Guest => 3,
+    }
+  }
+}
+
+impl From<i32> for AFRole {
+  fn from(item: i32) -> Self {
+    match item {
+      1 => AFRole::Owner,
+      2 => AFRole::Member,
+      3 => AFRole::Guest,
+      _ => panic!("Invalid value for AFRole"),
+    }
+  }
+}
+
+#[derive(FromRow, Serialize, Deserialize)]
+pub struct AFWorkspaceMember {
+  pub email: String,
+  pub role: AFRole,
+}

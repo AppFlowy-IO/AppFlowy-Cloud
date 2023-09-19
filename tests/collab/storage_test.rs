@@ -4,8 +4,8 @@ use crate::user_1_signed_in;
 
 use collab_define::CollabType;
 use shared_entity::error_code::ErrorCode;
+use sqlx::types::Uuid;
 use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
-use uuid::Uuid;
 
 #[tokio::test]
 async fn success_insert_collab_test() {

@@ -7,6 +7,7 @@ use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 
 use collab::preclude::Collab;
 use collab_define::CollabType;
+use sqlx::types::Uuid;
 use std::sync::Arc;
 
 use crate::user_1_signed_in;
@@ -15,7 +16,6 @@ use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
-use uuid::Uuid;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,

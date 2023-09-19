@@ -3,7 +3,7 @@ use sqlx::{
   PgPool,
 };
 
-use storage_entity::{AFUserProfileView, AFWorkspace};
+use storage_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
 pub async fn create_user_if_not_exists(
   pool: &PgPool,
@@ -86,18 +86,20 @@ pub async fn insert_workspace_members(
   pool: &PgPool,
   workspace_id: &uuid::Uuid,
   member_emails: &[String],
+  role: AFRole,
 ) -> Result<(), sqlx::Error> {
   sqlx::query!(
     r#"
-        INSERT INTO public.af_workspace_member (workspace_id, uid)
-        SELECT $1, af_user.uid
+        INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
+        SELECT $1, af_user.uid, $3
         FROM unnest($2::text[]) AS emails(email)
         JOIN public.af_user ON af_user.email = emails.email
         ON CONFLICT (workspace_id, uid)
         DO NOTHING
         "#,
     workspace_id,
-    member_emails
+    member_emails,
+    role.id()
   )
   .execute(pool)
   .await?;
@@ -124,6 +126,24 @@ pub async fn delete_workspace_members(
   .await?;
 
   Ok(())
+}
+
+pub async fn select_workspace_members(
+  pg_pool: &PgPool,
+  workspace_id: &uuid::Uuid,
+) -> Result<Vec<AFWorkspaceMember>, sqlx::Error> {
+  sqlx::query_as!(
+    AFWorkspaceMember,
+    r#"
+        SELECT af_user.email, af_workspace_member.role_id AS role
+        FROM public.af_workspace_member
+        JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+        WHERE af_workspace_member.workspace_id = $1
+        "#,
+    workspace_id
+  )
+  .fetch_all(pg_pool)
+  .await
 }
 
 pub async fn select_user_profile_view_by_uuid(

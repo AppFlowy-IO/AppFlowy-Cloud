@@ -10,7 +10,7 @@ use shared_entity::{
   error::AppError,
   error_code::{invalid_email_error, invalid_password_error, ErrorCode},
 };
-use storage_entity::{AFUserProfileView, AFWorkspaces};
+use storage_entity::AFUserProfileView;
 use validator::validate_email;
 
 use crate::domain::validate_password;
@@ -67,11 +67,6 @@ pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OA
   } else {
     Err(ErrorCode::InvalidOAuthProvider.into())
   }
-}
-
-pub async fn get_workspaces(pg_pool: &PgPool, uuid: &uuid::Uuid) -> Result<AFWorkspaces, AppError> {
-  let workspaces = storage::workspace::select_all_workspaces_owned(pg_pool, uuid).await?;
-  Ok(AFWorkspaces(workspaces))
 }
 
 pub async fn get_profile(

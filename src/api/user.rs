@@ -85,7 +85,7 @@ async fn workspaces_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let workspaces = biz::user::get_workspaces(&state.pg_pool, &uuid).await?;
+  let workspaces = biz::workspace::get_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 

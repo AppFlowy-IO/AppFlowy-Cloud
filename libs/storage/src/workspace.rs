@@ -59,6 +59,27 @@ pub async fn select_all_workspaces_owned(
   .await
 }
 
+pub async fn insert_workspaces_members(
+  pool: &PgPool,
+  workspace_id: &uuid::Uuid,
+  members: &[i64],
+) -> Result<(), sqlx::Error> {
+  sqlx::query_as!(
+    AFWorkspace,
+    r#"
+        INSERT INTO public.af_workspace_member (workspace_id, uid)
+        SELECT $1, unnest($2::bigint[])
+        ON CONFLICT (workspace_id, uid)
+        DO NOTHING
+        "#,
+    workspace_id,
+    members
+  )
+  .execute(pool)
+  .await?;
+  Ok(())
+}
+
 pub async fn select_user_profile_view_by_uuid(
   pool: &PgPool,
   user_uuid: &Uuid,

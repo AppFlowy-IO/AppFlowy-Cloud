@@ -59,7 +59,30 @@ pub async fn select_all_workspaces_owned(
   .await
 }
 
-pub async fn insert_workspaces_members(
+pub async fn select_user_is_workspace_owner(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_uuid: &Uuid,
+) -> Result<bool, sqlx::Error> {
+  let exists = sqlx::query_scalar!(
+    r#"
+        SELECT EXISTS(
+          SELECT 1 FROM public.af_workspace
+          WHERE workspace_id = $1 AND owner_uid = (
+            SELECT uid FROM public.af_user WHERE uuid = $2
+          )
+        )
+        "#,
+    workspace_uuid,
+    user_uuid
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
+pub async fn insert_workspace_members(
   pool: &PgPool,
   workspace_id: &uuid::Uuid,
   members: &[i64],
@@ -74,6 +97,24 @@ pub async fn insert_workspaces_members(
         "#,
     workspace_id,
     members
+  )
+  .execute(pool)
+  .await?;
+  Ok(())
+}
+
+pub async fn delete_workspace_members(
+  pool: &PgPool,
+  workspace_id: &uuid::Uuid,
+  members: &[i64],
+) -> Result<(), sqlx::Error> {
+  sqlx::query!(
+    r#"
+        DELETE FROM public.af_workspace_member
+        WHERE workspace_id = $1 AND uid = ANY($2::bigint[])
+        "#,
+    workspace_id,
+    &members
   )
   .execute(pool)
   .await?;

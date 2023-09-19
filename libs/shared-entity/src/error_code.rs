@@ -51,6 +51,9 @@ pub enum ErrorCode {
 
   #[error("Not Logged In")]
   NotLoggedIn = 1011,
+
+  #[error("Not Enough Permissions")]
+  NotEnoughPermissions = 1012,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

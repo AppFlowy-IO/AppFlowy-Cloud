@@ -90,19 +90,33 @@ async fn workspaces_handler(
 }
 
 async fn workspaces_members_add_handler(
-  _uuid: UserUuid,
-  _req: Json<WorkspaceMembers>,
-  _state: Data<AppState>,
+  user_uuid: UserUuid,
+  req: Json<WorkspaceMembers>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
-  todo!()
+  biz::workspace::add_workspace_members(
+    &state.pg_pool,
+    &user_uuid,
+    &req.workspace_uuid,
+    &req.member_uids,
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
 }
 
 async fn workspaces_members_remove_handler(
-  _uuid: UserUuid,
-  _req: Json<WorkspaceMembers>,
-  _state: Data<AppState>,
+  user_uuid: UserUuid,
+  req: Json<WorkspaceMembers>,
+  state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
-  todo!()
+  biz::workspace::remove_workspace_members(
+    &state.pg_pool,
+    &user_uuid,
+    &req.workspace_uuid,
+    &req.member_uids,
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
 }
 
 async fn update_handler(

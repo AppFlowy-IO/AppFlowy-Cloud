@@ -4,6 +4,7 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use sqlx::types::uuid;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 

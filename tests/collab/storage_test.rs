@@ -1,21 +1,17 @@
-use crate::client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX};
-use crate::client_api_client;
+use crate::client::utils::REGISTERED_USERS_MUTEX;
 use crate::collab::workspace_id_from_client;
+use crate::user_1_signed_in;
 
 use collab_define::CollabType;
 use shared_entity::error_code::ErrorCode;
+use sqlx::types::Uuid;
 use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
-use uuid::Uuid;
 
 #[tokio::test]
 async fn success_insert_collab_test() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = client_api_client();
-  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
-    .await
-    .unwrap();
-
+  let mut c = user_1_signed_in().await;
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&mut c).await;
   let object_id = Uuid::new_v4().to_string();
@@ -42,12 +38,9 @@ async fn success_insert_collab_test() {
 
 #[tokio::test]
 async fn success_delete_collab_test() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = client_api_client();
-  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
-    .await
-    .unwrap();
+  let mut c = user_1_signed_in().await;
 
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&mut c).await;
@@ -81,13 +74,9 @@ async fn success_delete_collab_test() {
 
 #[tokio::test]
 async fn fail_insert_collab_with_empty_payload_test() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = client_api_client();
-  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
-    .await
-    .unwrap();
-
+  let mut c = user_1_signed_in().await;
   let workspace_id = workspace_id_from_client(&mut c).await;
   let error = c
     .create_collab(InsertCollabParams::new(
@@ -105,12 +94,9 @@ async fn fail_insert_collab_with_empty_payload_test() {
 
 #[tokio::test]
 async fn fail_insert_collab_with_invalid_workspace_id_test() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = client_api_client();
-  c.sign_in_password(&REGISTERED_EMAIL, &REGISTERED_PASSWORD)
-    .await
-    .unwrap();
+  let mut c = user_1_signed_in().await;
 
   let workspace_id = Uuid::new_v4().to_string();
   let raw_data = "hello world".to_string().as_bytes().to_vec();

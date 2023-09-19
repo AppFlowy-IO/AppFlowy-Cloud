@@ -2,19 +2,13 @@ use std::time::SystemTime;
 
 use gotrue_entity::AccessTokenResponse;
 
-use crate::{
-  client::utils::{REGISTERED_EMAIL, REGISTERED_PASSWORD, REGISTERED_USER_MUTEX},
-  client_api_client,
-};
+use crate::{client::utils::REGISTERED_USERS_MUTEX, user_1_signed_in};
 
 #[tokio::test]
 async fn refresh_success() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let email = &REGISTERED_EMAIL;
-  let password = &REGISTERED_PASSWORD;
-  let mut c = client_api_client();
-  c.sign_in_password(email, password).await.unwrap();
+  let mut c = user_1_signed_in().await;
   let old_token = c.token().unwrap().access_token.to_owned();
   std::thread::sleep(std::time::Duration::from_secs(2));
   c.refresh().await.unwrap();
@@ -24,14 +18,9 @@ async fn refresh_success() {
 
 #[tokio::test]
 async fn refresh_trigger() {
-  let _guard = REGISTERED_USER_MUTEX.lock().await;
+  let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let email = &REGISTERED_EMAIL;
-  let password = &REGISTERED_PASSWORD;
-
-  let mut c = client_api_client();
-
-  c.sign_in_password(email, password).await.unwrap();
+  let mut c = user_1_signed_in().await;
   std::thread::sleep(std::time::Duration::from_secs(2));
   let token = c.token().unwrap();
   let old_access_token = token.access_token.to_owned();

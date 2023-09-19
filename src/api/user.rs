@@ -11,7 +11,7 @@ use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
-use storage_entity::{AFUserProfileView, AFWorkspaces};
+use storage_entity::AFUserProfileView;
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
@@ -21,7 +21,6 @@ use actix_web::{web, HttpResponse, Scope};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
-
     // auth server integration
     .service(web::resource("/sign_up").route(web::post().to(sign_up_handler)))
     .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
@@ -30,8 +29,6 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/oauth/{provider}").route(web::get().to(oauth_handler)))
     .service(web::resource("/info/{access_token}").route(web::get().to(info_handler)))
     .service(web::resource("/refresh/{refresh_token}").route(web::get().to(refresh_handler)))
-
-    .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
 
     // native
@@ -55,8 +52,8 @@ async fn info_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<User>> {
   let access_token = path.into_inner();
-  let oauth_url = biz::user::info(&state.gotrue_client, &access_token).await?;
-  Ok(AppResponse::Ok().with_data(oauth_url).into())
+  let user = biz::user::info(&state.pg_pool, &state.gotrue_client, &access_token).await?;
+  Ok(AppResponse::Ok().with_data(user).into())
 }
 
 async fn oauth_handler(
@@ -74,16 +71,8 @@ async fn profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserProfileView>> {
-  let profile = biz::user::user_profile(&state.pg_pool, &uuid).await?;
+  let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
-}
-
-async fn workspaces_handler(
-  uuid: UserUuid,
-  state: Data<AppState>,
-) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let workspaces = biz::user::user_workspaces(&state.pg_pool, &uuid).await?;
-  Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
 async fn update_handler(

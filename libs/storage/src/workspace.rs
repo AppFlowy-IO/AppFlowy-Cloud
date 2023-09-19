@@ -85,39 +85,44 @@ pub async fn select_user_is_workspace_owner(
 pub async fn insert_workspace_members(
   pool: &PgPool,
   workspace_id: &uuid::Uuid,
-  members: &[i64],
+  member_emails: &[String],
 ) -> Result<(), sqlx::Error> {
-  sqlx::query_as!(
-    AFWorkspace,
+  sqlx::query!(
     r#"
         INSERT INTO public.af_workspace_member (workspace_id, uid)
-        SELECT $1, unnest($2::bigint[])
+        SELECT $1, af_user.uid
+        FROM unnest($2::text[]) AS emails(email)
+        JOIN public.af_user ON af_user.email = emails.email
         ON CONFLICT (workspace_id, uid)
         DO NOTHING
         "#,
     workspace_id,
-    members
+    member_emails
   )
   .execute(pool)
   .await?;
+
   Ok(())
 }
 
 pub async fn delete_workspace_members(
   pool: &PgPool,
   workspace_id: &uuid::Uuid,
-  members: &[i64],
+  member_emails: &[String],
 ) -> Result<(), sqlx::Error> {
   sqlx::query!(
     r#"
         DELETE FROM public.af_workspace_member
-        WHERE workspace_id = $1 AND uid = ANY($2::bigint[])
+        WHERE workspace_id = $1 AND uid IN (
+            SELECT uid FROM public.af_user WHERE email = ANY($2::text[])
+        )
         "#,
     workspace_id,
-    &members
+    &member_emails
   )
   .execute(pool)
   .await?;
+
   Ok(())
 }
 

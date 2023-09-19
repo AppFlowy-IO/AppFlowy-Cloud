@@ -147,12 +147,12 @@ impl Client {
   pub async fn add_workspace_members(
     &mut self,
     workspace_uuid: uuid::Uuid,
-    member_uids: Box<[i64]>,
+    member_emails: Vec<String>,
   ) -> Result<(), AppError> {
     let url = format!("{}/api/workspace/member/add", self.base_url);
     let req = WorkspaceMembers {
       workspace_uuid,
-      member_uids,
+      member_emails,
     };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
@@ -167,12 +167,12 @@ impl Client {
   pub async fn remove_workspace_members(
     &mut self,
     workspace_uuid: uuid::Uuid,
-    member_uids: Box<[i64]>,
+    member_uids: Vec<String>,
   ) -> Result<(), AppError> {
     let url = format!("{}/api/workspace/member/remove", self.base_url);
     let req = WorkspaceMembers {
       workspace_uuid,
-      member_uids,
+      member_emails: member_uids,
     };
     let resp = self
       .http_client_with_auth(Method::POST, &url)

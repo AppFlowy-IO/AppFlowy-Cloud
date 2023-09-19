@@ -33,7 +33,7 @@ async fn members_add_handler(
     &state.pg_pool,
     &user_uuid,
     &req.workspace_uuid,
-    &req.member_uids,
+    &req.member_emails,
   )
   .await?;
   Ok(AppResponse::Ok().into())
@@ -48,7 +48,7 @@ async fn members_remove_handler(
     &state.pg_pool,
     &user_uuid,
     &req.workspace_uuid,
-    &req.member_uids,
+    &req.member_emails,
   )
   .await?;
   Ok(AppResponse::Ok().into())

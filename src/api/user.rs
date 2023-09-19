@@ -9,10 +9,9 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::WorkspaceMembers;
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
-use storage_entity::{AFUserProfileView, AFWorkspaces};
+use storage_entity::AFUserProfileView;
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
@@ -22,7 +21,6 @@ use actix_web::{web, HttpResponse, Scope};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
-
     // auth server integration
     .service(web::resource("/sign_up").route(web::post().to(sign_up_handler)))
     .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
@@ -31,10 +29,6 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/oauth/{provider}").route(web::get().to(oauth_handler)))
     .service(web::resource("/info/{access_token}").route(web::get().to(info_handler)))
     .service(web::resource("/refresh/{refresh_token}").route(web::get().to(refresh_handler)))
-
-    .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
-    .service(web::resource("/workspaces/members/add").route(web::post().to(workspaces_members_add_handler)))
-    .service(web::resource("/workspaces/members/remove").route(web::post().to(workspaces_members_remove_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
 
     // native
@@ -79,44 +73,6 @@ async fn profile_handler(
 ) -> Result<JsonAppResponse<AFUserProfileView>> {
   let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
-}
-
-async fn workspaces_handler(
-  uuid: UserUuid,
-  state: Data<AppState>,
-) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let workspaces = biz::workspace::get_workspaces(&state.pg_pool, &uuid).await?;
-  Ok(AppResponse::Ok().with_data(workspaces).into())
-}
-
-async fn workspaces_members_add_handler(
-  user_uuid: UserUuid,
-  req: Json<WorkspaceMembers>,
-  state: Data<AppState>,
-) -> Result<JsonAppResponse<()>> {
-  biz::workspace::add_workspace_members(
-    &state.pg_pool,
-    &user_uuid,
-    &req.workspace_uuid,
-    &req.member_uids,
-  )
-  .await?;
-  Ok(AppResponse::Ok().into())
-}
-
-async fn workspaces_members_remove_handler(
-  user_uuid: UserUuid,
-  req: Json<WorkspaceMembers>,
-  state: Data<AppState>,
-) -> Result<JsonAppResponse<()>> {
-  biz::workspace::remove_workspace_members(
-    &state.pg_pool,
-    &user_uuid,
-    &req.workspace_uuid,
-    &req.member_uids,
-  )
-  .await?;
-  Ok(AppResponse::Ok().into())
 }
 
 async fn update_handler(

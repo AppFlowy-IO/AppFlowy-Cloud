@@ -133,7 +133,7 @@ impl Client {
   }
 
   pub async fn workspaces(&mut self) -> Result<AFWorkspaces, AppError> {
-    let url = format!("{}/api/user/workspaces", self.base_url);
+    let url = format!("{}/api/workspace/list", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -149,7 +149,7 @@ impl Client {
     workspace_uuid: uuid::Uuid,
     member_uids: Box<[i64]>,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/user/workspaces/add", self.base_url);
+    let url = format!("{}/api/workspace/member/add", self.base_url);
     let req = WorkspaceMembers {
       workspace_uuid,
       member_uids,
@@ -169,7 +169,7 @@ impl Client {
     workspace_uuid: uuid::Uuid,
     member_uids: Box<[i64]>,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/user/workspaces/remove", self.base_url);
+    let url = format!("{}/api/workspace/member/remove", self.base_url);
     let req = WorkspaceMembers {
       workspace_uuid,
       member_uids,

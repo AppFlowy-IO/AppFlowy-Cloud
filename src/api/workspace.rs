@@ -15,7 +15,7 @@ pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
     .service(web::resource("/list").route(web::get().to(list_handler)))
     .service(
-      web::resource("/{workspace_id}/member/list").route(web::post().to(members_list_handler)),
+      web::resource("/{workspace_id}/member/list").route(web::get().to(members_list_handler)),
     )
     .service(web::resource("/member/add").route(web::post().to(members_add_handler)))
     .service(web::resource("/member/remove").route(web::post().to(members_remove_handler)))

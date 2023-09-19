@@ -151,7 +151,7 @@ impl Client {
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {
     let url = format!(
       "{}/api/workspace/{}/member/list",
-      workspace_uuid, self.base_url
+      self.base_url, workspace_uuid
     );
     let resp = self
       .http_client_with_auth(Method::GET, &url)

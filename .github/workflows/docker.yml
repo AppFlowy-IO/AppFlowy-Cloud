@@ -8,9 +8,9 @@ on:
     branches: [ main ]
 
 env:
-  GOTRUE_REGISTERED_EMAIL_1: some_user_1@some_company.com
+  GOTRUE_REGISTERED_EMAIL_1: user1@example.com
   GOTRUE_REGISTERED_PASSWORD_1: Some_Password123!
-  GOTRUE_REGISTERED_EMAIL_2: some_user_2@some_company.com
+  GOTRUE_REGISTERED_EMAIL_2: user2@example.com
   GOTRUE_REGISTERED_PASSWORD_2: Some_Password456!
   SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"

@@ -1,10 +1,10 @@
-use std::time::SystemTime;
-
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::OAuthURL;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
+use shared_entity::dto::WorkspaceMembers;
+use std::time::SystemTime;
 
 use gotrue_entity::{AccessTokenResponse, User};
 
@@ -142,6 +142,46 @@ impl Client {
     AppResponse::<AFWorkspaces>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn add_workspace_members(
+    &mut self,
+    workspace_id: uuid::Uuid,
+    user_ids: Box<[i64]>,
+  ) -> Result<(), AppError> {
+    let url = format!("{}/api/user/workspaces/add", self.base_url);
+    let req = WorkspaceMembers {
+      workspace_uuid: workspace_id,
+      user_uids: user_ids,
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  pub async fn remove_workspace_members(
+    &mut self,
+    workspace_id: uuid::Uuid,
+    user_ids: Box<[i64]>,
+  ) -> Result<(), AppError> {
+    let url = format!("{}/api/user/workspaces/remove", self.base_url);
+    let req = WorkspaceMembers {
+      workspace_uuid: workspace_id,
+      user_uids: user_ids,
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
   }
 
   pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {

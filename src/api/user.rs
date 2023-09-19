@@ -9,6 +9,7 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
+use shared_entity::dto::WorkspaceMembers;
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
 use storage_entity::{AFUserProfileView, AFWorkspaces};
@@ -32,6 +33,8 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/refresh/{refresh_token}").route(web::get().to(refresh_handler)))
 
     .service(web::resource("/workspaces").route(web::get().to(workspaces_handler)))
+    .service(web::resource("/workspaces/members/add").route(web::post().to(workspaces_members_add_handler)))
+    .service(web::resource("/workspaces/members/remove").route(web::post().to(workspaces_members_remove_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
 
     // native
@@ -84,6 +87,22 @@ async fn workspaces_handler(
 ) -> Result<JsonAppResponse<AFWorkspaces>> {
   let workspaces = biz::user::get_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
+}
+
+async fn workspaces_members_add_handler(
+  _uuid: UserUuid,
+  _req: Json<WorkspaceMembers>,
+  _state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  todo!()
+}
+
+async fn workspaces_members_remove_handler(
+  _uuid: UserUuid,
+  _req: Json<WorkspaceMembers>,
+  _state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  todo!()
 }
 
 async fn update_handler(

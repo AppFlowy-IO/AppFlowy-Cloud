@@ -5,11 +5,13 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
+use crate::ws::ping::ServerFixIntervalPing;
 use crate::ws::retry::ConnectAction;
+use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
-use tokio_retry::strategy::FixedInterval;
+use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
@@ -29,7 +31,7 @@ impl Default for WSClientConfig {
     Self {
       buffer_capacity: 1000,
       ping_per_secs: 8,
-      retry_connect_per_pings: 10,
+      retry_connect_per_pings: 20,
     }
   }
 }
@@ -39,7 +41,7 @@ type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel>>;
 pub struct WSClient {
   addr: Arc<parking_lot::Mutex<Option<String>>>,
   config: WSClientConfig,
-  state: Arc<Mutex<ConnectStateNotify>>,
+  state_notify: Arc<Mutex<ConnectStateNotify>>,
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
@@ -54,7 +56,7 @@ impl WSClient {
     WSClient {
       addr: Arc::new(parking_lot::Mutex::new(None)),
       config,
-      state,
+      state_notify: state,
       sender,
       channels,
       ping,
@@ -63,9 +65,12 @@ impl WSClient {
 
   pub async fn connect(&self, addr: String) -> Result<Option<SocketAddr>, WSError> {
     *self.addr.lock() = Some(addr.clone());
-
+    if let Some(old_ping) = self.ping.lock().await.as_ref() {
+      old_ping.stop().await;
+    }
     self.set_state(ConnectState::Connecting).await;
-    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(3);
+
+    let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(5 * 60));
     let action = ConnectAction::new(addr.clone());
     let cond = RetryCondition {
       connecting_addr: addr,
@@ -84,7 +89,7 @@ impl WSClient {
 
     let mut ping = ServerFixIntervalPing::new(
       Duration::from_secs(self.config.ping_per_secs),
-      self.state.clone(),
+      self.state_notify.clone(),
       sender.clone(),
       self.config.retry_connect_per_pings,
     );
@@ -160,11 +165,11 @@ impl WSClient {
   }
 
   pub async fn subscribe_connect_state(&self) -> Receiver<ConnectState> {
-    self.state.lock().await.subscribe()
+    self.state_notify.lock().await.subscribe()
   }
 
   pub async fn is_connected(&self) -> bool {
-    self.state.lock().await.state.is_connected()
+    self.state_notify.lock().await.state.is_connected()
   }
 
   pub async fn disconnect(&self) {
@@ -174,137 +179,7 @@ impl WSClient {
   }
 
   async fn set_state(&self, state: ConnectState) {
-    self.state.lock().await.set_state(state);
-  }
-}
-
-struct ServerFixIntervalPing {
-  duration: Duration,
-  sender: Option<Sender<Message>>,
-  #[allow(dead_code)]
-  stop_tx: tokio::sync::mpsc::Sender<()>,
-  stop_rx: Option<tokio::sync::mpsc::Receiver<()>>,
-  state: Arc<Mutex<ConnectStateNotify>>,
-  ping_count: Arc<Mutex<u32>>,
-  retry_connect_per_pings: u32,
-}
-
-impl ServerFixIntervalPing {
-  fn new(
-    duration: Duration,
-    state: Arc<Mutex<ConnectStateNotify>>,
-    sender: Sender<Message>,
-    retry_connect_per_pings: u32,
-  ) -> Self {
-    let (tx, rx) = tokio::sync::mpsc::channel(1000);
-    Self {
-      duration,
-      stop_tx: tx,
-      stop_rx: Some(rx),
-      state,
-      sender: Some(sender),
-      ping_count: Arc::new(Mutex::new(0)),
-      retry_connect_per_pings,
-    }
-  }
-
-  fn run(&mut self) {
-    let mut stop_rx = self.stop_rx.take().expect("Only take once");
-    let mut interval = tokio::time::interval(self.duration);
-    let sender = self.sender.take().expect("Only take once");
-    let mut receiver = sender.subscribe();
-    let weak_ping_count = Arc::downgrade(&self.ping_count);
-    let weak_state = Arc::downgrade(&self.state);
-    let reconnect_per_ping = self.retry_connect_per_pings;
-    tokio::spawn(async move {
-      loop {
-        tokio::select! {
-          _ = interval.tick() => {
-            // Send the ping
-            tracing::trace!("🙂ping");
-            let _ = sender.send(Message::Ping(vec![]));
-            if let Some(ping_count) = weak_ping_count.upgrade() {
-              let mut lock = ping_count.lock().await;
-              // After ten ping were sent, mark the connection as disconnected
-              if *lock >= reconnect_per_ping {
-                if let Some(state) =weak_state.upgrade() {
-                  state.lock().await.set_state(ConnectState::Disconnected);
-                }
-              } else {
-                *lock +=1;
-              }
-            }
-          },
-          msg = receiver.recv() => {
-            if let Ok(Message::Pong(_)) = msg {
-              tracing::trace!("🟢Receive pong from server");
-              if let Some(ping_count) = weak_ping_count.upgrade() {
-                let mut lock = ping_count.lock().await;
-                *lock = 0;
-
-                if let Some(state) =weak_state.upgrade() {
-                  state.lock().await.set_state(ConnectState::Connected);
-                }
-              }
-            }
-          },
-          _ = stop_rx.recv() => {
-            break;
-          }
-        }
-      }
-    });
-  }
-}
-
-pub struct ConnectStateNotify {
-  state: ConnectState,
-  sender: Sender<ConnectState>,
-}
-
-impl ConnectStateNotify {
-  fn new() -> Self {
-    let (sender, _) = channel(100);
-    Self {
-      state: ConnectState::Disconnected,
-      sender,
-    }
-  }
-
-  fn set_state(&mut self, state: ConnectState) {
-    if self.state != state {
-      tracing::trace!("[🙂Client]: connect state changed to {:?}", state);
-      self.state = state.clone();
-      let _ = self.sender.send(state);
-    }
-  }
-
-  fn subscribe(&self) -> Receiver<ConnectState> {
-    self.sender.subscribe()
-  }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum ConnectState {
-  Connecting,
-  Connected,
-  Disconnected,
-}
-
-impl ConnectState {
-  #[allow(dead_code)]
-  fn is_connecting(&self) -> bool {
-    matches!(self, ConnectState::Connecting)
-  }
-
-  #[allow(dead_code)]
-  fn is_connected(&self) -> bool {
-    matches!(self, ConnectState::Connected)
-  }
-
-  #[allow(dead_code)]
-  fn is_disconnected(&self) -> bool {
-    matches!(self, ConnectState::Disconnected)
+    self.state_notify.lock().await.set_state(state);
   }
 }
 

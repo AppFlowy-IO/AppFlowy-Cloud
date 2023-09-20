@@ -49,7 +49,7 @@ pub struct ClientMessage<U> {
 pub struct RealtimeMessage {
   pub business_id: BusinessID,
   pub object_id: String,
-  pub payload: Vec<u8>,
+  pub payload: Bytes,
 }
 
 impl RealtimeMessage {
@@ -70,7 +70,7 @@ impl From<CollabMessage> for RealtimeMessage {
     Self {
       business_id: BusinessID::CollabId,
       object_id: msg.object_id().to_string(),
-      payload: msg.to_vec(),
+      payload: Bytes::from(msg.to_vec()),
     }
   }
 }
@@ -83,7 +83,7 @@ where
     Self {
       business_id: client_msg.business_id,
       object_id: client_msg.content.object_id().to_string(),
-      payload: client_msg.content.to_vec(),
+      payload: Bytes::from(client_msg.content.to_vec()),
     }
   }
 }

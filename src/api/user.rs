@@ -9,7 +9,7 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::SignInParams;
+use shared_entity::dto::{SignInParams, UserUpdateParams};
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
 use storage_entity::AFUserProfileView;
@@ -78,12 +78,19 @@ async fn profile_handler(
 
 async fn update_handler(
   auth: Authorization,
-  req: Json<LoginRequest>,
+  req: Json<UserUpdateParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<User>> {
   let req = req.into_inner();
-  let user =
-    biz::user::update(&state.gotrue_client, &auth.token, &req.email, &req.password).await?;
+  let user = biz::user::update(
+    &state.pg_pool,
+    &state.gotrue_client,
+    &auth.token,
+    &req.email,
+    &req.password,
+    req.name.as_deref(),
+  )
+  .await?;
   Ok(AppResponse::Ok().with_data(user).into())
 }
 

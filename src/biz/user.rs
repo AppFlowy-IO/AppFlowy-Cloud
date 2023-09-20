@@ -96,13 +96,19 @@ pub async fn sign_in(
 }
 
 pub async fn update(
+  pg_pool: &PgPool,
   gotrue_client: &Client,
   token: &str,
   email: &str,
   password: &str,
+  name: Option<&str>,
 ) -> Result<User, AppError> {
   validate_email_password(email, password)?;
   let user = gotrue_client.update_user(token, email, password).await??;
+  let user_uuid = user.id.parse::<uuid::Uuid>()?;
+  if let Some(name) = name {
+    storage::workspace::update_user_name(pg_pool, &user_uuid, name).await?;
+  }
   Ok(user)
 }
 

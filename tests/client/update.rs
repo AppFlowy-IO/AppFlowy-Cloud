@@ -8,7 +8,7 @@ async fn update_but_not_logged_in() {
   let mut c = client_api_client();
   let new_email = generate_unique_email();
   let new_password = "Hello123!";
-  let res = c.update(&new_email, new_password).await;
+  let res = c.update(&new_email, new_password, None).await;
   assert!(res.is_err());
 }
 
@@ -21,7 +21,11 @@ async fn update_password_same_password() {
   c.sign_in_password(&user.email, &user.password)
     .await
     .unwrap();
-  let err = c.update(&user.email, &user.password).await.err().unwrap();
+  let err = c
+    .update(&user.email, &user.password, None)
+    .await
+    .err()
+    .unwrap();
   assert_eq!(err.code, ErrorCode::InvalidPassword);
   assert_eq!(
     err.message,
@@ -41,12 +45,12 @@ async fn update_password_and_revert() {
     c.sign_in_password(&user.email, &user.password)
       .await
       .unwrap();
-    c.update(&user.email, new_password).await.unwrap();
+    c.update(&user.email, new_password, None).await.unwrap();
   }
   {
     // revert password to old_password
     let mut c = client_api_client();
     c.sign_in_password(&user.email, new_password).await.unwrap();
-    c.update(&user.email, &user.password).await.unwrap();
+    c.update(&user.email, &user.password, None).await.unwrap();
   }
 }

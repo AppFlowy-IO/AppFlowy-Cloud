@@ -4,6 +4,7 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
 use shared_entity::dto::SignInParams;
+use shared_entity::dto::UserUpdateParams;
 use shared_entity::dto::WorkspaceMembersParams;
 use std::time::SystemTime;
 use storage_entity::AFWorkspaceMember;
@@ -255,16 +256,22 @@ impl Client {
     Ok(())
   }
 
-  pub async fn update(&mut self, email: &str, password: &str) -> Result<(), AppError> {
+  pub async fn update(
+    &mut self,
+    email: &str,
+    password: &str,
+    name: Option<&str>,
+  ) -> Result<(), AppError> {
     let url = format!("{}/api/user/update", self.base_url);
-    let payload = serde_json::json!({
-        "email": email,
-        "password": password,
-    });
+    let params = UserUpdateParams {
+      email: email.to_owned(),
+      password: password.to_owned(),
+      name: name.map(String::from),
+    };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&payload)
+      .json(&params)
       .send()
       .await?;
     let new_user = AppResponse::<User>::from_response(resp)

@@ -21,7 +21,7 @@ parking_lot = "0.12.1"
 tracing = { version = "0.1" }
 thiserror = "1.0.39"
 serde = { version = "1.0", features = ["derive"] }
-tokio-tungstenite = { version = "0.18" }
+tokio-tungstenite = { version = "0.20" }
 tokio = { version = "1.26", features = ["full"] }
 futures-util = "0.3.26"
 tokio-retry = "0.3"

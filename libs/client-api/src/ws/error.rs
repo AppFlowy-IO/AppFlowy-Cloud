@@ -1,5 +1,4 @@
 use crate::ws::ClientRealtimeMessage;
-use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WSError {
@@ -14,9 +13,6 @@ pub enum WSError {
 
   #[error(transparent)]
   SenderError(#[from] tokio::sync::broadcast::error::SendError<ClientRealtimeMessage>),
-
-  #[error(transparent)]
-  BroadcastStreamRecvError(#[from] BroadcastStreamRecvError),
 
   #[error("Internal failure: {0}")]
   Internal(#[from] Box<dyn std::error::Error + Send + Sync>),

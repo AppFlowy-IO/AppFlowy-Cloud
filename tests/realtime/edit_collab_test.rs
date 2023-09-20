@@ -85,14 +85,14 @@ async fn same_user_with_same_device_id_test() {
   let device_id = Uuid::new_v4().to_string();
   let client_1_1 =
     TestClient::new_with_device_id(&object_id, &device_id, collab_type.clone()).await;
+  client_1_1.collab.lock().insert("1", "a");
+  client_1_1.collab.lock().insert("3", "c");
+  tokio::time::sleep(Duration::from_millis(500)).await;
+
   let mut client_1_2 =
     TestClient::new_with_device_id(&object_id, &device_id, collab_type.clone()).await;
-
-  client_1_1.collab.lock().insert("1", "a");
   client_1_2.collab.lock().insert("2", "b");
-  client_1_1.collab.lock().insert("3", "c");
-
-  tokio::time::sleep(Duration::from_millis(200)).await;
+  tokio::time::sleep(Duration::from_millis(500)).await;
 
   let json_1 = client_1_1.collab.lock().to_json_value();
   let json_2 = client_1_2.collab.lock().to_json_value();
@@ -106,6 +106,8 @@ async fn same_user_with_same_device_id_test() {
   assert_json_eq!(
     json_2,
     json!({
+      "1": "a",
+      "3": "c",
       "2": "b"
     })
   );
@@ -115,7 +117,9 @@ async fn same_user_with_same_device_id_test() {
     &collab_type,
     5,
     json!({
-      "2": "b"
+      "1": "a",
+      "2": "b",
+      "3": "c"
     }),
   )
   .await;

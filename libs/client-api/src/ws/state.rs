@@ -46,6 +46,11 @@ impl ConnectState {
   }
 
   #[allow(dead_code)]
+  pub(crate) fn is_timeout(&self) -> bool {
+    matches!(self, ConnectState::PingTimeout)
+  }
+
+  #[allow(dead_code)]
   pub(crate) fn is_disconnected(&self) -> bool {
     matches!(self, ConnectState::Disconnected)
   }

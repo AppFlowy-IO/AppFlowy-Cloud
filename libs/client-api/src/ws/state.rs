@@ -37,21 +37,21 @@ pub enum ConnectState {
 
 impl ConnectState {
   #[allow(dead_code)]
-  pub(crate) fn is_connecting(&self) -> bool {
+  pub fn is_connecting(&self) -> bool {
     matches!(self, ConnectState::Connecting)
   }
 
-  pub(crate) fn is_connected(&self) -> bool {
+  pub fn is_connected(&self) -> bool {
     matches!(self, ConnectState::Connected)
   }
 
   #[allow(dead_code)]
-  pub(crate) fn is_timeout(&self) -> bool {
+  pub fn is_timeout(&self) -> bool {
     matches!(self, ConnectState::PingTimeout)
   }
 
   #[allow(dead_code)]
-  pub(crate) fn is_disconnected(&self) -> bool {
+  pub fn is_disconnected(&self) -> bool {
     matches!(self, ConnectState::Disconnected)
   }
 }

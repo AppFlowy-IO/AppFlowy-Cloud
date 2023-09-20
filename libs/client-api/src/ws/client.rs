@@ -11,7 +11,7 @@ use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
-use tokio_retry::strategy::{FibonacciBackoff, FixedInterval};
+use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;

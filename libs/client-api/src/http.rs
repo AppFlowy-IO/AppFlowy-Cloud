@@ -3,6 +3,7 @@ use gotrue_entity::OAuthURL;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
+use shared_entity::dto::SignInParams;
 use shared_entity::dto::WorkspaceMembersParams;
 use std::time::SystemTime;
 use storage_entity::AFWorkspaceMember;
@@ -205,11 +206,11 @@ impl Client {
 
   pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_in/password", self.base_url);
-    let payload = serde_json::json!({
-        "email": email,
-        "password": password,
-    });
-    let resp = self.http_client.post(&url).json(&payload).send().await?;
+    let params = SignInParams {
+      email: email.to_owned(),
+      password: password.to_owned(),
+    };
+    let resp = self.http_client.post(&url).json(&params).send().await?;
     self
       .token
       .set(AppResponse::from_response(resp).await?.into_data()?);
@@ -233,11 +234,11 @@ impl Client {
 
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/sign_up", self.base_url);
-    let payload = serde_json::json!({
-        "email": email,
-        "password": password,
-    });
-    let resp = self.http_client.post(&url).json(&payload).send().await?;
+    let params = SignInParams {
+      email: email.to_owned(),
+      password: password.to_owned(),
+    };
+    let resp = self.http_client.post(&url).json(&params).send().await?;
     AppResponse::<()>::from_response(resp).await?.into_error()?;
     Ok(())
   }

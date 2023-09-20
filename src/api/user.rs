@@ -9,6 +9,7 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
+use shared_entity::dto::SignInParams;
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
 use storage_entity::AFUserProfileView;
@@ -100,7 +101,7 @@ async fn sign_out_handler(
 }
 
 async fn sign_in_password_handler(
-  req: Json<LoginRequest>,
+  req: Json<SignInParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AccessTokenResponse>> {
   let req = req.into_inner();
@@ -116,14 +117,15 @@ async fn sign_in_password_handler(
 }
 
 async fn sign_up_handler(
-  req: Json<LoginRequest>,
+  req: Json<SignInParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
+  let req = req.into_inner();
   biz::user::sign_up(
-    &state.gotrue_client,
-    &req.email,
-    &req.password,
     &state.pg_pool,
+    &state.gotrue_client,
+    req.email,
+    req.password,
   )
   .await?;
 

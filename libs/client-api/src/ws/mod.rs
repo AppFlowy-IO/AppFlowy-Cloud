@@ -4,9 +4,10 @@ mod handler;
 mod msg;
 pub(crate) mod ping;
 mod retry;
-pub(crate) mod state;
+mod state;
 
 pub use client::*;
 pub use error::*;
 pub use handler::*;
 pub use msg::*;
+pub use state::*;

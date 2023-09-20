@@ -2918,6 +2918,7 @@ dependencies = [
  "sqlx",
  "thiserror",
  "url",
+ "uuid",
  "validator",
 ]
 

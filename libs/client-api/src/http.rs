@@ -1,10 +1,11 @@
-use std::time::SystemTime;
-
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::OAuthURL;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
+use shared_entity::dto::WorkspaceMembersParams;
+use std::time::SystemTime;
+use storage_entity::AFWorkspaceMember;
 
 use gotrue_entity::{AccessTokenResponse, User};
 
@@ -133,7 +134,7 @@ impl Client {
   }
 
   pub async fn workspaces(&mut self) -> Result<AFWorkspaces, AppError> {
-    let url = format!("{}/api/user/workspaces", self.base_url);
+    let url = format!("{}/api/workspace/list", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -142,6 +143,64 @@ impl Client {
     AppResponse::<AFWorkspaces>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn get_workspace_members(
+    &mut self,
+    workspace_uuid: uuid::Uuid,
+  ) -> Result<Vec<AFWorkspaceMember>, AppError> {
+    let url = format!(
+      "{}/api/workspace/{}/member/list",
+      self.base_url, workspace_uuid
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn add_workspace_members(
+    &mut self,
+    workspace_uuid: uuid::Uuid,
+    member_emails: Vec<String>,
+  ) -> Result<(), AppError> {
+    let url = format!("{}/api/workspace/member/add", self.base_url);
+    let req = WorkspaceMembersParams {
+      workspace_uuid,
+      member_emails,
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  pub async fn remove_workspace_members(
+    &mut self,
+    workspace_uuid: uuid::Uuid,
+    member_uids: Vec<String>,
+  ) -> Result<(), AppError> {
+    let url = format!("{}/api/workspace/member/remove", self.base_url);
+    let req = WorkspaceMembersParams {
+      workspace_uuid,
+      member_emails: member_uids,
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
   }
 
   pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {

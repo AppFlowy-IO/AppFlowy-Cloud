@@ -55,7 +55,6 @@ tracing-bunyan-formatter = "0.3.6"
 tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
-uuid = { version= "1.4.1", features = ["serde", "v4"] }
 async-trait = "0.1.73"
 
 # collab

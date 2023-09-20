@@ -26,4 +26,6 @@ tokio = { version = "1.26", features = ["full"] }
 futures-util = "0.3.26"
 tokio-retry = "0.3"
 bytes = "1.0"
+uuid = "1.4.1"
+
 collab-sync-protocol = { version = "0.1.0" }

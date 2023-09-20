@@ -2,6 +2,7 @@ use crate::client_api_client;
 use serde_json::json;
 
 use collab_define::CollabType;
+use sqlx::types::{uuid, Uuid};
 
 use crate::realtime::test_client::{assert_collab_json, TestClient};
 
@@ -10,7 +11,6 @@ use shared_entity::error_code::ErrorCode;
 use std::time::Duration;
 use storage::collab::FLUSH_PER_UPDATE;
 use storage_entity::QueryCollabParams;
-use uuid::Uuid;
 
 #[tokio::test]
 async fn realtime_write_collab_test() {

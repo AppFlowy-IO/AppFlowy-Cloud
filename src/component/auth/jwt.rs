@@ -4,9 +4,10 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
-use sqlx::types::uuid;
+use sqlx::types::{uuid, Uuid};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+use std::str::FromStr;
 
 use crate::state::AppState;
 
@@ -19,21 +20,7 @@ pub struct UserUuid(uuid::Uuid);
 
 impl UserUuid {
   pub fn from_auth(auth: Authorization) -> Result<Self, actix_web::Error> {
-    let uuid = auth
-      .claims
-      .sub
-      .ok_or(actix_web::error::ErrorUnauthorized(
-        "Invalid Authorization header, missing sub(uuid)",
-      ))
-      .map(|sub| {
-        uuid::Uuid::parse_str(&sub).map_err(|e| {
-          actix_web::error::ErrorUnauthorized(format!(
-            "Invalid Authorization header, invalid sub(uuid): {}",
-            e
-          ))
-        })
-      })?;
-    Ok(Self(uuid?))
+    Ok(Self(auth.uuid()?))
   }
 }
 
@@ -83,8 +70,21 @@ pub struct Authorization {
 }
 
 impl Authorization {
-  pub fn uuid(&self) -> Option<String> {
-    self.claims.sub.clone()
+  pub fn uuid(&self) -> Result<uuid::Uuid, actix_web::Error> {
+    self
+      .claims
+      .sub
+      .as_deref()
+      .map(Uuid::from_str)
+      .ok_or(actix_web::error::ErrorUnauthorized(
+        "Invalid Authorization header, missing sub(uuid)",
+      ))?
+      .map_err(|e| {
+        actix_web::error::ErrorUnauthorized(format!(
+          "Invalid Authorization header, invalid sub(uuid): {}",
+          e
+        ))
+      })
   }
 }
 

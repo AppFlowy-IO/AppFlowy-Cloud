@@ -28,17 +28,17 @@ pub async fn refresh(
 
 #[instrument(level = "info", skip_all, err)]
 pub async fn sign_up(
-  gotrue_client: &Client,
-  email: &str,
-  password: &str,
   pg_pool: &PgPool,
+  gotrue_client: &Client,
+  email: String,
+  password: String,
 ) -> Result<(), AppError> {
-  validate_email_password(email, password)?;
-  let user = gotrue_client.sign_up(email, password).await??;
+  validate_email_password(&email, &password)?;
+  let user = gotrue_client.sign_up(&email, &password).await??;
   tracing::info!("user sign up: {:?}", user);
   if user.confirmed_at.is_some() {
     let gotrue_uuid = uuid::Uuid::from_str(&user.id)?;
-    storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &user.email).await?;
+    storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &user.email, "").await?;
   }
   Ok(())
 }
@@ -50,7 +50,8 @@ pub async fn info(
 ) -> Result<User, AppError> {
   let user = gotrue_client.user_info(access_token).await??;
   let user_uuid = uuid::Uuid::from_str(&user.id)?;
-  storage::workspace::create_user_if_not_exists(pg_pool, &user_uuid, &user.email).await?;
+  let name: String = name_from_user_metadata(&user.user_metadata);
+  storage::workspace::create_user_if_not_exists(pg_pool, &user_uuid, &user.email, &name).await?;
   Ok(user)
 }
 
@@ -88,20 +89,26 @@ pub async fn sign_in(
 ) -> Result<AccessTokenResponse, AppError> {
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
-
   let gotrue_uuid = uuid::Uuid::from_str(&token.user.id)?;
-  storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &token.user.email).await?;
+  storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &token.user.email, "")
+    .await?;
   Ok(token)
 }
 
 pub async fn update(
+  pg_pool: &PgPool,
   gotrue_client: &Client,
   token: &str,
   email: &str,
   password: &str,
+  name: Option<&str>,
 ) -> Result<User, AppError> {
   validate_email_password(email, password)?;
   let user = gotrue_client.update_user(token, email, password).await??;
+  let user_uuid = user.id.parse::<uuid::Uuid>()?;
+  if let Some(name) = name {
+    storage::workspace::update_user_name(pg_pool, &user_uuid, name).await?;
+  }
   Ok(user)
 }
 
@@ -113,4 +120,15 @@ fn validate_email_password(email: &str, password: &str) -> Result<(), AppError> 
   } else {
     Ok(())
   }
+}
+
+// Best effort to get user's name after oauth
+fn name_from_user_metadata(value: &serde_json::Value) -> String {
+  value
+    .get("name")
+    .or(value.get("full_name"))
+    .or(value.get("nickname"))
+    .and_then(serde_json::Value::as_str)
+    .map(str::to_string)
+    .unwrap_or(String::new())
 }

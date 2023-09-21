@@ -18,8 +18,10 @@ async fn sign_up_success() {
 async fn sign_up_invalid_email() {
   let invalid_email = "not_email_address";
   let password = "Hello!123#";
-  let c = client_api_client();
-  let error = c.sign_up(invalid_email, password).await.unwrap_err();
+  let error = client_api_client()
+    .sign_up(invalid_email, password)
+    .await
+    .unwrap_err();
   assert_eq!(error.code, ErrorCode::InvalidEmail);
   assert_eq!(error.message, "invalid email: not_email_address");
 }

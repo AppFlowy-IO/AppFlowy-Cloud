@@ -4,6 +4,8 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
 use shared_entity::dto::SignInParams;
+use shared_entity::dto::SignInPasswordResponse;
+use shared_entity::dto::SignInTokenResponse;
 use shared_entity::dto::UserUpdateParams;
 use shared_entity::dto::WorkspaceMembersParams;
 use std::time::SystemTime;
@@ -41,7 +43,7 @@ impl Client {
   }
 
   // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
-  pub async fn sign_in_url(&mut self, url: &str) -> Result<(), AppError> {
+  pub async fn sign_in_url(&mut self, url: &str) -> Result<bool, AppError> {
     let mut access_token: Option<String> = None;
     let mut token_type: Option<String> = None;
     let mut expires_in: Option<i64> = None;
@@ -84,7 +86,7 @@ impl Client {
       })?;
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    let user = self.user_info(&access_token).await?;
+    let (user, new) = self.sign_in_token(&access_token).await?;
 
     self.token.set(AccessTokenResponse {
       access_token,
@@ -97,16 +99,14 @@ impl Client {
       provider_refresh_token,
     });
 
-    Ok(())
+    Ok(new)
   }
 
-  pub async fn user_info(&self, access_token: &str) -> Result<User, AppError> {
-    let url = format!("{}/api/user/info/{}", self.base_url, access_token);
+  pub async fn sign_in_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
+    let url = format!("{}/api/user/sign_in/token/{}", self.base_url, access_token);
     let resp = self.http_client.get(&url).send().await?;
-    let user = AppResponse::<User>::from_response(resp)
-      .await?
-      .into_data()?;
-    Ok(user)
+    let sign_in_resp: SignInTokenResponse = AppResponse::from_response(resp).await?.into_data()?;
+    Ok((sign_in_resp.user, sign_in_resp.is_new))
   }
 
   pub fn token(&self) -> Option<&AccessTokenResponse> {
@@ -205,17 +205,17 @@ impl Client {
     Ok(())
   }
 
-  pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<(), AppError> {
+  pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<bool, AppError> {
     let url = format!("{}/api/user/sign_in/password", self.base_url);
     let params = SignInParams {
       email: email.to_owned(),
       password: password.to_owned(),
     };
     let resp = self.http_client.post(&url).json(&params).send().await?;
-    self
-      .token
-      .set(AppResponse::from_response(resp).await?.into_data()?);
-    Ok(())
+    let sign_in_resp: SignInPasswordResponse =
+      AppResponse::from_response(resp).await?.into_data()?;
+    self.token.set(sign_in_resp.access_token_resp);
+    Ok(sign_in_resp.is_new)
   }
 
   pub async fn refresh(&mut self) -> Result<(), AppError> {

@@ -46,10 +46,8 @@ pkill -f appflowy_cloud || true
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
 RUST_LOG=trace cargo run &
 
-
 # sometimes the gotrue server may not be ready yet
 sleep 1
-source .env
 
 # created registered user
 ./build/init_registered_user.sh

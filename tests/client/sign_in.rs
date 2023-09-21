@@ -45,20 +45,39 @@ async fn sign_in_unconfirmed_email() {
 
 #[tokio::test]
 async fn sign_in_success() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
+  {
+    // First Time
+    let mut c = client_api_client();
+    let registered_user = &REGISTERED_USERS[2];
+    let is_new = c
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
+    assert!(is_new);
+    let token = c.token().unwrap();
+    assert!(token.user.confirmed_at.is_some());
 
-  let mut c = client_api_client();
-  c.sign_in_password(&REGISTERED_USERS[0].email, &REGISTERED_USERS[0].password)
-    .await
-    .unwrap();
-  let token = c.token().unwrap();
-  assert!(token.user.confirmed_at.is_some());
+    let workspaces = c.workspaces().await.unwrap();
+    assert_eq!(workspaces.0.len(), 1);
+    let profile = c.profile().await.unwrap();
+    let latest_workspace = workspaces.get_latest(&profile);
+    assert!(latest_workspace.is_some());
+  }
 
-  let workspaces = c.workspaces().await.unwrap();
-  assert!(!workspaces.0.is_empty());
-  let profile = c.profile().await.unwrap();
-  let latest_workspace = workspaces.get_latest(&profile);
-  assert!(latest_workspace.is_some());
+  {
+    // Subsequent Times
+    let mut c = client_api_client();
+    let registered_user = &REGISTERED_USERS[2];
+    let is_new = c
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
+    assert!(!is_new);
+
+    // workspaces should be the same
+    let workspaces = c.workspaces().await.unwrap();
+    assert_eq!(workspaces.0.len(), 1);
+  }
 }
 
 #[tokio::test]

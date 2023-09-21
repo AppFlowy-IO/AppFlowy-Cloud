@@ -4,6 +4,7 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
+source .env
 # register user 1
 curl localhost:9998/signup \
 	--data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL_1"'","password":"'"$GOTRUE_REGISTERED_PASSWORD_1"'"}' \

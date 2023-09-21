@@ -47,7 +47,6 @@ jobs:
           docker-compose up -d
 
           sleep 5 # sometimes the gotrue server may not be ready yet
-          source .env
 
           ./build/init_registered_user.sh
 

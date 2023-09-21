@@ -140,10 +140,10 @@ pub async fn init_state(config: &Config) -> AppState {
 }
 
 async fn get_aws_s3_client2() -> s3::Bucket {
-  let bucket_name = "my-bucket";
+  let bucket_name = "appflowy-cloud";
   let region = s3::Region::Custom {
     region: "".to_owned(),
-    endpoint: "http://127.0.0.1:9000".to_owned(),
+    endpoint: "http://localhost:9000".to_owned(),
   };
   let cred = s3::creds::Credentials {
     access_key: Some("minioadmin".to_owned()),
@@ -153,18 +153,21 @@ async fn get_aws_s3_client2() -> s3::Bucket {
     expiration: None,
   };
 
-  let bucket = s3::Bucket::new(bucket_name, region.clone(), cred.clone()).unwrap();
-  let (_, code) = bucket.head_object("/").await.unwrap();
-  if code == 404 {
-    s3::Bucket::create(
-      bucket_name,
-      region.clone(),
-      cred,
-      s3::BucketConfiguration::default(),
-    )
-    .await
-    .unwrap();
+  match s3::Bucket::create_with_path_style(
+    bucket_name,
+    region.clone(),
+    cred.clone(),
+    s3::BucketConfiguration::default(),
+  )
+  .await
+  {
+    Ok(_) => {},
+    Err(e) => match e {
+      s3::error::S3Error::Http(409, _) => {}, // Bucket already exists
+      _ => panic!("Failed to create bucket: {:?}", e),
+    },
   }
+  let bucket = s3::Bucket::new(bucket_name, region.clone(), cred.clone()).unwrap();
   bucket
 }
 

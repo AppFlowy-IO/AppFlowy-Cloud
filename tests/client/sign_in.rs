@@ -19,7 +19,6 @@ async fn sign_in_wrong_password() {
 
   let email = generate_unique_email();
   let password = "Hello123!";
-
   c.sign_up(&email, password).await.unwrap();
 
   let wrong_password = "Hllo123!";
@@ -37,7 +36,6 @@ async fn sign_in_unconfirmed_email() {
 
   let email = generate_unique_email();
   let password = "Hello123!";
-
   c.sign_up(&email, password).await.unwrap();
 
   let err = c.sign_in_password(&email, password).await.unwrap_err();

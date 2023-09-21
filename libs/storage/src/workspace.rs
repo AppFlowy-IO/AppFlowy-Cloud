@@ -5,15 +5,35 @@ use sqlx::{
 
 use storage_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
+pub async fn update_user_name(
+  pool: &PgPool,
+  gotrue_uuid: &uuid::Uuid,
+  name: &str,
+) -> Result<(), sqlx::Error> {
+  sqlx::query!(
+    r#"
+        UPDATE af_user
+        SET name = $1
+        WHERE uuid = $2
+        "#,
+    name,
+    gotrue_uuid
+  )
+  .execute(pool)
+  .await?;
+  Ok(())
+}
+
 pub async fn create_user_if_not_exists(
   pool: &PgPool,
   gotrue_uuid: &uuid::Uuid,
   email: &str,
+  name: &str,
 ) -> Result<(), sqlx::Error> {
   sqlx::query!(
     r#"
-        INSERT INTO af_user (uuid, email)
-        SELECT $1, $2
+        INSERT INTO af_user (uuid, email, name)
+        SELECT $1, $2, $3
         WHERE NOT EXISTS (
             SELECT 1 FROM public.af_user WHERE email = $2
         )
@@ -22,7 +42,8 @@ pub async fn create_user_if_not_exists(
         )
         "#,
     gotrue_uuid,
-    email
+    email,
+    name
   )
   .execute(pool)
   .await?;

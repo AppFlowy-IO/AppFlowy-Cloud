@@ -9,7 +9,9 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
 use gotrue_entity::{AccessTokenResponse, OAuthProvider, OAuthURL, User};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::{SignInParams, UserUpdateParams};
+use shared_entity::dto::{
+  SignInParams, SignInPasswordResponse, SignInTokenResponse, UserUpdateParams,
+};
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
 use storage_entity::AFUserProfileView;
@@ -25,10 +27,10 @@ pub fn user_scope() -> Scope {
     // auth server integration
     .service(web::resource("/sign_up").route(web::post().to(sign_up_handler)))
     .service(web::resource("/sign_in/password").route(web::post().to(sign_in_password_handler)))
+    .service(web::resource("/sign_in/token/{access_token}").route(web::get().to(sign_in_token_handler)))
     .service(web::resource("/sign_out").route(web::post().to(sign_out_handler)))
     .service(web::resource("/update").route(web::post().to(update_handler)))
     .service(web::resource("/oauth/{provider}").route(web::get().to(oauth_handler)))
-    .service(web::resource("/info/{access_token}").route(web::get().to(info_handler)))
     .service(web::resource("/refresh/{refresh_token}").route(web::get().to(refresh_handler)))
     .service(web::resource("/profile").route(web::get().to(profile_handler)))
 
@@ -48,13 +50,15 @@ async fn refresh_handler(
   Ok(AppResponse::Ok().with_data(oauth_url).into())
 }
 
-async fn info_handler(
+async fn sign_in_token_handler(
   path: web::Path<String>,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<User>> {
+) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
-  let user = biz::user::info(&state.pg_pool, &state.gotrue_client, &access_token).await?;
-  Ok(AppResponse::Ok().with_data(user).into())
+  let (user, is_new) =
+    biz::user::sign_in_token(&state.pg_pool, &state.gotrue_client, &access_token).await?;
+  let resp = SignInTokenResponse { user, is_new };
+  Ok(AppResponse::Ok().with_data(resp).into())
 }
 
 async fn oauth_handler(
@@ -110,17 +114,20 @@ async fn sign_out_handler(
 async fn sign_in_password_handler(
   req: Json<SignInParams>,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<AccessTokenResponse>> {
+) -> Result<JsonAppResponse<SignInPasswordResponse>> {
   let req = req.into_inner();
-  let token = biz::user::sign_in(
+  let (token, new) = biz::user::sign_in_password(
     &state.pg_pool,
     &state.gotrue_client,
     req.email,
     req.password,
   )
   .await?;
-
-  Ok(AppResponse::Ok().with_data(token).into())
+  let resp = SignInPasswordResponse {
+    access_token_resp: token,
+    is_new: new,
+  };
+  Ok(AppResponse::Ok().with_data(resp).into())
 }
 
 async fn sign_up_handler(
@@ -128,13 +135,7 @@ async fn sign_up_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let req = req.into_inner();
-  biz::user::sign_up(
-    &state.pg_pool,
-    &state.gotrue_client,
-    req.email,
-    req.password,
-  )
-  .await?;
+  biz::user::sign_up(&state.gotrue_client, req.email, req.password).await?;
 
   Ok(AppResponse::Ok().into())
 }

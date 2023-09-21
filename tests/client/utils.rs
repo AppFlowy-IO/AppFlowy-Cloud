@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 
 lazy_static! {
   pub static ref REGISTERED_USERS_MUTEX: Mutex<()> = Mutex::new(());
-  pub static ref REGISTERED_USERS: [RegisteredUser; 2] = {
+  pub static ref REGISTERED_USERS: [RegisteredUser; 3] = {
     dotenv().ok();
     [
       RegisteredUser {
@@ -16,6 +16,11 @@ lazy_static! {
       RegisteredUser {
         email: std::env::var("GOTRUE_REGISTERED_EMAIL_2").unwrap(),
         password: std::env::var("GOTRUE_REGISTERED_PASSWORD_2").unwrap(),
+      },
+      RegisteredUser {
+        // used for testing user sign up, and if they are new
+        email: std::env::var("GOTRUE_REGISTERED_EMAIL_3").unwrap(),
+        password: std::env::var("GOTRUE_REGISTERED_PASSWORD_3").unwrap(),
       },
     ]
   };

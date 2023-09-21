@@ -46,18 +46,11 @@ pkill -f appflowy_cloud || true
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
 RUST_LOG=trace cargo run &
 
-
 # sometimes the gotrue server may not be ready yet
 sleep 1
-source .env
-# register user 1
-curl localhost:9998/signup \
-	--data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL_1"'","password":"'"$GOTRUE_REGISTERED_PASSWORD_1"'"}' \
-	--header 'Content-Type: application/json'
-# register user 2
-curl localhost:9998/signup \
-	--data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL_2"'","password":"'"$GOTRUE_REGISTERED_PASSWORD_2"'"}' \
-	--header 'Content-Type: application/json'
+
+# created registered user
+./build/init_registered_user.sh
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false

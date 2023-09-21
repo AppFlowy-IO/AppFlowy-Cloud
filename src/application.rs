@@ -11,7 +11,6 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
-
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -127,6 +126,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
+  let _bucket = get_aws_s3_client2().await;
 
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
@@ -138,6 +138,53 @@ pub async fn init_state(config: &Config) -> AppState {
     gotrue_client,
   }
 }
+
+async fn get_aws_s3_client2() -> s3::Bucket {
+  let bucket_name = "my-bucket";
+  let region = s3::Region::Custom {
+    region: "".to_owned(),
+    endpoint: "http://127.0.0.1:9000".to_owned(),
+  };
+  let cred = s3::creds::Credentials {
+    access_key: Some("minioadmin".to_owned()),
+    secret_key: Some("minioadmin".to_owned()),
+    security_token: None,
+    session_token: None,
+    expiration: None,
+  };
+
+  let bucket = s3::Bucket::new(bucket_name, region.clone(), cred.clone()).unwrap();
+  let (_, code) = bucket.head_object("/").await.unwrap();
+  if code == 404 {
+    s3::Bucket::create(
+      bucket_name,
+      region.clone(),
+      cred,
+      s3::BucketConfiguration::default(),
+    )
+    .await
+    .unwrap();
+  }
+  bucket
+}
+
+// async fn get_aws_s3_client() -> aws_sdk_s3::Client {
+//   let credentials = Credentials::new("minioadmin", "minioadmin", None, None, "none");
+//   let config = aws_config::SdkConfig::builder()
+//     .set_region(Region {})
+//     .endpoint_url("http://localhost:9000")
+//     .credentials_provider(Some(credentials))
+//     .build();
+//
+//   let client = aws_sdk_s3::Client::new(&config);
+//   client
+//     .create_bucket()
+//     .bucket("hellothisisme")
+//     .send()
+//     .await
+//     .unwrap();
+//   client
+// }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
   PgPoolOptions::new()

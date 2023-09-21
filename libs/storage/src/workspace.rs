@@ -26,28 +26,30 @@ pub async fn update_user_name(
 
 pub async fn create_user_if_not_exists(
   pool: &PgPool,
-  gotrue_uuid: &uuid::Uuid,
+  user_uuid: &uuid::Uuid,
   email: &str,
   name: &str,
-) -> Result<(), sqlx::Error> {
-  sqlx::query!(
+) -> Result<bool, sqlx::Error> {
+  let affected_rows = sqlx::query!(
     r#"
-        INSERT INTO af_user (uuid, email, name)
-        SELECT $1, $2, $3
-        WHERE NOT EXISTS (
-            SELECT 1 FROM public.af_user WHERE email = $2
-        )
-        AND NOT EXISTS (
-            SELECT 1 FROM public.af_user WHERE uuid = $1
-        )
-        "#,
-    gotrue_uuid,
+      INSERT INTO af_user (uuid, email, name)
+      SELECT $1, $2, $3
+      WHERE NOT EXISTS (
+          SELECT 1 FROM public.af_user WHERE email = $2
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM public.af_user WHERE uuid = $1
+      )
+      "#,
+    user_uuid,
     email,
     name
   )
   .execute(pool)
-  .await?;
-  Ok(())
+  .await?
+  .rows_affected();
+
+  Ok(affected_rows > 0)
 }
 
 pub async fn get_user_id(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64, sqlx::Error> {

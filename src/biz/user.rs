@@ -28,7 +28,6 @@ pub async fn refresh(
 
 #[instrument(level = "info", skip_all, err)]
 pub async fn sign_up(
-  pg_pool: &PgPool,
   gotrue_client: &Client,
   email: String,
   password: String,
@@ -36,23 +35,20 @@ pub async fn sign_up(
   validate_email_password(&email, &password)?;
   let user = gotrue_client.sign_up(&email, &password).await??;
   tracing::info!("user sign up: {:?}", user);
-  if user.confirmed_at.is_some() {
-    let gotrue_uuid = uuid::Uuid::from_str(&user.id)?;
-    storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &user.email, "").await?;
-  }
   Ok(())
 }
 
-pub async fn info(
+pub async fn sign_in_token(
   pg_pool: &PgPool,
   gotrue_client: &Client,
   access_token: &str,
-) -> Result<User, AppError> {
+) -> Result<(User, bool), AppError> {
   let user = gotrue_client.user_info(access_token).await??;
   let user_uuid = uuid::Uuid::from_str(&user.id)?;
   let name: String = name_from_user_metadata(&user.user_metadata);
-  storage::workspace::create_user_if_not_exists(pg_pool, &user_uuid, &user.email, &name).await?;
-  Ok(user)
+  let new =
+    storage::workspace::create_user_if_not_exists(pg_pool, &user_uuid, &user.email, &name).await?;
+  Ok((user, new))
 }
 
 pub async fn oauth(gotrue_client: &Client, provider: OAuthProvider) -> Result<OAuthURL, AppError> {
@@ -81,18 +77,19 @@ pub async fn get_profile(
 }
 
 #[instrument(level = "info", skip_all, err)]
-pub async fn sign_in(
+pub async fn sign_in_password(
   pg_pool: &PgPool,
   gotrue_client: &Client,
   email: String,
   password: String,
-) -> Result<AccessTokenResponse, AppError> {
+) -> Result<(AccessTokenResponse, bool), AppError> {
   let grant = Grant::Password(PasswordGrant { email, password });
   let token = gotrue_client.token(&grant).await??;
   let gotrue_uuid = uuid::Uuid::from_str(&token.user.id)?;
-  storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &token.user.email, "")
-    .await?;
-  Ok(token)
+  let new =
+    storage::workspace::create_user_if_not_exists(pg_pool, &gotrue_uuid, &token.user.email, "")
+      .await?;
+  Ok((token, new))
 }
 
 pub async fn update(

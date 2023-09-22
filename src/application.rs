@@ -1,6 +1,6 @@
 use crate::api::{collab_scope, user_scope, workspace_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, TlsConfig};
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppState, Storage};
@@ -126,7 +126,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
-  let _bucket = get_aws_s3_client2().await;
+  let s3_bucket = get_aws_s3_client(&config.s3_setting).await;
 
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
@@ -136,25 +136,31 @@ pub async fn init_state(config: &Config) -> AppState {
     user: Arc::new(Default::default()),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
+    s3_bucket,
   }
 }
 
-async fn get_aws_s3_client2() -> s3::Bucket {
-  let bucket_name = "appflowy-cloud";
-  let region = s3::Region::Custom {
-    region: "".to_owned(),
-    endpoint: "http://localhost:9000".to_owned(),
+async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
+  let region = {
+    match s3_setting.use_minio {
+      true => s3::Region::Custom {
+        region: "".to_owned(),
+        endpoint: "http://localhost:9000".to_owned(),
+      },
+      false => s3_setting.region.parse::<s3::Region>().unwrap().into(),
+    }
   };
+
   let cred = s3::creds::Credentials {
-    access_key: Some("minioadmin".to_owned()),
-    secret_key: Some("minioadmin".to_owned()),
+    access_key: Some(s3_setting.access_key.to_owned()),
+    secret_key: Some(s3_setting.secret_key.to_owned()),
     security_token: None,
     session_token: None,
     expiration: None,
   };
 
   match s3::Bucket::create_with_path_style(
-    bucket_name,
+    &s3_setting.bucket,
     region.clone(),
     cred.clone(),
     s3::BucketConfiguration::default(),
@@ -167,7 +173,7 @@ async fn get_aws_s3_client2() -> s3::Bucket {
       _ => panic!("Failed to create bucket: {:?}", e),
     },
   }
-  let bucket = s3::Bucket::new(bucket_name, region.clone(), cred.clone()).unwrap();
+  let bucket = s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone()).unwrap();
   bucket
 }
 

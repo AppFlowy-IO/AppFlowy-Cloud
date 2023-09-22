@@ -71,7 +71,7 @@ impl TestClient {
     let origin = CollabOrigin::Client(CollabClient::new(uid, device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
-    let object = SyncObject::new(object_id, &workspace_id, collab_type);
+    let object = SyncObject::new(object_id, &workspace_id, collab_type, &device_id);
     let sync_plugin = SyncPlugin::new(
       origin.clone(),
       object,

@@ -126,7 +126,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
-  let s3_bucket = get_aws_s3_client(&config.s3_setting).await;
+  let s3_bucket = get_aws_s3_client(&config.s3).await;
 
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
@@ -173,7 +173,7 @@ async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
       _ => panic!("Failed to create bucket: {:?}", e),
     },
   }
-  
+
   s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone()).unwrap()
 }
 

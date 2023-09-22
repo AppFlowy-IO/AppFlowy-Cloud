@@ -12,7 +12,7 @@ pub struct Config {
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
-  pub s3_setting: S3Setting,
+  pub s3: S3Setting,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]

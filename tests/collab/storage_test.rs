@@ -11,9 +11,9 @@ use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 async fn success_insert_collab_test() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = user_1_signed_in().await;
+  let c = user_1_signed_in().await;
   let raw_data = "hello world".to_string().as_bytes().to_vec();
-  let workspace_id = workspace_id_from_client(&mut c).await;
+  let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(InsertCollabParams::new(
     1,
@@ -40,10 +40,10 @@ async fn success_insert_collab_test() {
 async fn success_delete_collab_test() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = user_1_signed_in().await;
+  let c = user_1_signed_in().await;
 
   let raw_data = "hello world".to_string().as_bytes().to_vec();
-  let workspace_id = workspace_id_from_client(&mut c).await;
+  let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(InsertCollabParams::new(
     1,
@@ -76,8 +76,8 @@ async fn success_delete_collab_test() {
 async fn fail_insert_collab_with_empty_payload_test() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = user_1_signed_in().await;
-  let workspace_id = workspace_id_from_client(&mut c).await;
+  let c = user_1_signed_in().await;
+  let workspace_id = workspace_id_from_client(&c).await;
   let error = c
     .create_collab(InsertCollabParams::new(
       1,
@@ -96,7 +96,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
 async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = user_1_signed_in().await;
+  let c = user_1_signed_in().await;
 
   let workspace_id = Uuid::new_v4().to_string();
   let raw_data = "hello world".to_string().as_bytes().to_vec();

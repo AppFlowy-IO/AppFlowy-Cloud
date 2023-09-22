@@ -14,11 +14,32 @@ pub struct SignInParams {
   pub password: String,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct UserUpdateParams {
-  pub email: String,
-  pub password: String,
   pub name: Option<String>,
+  pub email: Option<String>,
+  pub password: Option<String>,
+}
+
+impl UserUpdateParams {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn with_name<T: ToString>(mut self, name: T) -> Self {
+    self.name = Some(name.to_string());
+    self
+  }
+
+  pub fn with_email<T: ToString>(mut self, email: T) -> Self {
+    self.email = Some(email.to_string());
+    self
+  }
+
+  pub fn with_password(mut self, password: &str) -> Self {
+    self.password = Some(password.to_owned());
+    self
+  }
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]

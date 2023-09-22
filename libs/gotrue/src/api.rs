@@ -109,8 +109,8 @@ impl Client {
   pub async fn update_user(
     &self,
     access_token: &str,
-    email: &str,
-    password: &str,
+    email: Option<String>,
+    password: Option<String>,
   ) -> Result<Result<User, GoTrueError>, Error> {
     let payload = serde_json::json!({
         "email": email,

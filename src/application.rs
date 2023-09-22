@@ -147,7 +147,7 @@ async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
         region: "".to_owned(),
         endpoint: "http://localhost:9000".to_owned(),
       },
-      false => s3_setting.region.parse::<s3::Region>().unwrap().into(),
+      false => s3_setting.region.parse::<s3::Region>().unwrap(),
     }
   };
 
@@ -173,8 +173,8 @@ async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
       _ => panic!("Failed to create bucket: {:?}", e),
     },
   }
-  let bucket = s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone()).unwrap();
-  bucket
+  
+  s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone()).unwrap()
 }
 
 // async fn get_aws_s3_client() -> aws_sdk_s3::Client {

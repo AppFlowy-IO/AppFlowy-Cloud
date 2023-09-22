@@ -54,6 +54,9 @@ pub enum ErrorCode {
 
   #[error("Not Enough Permissions")]
   NotEnoughPermissions = 1012,
+
+  #[error("S3 Error")]
+  S3Error = 1013,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

@@ -1,6 +1,6 @@
 use crate::api::{collab_scope, user_scope, workspace_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, TlsConfig};
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
 use crate::middleware::cors::default_cors;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppState, Storage};
@@ -11,7 +11,6 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
-
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -127,6 +126,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
+  let s3_bucket = get_aws_s3_client(&config.s3).await;
 
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
 
@@ -136,8 +136,64 @@ pub async fn init_state(config: &Config) -> AppState {
     user: Arc::new(Default::default()),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
+    s3_bucket,
   }
 }
+
+async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
+  let region = {
+    match s3_setting.use_minio {
+      true => s3::Region::Custom {
+        region: "".to_owned(),
+        endpoint: s3_setting.minio_url.to_owned(),
+      },
+      false => s3_setting.region.parse::<s3::Region>().unwrap(),
+    }
+  };
+
+  let cred = s3::creds::Credentials {
+    access_key: Some(s3_setting.access_key.to_owned()),
+    secret_key: Some(s3_setting.secret_key.to_owned()),
+    security_token: None,
+    session_token: None,
+    expiration: None,
+  };
+
+  match s3::Bucket::create_with_path_style(
+    &s3_setting.bucket,
+    region.clone(),
+    cred.clone(),
+    s3::BucketConfiguration::default(),
+  )
+  .await
+  {
+    Ok(_) => {},
+    Err(e) => match e {
+      s3::error::S3Error::Http(409, _) => {}, // Bucket already exists
+      _ => panic!("Failed to create bucket: {:?}", e),
+    },
+  }
+
+  s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone()).unwrap()
+}
+
+// async fn get_aws_s3_client() -> aws_sdk_s3::Client {
+//   let credentials = Credentials::new("minioadmin", "minioadmin", None, None, "none");
+//   let config = aws_config::SdkConfig::builder()
+//     .set_region(Region {})
+//     .endpoint_url("http://localhost:9000")
+//     .credentials_provider(Some(credentials))
+//     .build();
+//
+//   let client = aws_sdk_s3::Client::new(&config);
+//   client
+//     .create_bucket()
+//     .bucket("hellothisisme")
+//     .send()
+//     .await
+//     .unwrap();
+//   client
+// }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
   PgPoolOptions::new()

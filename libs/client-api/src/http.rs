@@ -256,18 +256,8 @@ impl Client {
     Ok(())
   }
 
-  pub async fn update(
-    &mut self,
-    email: &str,
-    password: &str,
-    name: Option<&str>,
-  ) -> Result<(), AppError> {
+  pub async fn update(&mut self, params: UserUpdateParams) -> Result<(), AppError> {
     let url = format!("{}/api/user/update", self.base_url);
-    let params = UserUpdateParams {
-      email: email.to_owned(),
-      password: password.to_owned(),
-      name: name.map(String::from),
-    };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?

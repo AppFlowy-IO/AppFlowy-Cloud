@@ -16,9 +16,9 @@ pub struct SignInParams {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct UserUpdateParams {
-  pub email: String,
-  pub password: String,
   pub name: Option<String>,
+  pub email: Option<String>,
+  pub password: Option<String>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]

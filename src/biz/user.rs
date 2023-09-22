@@ -14,6 +14,7 @@ use storage_entity::AFUserProfileView;
 use validator::validate_email;
 
 use crate::domain::validate_password;
+use shared_entity::dto::UserUpdateParams;
 use sqlx::{types::uuid, PgPool};
 use tracing::instrument;
 
@@ -96,15 +97,35 @@ pub async fn update(
   pg_pool: &PgPool,
   gotrue_client: &Client,
   token: &str,
-  email: &str,
-  password: &str,
-  name: Option<&str>,
+  params: UserUpdateParams,
 ) -> Result<User, AppError> {
-  validate_email_password(email, password)?;
-  let user = gotrue_client.update_user(token, email, password).await??;
+  if let Some(email) = &params.email {
+    if !validate_email(email) {
+      return Err(invalid_email_error(email));
+    }
+  }
+
+  if let Some(password) = &params.password {
+    if !validate_password(password) {
+      return Err(invalid_password_error(password));
+    }
+  }
+
+  if let Some(name) = &params.name {
+    if name.is_empty() {
+      return Err(AppError::new(
+        ErrorCode::UserNameIsEmpty,
+        "User name should not be empty",
+      ));
+    }
+  }
+
+  let user = gotrue_client
+    .update_user(token, params.email, params.password)
+    .await??;
   let user_uuid = user.id.parse::<uuid::Uuid>()?;
-  if let Some(name) = name {
-    storage::workspace::update_user_name(pg_pool, &user_uuid, name).await?;
+  if let Some(name) = params.name {
+    storage::workspace::update_user_name(pg_pool, &user_uuid, &name).await?;
   }
   Ok(user)
 }

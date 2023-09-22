@@ -85,16 +85,8 @@ async fn update_handler(
   req: Json<UserUpdateParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<User>> {
-  let req = req.into_inner();
-  let user = biz::user::update(
-    &state.pg_pool,
-    &state.gotrue_client,
-    &auth.token,
-    &req.email,
-    &req.password,
-    req.name.as_deref(),
-  )
-  .await?;
+  let params = req.into_inner();
+  let user = biz::user::update(&state.pg_pool, &state.gotrue_client, &auth.token, params).await?;
   Ok(AppResponse::Ok().with_data(user).into())
 }
 

@@ -7,7 +7,7 @@ use crate::client_api_client;
 async fn sign_in_unknown_user() {
   let email = generate_unique_email();
   let password = "Hello123!";
-  let mut c = client_api_client();
+  let c = client_api_client();
   let err = c.sign_in_password(&email, password).await.unwrap_err();
   assert_eq!(err.code, ErrorCode::OAuthError);
   assert!(!err.message.is_empty());
@@ -15,7 +15,7 @@ async fn sign_in_unknown_user() {
 
 #[tokio::test]
 async fn sign_in_wrong_password() {
-  let mut c = client_api_client();
+  let c = client_api_client();
 
   let email = generate_unique_email();
   let password = "Hello123!";
@@ -32,7 +32,7 @@ async fn sign_in_wrong_password() {
 
 #[tokio::test]
 async fn sign_in_unconfirmed_email() {
-  let mut c = client_api_client();
+  let c = client_api_client();
 
   let email = generate_unique_email();
   let password = "Hello123!";
@@ -47,7 +47,7 @@ async fn sign_in_unconfirmed_email() {
 async fn sign_in_success() {
   {
     // First Time
-    let mut c = client_api_client();
+    let c = client_api_client();
     let registered_user = &REGISTERED_USERS[2];
     let is_new = c
       .sign_in_password(&registered_user.email, &registered_user.password)
@@ -72,7 +72,7 @@ async fn sign_in_success() {
 
   {
     // Subsequent Times
-    let mut c = client_api_client();
+    let c = client_api_client();
     let registered_user = &REGISTERED_USERS[2];
     let is_new = c
       .sign_in_password(&registered_user.email, &registered_user.password)

@@ -15,7 +15,7 @@ pub fn client_api_client() -> Client {
 
 pub async fn user_1_signed_in() -> Client {
   let user = &REGISTERED_USERS[0];
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL, LOCALHOST_WS);
+  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL, LOCALHOST_WS);
   c.sign_in_password(&user.email, &user.password)
     .await
     .unwrap();
@@ -24,7 +24,7 @@ pub async fn user_1_signed_in() -> Client {
 
 pub async fn user_2_signed_in() -> Client {
   let user = &REGISTERED_USERS[1];
-  let mut c = Client::from(reqwest::Client::new(), LOCALHOST_URL, LOCALHOST_WS);
+  let c = Client::from(reqwest::Client::new(), LOCALHOST_URL, LOCALHOST_WS);
   c.sign_in_password(&user.email, &user.password)
     .await
     .unwrap();

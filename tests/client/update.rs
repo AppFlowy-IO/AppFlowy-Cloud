@@ -24,7 +24,7 @@ async fn update_password_same_password() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
   let user = &REGISTERED_USERS[0];
-  let mut c = client_api_client();
+  let c = client_api_client();
   c.sign_in_password(&user.email, &user.password)
     .await
     .unwrap();
@@ -52,7 +52,7 @@ async fn update_password_and_revert() {
   let user = &REGISTERED_USERS[0];
   {
     // change password to new_password
-    let mut c = client_api_client();
+    let c = client_api_client();
     c.sign_in_password(&user.email, &user.password)
       .await
       .unwrap();
@@ -62,7 +62,7 @@ async fn update_password_and_revert() {
   }
   {
     // revert password to old_password
-    let mut c = client_api_client();
+    let c = client_api_client();
     c.sign_in_password(&user.email, new_password).await.unwrap();
     c.update(UserUpdateParams::new().with_password(&user.password))
       .await

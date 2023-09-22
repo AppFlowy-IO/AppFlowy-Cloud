@@ -38,7 +38,7 @@ impl TestClient {
     let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
     // Sign in
-    let mut api_client = user_1_signed_in().await;
+    let api_client = user_1_signed_in().await;
 
     // Connect to server via websocket
     let ws_client = WSClient::new(WSClientConfig {

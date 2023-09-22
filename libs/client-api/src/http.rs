@@ -159,7 +159,7 @@ impl Client {
       .into_data()
   }
 
-  pub async fn workspaces(&mut self) -> Result<AFWorkspaces, AppError> {
+  pub async fn workspaces(&self) -> Result<AFWorkspaces, AppError> {
     let url = format!("{}/api/workspace/list", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -172,7 +172,7 @@ impl Client {
   }
 
   pub async fn get_workspace_members(
-    &mut self,
+    &self,
     workspace_uuid: uuid::Uuid,
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {
     let url = format!(
@@ -190,7 +190,7 @@ impl Client {
   }
 
   pub async fn add_workspace_members(
-    &mut self,
+    &self,
     workspace_uuid: uuid::Uuid,
     member_emails: Vec<String>,
   ) -> Result<(), AppError> {
@@ -210,7 +210,7 @@ impl Client {
   }
 
   pub async fn remove_workspace_members(
-    &mut self,
+    &self,
     workspace_uuid: uuid::Uuid,
     member_uids: Vec<String>,
   ) -> Result<(), AppError> {
@@ -229,7 +229,7 @@ impl Client {
     Ok(())
   }
 
-  pub async fn sign_in_password(&mut self, email: &str, password: &str) -> Result<bool, AppError> {
+  pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<bool, AppError> {
     let url = format!("{}/api/user/sign_in/password", self.base_url);
     let params = SignInParams {
       email: email.to_owned(),

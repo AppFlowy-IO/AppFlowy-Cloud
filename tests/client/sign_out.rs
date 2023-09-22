@@ -12,7 +12,7 @@ async fn sign_out_but_not_sign_in() {
 async fn sign_out_after_sign_in() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = client_api_client();
+  let c = client_api_client();
   let user = &REGISTERED_USERS[0];
   c.sign_in_password(&user.email, &user.password)
     .await

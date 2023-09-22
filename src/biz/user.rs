@@ -114,7 +114,7 @@ pub async fn update(
   if let Some(name) = &params.name {
     if name.is_empty() {
       return Err(AppError::new(
-        ErrorCode::InvalidUserName,
+        ErrorCode::UserNameIsEmpty,
         "User name should not be empty",
       ));
     }

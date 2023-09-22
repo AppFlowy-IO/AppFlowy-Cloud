@@ -18,7 +18,7 @@ async fn refresh_success() {
 async fn refresh_trigger() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = user_1_signed_in().await;
+  let c = user_1_signed_in().await;
   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
   let old_access_token = c.access_token().unwrap();
 

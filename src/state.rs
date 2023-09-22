@@ -16,6 +16,7 @@ pub struct AppState {
   pub user: Arc<RwLock<UserCache>>,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
+  pub s3_bucket: s3::Bucket,
 }
 
 impl AppState {

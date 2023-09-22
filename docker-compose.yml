@@ -13,6 +13,13 @@ services:
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
 
+  minio:
+    image: minio/minio
+    ports:
+      - 9000:9000
+      - 9001:9001
+    command: server /data --console-address ":9001"
+
   postgres:
     build:
       context: .
@@ -67,6 +74,12 @@ services:
       - APP_ENVIRONMENT=production
       - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
       - APP__GOTRUE__EXT_URL=${API_EXTERNAL_URL}
+      - APP__S3__USE_MINIO=${USE_MINIO}
+      - APP__S3__MINIO_URL=${MINIO_URL:-http://minio:9000}
+      - APP__S3__AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - APP__S3__AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - APP__S3__AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - APP__S3__AWS_REGION=${AWS_REGION}
     build:
       context: .
       dockerfile: Dockerfile

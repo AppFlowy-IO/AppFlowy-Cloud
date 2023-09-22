@@ -145,7 +145,7 @@ async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
     match s3_setting.use_minio {
       true => s3::Region::Custom {
         region: "".to_owned(),
-        endpoint: "http://localhost:9000".to_owned(),
+        endpoint: s3_setting.minio_url.to_owned(),
       },
       false => s3_setting.region.parse::<s3::Region>().unwrap(),
     }

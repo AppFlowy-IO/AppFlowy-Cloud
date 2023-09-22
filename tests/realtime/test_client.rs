@@ -1,5 +1,3 @@
-use crate::client::utils::REGISTERED_USERS_MUTEX;
-
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 
@@ -10,12 +8,13 @@ use collab_define::CollabType;
 use sqlx::types::Uuid;
 use std::sync::Arc;
 
-use crate::user_1_signed_in;
 use assert_json_diff::assert_json_eq;
 use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
+
+use crate::client::utils::generate_unique_registered_user_client;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -35,10 +34,9 @@ impl TestClient {
     collab_type: CollabType,
   ) -> Self {
     let device_id = device_id.to_string();
-    let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
     // Sign in
-    let api_client = user_1_signed_in().await;
+    let (api_client, _user) = generate_unique_registered_user_client().await;
 
     // Connect to server via websocket
     let ws_client = WSClient::new(WSClientConfig {

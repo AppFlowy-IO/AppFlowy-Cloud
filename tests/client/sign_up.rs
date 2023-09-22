@@ -2,7 +2,7 @@ use gotrue_entity::OAuthProvider;
 use shared_entity::error_code::ErrorCode;
 
 use crate::{
-  client::utils::{generate_unique_email, REGISTERED_USERS, REGISTERED_USERS_MUTEX},
+  client::utils::{generate_unique_email, generate_unique_registered_user_client},
   client_api_client,
 };
 
@@ -38,10 +38,7 @@ async fn sign_up_invalid_password() {
 
 #[tokio::test]
 async fn sign_up_but_existing_user() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = client_api_client();
-  let user = &REGISTERED_USERS[0];
+  let (c, user) = generate_unique_registered_user_client().await;
   c.sign_up(&user.email, &user.password).await.unwrap();
 }
 

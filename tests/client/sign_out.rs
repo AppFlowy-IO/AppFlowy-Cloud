@@ -1,5 +1,4 @@
-use crate::client::utils::{REGISTERED_USERS, REGISTERED_USERS_MUTEX};
-use crate::client_api_client;
+use crate::{client::utils::generate_unique_registered_user_client, client_api_client};
 
 #[tokio::test]
 async fn sign_out_but_not_sign_in() {
@@ -10,10 +9,7 @@ async fn sign_out_but_not_sign_in() {
 
 #[tokio::test]
 async fn sign_out_after_sign_in() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = client_api_client();
-  let user = &REGISTERED_USERS[0];
+  let (c, user) = generate_unique_registered_user_client().await;
   c.sign_in_password(&user.email, &user.password)
     .await
     .unwrap();

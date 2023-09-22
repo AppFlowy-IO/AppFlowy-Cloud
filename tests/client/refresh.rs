@@ -1,12 +1,10 @@
 use std::time::SystemTime;
 
-use crate::{client::utils::REGISTERED_USERS_MUTEX, user_1_signed_in};
+use crate::client::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn refresh_success() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = user_1_signed_in().await;
+  let (c, _user) = generate_unique_registered_user_client().await;
   let old_token = c.access_token().unwrap();
   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
   c.refresh().await.unwrap();
@@ -16,9 +14,7 @@ async fn refresh_success() {
 
 #[tokio::test]
 async fn refresh_trigger() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = user_1_signed_in().await;
+  let (c, _user) = generate_unique_registered_user_client().await;
   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
   let old_access_token = c.access_token().unwrap();
 

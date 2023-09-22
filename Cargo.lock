@@ -833,6 +833,7 @@ dependencies = [
  "bytes",
  "collab-sync-protocol",
  "futures-util",
+ "gotrue",
  "gotrue-entity",
  "opener",
  "parking_lot",
@@ -1526,6 +1527,8 @@ dependencies = [
 name = "gotrue-entity"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "reqwest",
  "serde",
  "serde_json",
 ]

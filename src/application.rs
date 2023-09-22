@@ -149,11 +149,7 @@ async fn setup_admin_account(
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
 
-  gotrue_client
-    .sign_up(admin_email, password)
-    .await
-    .unwrap()
-    .unwrap();
+  gotrue_client.sign_up(admin_email, password).await.unwrap();
 
   // Unable to use query! macro here instead
   // because of the auth is a not default schema
@@ -242,8 +238,7 @@ async fn migrate(pool: &PgPool) {
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {
-  let gotrue_client =
-    gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url, &setting.ext_url);
+  let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
   gotrue_client
     .health()
     .await

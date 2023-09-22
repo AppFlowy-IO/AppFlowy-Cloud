@@ -14,11 +14,9 @@ async fn add_workspace_members_not_enough_permission() {
 
   // attempt to add user2 to user1's workspace
   // using user1's client
+  let email = c1.token().read().as_ref().unwrap().user.email.to_owned();
   let err = c1
-    .add_workspace_members(
-      user2_workspace_id,
-      [c1.token().unwrap().user.email.to_owned()].to_vec(),
-    )
+    .add_workspace_members(user2_workspace_id, [email].to_vec())
     .await
     .unwrap_err();
   assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
@@ -30,17 +28,15 @@ async fn add_workspace_members_then_delete() {
 
   let mut c1 = user_1_signed_in().await;
   let c2 = user_2_signed_in().await;
-  let c2_email = &c2.token().unwrap().user.email;
+  let c2_email = c2.token().read().as_ref().unwrap().user.email.clone();
 
   let c1_workspace = c1.workspaces().await.unwrap();
   let c1_workspace_id = c1_workspace.first().unwrap().workspace_id;
 
-  c1.add_workspace_members(
-    c1_workspace_id,
-    [c2.token().unwrap().user.email.to_owned()].to_vec(),
-  )
-  .await
-  .unwrap();
+  let email = c2.token().read().as_ref().unwrap().user.email.to_owned();
+  c1.add_workspace_members(c1_workspace_id, [email].to_vec())
+    .await
+    .unwrap();
 
   {
     // check if user2's email is in c1's workspace members
@@ -52,12 +48,10 @@ async fn add_workspace_members_then_delete() {
       .any(|w| w.email == *c2_email));
   }
 
-  c1.remove_workspace_members(
-    c1_workspace_id,
-    [c2.token().unwrap().user.email.to_owned()].to_vec(),
-  )
-  .await
-  .unwrap();
+  let email = c2.token().read().as_ref().unwrap().user.email.to_owned();
+  c1.remove_workspace_members(c1_workspace_id, [email].to_vec())
+    .await
+    .unwrap();
 
   {
     // check if user2's email is NOT in c1's workspace members

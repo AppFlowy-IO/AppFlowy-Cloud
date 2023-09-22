@@ -96,7 +96,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
 async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-  let mut c = user_1_signed_in().await;
+  let c = user_1_signed_in().await;
 
   let workspace_id = Uuid::new_v4().to_string();
   let raw_data = "hello world".to_string().as_bytes().to_vec();

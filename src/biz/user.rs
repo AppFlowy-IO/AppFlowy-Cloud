@@ -101,7 +101,7 @@ pub async fn update(
 ) -> Result<User, AppError> {
   if let Some(email) = &params.email {
     if !validate_email(email) {
-      Err(invalid_email_error(email))
+      return Err(invalid_email_error(email));
     }
   }
 

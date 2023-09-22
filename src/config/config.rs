@@ -12,6 +12,17 @@ pub struct Config {
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
+  pub s3: S3Setting,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct S3Setting {
+  pub use_minio: bool,
+  pub minio_url: String,
+  pub access_key: String,
+  pub secret_key: String,
+  pub bucket: String,
+  pub region: String,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]

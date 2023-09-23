@@ -243,6 +243,7 @@ pub struct OAuthURL {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum SignUpResponse {
   Authenticated(AccessTokenResponse),
   NotAuthenticated(User),

@@ -31,15 +31,27 @@ pub async fn generate_unique_registered_user_client() -> (Client, User) {
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await
     .unwrap();
-  // TODO: register user
 
+  // create new user
   let email = generate_unique_email();
   let password = "Hello123!";
+  admin_client
+    .create_email_verified_user(&email, password)
+    .await
+    .unwrap();
+
+  // sign in as new user
   let user_client = client_api_client();
   user_client
     .sign_in_password(&email, password)
     .await
     .unwrap();
 
-  todo!()
+  (
+    user_client,
+    User {
+      email,
+      password: password.to_string(),
+    },
+  )
 }

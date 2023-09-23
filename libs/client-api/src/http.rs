@@ -1,6 +1,7 @@
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
+use gotrue::params::AdminUserParams;
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use parking_lot::RwLock;
@@ -92,7 +93,7 @@ impl Client {
       })?;
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    let (user, new) = self.sign_in_token(&access_token).await?;
+    let (user, new) = self.verify_token(&access_token).await?;
 
     self.token.write().set(AccessTokenResponse {
       access_token,
@@ -108,17 +109,37 @@ impl Client {
     Ok(new)
   }
 
-  async fn sign_in_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
+  async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
     let user = self.gotrue_client.user_info(access_token).await?;
-    let is_new = self.verify(access_token).await?;
+    let is_new = self.verify_token_cloud(access_token).await?;
     Ok((user, is_new))
   }
 
-  async fn verify(&self, access_token: &str) -> Result<bool, AppError> {
+  async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
     let resp = self.cloud_client.get(&url).send().await?;
     let sign_in_resp: SignInTokenResponse = AppResponse::from_response(resp).await?.into_data()?;
     Ok(sign_in_resp.is_new)
+  }
+
+  pub async fn create_email_verified_user(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<User, AppError> {
+    let user = self
+      .gotrue_client
+      .admin_add_user(
+        &self.access_token()?,
+        &AdminUserParams {
+          email: email.to_owned(),
+          password: Some(password.to_owned()),
+          email_confirm: true,
+          ..Default::default()
+        },
+      )
+      .await?;
+    Ok(user)
   }
 
   /// Only expose this method for testing
@@ -247,7 +268,9 @@ impl Client {
         password: password.to_owned(),
       }))
       .await?;
-    let is_new = self.verify(&access_token_resp.access_token).await?;
+    let is_new = self
+      .verify_token_cloud(&access_token_resp.access_token)
+      .await?;
     self.token.write().set(access_token_resp);
     Ok(is_new)
   }

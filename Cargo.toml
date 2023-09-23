@@ -12,9 +12,9 @@ actix-http = "3.3.1"
 actix-rt = "2"
 actix-web-actors = { version = "4.2.0" }
 actix-service = "2.0.2"
-actix-identity = "0.5.2"
+actix-identity = "0.6.0"
 actix-cors = "0.6.4"
-actix-session = { version = "0.7", features = ["redis-rs-tls-session"] }
+actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
 openssl = "0.10.45"
 
 # serde
@@ -84,6 +84,7 @@ client-api = { path = "libs/client-api" }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 dotenv = "0.15.0"
+scraper = "0.17.1"
 
 [[bin]]
 name = "appflowy_cloud"

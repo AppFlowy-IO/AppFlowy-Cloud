@@ -43,6 +43,7 @@ impl ClientToken {
   /// If there's an existing token, this function clears the internal access token state and sends
   /// a `TokenState::Invalid` notification to signal that the token has been invalidated.
   ///
+  #[allow(dead_code)]
   pub(crate) fn unset(&mut self) {
     if self.token.is_some() {
       tracing::trace!("Set new access token: {:?}", self.token);

@@ -2,7 +2,7 @@ use gotrue_entity::OAuthProvider;
 use shared_entity::error_code::ErrorCode;
 
 use crate::{
-  client::utils::{generate_unique_email, REGISTERED_USERS, REGISTERED_USERS_MUTEX},
+  client::utils::{generate_unique_email, generate_unique_registered_user_client},
   client_api_client,
 };
 
@@ -22,26 +22,26 @@ async fn sign_up_invalid_email() {
     .sign_up(invalid_email, password)
     .await
     .unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidEmail);
-  assert_eq!(error.message, "invalid email: not_email_address");
+  assert_eq!(error.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(
+    error.message,
+    "Unable to validate email address: invalid format"
+  );
 }
 
 #[tokio::test]
 async fn sign_up_invalid_password() {
   let email = generate_unique_email();
-  let password = "123";
+  let password = "3";
   let c = client_api_client();
   let error = c.sign_up(&email, password).await.unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidPassword);
-  assert_eq!(error.message, "invalid password: 123")
+  assert_eq!(error.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(error.message, "Password should be at least 6 characters");
 }
 
 #[tokio::test]
 async fn sign_up_but_existing_user() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = client_api_client();
-  let user = &REGISTERED_USERS[0];
+  let (c, user) = generate_unique_registered_user_client().await;
   c.sign_up(&user.email, &user.password).await.unwrap();
 }
 
@@ -51,7 +51,11 @@ async fn sign_up_oauth_not_available() {
   assert_eq!(
     // Change Zoom to any other valid OAuth provider
     // to manually open the browser and login
-    c.oauth_login(OAuthProvider::Zoom).await.err().unwrap().code,
+    c.oauth_login(&OAuthProvider::Zoom)
+      .await
+      .err()
+      .unwrap()
+      .code,
     ErrorCode::InvalidOAuthProvider
   );
 }

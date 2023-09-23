@@ -1,6 +1,6 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::generate_unique_email;
+use crate::client::utils::{generate_unique_email, generate_unique_registered_user};
 use crate::client_api_client;
 
 #[tokio::test]
@@ -43,48 +43,48 @@ async fn sign_in_unconfirmed_email() {
   assert!(!err.message.is_empty());
 }
 
-// #[tokio::test]
-// async fn sign_in_success() {
-//   {
-//     // First Time
-//     let c = client_api_client();
-//     let registered_user = &ADMIN_USER[2];
-//     let is_new = c
-//       .sign_in_password(&registered_user.email, &registered_user.password)
-//       .await
-//       .unwrap();
-//     assert!(is_new);
-//     assert!(c
-//       .token()
-//       .read()
-//       .as_ref()
-//       .unwrap()
-//       .user
-//       .confirmed_at
-//       .is_some());
-//
-//     let workspaces = c.workspaces().await.unwrap();
-//     assert_eq!(workspaces.0.len(), 1);
-//     let profile = c.profile().await.unwrap();
-//     let latest_workspace = workspaces.get_latest(&profile);
-//     assert!(latest_workspace.is_some());
-//   }
-//
-//   {
-//     // Subsequent Times
-//     let c = client_api_client();
-//     let registered_user = generate_unique_registered_user_client();
-//     let is_new = c
-//       .sign_in_password(&registered_user.email, &registered_user.password)
-//       .await
-//       .unwrap();
-//     assert!(!is_new);
-//
-//     // workspaces should be the same
-//     let workspaces = c.workspaces().await.unwrap();
-//     assert_eq!(workspaces.0.len(), 1);
-//   }
-// }
+#[tokio::test]
+async fn sign_in_success() {
+  let registered_user = generate_unique_registered_user().await;
+
+  {
+    // First Time
+    let c = client_api_client();
+    let is_new = c
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
+    assert!(is_new);
+    assert!(c
+      .token()
+      .read()
+      .as_ref()
+      .unwrap()
+      .user
+      .confirmed_at
+      .is_some());
+
+    let workspaces = c.workspaces().await.unwrap();
+    assert_eq!(workspaces.0.len(), 1);
+    let profile = c.profile().await.unwrap();
+    let latest_workspace = workspaces.get_latest(&profile);
+    assert!(latest_workspace.is_some());
+  }
+
+  {
+    // Subsequent Times
+    let c = client_api_client();
+    let is_new = c
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
+    assert!(!is_new);
+
+    // workspaces should be the same
+    let workspaces = c.workspaces().await.unwrap();
+    assert_eq!(workspaces.0.len(), 1);
+  }
+}
 
 #[tokio::test]
 async fn sign_in_with_url() {

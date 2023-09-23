@@ -25,7 +25,8 @@ pub fn generate_unique_email() -> String {
   format!("user_{}@appflowy.io", Uuid::new_v4())
 }
 
-pub async fn generate_unique_registered_user_client() -> (Client, User) {
+pub async fn generate_unique_registered_user() -> User {
+  // log in as admin
   let admin_client = client_api_client();
   admin_client
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
@@ -40,18 +41,18 @@ pub async fn generate_unique_registered_user_client() -> (Client, User) {
     .await
     .unwrap();
 
-  // sign in as new user
-  let user_client = client_api_client();
-  user_client
-    .sign_in_password(&email, password)
+  User {
+    email,
+    password: password.to_string(),
+  }
+}
+
+pub async fn generate_unique_registered_user_client() -> (Client, User) {
+  let registered_user = generate_unique_registered_user().await;
+  let registered_user_client = client_api_client();
+  registered_user_client
+    .sign_in_password(&registered_user.email, &registered_user.password)
     .await
     .unwrap();
-
-  (
-    user_client,
-    User {
-      email,
-      password: password.to_string(),
-    },
-  )
+  (registered_user_client, registered_user)
 }

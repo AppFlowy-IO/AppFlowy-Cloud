@@ -22,18 +22,21 @@ async fn sign_up_invalid_email() {
     .sign_up(invalid_email, password)
     .await
     .unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidEmail);
-  assert_eq!(error.message, "invalid email: not_email_address");
+  assert_eq!(error.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(
+    error.message,
+    "Unable to validate email address: invalid format"
+  );
 }
 
 #[tokio::test]
 async fn sign_up_invalid_password() {
   let email = generate_unique_email();
-  let password = "123";
+  let password = "3";
   let c = client_api_client();
   let error = c.sign_up(&email, password).await.unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidPassword);
-  assert_eq!(error.message, "invalid password: 123")
+  assert_eq!(error.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(error.message, "Password should be at least 6 characters");
 }
 
 #[tokio::test]
@@ -48,7 +51,11 @@ async fn sign_up_oauth_not_available() {
   assert_eq!(
     // Change Zoom to any other valid OAuth provider
     // to manually open the browser and login
-    c.oauth_login(OAuthProvider::Zoom).await.err().unwrap().code,
+    c.oauth_login(&OAuthProvider::Zoom)
+      .await
+      .err()
+      .unwrap()
+      .code,
     ErrorCode::InvalidOAuthProvider
   );
 }

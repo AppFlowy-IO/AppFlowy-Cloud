@@ -83,23 +83,6 @@ cargo run
 
 ### Run the tests
 
-#### Verified user
-- Make sure you have registered a user and put into your `.env` file, else some test may fail
-- You may register the email defined in `.env` by running the following command, you may then click on the link sent to that email to complete registration
-```bash
-source .env
-curl localhost:9998/signup \
-    --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
-    --header 'Content-Type: application/json'
-```
-- Verify registration, you should get a token after running the command below:
-```bash
-source .env
-curl localhost:9998/token?grant_type=password \
-    --data-raw '{"email":"'"$GOTRUE_REGISTERED_EMAIL"'","password":"'"$GOTRUE_REGISTERED_PASSWORD"'"}' \
-    --header 'Content-Type: application/json'
-```
-
 #### Test
 ```bash
 cargo test

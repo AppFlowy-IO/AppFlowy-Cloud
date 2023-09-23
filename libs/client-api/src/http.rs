@@ -168,7 +168,12 @@ impl Client {
     }
   }
 
-  pub async fn oauth_login(&self, provider: OAuthProvider) -> Result<(), AppError> {
+  pub async fn oauth_login(&self, provider: &OAuthProvider) -> Result<(), AppError> {
+    let settings = self.gotrue_client.settings().await?;
+    if !settings.external.has_provider(provider) {
+      return Err(ErrorCode::InvalidOAuthProvider.into());
+    }
+
     let oauth_url = format!(
       "{}/authorize?provider={}",
       self.gotrue_client.base_url,

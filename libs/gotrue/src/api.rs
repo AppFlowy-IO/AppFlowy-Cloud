@@ -44,8 +44,7 @@ impl Client {
     });
     let url: String = format!("{}/signup", self.base_url);
     let resp = self.client.post(&url).json(&payload).send().await?;
-    let sign_up_resp = from_response(resp).await?;
-    Ok(sign_up_resp)
+    to_gotrue_result(resp).await
   }
 
   pub async fn token(&self, grant: &Grant) -> Result<AccessTokenResponse, GoTrueError> {

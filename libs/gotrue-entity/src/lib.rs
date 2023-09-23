@@ -124,8 +124,9 @@ impl From<OAuthError> for GoTrueError {
     GoTrueError {
       code: 400,
       msg: format!(
-        "oauth error: {}, description: {:?}",
-        value.error, value.error_description
+        "oauth error: {}, description: {}",
+        value.error,
+        value.error_description.unwrap_or_default(),
       ),
       error_id: None,
     }

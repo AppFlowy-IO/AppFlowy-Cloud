@@ -1,4 +1,4 @@
-use crate::params::AdminUserParams;
+use crate::params::{AdminUserParams, GenerateLinkParams, GenerateLinkResponse};
 
 use super::grant::Grant;
 use gotrue_entity::{
@@ -112,6 +112,21 @@ impl Client {
       .post(format!("{}/admin/users", self.base_url))
       .header("Authorization", format!("Bearer {}", access_token))
       .json(&admin_user_params)
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
+  pub async fn generate_link(
+    &self,
+    access_token: &str,
+    generate_link_params: &GenerateLinkParams,
+  ) -> Result<GenerateLinkResponse, GoTrueError> {
+    let resp = self
+      .client
+      .post(format!("{}/admin/generate_link", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(&generate_link_params)
       .send()
       .await?;
     to_gotrue_result(resp).await

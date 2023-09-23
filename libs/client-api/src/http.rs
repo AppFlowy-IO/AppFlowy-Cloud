@@ -122,6 +122,22 @@ impl Client {
     Ok(sign_in_resp.is_new)
   }
 
+  pub async fn create_magic_link(&self, email: &str, password: &str) -> Result<User, AppError> {
+    let user = self
+      .gotrue_client
+      .admin_add_user(
+        &self.access_token()?,
+        &AdminUserParams {
+          email: email.to_owned(),
+          password: Some(password.to_owned()),
+          email_confirm: true,
+          ..Default::default()
+        },
+      )
+      .await?;
+    Ok(user)
+  }
+
   pub async fn create_email_verified_user(
     &self,
     email: &str,

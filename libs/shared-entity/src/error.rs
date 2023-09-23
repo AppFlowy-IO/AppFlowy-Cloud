@@ -51,7 +51,6 @@ impl From<anyhow::Error> for AppError {
   }
 }
 
-#[cfg(feature = "cloud")]
 impl From<gotrue_entity::GoTrueError> for AppError {
   fn from(err: gotrue_entity::GoTrueError) -> Self {
     match (err.code, err.msg.as_str()) {

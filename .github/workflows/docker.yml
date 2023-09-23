@@ -32,26 +32,9 @@ jobs:
           sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER }}/' .env
           sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS }}/' .env
           sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
-          sed -i 's/GOTRUE_REGISTERED_EMAIL=.*/GOTRUE_REGISTERED_EMAIL=$GOTRUE_REGISTERED_EMAIL/' .env
-          sed -i 's/GOTRUE_REGISTERED_PASSWORD=.*/GOTRUE_REGISTERED_PASSWORD=$GOTRUE_REGISTERED_PASSWORD/' .env
-          sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=true/' .env
 
       - name: Run Docker-Compose
         run: |
-          docker-compose up -d
-
-      - name: Add registered user
-        run: |
-          # temporary allow signup without email verification
-          export GOTRUE_MAILER_AUTOCONFIRM=true
-          docker-compose up -d
-
-          sleep 5 # sometimes the gotrue server may not be ready yet
-
-          ./build/init_registered_user.sh
-
-          # revert to require signup email verification
-          export GOTRUE_MAILER_AUTOCONFIRM=false
           docker-compose up -d
 
       - name: Run tests

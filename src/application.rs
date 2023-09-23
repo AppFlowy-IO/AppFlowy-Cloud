@@ -126,9 +126,10 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
-  let s3_bucket = get_aws_s3_client(&config.s3).await;
 
+  let s3_bucket = get_aws_s3_client(&config.s3).await;
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
+  setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
 
   AppState {
     pg_pool,
@@ -138,6 +139,32 @@ pub async fn init_state(config: &Config) -> AppState {
     gotrue_client,
     s3_bucket,
   }
+}
+
+async fn setup_admin_account(
+  gotrue_client: &gotrue::api::Client,
+  pg_pool: &PgPool,
+  gotrue_setting: &GoTrueSetting,
+) {
+  let admin_email = gotrue_setting.admin_email.as_str();
+  let password = gotrue_setting.admin_password.as_str();
+
+  gotrue_client.sign_up(admin_email, password).await.unwrap();
+
+  // Unable to use query! macro here instead
+  // because of the auth is a not default schema
+  // hopefully this will be fixed in the future
+  sqlx::query(
+    r#"
+      UPDATE auth.users
+      SET role = 'supabase_admin', email_confirmed_at = NOW()
+      WHERE email = $1
+        "#,
+  )
+  .bind(admin_email)
+  .execute(pg_pool)
+  .await
+  .unwrap();
 }
 
 async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
@@ -211,8 +238,7 @@ async fn migrate(pool: &PgPool) {
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {
-  let gotrue_client =
-    gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url, &setting.ext_url);
+  let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
   gotrue_client
     .health()
     .await

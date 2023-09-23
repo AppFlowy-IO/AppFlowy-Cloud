@@ -1,12 +1,15 @@
+use gotrue::grant::Grant;
+use gotrue::grant::PasswordGrant;
+use gotrue::grant::RefreshTokenGrant;
+use gotrue::params::AdminUserParams;
 use gotrue_entity::OAuthProvider;
-use gotrue_entity::OAuthURL;
+use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use parking_lot::RwLock;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::data::AppResponse;
-use shared_entity::dto::SignInParams;
-use shared_entity::dto::SignInPasswordResponse;
 use shared_entity::dto::SignInTokenResponse;
+use shared_entity::dto::UpdateUsernameParams;
 use shared_entity::dto::UserUpdateParams;
 use shared_entity::dto::WorkspaceMembersParams;
 use std::sync::Arc;
@@ -24,18 +27,20 @@ use storage_entity::{AFWorkspaces, QueryCollabParams};
 use storage_entity::{DeleteCollabParams, RawData};
 
 pub struct Client {
-  http_client: reqwest::Client,
+  cloud_client: reqwest::Client,
+  gotrue_client: gotrue::api::Client,
   base_url: String,
   ws_addr: String,
   token: Arc<RwLock<ClientToken>>,
 }
 
 impl Client {
-  pub fn from(c: reqwest::Client, base_url: &str, ws_addr: &str) -> Self {
+  pub fn from(c: reqwest::Client, base_url: &str, ws_addr: &str, gotrue_url: &str) -> Self {
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
-      http_client: c,
+      cloud_client: c.clone(),
+      gotrue_client: gotrue::api::Client::new(c, gotrue_url),
       token: Arc::new(RwLock::new(ClientToken::new())),
     }
   }
@@ -88,7 +93,7 @@ impl Client {
       })?;
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    let (user, new) = self.sign_in_token(&access_token).await?;
+    let (user, new) = self.verify_token(&access_token).await?;
 
     self.token.write().set(AccessTokenResponse {
       access_token,
@@ -104,11 +109,37 @@ impl Client {
     Ok(new)
   }
 
-  pub async fn sign_in_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
-    let url = format!("{}/api/user/sign_in/token/{}", self.base_url, access_token);
-    let resp = self.http_client.get(&url).send().await?;
+  async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
+    let user = self.gotrue_client.user_info(access_token).await?;
+    let is_new = self.verify_token_cloud(access_token).await?;
+    Ok((user, is_new))
+  }
+
+  async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppError> {
+    let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
+    let resp = self.cloud_client.get(&url).send().await?;
     let sign_in_resp: SignInTokenResponse = AppResponse::from_response(resp).await?.into_data()?;
-    Ok((sign_in_resp.user, sign_in_resp.is_new))
+    Ok(sign_in_resp.is_new)
+  }
+
+  pub async fn create_email_verified_user(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<User, AppError> {
+    let user = self
+      .gotrue_client
+      .admin_add_user(
+        &self.access_token()?,
+        &AdminUserParams {
+          email: email.to_owned(),
+          password: Some(password.to_owned()),
+          email_confirm: true,
+          ..Default::default()
+        },
+      )
+      .await?;
+    Ok(user)
   }
 
   /// Only expose this method for testing
@@ -137,13 +168,18 @@ impl Client {
     }
   }
 
-  pub async fn oauth_login(&self, provider: OAuthProvider) -> Result<(), AppError> {
-    let url = format!("{}/api/user/oauth/{}", self.base_url, provider.as_str());
-    let resp = self.http_client.get(&url).send().await?;
-    let oauth_url = AppResponse::<OAuthURL>::from_response(resp)
-      .await?
-      .into_data()?;
-    opener::open(oauth_url.url.as_str())?;
+  pub async fn oauth_login(&self, provider: &OAuthProvider) -> Result<(), AppError> {
+    let settings = self.gotrue_client.settings().await?;
+    if !settings.external.has_provider(provider) {
+      return Err(ErrorCode::InvalidOAuthProvider.into());
+    }
+
+    let oauth_url = format!(
+      "{}/authorize?provider={}",
+      self.gotrue_client.base_url,
+      provider.as_str(),
+    );
+    opener::open(oauth_url)?;
     Ok(())
   }
 
@@ -230,74 +266,81 @@ impl Client {
   }
 
   pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<bool, AppError> {
-    let url = format!("{}/api/user/sign_in/password", self.base_url);
-    let params = SignInParams {
-      email: email.to_owned(),
-      password: password.to_owned(),
-    };
-    let resp = self.http_client.post(&url).json(&params).send().await?;
-    let sign_in_resp: SignInPasswordResponse =
-      AppResponse::from_response(resp).await?.into_data()?;
-    self.token.write().set(sign_in_resp.access_token_resp);
-    Ok(sign_in_resp.is_new)
+    let access_token_resp = self
+      .gotrue_client
+      .token(&Grant::Password(PasswordGrant {
+        email: email.to_owned(),
+        password: password.to_owned(),
+      }))
+      .await?;
+    let is_new = self
+      .verify_token_cloud(&access_token_resp.access_token)
+      .await?;
+    self.token.write().set(access_token_resp);
+    Ok(is_new)
   }
 
   pub async fn refresh(&self) -> Result<(), AppError> {
-    let url = format!(
-      "{}/api/user/refresh/{}",
-      self.base_url,
-      self
-        .token
-        .read()
-        .as_ref()
-        .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
-        .refresh_token
-        .as_str()
-    );
-    let resp = self.http_client.get(&url).send().await?;
-    let token = AppResponse::from_response(resp).await?.into_data()?;
-    self.token.write().set(token);
+    let refresh_token = self
+      .token
+      .read()
+      .as_ref()
+      .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
+      .refresh_token
+      .as_str()
+      .to_owned();
+    let access_token_resp = self
+      .gotrue_client
+      .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
+      .await?;
+    self.token.write().set(access_token_resp);
     Ok(())
   }
 
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppError> {
-    let url = format!("{}/api/user/sign_up", self.base_url);
-    let params = SignInParams {
-      email: email.to_owned(),
-      password: password.to_owned(),
-    };
-    let resp = self.http_client.post(&url).json(&params).send().await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    Ok(())
+    match self.gotrue_client.sign_up(email, password).await? {
+      Authenticated(access_token_resp) => {
+        self.token.write().set(access_token_resp);
+        Ok(())
+      },
+      NotAuthenticated(user) => {
+        tracing::info!("sign_up but not authenticated: {}", user.email);
+        Ok(())
+      },
+    }
   }
 
   pub async fn sign_out(&self) -> Result<(), AppError> {
-    let url = format!("{}/api/user/sign_out", self.base_url);
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .send()
-      .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()?;
-    self.token.write().unset();
+    self.gotrue_client.logout(&self.access_token()?).await?;
     Ok(())
   }
 
   pub async fn update(&self, params: UserUpdateParams) -> Result<(), AppError> {
+    let updated_user = self
+      .gotrue_client
+      .update_user(&self.access_token()?, params.email, params.password)
+      .await?;
+    if let Some(t) = self.token.write().as_mut() {
+      t.user = updated_user;
+    }
+    if let Some(name) = params.name {
+      self.update_user_name(&name).await?;
+    }
+    Ok(())
+  }
+
+  pub async fn update_user_name(&self, new_name: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/update", self.base_url);
+    let params = UpdateUsernameParams {
+      new_name: new_name.to_string(),
+    };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&params)
       .send()
       .await?;
-    let new_user = AppResponse::<User>::from_response(resp)
-      .await?
-      .into_data()?;
-    if let Some(t) = self.token.write().as_mut() {
-      t.user = new_user;
-    }
-    Ok(())
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
@@ -370,7 +413,7 @@ impl Client {
 
     let access_token = self.access_token()?;
     let request_builder = self
-      .http_client
+      .cloud_client
       .request(method, url)
       .bearer_auth(access_token);
     Ok(request_builder)

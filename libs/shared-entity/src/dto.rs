@@ -1,6 +1,6 @@
 // Data Transfer Objects (DTO)
 
-use gotrue_entity::{AccessTokenResponse, User};
+use gotrue_entity::AccessTokenResponse;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct WorkspaceMembersParams {
@@ -19,6 +19,11 @@ pub struct UserUpdateParams {
   pub name: Option<String>,
   pub email: Option<String>,
   pub password: Option<String>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct UpdateUsernameParams {
+  pub new_name: String,
 }
 
 impl UserUpdateParams {
@@ -50,6 +55,5 @@ pub struct SignInPasswordResponse {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct SignInTokenResponse {
-  pub user: User,
   pub is_new: bool,
 }

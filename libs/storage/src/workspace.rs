@@ -7,7 +7,7 @@ use storage_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
 pub async fn update_user_name(
   pool: &PgPool,
-  gotrue_uuid: &uuid::Uuid,
+  uuid: &uuid::Uuid,
   name: &str,
 ) -> Result<(), sqlx::Error> {
   sqlx::query!(
@@ -17,7 +17,7 @@ pub async fn update_user_name(
         WHERE uuid = $2
         "#,
     name,
-    gotrue_uuid
+    uuid
   )
   .execute(pool)
   .await?;

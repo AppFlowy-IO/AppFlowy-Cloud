@@ -1,13 +1,11 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::{client::utils::REGISTERED_USERS_MUTEX, user_1_signed_in, user_2_signed_in};
+use crate::client::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn add_workspace_members_not_enough_permission() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c1 = user_1_signed_in().await;
-  let c2 = user_2_signed_in().await;
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let (c2, _user2) = generate_unique_registered_user_client().await;
 
   let user2_workspace = c2.workspaces().await.unwrap();
   let user2_workspace_id = user2_workspace.first().unwrap().workspace_id;
@@ -24,10 +22,8 @@ async fn add_workspace_members_not_enough_permission() {
 
 #[tokio::test]
 async fn add_workspace_members_then_delete() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c1 = user_1_signed_in().await;
-  let c2 = user_2_signed_in().await;
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let (c2, _user2) = generate_unique_registered_user_client().await;
   let c2_email = c2.token().read().as_ref().unwrap().user.email.clone();
 
   let c1_workspace = c1.workspaces().await.unwrap();

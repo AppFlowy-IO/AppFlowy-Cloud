@@ -1,5 +1,3 @@
-use crate::client::utils::REGISTERED_USERS_MUTEX;
-
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 
@@ -10,12 +8,14 @@ use collab_define::CollabType;
 use sqlx::types::Uuid;
 use std::sync::Arc;
 
-use crate::user_1_signed_in;
 use assert_json_diff::assert_json_eq;
 use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
+
+use crate::client::utils::{generate_unique_registered_user, User};
+use crate::client_api_client;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -33,12 +33,15 @@ impl TestClient {
     object_id: &str,
     device_id: &str,
     collab_type: CollabType,
+    registered_user: &User,
   ) -> Self {
     let device_id = device_id.to_string();
-    let _guard = REGISTERED_USERS_MUTEX.lock().await;
 
-    // Sign in
-    let api_client = user_1_signed_in().await;
+    let api_client = client_api_client();
+    api_client
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
 
     // Connect to server via websocket
     let ws_client = WSClient::new(WSClientConfig {
@@ -94,7 +97,8 @@ impl TestClient {
 
   pub(crate) async fn new(object_id: &str, collab_type: CollabType) -> Self {
     let device_id = Uuid::new_v4().to_string();
-    Self::new_with_device_id(object_id, &device_id, collab_type).await
+    let registered_user = generate_unique_registered_user().await;
+    Self::new_with_device_id(object_id, &device_id, collab_type, &registered_user).await
   }
 
   pub(crate) async fn disconnect(&self) {

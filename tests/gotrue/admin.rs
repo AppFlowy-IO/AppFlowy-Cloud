@@ -1,9 +1,9 @@
+use client_api::http_test::extract_appflowy_sign_in_url;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
   params::{AdminUserParams, GenerateLinkParams},
 };
-use scraper::{Html, Selector};
 
 use crate::{
   client::{
@@ -94,17 +94,4 @@ async fn admin_generate_link_and_user_sign_in() {
 
   let workspaces = client.workspaces().await.unwrap();
   assert_eq!(workspaces.len(), 1);
-}
-
-fn extract_appflowy_sign_in_url(html_str: &str) -> String {
-  let fragment = Html::parse_fragment(html_str);
-  let selector = Selector::parse("a").unwrap();
-  fragment
-    .select(&selector)
-    .next()
-    .unwrap()
-    .value()
-    .attr("href")
-    .unwrap()
-    .to_string()
 }

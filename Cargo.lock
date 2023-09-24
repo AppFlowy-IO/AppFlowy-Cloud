@@ -839,6 +839,7 @@ dependencies = [
  "opener",
  "parking_lot",
  "reqwest",
+ "scraper",
  "serde",
  "serde_json",
  "serde_repr",

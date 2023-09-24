@@ -41,6 +41,7 @@ async fn verify_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
+#[tracing::instrument(level = "debug", skip(state))]
 async fn profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
@@ -59,6 +60,7 @@ async fn update_handler(
   Ok(AppResponse::Ok().into())
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 async fn login_handler(
   req: Json<LoginRequest>,
   state: Data<AppState>,
@@ -83,6 +85,7 @@ async fn login_handler(
   Ok(HttpResponse::Ok().json(resp))
 }
 
+#[tracing::instrument(level = "debug", skip(state))]
 async fn logout_handler(req: HttpRequest, state: Data<AppState>) -> Result<HttpResponse> {
   let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;
   logout(logged_user, state.user.clone()).await;
@@ -109,6 +112,7 @@ async fn register_handler(
   Ok(HttpResponse::Ok().json(resp))
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 async fn change_password_handler(
   req: HttpRequest,
   payload: Json<ChangePasswordRequest>,

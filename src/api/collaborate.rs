@@ -111,6 +111,7 @@ async fn retrieve_snapshot_data_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 async fn retrieve_snapshots_handler(
   payload: Json<QueryObjectSnapshotParams>,
   storage: Data<Storage<CollabStorageProxy>>,

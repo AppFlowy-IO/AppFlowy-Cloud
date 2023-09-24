@@ -27,8 +27,8 @@ use storage_entity::{AFWorkspaces, QueryCollabParams};
 use storage_entity::{DeleteCollabParams, RawData};
 
 pub struct Client {
-  cloud_client: reqwest::Client,
-  gotrue_client: gotrue::api::Client,
+  pub(crate) cloud_client: reqwest::Client,
+  pub(crate) gotrue_client: gotrue::api::Client,
   base_url: String,
   ws_addr: String,
   token: Arc<RwLock<ClientToken>>,

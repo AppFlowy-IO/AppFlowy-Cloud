@@ -21,6 +21,7 @@ use collab_sync_protocol::{handle_msg, DefaultSyncProtocol};
 use collab_sync_protocol::{
   CSAwarenessUpdate, CollabMessage, CollabServerAck, CollabServerBroadcast, CollabServerResponse,
 };
+use tracing::{error, trace, warn};
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
@@ -60,7 +61,7 @@ impl CollabBroadcast {
           let payload = gen_update_message(&event.update);
           let msg = CollabServerBroadcast::new(origin, cloned_oid.clone(), payload);
           if let Err(_e) = sink.send(msg.into()) {
-            tracing::trace!("Broadcast group is closed");
+            trace!("Broadcast group is closed");
           }
         })
         .unwrap();
@@ -76,7 +77,7 @@ impl CollabBroadcast {
             let payload = Message::Awareness(awareness_update).encode_v1();
             let msg = CSAwarenessUpdate::new(cloned_oid.clone(), payload);
             if let Err(_e) = sink.send(msg.into()) {
-              tracing::trace!("Broadcast group is closed");
+              trace!("Broadcast group is closed");
             }
           }
         });
@@ -125,7 +126,7 @@ impl CollabBroadcast {
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: std::error::Error + Send + Sync + 'static,
   {
-    tracing::trace!("[💭Server]: new subscriber: {}", origin);
+    trace!("[💭Server]: new subscriber: {}", origin);
     let sink = Arc::new(Mutex::new(sink));
     // Receive a update from the document observer and forward the applied update to all
     // connected subscribers using its Sink.
@@ -141,7 +142,7 @@ impl CollabBroadcast {
             }
           }
 
-          tracing::trace!("[💭Server]: {}", msg);
+          trace!("[💭Server]: {}", msg);
           let mut sink = sink.lock().await;
           if let Err(e) = sink.send(msg).await {
             tracing::error!("[💭Server]: broadcast client message failed: {:?}", e);
@@ -172,7 +173,7 @@ impl CollabBroadcast {
           let is_client_init = collab_msg.is_init();
 
           if object_id != collab_msg.object_id() {
-            tracing::error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
+            error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
             continue;
           }
           tracing::debug!("[💭Server]: {}", collab_msg,);
@@ -188,10 +189,16 @@ impl CollabBroadcast {
                 if let Some(resp) = resp {
                   let msg =
                     CollabServerResponse::new(origin.cloned(), object_id.clone(), resp.encode_v1());
-                  sink.send(msg.into()).await.map_err(internal_error)?;
+                  if let Err(err) = sink.send(msg.into()).await {
+                    error!("[💭Server]: send response to client failed: {:?}", err);
+                    break;
+                  }
                 }
               },
-              _ => break,
+              Err(e) => {
+                warn!("Parser yrs message failed: {:?}", e);
+                break;
+              },
             }
           }
 
@@ -206,7 +213,11 @@ impl CollabBroadcast {
 
             // Send the ack message to the client
             let ack = CollabServerAck::new(object_id.clone(), msg_id, payload);
-            let _ = sink.send(ack.into()).await;
+            if let Err(e) = sink.send(ack.into()).await {
+              trace!("Send the ack message to the client failed: {}", e);
+            }
+          } else {
+            warn!("Client message does not have a message id");
           }
         }
         Ok(())

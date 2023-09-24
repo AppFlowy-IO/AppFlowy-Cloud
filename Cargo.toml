@@ -84,7 +84,7 @@ tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 dotenv = "0.15.0"
 scraper = "0.17.1"
-client-api = { path = "libs/client-api",  features = ["client-api-test"]}
+client-api = { path = "libs/client-api" }
 
 [[bin]]
 name = "appflowy_cloud"

@@ -99,6 +99,7 @@ impl TestClient {
       sink,
       SinkConfig::default(),
       stream,
+      Some(handler),
     );
 
     collab.lock().add_plugin(Arc::new(sync_plugin));

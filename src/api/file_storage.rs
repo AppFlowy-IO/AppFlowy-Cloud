@@ -12,7 +12,9 @@ use crate::{component::auth::jwt::UserUuid, state::AppState};
 
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")
-    .service(web::resource("/create/{path}").route(web::get().to(create_handler)))
+    .service(web::resource("/{path}").route(web::get().to(get_handler)))
+    .service(web::resource("/{path}").route(web::put().to(create_handler)))
+    .service(web::resource("/{path}").route(web::delete().to(delete_handler)))
 }
 
 async fn create_handler(
@@ -23,11 +25,10 @@ async fn create_handler(
   content_type: web::Header<ContentType>,
 ) -> Result<JsonAppResponse<()>> {
   let file_path = path.into_inner();
-  let bucket = &state.s3_bucket;
   let mime = content_type.into_inner().0;
   file_storage::create_object(
     &state.pg_pool,
-    bucket,
+    &state.s3_bucket,
     &user_uuid,
     &file_path,
     &file_data,
@@ -35,4 +36,25 @@ async fn create_handler(
   )
   .await?;
   Ok(AppResponse::Ok().into())
+}
+
+async fn delete_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<String>,
+) -> Result<JsonAppResponse<()>> {
+  let file_path = path.into_inner();
+  file_storage::delete_object(&state.pg_pool, &state.s3_bucket, &user_uuid, &file_path).await?;
+  Ok(AppResponse::Ok().into())
+}
+
+async fn get_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<String>,
+) -> Result<Bytes> {
+  let file_path = path.into_inner();
+  let data =
+    file_storage::get_object(&state.pg_pool, &state.s3_bucket, &user_uuid, &file_path).await?;
+  Ok(data)
 }

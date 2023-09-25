@@ -51,14 +51,12 @@ impl From<anyhow::Error> for AppError {
   }
 }
 
-#[cfg(feature = "cloud")]
 impl From<gotrue_entity::GoTrueError> for AppError {
   fn from(err: gotrue_entity::GoTrueError) -> Self {
     match (err.code, err.msg.as_str()) {
+      (400, m) if m.starts_with("oauth error") => AppError::new(ErrorCode::OAuthError, err.msg),
       (401, _) => AppError::new(ErrorCode::OAuthError, err.msg),
-      (422, "New password should be different from the old password.") => {
-        AppError::new(ErrorCode::InvalidPassword, err.msg)
-      },
+      (422, _) => AppError::new(ErrorCode::InvalidRequestParams, err.msg),
       _ => AppError::new(
         ErrorCode::Unhandled,
         format!(

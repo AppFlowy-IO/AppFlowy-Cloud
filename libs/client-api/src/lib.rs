@@ -1,4 +1,8 @@
 mod http;
+
+#[cfg(feature = "client-api-test")]
+pub mod http_test;
+
 pub mod notify;
 pub mod ws;
 

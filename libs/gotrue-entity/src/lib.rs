@@ -99,6 +99,40 @@ pub struct GoTrueError {
   pub error_id: Option<String>,
 }
 
+impl From<anyhow::Error> for GoTrueError {
+  fn from(value: anyhow::Error) -> Self {
+    GoTrueError {
+      code: -1,
+      msg: format!("gotrue unhandled error: {}", value),
+      error_id: None,
+    }
+  }
+}
+
+impl From<reqwest::Error> for GoTrueError {
+  fn from(value: reqwest::Error) -> Self {
+    GoTrueError {
+      code: -1,
+      msg: format!("gotrue reqwest error: {}", value),
+      error_id: None,
+    }
+  }
+}
+
+impl From<OAuthError> for GoTrueError {
+  fn from(value: OAuthError) -> Self {
+    GoTrueError {
+      code: 400,
+      msg: format!(
+        "oauth error: {}, description: {}",
+        value.error,
+        value.error_description.unwrap_or_default(),
+      ),
+      error_id: None,
+    }
+  }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GoTrueSettings {
   pub external: GoTrueOAuthProviderSettings,
@@ -207,4 +241,11 @@ impl OAuthProvider {
 #[derive(Serialize, Deserialize)]
 pub struct OAuthURL {
   pub url: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SignUpResponse {
+  Authenticated(AccessTokenResponse),
+  NotAuthenticated(User),
 }

@@ -30,6 +30,8 @@ pub struct GoTrueSetting {
   pub base_url: String,
   pub ext_url: String, // public url
   pub jwt_secret: Secret<String>,
+  pub admin_email: String,
+  pub admin_password: String,
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our

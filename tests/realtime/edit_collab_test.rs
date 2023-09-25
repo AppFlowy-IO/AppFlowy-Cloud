@@ -1,4 +1,4 @@
-use crate::client_api_client;
+use crate::{client::utils::generate_unique_registered_user, client_api_client};
 use serde_json::json;
 
 use collab_define::CollabType;
@@ -80,17 +80,30 @@ async fn same_user_with_same_device_id_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
 
+  // Sign in
+  let registered_user = generate_unique_registered_user().await;
+
   // Client_1_2 will force the server to disconnect client_1_1. So any changes made by client_1_1
   // will not be saved to the server.
   let device_id = Uuid::new_v4().to_string();
-  let client_1_1 =
-    TestClient::new_with_device_id(&object_id, &device_id, collab_type.clone()).await;
+  let client_1_1 = TestClient::new_with_device_id(
+    &object_id,
+    &device_id,
+    collab_type.clone(),
+    &registered_user,
+  )
+  .await;
   client_1_1.collab.lock().insert("1", "a");
   client_1_1.collab.lock().insert("3", "c");
   tokio::time::sleep(Duration::from_millis(500)).await;
 
-  let mut client_1_2 =
-    TestClient::new_with_device_id(&object_id, &device_id, collab_type.clone()).await;
+  let mut client_1_2 = TestClient::new_with_device_id(
+    &object_id,
+    &device_id,
+    collab_type.clone(),
+    &registered_user,
+  )
+  .await;
   client_1_2.collab.lock().insert("2", "b");
   tokio::time::sleep(Duration::from_millis(500)).await;
 

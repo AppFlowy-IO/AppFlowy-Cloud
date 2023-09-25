@@ -55,8 +55,11 @@ pub enum ErrorCode {
   #[error("Not Enough Permissions")]
   NotEnoughPermissions = 1012,
 
+  #[error("User name cannot be empty")]
+  UserNameIsEmpty = 1013,
+
   #[error("S3 Error")]
-  S3Error = 1013,
+  S3Error = 1014,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

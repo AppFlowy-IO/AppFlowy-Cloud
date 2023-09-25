@@ -1,12 +1,10 @@
-use crate::client::utils::REGISTERED_USERS_MUTEX;
-use crate::user_1_signed_in;
 use client_api::ws::{ConnectState, WSClient, WSClientConfig};
+
+use crate::client::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn realtime_connect_test() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = user_1_signed_in().await;
+  let (c, _user) = generate_unique_registered_user_client().await;
   let ws_client = WSClient::new(WSClientConfig {
     buffer_capacity: 100,
     ping_per_secs: 2,
@@ -29,10 +27,7 @@ async fn realtime_connect_test() {
 
 #[tokio::test]
 async fn realtime_disconnect_test() {
-  let _guard = REGISTERED_USERS_MUTEX.lock().await;
-
-  let c = user_1_signed_in().await;
-
+  let (c, _user) = generate_unique_registered_user_client().await;
   let ws_client = WSClient::new(WSClientConfig {
     buffer_capacity: 100,
     ping_per_secs: 2,

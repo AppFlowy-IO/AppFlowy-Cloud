@@ -205,3 +205,14 @@ pub struct AFWorkspaceMember {
   pub email: String,
   pub role: AFRole,
 }
+
+#[derive(FromRow, Serialize, Deserialize)]
+pub struct AFObjectMetadata {
+  pub user_uuid: uuid::Uuid,
+  pub path: String,
+  pub object_type: String,
+  pub s3_key: uuid::Uuid,
+  pub created_at: DateTime<Utc>,
+  pub updated_at: DateTime<Utc>,
+  pub deleted_at: Option<DateTime<Utc>>,
+}

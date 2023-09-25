@@ -25,6 +25,14 @@ async fn create_handler(
   let file_path = path.into_inner();
   let bucket = &state.s3_bucket;
   let mime = content_type.into_inner().0;
-  file_storage::create_object_for_user(bucket, &user_uuid, &file_path, &file_data, mime).await?;
+  file_storage::create_object(
+    &state.pg_pool,
+    bucket,
+    &user_uuid,
+    &file_path,
+    &file_data,
+    mime,
+  )
+  .await?;
   Ok(AppResponse::Ok().into())
 }

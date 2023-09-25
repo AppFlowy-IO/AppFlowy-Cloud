@@ -10,9 +10,9 @@ use sqlx::types::Uuid;
 use std::sync::{Arc, Once};
 
 use assert_json_diff::assert_json_eq;
-use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig};
 use collab_plugins::sync_plugin::client::SinkConfig;
-use futures_util::StreamExt;
+
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
@@ -31,9 +31,9 @@ pub(crate) struct TestClient {
 }
 
 pub(crate) struct TestCollab {
+  #[allow(dead_code)]
   pub origin: CollabOrigin,
   pub collab: Arc<MutexCollab>,
-  pub handler: Arc<WebSocketChannel>,
 }
 
 impl TestClient {
@@ -104,11 +104,7 @@ impl TestClient {
 
     collab.lock().add_plugin(Arc::new(sync_plugin));
     collab.async_initialize().await;
-    let test_collab = TestCollab {
-      origin,
-      collab,
-      handler,
-    };
+    let test_collab = TestCollab { origin, collab };
     self
       .collab_by_object_id
       .insert(object_id.to_string(), test_collab);

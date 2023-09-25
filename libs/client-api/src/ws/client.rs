@@ -111,10 +111,15 @@ impl WSClient {
                   .await
                   .get(&msg.business_id)
                   .and_then(|map| map.get(&msg.object_id))
-                  .and_then(|channel| channel.upgrade())
                 {
-                  trace!("send message to channel");
-                  channel.recv_msg(&msg);
+                  match channel.upgrade() {
+                    None => {
+                      trace!("channel is dropped");
+                    },
+                    Some(channel) => {
+                      channel.recv_msg(&msg);
+                    },
+                  }
                 }
               } else {
                 warn!("channels are closed");

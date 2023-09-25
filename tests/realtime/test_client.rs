@@ -7,13 +7,18 @@ use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 use collab::preclude::Collab;
 use collab_define::CollabType;
 use sqlx::types::Uuid;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use assert_json_diff::assert_json_eq;
 use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
+use collab_plugins::sync_plugin::client::SinkConfig;
+use futures_util::StreamExt;
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
+use tracing_subscriber::fmt::Subscriber;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use crate::client::utils::{generate_unique_registered_user, User};
 use crate::client_api_client;
@@ -33,6 +38,7 @@ pub(crate) struct TestCollab {
 
 impl TestClient {
   pub(crate) async fn new() -> Self {
+    setup_log();
     let registered_user = generate_unique_registered_user().await;
     let device_id = Uuid::new_v4().to_string();
     Self::new_with_device_id(device_id, registered_user).await
@@ -91,11 +97,12 @@ impl TestClient {
       object,
       Arc::downgrade(&collab),
       sink,
+      SinkConfig::default(),
       stream,
     );
+
     collab.lock().add_plugin(Arc::new(sync_plugin));
     collab.async_initialize().await;
-
     let test_collab = TestCollab {
       origin,
       collab,
@@ -183,4 +190,20 @@ pub async fn get_collab_json_from_server(
   Collab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![bytes.to_vec()], vec![])
     .unwrap()
     .to_json_value()
+}
+
+pub fn setup_log() {
+  static START: Once = Once::new();
+  START.call_once(|| {
+    let level = "trace";
+    let mut filters = vec![];
+    filters.push(format!("collab_plugins={}", level));
+    std::env::set_var("RUST_LOG", filters.join(","));
+
+    let subscriber = Subscriber::builder()
+      .with_env_filter(EnvFilter::from_default_env())
+      .with_ansi(true)
+      .finish();
+    subscriber.try_init().unwrap();
+  });
 }

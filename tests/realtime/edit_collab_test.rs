@@ -7,10 +7,12 @@ use sqlx::types::{uuid, Uuid};
 use crate::realtime::test_client::{assert_collab_json, TestClient};
 
 use assert_json_diff::assert_json_eq;
+use collab::core::collab_state::SyncState;
 use shared_entity::error_code::ErrorCode;
 use std::time::Duration;
 use storage::collab::FLUSH_PER_UPDATE;
 use storage_entity::QueryCollabParams;
+use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
@@ -18,6 +20,14 @@ async fn realtime_write_single_collab_test() {
   let collab_type = CollabType::Document;
   let mut test_client = TestClient::new().await;
   test_client.create(&object_id, collab_type.clone()).await;
+
+  let mut sync_state = test_client
+    .collab_by_object_id
+    .get(&object_id)
+    .unwrap()
+    .collab
+    .lock()
+    .subscribe_sync_state();
 
   // Edit the collab
   for i in 0..=5 {
@@ -30,8 +40,21 @@ async fn realtime_write_single_collab_test() {
       .insert(&i.to_string(), i.to_string());
   }
 
-  // Wait for the messages to be sent
-  tokio::time::sleep(Duration::from_secs(2)).await;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(4)) => panic!("sync timeout"),
+       result = sync_state.next() => {
+        match result {
+          Some(new_state) => {
+            if new_state == SyncState::SyncFinished {
+              break;
+            }
+          },
+          None => panic!("sync error"),
+        }
+       },
+    }
+  }
 
   assert_collab_json(
     &mut test_client.api_client,
@@ -52,40 +75,44 @@ async fn realtime_write_single_collab_test() {
 
 #[tokio::test]
 async fn realtime_write_multiple_collab_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
   let mut test_client = TestClient::new().await;
-  test_client.create(&object_id, collab_type.clone()).await;
+  let mut object_ids = vec![];
+  for _ in 0..10 {
+    let object_id = uuid::Uuid::new_v4().to_string();
+    let collab_type = CollabType::Document;
+    test_client.create(&object_id, collab_type.clone()).await;
+    for i in 0..=5 {
+      test_client
+        .collab_by_object_id
+        .get_mut(&object_id)
+        .unwrap()
+        .collab
+        .lock()
+        .insert(&i.to_string(), i.to_string());
+    }
 
-  // Edit the collab
-  for i in 0..=5 {
-    test_client
-      .collab_by_object_id
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .lock()
-      .insert(&i.to_string(), i.to_string());
+    object_ids.push(object_id);
   }
 
   // Wait for the messages to be sent
   tokio::time::sleep(Duration::from_secs(2)).await;
-
-  assert_collab_json(
-    &mut test_client.api_client,
-    &object_id,
-    &collab_type,
-    3,
-    json!( {
-      "0": "0",
-      "1": "1",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
-    }),
-  )
-  .await;
+  for object_id in object_ids {
+    assert_collab_json(
+      &mut test_client.api_client,
+      &object_id,
+      &CollabType::Document,
+      3,
+      json!( {
+        "0": "0",
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4",
+        "5": "5",
+      }),
+    )
+    .await;
+  }
 }
 
 #[tokio::test]

@@ -31,7 +31,6 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
 fi
 
 until curl localhost:9998/health; do
-  >&2 echo "Waiting on GoTrue"
   sleep 1
 done
 
@@ -48,7 +47,6 @@ RUST_LOG=trace cargo run &
 
 # sometimes the gotrue server may not be ready yet
 sleep 1
-
 # created registered user
 ./build/init_registered_user.sh
 

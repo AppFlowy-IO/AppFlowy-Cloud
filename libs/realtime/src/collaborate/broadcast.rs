@@ -19,7 +19,7 @@ use yrs::{ReadTxn, UpdateSubscription};
 use crate::error::{internal_error, RealtimeError};
 use collab_sync_protocol::{handle_msg, DefaultSyncProtocol};
 use collab_sync_protocol::{
-  CSAwarenessUpdate, CollabMessage, CollabServerAck, CollabServerBroadcast, CollabServerResponse,
+  CSAwarenessUpdate, ClientUpdateResponse, CollabMessage, CollabServerBroadcast, ServerCollabInit,
 };
 use tracing::{error, trace, warn};
 
@@ -176,7 +176,7 @@ impl CollabBroadcast {
             error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
             continue;
           }
-          tracing::debug!("[💭Server]: {}", collab_msg,);
+          tracing::debug!("[💭Server]: {}", collab_msg);
           let payload = collab_msg.payload().unwrap();
           let mut decoder = DecoderV1::from(payload);
           let mut sink = sink.lock().await;
@@ -187,8 +187,13 @@ impl CollabBroadcast {
                 let resp = handle_msg(&origin, &DefaultSyncProtocol, &collab, msg).await?;
                 // Send the response to the corresponding client
                 if let Some(resp) = resp {
-                  let msg =
-                    CollabServerResponse::new(origin.cloned(), object_id.clone(), resp.encode_v1());
+                  let msg = ClientUpdateResponse::new(
+                    origin.cloned(),
+                    object_id.clone(),
+                    resp.encode_v1(),
+                    collab_msg.msg_id(),
+                  );
+                  trace!("Send response to client: {}", msg);
                   if let Err(err) = sink.send(msg.into()).await {
                     error!("[💭Server]: send response to client failed: {:?}", err);
                     break;
@@ -211,10 +216,9 @@ impl CollabBroadcast {
               None
             };
 
-            // Send the ack message to the client
-            let ack = CollabServerAck::new(object_id.clone(), msg_id, payload);
-            if let Err(e) = sink.send(ack.into()).await {
-              trace!("Send the ack message to the client failed: {}", e);
+            let server_init_sync = ServerCollabInit::new(object_id.clone(), msg_id, payload);
+            if let Err(e) = sink.send(server_init_sync.into()).await {
+              trace!("Send server init sync to the client failed: {}", e);
             }
           } else {
             warn!("Client message does not have a message id");

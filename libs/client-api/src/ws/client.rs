@@ -42,6 +42,7 @@ pub struct WSClient {
   addr: Arc<parking_lot::Mutex<Option<String>>>,
   config: WSClientConfig,
   state_notify: Arc<Mutex<ConnectStateNotify>>,
+  /// Sender used to send messages to the websocket.
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,

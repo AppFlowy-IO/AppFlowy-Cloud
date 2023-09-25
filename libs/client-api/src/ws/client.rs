@@ -15,6 +15,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
+use tracing::trace;
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -100,6 +101,7 @@ impl WSClient {
     // Receive messages from the websocket, and send them to the channels.
     tokio::spawn(async move {
       while let Some(Ok(msg)) = stream.next().await {
+        trace!("client receive ws message: {}", msg);
         match msg {
           Message::Text(_) => {},
           Message::Binary(_) => {
@@ -180,6 +182,7 @@ impl WSClient {
   }
 
   async fn set_state(&self, state: ConnectState) {
+    trace!("websocket state: {:?}", state);
     self.state_notify.lock().await.set_state(state);
   }
 }

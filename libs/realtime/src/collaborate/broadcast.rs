@@ -187,16 +187,23 @@ impl CollabBroadcast {
                 let resp = handle_msg(&origin, &DefaultSyncProtocol, &collab, msg).await?;
                 // Send the response to the corresponding client
                 if let Some(resp) = resp {
-                  let msg = ClientUpdateResponse::new(
-                    origin.cloned(),
-                    object_id.clone(),
-                    resp.encode_v1(),
-                    collab_msg.msg_id(),
-                  );
-                  trace!("Send response to client: {}", msg);
-                  if let Err(err) = sink.send(msg.into()).await {
-                    error!("[💭Server]: send response to client failed: {:?}", err);
-                    break;
+                  match origin {
+                    None => {
+                      warn!("Client message does not have a origin");
+                    },
+                    Some(origin) => {
+                      let msg = ClientUpdateResponse::new(
+                        origin.clone(),
+                        object_id.clone(),
+                        resp.encode_v1(),
+                        collab_msg.msg_id(),
+                      );
+                      trace!("Send response to client: {}", msg);
+                      if let Err(err) = sink.send(msg.into()).await {
+                        error!("[💭Server]: send response to client failed: {:?}", err);
+                        break;
+                      }
+                    },
                   }
                 }
               },

@@ -1,12 +1,14 @@
+use anyhow::anyhow;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
-use gotrue::params::AdminUserParams;
+use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use parking_lot::RwLock;
 use reqwest::Method;
 use reqwest::RequestBuilder;
+use scraper::{Html, Selector};
 use shared_entity::data::AppResponse;
 use shared_entity::dto::SignInTokenResponse;
 use shared_entity::dto::UpdateUsernameParams;
@@ -410,6 +412,37 @@ impl Client {
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
 
+  pub async fn generate_sign_in_callback_url(
+    &self,
+    admin_user_email: &str,
+    admin_user_password: &str,
+    user_email: &str,
+  ) -> Result<String, AppError> {
+    let admin_token = self
+      .gotrue_client
+      .token(&Grant::Password(PasswordGrant {
+        email: admin_user_email.to_string(),
+        password: admin_user_password.to_string(),
+      }))
+      .await?;
+
+    let admin_user_params: GenerateLinkParams = GenerateLinkParams {
+      email: user_email.to_string(),
+      ..Default::default()
+    };
+
+    let link_resp = self
+      .gotrue_client
+      .generate_link(&admin_token.access_token, &admin_user_params)
+      .await?;
+    assert_eq!(link_resp.email, user_email);
+
+    let action_link = link_resp.action_link;
+    let resp = reqwest::Client::new().get(action_link).send().await?;
+    let resp_text = resp.text().await?;
+    Ok(extract_sign_in_url(&resp_text)?)
+  }
+
   async fn http_client_with_auth(
     &self,
     method: Method,
@@ -461,4 +494,18 @@ impl Client {
   //     .await?;
   //   check_response(resp).await
   // }
+}
+
+pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
+  let fragment = Html::parse_fragment(html_str);
+  let selector = Selector::parse("a").unwrap();
+  let url = fragment
+    .select(&selector)
+    .next()
+    .ok_or(anyhow!("no a tag found"))?
+    .value()
+    .attr("href")
+    .ok_or(anyhow!("no href found"))?
+    .to_string();
+  Ok(url)
 }

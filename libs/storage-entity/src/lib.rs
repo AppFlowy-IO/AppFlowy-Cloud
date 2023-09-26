@@ -207,12 +207,11 @@ pub struct AFWorkspaceMember {
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
-pub struct AFObjectMetadata {
-  pub user_uuid: uuid::Uuid,
+pub struct AFFileMetadata {
+  pub owner_uid: i64,
   pub path: String,
-  pub object_type: String,
+  pub file_type: String,
+  pub file_size: i64,
   pub s3_key: uuid::Uuid,
   pub created_at: DateTime<Utc>,
-  pub updated_at: DateTime<Utc>,
-  pub deleted_at: Option<DateTime<Utc>>,
 }

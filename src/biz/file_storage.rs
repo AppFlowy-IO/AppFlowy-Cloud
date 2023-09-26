@@ -18,7 +18,7 @@ pub async fn create_object(
   let mut trans = pg_pool.begin().await?;
   let s3_key = uuid::Uuid::new_v4();
   let file_type = mime.to_string();
-  file_storage::insert_object_metadata(&mut trans, user_uuid, path, &file_type, size, &s3_key)
+  file_storage::insert_file_metadata(&mut trans, user_uuid, path, &file_type, size, &s3_key)
     .await?;
 
   let resp = s3_bucket.put_object(s3_key.to_string(), data).await?;
@@ -37,8 +37,10 @@ pub async fn delete_object(
   // TODO: access control
 
   let mut trans = pg_pool.begin().await?;
-  let s3_key = file_storage::set_delete_object_metadata(&mut trans, user_uuid, path).await?;
-  let resp = s3_bucket.delete_object(s3_key).await?;
+  let file_metadata = file_storage::delete_file_metadata(&mut trans, user_uuid, path).await?;
+  let resp = s3_bucket
+    .delete_object(&file_metadata.s3_key.to_string())
+    .await?;
 
   check_s3_status(&resp)?;
   trans.commit().await?;
@@ -48,12 +50,12 @@ pub async fn delete_object(
 pub async fn get_object(
   pg_pool: &sqlx::PgPool,
   s3_bucket: &s3::Bucket,
-  _user_uuid: &uuid::Uuid,
+  user_uuid: &uuid::Uuid,
   path: &str,
 ) -> Result<Bytes, AppError> {
   // TODO: access control
 
-  let object_metadata = file_storage::get_object_metadata(pg_pool, path).await?;
+  let object_metadata = file_storage::get_file_metadata(pg_pool, user_uuid, path).await?;
   let resp = s3_bucket
     .get_object(&object_metadata.s3_key.to_string())
     .await?;

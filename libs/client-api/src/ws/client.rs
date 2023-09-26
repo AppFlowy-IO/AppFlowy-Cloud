@@ -12,13 +12,13 @@ use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
-use tokio_retry::strategy::{FibonacciBackoff, FixedInterval};
+use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{error, info, trace, warn};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -82,7 +82,6 @@ impl WSClient {
       connecting_addr: addr,
       addr: Arc::downgrade(&self.addr),
     };
-    debug!("🔵Connecting to websocket: {}", addr);
     let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
     let addr = match stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),

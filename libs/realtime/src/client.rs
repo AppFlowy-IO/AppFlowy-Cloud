@@ -16,7 +16,7 @@ use crate::error::RealtimeError;
 
 use std::time::{Duration, Instant};
 use storage::collab::CollabStorage;
-use tracing::{error, info};
+use tracing::error;
 
 pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
   user: U,

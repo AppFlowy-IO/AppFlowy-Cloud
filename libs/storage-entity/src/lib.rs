@@ -212,6 +212,11 @@ pub struct AFFileMetadata {
   pub path: String,
   pub file_type: String,
   pub file_size: i64,
-  pub s3_key: uuid::Uuid,
   pub created_at: DateTime<Utc>,
+}
+
+impl AFFileMetadata {
+  pub fn s3_path(&self) -> String {
+    format!("{}/{}", self.owner_uid, self.path)
+  }
 }

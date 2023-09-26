@@ -446,11 +446,11 @@ impl Client {
     Ok(extract_sign_in_url(&resp_text)?)
   }
 
-  pub async fn create_file_storage_object(
+  pub async fn put_file_storage_object(
     &self,
     path: &str,
     data: Bytes,
-    mime: Mime,
+    mime: &Mime,
   ) -> Result<(), AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, path);
     let resp = self
@@ -470,21 +470,16 @@ impl Client {
       .await?
       .send()
       .await?;
-
-    let status = resp.status();
-    if status.is_success() {
-      let payload = resp.text().await?;
-      Err(
-        anyhow!(
-          "Failed to get file storage object, code: {}, payload: {}",
-          status,
-          payload
-        )
-        .into(),
-      )
-    } else {
-      let bytes = resp.bytes().await?;
-      Ok(bytes)
+    match resp.status() {
+      reqwest::StatusCode::OK => {
+        let bytes = resp.bytes().await?;
+        Ok(bytes)
+      },
+      reqwest::StatusCode::NOT_FOUND => Err(ErrorCode::FileNotFound.into()),
+      c => Err(AppError::new(
+        ErrorCode::Unhandled,
+        format!("status code: {}, message: {}", c, resp.text().await?),
+      )),
     }
   }
 

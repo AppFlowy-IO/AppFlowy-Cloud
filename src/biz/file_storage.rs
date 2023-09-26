@@ -4,7 +4,8 @@ use shared_entity::{error::AppError, error_code::ErrorCode};
 use sqlx::types::uuid;
 use storage::file_storage;
 
-pub async fn create_object(
+// todo: user writer
+pub async fn put_object(
   pg_pool: &sqlx::PgPool,
   s3_bucket: &s3::Bucket,
   user_uuid: &uuid::Uuid,
@@ -16,13 +17,10 @@ pub async fn create_object(
 
   let size = data.len() as i64;
   let mut trans = pg_pool.begin().await?;
-  let s3_key = uuid::Uuid::new_v4();
   let file_type = mime.to_string();
-  file_storage::insert_file_metadata(&mut trans, user_uuid, path, &file_type, size, &s3_key)
-    .await?;
-
-  let resp = s3_bucket.put_object(s3_key.to_string(), data).await?;
-
+  let metadata =
+    file_storage::insert_file_metadata(&mut trans, user_uuid, path, &file_type, size).await?;
+  let resp = s3_bucket.put_object(metadata.s3_path(), data).await?;
   check_s3_status(&resp)?;
   trans.commit().await?;
   Ok(())
@@ -37,16 +35,21 @@ pub async fn delete_object(
   // TODO: access control
 
   let mut trans = pg_pool.begin().await?;
-  let file_metadata = file_storage::delete_file_metadata(&mut trans, user_uuid, path).await?;
-  let resp = s3_bucket
-    .delete_object(&file_metadata.s3_key.to_string())
-    .await?;
-
-  check_s3_status(&resp)?;
-  trans.commit().await?;
-  Ok(())
+  match file_storage::delete_file_metadata(&mut trans, user_uuid, path).await {
+    Ok(metadata) => {
+      let resp = s3_bucket.delete_object(metadata.s3_path()).await?;
+      check_s3_status(&resp)?;
+      trans.commit().await?;
+      Ok(())
+    },
+    Err(e) => match e {
+      sqlx::Error::RowNotFound => Err(ErrorCode::FileNotFound.into()),
+      e => Err(e.into()),
+    },
+  }
 }
 
+// user reader
 pub async fn get_object(
   pg_pool: &sqlx::PgPool,
   s3_bucket: &s3::Bucket,
@@ -55,12 +58,17 @@ pub async fn get_object(
 ) -> Result<Bytes, AppError> {
   // TODO: access control
 
-  let object_metadata = file_storage::get_file_metadata(pg_pool, user_uuid, path).await?;
-  let resp = s3_bucket
-    .get_object(&object_metadata.s3_key.to_string())
-    .await?;
-  check_s3_status(&resp)?;
-  Ok(resp.bytes().to_owned())
+  match file_storage::get_file_metadata(pg_pool, user_uuid, path).await {
+    Ok(metadata) => {
+      let resp = s3_bucket.get_object(metadata.s3_path()).await?;
+      check_s3_status(&resp)?;
+      Ok(resp.bytes().to_owned())
+    },
+    Err(e) => match e {
+      sqlx::Error::RowNotFound => Err(ErrorCode::FileNotFound.into()),
+      e => Err(e.into()),
+    },
+  }
 }
 
 fn check_s3_status(resp: &ResponseData) -> Result<(), AppError> {

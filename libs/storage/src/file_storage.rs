@@ -7,25 +7,26 @@ pub async fn insert_file_metadata(
   path: &str,
   file_type: &str,
   file_size: i64,
-  s3_key: &uuid::Uuid,
-) -> Result<(), sqlx::Error> {
-  sqlx::query!(
+) -> Result<AFFileMetadata, sqlx::Error> {
+  sqlx::query_as!(
+    AFFileMetadata,
     r#"
-        INSERT INTO af_file_metadata (owner_uid, path, file_type, file_size, s3_key)
-        SELECT uid, $2, $3, $4, $5
+        INSERT INTO af_file_metadata (owner_uid, path, file_type, file_size)
+        SELECT uid, $2, $3, $4
         FROM af_user
         WHERE uuid = $1
+        ON CONFLICT (owner_uid, path) DO UPDATE SET
+            file_type = $3,
+            file_size = $4
+        RETURNING *
         "#,
     user,
     path,
     file_type,
-    file_size,
-    s3_key,
+    file_size
   )
-  .execute(trans.as_mut())
-  .await?;
-
-  Ok(())
+  .fetch_one(trans.as_mut())
+  .await
 }
 
 pub async fn delete_file_metadata(

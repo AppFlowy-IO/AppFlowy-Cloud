@@ -25,11 +25,6 @@
       },
       {
         "ordinal": 4,
-        "name": "s3_key",
-        "type_info": "Uuid"
-      },
-      {
-        "ordinal": 5,
         "name": "created_at",
         "type_info": "Timestamptz"
       }
@@ -41,7 +36,6 @@
       ]
     },
     "nullable": [
-      false,
       false,
       false,
       false,

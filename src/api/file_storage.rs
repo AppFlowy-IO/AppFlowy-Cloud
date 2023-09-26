@@ -6,18 +6,21 @@ use actix_web::{
 };
 use bytes::Bytes;
 use shared_entity::data::{AppResponse, JsonAppResponse};
+use shared_entity::error_code::ErrorCode;
 
 use crate::biz::file_storage;
 use crate::{component::auth::jwt::UserUuid, state::AppState};
 
 pub fn file_storage_scope() -> Scope {
-  web::scope("/api/file_storage")
-    .service(web::resource("/{path}").route(web::get().to(get_handler)))
-    .service(web::resource("/{path}").route(web::put().to(create_handler)))
-    .service(web::resource("/{path}").route(web::delete().to(delete_handler)))
+  web::scope("/api/file_storage").service(
+    web::resource("/{path}")
+      .route(web::get().to(get_handler))
+      .route(web::put().to(put_handler))
+      .route(web::delete().to(delete_handler)),
+  )
 }
 
-async fn create_handler(
+async fn put_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<String>,
@@ -26,7 +29,7 @@ async fn create_handler(
 ) -> Result<JsonAppResponse<()>> {
   let file_path = path.into_inner();
   let mime = content_type.into_inner().0;
-  file_storage::create_object(
+  file_storage::put_object(
     &state.pg_pool,
     &state.s3_bucket,
     &user_uuid,
@@ -54,7 +57,11 @@ async fn get_handler(
   path: web::Path<String>,
 ) -> Result<Bytes> {
   let file_path = path.into_inner();
-  let data =
-    file_storage::get_object(&state.pg_pool, &state.s3_bucket, &user_uuid, &file_path).await?;
-  Ok(data)
+  match file_storage::get_object(&state.pg_pool, &state.s3_bucket, &user_uuid, &file_path).await {
+    Ok(data) => Ok(data),
+    Err(e) => match e.code {
+      ErrorCode::FileNotFound => Err(actix_web::error::ErrorNotFound(e)),
+      _ => Err(actix_web::error::ErrorInternalServerError(e)),
+    },
+  }
 }

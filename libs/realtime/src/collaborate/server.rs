@@ -77,7 +77,7 @@ where
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     tracing::trace!("[💭Server]: new connection => {} ", new_conn.user);
     // Remove the user from the group if the user is already connected
-    self.remove_user(&new_conn.user);
+    // self.remove_user(&new_conn.user);
 
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     self
@@ -135,8 +135,7 @@ async fn forward_message_to_collab_group<U>(
 {
   if let Some(client_stream) = client_streams.read().get(&client_msg.user) {
     tracing::trace!(
-      "[💭Server]: receives: user:{} message: [oid:{}|msg_id:{:?}]",
-      client_msg.user,
+      "[💭Server]: receives client message: [oid:{}|msg_id:{:?}]",
       client_msg.content.object_id(),
       client_msg.content.msg_id()
     );
@@ -207,7 +206,10 @@ where
   }
 
   match client_streams.write().get_mut(&client_msg.user) {
-    None => tracing::error!("🔴The client stream is not found"),
+    None => {
+      // The client stream will be removed when the client disconnects
+      tracing::warn!("The client stream is not found")
+    },
     Some(client_stream) => {
       if let Some(collab_group) = groups.write().get_mut(object_id) {
         collab_group

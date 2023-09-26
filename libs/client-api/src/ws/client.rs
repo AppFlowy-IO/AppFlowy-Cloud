@@ -1,4 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
+use std::borrow::Cow;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -11,11 +12,13 @@ use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
-use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::strategy::{FibonacciBackoff, FixedInterval};
 use tokio_retry::{Condition, RetryIf};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -72,12 +75,14 @@ impl WSClient {
     }
     self.set_state(ConnectState::Connecting).await;
 
-    let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(5 * 60));
+    // let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(10 * 60));
+    let retry_strategy = FixedInterval::new(Duration::from_secs(6));
     let action = ConnectAction::new(addr.clone());
     let cond = RetryCondition {
       connecting_addr: addr,
       addr: Arc::downgrade(&self.addr),
     };
+    debug!("🔵Connecting to websocket: {}", addr);
     let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
     let addr = match stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),
@@ -135,7 +140,9 @@ impl WSClient {
             },
           },
           Message::Pong(_) => {},
-          Message::Close(_) => {},
+          Message::Close(close) => {
+            info!("{:?}", close);
+          },
           Message::Frame(_) => {},
         }
       }
@@ -184,7 +191,10 @@ impl WSClient {
 
   pub async fn disconnect(&self) {
     *self.addr.lock() = None;
-    let _ = self.sender.send(Message::Close(None));
+    let _ = self.sender.send(Message::Close(Some(CloseFrame {
+      code: CloseCode::Normal,
+      reason: Cow::from("client disconnect"),
+    })));
     self.set_state(ConnectState::Disconnected).await;
   }
 

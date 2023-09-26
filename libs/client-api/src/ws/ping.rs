@@ -79,6 +79,7 @@ impl ServerFixIntervalPing {
             }
           },
           _ = stop_rx.recv() => {
+            tracing::trace!("🟢stop ping");
             break;
           }
         }

@@ -2,7 +2,7 @@ use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use std::collections::HashMap;
 
-use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
+use collab_plugins::sync_plugin::{SinkConfig, SyncObject, SyncPlugin};
 
 use collab::preclude::Collab;
 use collab_define::CollabType;
@@ -11,7 +11,6 @@ use std::sync::{Arc, Once};
 
 use assert_json_diff::assert_json_eq;
 use client_api::ws::{BusinessID, WSClient, WSClientConfig};
-use collab_plugins::sync_plugin::client::SinkConfig;
 
 use serde_json::Value;
 use std::time::Duration;
@@ -54,7 +53,7 @@ impl TestClient {
     // Connect to server via websocket
     let ws_client = WSClient::new(WSClientConfig {
       buffer_capacity: 100,
-      ping_per_secs: 2,
+      ping_per_secs: 6,
       retry_connect_per_pings: 5,
     });
     ws_client

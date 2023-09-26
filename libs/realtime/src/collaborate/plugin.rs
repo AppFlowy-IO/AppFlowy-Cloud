@@ -98,7 +98,7 @@ where
             );
             match self.storage.insert_collab(params).await {
               Ok(_) => {},
-              Err(err) => tracing::error!("🔴Create collab failed: {:?}", err),
+              Err(err) => tracing::error!("🔴Insert collab failed: {:?}", err),
             }
           },
           _ => {

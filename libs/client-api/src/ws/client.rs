@@ -1,4 +1,5 @@
 use futures_util::{SinkExt, StreamExt};
+use std::borrow::Cow;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -11,11 +12,13 @@ use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tokio::sync::{Mutex, RwLock};
-use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -72,7 +75,8 @@ impl WSClient {
     }
     self.set_state(ConnectState::Connecting).await;
 
-    let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(5 * 60));
+    // let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(10 * 60));
+    let retry_strategy = FixedInterval::new(Duration::from_secs(6));
     let action = ConnectAction::new(addr.clone());
     let cond = RetryCondition {
       connecting_addr: addr,
@@ -84,8 +88,8 @@ impl WSClient {
       _ => None,
     };
 
-    let (mut sink, mut stream) = stream.split();
     self.set_state(ConnectState::Connected).await;
+    let (mut sink, mut stream) = stream.split();
     let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
 
@@ -114,6 +118,8 @@ impl WSClient {
                 {
                   match channel.upgrade() {
                     None => {
+                      // when calling [WSClient::subscribe], the caller is responsible for keeping
+                      // the channel alive as long as it wants to receive messages from the websocket.
                       trace!("channel is dropped");
                     },
                     Some(channel) => {
@@ -135,7 +141,9 @@ impl WSClient {
             },
           },
           Message::Pong(_) => {},
-          Message::Close(_) => {},
+          Message::Close(close) => {
+            info!("{:?}", close);
+          },
           Message::Frame(_) => {},
         }
       }
@@ -183,8 +191,13 @@ impl WSClient {
   }
 
   pub async fn disconnect(&self) {
+    debug!("client disconnect");
+
     *self.addr.lock() = None;
-    let _ = self.sender.send(Message::Close(None));
+    let _ = self.sender.send(Message::Close(Some(CloseFrame {
+      code: CloseCode::Normal,
+      reason: Cow::from("client disconnect"),
+    })));
     self.set_state(ConnectState::Disconnected).await;
   }
 
@@ -200,13 +213,19 @@ struct RetryCondition {
 }
 impl Condition<WSError> for RetryCondition {
   fn should_retry(&mut self, _error: &WSError) -> bool {
-    self
+    let should_retry = self
       .addr
       .upgrade()
-      .map(|addr| match addr.lock().as_ref() {
+      .map(|addr| match addr.try_lock() {
         None => false,
-        Some(addr) => addr == &self.connecting_addr,
+        Some(addr) => match &*addr {
+          None => false,
+          Some(addr) => addr == &self.connecting_addr,
+        },
       })
-      .unwrap_or(false)
+      .unwrap_or(false);
+
+    debug!("WSClient should_retry: {}", should_retry);
+    should_retry
   }
 }

@@ -7,7 +7,7 @@ async fn realtime_connect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let ws_client = WSClient::new(WSClientConfig {
     buffer_capacity: 100,
-    ping_per_secs: 2,
+    ping_per_secs: 6,
     retry_connect_per_pings: 5,
   });
   let mut state = ws_client.subscribe_connect_state().await;
@@ -30,7 +30,7 @@ async fn realtime_disconnect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let ws_client = WSClient::new(WSClientConfig {
     buffer_capacity: 100,
-    ping_per_secs: 2,
+    ping_per_secs: 6,
     retry_connect_per_pings: 5,
   });
   ws_client

@@ -278,29 +278,30 @@ async fn insert_af_collab(
   .await?;
 
   match existing_workspace_id {
-    Some(existing_id) if existing_id == workspace_id => {
-      tracing::trace!("Update existing af_collab row");
-      sqlx::query!(
-        "UPDATE af_collab \
+    Some(existing_id) => {
+      if existing_id == workspace_id {
+        trace!("Update existing af_collab row");
+        sqlx::query!(
+          "UPDATE af_collab \
         SET blob = $2, len = $3, partition_key = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1",
-        params.object_id,
-        params.raw_data,
-        params.len,
-        partition_key,
-        encrypt,
-        params.uid,
-      )
-      .execute(tx.deref_mut())
-      .await
-      .context(format!(
-        "Update af_collab failed: {}:{}",
-        params.uid, params.object_id
-      ))?;
-    },
-    Some(_) => {
-      return Err(StorageError::Internal(anyhow::anyhow!(
-        "Inserting a row with an existing object_id but different workspace_id"
-      )));
+          params.object_id,
+          params.raw_data,
+          params.len,
+          partition_key,
+          encrypt,
+          params.uid,
+        )
+        .execute(tx.deref_mut())
+        .await
+        .context(format!(
+          "Update af_collab failed: {}:{}",
+          params.uid, params.object_id
+        ))?;
+      } else {
+        return Err(StorageError::Internal(anyhow::anyhow!(
+          "Inserting a row with an existing object_id but different workspace_id"
+        )));
+      }
     },
     None => {
       // Get the 'Owner' role_id from af_roles
@@ -309,9 +310,10 @@ async fn insert_af_collab(
         .await?;
 
       trace!(
-        "Insert new af_collab row: {}:{}",
+        "Insert new af_collab row: {}:{}:{}",
         params.uid,
-        params.object_id
+        params.object_id,
+        params.workspace_id
       );
 
       // Insert into af_collab_member

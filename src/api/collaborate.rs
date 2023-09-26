@@ -12,7 +12,7 @@ use storage_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
-use tracing::instrument;
+use tracing::{debug, instrument};
 use validator::Validate;
 
 pub fn collab_scope() -> Scope {
@@ -50,7 +50,7 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(level = "debug", skip_all, err)]
+#[instrument(level = "debug", skip(storage), err)]
 async fn retrieve_collab_handler(
   payload: Json<QueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
@@ -63,6 +63,8 @@ async fn retrieve_collab_handler(
       StorageError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
       _ => AppError::new(ErrorCode::StorageError, err.to_string()),
     })?;
+
+  debug!("Returned data length: {}", data.len());
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 

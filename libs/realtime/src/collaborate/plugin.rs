@@ -98,11 +98,11 @@ where
             );
             match self.storage.insert_collab(params).await {
               Ok(_) => {},
-              Err(err) => tracing::error!("🔴Insert collab failed: {:?}", err),
+              Err(err) => tracing::error!("{:?}", err),
             }
           },
           _ => {
-            tracing::error!("🔴Get collab failed: {:?}", err);
+            tracing::error!("Get collab failed: {:?}", err);
             // TODO: retry?
           },
         }
@@ -151,7 +151,7 @@ where
       let object_id = params.object_id.clone();
       match storage.insert_collab(params).await {
         Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
-        Err(err) => tracing::error!("🔴Update collab failed: {:?}", err),
+        Err(err) => tracing::error!("save collab failed: {:?}", err),
       }
     });
   }

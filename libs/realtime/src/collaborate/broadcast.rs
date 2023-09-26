@@ -176,59 +176,65 @@ impl CollabBroadcast {
             error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
             continue;
           }
-          tracing::debug!("[💭Server]: {}", collab_msg);
-          let payload = collab_msg.payload().unwrap();
-          let mut decoder = DecoderV1::from(payload);
-          let mut sink = sink.lock().await;
-          let reader = MessageReader::new(&mut decoder);
-          for msg in reader {
-            match msg {
-              Ok(msg) => {
-                let resp = handle_msg(&origin, &DefaultSyncProtocol, &collab, msg).await?;
-                // Send the response to the corresponding client
-                if let Some(resp) = resp {
-                  match origin {
-                    None => {
-                      warn!("Client message does not have a origin");
-                    },
-                    Some(origin) => {
-                      let msg = ClientUpdateResponse::new(
-                        origin.clone(),
-                        object_id.clone(),
-                        resp.encode_v1(),
-                        collab_msg.msg_id(),
-                      );
-                      trace!("Send response to client: {}", msg);
-                      if let Err(err) = sink.send(msg.into()).await {
-                        error!("[💭Server]: send response to client failed: {:?}", err);
-                        break;
-                      }
-                    },
-                  }
+          let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
+          match sink.try_lock() {
+            Ok(mut sink) => {
+              let reader = MessageReader::new(&mut decoder);
+              for msg in reader {
+                match msg {
+                  Ok(msg) => {
+                    let message = handle_msg(&origin, &DefaultSyncProtocol, &collab, msg).await?;
+                    match origin {
+                      None => warn!("Client message does not have a origin"),
+                      Some(origin) => {
+                        let payload = match message {
+                          None => vec![],
+                          Some(message) => message.encode_v1(),
+                        };
+
+                        let resp = ClientUpdateResponse::new(
+                          origin.clone(),
+                          object_id.clone(),
+                          payload,
+                          collab_msg.msg_id(),
+                        );
+
+                        trace!("Send response to client: {}", resp);
+                        if let Err(err) = sink.send(resp.into()).await {
+                          error!("[💭Server]: send response to client failed: {:?}", err);
+                          break;
+                        }
+                      },
+                    }
+                    // Send the response to the corresponding client
+                  },
+                  Err(e) => {
+                    error!("Parser yrs message failed: {:?}", e);
+                    break;
+                  },
                 }
-              },
-              Err(e) => {
-                warn!("Parser yrs message failed: {:?}", e);
-                break;
-              },
-            }
-          }
+              }
 
-          if let Some(msg_id) = collab_msg.msg_id() {
-            // Send the server's state vector to the client. The client will calculate the missing
-            // updates and send them as a single update back to the server.
-            let payload = if is_client_init {
-              Some(encode_server_sv(&collab))
-            } else {
-              None
-            };
+              if let Some(msg_id) = collab_msg.msg_id() {
+                // Send the server's state vector to the client. The client will calculate the missing
+                // updates and send them as a single update back to the server.
+                let payload = if is_client_init {
+                  encode_server_sv(&collab)
+                } else {
+                  vec![]
+                };
 
-            let server_init_sync = ServerCollabInit::new(object_id.clone(), msg_id, payload);
-            if let Err(e) = sink.send(server_init_sync.into()).await {
-              trace!("Send server init sync to the client failed: {}", e);
-            }
-          } else {
-            warn!("Client message does not have a message id");
+                let server_init_sync = ServerCollabInit::new(object_id.clone(), msg_id, payload);
+                if let Err(e) = sink.send(server_init_sync.into()).await {
+                  trace!("Send server init sync to the client failed: {}", e);
+                }
+              } else {
+                warn!("Client message does not have a message id");
+              }
+            },
+            Err(err) => {
+              error!("Get sink lock failed: {:?}", err);
+            },
           }
         }
         Ok(())

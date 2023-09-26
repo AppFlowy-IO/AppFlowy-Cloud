@@ -40,4 +40,4 @@ jobs:
       - name: Run tests
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
-          cargo test
+          RUST_LOG=info cargo test

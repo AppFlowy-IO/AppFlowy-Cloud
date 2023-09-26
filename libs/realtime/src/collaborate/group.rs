@@ -6,15 +6,17 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_define::CollabType;
 use collab_sync_protocol::CollabMessage;
-use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
+
+use anyhow::Error;
 use std::sync::Arc;
 use storage::collab::CollabStorage;
+use tokio::sync::RwLock;
 
 use crate::entities::RealtimeUser;
 use tokio::task::spawn_blocking;
 use tokio_util::codec::{Decoder, Encoder, LengthDelimitedCodec};
+use tracing::error;
 
 pub struct CollabGroupCache<S, U> {
   group_by_object_id: RwLock<HashMap<String, Arc<CollabGroup<U>>>>,
@@ -33,6 +35,36 @@ where
     }
   }
 
+  pub async fn contains_user(&self, object_id: &str, user: &U) -> Result<bool, Error> {
+    let group_by_object_id = self.group_by_object_id.read().await;
+    if let Some(group) = group_by_object_id.get(object_id) {
+      Ok(group.subscribers.read().await.get(user).is_some())
+    } else {
+      Ok(false)
+    }
+  }
+
+  pub async fn contains_group(&self, object_id: &str) -> Result<bool, Error> {
+    let group_by_object_id = self.group_by_object_id.try_read()?;
+    Ok(group_by_object_id.get(object_id).is_some())
+  }
+
+  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup<U>>> {
+    self.group_by_object_id.read().await.get(object_id).cloned()
+  }
+
+  pub async fn remove_group(&self, object_id: &str) {
+    match self.group_by_object_id.try_write() {
+      Ok(mut group_by_object_id) => {
+        group_by_object_id.remove(object_id);
+      },
+      Err(err) => error!(
+        "Failed to acquire write lock of group_by_object_id: {:?}",
+        err
+      ),
+    }
+  }
+
   pub async fn create_group(
     &self,
     uid: i64,
@@ -40,17 +72,24 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) {
-    if self.group_by_object_id.read().contains_key(object_id) {
-      return;
-    }
+    match self.group_by_object_id.try_write() {
+      Ok(mut group_by_object_id) => {
+        if group_by_object_id.contains_key(object_id) {
+          return;
+        }
 
-    let group = self
-      .init_group(uid, workspace_id, object_id, collab_type)
-      .await;
-    self
-      .group_by_object_id
-      .write()
-      .insert(object_id.to_string(), group);
+        let group = self
+          .init_group(uid, workspace_id, object_id, collab_type)
+          .await;
+        group_by_object_id.insert(object_id.to_string(), group);
+      },
+      Err(err) => {
+        error!(
+          "Failed to acquire write lock of group_by_object_id: {:?}",
+          err
+        )
+      },
+    }
   }
 
   async fn init_group(
@@ -63,7 +102,6 @@ where
     tracing::trace!("Create new group for object_id:{}", object_id);
     let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
     let broadcast = CollabBroadcast::new(object_id, collab.clone(), 10);
-
     let collab = Arc::new(collab.clone());
 
     // The lifecycle of the collab is managed by the group.
@@ -88,28 +126,6 @@ where
       .cache_memory_collab(object_id, Arc::downgrade(&collab))
       .await;
     group
-  }
-}
-
-impl<S, U> Deref for CollabGroupCache<S, U>
-where
-  S: CollabStorage,
-  U: RealtimeUser,
-{
-  type Target = RwLock<HashMap<String, Arc<CollabGroup<U>>>>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.group_by_object_id
-  }
-}
-
-impl<S, U> DerefMut for CollabGroupCache<S, U>
-where
-  S: CollabStorage,
-  U: RealtimeUser,
-{
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.group_by_object_id
   }
 }
 
@@ -139,8 +155,8 @@ where
     f(&collab);
   }
 
-  pub fn is_empty(&self) -> bool {
-    self.subscribers.read().is_empty()
+  pub async fn is_empty(&self) -> bool {
+    self.subscribers.read().await.is_empty()
   }
 
   /// Flush the [Collab] to the storage.

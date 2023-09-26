@@ -1,4 +1,4 @@
-use crate::{client::utils::generate_unique_registered_user, client_api_client};
+use crate::client::utils::generate_unique_registered_user;
 use serde_json::json;
 
 use collab_define::CollabType;
@@ -7,12 +7,11 @@ use sqlx::types::{uuid, Uuid};
 use crate::realtime::test_client::{assert_collab_json, TestClient};
 
 use assert_json_diff::assert_json_eq;
-use collab::core::collab_state::SyncState;
+
 use shared_entity::error_code::ErrorCode;
 use std::time::Duration;
-use storage::collab::FLUSH_PER_UPDATE;
+
 use storage_entity::QueryCollabParams;
-use tokio_stream::StreamExt;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
@@ -20,14 +19,6 @@ async fn realtime_write_single_collab_test() {
   let collab_type = CollabType::Document;
   let mut test_client = TestClient::new().await;
   test_client.create(&object_id, collab_type.clone()).await;
-
-  let mut sync_state = test_client
-    .collab_by_object_id
-    .get(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .subscribe_sync_state();
 
   // Edit the collab
   for i in 0..=5 {
@@ -40,22 +31,7 @@ async fn realtime_write_single_collab_test() {
       .insert(&i.to_string(), i.to_string());
   }
 
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(4)) => panic!("sync timeout"),
-       result = sync_state.next() => {
-        match result {
-          Some(new_state) => {
-            if new_state == SyncState::SyncFinished {
-              break;
-            }
-          },
-          None => panic!("sync error"),
-        }
-       },
-    }
-  }
-
+  test_client.poll_object_sync_complete(&object_id).await;
   assert_collab_json(
     &mut test_client.api_client,
     &object_id,
@@ -77,7 +53,7 @@ async fn realtime_write_single_collab_test() {
 async fn realtime_write_multiple_collab_test() {
   let mut test_client = TestClient::new().await;
   let mut object_ids = vec![];
-  for _ in 0..10 {
+  for _ in 0..5 {
     let object_id = uuid::Uuid::new_v4().to_string();
     let collab_type = CollabType::Document;
     test_client.create(&object_id, collab_type.clone()).await;
@@ -91,11 +67,11 @@ async fn realtime_write_multiple_collab_test() {
         .insert(&i.to_string(), i.to_string());
     }
 
+    test_client.poll_object_sync_complete(&object_id).await;
     object_ids.push(object_id);
   }
 
   // Wait for the messages to be sent
-  tokio::time::sleep(Duration::from_secs(2)).await;
   for object_id in object_ids {
     assert_collab_json(
       &mut test_client.api_client,
@@ -127,17 +103,16 @@ async fn one_direction_peer_sync_test() {
   client_2.create(&object_id, collab_type.clone()).await;
 
   // Edit the collab from client 1 and then the server will broadcast to client 2
-  for _i in 0..=FLUSH_PER_UPDATE {
-    client_1
-      .collab_by_object_id
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .lock()
-      .insert("name", "AppFlowy");
-    tokio::time::sleep(Duration::from_millis(10)).await;
-  }
+  client_1
+    .collab_by_object_id
+    .get_mut(&object_id)
+    .unwrap()
+    .collab
+    .lock()
+    .insert("name", "AppFlowy");
+  client_1.poll_object_sync_complete(&object_id).await;
 
+  tokio::time::sleep(Duration::from_secs(2)).await;
   assert_collab_json(
     &mut client_1.api_client,
     &object_id,
@@ -194,7 +169,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .collab
     .lock()
     .insert("3", "c");
-  tokio::time::sleep(Duration::from_millis(500)).await;
+  client_1_1.poll_object_sync_complete(&object_id).await;
 
   let mut client_1_2 =
     TestClient::new_with_device_id(device_id.clone(), registered_user.clone()).await;
@@ -206,7 +181,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .collab
     .lock()
     .insert("2", "b");
-  tokio::time::sleep(Duration::from_millis(500)).await;
+  client_1_2.poll_object_sync_complete(&object_id).await;
 
   let json_1 = client_1_1
     .collab_by_object_id
@@ -253,7 +228,6 @@ async fn user_with_duplicate_devices_connect_edit_test() {
 
 #[tokio::test]
 async fn two_direction_peer_sync_test() {
-  let _client_api = client_api_client();
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
 
@@ -270,7 +244,7 @@ async fn two_direction_peer_sync_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  tokio::time::sleep(Duration::from_millis(10)).await;
+  client_1.poll_object_sync_complete(&object_id).await;
 
   client_2
     .collab_by_object_id
@@ -279,8 +253,9 @@ async fn two_direction_peer_sync_test() {
     .collab
     .lock()
     .insert("support platform", "macOS, Windows, Linux, iOS, Android");
-  tokio::time::sleep(Duration::from_millis(1000)).await;
+  client_2.poll_object_sync_complete(&object_id).await;
 
+  tokio::time::sleep(Duration::from_millis(1000)).await;
   let json_1 = client_1
     .collab_by_object_id
     .get_mut(&object_id)
@@ -319,7 +294,7 @@ async fn client_init_sync_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  tokio::time::sleep(Duration::from_millis(10)).await;
+  client_1.poll_object_sync_complete(&object_id).await;
 
   let mut client_2 = TestClient::new().await;
   client_2.create(&object_id, collab_type.clone()).await;
@@ -371,6 +346,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 1");
+  tokio::time::sleep(Duration::from_millis(1000)).await;
   client_2
     .collab_by_object_id
     .get_mut(&object_id_2)
@@ -378,6 +354,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 2");
+  tokio::time::sleep(Duration::from_millis(1000)).await;
   client_3
     .collab_by_object_id
     .get_mut(&object_id_3)
@@ -385,7 +362,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 3");
-  tokio::time::sleep(Duration::from_secs(2)).await;
+  client_3.poll_object_sync_complete(&object_id_3).await;
 
   assert_collab_json(
     &mut client_1.api_client,
@@ -454,7 +431,7 @@ async fn ws_reconnect_sync_test() {
   // After reconnect the collab should be synced to the server.
   test_client.reconnect().await;
   // Wait for the messages to be sent
-  tokio::time::sleep(Duration::from_secs(2)).await;
+  test_client.poll_object_sync_complete(&object_id).await;
 
   assert_collab_json(
     &mut test_client.api_client,

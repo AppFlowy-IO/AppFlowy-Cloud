@@ -280,7 +280,7 @@ async fn insert_af_collab(
   match existing_workspace_id {
     Some(existing_id) => {
       if existing_id == workspace_id {
-        tracing::trace!("Update existing af_collab row");
+        trace!("Update existing af_collab row");
         sqlx::query!(
           "UPDATE af_collab \
         SET blob = $2, len = $3, partition_key = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1",
@@ -310,9 +310,10 @@ async fn insert_af_collab(
         .await?;
 
       trace!(
-        "Insert new af_collab row: {}:{}",
+        "Insert new af_collab row: {}:{}:{}",
         params.uid,
-        params.object_id
+        params.object_id,
+        params.workspace_id
       );
 
       // Insert into af_collab_member

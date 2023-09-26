@@ -18,7 +18,7 @@ use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
-use tracing::{error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -88,8 +88,8 @@ impl WSClient {
       _ => None,
     };
 
-    let (mut sink, mut stream) = stream.split();
     self.set_state(ConnectState::Connected).await;
+    let (mut sink, mut stream) = stream.split();
     let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
 
@@ -118,6 +118,8 @@ impl WSClient {
                 {
                   match channel.upgrade() {
                     None => {
+                      // when calling [WSClient::subscribe], the caller is responsible for keeping
+                      // the channel alive as long as it wants to receive messages from the websocket.
                       trace!("channel is dropped");
                     },
                     Some(channel) => {
@@ -189,6 +191,8 @@ impl WSClient {
   }
 
   pub async fn disconnect(&self) {
+    debug!("client disconnect");
+
     *self.addr.lock() = None;
     let _ = self.sender.send(Message::Close(Some(CloseFrame {
       code: CloseCode::Normal,
@@ -209,13 +213,19 @@ struct RetryCondition {
 }
 impl Condition<WSError> for RetryCondition {
   fn should_retry(&mut self, _error: &WSError) -> bool {
-    self
+    let should_retry = self
       .addr
       .upgrade()
-      .map(|addr| match addr.lock().as_ref() {
+      .map(|addr| match addr.try_lock() {
         None => false,
-        Some(addr) => addr == &self.connecting_addr,
+        Some(addr) => match &*addr {
+          None => false,
+          Some(addr) => addr == &self.connecting_addr,
+        },
       })
-      .unwrap_or(false)
+      .unwrap_or(false);
+
+    debug!("WSClient should_retry: {}", should_retry);
+    should_retry
   }
 }

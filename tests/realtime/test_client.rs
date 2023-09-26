@@ -12,9 +12,11 @@ use std::sync::{Arc, Once};
 use assert_json_diff::assert_json_eq;
 use client_api::ws::{BusinessID, WSClient, WSClientConfig};
 
+use collab::core::collab_state::SyncState;
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
+use tokio_stream::StreamExt;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -65,6 +67,22 @@ impl TestClient {
       api_client,
       collab_by_object_id: Default::default(),
       device_id,
+    }
+  }
+
+  pub(crate) async fn poll_object_sync_complete(&self, object_id: &str) {
+    let mut sync_state = self
+      .collab_by_object_id
+      .get(object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .subscribe_sync_state();
+
+    while let Some(state) = sync_state.next().await {
+      if state == SyncState::SyncFinished {
+        break;
+      }
     }
   }
 

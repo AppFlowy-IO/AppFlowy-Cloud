@@ -15,6 +15,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
+use tracing::{error, trace, warn};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -42,6 +43,7 @@ pub struct WSClient {
   addr: Arc<parking_lot::Mutex<Option<String>>>,
   config: WSClientConfig,
   state_notify: Arc<Mutex<ConnectStateNotify>>,
+  /// Sender used to send messages to the websocket.
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
@@ -109,19 +111,27 @@ impl WSClient {
                   .await
                   .get(&msg.business_id)
                   .and_then(|map| map.get(&msg.object_id))
-                  .and_then(|channel| channel.upgrade())
                 {
-                  channel.recv_msg(&msg);
+                  match channel.upgrade() {
+                    None => {
+                      trace!("channel is dropped");
+                    },
+                    Some(channel) => {
+                      channel.recv_msg(&msg);
+                    },
+                  }
                 }
+              } else {
+                warn!("channels are closed");
               }
             } else {
-              tracing::error!("🔴Invalid message from websocket");
+              error!("🔴Parser ClientRealtimeMessage failed");
             }
           },
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
             Err(e) => {
-              tracing::error!("🔴Failed to send pong message to websocket: {:?}", e);
+              error!("🔴Failed to send pong message to websocket: {:?}", e);
             },
           },
           Message::Pong(_) => {},
@@ -179,6 +189,7 @@ impl WSClient {
   }
 
   async fn set_state(&self, state: ConnectState) {
+    trace!("websocket state: {:?}", state);
     self.state_notify.lock().await.set_state(state);
   }
 }

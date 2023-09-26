@@ -52,7 +52,7 @@ impl ServerFixIntervalPing {
         tokio::select! {
           _ = interval.tick() => {
             // Send the ping
-            tracing::trace!("🙂ping");
+            tracing::trace!("🟢ping from client");
             let _ = sender.send(Message::Ping(vec![]));
             if let Some(ping_count) = weak_ping_count.upgrade() {
               let mut lock = ping_count.lock().await;
@@ -67,7 +67,7 @@ impl ServerFixIntervalPing {
           },
           msg = receiver.recv() => {
             if let Ok(Message::Pong(_)) = msg {
-              tracing::trace!("🟢Receive pong from server");
+              tracing::trace!("🟢pong from server");
               if let Some(ping_count) = weak_ping_count.upgrade() {
                 let mut lock = ping_count.lock().await;
                 *lock = 0;

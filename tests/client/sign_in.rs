@@ -106,7 +106,7 @@ async fn sign_in_with_url() {
   let c = client_api_client();
   let user_email = generate_unique_email();
   let url_str = c
-    .generate_sign_in_url(&ADMIN_USER.email, &ADMIN_USER.password, &user_email)
+    .generate_sign_in_callback_url(&ADMIN_USER.email, &ADMIN_USER.password, &user_email)
     .await
     .unwrap();
   let _ = c.sign_in_url(&url_str).await.unwrap();

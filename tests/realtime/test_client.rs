@@ -1,42 +1,50 @@
 use collab::core::collab::MutexCollab;
 use collab::core::origin::{CollabClient, CollabOrigin};
+use std::collections::HashMap;
 
 use collab_plugins::sync_plugin::{SyncObject, SyncPlugin};
 
 use collab::preclude::Collab;
 use collab_define::CollabType;
 use sqlx::types::Uuid;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use assert_json_diff::assert_json_eq;
-use client_api::ws::{BusinessID, WSClient, WSClientConfig, WebSocketChannel};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig};
+use collab_plugins::sync_plugin::client::SinkConfig;
+
 use serde_json::Value;
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
+use tracing_subscriber::fmt::Subscriber;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 use crate::client::utils::{generate_unique_registered_user, User};
 use crate::client_api_client;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
-  #[allow(dead_code)]
-  pub origin: CollabOrigin,
-  pub collab: Arc<MutexCollab>,
-  #[allow(dead_code)]
-  pub handler: Arc<WebSocketChannel>,
   pub api_client: client_api::Client,
+  pub collab_by_object_id: HashMap<String, TestCollab>,
   device_id: String,
 }
 
-impl TestClient {
-  pub(crate) async fn new_with_device_id(
-    object_id: &str,
-    device_id: &str,
-    collab_type: CollabType,
-    registered_user: &User,
-  ) -> Self {
-    let device_id = device_id.to_string();
+pub(crate) struct TestCollab {
+  #[allow(dead_code)]
+  pub origin: CollabOrigin,
+  pub collab: Arc<MutexCollab>,
+}
 
+impl TestClient {
+  pub(crate) async fn new() -> Self {
+    setup_log();
+    let registered_user = generate_unique_registered_user().await;
+    let device_id = Uuid::new_v4().to_string();
+    Self::new_with_device_id(device_id, registered_user).await
+  }
+
+  pub(crate) async fn new_with_device_id(device_id: String, registered_user: User) -> Self {
     let api_client = client_api_client();
     api_client
       .sign_in_password(&registered_user.email, &registered_user.password)
@@ -53,9 +61,17 @@ impl TestClient {
       .connect(api_client.ws_url(&device_id).unwrap())
       .await
       .unwrap();
+    Self {
+      ws_client,
+      api_client,
+      collab_by_object_id: Default::default(),
+      device_id,
+    }
+  }
 
-    // Get workspace id and uid
-    let workspace_id = api_client
+  pub(crate) async fn create(&mut self, object_id: &str, collab_type: CollabType) {
+    let workspace_id = self
+      .api_client
       .workspaces()
       .await
       .unwrap()
@@ -63,42 +79,35 @@ impl TestClient {
       .unwrap()
       .workspace_id
       .to_string();
-    let uid = api_client.profile().await.unwrap().uid.unwrap();
+    let uid = self.api_client.profile().await.unwrap().uid.unwrap();
 
     // Subscribe to object
-    let handler = ws_client
+    let handler = self
+      .ws_client
       .subscribe(BusinessID::CollabId, object_id.to_string())
       .await
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
-    let origin = CollabOrigin::Client(CollabClient::new(uid, device_id.clone()));
+    let origin = CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
-    let object = SyncObject::new(object_id, &workspace_id, collab_type, &device_id);
+    let object = SyncObject::new(object_id, &workspace_id, collab_type, &self.device_id);
     let sync_plugin = SyncPlugin::new(
       origin.clone(),
       object,
       Arc::downgrade(&collab),
       sink,
+      SinkConfig::default(),
       stream,
+      Some(handler),
     );
+
     collab.lock().add_plugin(Arc::new(sync_plugin));
     collab.async_initialize().await;
-
-    Self {
-      ws_client,
-      api_client,
-      origin,
-      collab,
-      handler,
-      device_id,
-    }
-  }
-
-  pub(crate) async fn new(object_id: &str, collab_type: CollabType) -> Self {
-    let device_id = Uuid::new_v4().to_string();
-    let registered_user = generate_unique_registered_user().await;
-    Self::new_with_device_id(object_id, &device_id, collab_type, &registered_user).await
+    let test_collab = TestCollab { origin, collab };
+    self
+      .collab_by_object_id
+      .insert(object_id.to_string(), test_collab);
   }
 
   pub(crate) async fn disconnect(&self) {
@@ -178,4 +187,20 @@ pub async fn get_collab_json_from_server(
   Collab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![bytes.to_vec()], vec![])
     .unwrap()
     .to_json_value()
+}
+
+pub fn setup_log() {
+  static START: Once = Once::new();
+  START.call_once(|| {
+    let level = "trace";
+    let mut filters = vec![];
+    filters.push(format!("collab_plugins={}", level));
+    std::env::set_var("RUST_LOG", filters.join(","));
+
+    let subscriber = Subscriber::builder()
+      .with_env_filter(EnvFilter::from_default_env())
+      .with_ansi(true)
+      .finish();
+    subscriber.try_init().unwrap();
+  });
 }

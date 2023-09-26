@@ -1,4 +1,4 @@
-use client_api::http_test::extract_appflowy_sign_in_url;
+use client_api::extract_sign_in_url;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
@@ -86,7 +86,7 @@ async fn admin_generate_link_and_user_sign_in() {
   let reqwest_client = reqwest::Client::new();
   let resp = reqwest_client.get(action_link).send().await.unwrap();
   let resp_text = resp.text().await.unwrap();
-  let appflowy_sign_in_url = extract_appflowy_sign_in_url(&resp_text);
+  let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
 
   let client = client_api_client();
   let is_new = client.sign_in_url(&appflowy_sign_in_url).await.unwrap();

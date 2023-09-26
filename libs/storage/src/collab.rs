@@ -12,6 +12,7 @@ use storage_entity::{
   AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
+use tracing::trace;
 
 use validator::Validate;
 
@@ -290,7 +291,11 @@ async fn insert_af_collab(
         params.uid,
       )
       .execute(tx.deref_mut())
-      .await?;
+      .await
+      .context(format!(
+        "Update af_collab failed: {}:{}",
+        params.uid, params.object_id
+      ))?;
     },
     Some(_) => {
       return Err(StorageError::Internal(anyhow::anyhow!(
@@ -303,6 +308,12 @@ async fn insert_af_collab(
         .fetch_one(tx.deref_mut())
         .await?;
 
+      trace!(
+        "Insert new af_collab row: {}:{}",
+        params.uid,
+        params.object_id
+      );
+
       // Insert into af_collab_member
       sqlx::query!(
         "INSERT INTO af_collab_member (oid, uid, role_id) VALUES ($1, $2, $3)",
@@ -311,9 +322,12 @@ async fn insert_af_collab(
         role_id
       )
       .execute(tx.deref_mut())
-      .await?;
+      .await
+      .context(format!(
+        "Insert af_collab_member failed: {}:{}:{}",
+        params.uid, params.object_id, role_id
+      ))?;
 
-      tracing::trace!("Insert new af_collab row");
       sqlx::query!(
         "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
           VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -326,7 +340,11 @@ async fn insert_af_collab(
         workspace_id,
       )
       .execute(tx.deref_mut())
-      .await?;
+      .await
+      .context(format!(
+        "Insert new af_collab failed: {}:{}:{}",
+        params.uid, params.object_id, params.collab_type
+      ))?;
     },
   }
 

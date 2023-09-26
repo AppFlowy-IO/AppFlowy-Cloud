@@ -6,12 +6,13 @@ use actix::{Actor, Context, Handler, ResponseFuture};
 use collab::core::origin::CollabOrigin;
 
 use collab_sync_protocol::CollabMessage;
-use parking_lot::RwLock;
-
+use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
+use tracing::trace;
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
@@ -25,7 +26,7 @@ pub struct CollabServer<S, U> {
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S, U>>,
   /// Keep track of all object ids that a user is subscribed to
-  editing_collab_by_user: Arc<RwLock<HashMap<U, HashSet<Editing>>>>,
+  editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
 }
@@ -37,7 +38,7 @@ where
 {
   pub fn new(storage: S) -> Result<Self, RealtimeError> {
     let groups = Arc::new(CollabGroupCache::new(storage.clone()));
-    let edit_collab_by_user = Arc::new(RwLock::new(HashMap::new()));
+    let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
     Ok(Self {
       storage,
       groups,
@@ -45,16 +46,23 @@ where
       client_stream_by_user: Default::default(),
     })
   }
+}
 
-  fn remove_user(&self, user: &U) {
-    self.client_stream_by_user.write().remove(user);
-
-    let editing_set = self.editing_collab_by_user.write().remove(user);
-    if let Some(editing_set) = editing_set {
-      tracing::info!("Remove user from group: {}", user);
-      for editing in editing_set {
-        remove_user_from_group(user, &self.groups, &editing);
-      }
+async fn remove_user<S, U>(
+  groups: &Arc<CollabGroupCache<S, U>>,
+  client_stream_by_user: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
+  editing_collab_by_user: &Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
+  user: &U,
+) where
+  S: CollabStorage + Clone,
+  U: RealtimeUser,
+{
+  client_stream_by_user.write().await.remove(user);
+  let editing_set = editing_collab_by_user.lock().remove(user);
+  if let Some(editing_set) = editing_set {
+    tracing::info!("Remove user from group: {}", user);
+    for editing in editing_set {
+      remove_user_from_group(user, groups, &editing).await;
     }
   }
 }
@@ -72,19 +80,30 @@ where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
 {
-  type Result = Result<(), RealtimeError>;
+  type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    tracing::trace!("[💭Server]: new connection => {} ", new_conn.user);
-    // Remove the user from the group if the user is already connected
-    self.remove_user(&new_conn.user);
-
+    trace!("[💭Server]: new connection => {} ", new_conn.user);
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
-    self
-      .client_stream_by_user
-      .write()
-      .insert(new_conn.user, stream);
-    Ok(())
+    let groups = self.groups.clone();
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let editing_collab_by_user = self.editing_collab_by_user.clone();
+
+    Box::pin(async move {
+      remove_user(
+        &groups,
+        &client_stream_by_user,
+        &editing_collab_by_user,
+        &new_conn.user,
+      )
+      .await;
+
+      client_stream_by_user
+        .write()
+        .await
+        .insert(new_conn.user, stream);
+      Ok(())
+    })
   }
 }
 
@@ -93,11 +112,22 @@ where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
 {
-  type Result = Result<(), RealtimeError>;
+  type Result = ResponseFuture<Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    tracing::trace!("[💭Server]: disconnect => {}", msg.user);
-    self.remove_user(&msg.user);
-    Ok(())
+    trace!("[💭Server]: disconnect => {}", msg.user);
+    let groups = self.groups.clone();
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let editing_collab_by_user = self.editing_collab_by_user.clone();
+    Box::pin(async move {
+      remove_user(
+        &groups,
+        &client_stream_by_user,
+        &editing_collab_by_user,
+        &msg.user,
+      )
+      .await;
+      Ok(())
+    })
   }
 }
 
@@ -133,10 +163,9 @@ async fn forward_message_to_collab_group<U>(
 ) where
   U: RealtimeUser,
 {
-  if let Some(client_stream) = client_streams.read().get(&client_msg.user) {
+  if let Some(client_stream) = client_streams.read().await.get(&client_msg.user) {
     tracing::trace!(
-      "[💭Server]: receives: user:{} message: [oid:{}|msg_id:{:?}]",
-      client_msg.user,
+      "[💭Server]: receives client message: [oid:{}|msg_id:{:?}]",
       client_msg.content.object_id(),
       client_msg.content.msg_id()
     );
@@ -146,7 +175,7 @@ async fn forward_message_to_collab_group<U>(
     {
       Ok(_) => {},
       Err(e) => {
-        tracing::error!("🔴send error: {}", e)
+        tracing::error!("send error: {}", e)
       },
     }
   }
@@ -155,7 +184,7 @@ async fn forward_message_to_collab_group<U>(
 async fn subscribe_collab_group_change_if_need<U, S>(
   client_msg: &ClientMessage<U>,
   groups: &Arc<CollabGroupCache<S, U>>,
-  edit_collab_by_user: &Arc<RwLock<HashMap<U, HashSet<Editing>>>>,
+  edit_collab_by_user: &Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
 ) -> Result<(), RealtimeError>
 where
@@ -163,7 +192,7 @@ where
   S: CollabStorage,
 {
   let object_id = client_msg.content.object_id();
-  if !groups.read().contains_key(object_id) {
+  if !groups.contains_group(object_id).await? {
     // When create a group, the message must be the init sync message.
     match &client_msg.content {
       CollabMessage::ClientInit(client_init) => {
@@ -188,6 +217,15 @@ where
     }
   }
 
+  // If the client's stream is already subscribed to the collab group, return.
+  if groups
+    .contains_user(object_id, &client_msg.user)
+    .await
+    .unwrap_or(false)
+  {
+    return Ok(());
+  }
+
   let origin = match client_msg.content.origin() {
     None => {
       tracing::error!("🔴The origin from client message is empty");
@@ -195,24 +233,14 @@ where
     },
     Some(client) => client,
   };
-
-  // If the client's stream is already subscribed to the collab group, return.
-  if groups
-    .read()
-    .get(object_id)
-    .map(|group| group.subscribers.read().get(&client_msg.user).is_some())
-    .unwrap_or(false)
-  {
-    return Ok(());
-  }
-
-  match client_streams.write().get_mut(&client_msg.user) {
-    None => tracing::error!("🔴The client stream is not found"),
+  match client_streams.write().await.get_mut(&client_msg.user) {
+    None => tracing::warn!("The client stream is not found"),
     Some(client_stream) => {
-      if let Some(collab_group) = groups.write().get_mut(object_id) {
+      if let Some(collab_group) = groups.get_group(object_id).await {
         collab_group
           .subscribers
           .write()
+          .await
           .entry(client_msg.user.clone())
           .or_insert_with(|| {
             tracing::trace!(
@@ -222,7 +250,7 @@ where
             );
 
             edit_collab_by_user
-              .write()
+              .lock()
               .entry(client_msg.user.clone())
               .or_default()
               .insert(Editing {
@@ -250,27 +278,24 @@ where
 }
 
 /// Remove the user from the group and remove the group from the cache if the group is empty.
-fn remove_user_from_group<S, U>(user: &U, groups: &Arc<CollabGroupCache<S, U>>, editing: &Editing)
-where
+async fn remove_user_from_group<S, U>(
+  user: &U,
+  groups: &Arc<CollabGroupCache<S, U>>,
+  editing: &Editing,
+) where
   S: CollabStorage,
   U: RealtimeUser,
 {
-  let mut groups_write_guard = groups.write();
-
-  let should_remove_group = groups_write_guard.get_mut(&editing.object_id).map(|group| {
+  if let Some(group) = groups.get_group(&editing.object_id).await {
     tracing::info!("Remove subscriber: {}", editing.origin);
-    group.subscribers.write().remove(user);
-    let should_remove = group.is_empty();
+    group.subscribers.write().await.remove(user);
+    let should_remove = group.is_empty().await;
     if should_remove {
       group.flush_collab();
-    }
-    should_remove
-  });
 
-  // If the group is empty, remove it from the cache
-  if should_remove_group.unwrap_or(false) {
-    tracing::debug!("Remove group: {}", editing.object_id);
-    groups_write_guard.remove(&editing.object_id);
+      tracing::debug!("Remove group: {}", editing.object_id);
+      groups.remove_group(&editing.object_id).await;
+    }
   }
 }
 

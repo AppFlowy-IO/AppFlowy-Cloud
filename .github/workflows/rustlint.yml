@@ -1,4 +1,4 @@
-name: AppFlowy-Cloud Lint
+name: Lint
 
 on:
   push:
@@ -14,7 +14,7 @@ env:
 
 jobs:
   test:
-    name: Unit Tests
+    name: fmt & clippy
     runs-on: ubuntu-latest
 
     steps:

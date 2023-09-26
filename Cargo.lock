@@ -838,6 +838,7 @@ dependencies = [
  "futures-util",
  "gotrue",
  "gotrue-entity",
+ "mime",
  "opener",
  "parking_lot",
  "reqwest",

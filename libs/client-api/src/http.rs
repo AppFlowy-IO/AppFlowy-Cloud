@@ -1,11 +1,14 @@
 use anyhow::anyhow;
+use bytes::Bytes;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
+use mime::Mime;
 use parking_lot::RwLock;
+use reqwest::header;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use scraper::{Html, Selector};
@@ -441,6 +444,58 @@ impl Client {
     let resp = reqwest::Client::new().get(action_link).send().await?;
     let resp_text = resp.text().await?;
     Ok(extract_sign_in_url(&resp_text)?)
+  }
+
+  pub async fn create_file_storage_object(
+    &self,
+    path: &str,
+    data: Bytes,
+    mime: Mime,
+  ) -> Result<(), AppError> {
+    let url = format!("{}/api/file_storage/{}", self.base_url, path);
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .header(header::CONTENT_TYPE, mime.to_string())
+      .body(data)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_file_storage_object(&self, path: &str) -> Result<Bytes, AppError> {
+    let url = format!("{}/api/file_storage/{}", self.base_url, path);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    let status = resp.status();
+    if status.is_success() {
+      let payload = resp.text().await?;
+      Err(
+        anyhow!(
+          "Failed to get file storage object, code: {}, payload: {}",
+          status,
+          payload
+        )
+        .into(),
+      )
+    } else {
+      let bytes = resp.bytes().await?;
+      Ok(bytes)
+    }
+  }
+
+  pub async fn delete_file_storage_object(&self, path: &str) -> Result<(), AppError> {
+    let url = format!("{}/api/file_storage/{}", self.base_url, path);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   async fn http_client_with_auth(

@@ -30,4 +30,4 @@ bytes = "1.0"
 uuid = "1.4.1"
 collab-sync-protocol = { version = "0.1.0" }
 scraper = "0.17.1"
-
+mime = "0.3.17"

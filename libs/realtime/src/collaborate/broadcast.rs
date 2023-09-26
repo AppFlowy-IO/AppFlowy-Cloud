@@ -177,8 +177,7 @@ impl CollabBroadcast {
             continue;
           }
           tracing::debug!("[💭Server]: {}", collab_msg);
-          let payload = collab_msg.payload().unwrap();
-          let mut decoder = DecoderV1::from(payload);
+          let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
           let mut sink = sink.lock().await;
           let reader = MessageReader::new(&mut decoder);
           for msg in reader {
@@ -218,9 +217,9 @@ impl CollabBroadcast {
             // Send the server's state vector to the client. The client will calculate the missing
             // updates and send them as a single update back to the server.
             let payload = if is_client_init {
-              Some(encode_server_sv(&collab))
+              encode_server_sv(&collab)
             } else {
-              None
+              vec![]
             };
 
             let server_init_sync = ServerCollabInit::new(object_id.clone(), msg_id, payload);

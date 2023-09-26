@@ -62,7 +62,7 @@ async fn remove_user<S, U>(
   if let Some(editing_set) = editing_set {
     tracing::info!("Remove user from group: {}", user);
     for editing in editing_set {
-      remove_user_from_group(user, &groups, &editing).await;
+      remove_user_from_group(user, groups, &editing).await;
     }
   }
 }

@@ -346,7 +346,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 1");
-  client_1.poll_object_sync_complete(&object_id_1).await;
+  tokio::time::sleep(Duration::from_millis(1000)).await;
   client_2
     .collab_by_object_id
     .get_mut(&object_id_2)
@@ -354,7 +354,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 2");
-  client_2.poll_object_sync_complete(&object_id_2).await;
+  tokio::time::sleep(Duration::from_millis(1000)).await;
   client_3
     .collab_by_object_id
     .get_mut(&object_id_3)
@@ -362,7 +362,6 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 3");
-
   client_3.poll_object_sync_complete(&object_id_3).await;
 
   assert_collab_json(

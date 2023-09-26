@@ -84,6 +84,8 @@ impl TestClient {
         break;
       }
     }
+
+    tokio::time::sleep(Duration::from_millis(1000)).await;
   }
 
   pub(crate) async fn create(&mut self, object_id: &str, collab_type: CollabType) {
@@ -209,7 +211,7 @@ pub async fn get_collab_json_from_server(
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = "trace";
+    let level = std::env::var("RUST_LOG").unwrap_or("debug".to_string());
     let mut filters = vec![];
     filters.push(format!("collab_plugins={}", level));
     std::env::set_var("RUST_LOG", filters.join(","));

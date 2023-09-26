@@ -13,7 +13,6 @@ use std::time::Duration;
 
 use storage_entity::QueryCollabParams;
 
-
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
   let object_id = uuid::Uuid::new_v4().to_string();

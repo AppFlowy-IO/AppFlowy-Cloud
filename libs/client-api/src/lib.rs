@@ -1,5 +1,8 @@
 mod http;
 
+#[cfg(feature = "collab-sync")]
+pub mod collab_sync;
+
 pub mod notify;
 pub mod ws;
 

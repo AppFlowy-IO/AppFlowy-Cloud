@@ -455,7 +455,6 @@ dependencies = [
  "client-api",
  "collab",
  "collab-define",
- "collab-plugins",
  "collab-sync-protocol",
  "config",
  "derive_more",
@@ -833,10 +832,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bytes",
+ "collab",
+ "collab-define",
  "collab-sync-protocol",
  "futures-util",
  "gotrue",
  "gotrue-entity",
+ "lib0",
  "opener",
  "parking_lot",
  "reqwest",
@@ -854,6 +856,8 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+ "y-sync",
+ "yrs",
 ]
 
 [[package]]
@@ -886,34 +890,6 @@ dependencies = [
  "serde",
  "serde_repr",
  "uuid",
-]
-
-[[package]]
-name = "collab-plugins"
-version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=4e70326#4e70326f8fda6916d82dfc80272b68cfbe7cd61f"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "collab",
- "collab-define",
- "collab-sync-protocol",
- "futures-util",
- "lib0",
- "parking_lot",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "similar",
- "thiserror",
- "tokio",
- "tokio-retry",
- "tokio-stream",
- "tracing",
- "uuid",
- "y-sync",
- "yrs",
 ]
 
 [[package]]
@@ -2814,7 +2790,6 @@ dependencies = [
  "chrono",
  "collab",
  "collab-define",
- "collab-plugins",
  "collab-sync-protocol",
  "futures-util",
  "lib0",
@@ -3398,12 +3373,6 @@ dependencies = [
  "digest",
  "rand_core 0.6.4",
 ]
-
-[[package]]
-name = "similar"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
 
 [[package]]
 name = "simple_asn1"

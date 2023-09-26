@@ -1,19 +1,15 @@
+use assert_json_diff::assert_json_eq;
+use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
+use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
-use std::collections::HashMap;
-
-use collab_plugins::sync_plugin::{SinkConfig, SyncObject, SyncPlugin};
-
 use collab::preclude::Collab;
 use collab_define::CollabType;
-use sqlx::types::Uuid;
-use std::sync::{Arc, Once};
-
-use assert_json_diff::assert_json_eq;
-use client_api::ws::{BusinessID, WSClient, WSClientConfig};
-
-use collab::core::collab_state::SyncState;
 use serde_json::Value;
+use sqlx::types::Uuid;
+use std::collections::HashMap;
+use std::sync::{Arc, Once};
 use std::time::Duration;
 use storage_entity::QueryCollabParams;
 use tokio_stream::StreamExt;

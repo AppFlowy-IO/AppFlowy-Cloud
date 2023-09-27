@@ -4,7 +4,7 @@ use serde_json::json;
 use collab_define::CollabType;
 use sqlx::types::{uuid, Uuid};
 
-use crate::realtime::test_client::{assert_collab_json, TestClient};
+use crate::realtime::test_client::{assert_client_collab, assert_remote_collab_json, TestClient};
 
 use assert_json_diff::assert_json_eq;
 
@@ -14,8 +14,11 @@ use std::time::Duration;
 async fn realtime_write_single_collab_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
-  let mut test_client = TestClient::new().await;
-  test_client.create(&object_id, collab_type.clone()).await;
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.current_workspace_id().await;
+  test_client
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
 
   // Edit the collab
   for i in 0..=5 {
@@ -32,7 +35,7 @@ async fn realtime_write_single_collab_test() {
   }
 
   test_client.wait_object_sync_complete(&object_id).await;
-  assert_collab_json(
+  assert_remote_collab_json(
     &mut test_client.api_client,
     &object_id,
     &collab_type,
@@ -51,12 +54,15 @@ async fn realtime_write_single_collab_test() {
 
 #[tokio::test]
 async fn realtime_write_multiple_collab_test() {
-  let mut test_client = TestClient::new().await;
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.current_workspace_id().await;
   let mut object_ids = vec![];
   for _ in 0..5 {
     let object_id = uuid::Uuid::new_v4().to_string();
     let collab_type = CollabType::Document;
-    test_client.create(&object_id, collab_type.clone()).await;
+    test_client
+      .create_collab(&workspace_id, &object_id, collab_type.clone())
+      .await;
     for i in 0..=5 {
       test_client
         .collab_by_object_id
@@ -73,7 +79,7 @@ async fn realtime_write_multiple_collab_test() {
 
   // Wait for the messages to be sent
   for object_id in object_ids {
-    assert_collab_json(
+    assert_remote_collab_json(
       &mut test_client.api_client,
       &object_id,
       &CollabType::Document,
@@ -96,11 +102,16 @@ async fn one_direction_peer_sync_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
 
-  let mut client_1 = TestClient::new().await;
-  client_1.create(&object_id, collab_type.clone()).await;
+  let mut client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.current_workspace_id().await;
+  client_1
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
 
-  let mut client_2 = TestClient::new().await;
-  client_2.create(&object_id, collab_type.clone()).await;
+  let mut client_2 = TestClient::new_user().await;
+  client_2
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
 
   // Edit the collab from client 1 and then the server will broadcast to client 2
   client_1
@@ -112,11 +123,17 @@ async fn one_direction_peer_sync_test() {
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&object_id).await;
 
-  // Wait for the broadcast message to be sent. The client_2 will receive the updates and apply
-  // the updates to the collab object.
-  tokio::time::sleep(Duration::from_secs(2)).await;
+  assert_client_collab(
+    &mut client_2,
+    &object_id,
+    10,
+    json!({
+      "name": "AppFlowy"
+    }),
+  )
+  .await;
 
-  assert_collab_json(
+  assert_remote_collab_json(
     &mut client_1.api_client,
     &object_id,
     &collab_type,
@@ -126,37 +143,23 @@ async fn one_direction_peer_sync_test() {
     }),
   )
   .await;
-
-  let json_1 = client_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  let json_2 = client_2
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  assert_json_eq!(json_1, json_2);
 }
 
 #[tokio::test]
 async fn user_with_duplicate_devices_connect_edit_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
-
   let registered_user = generate_unique_registered_user().await;
 
   // Client_1_2 will force the server to disconnect client_1_1. So any changes made by client_1_1
   // will not be saved to the server.
   let device_id = Uuid::new_v4().to_string();
-  let mut client_1_1 =
-    TestClient::new_with_device_id(device_id.clone(), registered_user.clone()).await;
-  client_1_1.create(&object_id, collab_type.clone()).await;
+  let mut client_1_1 = TestClient::new(device_id.clone(), registered_user.clone()).await;
+  let workspace_id = client_1_1.current_workspace_id().await;
+
+  client_1_1
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
 
   client_1_1
     .collab_by_object_id
@@ -174,9 +177,10 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .insert("3", "c");
   client_1_1.wait_object_sync_complete(&object_id).await;
 
-  let mut client_1_2 =
-    TestClient::new_with_device_id(device_id.clone(), registered_user.clone()).await;
-  client_1_2.create(&object_id, collab_type.clone()).await;
+  let mut client_1_2 = TestClient::new(device_id.clone(), registered_user.clone()).await;
+  client_1_2
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
   client_1_2
     .collab_by_object_id
     .get_mut(&object_id)
@@ -186,36 +190,30 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .insert("2", "b");
   client_1_2.wait_object_sync_complete(&object_id).await;
 
-  let json_1 = client_1_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  let json_2 = client_1_2
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  assert_json_eq!(
-    json_1,
+  assert_client_collab(
+    &mut client_1_1,
+    &object_id,
+    10,
     json!({
       "1": "a",
       "3": "c"
-    })
-  );
-  assert_json_eq!(
-    json_2,
+    }),
+  )
+  .await;
+
+  assert_client_collab(
+    &mut client_1_2,
+    &object_id,
+    10,
     json!({
       "1": "a",
       "3": "c",
       "2": "b"
-    })
-  );
-  assert_collab_json(
+    }),
+  )
+  .await;
+
+  assert_remote_collab_json(
     &mut client_1_2.api_client,
     &object_id,
     &collab_type,
@@ -234,11 +232,16 @@ async fn two_direction_peer_sync_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
 
-  let mut client_1 = TestClient::new().await;
-  client_1.create(&object_id, collab_type.clone()).await;
+  let mut client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.current_workspace_id().await;
+  client_1
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
 
-  let mut client_2 = TestClient::new().await;
-  client_2.create(&object_id, collab_type.clone()).await;
+  let mut client_2 = TestClient::new_user().await;
+  client_2
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
 
   client_1
     .collab_by_object_id
@@ -258,32 +261,12 @@ async fn two_direction_peer_sync_test() {
     .insert("support platform", "macOS, Windows, Linux, iOS, Android");
   client_2.wait_object_sync_complete(&object_id).await;
 
-  // Wait for the server broadcast the updates to client_1 and client_2
-  tokio::time::sleep(Duration::from_secs(1)).await;
-  let json_1 = client_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  let json_2 = client_2
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-
-  // After applying the updates, the collab object should be the same.
-  assert_json_eq!(
-    json_1,
-    json!({
-      "name": "AppFlowy",
-      "support platform": "macOS, Windows, Linux, iOS, Android"
-    })
-  );
-  assert_json_eq!(json_1, json_2);
+  let expected_json = json!({
+    "name": "AppFlowy",
+    "support platform": "macOS, Windows, Linux, iOS, Android"
+  });
+  assert_client_collab(&mut client_1, &object_id, 10, expected_json.clone()).await;
+  assert_client_collab(&mut client_2, &object_id, 10, expected_json.clone()).await;
 }
 
 #[tokio::test]
@@ -291,8 +274,11 @@ async fn client_init_sync_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
 
-  let mut client_1 = TestClient::new().await;
-  client_1.create(&object_id, collab_type.clone()).await;
+  let mut client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.current_workspace_id().await;
+  client_1
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
   client_1
     .collab_by_object_id
     .get_mut(&object_id)
@@ -303,48 +289,40 @@ async fn client_init_sync_test() {
   client_1.wait_object_sync_complete(&object_id).await;
   tokio::time::sleep(Duration::from_millis(1000)).await;
 
-  let mut client_2 = TestClient::new().await;
-  client_2.create(&object_id, collab_type.clone()).await;
+  let mut client_2 = TestClient::new_user().await;
+  client_2
+    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
   client_2.wait_object_sync_complete(&object_id).await;
 
-  // Open the collab from client 2. After the initial sync, the server will send the missing updates to client_2.
-  let json_1 = client_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  let json_2 = client_2
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .to_json_value();
-  assert_json_eq!(
-    json_1,
-    json!({
-      "name": "AppFlowy",
-    })
-  );
-  assert_json_eq!(json_1, json_2);
+  let expected_json = json!({
+    "name": "AppFlowy",
+  });
+  assert_client_collab(&mut client_1, &object_id, 10, expected_json.clone()).await;
+  assert_client_collab(&mut client_2, &object_id, 10, expected_json.clone()).await;
 }
 
 #[tokio::test]
 async fn multiple_collab_edit_test() {
   let collab_type = CollabType::Document;
   let object_id_1 = uuid::Uuid::new_v4().to_string();
-  let mut client_1 = TestClient::new().await;
-  client_1.create(&object_id_1, collab_type.clone()).await;
+  let mut client_1 = TestClient::new_user().await;
+  let workspace_id = client_1.current_workspace_id().await;
+  client_1
+    .create_collab(&workspace_id, &object_id_1, collab_type.clone())
+    .await;
 
   let object_id_2 = uuid::Uuid::new_v4().to_string();
-  let mut client_2 = TestClient::new().await;
-  client_2.create(&object_id_2, collab_type.clone()).await;
+  let mut client_2 = TestClient::new_user().await;
+  client_2
+    .create_collab(&workspace_id, &object_id_2, collab_type.clone())
+    .await;
 
   let object_id_3 = uuid::Uuid::new_v4().to_string();
-  let mut client_3 = TestClient::new().await;
-  client_3.create(&object_id_3, collab_type.clone()).await;
+  let mut client_3 = TestClient::new_user().await;
+  client_3
+    .create_collab(&workspace_id, &object_id_3, collab_type.clone())
+    .await;
 
   client_1
     .collab_by_object_id
@@ -371,7 +349,7 @@ async fn multiple_collab_edit_test() {
     .insert("title", "I am client 3");
   client_3.wait_object_sync_complete(&object_id_3).await;
 
-  assert_collab_json(
+  assert_remote_collab_json(
     &mut client_1.api_client,
     &object_id_1,
     &collab_type,
@@ -382,7 +360,7 @@ async fn multiple_collab_edit_test() {
   )
   .await;
 
-  assert_collab_json(
+  assert_remote_collab_json(
     &mut client_2.api_client,
     &object_id_2,
     &collab_type,
@@ -392,7 +370,7 @@ async fn multiple_collab_edit_test() {
     }),
   )
   .await;
-  assert_collab_json(
+  assert_remote_collab_json(
     &mut client_3.api_client,
     &object_id_3,
     &collab_type,

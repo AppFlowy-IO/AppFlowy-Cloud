@@ -34,18 +34,18 @@ pub(crate) struct TestCollab {
 }
 
 impl TestClient {
-  pub(crate) async fn new() -> Self {
+  pub(crate) async fn new_user() -> Self {
     let registered_user = generate_unique_registered_user().await;
     let device_id = Uuid::new_v4().to_string();
-    Self::new_with_device_id(device_id, registered_user).await
+    Self::new(device_id, registered_user).await
   }
 
-  pub(crate) async fn new_with_user(registered_user: User) -> Self {
+  pub(crate) async fn user_with_new_device(registered_user: User) -> Self {
     let device_id = Uuid::new_v4().to_string();
-    Self::new_with_device_id(device_id, registered_user).await
+    Self::new(device_id, registered_user).await
   }
 
-  pub(crate) async fn new_with_device_id(device_id: String, registered_user: User) -> Self {
+  pub(crate) async fn new(device_id: String, registered_user: User) -> Self {
     setup_log();
     let api_client = client_api_client();
     api_client
@@ -99,8 +99,8 @@ impl TestClient {
     }
   }
 
-  pub(crate) async fn create(&mut self, object_id: &str, collab_type: CollabType) {
-    let workspace_id = self
+  pub(crate) async fn current_workspace_id(&self) -> String {
+    self
       .api_client
       .workspaces()
       .await
@@ -108,7 +108,15 @@ impl TestClient {
       .first()
       .unwrap()
       .workspace_id
-      .to_string();
+      .to_string()
+  }
+
+  pub(crate) async fn create_collab(
+    &mut self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) {
     let uid = self.api_client.profile().await.unwrap().uid.unwrap();
 
     // Subscribe to object
@@ -122,7 +130,7 @@ impl TestClient {
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
     let ws_connect_state = self.ws_client.subscribe_connect_state().await;
-    let object = SyncObject::new(object_id, &workspace_id, collab_type, &self.device_id);
+    let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
     let sync_plugin = SyncPlugin::new(
       origin.clone(),
       object,
@@ -155,8 +163,7 @@ impl TestClient {
   }
 }
 
-#[allow(dead_code)]
-pub async fn assert_collab_json(
+pub async fn assert_remote_collab_json(
   client: &mut client_api::Client,
   object_id: &str,
   collab_type: &CollabType,
@@ -202,6 +209,43 @@ pub async fn assert_collab_json(
   }
 }
 
+pub(crate) async fn assert_client_collab(
+  client: &mut TestClient,
+  object_id: &str,
+  secs: u64,
+  expected: Value,
+) {
+  let object_id = object_id.to_string();
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+         panic!("timeout");
+       },
+       json = async {
+        client
+          .collab_by_object_id
+          .get_mut(&object_id)
+          .unwrap()
+          .collab
+          .lock()
+          .to_json_value()
+      } => {
+        retry_count += 1;
+        if retry_count > 5 {
+          assert_json_eq!(json, expected);
+          break;
+        }
+
+        if json == expected {
+          break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+      }
+    }
+  }
+}
+
 #[allow(dead_code)]
 pub async fn get_collab_json_from_server(
   client: &mut client_api::Client,
@@ -224,7 +268,7 @@ pub async fn get_collab_json_from_server(
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
+    let level = std::env::var("RUST_LOG").unwrap_or("debug".to_string());
     let mut filters = vec![];
     filters.push(format!("client_api={}", level));
     std::env::set_var("RUST_LOG", filters.join(","));

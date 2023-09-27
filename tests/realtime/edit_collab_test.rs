@@ -6,7 +6,7 @@ use sqlx::types::{uuid, Uuid};
 
 use crate::realtime::test_client::{assert_client_collab, assert_remote_collab_json, TestClient};
 
-use assert_json_diff::assert_json_eq;
+
 
 use std::time::Duration;
 

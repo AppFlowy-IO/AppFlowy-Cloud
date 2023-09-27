@@ -57,6 +57,12 @@ pub enum ErrorCode {
 
   #[error("User name cannot be empty")]
   UserNameIsEmpty = 1013,
+
+  #[error("S3 Error")]
+  S3Error = 1014,
+
+  #[error("File Not Found")]
+  FileNotFound = 1015,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

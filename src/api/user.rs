@@ -3,7 +3,9 @@ use crate::component::auth::{
   change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
   RegisterRequest,
 };
+
 use crate::component::auth::{InputParamsError, LoginRequest};
+
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;

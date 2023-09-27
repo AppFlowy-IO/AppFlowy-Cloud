@@ -205,3 +205,18 @@ pub struct AFWorkspaceMember {
   pub email: String,
   pub role: AFRole,
 }
+
+#[derive(FromRow, Serialize, Deserialize)]
+pub struct AFFileMetadata {
+  pub owner_uid: i64,
+  pub path: String,
+  pub file_type: String,
+  pub file_size: i64,
+  pub created_at: DateTime<Utc>,
+}
+
+impl AFFileMetadata {
+  pub fn s3_path(&self) -> String {
+    format!("{}/{}", self.owner_uid, self.path)
+  }
+}

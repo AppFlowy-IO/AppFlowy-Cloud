@@ -1,4 +1,4 @@
-use crate::api::{collab_scope, user_scope, workspace_scope, ws_scope};
+use crate::api::{collab_scope, file_storage_scope, user_scope, workspace_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
 use crate::middleware::cors::default_cors;
@@ -100,6 +100,7 @@ where
       .service(workspace_scope())
       .service(ws_scope())
       .service(collab_scope())
+      .service(file_storage_scope())
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
@@ -127,7 +128,7 @@ pub async fn init_state(config: &Config) -> AppState {
   let pg_pool = get_connection_pool(&config.database).await;
   migrate(&pg_pool).await;
 
-  let s3_bucket = get_aws_s3_client(&config.s3).await;
+  let s3_bucket = get_aws_s3_bucket(&config.s3).await;
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
 
@@ -167,7 +168,7 @@ async fn setup_admin_account(
   .unwrap();
 }
 
-async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
+async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {
   let region = {
     match s3_setting.use_minio {
       true => s3::Region::Custom {
@@ -201,7 +202,9 @@ async fn get_aws_s3_client(s3_setting: &S3Setting) -> s3::Bucket {
     },
   }
 
-  s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone()).unwrap()
+  s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone())
+    .unwrap()
+    .with_path_style()
 }
 
 // async fn get_aws_s3_client() -> aws_sdk_s3::Client {

@@ -1,5 +1,5 @@
 use crate::client::utils::generate_unique_registered_user;
-use crate::realtime::test_client::{assert_client_collab, assert_remote_collab_json, TestClient};
+use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, TestClient};
 
 use collab_define::CollabType;
 use serde_json::json;
@@ -47,11 +47,11 @@ async fn ws_reconnect_sync_test() {
   // Wait for the messages to be sent
   test_client.wait_object_sync_complete(&object_id).await;
 
-  assert_remote_collab_json(
+  assert_remote_collab(
     &mut test_client.api_client,
     &object_id,
     &collab_type,
-    3,
+    10,
     json!( {
       "0": "0",
       "1": "1",

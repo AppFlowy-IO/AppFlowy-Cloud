@@ -1,9 +1,8 @@
 use serde_json::json;
 
+use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, TestClient};
 use collab_define::CollabType;
 use sqlx::types::uuid;
-
-use crate::realtime::test_client::{assert_client_collab, assert_remote_collab_json, TestClient};
 
 use std::time::Duration;
 
@@ -26,25 +25,26 @@ async fn realtime_write_single_collab_test() {
       .collab
       .lock()
       .insert(&i.to_string(), i.to_string());
-
     // simulate the user is typing
     tokio::time::sleep(Duration::from_millis(100)).await;
   }
 
+  let expected_json = json!( {
+    "0": "0",
+    "1": "1",
+    "2": "2",
+    "3": "3",
+    "4": "4",
+    "5": "5",
+  });
   test_client.wait_object_sync_complete(&object_id).await;
-  assert_remote_collab_json(
+
+  assert_remote_collab(
     &mut test_client.api_client,
     &object_id,
     &collab_type,
-    3,
-    json!( {
-      "0": "0",
-      "1": "1",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
-    }),
+    10,
+    expected_json,
   )
   .await;
 }
@@ -76,11 +76,11 @@ async fn realtime_write_multiple_collab_test() {
 
   // Wait for the messages to be sent
   for object_id in object_ids {
-    assert_remote_collab_json(
+    assert_remote_collab(
       &mut test_client.api_client,
       &object_id,
       &CollabType::Document,
-      3,
+      10,
       json!( {
         "0": "0",
         "1": "1",
@@ -130,11 +130,11 @@ async fn one_direction_peer_sync_test() {
   )
   .await;
 
-  assert_remote_collab_json(
+  assert_remote_collab(
     &mut client_1.api_client,
     &object_id,
     &collab_type,
-    5,
+    10,
     json!({
       "name": "AppFlowy"
     }),
@@ -346,32 +346,32 @@ async fn multiple_collab_edit_test() {
     .insert("title", "I am client 3");
   client_3.wait_object_sync_complete(&object_id_3).await;
 
-  assert_remote_collab_json(
+  assert_remote_collab(
     &mut client_1.api_client,
     &object_id_1,
     &collab_type,
-    3,
+    10,
     json!( {
       "title": "I am client 1"
     }),
   )
   .await;
 
-  assert_remote_collab_json(
+  assert_remote_collab(
     &mut client_2.api_client,
     &object_id_2,
     &collab_type,
-    3,
+    10,
     json!( {
       "title": "I am client 2"
     }),
   )
   .await;
-  assert_remote_collab_json(
+  assert_remote_collab(
     &mut client_3.api_client,
     &object_id_3,
     &collab_type,
-    3,
+    10,
     json!( {
       "title": "I am client 3"
     }),

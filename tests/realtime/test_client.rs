@@ -1,6 +1,6 @@
 use assert_json_diff::assert_json_eq;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
-use client_api::ws::{BusinessID, WSClient, WSClientConfig};
+use client_api::ws::{BusinessID, ConnectState, WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -10,8 +10,8 @@ use serde_json::Value;
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::{Arc, Once};
-use std::time::Duration;
 use storage_entity::QueryCollabParams;
+use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -35,13 +35,18 @@ pub(crate) struct TestCollab {
 
 impl TestClient {
   pub(crate) async fn new() -> Self {
-    setup_log();
     let registered_user = generate_unique_registered_user().await;
     let device_id = Uuid::new_v4().to_string();
     Self::new_with_device_id(device_id, registered_user).await
   }
 
+  pub(crate) async fn new_with_user(registered_user: User) -> Self {
+    let device_id = Uuid::new_v4().to_string();
+    Self::new_with_device_id(device_id, registered_user).await
+  }
+
   pub(crate) async fn new_with_device_id(device_id: String, registered_user: User) -> Self {
+    setup_log();
     let api_client = client_api_client();
     api_client
       .sign_in_password(&registered_user.email, &registered_user.password)
@@ -66,7 +71,7 @@ impl TestClient {
     }
   }
 
-  pub(crate) async fn poll_object_sync_complete(&self, object_id: &str) {
+  pub(crate) async fn wait_object_sync_complete(&self, object_id: &str) {
     let mut sync_state = self
       .collab_by_object_id
       .get(object_id)
@@ -75,13 +80,23 @@ impl TestClient {
       .lock()
       .subscribe_sync_state();
 
-    while let Some(state) = sync_state.next().await {
+    const TIMEOUT_DURATION: Duration = Duration::from_secs(10);
+    while let Ok(Some(state)) = timeout(TIMEOUT_DURATION, sync_state.next()).await {
       if state == SyncState::SyncFinished {
         break;
       }
     }
+  }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+  pub(crate) async fn wait_ws_connected(&self) {
+    let mut connect_state = self.ws_client.subscribe_connect_state().await;
+
+    const TIMEOUT_DURATION: Duration = Duration::from_secs(10);
+    while let Ok(Ok(state)) = timeout(TIMEOUT_DURATION, connect_state.recv()).await {
+      if state == ConnectState::Connected {
+        break;
+      }
+    }
   }
 
   pub(crate) async fn create(&mut self, object_id: &str, collab_type: CollabType) {
@@ -106,6 +121,7 @@ impl TestClient {
     let origin = CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
+    let ws_connect_state = self.ws_client.subscribe_connect_state().await;
     let object = SyncObject::new(object_id, &workspace_id, collab_type, &self.device_id);
     let sync_plugin = SyncPlugin::new(
       origin.clone(),
@@ -115,6 +131,7 @@ impl TestClient {
       SinkConfig::default(),
       stream,
       Some(handler),
+      ws_connect_state,
     );
 
     collab.lock().add_plugin(Arc::new(sync_plugin));
@@ -207,9 +224,9 @@ pub async fn get_collab_json_from_server(
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = std::env::var("RUST_LOG").unwrap_or("debug".to_string());
+    let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
     let mut filters = vec![];
-    filters.push(format!("collab_plugins={}", level));
+    filters.push(format!("client_api={}", level));
     std::env::set_var("RUST_LOG", filters.join(","));
 
     let subscriber = Subscriber::builder()

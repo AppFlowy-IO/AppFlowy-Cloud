@@ -103,6 +103,7 @@ where
     self.msg.mergeable()
   }
 
+  #[allow(dead_code)]
   pub fn is_init(&self) -> bool {
     self.msg.is_init_msg()
   }

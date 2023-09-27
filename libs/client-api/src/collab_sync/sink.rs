@@ -10,7 +10,7 @@ use futures_util::SinkExt;
 use tokio::spawn;
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
-use tracing::{debug, trace};
+use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug)]
 pub enum SinkState {
@@ -112,23 +112,38 @@ where
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> Msg) {
     {
-      let mut pending_msgs = self.pending_msg_queue.lock();
+      let mut pending_msg_queue = self.pending_msg_queue.lock();
       let msg_id = self.msg_id_counter.next();
       let msg = f(msg_id);
-      pending_msgs.push_msg(msg_id, msg);
-      drop(pending_msgs);
+      pending_msg_queue.push_msg(msg_id, msg);
+      drop(pending_msg_queue);
     }
 
     self.notify();
   }
 
-  pub fn remove_all_pending_msgs(&self) {
+  pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> Msg) {
+    // When the client is connected, remove all pending messages and send the init message.
+    {
+      let mut pending_msg_queue = self.pending_msg_queue.lock();
+      pending_msg_queue.clear();
+
+      let msg_id = self.msg_id_counter.next();
+      let msg = f(msg_id);
+      pending_msg_queue.push_msg(msg_id, msg);
+      drop(pending_msg_queue);
+    }
+
+    self.notify();
+  }
+
+  pub fn clear(&self) {
     self.pending_msg_queue.lock().clear();
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
   pub async fn ack_msg(&self, object_id: &str, msg_id: MsgId) {
-    trace!("receive {} message:{}", object_id, msg_id);
+    trace!("server ack {} message:{}", object_id, msg_id);
     if let Some(mut pending_msg) = self.pending_msg_queue.lock().peek_mut() {
       // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
       // due to network issues, the client might send multiple messages with the same msg_id.
@@ -141,7 +156,6 @@ where
         msg_id
       );
       if pending_msg.msg_id() == msg_id {
-        debug!("{} message:{} was sent", object_id, msg_id);
         pending_msg.set_state(MessageState::Done);
         self.notify();
       }
@@ -196,13 +210,7 @@ where
       let (mut pending_msg_queue, mut sending_msg) = match self.pending_msg_queue.try_lock() {
         None => {
           // If acquire the lock failed, try to notify again after 100ms
-          let weak_notifier = Arc::downgrade(&self.notifier);
-          spawn(async move {
-            interval(Duration::from_millis(100)).tick().await;
-            if let Some(notifier) = weak_notifier.upgrade() {
-              let _ = notifier.send(false);
-            }
-          });
+          retry_later(Arc::downgrade(&self.notifier));
           None
         },
         Some(mut pending_msg_queue) => pending_msg_queue
@@ -234,36 +242,49 @@ where
 
       sending_msg.set_state(MessageState::Processing);
       sending_msg.set_ret(tx);
-      if !sending_msg.is_init() {
-        let _ = self.state_notifier.send(SinkState::Syncing);
-      }
+      let _ = self.state_notifier.send(SinkState::Syncing);
       let collab_msg = sending_msg.get_msg().clone();
       pending_msg_queue.push(sending_msg);
       collab_msg
     };
 
-    let mut sender = self.sender.lock().await;
-    tracing::debug!("[🙂Client {}]: {}", self.uid, collab_msg);
-    sender.send(collab_msg).await.ok()?;
+    match self.sender.try_lock() {
+      Ok(mut sender) => {
+        debug!("[🙂Client {}]: {}", self.uid, collab_msg);
+        sender.send(collab_msg).await.ok()?;
+      },
+      Err(_) => {
+        warn!("Failed to acquire the lock of the sink, retry later");
+        retry_later(Arc::downgrade(&self.notifier));
+        return None;
+      },
+    }
+
     // Wait for the message to be acked.
     // If the message is not acked within the timeout, resend the message.
     match tokio::time::timeout(self.config.timeout, rx).await {
-      Ok(_) => {
-        if let Some(mut pending_msgs) = self.pending_msg_queue.try_lock() {
-          let pending_msg = pending_msgs.pop();
-          trace!(
-            "{} was sent, current pending messages: {}",
-            pending_msg
-              .map(|msg| msg.get_msg().to_string())
-              .unwrap_or("".to_string()),
-            pending_msgs.len()
-          );
-          if pending_msgs.is_empty() {
-            if let Err(e) = self.state_notifier.send(SinkState::Finished) {
-              tracing::error!("send sink state failed: {}", e);
+      Ok(result) => {
+        match result {
+          Ok(_) => {
+            if let Some(mut pending_msg_queue) = self.pending_msg_queue.try_lock() {
+              let pending_msg = pending_msg_queue.pop();
+              trace!(
+                "{} was sent, current pending messages: {}",
+                pending_msg
+                  .map(|msg| msg.get_msg().to_string())
+                  .unwrap_or("".to_string()),
+                pending_msg_queue.len()
+              );
+              if pending_msg_queue.is_empty() {
+                if let Err(e) = self.state_notifier.send(SinkState::Finished) {
+                  error!("send sink state failed: {}", e);
+                }
+              }
             }
-          }
+          },
+          Err(err) => error!("Failed to receive the ack message: {:?}", err),
         }
+
         self.notify()
       },
       Err(_) => {
@@ -286,6 +307,15 @@ where
   fn stop(&self) {
     let _ = self.notifier.send(true);
   }
+}
+
+fn retry_later(weak_notifier: Weak<watch::Sender<bool>>) {
+  spawn(async move {
+    interval(Duration::from_millis(100)).tick().await;
+    if let Some(notifier) = weak_notifier.upgrade() {
+      let _ = notifier.send(false);
+    }
+  });
 }
 
 pub struct CollabSinkRunner<Msg>(PhantomData<Msg>);

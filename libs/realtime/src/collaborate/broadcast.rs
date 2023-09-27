@@ -145,7 +145,7 @@ impl CollabBroadcast {
           trace!("[💭Server]: {}", msg);
           let mut sink = sink.lock().await;
           if let Err(e) = sink.send(msg).await {
-            tracing::error!("[💭Server]: broadcast client message failed: {:?}", e);
+            error!("[💭Server]: broadcast client message failed: {:?}", e);
             return Err(RealtimeError::Internal(anyhow::Error::from(e)));
           }
         }

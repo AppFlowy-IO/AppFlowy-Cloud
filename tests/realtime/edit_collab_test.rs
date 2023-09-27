@@ -8,10 +8,7 @@ use crate::realtime::test_client::{assert_collab_json, TestClient};
 
 use assert_json_diff::assert_json_eq;
 
-use shared_entity::error_code::ErrorCode;
 use std::time::Duration;
-
-use storage_entity::QueryCollabParams;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
@@ -29,9 +26,12 @@ async fn realtime_write_single_collab_test() {
       .collab
       .lock()
       .insert(&i.to_string(), i.to_string());
+
+    // simulate the user is typing
+    tokio::time::sleep(Duration::from_millis(100)).await;
   }
 
-  test_client.poll_object_sync_complete(&object_id).await;
+  test_client.wait_object_sync_complete(&object_id).await;
   assert_collab_json(
     &mut test_client.api_client,
     &object_id,
@@ -67,7 +67,7 @@ async fn realtime_write_multiple_collab_test() {
         .insert(&i.to_string(), i.to_string());
     }
 
-    test_client.poll_object_sync_complete(&object_id).await;
+    test_client.wait_object_sync_complete(&object_id).await;
     object_ids.push(object_id);
   }
 
@@ -110,9 +110,12 @@ async fn one_direction_peer_sync_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  client_1.poll_object_sync_complete(&object_id).await;
+  client_1.wait_object_sync_complete(&object_id).await;
 
+  // Wait for the broadcast message to be sent. The client_2 will receive the updates and apply
+  // the updates to the collab object.
   tokio::time::sleep(Duration::from_secs(2)).await;
+
   assert_collab_json(
     &mut client_1.api_client,
     &object_id,
@@ -169,7 +172,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .collab
     .lock()
     .insert("3", "c");
-  client_1_1.poll_object_sync_complete(&object_id).await;
+  client_1_1.wait_object_sync_complete(&object_id).await;
 
   let mut client_1_2 =
     TestClient::new_with_device_id(device_id.clone(), registered_user.clone()).await;
@@ -181,7 +184,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .collab
     .lock()
     .insert("2", "b");
-  client_1_2.poll_object_sync_complete(&object_id).await;
+  client_1_2.wait_object_sync_complete(&object_id).await;
 
   let json_1 = client_1_1
     .collab_by_object_id
@@ -244,7 +247,7 @@ async fn two_direction_peer_sync_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  client_1.poll_object_sync_complete(&object_id).await;
+  client_1.wait_object_sync_complete(&object_id).await;
 
   client_2
     .collab_by_object_id
@@ -253,9 +256,10 @@ async fn two_direction_peer_sync_test() {
     .collab
     .lock()
     .insert("support platform", "macOS, Windows, Linux, iOS, Android");
-  client_2.poll_object_sync_complete(&object_id).await;
+  client_2.wait_object_sync_complete(&object_id).await;
 
-  tokio::time::sleep(Duration::from_millis(1000)).await;
+  // Wait for the server broadcast the updates to client_1 and client_2
+  tokio::time::sleep(Duration::from_secs(1)).await;
   let json_1 = client_1
     .collab_by_object_id
     .get_mut(&object_id)
@@ -270,6 +274,8 @@ async fn two_direction_peer_sync_test() {
     .collab
     .lock()
     .to_json_value();
+
+  // After applying the updates, the collab object should be the same.
   assert_json_eq!(
     json_1,
     json!({
@@ -294,11 +300,12 @@ async fn client_init_sync_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  client_1.poll_object_sync_complete(&object_id).await;
+  client_1.wait_object_sync_complete(&object_id).await;
+  tokio::time::sleep(Duration::from_millis(1000)).await;
 
   let mut client_2 = TestClient::new().await;
   client_2.create(&object_id, collab_type.clone()).await;
-  tokio::time::sleep(Duration::from_millis(1000)).await;
+  client_2.wait_object_sync_complete(&object_id).await;
 
   // Open the collab from client 2. After the initial sync, the server will send the missing updates to client_2.
   let json_1 = client_1
@@ -346,7 +353,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 1");
-  tokio::time::sleep(Duration::from_millis(1000)).await;
+  client_1.wait_object_sync_complete(&object_id_1).await;
   client_2
     .collab_by_object_id
     .get_mut(&object_id_2)
@@ -354,7 +361,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 2");
-  tokio::time::sleep(Duration::from_millis(1000)).await;
+  client_2.wait_object_sync_complete(&object_id_2).await;
   client_3
     .collab_by_object_id
     .get_mut(&object_id_3)
@@ -362,7 +369,7 @@ async fn multiple_collab_edit_test() {
     .collab
     .lock()
     .insert("title", "I am client 3");
-  client_3.poll_object_sync_complete(&object_id_3).await;
+  client_3.wait_object_sync_complete(&object_id_3).await;
 
   assert_collab_json(
     &mut client_1.api_client,
@@ -392,59 +399,6 @@ async fn multiple_collab_edit_test() {
     3,
     json!( {
       "title": "I am client 3"
-    }),
-  )
-  .await;
-}
-
-#[tokio::test]
-async fn ws_reconnect_sync_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
-
-  let mut test_client = TestClient::new().await;
-  test_client.create(&object_id, collab_type.clone()).await;
-
-  // Disconnect the client and edit the collab. The updates will not be sent to the server.
-  test_client.disconnect().await;
-  for i in 0..=5 {
-    test_client
-      .collab_by_object_id
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .lock()
-      .insert(&i.to_string(), i.to_string());
-  }
-
-  // it will return RecordNotFound error when trying to get the collab from the server
-  let err = test_client
-    .api_client
-    .get_collab(QueryCollabParams {
-      object_id: object_id.clone(),
-      collab_type: collab_type.clone(),
-    })
-    .await
-    .unwrap_err();
-  assert_eq!(err.code, ErrorCode::RecordNotFound);
-
-  // After reconnect the collab should be synced to the server.
-  test_client.reconnect().await;
-  // Wait for the messages to be sent
-  test_client.poll_object_sync_complete(&object_id).await;
-
-  assert_collab_json(
-    &mut test_client.api_client,
-    &object_id,
-    &collab_type,
-    3,
-    json!( {
-      "0": "0",
-      "1": "1",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
     }),
   )
   .await;

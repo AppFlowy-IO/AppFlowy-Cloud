@@ -119,9 +119,9 @@ where
     self.sync_state.subscribe()
   }
 
-  pub fn notify(&self, awareness: &Awareness) {
+  pub fn init_sync(&self, awareness: &Awareness) {
     if let Some(payload) = doc_init_state(awareness, &self.protocol) {
-      self.sink.queue_msg(|msg_id| {
+      self.sink.queue_init_sync(|msg_id| {
         ClientCollabInit::new(
           self.origin.clone(),
           self.object.object_id.clone(),
@@ -138,7 +138,7 @@ where
   }
 
   pub fn clear(&self) {
-    self.sink.remove_all_pending_msgs();
+    self.sink.clear();
   }
 }
 

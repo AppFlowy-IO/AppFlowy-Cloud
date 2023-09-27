@@ -837,6 +837,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "collab-sync-protocol",
+ "futures-core",
  "futures-util",
  "gotrue",
  "gotrue-entity",

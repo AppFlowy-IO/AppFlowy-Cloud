@@ -1,19 +1,27 @@
+use std::pin::Pin;
+
+use futures_util::Stream;
+
 use bytes::Bytes;
-use s3::request::ResponseData;
+use s3::request::{ResponseData, ResponseDataStream};
 use shared_entity::{error::AppError, error_code::ErrorCode};
 use sqlx::types::uuid;
 use storage::{file_storage, user::get_user_id};
+use tokio_stream::StreamExt;
 
 use super::utils::CountingReader;
 
-pub async fn put_object(
+pub async fn put_object<R>(
   pg_pool: &sqlx::PgPool,
   s3_bucket: &s3::Bucket,
   user_uuid: &uuid::Uuid,
   file_path: &str,
   mime: mime::Mime,
-  async_read: &mut (impl tokio::io::AsyncRead + std::marker::Unpin),
-) -> Result<(), AppError> {
+  async_read: &mut R,
+) -> Result<(), AppError>
+where
+  R: tokio::io::AsyncRead + std::marker::Unpin,
+{
   // TODO: access control
 
   let file_type = mime.to_string();
@@ -55,20 +63,18 @@ pub async fn delete_object(
   }
 }
 
-// user reader
 pub async fn get_object(
   pg_pool: &sqlx::PgPool,
   s3_bucket: &s3::Bucket,
   user_uuid: &uuid::Uuid,
   path: &str,
-) -> Result<Bytes, AppError> {
+) -> Result<Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>>>>, AppError> {
   // TODO: access control
 
   match file_storage::get_file_metadata(pg_pool, user_uuid, path).await {
     Ok(metadata) => {
-      let resp = s3_bucket.get_object(metadata.s3_path()).await?;
-      check_s3_response_data(&resp)?;
-      Ok(resp.bytes().to_owned())
+      let resp = s3_bucket.get_object_stream(metadata.s3_path()).await?;
+      Ok(s3_response_stream_to_tokio_stream(resp))
     },
     Err(e) => match e {
       sqlx::Error::RowNotFound => Err(ErrorCode::FileNotFound.into()),
@@ -100,4 +106,11 @@ fn check_s3_status_code(status_code: u16) -> Result<(), AppError> {
       Err(ErrorCode::S3Error.into())
     },
   }
+}
+
+fn s3_response_stream_to_tokio_stream(
+  resp: ResponseDataStream,
+) -> Pin<Box<dyn Stream<Item = Result<Bytes, std::io::Error>>>> {
+  let mapped = resp.bytes.map(Ok::<bytes::Bytes, std::io::Error>);
+  Box::pin(mapped)
 }

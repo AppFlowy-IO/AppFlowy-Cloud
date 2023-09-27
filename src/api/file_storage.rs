@@ -1,13 +1,13 @@
 use std::pin::Pin;
 
+use actix_http::body::BoxBody;
 use actix_web::http::header::ContentType;
 use actix_web::web::Payload;
-use actix_web::Result;
 use actix_web::{
   web::{self, Data},
   Scope,
 };
-use bytes::Bytes;
+use actix_web::{HttpResponse, Result};
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::error_code::ErrorCode;
 use tokio::io::AsyncRead;
@@ -62,10 +62,10 @@ async fn get_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<String>,
-) -> Result<Bytes> {
+) -> Result<HttpResponse<BoxBody>> {
   let file_path = path.into_inner();
   match file_storage::get_object(&state.pg_pool, &state.s3_bucket, &user_uuid, &file_path).await {
-    Ok(data) => Ok(data),
+    Ok(async_read) => Ok(HttpResponse::Ok().streaming(async_read)),
     Err(e) => match e.code {
       ErrorCode::FileNotFound => Err(actix_web::error::ErrorNotFound(e)),
       _ => Err(actix_web::error::ErrorInternalServerError(e)),

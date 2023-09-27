@@ -12,7 +12,7 @@ use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{oneshot, Mutex, RwLock};
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -51,13 +51,12 @@ pub struct WSClient {
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
-  stop_tx: Sender<()>,
+  stop_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
 
 impl WSClient {
   pub fn new(config: WSClientConfig) -> Self {
     let (sender, _) = channel(config.buffer_capacity);
-    let (stop_tx, _) = channel(1);
     let state = Arc::new(Mutex::new(ConnectStateNotify::new()));
     let channels = Arc::new(RwLock::new(HashMap::new()));
     let ping = Arc::new(Mutex::new(None));
@@ -68,16 +67,19 @@ impl WSClient {
       sender,
       channels,
       ping,
-      stop_tx,
+      stop_tx: Mutex::new(None),
     }
   }
 
   pub async fn connect(&self, addr: String) -> Result<Option<SocketAddr>, WSError> {
+    let (stop_tx, mut stop_rx) = oneshot::channel();
+    *self.stop_tx.lock().await = Some(stop_tx);
+
+    self.set_state(ConnectState::Connecting).await;
     *self.addr.lock() = Some(addr.clone());
     if let Some(old_ping) = self.ping.lock().await.as_ref() {
       old_ping.stop().await;
     }
-    self.set_state(ConnectState::Connecting).await;
 
     // let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(10 * 60));
     let retry_strategy = FixedInterval::new(Duration::from_secs(6));
@@ -154,11 +156,10 @@ impl WSClient {
     });
 
     let mut sink_rx = self.sender.subscribe();
-    let mut stop_rx = self.stop_tx.subscribe();
     tokio::spawn(async move {
       loop {
         tokio::select! {
-          _ = stop_rx.recv() => {
+          _ = &mut stop_rx => {
             info!("Client stop sending message using websocket");
             break;
           },
@@ -205,15 +206,18 @@ impl WSClient {
   }
 
   pub async fn disconnect(&self) {
-    debug!("client disconnect");
-    let _ = self.stop_tx.send(());
-    let _ = self.sender.send(Message::Close(Some(CloseFrame {
-      code: CloseCode::Normal,
-      reason: Cow::from("client disconnect"),
-    })));
+    if let Some(stop_tx) = self.stop_tx.lock().await.take() {
+      debug!("client disconnect");
 
-    *self.addr.lock() = None;
-    self.set_state(ConnectState::Disconnected).await;
+      let _ = stop_tx.send(());
+      let _ = self.sender.send(Message::Close(Some(CloseFrame {
+        code: CloseCode::Normal,
+        reason: Cow::from("client disconnect"),
+      })));
+
+      *self.addr.lock() = None;
+      self.set_state(ConnectState::Disconnected).await;
+    }
   }
 
   async fn set_state(&self, state: ConnectState) {

@@ -88,7 +88,6 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
   client_2
     .create_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  client_2.wait_ws_connected().await;
   client_2.disconnect().await;
 
   client_2

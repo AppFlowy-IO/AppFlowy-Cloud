@@ -10,6 +10,7 @@ use crate::component::auth::jwt::UserUuid;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
+use tracing::instrument;
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
@@ -21,6 +22,7 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/member/remove").route(web::post().to(members_remove_handler)))
 }
 
+#[instrument(skip_all, err)]
 async fn list_handler(
   uuid: UserUuid,
   state: Data<AppState>,
@@ -29,6 +31,7 @@ async fn list_handler(
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
+#[instrument(skip_all, err)]
 async fn members_add_handler(
   user_uuid: UserUuid,
   req: Json<WorkspaceMembersParams>,
@@ -44,6 +47,7 @@ async fn members_add_handler(
   Ok(AppResponse::Ok().into())
 }
 
+#[instrument(skip_all, err)]
 async fn members_list_handler(
   path: web::Path<String>,
   user_uuid: UserUuid,
@@ -58,6 +62,7 @@ async fn members_list_handler(
   Ok(AppResponse::Ok().with_data(ws_members).into())
 }
 
+#[instrument(skip_all, err)]
 async fn members_remove_handler(
   user_uuid: UserUuid,
   req: Json<WorkspaceMembersParams>,

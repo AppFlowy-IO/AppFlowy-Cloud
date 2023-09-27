@@ -2807,6 +2807,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-retry",
  "tokio-stream",
  "tokio-util",
  "tracing",

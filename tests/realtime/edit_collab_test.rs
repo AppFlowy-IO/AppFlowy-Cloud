@@ -25,8 +25,6 @@ async fn realtime_write_single_collab_test() {
       .collab
       .lock()
       .insert(&i.to_string(), i.to_string());
-    // simulate the user is typing
-    tokio::time::sleep(Duration::from_millis(100)).await;
   }
 
   let expected_json = json!( {

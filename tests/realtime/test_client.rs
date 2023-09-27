@@ -88,6 +88,7 @@ impl TestClient {
     }
   }
 
+  #[allow(dead_code)]
   pub(crate) async fn wait_ws_connected(&self) {
     let mut connect_state = self.ws_client.subscribe_connect_state().await;
 

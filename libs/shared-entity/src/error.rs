@@ -137,3 +137,10 @@ impl From<SystemTimeError> for AppError {
     AppError::new(ErrorCode::Unhandled, value.to_string())
   }
 }
+
+#[cfg(feature = "cloud")]
+impl From<s3::error::S3Error> for AppError {
+  fn from(value: s3::error::S3Error) -> Self {
+    AppError::new(ErrorCode::S3Error, value.to_string())
+  }
+}

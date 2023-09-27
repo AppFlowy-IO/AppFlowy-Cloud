@@ -16,7 +16,7 @@ pub async fn token_verify(
   let user = gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
-  let is_new: bool = create_user_if_not_exists(pg_pool, &user_uuid, &user.email, &name).await?;
+  let is_new = create_user_if_not_exists(pg_pool, &user_uuid, &user.email, &name).await?;
   Ok(is_new)
 }
 

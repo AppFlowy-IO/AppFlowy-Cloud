@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT * FROM af_file_metadata\n        WHERE owner_uid = (\n            SELECT uid\n            FROM af_user\n            WHERE uuid = $1\n        ) AND path = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owner_uid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "file_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "file_size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1f98d40728c1bda6841418970cac282651f06207b3b4681c3f15cd158a052f45"
+}

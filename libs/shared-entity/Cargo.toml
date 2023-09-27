@@ -20,6 +20,7 @@ sqlx = { version = "0.7", default-features = false, features = ["postgres"], opt
 validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }
 opener = "0.6.1"
 url = "2.4.1"
+rust-s3 = "0.33.0"
 
 [features]
 cloud = ["actix-web", "sqlx", "validator"]

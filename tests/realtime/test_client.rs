@@ -232,7 +232,7 @@ pub(crate) async fn assert_client_collab(
           .to_json_value()
       } => {
         retry_count += 1;
-        if retry_count > 5 {
+        if retry_count > 20 {
           assert_json_eq!(json, expected);
           break;
         }

@@ -6,8 +6,6 @@ use serde_json::json;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
 
-
-
 use storage_entity::QueryCollabParams;
 
 #[tokio::test]

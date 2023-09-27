@@ -1,8 +1,9 @@
 use anyhow::Result;
 use gotrue::api::Client;
 use shared_entity::error::AppError;
-use storage::workspace::{
-  create_user_if_not_exists, select_user_profile_view_by_uuid, update_user_name,
+use storage::{
+  user::{create_user_if_not_exists, update_user_name},
+  workspace::select_user_profile_view_by_uuid,
 };
 use storage_entity::AFUserProfileView;
 

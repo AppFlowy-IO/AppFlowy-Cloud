@@ -45,11 +45,6 @@ pkill -f appflowy_cloud || true
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
 RUST_LOG=trace cargo run &
 
-# sometimes the gotrue server may not be ready yet
-sleep 1
-# created registered user
-./build/init_registered_user.sh
-
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false
 docker-compose --file ./docker-compose-dev.yml up -d

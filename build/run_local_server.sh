@@ -43,7 +43,7 @@ pkill -f appflowy_cloud || true
 # After the .sqlx files are generated, we build in SQLX_OFFLINE=true
 # where we don't need to connect to the database
 cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
-RUST_LOG=debug cargo run &
+RUST_LOG=trace cargo run &
 
 # sometimes the gotrue server may not be ready yet
 sleep 1

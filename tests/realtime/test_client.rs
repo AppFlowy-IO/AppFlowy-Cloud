@@ -269,7 +269,7 @@ pub async fn get_collab_json_from_server(
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = std::env::var("RUST_LOG").unwrap_or("debug".to_string());
+    let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
     let mut filters = vec![];
     filters.push(format!("client_api={}", level));
     std::env::set_var("RUST_LOG", filters.join(","));

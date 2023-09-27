@@ -183,24 +183,19 @@ impl Deref for ClientWSSink {
 pub struct RealtimeUserImpl {
   pub uuid: String,
   pub device_id: String,
-  timestamp: i64,
 }
 
 impl RealtimeUserImpl {
   pub fn new(uuid: String, device_id: String) -> Self {
-    Self {
-      uuid,
-      device_id,
-      timestamp: chrono::Utc::now().timestamp(),
-    }
+    Self { uuid, device_id }
   }
 }
 
 impl Display for RealtimeUserImpl {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "uuid:{}|device_id:{}:{}",
-      self.uuid, self.device_id, self.timestamp
+      "uuid:{}|device_id:{}",
+      self.uuid, self.device_id,
     ))
   }
 }

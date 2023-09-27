@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::trace;
+use tracing::{info, trace};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::{CollabGroupCache, SubscribeGroupIfNeedAction};
@@ -58,10 +58,13 @@ async fn remove_user<S, U>(
   S: CollabStorage + Clone,
   U: RealtimeUser,
 {
-  client_stream_by_user.write().await.remove(user);
+  if client_stream_by_user.write().await.remove(user).is_some() {
+    info!("Remove user stream: {}", user);
+  }
+
   let editing_set = editing_collab_by_user.lock().remove(user);
   if let Some(editing_set) = editing_set {
-    tracing::info!("Remove user from group: {}", user);
+    info!("Remove user from group: {}", user);
     for editing in editing_set {
       remove_user_from_group(user, groups, &editing).await;
     }
@@ -84,13 +87,13 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    trace!("[💭Server]: new connection => {} ", new_conn.user);
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
+      trace!("[💭Server]: new connection => {} ", new_conn.user);
       remove_user(
         &groups,
         &client_stream_by_user,
@@ -194,7 +197,7 @@ async fn remove_user_from_group<S, U>(
   U: RealtimeUser,
 {
   if let Some(group) = groups.get_group(&editing.object_id).await {
-    tracing::info!("Remove subscriber: {}", editing.origin);
+    info!("Remove subscriber: {}", editing.origin);
     group.subscribers.write().await.remove(user);
     let should_remove = group.is_empty().await;
     if should_remove {

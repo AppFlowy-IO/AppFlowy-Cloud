@@ -5,7 +5,7 @@ use client_api::Client;
 mod client;
 mod collab;
 mod gotrue;
-mod realtime;
+// mod realtime;
 
 pub fn client_api_client() -> Client {
   Client::from(

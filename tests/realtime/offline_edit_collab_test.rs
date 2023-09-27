@@ -5,6 +5,7 @@ use collab_define::CollabType;
 use serde_json::json;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
+use std::time::Duration;
 
 use storage_entity::QueryCollabParams;
 
@@ -78,7 +79,6 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
     .insert("name", "work");
 
   client_1.wait_object_sync_complete(&object_id).await;
-  // tokio::time::sleep(Duration::from_millis(300)).await;
 
   let mut client_2 = TestClient::new_with_user(registered_user.clone()).await;
   client_2.create(&object_id, collab_type.clone()).await;
@@ -95,6 +95,10 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
 
   client_2.reconnect().await;
   client_2.wait_object_sync_complete(&object_id).await;
+
+  // Wait 2 secs that let the server broadcast the update to the client_1.
+  // It might fail if the server is slow.
+  tokio::time::sleep(Duration::from_secs(2)).await;
 
   let expected_json = json!({
     "name": "workspace"

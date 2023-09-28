@@ -1,11 +1,11 @@
 use anyhow::Result;
-use gotrue::api::Client;
-use shared_entity::error::AppError;
-use storage::{
+use database::{
   user::{create_user_if_not_exists, update_user_name},
   workspace::select_user_profile_view_by_uuid,
 };
-use storage_entity::AFUserProfileView;
+use database_entity::AFUserProfileView;
+use gotrue::api::Client;
+use shared_entity::error::AppError;
 
 use sqlx::{types::uuid, PgPool};
 

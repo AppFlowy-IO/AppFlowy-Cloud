@@ -18,7 +18,7 @@ use tracing::{info, trace};
 use crate::client::ClientWSSink;
 use crate::collaborate::group::{CollabGroupCache, SubscribeGroupIfNeedAction};
 use crate::util::channel_ext::UnboundedSenderSink;
-use storage::collab::CollabStorage;
+use database::collab::CollabStorage;
 
 #[derive(Clone)]
 pub struct CollabServer<S, U> {

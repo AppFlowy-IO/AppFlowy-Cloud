@@ -22,9 +22,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::component::storage_proxy::CollabStorageProxy;
+use database::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
-use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage};
 use tracing_actix_web::TracingLogger;
 
 pub struct Application {

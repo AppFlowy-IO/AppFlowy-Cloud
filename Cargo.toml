@@ -71,8 +71,8 @@ collab = { version = "0.1.0" }
 token = { path = "libs/token" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
-storage = { path = "libs/storage" }
-storage-entity = { path = "libs/storage-entity" }
+database = { path = "libs/database" }
+database-entity = { path = "libs/database-entity" }
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
@@ -101,8 +101,8 @@ members = [
     "libs/token",
     "libs/snowflake",
     "libs/realtime",
-    "libs/storage",
-    "libs/storage-entity",
+    "libs/database",
+    "libs/database-entity",
     "libs/client-api",
     "libs/infra",
     "libs/shared-entity",

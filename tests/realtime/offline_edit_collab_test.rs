@@ -6,7 +6,7 @@ use serde_json::json;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
 
-use storage_entity::QueryCollabParams;
+use database_entity::QueryCollabParams;
 
 #[tokio::test]
 async fn ws_reconnect_sync_test() {

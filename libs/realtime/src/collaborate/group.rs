@@ -12,10 +12,10 @@ use std::pin::Pin;
 
 use anyhow::Error;
 use collab_sync_protocol::CollabMessage;
+use database::collab::CollabStorage;
 use parking_lot::Mutex;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use storage::collab::CollabStorage;
 use tokio::sync::RwLock;
 
 use crate::entities::{ClientMessage, Editing, RealtimeUser};

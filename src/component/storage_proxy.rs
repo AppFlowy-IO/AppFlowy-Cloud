@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use std::collections::HashMap;
-use std::sync::{Arc, Weak};
-use storage::collab::{CollabPostgresDBStorageImpl, CollabStorage, StorageConfig};
-use storage_entity::{
+use database::collab::{CollabPostgresDBStorageImpl, CollabStorage, StorageConfig};
+use database_entity::{
   AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
+use std::collections::HashMap;
+use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -44,11 +44,11 @@ impl CollabStorage for CollabStorageProxy {
       .insert(object_id.to_string(), collab);
   }
 
-  async fn insert_collab(&self, params: InsertCollabParams) -> storage::collab::Result<()> {
+  async fn insert_collab(&self, params: InsertCollabParams) -> database::collab::Result<()> {
     self.inner.insert_collab(params).await
   }
 
-  async fn get_collab(&self, params: QueryCollabParams) -> storage::collab::Result<RawData> {
+  async fn get_collab(&self, params: QueryCollabParams) -> database::collab::Result<RawData> {
     let collab = self
       .collab_by_object_id
       .read()
@@ -65,25 +65,25 @@ impl CollabStorage for CollabStorageProxy {
     }
   }
 
-  async fn delete_collab(&self, object_id: &str) -> storage::collab::Result<()> {
+  async fn delete_collab(&self, object_id: &str) -> database::collab::Result<()> {
     self.inner.delete_collab(object_id).await
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> storage::collab::Result<()> {
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> database::collab::Result<()> {
     self.inner.create_snapshot(params).await
   }
 
   async fn get_snapshot_data(
     &self,
     params: QuerySnapshotParams,
-  ) -> storage::collab::Result<RawData> {
+  ) -> database::collab::Result<RawData> {
     self.inner.get_snapshot_data(params).await
   }
 
   async fn get_all_snapshots(
     &self,
     params: QueryObjectSnapshotParams,
-  ) -> storage::collab::Result<AFCollabSnapshots> {
+  ) -> database::collab::Result<AFCollabSnapshots> {
     self.inner.get_all_snapshots(params).await
   }
 }

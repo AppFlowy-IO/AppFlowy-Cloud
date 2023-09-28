@@ -3,7 +3,7 @@ use sqlx::{
   PgPool,
 };
 
-use storage_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
+use database_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
 pub async fn select_all_workspaces_owned(
   pool: &PgPool,

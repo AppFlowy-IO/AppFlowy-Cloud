@@ -13,7 +13,7 @@ serde_repr = "0.1.16"
 gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
 shared_entity = { path = "../shared-entity" }
-storage-entity = { path = "../storage-entity" }
+database-entity = { path = "../database-entity" }
 opener = "0.6.1"
 url = "2.4.1"
 tokio-stream = { version = "0.1.14" }

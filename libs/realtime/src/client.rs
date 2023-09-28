@@ -14,8 +14,8 @@ use collab_sync_protocol::CollabMessage;
 use crate::collaborate::CollabServer;
 use crate::error::RealtimeError;
 
+use database::collab::CollabStorage;
 use std::time::{Duration, Instant};
-use storage::collab::CollabStorage;
 use tracing::error;
 
 pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {

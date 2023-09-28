@@ -8,6 +8,7 @@ use storage_entity::{
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
 use tokio::sync::RwLock;
+use tracing::info;
 
 #[derive(Clone)]
 pub struct CollabStorageProxy {
@@ -34,7 +35,7 @@ impl CollabStorage for CollabStorageProxy {
     self.inner.is_exist(object_id).await
   }
 
-  async fn cache_memory_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
+  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
     tracing::trace!("Cache collab:{} in memory", object_id);
     self
       .collab_by_object_id
@@ -48,22 +49,19 @@ impl CollabStorage for CollabStorageProxy {
   }
 
   async fn get_collab(&self, params: QueryCollabParams) -> storage::collab::Result<RawData> {
-    // self.inner.get_collab(params).await
     let collab = self
       .collab_by_object_id
       .read()
       .await
       .get(&params.object_id)
       .and_then(|collab| collab.upgrade());
-    tracing::debug!(
-      "collab:{} in memory:{}",
-      &params.object_id,
-      collab.is_some()
-    );
 
     match collab {
       None => self.inner.get_collab(params).await,
-      Some(collab) => Ok(collab.encode_as_update_v1().0),
+      Some(collab) => {
+        info!("Get collab data:{} from memory", params.object_id);
+        Ok(collab.encode_as_update_v1().0)
+      },
     }
   }
 

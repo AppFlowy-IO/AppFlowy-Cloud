@@ -3,19 +3,20 @@ use crate::error::{RealtimeError, StreamError};
 use anyhow::Result;
 
 use actix::{Actor, Context, Handler, ResponseFuture};
-use collab::core::origin::CollabOrigin;
 
 use collab_sync_protocol::CollabMessage;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
+
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::trace;
+use tracing::{info, trace};
 
 use crate::client::ClientWSSink;
-use crate::collaborate::group::CollabGroupCache;
+use crate::collaborate::group::{CollabGroupCache, SubscribeGroupIfNeedAction};
 use crate::util::channel_ext::UnboundedSenderSink;
 use storage::collab::CollabStorage;
 
@@ -57,10 +58,13 @@ async fn remove_user<S, U>(
   S: CollabStorage + Clone,
   U: RealtimeUser,
 {
-  client_stream_by_user.write().await.remove(user);
+  if client_stream_by_user.write().await.remove(user).is_some() {
+    info!("Remove user stream: {}", user);
+  }
+
   let editing_set = editing_collab_by_user.lock().remove(user);
   if let Some(editing_set) = editing_set {
-    tracing::info!("Remove user from group: {}", user);
+    info!("Remove user from group: {}", user);
     for editing in editing_set {
       remove_user_from_group(user, groups, &editing).await;
     }
@@ -83,13 +87,13 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    trace!("[💭Server]: new connection => {} ", new_conn.user);
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
+      trace!("[💭Server]: new connection => {} ", new_conn.user);
       remove_user(
         &groups,
         &client_stream_by_user,
@@ -139,19 +143,21 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    let client_streams = self.client_stream_by_user.clone();
+    let client_stream_by_user = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
     let edit_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
-      subscribe_collab_group_change_if_need(
-        &client_msg,
-        &groups,
-        &edit_collab_by_user,
-        &client_streams,
-      )
+      SubscribeGroupIfNeedAction {
+        client_msg: &client_msg,
+        groups: &groups,
+        edit_collab_by_user: &edit_collab_by_user,
+        client_stream_by_user: &client_stream_by_user,
+      }
+      .run()
       .await?;
-      forward_message_to_collab_group(&client_msg, &client_streams).await;
+
+      forward_message_to_collab_group(&client_msg, &client_stream_by_user).await;
       Ok(())
     })
   }
@@ -164,7 +170,7 @@ async fn forward_message_to_collab_group<U>(
   U: RealtimeUser,
 {
   if let Some(client_stream) = client_streams.read().await.get(&client_msg.user) {
-    tracing::trace!(
+    trace!(
       "[💭Server]: receives client message: [oid:{}|msg_id:{:?}]",
       client_msg.content.object_id(),
       client_msg.content.msg_id()
@@ -181,102 +187,6 @@ async fn forward_message_to_collab_group<U>(
   }
 }
 
-async fn subscribe_collab_group_change_if_need<U, S>(
-  client_msg: &ClientMessage<U>,
-  groups: &Arc<CollabGroupCache<S, U>>,
-  edit_collab_by_user: &Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
-  client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
-) -> Result<(), RealtimeError>
-where
-  U: RealtimeUser,
-  S: CollabStorage,
-{
-  let object_id = client_msg.content.object_id();
-  if !groups.contains_group(object_id).await? {
-    // When create a group, the message must be the init sync message.
-    match &client_msg.content {
-      CollabMessage::ClientInit(client_init) => {
-        let uid = client_init
-          .origin
-          .client_user_id()
-          .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
-        groups
-          .create_group(
-            uid,
-            &client_init.workspace_id,
-            object_id,
-            client_init.collab_type.clone(),
-          )
-          .await;
-      },
-      _ => {
-        return Err(RealtimeError::UnexpectedData(
-          "The first message must be init sync message",
-        ));
-      },
-    }
-  }
-
-  // If the client's stream is already subscribed to the collab group, return.
-  if groups
-    .contains_user(object_id, &client_msg.user)
-    .await
-    .unwrap_or(false)
-  {
-    return Ok(());
-  }
-
-  let origin = match client_msg.content.origin() {
-    None => {
-      tracing::error!("🔴The origin from client message is empty");
-      &CollabOrigin::Empty
-    },
-    Some(client) => client,
-  };
-  match client_streams.write().await.get_mut(&client_msg.user) {
-    None => tracing::warn!("The client stream is not found"),
-    Some(client_stream) => {
-      if let Some(collab_group) = groups.get_group(object_id).await {
-        collab_group
-          .subscribers
-          .write()
-          .await
-          .entry(client_msg.user.clone())
-          .or_insert_with(|| {
-            tracing::trace!(
-              "[💭Server]: {} subscribe group:{}",
-              client_msg.user,
-              client_msg.content.object_id()
-            );
-
-            edit_collab_by_user
-              .lock()
-              .entry(client_msg.user.clone())
-              .or_default()
-              .insert(Editing {
-                object_id: object_id.to_string(),
-                origin: origin.clone(),
-              });
-
-            let (sink, stream) = client_stream
-              .client_channel::<CollabMessage, _, _>(
-                object_id,
-                move |object_id, msg| msg.object_id() == object_id,
-                move |object_id, msg| msg.object_id == object_id,
-              )
-              .unwrap();
-
-            collab_group
-              .broadcast
-              .subscribe(origin.clone(), sink, stream)
-          });
-      }
-    },
-  }
-
-  Ok(())
-}
-
 /// Remove the user from the group and remove the group from the cache if the group is empty.
 async fn remove_user_from_group<S, U>(
   user: &U,
@@ -287,11 +197,11 @@ async fn remove_user_from_group<S, U>(
   U: RealtimeUser,
 {
   if let Some(group) = groups.get_group(&editing.object_id).await {
-    tracing::info!("Remove subscriber: {}", editing.origin);
+    info!("Remove subscriber: {}", editing.origin);
     group.subscribers.write().await.remove(user);
     let should_remove = group.is_empty().await;
     if should_remove {
-      group.flush_collab();
+      group.save_collab();
 
       tracing::debug!("Remove group: {}", editing.object_id);
       groups.remove_group(&editing.object_id).await;

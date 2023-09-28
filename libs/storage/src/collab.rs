@@ -36,7 +36,7 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// * `bool` - `true` if the collaboration exists, `false` otherwise.
   async fn is_exist(&self, object_id: &str) -> bool;
 
-  async fn cache_memory_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {}
+  async fn cache_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {}
 
   /// Creates a new collaboration in the storage.
   ///

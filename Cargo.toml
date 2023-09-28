@@ -79,14 +79,13 @@ shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 
 [dev-dependencies]
 once_cell = "1.7.2"
-collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
 collab-define = { version = "0.1.0" }
 collab-sync-protocol = { version = "0.1.0" }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 dotenv = "0.15.0"
 scraper = "0.17.1"
-client-api = { path = "libs/client-api" }
+client-api = { path = "libs/client-api", features = ["collab-sync"] }
 
 [[bin]]
 name = "appflowy_cloud"
@@ -124,13 +123,11 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e70326"  }
-collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e70326" }
-collab-plugins = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e70326" }
-collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4e70326" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f9b52a"  }
+collab-sync-protocol = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f9b52a" }
+collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f9b52a" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }
 #collab-sync-protocol = { path = "libs/AppFlowy-Collab/collab-sync-protocol" }
-#collab-plugins = { path = "libs/AppFlowy-Collab/collab-plugins" }
 #collab-define = { path = "libs/AppFlowy-Collab/collab-define" }

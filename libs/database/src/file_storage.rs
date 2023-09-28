@@ -1,5 +1,5 @@
+use database_entity::AFFileMetadata;
 use sqlx::{PgPool, Transaction};
-use storage_entity::AFFileMetadata;
 
 pub async fn insert_file_metadata(
   trans: &mut Transaction<'_, sqlx::Postgres>,

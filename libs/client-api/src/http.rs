@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use bytes::Bytes;
+use database_entity::AFWorkspaceMember;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
@@ -19,17 +20,16 @@ use shared_entity::dto::UserUpdateParams;
 use shared_entity::dto::WorkspaceMembersParams;
 use std::sync::Arc;
 use std::time::SystemTime;
-use storage_entity::AFWorkspaceMember;
 
 use gotrue_entity::{AccessTokenResponse, User};
 
 use crate::notify::{ClientToken, TokenStateReceiver};
+use database_entity::{AFUserProfileView, InsertCollabParams};
+use database_entity::{AFWorkspaces, QueryCollabParams};
+use database_entity::{DeleteCollabParams, RawData};
 use shared_entity::error::AppError;
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
-use storage_entity::{AFUserProfileView, InsertCollabParams};
-use storage_entity::{AFWorkspaces, QueryCollabParams};
-use storage_entity::{DeleteCollabParams, RawData};
 
 pub struct Client {
   pub(crate) cloud_client: reqwest::Client,

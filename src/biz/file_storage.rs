@@ -1,8 +1,8 @@
 use bytes::Bytes;
+use database::file_storage;
 use s3::request::ResponseData;
 use shared_entity::{error::AppError, error_code::ErrorCode};
 use sqlx::types::uuid;
-use storage::file_storage;
 
 // todo: user writer
 pub async fn put_object(

@@ -1,10 +1,10 @@
-use shared_entity::{error::AppError, error_code::ErrorCode};
-use sqlx::{types::uuid, PgPool};
-use storage::workspace::{
+use database::workspace::{
   delete_workspace_members, insert_workspace_members, select_all_workspaces_owned,
   select_user_is_workspace_owner, select_workspace_members,
 };
-use storage_entity::{AFRole, AFWorkspaceMember, AFWorkspaces};
+use database_entity::{AFRole, AFWorkspaceMember, AFWorkspaces};
+use shared_entity::{error::AppError, error_code::ErrorCode};
+use sqlx::{types::uuid, PgPool};
 
 pub async fn get_workspaces(
   pg_pool: &PgPool,

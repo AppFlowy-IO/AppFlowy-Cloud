@@ -1,10 +1,10 @@
 use crate::biz;
 use crate::state::AppState;
+use database_entity::{AFWorkspaceMember, AFWorkspaces};
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::WorkspaceMembersParams;
 use shared_entity::error::AppError;
 use sqlx::types::uuid;
-use storage_entity::{AFWorkspaceMember, AFWorkspaces};
 
 use crate::component::auth::jwt::UserUuid;
 use actix_web::web::{Data, Json};

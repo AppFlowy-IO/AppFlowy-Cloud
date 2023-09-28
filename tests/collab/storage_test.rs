@@ -3,9 +3,9 @@ use crate::{
 };
 
 use collab_define::CollabType;
+use database_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::Uuid;
-use storage_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 
 #[tokio::test]
 async fn success_insert_collab_test() {

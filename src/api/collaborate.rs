@@ -3,15 +3,15 @@ use crate::state::Storage;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
-use shared_entity::data::AppResponse;
-use shared_entity::error::AppError;
-use shared_entity::error_code::ErrorCode;
-use storage::collab::CollabStorage;
-use storage::error::StorageError;
-use storage_entity::{
+use database::collab::CollabStorage;
+use database::error::StorageError;
+use database_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
+use shared_entity::data::AppResponse;
+use shared_entity::error::AppError;
+use shared_entity::error_code::ErrorCode;
 use tracing::{debug, instrument};
 use validator::Validate;
 

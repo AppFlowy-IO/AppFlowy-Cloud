@@ -9,9 +9,9 @@ use collab_define::CollabType;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Weak;
 
-use storage::collab::CollabStorage;
-use storage::error::StorageError;
-use storage_entity::{InsertCollabParams, QueryCollabParams, RawData};
+use database::collab::CollabStorage;
+use database::error::StorageError;
+use database_entity::{InsertCollabParams, QueryCollabParams, RawData};
 
 use crate::collaborate::group::CollabGroup;
 use crate::entities::RealtimeUser;

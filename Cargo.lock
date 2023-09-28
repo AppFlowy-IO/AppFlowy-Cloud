@@ -457,6 +457,8 @@ dependencies = [
  "collab-define",
  "collab-sync-protocol",
  "config",
+ "database",
+ "database-entity",
  "derive_more",
  "dotenv",
  "fancy-regex",
@@ -483,8 +485,6 @@ dependencies = [
  "shared_entity",
  "snowflake",
  "sqlx",
- "storage",
- "storage-entity",
  "tempfile",
  "thiserror",
  "token",
@@ -838,6 +838,7 @@ dependencies = [
  "collab",
  "collab-define",
  "collab-sync-protocol",
+ "database-entity",
  "futures-core",
  "futures-util",
  "gotrue",
@@ -852,7 +853,6 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "shared_entity",
- "storage-entity",
  "thiserror",
  "tokio",
  "tokio-retry",
@@ -1113,6 +1113,39 @@ name = "data-encoding"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2e66c9d817f1720209181c316d28635c050fa304f9c79e47a520882661b7308"
+
+[[package]]
+name = "database"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "collab",
+ "collab-define",
+ "database-entity",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "database-entity"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "collab-define",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "uuid",
+ "validator",
+]
 
 [[package]]
 name = "der"
@@ -2796,6 +2829,8 @@ dependencies = [
  "collab",
  "collab-define",
  "collab-sync-protocol",
+ "database",
+ "database-entity",
  "futures-util",
  "lib0",
  "once_cell",
@@ -2805,8 +2840,6 @@ dependencies = [
  "serde-aux",
  "serde_json",
  "serde_repr",
- "storage",
- "storage-entity",
  "tempfile",
  "thiserror",
  "tokio",
@@ -3711,39 +3744,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "storage"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "collab",
- "collab-define",
- "serde",
- "serde_json",
- "sqlx",
- "storage-entity",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
- "validator",
-]
-
-[[package]]
-name = "storage-entity"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "collab-define",
- "serde",
- "serde_json",
- "sqlx",
- "uuid",
- "validator",
-]
 
 [[package]]
 name = "string_cache"

@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use bytes::Bytes;
-use database_entity::AFWorkspaceMember;
+use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
@@ -24,7 +24,7 @@ use std::time::SystemTime;
 use gotrue_entity::{AccessTokenResponse, User};
 
 use crate::notify::{ClientToken, TokenStateReceiver};
-use database_entity::{AFUserProfileView, InsertCollabParams};
+use database_entity::{AFUserProfileView, AFWorkspaceMember, InsertCollabParams};
 use database_entity::{AFWorkspaces, QueryCollabParams};
 use database_entity::{DeleteCollabParams, RawData};
 use shared_entity::error::AppError;
@@ -463,7 +463,10 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn get_file_storage_object(&self, path: &str) -> Result<Bytes, AppError> {
+  pub async fn get_file_storage_object_stream(
+    &self,
+    path: &str,
+  ) -> Result<impl futures_core::Stream<Item = reqwest::Result<Bytes>>, AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, path);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -471,16 +474,22 @@ impl Client {
       .send()
       .await?;
     match resp.status() {
-      reqwest::StatusCode::OK => {
-        let bytes = resp.bytes().await?;
-        Ok(bytes)
-      },
+      reqwest::StatusCode::OK => Ok(resp.bytes_stream()),
       reqwest::StatusCode::NOT_FOUND => Err(ErrorCode::FileNotFound.into()),
       c => Err(AppError::new(
         ErrorCode::Unhandled,
         format!("status code: {}, message: {}", c, resp.text().await?),
       )),
     }
+  }
+
+  pub async fn get_file_storage_object(&self, path: &str) -> Result<Bytes, AppError> {
+    let mut acc: Vec<u8> = Vec::new();
+    let mut stream = self.get_file_storage_object_stream(path).await?;
+    while let Some(raw_bytes) = stream.next().await {
+      acc.extend_from_slice(&raw_bytes?);
+    }
+    Ok(Bytes::from(acc))
   }
 
   pub async fn delete_file_storage_object(&self, path: &str) -> Result<(), AppError> {

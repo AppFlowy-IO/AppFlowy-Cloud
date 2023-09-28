@@ -76,7 +76,7 @@ where
     let object_id = object.object_id.clone();
     let stream = SyncStream::new(
       origin.clone(),
-      object_id,
+      object_id.clone(),
       stream,
       protocol,
       collab,
@@ -89,7 +89,7 @@ where
     spawn(async move {
       while let Some(collab_state) = sink_state_stream.next().await {
         if let Some(sync_state) = weak_sync_state.upgrade() {
-          trace!("collab state change: {:?}", collab_state);
+          trace!("{}: sync state: {:?}", object_id, collab_state);
           match collab_state {
             SinkState::Syncing => {
               let _ = sync_state.send(SyncState::SyncUpdate);

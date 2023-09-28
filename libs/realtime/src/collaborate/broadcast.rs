@@ -218,22 +218,19 @@ impl CollabBroadcast {
               if let Some(msg_id) = collab_msg.msg_id() {
                 // Send the server's state vector to the client. The client will calculate the missing
                 // updates and send them as a single update back to the server.
-                let payload = if is_client_init {
-                  encode_server_sv(&collab)
-                } else {
-                  vec![]
-                };
-
-                let server_init_sync = ServerCollabInit::new(object_id.clone(), msg_id, payload);
-                if let Err(e) = sink.send(server_init_sync.into()).await {
-                  trace!("Send server init sync to the client failed: {}", e);
+                if is_client_init {
+                  let payload = encode_server_sv(&collab);
+                  let server_init_sync = ServerCollabInit::new(object_id.clone(), msg_id, payload);
+                  if let Err(e) = sink.send(server_init_sync.into()).await {
+                    trace!("Send server init sync to the client failed: {}", e);
+                  }
                 }
               } else {
                 warn!("Client message does not have a message id");
               }
             },
             Err(err) => {
-              error!("Get sink lock failed: {:?}", err);
+              error!("Get sink lock of {} failed: {:?}", object_id, err);
             },
           }
         }

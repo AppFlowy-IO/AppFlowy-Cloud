@@ -149,6 +149,7 @@ impl WSClient {
           Message::Pong(_) => {},
           Message::Close(close) => {
             info!("{:?}", close);
+            break;
           },
           Message::Frame(_) => {},
         }
@@ -160,7 +161,6 @@ impl WSClient {
       loop {
         tokio::select! {
           _ = &mut stop_rx => {
-            info!("Client stop sending message using websocket");
             break;
           },
          Ok(msg) = sink_rx.recv() => {

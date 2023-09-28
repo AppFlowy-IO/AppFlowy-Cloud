@@ -13,10 +13,11 @@ use tokio::sync::RwLock;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::{info, trace};
+use tracing::{error, info, trace, warn};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::{CollabGroupCache, SubscribeGroupIfNeedAction};
+
 use crate::util::channel_ext::UnboundedSenderSink;
 use storage::collab::CollabStorage;
 
@@ -196,16 +197,14 @@ async fn remove_user_from_group<S, U>(
   S: CollabStorage,
   U: RealtimeUser,
 {
-  if let Some(group) = groups.get_group(&editing.object_id).await {
-    info!("Remove subscriber: {}", editing.origin);
-    group.subscribers.write().await.remove(user);
-    let should_remove = group.is_empty().await;
-    if should_remove {
-      group.save_collab();
-
-      tracing::debug!("Remove group: {}", editing.object_id);
-      groups.remove_group(&editing.object_id).await;
-    }
+  let subscription = groups.remove_user(&editing.object_id, user).await;
+  match subscription {
+    Ok(Some(subscription)) => {
+      let _ = subscription.completed().await;
+      groups.remove_group_if_empty(&editing.object_id).await;
+    },
+    Ok(None) => warn!("The subscription is not found"),
+    Err(err) => error!("Remove user from group failed: {}", err),
   }
 }
 

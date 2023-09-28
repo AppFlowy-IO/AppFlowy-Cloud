@@ -10,7 +10,7 @@ use std::future::Future;
 use std::iter::Take;
 use std::pin::Pin;
 
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use collab_sync_protocol::CollabMessage;
 use parking_lot::Mutex;
 use std::sync::{Arc, Weak};
@@ -24,7 +24,8 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, RetryIf};
 
 use crate::error::RealtimeError;
-use tracing::{error, trace, warn};
+
+use tracing::{error, info, trace, warn};
 
 pub struct CollabGroupCache<S, U> {
   group_by_object_id: Arc<RwLock<HashMap<String, Arc<CollabGroup<U>>>>>,
@@ -61,13 +62,44 @@ where
     self.group_by_object_id.read().await.get(object_id).cloned()
   }
 
-  pub async fn remove_group(&self, object_id: &str) {
+  pub async fn remove_group_if_empty(&self, object_id: &str) {
     match self.group_by_object_id.try_write() {
       Ok(mut group_by_object_id) => {
-        group_by_object_id.remove(object_id);
+        let should_remove = if let Some(group) = group_by_object_id.get(object_id) {
+          let should_remove = group.is_empty().await;
+          if should_remove {
+            group.save_collab();
+          }
+          should_remove
+        } else {
+          false
+        };
+
+        if should_remove {
+          info!("Remove group: {}", object_id);
+          group_by_object_id.remove(object_id);
+        }
       },
       Err(err) => error!("Failed to acquire write lock to remove group: {:?}", err),
     }
+  }
+
+  pub async fn remove_user(
+    &self,
+    object_id: &str,
+    user: &U,
+  ) -> Result<Option<Subscription>, Error> {
+    Ok(
+      self
+        .group_by_object_id
+        .try_read()?
+        .get(object_id)
+        .ok_or(anyhow!("Object is not exist in the group"))?
+        .subscribers
+        .write()
+        .await
+        .remove(user),
+    )
   }
 
   pub async fn create_group(

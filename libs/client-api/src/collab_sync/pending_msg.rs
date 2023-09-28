@@ -7,6 +7,8 @@ use crate::collab_sync::MsgId;
 use collab_sync_protocol::CollabSinkMessage;
 use tokio::sync::oneshot;
 
+use tracing::error;
+
 pub(crate) struct PendingMsgQueue<Msg> {
   queue: BinaryHeap<PendingMessage<Msg>>,
 }
@@ -75,10 +77,22 @@ where
     &self.state
   }
 
-  pub fn set_state(&mut self, new_state: MessageState) {
+  pub fn set_state(&mut self, new_state: MessageState) -> bool {
     self.state = new_state;
-    if self.state.is_done() && self.tx.is_some() {
-      self.tx.take().map(|tx| tx.send(self.msg_id));
+    if !self.state.is_done() {
+      return false;
+    }
+    match self.tx.take() {
+      None => false,
+      Some(tx) => {
+        if let Err(err) = tx.send(self.msg_id) {
+          error!(
+            "Failed to send message id to pending message receiver: {}",
+            err
+          )
+        }
+        true
+      },
     }
   }
 

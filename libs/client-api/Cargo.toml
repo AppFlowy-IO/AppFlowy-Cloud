@@ -27,6 +27,7 @@ serde = { version = "1.0", features = ["derive"] }
 tokio-tungstenite = { version = "0.20.1" }
 tokio = { version = "1.26", features = ["full"] }
 futures-util = "0.3.26"
+futures-core = "0.3.26"
 tokio-retry = "0.3"
 bytes = "1.0"
 uuid = "1.4.1"

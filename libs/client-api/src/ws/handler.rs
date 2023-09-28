@@ -37,14 +37,11 @@ impl WebSocketChannel {
     T: Into<ClientRealtimeMessage> + Send + Sync + 'static + Clone,
   {
     let (tx, mut rx) = unbounded_channel::<T>();
-    let cloned_sender = self.sender.clone();
+    let ws_msg_sender = self.sender.clone();
     tokio::spawn(async move {
       while let Some(msg) = rx.recv().await {
         let ws_msg: ClientRealtimeMessage = msg.into();
-        match cloned_sender.send(ws_msg.into()) {
-          Ok(_) => {},
-          Err(e) => tracing::error!("🔴Error sending message: {:?}", e),
-        }
+        let _ = ws_msg_sender.send(ws_msg.into());
       }
     });
     BroadcastSink::new(tx)

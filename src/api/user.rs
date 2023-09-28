@@ -62,7 +62,7 @@ async fn update_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[tracing::instrument(level = "debug", skip_all)]
+#[tracing::instrument(skip_all)]
 async fn login_handler(
   req: Json<LoginRequest>,
   state: Data<AppState>,

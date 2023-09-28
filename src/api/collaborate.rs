@@ -20,7 +20,7 @@ pub fn collab_scope() -> Scope {
     .service(
       web::resource("/")
         .route(web::post().to(create_collab_handler))
-        .route(web::get().to(retrieve_collab_handler))
+        .route(web::get().to(get_collab_handler))
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
     )
@@ -28,7 +28,7 @@ pub fn collab_scope() -> Scope {
     .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
 }
 
-#[instrument(level = "debug", skip_all, err)]
+#[instrument(skip_all, err)]
 async fn create_collab_handler(
   payload: Json<InsertCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
@@ -50,8 +50,8 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(level = "debug", skip(storage), err)]
-async fn retrieve_collab_handler(
+#[instrument(skip(storage), err)]
+async fn get_collab_handler(
   payload: Json<QueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
@@ -68,7 +68,7 @@ async fn retrieve_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(level = "debug", skip_all, err)]
+#[instrument(skip_all, err)]
 async fn update_collab_handler(
   payload: Json<InsertCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,

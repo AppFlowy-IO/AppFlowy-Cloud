@@ -21,6 +21,7 @@ tokio = { version = "1.26.0", features = ["net", "sync", "macros"] }
 async-trait = "0.1.73"
 anyhow = "1.0.75"
 serde_repr = "0.1.6"
+tokio-retry = "0.3.0"
 
 collab = { version = "0.1.0"}
 collab-sync-protocol = { version = "0.1.0" }
@@ -45,6 +46,5 @@ tracing-bunyan-formatter = "0.3.6"
 tracing-log = "0.1.1"
 serde-aux = "4.2.0"
 tempfile = "3.8.0"
-collab-plugins = { version = "0.1.0", features = ["sync_plugin"] }
 assert-json-diff = "2.0.2"
 uuid = { version = "1", features = ["v4"] }

@@ -125,7 +125,7 @@ where
       tracing::trace!("number of updates reach flush_per_update, start flushing");
       match self.group.upgrade() {
         None => tracing::error!("🔴Group is dropped, skip flush collab"),
-        Some(group) => group.flush_collab(),
+        Some(group) => group.save_collab(),
       }
     }
   }

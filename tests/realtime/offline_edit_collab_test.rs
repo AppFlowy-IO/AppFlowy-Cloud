@@ -1,5 +1,6 @@
 use crate::client::utils::generate_unique_registered_user;
 use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, TestClient};
+use std::time::Duration;
 
 use collab_define::CollabType;
 use serde_json::json;
@@ -82,14 +83,16 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
     .collab
     .lock()
     .insert("name", "work");
-  client_1.wait_object_sync_complete(&object_id).await;
 
   let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
   client_2
     .create_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  client_2.disconnect().await;
 
+  client_1.wait_object_sync_complete(&object_id).await;
+  tokio::time::sleep(Duration::from_millis(1000)).await;
+
+  client_2.disconnect().await;
   client_2
     .collab_by_object_id
     .get_mut(&object_id)

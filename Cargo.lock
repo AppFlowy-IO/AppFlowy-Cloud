@@ -868,7 +868,6 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f9b52a#0f9b52a5675e6e55c6d3b3d2a67055f424f6608e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -888,11 +887,12 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f9b52a#0f9b52a5675e6e55c6d3b3d2a67055f424f6608e"
 dependencies = [
  "anyhow",
+ "bytes",
  "collab",
  "serde",
+ "serde_json",
  "serde_repr",
  "uuid",
 ]
@@ -900,7 +900,6 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f9b52a#0f9b52a5675e6e55c6d3b3d2a67055f424f6608e"
 dependencies = [
  "bytes",
  "collab",

@@ -149,7 +149,6 @@ async fn setup_admin_account(
 ) {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
-
   gotrue_client.sign_up(admin_email, password).await.unwrap();
 
   // Unable to use query! macro here instead

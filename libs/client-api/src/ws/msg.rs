@@ -1,5 +1,5 @@
 use crate::ws::WSError;
-use collab_sync_protocol::CollabMessage;
+use collab_define::collab_msg::CollabMessage;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tokio_tungstenite::tungstenite::Message;

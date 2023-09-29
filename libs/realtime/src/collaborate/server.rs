@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use actix::{Actor, Context, Handler, ResponseFuture};
 
-use collab_sync_protocol::CollabMessage;
+use collab_define::collab_msg::CollabMessage;
 use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

@@ -75,10 +75,7 @@ impl FromRedisValue for RedisString {
       redis::Value::Data(uid_bytes) => Ok(RedisString(
         String::from_utf8(uid_bytes.to_vec()).map_err(|_| read_from_redis_error(v))?,
       )),
-      x => {
-        println!("----------------------------");
-        return Err(read_from_redis_error(x));
-      },
+      x => return Err(read_from_redis_error(x)),
     }
   }
 }

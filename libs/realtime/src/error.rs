@@ -27,7 +27,7 @@ pub enum RealtimeError {
   CollabError(#[from] CollabError),
 
   #[error(transparent)]
-  StorageError(#[from] storage::error::StorageError),
+  StorageError(#[from] database::error::StorageError),
 
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),

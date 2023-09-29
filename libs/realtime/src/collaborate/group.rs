@@ -11,16 +11,11 @@ use std::iter::Take;
 use std::pin::Pin;
 
 use anyhow::Error;
-<<<<<<< Updated upstream
-use collab_sync_protocol::CollabMessage;
-=======
 use collab_define::collab_msg::CollabMessage;
 use database::collab::CollabStorage;
->>>>>>> Stashed changes
 use parking_lot::Mutex;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use storage::collab::CollabStorage;
 use tokio::sync::RwLock;
 
 use crate::entities::{ClientMessage, Editing, RealtimeUser};

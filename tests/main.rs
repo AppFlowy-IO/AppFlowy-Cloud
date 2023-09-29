@@ -4,6 +4,7 @@ use client_api::Client;
 
 mod client;
 mod collab;
+mod collab_stream;
 mod gotrue;
 // mod realtime;
 

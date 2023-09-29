@@ -455,6 +455,7 @@ dependencies = [
  "client-api",
  "collab",
  "collab-define",
+ "collab-stream",
  "collab-sync-protocol",
  "config",
  "database",
@@ -475,6 +476,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "realtime",
+ "redis",
  "reqwest",
  "rust-s3",
  "scraper",
@@ -895,6 +897,15 @@ dependencies = [
  "serde",
  "serde_repr",
  "uuid",
+]
+
+[[package]]
+name = "collab-stream"
+version = "0.1.0"
+dependencies = [
+ "redis",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]
@@ -2872,6 +2883,8 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "ryu",
+ "sha1_smol",
+ "socket2 0.4.9",
  "tokio",
  "tokio-native-tls",
  "tokio-retry",
@@ -3354,6 +3367,12 @@ dependencies = [
  "cpufeatures",
  "digest",
 ]
+
+[[package]]
+name = "sha1_smol"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae1a47186c03a32177042e55dbc5fd5aee900b8e0069a8d70fba96a9375cd012"
 
 [[package]]
 name = "sha2"

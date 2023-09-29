@@ -1,0 +1,11 @@
+[package]
+name = "collab-stream"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+redis = "0.23.3"
+tokio = { version = "1.26" }
+tokio-stream = { version = "0.1.14" }

@@ -1,3 +1,4 @@
+use collab_define::collab_msg::CollabSinkMessage;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
@@ -5,7 +6,6 @@ use std::time::Duration;
 
 use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
 use crate::collab_sync::{SyncError, DEFAULT_SYNC_TIMEOUT};
-use collab_sync_protocol::CollabSinkMessage;
 use futures_util::SinkExt;
 use tokio::spawn;
 use tokio::sync::{mpsc, oneshot, watch, Mutex};

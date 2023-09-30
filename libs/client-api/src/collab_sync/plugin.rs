@@ -4,8 +4,8 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::CollabPlugin;
+use collab_define::collab_msg::{ClientUpdateRequest, CollabMessage};
 use collab_define::{CollabObject, CollabType};
-use collab_sync_protocol::{ClientUpdateRequest, CollabMessage};
 use futures_util::SinkExt;
 use tokio_stream::StreamExt;
 

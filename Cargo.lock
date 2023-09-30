@@ -868,6 +868,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d5a4a0e#d5a4a0e2e071fa36add784728f5ef33eb4450f51"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -887,6 +888,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d5a4a0e#d5a4a0e2e071fa36add784728f5ef33eb4450f51"
 dependencies = [
  "anyhow",
  "bytes",
@@ -900,6 +902,7 @@ dependencies = [
 [[package]]
 name = "collab-sync-protocol"
 version = "0.1.0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=d5a4a0e#d5a4a0e2e071fa36add784728f5ef33eb4450f51"
 dependencies = [
  "bytes",
  "collab",

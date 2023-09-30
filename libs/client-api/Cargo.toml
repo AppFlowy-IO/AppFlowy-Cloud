@@ -31,15 +31,15 @@ futures-core = "0.3.26"
 tokio-retry = "0.3"
 bytes = "1.0"
 uuid = "1.4.1"
-collab-sync-protocol = { version = "0.1.0" }
 scraper = "0.17.1"
 
 # collab sync
 collab = { version = "0.1.0", optional = true }
-collab-define = { version = "0.1.0", optional = true }
+collab-define = { version = "0.1.0" }
+collab-sync-protocol = { version = "0.1.0" }
 y-sync = { version = "0.3.1", optional = true }
 yrs = { version = "0.16.5", optional = true }
 lib0 = { version = "0.16.3", features = ["lib0-serde"], optional = true }
 
 [features]
-collab-sync = ["collab", "collab-define", "y-sync", "yrs", "lib0"]
+collab-sync = ["collab", "y-sync", "yrs", "lib0"]

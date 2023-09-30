@@ -185,19 +185,17 @@ impl CollabBroadcast {
                     match origin {
                       None => warn!("Client message does not have a origin"),
                       Some(origin) => {
-                        if let Some(payload) = payload {
-                          let resp = ClientUpdateResponse::new(
-                            origin.clone(),
-                            object_id.clone(),
-                            payload,
-                            collab_msg.msg_id(),
-                          );
+                        let resp = ClientUpdateResponse::new(
+                          origin.clone(),
+                          object_id.clone(),
+                          payload.unwrap_or_default(),
+                          collab_msg.msg_id(),
+                        );
 
-                          trace!("Send response to client: {}", resp);
-                          if let Err(err) = sink.send(resp.into()).await {
-                            error!("[💭Server]: send response to client failed: {:?}", err);
-                            break;
-                          }
+                        trace!("Send response to client: {}", resp);
+                        if let Err(err) = sink.send(resp.into()).await {
+                          error!("[💭Server]: send response to client failed: {:?}", err);
+                          break;
                         }
                       },
                     }

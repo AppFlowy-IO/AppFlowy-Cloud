@@ -256,17 +256,19 @@ where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     {
-      trace!("<<< start processing messages");
-      SyncStream::<Sink, Stream>::process_payload(
-        origin,
-        msg.payload(),
-        object_id,
-        protocol,
-        collab,
-        sink,
-      )
-      .await?;
-      trace!("<<< end processing messages");
+      if !msg.payload().is_empty() {
+        trace!("<<< start processing messages");
+        SyncStream::<Sink, Stream>::process_payload(
+          origin,
+          msg.payload(),
+          object_id,
+          protocol,
+          collab,
+          sink,
+        )
+        .await?;
+        trace!("<<< end processing messages");
+      }
       if let Some(msg_id) = msg.msg_id() {
         sink.ack_msg(msg.object_id(), msg_id).await;
       }
@@ -286,7 +288,6 @@ where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     if payload.is_empty() {
-      warn!("Unexpected empty payload of collab message");
       return Ok(());
     }
 

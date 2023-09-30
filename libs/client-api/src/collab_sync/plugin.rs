@@ -4,7 +4,7 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::CollabPlugin;
-use collab_define::collab_msg::{ClientUpdateRequest, CollabMessage};
+use collab_define::collab_msg::{ClientUpdate, CollabMessage};
 use collab_define::{CollabObject, CollabType};
 use futures_util::SinkExt;
 use tokio_stream::StreamExt;
@@ -113,9 +113,8 @@ where
     tokio::spawn(async move {
       if let Some(sync_queue) = weak_sync_queue.upgrade() {
         let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
-        sync_queue.queue_msg(|msg_id| {
-          ClientUpdateRequest::new(cloned_origin, object_id, msg_id, payload).into()
-        });
+        sync_queue
+          .queue_msg(|msg_id| ClientUpdate::new(cloned_origin, object_id, payload, msg_id).into());
       }
     });
   }

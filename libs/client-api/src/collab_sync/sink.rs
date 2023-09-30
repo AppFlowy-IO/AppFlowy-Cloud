@@ -143,7 +143,6 @@ where
 
   /// Notify the sink to process the next message and mark the current message as done.
   pub async fn ack_msg(&self, object_id: &str, msg_id: MsgId) {
-    trace!("server ack {} message:{}", object_id, msg_id);
     if let Some(mut pending_msg) = self.pending_msg_queue.lock().peek_mut() {
       // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
       // due to network issues, the client might send multiple messages with the same msg_id.
@@ -155,8 +154,8 @@ where
         pending_msg.msg_id(),
         msg_id
       );
-      if pending_msg.msg_id() == msg_id {
-        pending_msg.set_state(MessageState::Done);
+      if pending_msg.msg_id() == msg_id && pending_msg.set_state(MessageState::Done) {
+        trace!("server ack {} message:{}", object_id, msg_id);
         self.notify();
       }
     }
@@ -282,7 +281,9 @@ where
               }
             }
           },
-          Err(err) => error!("Failed to receive the ack message: {:?}", err),
+          Err(err) => {
+            warn!("Send message failed error: {:?}", err)
+          },
         }
 
         self.notify()

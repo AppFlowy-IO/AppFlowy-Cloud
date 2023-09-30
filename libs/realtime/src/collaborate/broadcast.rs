@@ -18,7 +18,7 @@ use yrs::UpdateSubscription;
 
 use crate::error::{internal_error, RealtimeError};
 use collab_define::collab_msg::{
-  CSAwarenessUpdate, ClientUpdateResponse, CollabMessage, CollabServerBroadcast,
+  ClientUpdate, CollabAwarenessData, CollabBroadcastData, CollabMessage,
 };
 use collab_sync_protocol::{handle_msg, ServerSyncProtocol};
 use tracing::{error, trace, warn};
@@ -59,7 +59,7 @@ impl CollabBroadcast {
         .observe_update_v1(move |txn, event| {
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = CollabServerBroadcast::new(origin, cloned_oid.clone(), payload);
+          let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
           if let Err(_e) = sink.send(msg.into()) {
             trace!("Broadcast group is closed");
           }
@@ -75,7 +75,7 @@ impl CollabBroadcast {
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = CSAwarenessUpdate::new(cloned_oid.clone(), payload);
+            let msg = CollabAwarenessData::new(cloned_oid.clone(), payload);
             if let Err(_e) = sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
@@ -102,7 +102,7 @@ impl CollabBroadcast {
   #[allow(clippy::result_large_err)]
   pub fn broadcast_awareness(
     &self,
-    msg: CSAwarenessUpdate,
+    msg: CollabAwarenessData,
   ) -> Result<(), SendError<CollabMessage>> {
     self.sender.send(msg.into())?;
     Ok(())
@@ -166,6 +166,7 @@ impl CollabBroadcast {
           let collab_msg = res.map_err(internal_error)?;
           // Continue if the message is empty
           if collab_msg.is_empty() {
+            warn!("Unexpected empty payload of collab message");
             continue;
           }
 
@@ -185,32 +186,29 @@ impl CollabBroadcast {
                     match origin {
                       None => warn!("Client message does not have a origin"),
                       Some(origin) => {
-                        let resp = ClientUpdateResponse::new(
-                          origin.clone(),
-                          object_id.clone(),
-                          payload.unwrap_or_default(),
-                          collab_msg.msg_id(),
-                        );
+                        if let Some(msg_id) = collab_msg.msg_id() {
+                          let resp = ClientUpdate::new(
+                            origin.clone(),
+                            object_id.clone(),
+                            payload.unwrap_or_default(),
+                            msg_id,
+                          );
 
-                        trace!("Send response to client: {}", resp);
-                        if let Err(err) = sink.send(resp.into()).await {
-                          error!("[💭Server]: send response to client failed: {:?}", err);
-                          break;
+                          trace!("Send response to client: {}", resp);
+                          let _ = sink.send(resp.into()).await;
                         }
                       },
                     }
                     // Send the response to the corresponding client
                   },
                   Err(e) => {
-                    error!("Parser yrs message failed: {:?}", e);
+                    error!("Parser sync message failed: {:?}", e);
                     break;
                   },
                 }
               }
             },
-            Err(err) => {
-              error!("Get sink lock failed: {:?}", err);
-            },
+            Err(err) => error!("Requires sink lock failed: {:?}", err),
           }
         }
         Ok(())
@@ -224,7 +222,7 @@ impl CollabBroadcast {
   }
 }
 
-/// A subscription structure returned from [CollabBroadcast::subscribe], which represents a
+/// A subscription structure returned from [CollabBroadcastData::subscribe], which represents a
 /// subscribed connection. It can be dropped in order to unsubscribe or awaited via
 /// [Subscription::completed] method in order to complete of its own volition (due to an internal
 /// connection error or closed connection).

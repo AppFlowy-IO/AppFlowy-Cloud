@@ -75,10 +75,19 @@ where
     &self.state
   }
 
-  pub fn set_state(&mut self, new_state: MessageState) {
+  pub fn set_state(&mut self, new_state: MessageState) -> bool {
     self.state = new_state;
-    if self.state.is_done() && self.tx.is_some() {
-      self.tx.take().map(|tx| tx.send(self.msg_id));
+    if !self.state.is_done() {
+      return false;
+    }
+
+    match self.tx.take() {
+      None => false,
+      Some(tx) => {
+        // Notify that the message with given id was received
+        let _ = tx.send(self.msg_id);
+        true
+      },
     }
   }
 

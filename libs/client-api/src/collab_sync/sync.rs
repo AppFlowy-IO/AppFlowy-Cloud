@@ -9,7 +9,7 @@ use crate::collab_sync::{
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
-use collab_define::collab_msg::{ClientCollabInit, ClientUpdateRequest, CollabMessage};
+use collab_define::collab_msg::{ClientCollabInit, ClientUpdate, CollabMessage, ServerCollabInit};
 use collab_sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
@@ -19,7 +19,7 @@ use tokio::task::JoinHandle;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{error, trace, warn};
 use y_sync::awareness::Awareness;
-use y_sync::sync::MessageReader;
+use y_sync::sync::{Message, MessageReader, SyncMessage};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -87,7 +87,6 @@ where
     spawn(async move {
       while let Some(collab_state) = sink_state_stream.next().await {
         if let Some(sync_state) = weak_sync_state.upgrade() {
-          trace!("collab state change: {:?}", collab_state);
           match collab_state {
             SinkState::Syncing => {
               let _ = sync_state.send(SyncState::SyncUpdate);
@@ -294,11 +293,17 @@ where
     let mut decoder = DecoderV1::new(Cursor::new(payload));
     let reader = MessageReader::new(&mut decoder);
     for msg in reader {
-      trace!("handle message: {:?}", msg);
-      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg?).await? {
+      let msg = msg?;
+      trace!("message: {:?}", msg);
+      let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg).await? {
         let object_id = object_id.to_string();
         sink.queue_msg(|msg_id| {
-          ClientUpdateRequest::new(origin.clone(), object_id, msg_id, payload).into()
+          if is_sync_step_1 {
+            ServerCollabInit::new(origin.clone(), object_id, payload, msg_id).into()
+          } else {
+            ClientUpdate::new(origin.clone(), object_id, payload, msg_id).into()
+          }
         });
       }
     }

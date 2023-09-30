@@ -1,10 +1,10 @@
+use collab_define::collab_msg::CollabSinkMessage;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
 use crate::collab_sync::MsgId;
-use collab_sync_protocol::CollabSinkMessage;
 use tokio::sync::oneshot;
 
 pub(crate) struct PendingMsgQueue<Msg> {

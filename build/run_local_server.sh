@@ -42,7 +42,14 @@ pkill -f appflowy_cloud || true
 # To generate the .sqlx files, we need to run the following command
 # After the .sqlx files are generated, we build in SQLX_OFFLINE=true
 # where we don't need to connect to the database
-cargo sqlx database create && cargo sqlx migrate run && cargo sqlx prepare --workspace
+
+cargo sqlx database create && cargo sqlx migrate run
+if [[ -z "${SKIP_SQLX_PREPARE+x}" ]]
+then
+  cargo sqlx prepare --workspace
+fi
+
+
 RUST_LOG=trace cargo run &
 
 # revert to require signup email verification

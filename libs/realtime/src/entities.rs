@@ -2,8 +2,8 @@ use crate::error::RealtimeError;
 use actix::{Message, Recipient};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-use collab_sync_protocol::CollabMessage;
 
+use collab_define::collab_msg::CollabMessage;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};

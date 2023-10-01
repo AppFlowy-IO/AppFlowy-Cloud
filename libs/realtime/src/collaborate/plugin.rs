@@ -5,6 +5,7 @@ use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 
+use collab::sync_protocol::awareness::Awareness;
 use collab_define::CollabType;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Weak;
@@ -15,7 +16,6 @@ use database_entity::{InsertCollabParams, QueryCollabParams, RawData};
 
 use crate::collaborate::group::CollabGroup;
 use crate::entities::RealtimeUser;
-use y_sync::awareness::Awareness;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 

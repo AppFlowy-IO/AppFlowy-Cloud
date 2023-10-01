@@ -1,3 +1,4 @@
+use collab::core::origin::CollabOrigin;
 use collab_define::collab_msg::CollabSinkMessage;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -142,7 +143,7 @@ where
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
-  pub async fn ack_msg(&self, object_id: &str, msg_id: MsgId) {
+  pub async fn ack_msg(&self, _origin: Option<&CollabOrigin>, object_id: &str, msg_id: MsgId) {
     if let Some(mut pending_msg) = self.pending_msg_queue.lock().peek_mut() {
       // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
       // due to network issues, the client might send multiple messages with the same msg_id.
@@ -155,7 +156,6 @@ where
         msg_id
       );
       if pending_msg.msg_id() == msg_id && pending_msg.set_state(MessageState::Done) {
-        trace!("server ack {} message:{}", object_id, msg_id);
         self.notify();
       }
     }

@@ -455,7 +455,6 @@ dependencies = [
  "client-api",
  "collab",
  "collab-define",
- "collab-sync-protocol",
  "config",
  "database",
  "database-entity",
@@ -837,7 +836,6 @@ dependencies = [
  "bytes",
  "collab",
  "collab-define",
- "collab-sync-protocol",
  "database-entity",
  "futures-core",
  "futures-util",
@@ -861,7 +859,6 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
- "y-sync",
  "yrs",
 ]
 
@@ -880,7 +877,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
- "y-sync",
  "yrs",
 ]
 
@@ -895,20 +891,6 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "uuid",
-]
-
-[[package]]
-name = "collab-sync-protocol"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "collab",
- "collab-define",
- "md5",
- "serde",
- "serde_json",
- "y-sync",
- "yrs",
 ]
 
 [[package]]
@@ -2827,7 +2809,6 @@ dependencies = [
  "chrono",
  "collab",
  "collab-define",
- "collab-sync-protocol",
  "database",
  "database-entity",
  "futures-util",
@@ -2850,7 +2831,6 @@ dependencies = [
  "tracing-log",
  "tracing-subscriber",
  "uuid",
- "y-sync",
  "yrs",
 ]
 
@@ -4596,17 +4576,6 @@ dependencies = [
  "rusticata-macros",
  "thiserror",
  "time",
-]
-
-[[package]]
-name = "y-sync"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f54d34b68ec4514a0659838c2b1ba867c571b20b3804a1338dacf4fa9062d801"
-dependencies = [
- "lib0",
- "thiserror",
- "yrs",
 ]
 
 [[package]]

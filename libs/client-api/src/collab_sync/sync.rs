@@ -9,8 +9,10 @@ use crate::collab_sync::{
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
+use collab::sync_protocol::awareness::Awareness;
+use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
+use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use collab_define::collab_msg::{ClientCollabInit, ClientUpdate, CollabMessage, ServerCollabInit};
-use collab_sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
 use tokio::spawn;
@@ -18,8 +20,6 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{error, trace, warn};
-use y_sync::awareness::Awareness;
-use y_sync::sync::{Message, MessageReader, SyncMessage};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -256,7 +256,7 @@ where
   {
     {
       if !msg.payload().is_empty() {
-        trace!("<<< start processing messages");
+        trace!("💬process messages");
         SyncStream::<Sink, Stream>::process_payload(
           origin,
           msg.payload(),
@@ -266,10 +266,10 @@ where
           sink,
         )
         .await?;
-        trace!("<<< end processing messages");
+        trace!("💬");
       }
       if let Some(msg_id) = msg.msg_id() {
-        sink.ack_msg(msg.object_id(), msg_id).await;
+        sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await;
       }
       Ok(())
     }
@@ -294,7 +294,7 @@ where
     let reader = MessageReader::new(&mut decoder);
     for msg in reader {
       let msg = msg?;
-      trace!("message: {:?}", msg);
+      trace!("\t{:?}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
       if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg).await? {
         let object_id = object_id.to_string();

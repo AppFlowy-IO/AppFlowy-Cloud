@@ -4,6 +4,8 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::CollabPlugin;
+use collab::sync_protocol::awareness::Awareness;
+use collab::sync_protocol::message::{Message, SyncMessage};
 use collab_define::collab_msg::{ClientUpdate, CollabMessage};
 use collab_define::{CollabObject, CollabType};
 use futures_util::SinkExt;
@@ -12,8 +14,6 @@ use tokio_stream::StreamExt;
 use crate::collab_sync::{SinkConfig, SyncQueue};
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use tokio_stream::wrappers::WatchStream;
-use y_sync::awareness::Awareness;
-use y_sync::sync::{Message, SyncMessage};
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {

@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
+use collab::sync_protocol::awareness::{Awareness, AwarenessUpdate};
+use collab::sync_protocol::message::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
+use collab::sync_protocol::{awareness, handle_msg, ServerSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::encoding::Write;
 use tokio::select;
@@ -9,9 +12,6 @@ use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use y_sync::awareness;
-use y_sync::awareness::{Awareness, AwarenessUpdate};
-use y_sync::sync::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
@@ -20,7 +20,6 @@ use crate::error::{internal_error, RealtimeError};
 use collab_define::collab_msg::{
   ClientUpdate, CollabAwarenessData, CollabBroadcastData, CollabMessage,
 };
-use collab_sync_protocol::{handle_msg, ServerSyncProtocol};
 use tracing::{error, trace, warn};
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -246,6 +245,7 @@ impl Subscription {
   }
 }
 
+#[inline]
 fn gen_update_message(update: &[u8]) -> Vec<u8> {
   let mut encoder = EncoderV1::new();
   encoder.write_var(MSG_SYNC);
@@ -254,6 +254,7 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
   encoder.to_vec()
 }
 
+#[inline]
 fn gen_awareness_update_message(
   awareness: &Awareness,
   event: &awareness::Event,

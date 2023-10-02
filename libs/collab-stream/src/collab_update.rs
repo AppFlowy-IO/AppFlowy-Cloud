@@ -10,7 +10,7 @@ pub struct CreatedTime {
 }
 
 impl CreatedTime {
-  fn from_redis_stream_key(bytes: &Vec<u8>) -> Result<Self, &'static str> {
+  fn from_redis_stream_key(bytes: &[u8]) -> Result<Self, &'static str> {
     // Convert the Vec<u8> to a &str
     let s = std::str::from_utf8(bytes).map_err(|_| "Invalid UTF-8 sequence")?;
 
@@ -75,7 +75,7 @@ impl FromRedisValue for RedisString {
       redis::Value::Data(uid_bytes) => Ok(RedisString(
         String::from_utf8(uid_bytes.to_vec()).map_err(|_| read_from_redis_error(v))?,
       )),
-      x => return Err(read_from_redis_error(x)),
+      x => Err(read_from_redis_error(x)),
     }
   }
 }
@@ -126,6 +126,6 @@ impl<'a> CollabUpdate {
   pub fn to_single_tuple_array(&'a self) -> [(&'static str, &'a [u8]); 2] {
     static UID: &str = "uid";
     static DATA: &str = "data";
-    [(UID, &self.uid.as_bytes()), (DATA, &self.raw_data.as_ref())]
+    [(UID, self.uid.as_bytes()), (DATA, self.raw_data.as_ref())]
   }
 }

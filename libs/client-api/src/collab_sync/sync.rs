@@ -9,10 +9,8 @@ use crate::collab_sync::{
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
-use collab_sync_protocol::{handle_msg, CollabSyncProtocol, DefaultSyncProtocol};
-use collab_sync_protocol::{
-  ClientCollabInit, ClientUpdateRequest, CollabMessage, ServerCollabInitResponse,
-};
+use collab_define::collab_msg::{ClientCollabInit, ClientUpdateRequest, CollabMessage};
+use collab_sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
 use tokio::spawn;
@@ -21,9 +19,9 @@ use tokio::task::JoinHandle;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{error, trace, warn};
 use y_sync::awareness::Awareness;
-use y_sync::sync::{Message, MessageReader};
-use yrs::updates::decoder::{Decode, DecoderV1};
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use y_sync::sync::MessageReader;
+use yrs::updates::decoder::DecoderV1;
+use yrs::updates::encoder::{Encoder, EncoderV1};
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 2;
 
@@ -38,7 +36,7 @@ pub struct SyncQueue<Sink, Stream> {
   /// the updates from the remote.
   #[allow(dead_code)]
   stream: SyncStream<Sink, Stream>,
-  protocol: DefaultSyncProtocol,
+  protocol: ClientSyncProtocol,
   sync_state: Arc<watch::Sender<SyncState>>,
 }
 
@@ -56,7 +54,7 @@ where
     collab: Weak<MutexCollab>,
     config: SinkConfig,
   ) -> Self {
-    let protocol = DefaultSyncProtocol;
+    let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(false);
     let sync_state = Arc::new(watch::channel(SyncState::SyncInitStart).0);
     let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
@@ -257,25 +255,9 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    match msg {
-      CollabMessage::ServerInit(init_sync) => {
-        if !init_sync.payload.is_empty() {
-          let mut decoder = DecoderV1::from(init_sync.payload.as_ref());
-          if let Ok(msg) = Message::decode(&mut decoder) {
-            if let Some(resp_msg) = handle_msg(&Some(origin), protocol, collab, msg).await? {
-              let payload = resp_msg.encode_v1();
-              let object_id = object_id.to_string();
-              sink.queue_msg(|msg_id| {
-                ServerCollabInitResponse::new(origin.clone(), object_id, payload, msg_id).into()
-              });
-            }
-          }
-        }
-
-        sink.ack_msg(object_id, init_sync.msg_id).await;
-        Ok(())
-      },
-      _ => {
+    {
+      if !msg.payload().is_empty() {
+        trace!("<<< start processing messages");
         SyncStream::<Sink, Stream>::process_payload(
           origin,
           msg.payload(),
@@ -285,11 +267,12 @@ where
           sink,
         )
         .await?;
-        if let Some(msg_id) = msg.msg_id() {
-          sink.ack_msg(msg.object_id(), msg_id).await;
-        }
-        Ok(())
-      },
+        trace!("<<< end processing messages");
+      }
+      if let Some(msg_id) = msg.msg_id() {
+        sink.ack_msg(msg.object_id(), msg_id).await;
+      }
+      Ok(())
     }
   }
 
@@ -311,9 +294,8 @@ where
     let mut decoder = DecoderV1::new(Cursor::new(payload));
     let reader = MessageReader::new(&mut decoder);
     for msg in reader {
-      let msg = msg?;
-      if let Some(resp) = handle_msg(&Some(origin), protocol, collab, msg).await? {
-        let payload = resp.encode_v1();
+      trace!("handle message: {:?}", msg);
+      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg?).await? {
         let object_id = object_id.to_string();
         sink.queue_msg(|msg_id| {
           ClientUpdateRequest::new(origin.clone(), object_id, msg_id, payload).into()

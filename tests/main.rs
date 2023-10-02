@@ -6,7 +6,7 @@ mod client;
 mod collab;
 mod collab_stream;
 mod gotrue;
-// mod realtime;
+mod realtime;
 
 pub fn client_api_client() -> Client {
   Client::from(

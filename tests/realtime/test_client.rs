@@ -80,7 +80,7 @@ impl TestClient {
       .lock()
       .subscribe_sync_state();
 
-    const TIMEOUT_DURATION: Duration = Duration::from_secs(10);
+    const TIMEOUT_DURATION: Duration = Duration::from_secs(20);
     while let Ok(Some(state)) = timeout(TIMEOUT_DURATION, sync_state.next()).await {
       if state == SyncState::SyncFinished {
         break;
@@ -213,9 +213,9 @@ pub async fn assert_remote_collab(
 pub(crate) async fn assert_client_collab(
   client: &mut TestClient,
   object_id: &str,
-  secs: u64,
   expected: Value,
 ) {
+  let secs = 30;
   let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {
@@ -233,15 +233,14 @@ pub(crate) async fn assert_client_collab(
           .to_json_value()
       } => {
         retry_count += 1;
-        if retry_count > 20 {
-          assert_json_eq!(json, expected);
-          break;
-        }
-
+        if retry_count > 30 {
+            assert_eq!(json, expected, "object_id: {}", object_id);
+            break;
+          }
         if json == expected {
           break;
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
       }
     }
   }

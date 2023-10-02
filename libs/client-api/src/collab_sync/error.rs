@@ -1,10 +1,10 @@
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
   #[error(transparent)]
-  YSync(#[from] y_sync::sync::Error),
+  YSync(#[from] collab::sync_protocol::message::Error),
 
   #[error(transparent)]
-  YAwareness(#[from] y_sync::awareness::Error),
+  YAwareness(#[from] collab::sync_protocol::awareness::Error),
 
   #[error("failed to deserialize message: {0}")]
   DecodingError(#[from] lib0::error::Error),

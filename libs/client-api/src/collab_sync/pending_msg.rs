@@ -6,8 +6,10 @@ use std::ops::{Deref, DerefMut};
 
 use crate::collab_sync::MsgId;
 use tokio::sync::oneshot;
+use tracing::{trace, warn};
 
 pub(crate) struct PendingMsgQueue<Msg> {
+  uid: i64,
   queue: BinaryHeap<PendingMessage<Msg>>,
 }
 
@@ -15,13 +17,15 @@ impl<Msg> PendingMsgQueue<Msg>
 where
   Msg: Ord + Clone + Display,
 {
-  pub(crate) fn new() -> Self {
+  pub(crate) fn new(uid: i64) -> Self {
     Self {
+      uid,
       queue: Default::default(),
     }
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
+    trace!("[Client {}]: queue message: {}", self.uid, msg);
     self.queue.push(PendingMessage::new(msg, msg_id));
   }
 }
@@ -75,10 +79,33 @@ where
     &self.state
   }
 
-  pub fn set_state(&mut self, new_state: MessageState) {
+  pub fn set_state(&mut self, uid: i64, new_state: MessageState) -> bool {
     self.state = new_state;
-    if self.state.is_done() && self.tx.is_some() {
-      self.tx.take().map(|tx| tx.send(self.msg_id));
+    trace!(
+      "[Client {}] : msg_id: {}, state: {:?}",
+      uid,
+      self.msg_id,
+      self.state
+    );
+    if !self.state.is_done() {
+      return false;
+    }
+
+    match self.tx.take() {
+      None => {
+        warn!("No tx for msg_id: {}", self.msg_id);
+        false
+      },
+      Some(tx) => {
+        // Notify that the message with given id was received
+        match tx.send(self.msg_id) {
+          Ok(_) => true,
+          Err(err) => {
+            warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
+            false
+          },
+        }
+      },
     }
   }
 

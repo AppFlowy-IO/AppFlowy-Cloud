@@ -16,9 +16,10 @@ use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
+use crate::collaborate::retry::SinkCollabMessageAction;
 use crate::error::{internal_error, RealtimeError};
 use collab_define::collab_msg::{
-  ClientUpdate, CollabAwarenessData, CollabBroadcastData, CollabMessage,
+  CollabAwarenessData, CollabBroadcastData, CollabMessage, UpdateAck,
 };
 use tracing::{error, trace, warn};
 
@@ -127,25 +128,27 @@ impl CollabBroadcast {
   {
     trace!("[💭Server]: new subscriber: {}", origin);
     let sink = Arc::new(Mutex::new(sink));
-    // Receive a update from the document observer and forward the applied update to all
+    // Receive a update from the document observer and forward the  update to all
     // connected subscribers using its Sink.
     let sink_task = {
       let sink = sink.clone();
       let mut receiver = self.sender.subscribe();
       tokio::spawn(async move {
-        while let Ok(msg) = receiver.recv().await {
+        while let Ok(message) = receiver.recv().await {
           // No need to broadcast the message back to the origin.
-          if let Some(msg_origin) = msg.origin() {
+          if let Some(msg_origin) = message.origin() {
             if msg_origin == &origin {
               continue;
             }
           }
 
-          trace!("[💭Server]: {}", msg);
-          let mut sink = sink.lock().await;
-          if let Err(e) = sink.send(msg).await {
-            error!("[💭Server]: broadcast client message failed: {:?}", e);
-            return Err(RealtimeError::Internal(anyhow::Error::from(e)));
+          trace!("[💭Server]: {}", message);
+          let action = SinkCollabMessageAction {
+            sink: &sink,
+            message,
+          };
+          if let Err(err) = action.run().await {
+            error!("Fail to broadcast message:{}", err);
           }
         }
         Ok(())
@@ -186,7 +189,7 @@ impl CollabBroadcast {
                       None => warn!("Client message does not have a origin"),
                       Some(origin) => {
                         if let Some(msg_id) = collab_msg.msg_id() {
-                          let resp = ClientUpdate::new(
+                          let resp = UpdateAck::new(
                             origin.clone(),
                             object_id.clone(),
                             payload.unwrap_or_default(),
@@ -194,7 +197,12 @@ impl CollabBroadcast {
                           );
 
                           trace!("Send response to client: {}", resp);
-                          let _ = sink.send(resp.into()).await;
+                          match sink.send(resp.into()).await {
+                            Ok(_) => {},
+                            Err(err) => {
+                              trace!("fail to send response to client: {}", err);
+                            },
+                          }
                         }
                       },
                     }

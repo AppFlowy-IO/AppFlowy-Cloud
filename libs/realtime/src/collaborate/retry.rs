@@ -1,6 +1,7 @@
 use crate::collaborate::CollabClientStream;
 
-use anyhow::Error;
+use anyhow::{anyhow, Error};
+
 use collab::core::origin::CollabOrigin;
 use collab_define::collab_msg::CollabMessage;
 use database::collab::CollabStorage;
@@ -16,7 +17,7 @@ use tokio::sync::RwLock;
 
 use crate::entities::{ClientMessage, Editing, RealtimeUser};
 use tokio_retry::strategy::FixedInterval;
-use tokio_retry::{Action, Condition, RetryIf};
+use tokio_retry::{Action, Condition, Retry, RetryIf};
 
 use crate::collaborate::group::CollabGroupCache;
 use crate::error::RealtimeError;
@@ -162,30 +163,26 @@ impl<U> Condition<RealtimeError> for SubscribeGroupCondition<U> {
   }
 }
 
-pub struct SinkCollabMessageAction<Sink> {
-  sink: Arc<tokio::sync::Mutex<Sink>>,
-  message: CollabMessage,
+pub struct SinkCollabMessageAction<'a, Sink> {
+  pub sink: &'a Arc<tokio::sync::Mutex<Sink>>,
+  pub message: CollabMessage,
 }
 
-impl<Sink> SinkCollabMessageAction<Sink>
+impl<'a, Sink> SinkCollabMessageAction<'a, Sink>
 where
-  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
-  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'a,
 {
-  pub fn run(
-    self,
-  ) -> RetryIf<Take<FixedInterval>, SinkCollabMessageAction<Sink>, SinkCollabMessageCondition> {
+  pub fn run(self) -> Retry<Take<FixedInterval>, SinkCollabMessageAction<'a, Sink>> {
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
-    RetryIf::spawn(retry_strategy, self, SinkCollabMessageCondition)
+    Retry::spawn(retry_strategy, self)
   }
 }
 
-impl<Sink> Action for SinkCollabMessageAction<Sink>
+impl<'a, Sink> Action for SinkCollabMessageAction<'a, Sink>
 where
-  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
-  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'a,
 {
-  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + 'static>>;
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync + 'a>>;
   type Item = ();
   type Error = RealtimeError;
 
@@ -193,22 +190,14 @@ where
     let sink = self.sink.clone();
     let message = self.message.clone();
     Box::pin(async move {
-      trace!("[💭Server]: {}", message);
       let mut sink = sink
         .try_lock()
         .map_err(|err| RealtimeError::Internal(Error::from(err)))?;
       sink
         .send(message)
         .await
-        .map_err(|err| RealtimeError::Internal(Error::from(err)))?;
+        .map_err(|_err| RealtimeError::Internal(anyhow!("Sink message fail")))?;
       Ok(())
     })
-  }
-}
-
-pub struct SinkCollabMessageCondition;
-impl Condition<RealtimeError> for SinkCollabMessageCondition {
-  fn should_retry(&mut self, _error: &RealtimeError) -> bool {
-    false
   }
 }

@@ -12,7 +12,7 @@ use collab::core::origin::CollabOrigin;
 use collab::sync_protocol::awareness::Awareness;
 use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
-use collab_define::collab_msg::{ClientCollabInit, ClientUpdate, CollabMessage, ServerCollabInit};
+use collab_define::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
 use tokio::spawn;
@@ -23,7 +23,7 @@ use tracing::{error, trace, warn};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
-pub const DEFAULT_SYNC_TIMEOUT: u64 = 2;
+pub const DEFAULT_SYNC_TIMEOUT: u64 = 4;
 
 pub struct SyncQueue<Sink, Stream> {
   object: SyncObject,
@@ -255,7 +255,11 @@ where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     {
-      if !msg.payload().is_empty() {
+      if match msg.msg_id() {
+        None => true,
+        Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
+      } && !msg.payload().is_empty()
+      {
         trace!("💬process messages");
         SyncStream::<Sink, Stream>::process_payload(
           origin,
@@ -267,9 +271,6 @@ where
         )
         .await?;
         trace!("💬");
-      }
-      if let Some(msg_id) = msg.msg_id() {
-        sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await;
       }
       Ok(())
     }
@@ -286,15 +287,11 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    if payload.is_empty() {
-      return Ok(());
-    }
-
     let mut decoder = DecoderV1::new(Cursor::new(payload));
     let reader = MessageReader::new(&mut decoder);
     for msg in reader {
       let msg = msg?;
-      trace!("\t{:?}", msg);
+      trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
       if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg).await? {
         let object_id = object_id.to_string();
@@ -302,7 +299,7 @@ where
           if is_sync_step_1 {
             ServerCollabInit::new(origin.clone(), object_id, payload, msg_id).into()
           } else {
-            ClientUpdate::new(origin.clone(), object_id, payload, msg_id).into()
+            UpdateSync::new(origin.clone(), object_id, payload, msg_id).into()
           }
         });
       }

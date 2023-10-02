@@ -16,7 +16,8 @@ use tokio_stream::StreamExt;
 use tracing::{info, trace};
 
 use crate::client::ClientWSSink;
-use crate::collaborate::group::{CollabGroupCache, SubscribeGroupIfNeedAction};
+use crate::collaborate::group::CollabGroupCache;
+use crate::collaborate::retry::SubscribeGroupIfNeedAction;
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 
@@ -163,6 +164,7 @@ where
   }
 }
 
+#[inline]
 async fn forward_message_to_collab_group<U>(
   client_msg: &ClientMessage<U>,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,

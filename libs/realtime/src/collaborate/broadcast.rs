@@ -2,6 +2,9 @@ use std::sync::Arc;
 
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
+use collab::sync_protocol::awareness::{Awareness, AwarenessUpdate};
+use collab::sync_protocol::message::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
+use collab::sync_protocol::{awareness, handle_msg, ServerSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::encoding::Write;
 use tokio::select;
@@ -9,18 +12,15 @@ use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use y_sync::awareness;
-use y_sync::awareness::{Awareness, AwarenessUpdate};
-use y_sync::sync::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
+use crate::collaborate::retry::SinkCollabMessageAction;
 use crate::error::{internal_error, RealtimeError};
 use collab_define::collab_msg::{
-  CSAwarenessUpdate, ClientUpdateResponse, CollabMessage, CollabServerBroadcast,
+  CollabAwarenessData, CollabBroadcastData, CollabMessage, UpdateAck,
 };
-use collab_sync_protocol::{handle_msg, ServerSyncProtocol};
 use tracing::{error, trace, warn};
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -59,7 +59,7 @@ impl CollabBroadcast {
         .observe_update_v1(move |txn, event| {
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = CollabServerBroadcast::new(origin, cloned_oid.clone(), payload);
+          let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
           if let Err(_e) = sink.send(msg.into()) {
             trace!("Broadcast group is closed");
           }
@@ -75,7 +75,7 @@ impl CollabBroadcast {
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = CSAwarenessUpdate::new(cloned_oid.clone(), payload);
+            let msg = CollabAwarenessData::new(cloned_oid.clone(), payload);
             if let Err(_e) = sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
@@ -102,7 +102,7 @@ impl CollabBroadcast {
   #[allow(clippy::result_large_err)]
   pub fn broadcast_awareness(
     &self,
-    msg: CSAwarenessUpdate,
+    msg: CollabAwarenessData,
   ) -> Result<(), SendError<CollabMessage>> {
     self.sender.send(msg.into())?;
     Ok(())
@@ -128,25 +128,27 @@ impl CollabBroadcast {
   {
     trace!("[💭Server]: new subscriber: {}", origin);
     let sink = Arc::new(Mutex::new(sink));
-    // Receive a update from the document observer and forward the applied update to all
+    // Receive a update from the document observer and forward the  update to all
     // connected subscribers using its Sink.
     let sink_task = {
       let sink = sink.clone();
       let mut receiver = self.sender.subscribe();
       tokio::spawn(async move {
-        while let Ok(msg) = receiver.recv().await {
+        while let Ok(message) = receiver.recv().await {
           // No need to broadcast the message back to the origin.
-          if let Some(msg_origin) = msg.origin() {
+          if let Some(msg_origin) = message.origin() {
             if msg_origin == &origin {
               continue;
             }
           }
 
-          trace!("[💭Server]: {}", msg);
-          let mut sink = sink.lock().await;
-          if let Err(e) = sink.send(msg).await {
-            error!("[💭Server]: broadcast client message failed: {:?}", e);
-            return Err(RealtimeError::Internal(anyhow::Error::from(e)));
+          trace!("[💭Server]: {}", message);
+          let action = SinkCollabMessageAction {
+            sink: &sink,
+            message,
+          };
+          if let Err(err) = action.run().await {
+            error!("Fail to broadcast message:{}", err);
           }
         }
         Ok(())
@@ -166,6 +168,7 @@ impl CollabBroadcast {
           let collab_msg = res.map_err(internal_error)?;
           // Continue if the message is empty
           if collab_msg.is_empty() {
+            warn!("Unexpected empty payload of collab message");
             continue;
           }
 
@@ -185,32 +188,34 @@ impl CollabBroadcast {
                     match origin {
                       None => warn!("Client message does not have a origin"),
                       Some(origin) => {
-                        let resp = ClientUpdateResponse::new(
-                          origin.clone(),
-                          object_id.clone(),
-                          payload.unwrap_or_default(),
-                          collab_msg.msg_id(),
-                        );
+                        if let Some(msg_id) = collab_msg.msg_id() {
+                          let resp = UpdateAck::new(
+                            origin.clone(),
+                            object_id.clone(),
+                            payload.unwrap_or_default(),
+                            msg_id,
+                          );
 
-                        trace!("Send response to client: {}", resp);
-                        if let Err(err) = sink.send(resp.into()).await {
-                          error!("[💭Server]: send response to client failed: {:?}", err);
-                          break;
+                          trace!("Send response to client: {}", resp);
+                          match sink.send(resp.into()).await {
+                            Ok(_) => {},
+                            Err(err) => {
+                              trace!("fail to send response to client: {}", err);
+                            },
+                          }
                         }
                       },
                     }
                     // Send the response to the corresponding client
                   },
                   Err(e) => {
-                    error!("Parser yrs message failed: {:?}", e);
+                    error!("Parser sync message failed: {:?}", e);
                     break;
                   },
                 }
               }
             },
-            Err(err) => {
-              error!("Get sink lock failed: {:?}", err);
-            },
+            Err(err) => error!("Requires sink lock failed: {:?}", err),
           }
         }
         Ok(())
@@ -224,7 +229,7 @@ impl CollabBroadcast {
   }
 }
 
-/// A subscription structure returned from [CollabBroadcast::subscribe], which represents a
+/// A subscription structure returned from [CollabBroadcastData::subscribe], which represents a
 /// subscribed connection. It can be dropped in order to unsubscribe or awaited via
 /// [Subscription::completed] method in order to complete of its own volition (due to an internal
 /// connection error or closed connection).
@@ -248,6 +253,7 @@ impl Subscription {
   }
 }
 
+#[inline]
 fn gen_update_message(update: &[u8]) -> Vec<u8> {
   let mut encoder = EncoderV1::new();
   encoder.write_var(MSG_SYNC);
@@ -256,6 +262,7 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
   encoder.to_vec()
 }
 
+#[inline]
 fn gen_awareness_update_message(
   awareness: &Awareness,
   event: &awareness::Event,

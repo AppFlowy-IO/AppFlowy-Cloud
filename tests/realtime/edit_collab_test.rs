@@ -121,7 +121,6 @@ async fn one_direction_peer_sync_test() {
   assert_client_collab(
     &mut client_2,
     &object_id,
-    10,
     json!({
       "name": "AppFlowy"
     }),
@@ -260,8 +259,8 @@ async fn two_direction_peer_sync_test() {
     "name": "AppFlowy",
     "support platform": "macOS, Windows, Linux, iOS, Android"
   });
-  assert_client_collab(&mut client_1, &object_id, 10, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, 10, expected_json.clone()).await;
+  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
+  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
 }
 
 #[tokio::test]
@@ -293,8 +292,8 @@ async fn client_init_sync_test() {
   let expected_json = json!({
     "name": "AppFlowy",
   });
-  assert_client_collab(&mut client_1, &object_id, 10, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, 10, expected_json.clone()).await;
+  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
+  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
 }
 
 #[tokio::test]

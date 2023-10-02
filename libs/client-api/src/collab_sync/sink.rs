@@ -1,4 +1,6 @@
+use collab::core::origin::CollabOrigin;
 use collab_define::collab_msg::CollabSinkMessage;
+
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
@@ -7,6 +9,7 @@ use std::time::Duration;
 use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
 use crate::collab_sync::{SyncError, DEFAULT_SYNC_TIMEOUT};
 use futures_util::SinkExt;
+
 use tokio::spawn;
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
@@ -80,7 +83,7 @@ where
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);
     let sender = Arc::new(Mutex::new(sink));
-    let pending_msg_queue = PendingMsgQueue::new();
+    let pending_msg_queue = PendingMsgQueue::new(uid);
     let pending_msg_queue = Arc::new(parking_lot::Mutex::new(pending_msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
     //
@@ -142,23 +145,29 @@ where
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
-  pub async fn ack_msg(&self, object_id: &str, msg_id: MsgId) {
-    trace!("server ack {} message:{}", object_id, msg_id);
-    if let Some(mut pending_msg) = self.pending_msg_queue.lock().peek_mut() {
-      // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
-      // due to network issues, the client might send multiple messages with the same msg_id.
-      // Therefore, the msg_id might not always match the msg_id of the pending_msg.
-      debug_assert!(
-        pending_msg.msg_id() >= msg_id,
-        "{}: pending msg_id: {}, receive msg:{}",
-        object_id,
-        pending_msg.msg_id(),
-        msg_id
-      );
-      if pending_msg.msg_id() == msg_id {
-        pending_msg.set_state(MessageState::Done);
-        self.notify();
-      }
+  pub async fn ack_msg(
+    &self,
+    _origin: Option<&CollabOrigin>,
+    object_id: &str,
+    msg_id: MsgId,
+  ) -> bool {
+    match self.pending_msg_queue.lock().peek_mut() {
+      None => false,
+      Some(mut pending_msg) => {
+        // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
+        // due to network issues, the client might send multiple messages with the same msg_id.
+        // Therefore, the msg_id might not always match the msg_id of the pending_msg.
+        if pending_msg.msg_id() != msg_id {
+          return false;
+        }
+
+        let is_done = pending_msg.set_state(self.uid, MessageState::Done);
+        if is_done {
+          trace!("[Client {}]: Did send: {}:{}", self.uid, object_id, msg_id);
+          self.notify();
+        }
+        is_done
+      },
     }
   }
 
@@ -240,8 +249,8 @@ where
         }
       }
 
-      sending_msg.set_state(MessageState::Processing);
       sending_msg.set_ret(tx);
+      sending_msg.set_state(self.uid, MessageState::Processing);
       let _ = self.state_notifier.send(SinkState::Syncing);
       let collab_msg = sending_msg.get_msg().clone();
       pending_msg_queue.push(sending_msg);
@@ -250,7 +259,7 @@ where
 
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        debug!("[🙂Client {}]: {}", self.uid, collab_msg);
+        debug!("[Client {}] sending {}", self.uid, collab_msg);
         sender.send(collab_msg).await.ok()?;
       },
       Err(_) => {
@@ -265,31 +274,26 @@ where
     match tokio::time::timeout(self.config.timeout, rx).await {
       Ok(result) => {
         match result {
-          Ok(_) => {
-            if let Some(mut pending_msg_queue) = self.pending_msg_queue.try_lock() {
-              let pending_msg = pending_msg_queue.pop();
-              trace!(
-                "{} was sent, current pending messages: {}",
-                pending_msg
-                  .map(|msg| msg.get_msg().to_string())
-                  .unwrap_or("".to_string()),
-                pending_msg_queue.len()
-              );
+          Ok(_) => match self.pending_msg_queue.try_lock() {
+            None => warn!("Failed to acquire the lock of the pending_msg_queue"),
+            Some(mut pending_msg_queue) => {
+              let _ = pending_msg_queue.pop();
+              trace!("Pending messages: {}", pending_msg_queue.len());
               if pending_msg_queue.is_empty() {
                 if let Err(e) = self.state_notifier.send(SinkState::Finished) {
                   error!("send sink state failed: {}", e);
                 }
               }
-            }
+            },
           },
-          Err(err) => error!("Failed to receive the ack message: {:?}", err),
+          Err(err) => warn!("Send message failed error: {:?}", err),
         }
 
         self.notify()
       },
       Err(_) => {
         if let Some(mut pending_msg) = self.pending_msg_queue.lock().peek_mut() {
-          pending_msg.set_state(MessageState::Timeout);
+          pending_msg.set_state(self.uid, MessageState::Timeout);
         }
         self.notify();
       },
@@ -410,7 +414,7 @@ impl Default for SinkConfig {
     Self {
       timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
       mergeable: false,
-      max_merge_size: 1024,
+      max_merge_size: 4096,
       strategy: SinkStrategy::ASAP,
     }
   }

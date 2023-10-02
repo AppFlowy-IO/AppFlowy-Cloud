@@ -68,6 +68,7 @@ async fn ws_reconnect_sync_test() {
 #[tokio::test]
 async fn edit_document_with_one_client_online_and_other_offline_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
+  println!("test doc id: {}", &object_id);
   let collab_type = CollabType::Document;
   let registered_user = generate_unique_registered_user().await;
 
@@ -106,8 +107,8 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
   let expected_json = json!({
     "name": "workspace"
   });
-  assert_client_collab(&mut client_1, &object_id, 10, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, 10, expected_json.clone()).await;
+  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
+  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
 }
 
 #[tokio::test]
@@ -166,6 +167,6 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     "8": "Task 8",
     "9": "Task 9"
   });
-  assert_client_collab(&mut client_1, &object_id, 10, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, 10, expected_json.clone()).await;
+  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
+  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
 }

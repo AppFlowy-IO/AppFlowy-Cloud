@@ -14,7 +14,6 @@ gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
 shared_entity = { path = "../shared-entity" }
 database-entity = { path = "../database-entity" }
-opener = "0.6.1"
 url = "2.4.1"
 tokio-stream = { version = "0.1.14" }
 parking_lot = "0.12.1"
@@ -39,5 +38,8 @@ collab-define = { version = "0.1.0" }
 yrs = { version = "0.16.5", optional = true }
 lib0 = { version = "0.16.3", features = ["lib0-serde"], optional = true }
 
+
 [features]
 collab-sync = ["collab", "yrs", "lib0"]
+
+

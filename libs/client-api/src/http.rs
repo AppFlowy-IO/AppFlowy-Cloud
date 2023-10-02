@@ -54,7 +54,12 @@ impl Client {
     self.token.read().subscribe()
   }
 
-  // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
+  /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
+  ///
+  /// This function parses the provided URL( e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...
+  /// &refresh_token=...&token_type=bearer), extracting the token parameters from the fragment part of the URL.
+  /// It then validates and utilizes these parameters to perform a sign-in operation.
+  ///
   pub async fn sign_in_url(&self, url: &str) -> Result<bool, AppError> {
     let mut access_token: Option<String> = None;
     let mut token_type: Option<String> = None;
@@ -169,6 +174,14 @@ impl Client {
     self.token.clone()
   }
 
+  /// Retrieves the expiration timestamp of the current token.
+  ///
+  /// This function attempts to read the current token and, if successful, returns the expiration timestamp.
+  ///
+  /// # Returns
+  /// - `Ok(i64)`: An `i64` representing the expiration timestamp of the token.
+  /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
+  ///
   pub fn token_expires_at(&self) -> Result<i64, AppError> {
     match &self.token.try_read() {
       None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
@@ -176,6 +189,14 @@ impl Client {
     }
   }
 
+  /// Retrieves the access token string.
+  ///
+  /// This function attempts to read the current token and, if successful, returns the access token string.
+  ///
+  /// # Returns
+  /// - `Ok(String)`: A `String` containing the access token.
+  /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
+  ///
   pub fn access_token(&self) -> Result<String, AppError> {
     match &self.token.try_read() {
       None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
@@ -189,19 +210,30 @@ impl Client {
     }
   }
 
-  pub async fn oauth_login(&self, provider: &OAuthProvider) -> Result<(), AppError> {
+  /// Initiates an OAuth login by constructing the authorization URL for the specified provider.
+  ///
+  /// This asynchronous function communicates with the GoTrue client to retrieve settings and
+  /// validate the availability of the specified OAuth provider. If the provider is available,
+  /// it constructs and returns the authorization URL.
+  ///
+  /// # Parameters
+  /// - `provider`: A reference to an `OAuthProvider` indicating which OAuth provider to use for login.
+  ///
+  /// # Returns
+  /// - `Ok(String)`: A `String` containing the constructed authorization URL if the specified provider is available.
+  /// - `Err(AppError)`: An `AppError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
+  ///
+  pub async fn oauth_login(&self, provider: &OAuthProvider) -> Result<String, AppError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
       return Err(ErrorCode::InvalidOAuthProvider.into());
     }
 
-    let oauth_url = format!(
+    Ok(format!(
       "{}/authorize?provider={}",
       self.gotrue_client.base_url,
       provider.as_str(),
-    );
-    opener::open(oauth_url)?;
-    Ok(())
+    ))
   }
 
   pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {
@@ -301,6 +333,11 @@ impl Client {
     Ok(is_new)
   }
 
+  /// Refreshes the access token using the stored refresh token.
+  ///
+  /// This function attempts to refresh the access token by sending a request to the authentication server
+  /// using the stored refresh token. If successful, it updates the stored access token with the new one
+  /// received from the server.
   pub async fn refresh(&self) -> Result<(), AppError> {
     let refresh_token = self
       .token

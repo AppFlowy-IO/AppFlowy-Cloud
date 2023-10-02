@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use redis::{FromRedisValue, RedisError};
 
 #[derive(Debug)]
@@ -53,11 +55,41 @@ impl FromRedisValue for CreatedTime {
 }
 
 // representing each document update
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct CollabUpdate {
-  pub uid: String,                       // user who did the change
-  pub raw_data: Vec<u8>,                 // YRS data
-  pub created_time: Option<CreatedTime>, // only applicable when reading from redis
+  pub uid: String,       // user who did the change
+  pub raw_data: Vec<u8>, // YRS data
+}
+
+// representing each document update
+#[derive(Debug)]
+pub struct CollabUpdatesReadById(pub BTreeMap<String, Vec<CollabUpdateRead>>);
+
+impl FromRedisValue for CollabUpdatesReadById {
+  fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+    let mut map: BTreeMap<String, Vec<CollabUpdateRead>> = BTreeMap::new();
+
+    let updates_by_ids = bulk_from_redis_value(v)?.iter();
+    for updates in updates_by_ids {
+      let key_values = bulk_from_redis_value(updates)?;
+      let key = RedisString::from_redis_value(&key_values[0])?.0;
+      let values = bulk_from_redis_value(&key_values[1])?.iter();
+      for value in values {
+        let value = CollabUpdateRead::from_redis_value(value)?;
+        map.entry(key.clone()).or_insert_with(Vec::new).push(value);
+      }
+    }
+
+    Ok(CollabUpdatesReadById(map))
+  }
+}
+
+// representing each document update
+#[derive(Debug)]
+pub struct CollabUpdateRead {
+  pub uid: String,               // user who did the change
+  pub raw_data: Vec<u8>,         // YRS data
+  pub created_time: CreatedTime, // only applicable when reading from redis
 }
 
 fn read_from_redis_error(unexpected_value: &redis::Value) -> RedisError {
@@ -80,28 +112,28 @@ impl FromRedisValue for RedisString {
   }
 }
 
-fn vec_from_redis_value(v: &redis::Value) -> Result<&Vec<redis::Value>, RedisError> {
+fn bulk_from_redis_value(v: &redis::Value) -> Result<&Vec<redis::Value>, RedisError> {
   match v {
     redis::Value::Bulk(b) => Ok(b),
     x => Err(read_from_redis_error(x)),
   }
 }
 
-fn raw_from_redis_value(v: &redis::Value) -> Result<&Vec<u8>, RedisError> {
+fn data_from_redis_value(v: &redis::Value) -> Result<&Vec<u8>, RedisError> {
   match v {
     redis::Value::Data(d) => Ok(d),
     x => Err(read_from_redis_error(x)),
   }
 }
 
-impl FromRedisValue for CollabUpdate {
+impl FromRedisValue for CollabUpdateRead {
   fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
-    let b = vec_from_redis_value(v)?;
+    let b = bulk_from_redis_value(v)?;
     assert_eq!(b.len(), 2);
 
     let created_time = CreatedTime::from_redis_value(&b[0])?;
 
-    let b = vec_from_redis_value(&b[1])?;
+    let b = bulk_from_redis_value(&b[1])?;
     assert_eq!(b.len(), 4);
 
     let uid_field = RedisString::from_redis_value(&b[0])?;
@@ -112,12 +144,12 @@ impl FromRedisValue for CollabUpdate {
     let data_field = RedisString::from_redis_value(&b[2])?;
     assert_eq!(data_field.0, "data");
 
-    let yrs_data = raw_from_redis_value(&b[3])?.to_vec();
+    let yrs_data = data_from_redis_value(&b[3])?.to_vec();
 
-    Ok(CollabUpdate {
+    Ok(CollabUpdateRead {
       uid,
       raw_data: yrs_data,
-      created_time: Some(created_time),
+      created_time,
     })
   }
 }

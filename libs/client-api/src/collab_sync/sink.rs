@@ -286,7 +286,7 @@ where
               }
             },
           },
-          Err(err) => warn!("Send message failed error: {:?}", err),
+          Err(err) => trace!("Send message failed error: {:?}", err),
         }
 
         self.notify()

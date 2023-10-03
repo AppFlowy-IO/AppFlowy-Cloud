@@ -8,10 +8,5 @@ mod gotrue;
 mod realtime;
 
 pub fn client_api_client() -> Client {
-  Client::from(
-    reqwest::Client::new(),
-    LOCALHOST_URL,
-    LOCALHOST_WS,
-    LOCALHOST_GOTRUE,
-  )
+  Client::new(LOCALHOST_URL, LOCALHOST_WS, LOCALHOST_GOTRUE)
 }

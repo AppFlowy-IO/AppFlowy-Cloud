@@ -48,7 +48,7 @@ async fn ws_reconnect_sync_test() {
   test_client.wait_object_sync_complete(&object_id).await;
 
   assert_remote_collab(
-    &mut test_client.api_client,
+    &test_client.api_client,
     &object_id,
     &collab_type,
     10,

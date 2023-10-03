@@ -76,7 +76,7 @@ impl FromRedisValue for CollabUpdatesReadById {
       let values = bulk_from_redis_value(&key_values[1])?.iter();
       for value in values {
         let value = CollabUpdateRead::from_redis_value(value)?;
-        map.entry(key.clone()).or_insert_with(Vec::new).push(value);
+        map.entry(key.clone()).or_default().push(value);
       }
     }
 

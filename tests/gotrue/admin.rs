@@ -89,7 +89,10 @@ async fn admin_generate_link_and_user_sign_in() {
   let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
 
   let client = client_api_client();
-  let is_new = client.sign_in_url(&appflowy_sign_in_url).await.unwrap();
+  let is_new = client
+    .sign_in_with_url(&appflowy_sign_in_url)
+    .await
+    .unwrap();
   assert!(is_new);
 
   let workspaces = client.workspaces().await.unwrap();

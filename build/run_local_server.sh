@@ -17,6 +17,7 @@ export GOTRUE_MAILER_AUTOCONFIRM=true
 
 # Enable Google OAuth when running locally
 export GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
+
 docker-compose --file ./docker-compose-dev.yml up -d --build
 
 # Keep pinging Postgres until it's ready to accept commands

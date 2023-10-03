@@ -87,6 +87,7 @@ assert-json-diff = "2.0.2"
 dotenv = "0.15.0"
 scraper = "0.17.1"
 client-api = { path = "libs/client-api", features = ["collab-sync"] }
+opener = "0.6.1"
 
 [[bin]]
 name = "appflowy_cloud"

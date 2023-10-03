@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -31,6 +31,18 @@ use shared_entity::error::AppError;
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
 
+/// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
+///
+/// It provides methods to perform actions like signing in, signing out, refreshing tokens,
+/// and interacting with file storage and collaboration objects.
+///
+/// # Fields
+/// - `cloud_client`: A `reqwest::Client` used for HTTP requests to the cloud.
+/// - `gotrue_client`: A `gotrue::api::Client` used for interacting with the GoTrue API.
+/// - `base_url`: The base URL for API requests.
+/// - `ws_addr`: The WebSocket address for real-time communication.
+/// - `token`: An `Arc<RwLock<ClientToken>>` managing the client's authentication token.
+///
 pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
@@ -40,12 +52,19 @@ pub struct Client {
 }
 
 impl Client {
-  pub fn from(c: reqwest::Client, base_url: &str, ws_addr: &str, gotrue_url: &str) -> Self {
+  /// Constructs a new `Client` instance.
+  ///
+  /// # Parameters
+  /// - `base_url`: The base URL for API requests.
+  /// - `ws_addr`: The WebSocket address for real-time communication.
+  /// - `gotrue_url`: The URL for the GoTrue API.
+  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str) -> Self {
+    let reqwest_client = reqwest::Client::new();
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
-      cloud_client: c.clone(),
-      gotrue_client: gotrue::api::Client::new(c, gotrue_url),
+      cloud_client: reqwest_client.clone(),
+      gotrue_client: gotrue::api::Client::new(reqwest_client, gotrue_url),
       token: Arc::new(RwLock::new(ClientToken::new())),
     }
   }
@@ -54,8 +73,10 @@ impl Client {
     self.token.read().subscribe()
   }
 
-  // e.g. appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer
-  pub async fn sign_in_url(&self, url: &str) -> Result<bool, AppError> {
+  /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
+  /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
+  ///
+  pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppError> {
     let mut access_token: Option<String> = None;
     let mut token_type: Option<String> = None;
     let mut expires_in: Option<i64> = None;
@@ -78,10 +99,10 @@ impl Client {
             token_type = Some(v.to_string());
           },
           "expires_in" => {
-            expires_in = Some(v.parse::<i64>()?);
+            expires_in = Some(v.parse::<i64>().context("parser expires_in failed")?);
           },
           "expires_at" => {
-            expires_at = Some(v.parse::<i64>()?);
+            expires_at = Some(v.parse::<i64>().context("parser expires_at failed")?);
           },
           "refresh_token" => {
             refresh_token = Some(v.to_string());
@@ -114,12 +135,82 @@ impl Client {
     Ok(new)
   }
 
+  /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
+  ///
+  /// This asynchronous function communicates with the GoTrue client to retrieve settings and
+  /// validate the availability of the specified OAuth provider. If the provider is available,
+  /// it constructs and returns the OAuth URL. When the user opens the OAuth URL, it redirects to
+  /// the corresponding provider's OAuth web page. After the user is authenticated, the browser will open
+  /// a deep link to the AppFlowy app (iOS, macOS, etc.), which will call [Client::sign_in_with_url] to sign in.
+  ///
+  /// For example, the OAuth URL on Google looks like `https://appflowy.io/authorize?provider=google`.
+  /// The deep link looks like `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
+
+  /// # Parameters
+  /// - `provider`: A reference to an `OAuthProvider` indicating which OAuth provider to use for login.
+  ///
+  /// # Returns
+  /// - `Ok(String)`: A `String` containing the constructed authorization URL if the specified provider is available.
+  /// - `Err(AppError)`: An `AppError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
+  ///
+  pub async fn generate_oauth_url_with_provider(
+    &self,
+    provider: &OAuthProvider,
+  ) -> Result<String, AppError> {
+    let settings = self.gotrue_client.settings().await?;
+    if !settings.external.has_provider(provider) {
+      return Err(ErrorCode::InvalidOAuthProvider.into());
+    }
+
+    Ok(format!(
+      "{}/authorize?provider={}",
+      self.gotrue_client.base_url,
+      provider.as_str(),
+    ))
+  }
+
+  /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
+  /// The URL looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
+  ///
+  pub async fn generate_sign_in_url_with_email(
+    &self,
+    admin_user_email: &str,
+    admin_user_password: &str,
+    user_email: &str,
+  ) -> Result<String, AppError> {
+    let admin_token = self
+      .gotrue_client
+      .token(&Grant::Password(PasswordGrant {
+        email: admin_user_email.to_string(),
+        password: admin_user_password.to_string(),
+      }))
+      .await?;
+
+    let admin_user_params: GenerateLinkParams = GenerateLinkParams {
+      email: user_email.to_string(),
+      ..Default::default()
+    };
+
+    let link_resp = self
+      .gotrue_client
+      .generate_link(&admin_token.access_token, &admin_user_params)
+      .await?;
+    assert_eq!(link_resp.email, user_email);
+
+    let action_link = link_resp.action_link;
+    let resp = reqwest::Client::new().get(action_link).send().await?;
+    let resp_text = resp.text().await?;
+    Ok(extract_sign_in_url(&resp_text)?)
+  }
+
+  #[inline]
   async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
     let user = self.gotrue_client.user_info(access_token).await?;
     let is_new = self.verify_token_cloud(access_token).await?;
     Ok((user, is_new))
   }
 
+  #[inline]
   async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
     let resp = self.cloud_client.get(&url).send().await?;
@@ -169,6 +260,15 @@ impl Client {
     self.token.clone()
   }
 
+  /// Retrieves the expiration timestamp of the current token.
+  ///
+  /// This function attempts to read the current token and, if successful, returns the expiration timestamp.
+  ///
+  /// # Returns
+  /// - `Ok(i64)`: An `i64` representing the expiration timestamp of the token.
+  /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
+  ///
+  #[inline]
   pub fn token_expires_at(&self) -> Result<i64, AppError> {
     match &self.token.try_read() {
       None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
@@ -176,6 +276,14 @@ impl Client {
     }
   }
 
+  /// Retrieves the access token string.
+  ///
+  /// This function attempts to read the current token and, if successful, returns the access token string.
+  ///
+  /// # Returns
+  /// - `Ok(String)`: A `String` containing the access token.
+  /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
+  ///
   pub fn access_token(&self) -> Result<String, AppError> {
     match &self.token.try_read() {
       None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
@@ -187,21 +295,6 @@ impl Client {
           .clone(),
       ),
     }
-  }
-
-  pub async fn oauth_login(&self, provider: &OAuthProvider) -> Result<(), AppError> {
-    let settings = self.gotrue_client.settings().await?;
-    if !settings.external.has_provider(provider) {
-      return Err(ErrorCode::InvalidOAuthProvider.into());
-    }
-
-    let oauth_url = format!(
-      "{}/authorize?provider={}",
-      self.gotrue_client.base_url,
-      provider.as_str(),
-    );
-    opener::open(oauth_url)?;
-    Ok(())
   }
 
   pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {
@@ -301,6 +394,11 @@ impl Client {
     Ok(is_new)
   }
 
+  /// Refreshes the access token using the stored refresh token.
+  ///
+  /// This function attempts to refresh the access token by sending a request to the authentication server
+  /// using the stored refresh token. If successful, it updates the stored access token with the new one
+  /// received from the server.
   pub async fn refresh(&self) -> Result<(), AppError> {
     let refresh_token = self
       .token
@@ -413,37 +511,6 @@ impl Client {
   pub fn ws_url(&self, device_id: &str) -> Result<String, AppError> {
     let access_token = self.access_token()?;
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
-  }
-
-  pub async fn generate_sign_in_callback_url(
-    &self,
-    admin_user_email: &str,
-    admin_user_password: &str,
-    user_email: &str,
-  ) -> Result<String, AppError> {
-    let admin_token = self
-      .gotrue_client
-      .token(&Grant::Password(PasswordGrant {
-        email: admin_user_email.to_string(),
-        password: admin_user_password.to_string(),
-      }))
-      .await?;
-
-    let admin_user_params: GenerateLinkParams = GenerateLinkParams {
-      email: user_email.to_string(),
-      ..Default::default()
-    };
-
-    let link_resp = self
-      .gotrue_client
-      .generate_link(&admin_token.access_token, &admin_user_params)
-      .await?;
-    assert_eq!(link_resp.email, user_email);
-
-    let action_link = link_resp.action_link;
-    let resp = reqwest::Client::new().get(action_link).send().await?;
-    let resp_text = resp.text().await?;
-    Ok(extract_sign_in_url(&resp_text)?)
   }
 
   pub async fn put_file_storage_object(

@@ -48,14 +48,24 @@ async fn sign_up_but_existing_user() {
 #[tokio::test]
 async fn sign_up_oauth_not_available() {
   let c = client_api_client();
+  let err = c
+    .generate_oauth_url_with_provider(&OAuthProvider::Zoom)
+    .await
+    .err()
+    .unwrap();
   assert_eq!(
     // Change Zoom to any other valid OAuth provider
     // to manually open the browser and login
-    c.oauth_login(&OAuthProvider::Zoom)
-      .await
-      .err()
-      .unwrap()
-      .code,
+    err.code,
     ErrorCode::InvalidOAuthProvider
   );
+}
+
+#[tokio::test]
+async fn sign_up_with_google_oauth() {
+  let c = client_api_client();
+  let _ = c
+    .generate_oauth_url_with_provider(&OAuthProvider::Google)
+    .await
+    .unwrap();
 }

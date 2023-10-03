@@ -1,6 +1,7 @@
 use anyhow::Context;
 use collab_define::CollabType;
 use database_entity::error::DatabaseError;
+use database_entity::{AFCollabSnapshot, AFCollabSnapshots};
 use std::ops::DerefMut;
 
 use sqlx::types::Uuid;
@@ -32,7 +33,7 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 /// # Returns
 ///
 /// * `Ok(())` if the operation is successful.
-/// * `Err(StorageError::Internal)` if there's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
+/// * `Err(DatabaseError::Internal)` if there's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
 /// * `Err(sqlx::Error)` for other database-related errors.
 ///
 /// # Errors
@@ -157,4 +158,51 @@ pub async fn get_collab_blob(
   )
   .fetch_one(pg_pool)
   .await
+}
+
+pub async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx::Error> {
+  sqlx::query!(
+    r#"
+        UPDATE af_collab
+        SET deleted_at = $2
+        WHERE oid = $1;
+        "#,
+    object_id,
+    chrono::Utc::now()
+  )
+  .execute(pg_pool)
+  .await?;
+  Ok(())
+}
+
+pub async fn get_snapshot_blob(pg_pool: &PgPool, snapshot_id: i64) -> Result<Vec<u8>, sqlx::Error> {
+  let blob = sqlx::query!(
+    r#"
+        SELECT blob
+        FROM af_collab_snapshot
+        WHERE sid = $1 AND deleted_at IS NULL;
+        "#,
+    snapshot_id,
+  )
+  .fetch_one(pg_pool)
+  .await?
+  .blob;
+  Ok(blob)
+}
+
+pub async fn get_all_snapshots(
+  pg_pool: &PgPool,
+  object_id: &str,
+) -> Result<AFCollabSnapshots, sqlx::Error> {
+  let snapshots: Vec<AFCollabSnapshot> = sqlx::query_as!(
+    AFCollabSnapshot,
+    r#"
+        SELECT sid as "snapshot_id", oid as "object_id", created_at
+        FROM af_collab_snapshot where oid = $1 AND deleted_at IS NULL;
+        "#,
+    object_id
+  )
+  .fetch_all(pg_pool)
+  .await?;
+  Ok(AFCollabSnapshots(snapshots))
 }

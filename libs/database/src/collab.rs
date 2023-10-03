@@ -4,6 +4,7 @@ use collab::core::collab::MutexCollab;
 use collab_define::CollabType;
 use database_entity::error::DatabaseError;
 use database_entity::{AFCollabSnapshots, QueryObjectSnapshotParams, QuerySnapshotParams};
+use redis::aio::ConnectionManager;
 use shared_entity::dto::{InsertCollabParams, InsertSnapshotParams, QueryCollabParams};
 use sqlx::types::Uuid;
 use sqlx::PgPool;
@@ -90,24 +91,29 @@ impl Default for StorageConfig {
 }
 
 #[derive(Clone)]
-pub struct CollabPostgresDBStorageImpl {
+pub struct CollabDatabaseStorageImpl {
   #[allow(dead_code)]
   pg_pool: PgPool,
+  redis_client: ConnectionManager,
   config: StorageConfig,
 }
 
 pub const FLUSH_PER_UPDATE: u32 = 100;
-impl CollabPostgresDBStorageImpl {
-  pub fn new(pg_pool: PgPool) -> Self {
+impl CollabDatabaseStorageImpl {
+  pub fn new(pg_pool: PgPool, redis_client: ConnectionManager) -> Self {
     let config = StorageConfig {
       flush_per_update: FLUSH_PER_UPDATE,
     };
-    Self { pg_pool, config }
+    Self {
+      pg_pool,
+      redis_client,
+      config,
+    }
   }
 }
 
 #[async_trait]
-impl CollabStorage for CollabPostgresDBStorageImpl {
+impl CollabStorage for CollabDatabaseStorageImpl {
   fn config(&self) -> &StorageConfig {
     &self.config
   }
@@ -127,6 +133,7 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
       .context("Failed to acquire a Postgres transaction to insert collab")?;
     collaborate::insert_af_collab(
       &mut transaction,
+      self.redis_client.clone(),
       &params
         .workspace_id
         .parse::<Uuid>()
@@ -141,14 +148,24 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
 
   async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
     params.validate()?;
-    let data =
-      collaborate::get_collab_blob(&self.pg_pool, &params.collab_type, &params.object_id).await?;
+    let data = collaborate::get_collab_blob_cached(
+      &self.pg_pool,
+      self.redis_client.clone(),
+      &params.collab_type,
+      &params.object_id,
+    )
+    .await?;
     debug_assert!(!data.is_empty());
     Ok(data)
   }
 
   async fn delete_collab(&self, object_id: &str) -> Result<()> {
-    collaborate::delete_collab(&self.pg_pool, object_id).await?;
+    collaborate::delete_collab_with_cached_eviction(
+      &self.pg_pool,
+      self.redis_client.clone(),
+      object_id,
+    )
+    .await?;
     Ok(())
   }
 

@@ -13,6 +13,7 @@ use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use actix::Actor;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
+use redis::aio::ConnectionManager;
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -22,7 +23,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::component::storage_proxy::CollabStorageProxy;
-use database::collab::{CollabPostgresDBStorageImpl, CollabStorage};
+use database::collab::CollabDatabaseStorageImpl;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 use tracing_actix_web::TracingLogger;
@@ -33,18 +34,11 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build<S>(
-    config: Config,
-    state: AppState,
-    storage: Storage<S>,
-  ) -> Result<Self, anyhow::Error>
-  where
-    S: CollabStorage + Unpin,
-  {
+  pub async fn build(config: Config, state: AppState) -> Result<Self, anyhow::Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config, storage).await?;
+    let server = run(listener, state, config).await?;
 
     Ok(Self { port, server })
   }
@@ -58,15 +52,11 @@ impl Application {
   }
 }
 
-pub async fn run<S>(
+pub async fn run(
   listener: TcpListener,
   state: AppState,
   config: Config,
-  storage: Storage<S>,
-) -> Result<Server, anyhow::Error>
-where
-  S: CollabStorage + Unpin,
-{
+) -> Result<Server, anyhow::Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
     .map_err(|e| {
@@ -82,6 +72,7 @@ where
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
+  let storage = state.collab_storage.clone();
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>>::new(storage.collab_storage.clone())
     .unwrap()
     .start();
@@ -132,6 +123,7 @@ pub async fn init_state(config: &Config) -> AppState {
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await;
+  let collab_storage = init_storage(config, pg_pool.clone(), redis_client.clone()).await;
 
   AppState {
     pg_pool,
@@ -141,6 +133,7 @@ pub async fn init_state(config: &Config) -> AppState {
     gotrue_client,
     s3_bucket,
     redis_client,
+    collab_storage,
   }
 }
 
@@ -259,8 +252,12 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
   builder
 }
 
-pub async fn init_storage(_config: &Config, pg_pool: PgPool) -> Storage<CollabStorageProxy> {
-  let collab_storage = CollabPostgresDBStorageImpl::new(pg_pool);
+pub async fn init_storage(
+  _config: &Config,
+  pg_pool: PgPool,
+  redis_client: ConnectionManager,
+) -> Storage<CollabStorageProxy> {
+  let collab_storage = CollabDatabaseStorageImpl::new(pg_pool, redis_client);
   let proxy = CollabStorageProxy::new(collab_storage);
   Storage {
     collab_storage: proxy,

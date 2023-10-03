@@ -22,4 +22,5 @@ thiserror = "1.0.47"
 sqlx = { version = "0.7", default-features = false, features = ["postgres", "chrono", "uuid", "macros", "runtime-tokio-rustls"] }
 tracing = { version = "0.1.37" }
 uuid = { version = "1.4.1", features = ["serde", "v4"] }
-chrono = {version="0.4",features = ["serde"]}
+chrono = { version="0.4", features = ["serde"]}
+redis = { version="0.23.0"}

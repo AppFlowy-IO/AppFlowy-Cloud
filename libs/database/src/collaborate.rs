@@ -2,6 +2,7 @@ use anyhow::Context;
 use collab_define::CollabType;
 use database_entity::error::DatabaseError;
 use database_entity::{AFCollabSnapshot, AFCollabSnapshots};
+use redis::{aio::ConnectionManager, AsyncCommands};
 use std::ops::DerefMut;
 
 use sqlx::types::Uuid;
@@ -44,6 +45,7 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 ///
 pub async fn insert_af_collab(
   tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+  mut redis_client: ConnectionManager,
   workspace_id: &Uuid,
   owner_uid: i64,
   object_id: &str,
@@ -85,6 +87,8 @@ pub async fn insert_af_collab(
           "Update af_collab failed: {}:{}",
           owner_uid, object_id
         ))?;
+        // Redis invalidate
+        redis_invalidate_collab(&mut redis_client, object_id).await;
       } else {
         return Err(DatabaseError::from(anyhow::anyhow!(
           "Inserting a row with an existing object_id but different workspace_id"
@@ -141,7 +145,48 @@ pub async fn insert_af_collab(
   Ok(())
 }
 
-pub async fn get_collab_blob(
+pub async fn get_collab_blob_cached(
+  pg_pool: &PgPool,
+  mut redis_client: ConnectionManager,
+  collab_type: &CollabType,
+  object_id: &str,
+) -> Result<Vec<u8>, sqlx::Error> {
+  static REDIS_COLLAB_CACHE_DURATION_SEC: usize = 60 * 60;
+
+  // Get from redis
+  let redis_key = collab_redis_key(object_id);
+  match redis_client.get::<_, Vec<u8>>(redis_key.clone()).await {
+    Err(err) => {
+      tracing::error!("Get collab from redis failed: {:?}", err);
+      Ok(get_collab_blob(pg_pool, collab_type, object_id).await?)
+    },
+    Ok(raw_data) => {
+      if !raw_data.is_empty() {
+        return Ok(raw_data);
+      }
+
+      // get data from postgresql
+      let blob = get_collab_blob(pg_pool, collab_type, object_id).await?;
+
+      // put to redis
+      let _ = redis_client
+        .set_options::<_, _, ()>(
+          redis_key,
+          &blob,
+          redis::SetOptions::default()
+            .with_expiration(redis::SetExpiry::EXAT(REDIS_COLLAB_CACHE_DURATION_SEC)),
+        )
+        .await
+        .map_err(|err| {
+          tracing::error!("Set collab to redis failed: {:?}", err);
+        });
+
+      Ok(blob)
+    },
+  }
+}
+
+async fn get_collab_blob(
   pg_pool: &PgPool,
   collab_type: &CollabType,
   object_id: &str,
@@ -160,7 +205,17 @@ pub async fn get_collab_blob(
   .await
 }
 
-pub async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx::Error> {
+pub async fn delete_collab_with_cached_eviction(
+  pg_pool: &PgPool,
+  mut redis_client: ConnectionManager,
+  object_id: &str,
+) -> Result<(), sqlx::Error> {
+  delete_collab(pg_pool, object_id).await?;
+  redis_invalidate_collab(&mut redis_client, object_id).await;
+  Ok(())
+}
+
+async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx::Error> {
   sqlx::query!(
     r#"
         UPDATE af_collab
@@ -230,4 +285,21 @@ pub async fn create_snapshot(
   .execute(pg_pool)
   .await?;
   Ok(())
+}
+
+async fn redis_invalidate_collab(redis_client: &mut ConnectionManager, object_id: &str) {
+  let _ = redis_client
+    .del::<_, ()>(collab_redis_key(object_id))
+    .await
+    .map_err(|err| {
+      tracing::error!(
+        "Delete collab from redis failed, id: {}, err: {:?}",
+        object_id,
+        err
+      )
+    });
+}
+
+fn collab_redis_key(object_id: &str) -> String {
+  format!("collab::{}", object_id)
 }

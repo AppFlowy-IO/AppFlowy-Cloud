@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use database::collab::{CollabPostgresDBStorageImpl, CollabStorage, StorageConfig};
+use database::collab::{CollabDatabaseStorageImpl, CollabStorage, StorageConfig};
 use database_entity::{AFCollabSnapshots, QueryObjectSnapshotParams, QuerySnapshotParams, RawData};
 use shared_entity::dto::{InsertCollabParams, InsertSnapshotParams, QueryCollabParams};
 use std::collections::HashMap;
@@ -10,12 +10,12 @@ use tracing::info;
 
 #[derive(Clone)]
 pub struct CollabStorageProxy {
-  inner: CollabPostgresDBStorageImpl,
+  inner: CollabDatabaseStorageImpl,
   collab_by_object_id: Arc<RwLock<HashMap<String, Weak<MutexCollab>>>>,
 }
 
 impl CollabStorageProxy {
-  pub fn new(inner: CollabPostgresDBStorageImpl) -> Self {
+  pub fn new(inner: CollabDatabaseStorageImpl) -> Self {
     Self {
       inner,
       collab_by_object_id: Arc::new(RwLock::new(HashMap::new())),

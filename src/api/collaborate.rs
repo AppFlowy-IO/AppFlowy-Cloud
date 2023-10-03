@@ -28,7 +28,13 @@ async fn create_collab_handler(
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collaborate::create_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  biz::collaborate::create_collab(
+    &state.pg_pool,
+    state.redis_client.clone(),
+    &user_uuid,
+    &payload.into_inner(),
+  )
+  .await?;
   Ok(AppResponse::Ok().into())
 }
 

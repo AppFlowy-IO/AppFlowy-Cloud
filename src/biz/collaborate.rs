@@ -29,7 +29,6 @@ pub async fn create_collab(
   let workspace_uuid = params.workspace_id.parse::<Uuid>()?;
   let owner_uid = user::uid_from_uuid(pg_pool, user_uuid).await?;
   let mut tx = pg_pool.begin().await?;
-
   collaborate::insert_af_collab(
     &mut tx,
     redis_client,
@@ -40,6 +39,7 @@ pub async fn create_collab(
     &params.collab_type,
   )
   .await?;
+  tx.commit().await?;
   Ok(())
 }
 
@@ -53,14 +53,20 @@ pub async fn get_collab_raw(
 
   // TODO: access control for user_uuid
 
-  let data = collaborate::get_collab_blob_cached(
+  match collaborate::get_collab_blob_cached(
     pg_pool,
     redis_client,
     &params.collab_type,
     &params.object_id,
   )
-  .await?;
-  Ok(data)
+  .await
+  {
+    Ok(data) => Ok(data),
+    Err(e) => match e {
+      sqlx::Error::RowNotFound => Err(ErrorCode::RecordNotFound.into()),
+      _ => Err(e.into()),
+    },
+  }
 }
 
 pub async fn update_collab(
@@ -76,7 +82,6 @@ pub async fn update_collab(
   let workspace_uuid = params.workspace_id.parse::<Uuid>()?;
   let owner_uid = user::uid_from_uuid(pg_pool, user_uuid).await?;
   let mut tx = pg_pool.begin().await?;
-
   collaborate::insert_af_collab(
     &mut tx,
     redis_client,
@@ -87,6 +92,7 @@ pub async fn update_collab(
     &params.collab_type,
   )
   .await?;
+  tx.commit().await?;
   Ok(())
 }
 

@@ -158,7 +158,8 @@ pub async fn get_collab_blob_cached(
   match redis_client.get::<_, Vec<u8>>(redis_key.clone()).await {
     Err(err) => {
       tracing::error!("Get collab from redis failed: {:?}", err);
-      Ok(get_collab_blob(pg_pool, collab_type, object_id).await?)
+      let blob = get_collab_blob(pg_pool, collab_type, object_id).await?;
+      Ok(blob)
     },
     Ok(raw_data) => {
       if !raw_data.is_empty() {

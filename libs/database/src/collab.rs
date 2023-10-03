@@ -126,11 +126,7 @@ impl CollabStorage for CollabDatabaseStorageImpl {
 
   async fn insert_collab(&self, owner_uid: i64, params: InsertCollabParams) -> Result<()> {
     params.validate()?;
-    let mut transaction = self
-      .pg_pool
-      .begin()
-      .await
-      .context("Failed to acquire a Postgres transaction to insert collab")?;
+    let mut transaction = self.pg_pool.begin().await?;
     collaborate::insert_af_collab(
       &mut transaction,
       self.redis_client.clone(),
@@ -143,20 +139,31 @@ impl CollabStorage for CollabDatabaseStorageImpl {
       &params.raw_data,
       &params.collab_type,
     )
-    .await
+    .await?;
+    transaction.commit().await?;
+    Ok(())
   }
 
   async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
     params.validate()?;
-    let data = collaborate::get_collab_blob_cached(
+
+    match collaborate::get_collab_blob_cached(
       &self.pg_pool,
       self.redis_client.clone(),
       &params.collab_type,
       &params.object_id,
     )
-    .await?;
-    debug_assert!(!data.is_empty());
-    Ok(data)
+    .await
+    {
+      Ok(data) => {
+        debug_assert!(!data.is_empty());
+        Ok(data)
+      },
+      Err(e) => match e {
+        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound.into()),
+        _ => Err(e.into()),
+      },
+    }
   }
 
   async fn delete_collab(&self, object_id: &str) -> Result<()> {

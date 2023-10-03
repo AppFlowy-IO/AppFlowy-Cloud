@@ -31,6 +31,7 @@ shared_entity = { path = "../shared-entity" }
 yrs = "0.16.5"
 lib0 = "0.16.3"
 chrono = "0.4.30"
+uuid = "1"
 
 [dev-dependencies]
 actix = "0.13"

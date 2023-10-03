@@ -31,14 +31,14 @@ pub async fn establish_ws_connection(
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
   let realtime_user = Arc::new(RealtimeUserImpl::new(user_uuid.to_string(), device_id));
-  let client = ClientWSSession::new(
+  let session = ClientWSSession::new(
     realtime_user,
     server.get_ref().clone(),
     Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
     Duration::from_secs(state.config.websocket.client_timeout as u64),
   );
 
-  match ws::start(client, &request, payload) {
+  match ws::start(session, &request, payload) {
     Ok(response) => Ok(response),
     Err(e) => {
       tracing::error!("🔴ws connection error: {:?}", e);

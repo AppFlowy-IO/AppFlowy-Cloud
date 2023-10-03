@@ -21,6 +21,7 @@ use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
 pub struct CollabStoragePlugin<S, U> {
+  uid: i64,
   workspace_id: String,
   storage: S,
   did_load: AtomicBool,
@@ -31,6 +32,7 @@ pub struct CollabStoragePlugin<S, U> {
 
 impl<S, U> CollabStoragePlugin<S, U> {
   pub fn new(
+    uid: i64,
     workspace_id: &str,
     collab_type: CollabType,
     storage: S,
@@ -40,6 +42,7 @@ impl<S, U> CollabStoragePlugin<S, U> {
     let did_load = AtomicBool::new(false);
     let update_count = AtomicU32::new(0);
     Self {
+      uid,
       workspace_id,
       storage,
       did_load,
@@ -88,13 +91,12 @@ where
               txn.encode_state_as_update_v1(&StateVector::default())
             };
             let params = InsertCollabParams::from_raw_data(
-              // self.uid,
               object_id,
               self.collab_type.clone(),
               raw_data,
               &self.workspace_id,
             );
-            match self.storage.insert_collab(params).await {
+            match self.storage.insert_collab(self.uid, params).await {
               Ok(_) => {},
               Err(err) => tracing::error!("{:?}", err),
             }
@@ -131,7 +133,6 @@ where
   fn flush(&self, object_id: &str, update: &Bytes) {
     let storage = self.storage.clone();
     let params = InsertCollabParams::from_raw_data(
-      // self.uid,
       object_id,
       self.collab_type.clone(),
       update.to_vec(),
@@ -146,9 +147,10 @@ where
       0
     );
 
+    let uid = self.uid;
     tokio::spawn(async move {
       let object_id = params.object_id.clone();
-      match storage.insert_collab(params).await {
+      match storage.insert_collab(uid, params).await {
         Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
         Err(err) => tracing::error!("save collab failed: {:?}", err),
       }

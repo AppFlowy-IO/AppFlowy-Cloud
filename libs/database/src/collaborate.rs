@@ -206,3 +206,28 @@ pub async fn get_all_snapshots(
   .await?;
   Ok(AFCollabSnapshots(snapshots))
 }
+
+pub async fn create_snapshot(
+  pg_pool: &PgPool,
+  object_id: &str,
+  raw_data: &[u8],
+  workspace_id: &Uuid,
+) -> Result<(), sqlx::Error> {
+  // TODO: might change in the future
+  let encrypt = 0;
+
+  sqlx::query!(
+    r#"
+        INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)
+        VALUES ($1, $2, $3, $4, $5)
+        "#,
+    object_id,
+    raw_data,
+    raw_data.len() as i32,
+    encrypt,
+    workspace_id,
+  )
+  .execute(pg_pool)
+  .await?;
+  Ok(())
+}

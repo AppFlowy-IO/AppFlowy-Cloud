@@ -1,16 +1,16 @@
+use anyhow::Context;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab_define::CollabType;
 use database_entity::error::DatabaseError;
-use database_entity::{
-  AFCollabSnapshot, AFCollabSnapshots, QueryObjectSnapshotParams, QuerySnapshotParams,
-};
+use database_entity::{AFCollabSnapshots, QueryObjectSnapshotParams, QuerySnapshotParams};
 use shared_entity::dto::{InsertCollabParams, InsertSnapshotParams, QueryCollabParams};
-use sqlx::types::{chrono, Uuid};
+use sqlx::types::Uuid;
 use sqlx::PgPool;
-use std::str::FromStr;
 use std::sync::Weak;
 use validator::Validate;
+
+use crate::collaborate;
 type RawData = Vec<u8>;
 
 pub type Result<T, E = DatabaseError> = core::result::Result<T, E>;
@@ -44,7 +44,7 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_collab(&self, params: InsertCollabParams) -> Result<()>;
+  async fn insert_collab(&self, owner_uid: i64, params: InsertCollabParams) -> Result<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
@@ -113,128 +113,69 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
   }
 
   async fn is_exist(&self, object_id: &str) -> bool {
-    let result = sqlx::query!(
-      "SELECT oid FROM af_collab WHERE oid = $1 LIMIT 1",
-      object_id
-    )
-    .fetch_optional(&self.pg_pool)
-    .await
-    .unwrap_or(None);
-    result.is_some()
+    collaborate::collab_exists(&self.pg_pool, object_id)
+      .await
+      .unwrap_or(false)
   }
 
-  async fn insert_collab(&self, _params: InsertCollabParams) -> Result<()> {
-    todo!()
-    // params.validate()?;
-
-    // let mut transaction = self
-    //   .pg_pool
-    //   .begin()
-    //   .await
-    //   .context("Failed to acquire a Postgres transaction to insert collab")?;
-    // insert_af_collab(&mut transaction, params).await?;
-    // transaction
-    //   .commit()
-    //   .await
-    //   .context("Failed to commit transaction to insert collab")?;
-    // Ok(())
+  async fn insert_collab(&self, owner_uid: i64, params: InsertCollabParams) -> Result<()> {
+    params.validate()?;
+    let mut transaction = self
+      .pg_pool
+      .begin()
+      .await
+      .context("Failed to acquire a Postgres transaction to insert collab")?;
+    collaborate::insert_af_collab(
+      &mut transaction,
+      &params
+        .workspace_id
+        .parse::<Uuid>()
+        .context("Failed to parse workspace ID")?,
+      owner_uid,
+      &params.object_id,
+      &params.raw_data,
+      &params.collab_type,
+    )
+    .await
   }
 
   async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
     params.validate()?;
-
-    let partition_key = params.collab_type.value();
-    let record = sqlx::query!(
-      r#"
-        SELECT blob
-        FROM af_collab
-        WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
-        "#,
-      params.object_id,
-      partition_key,
-    )
-    .fetch_optional(&self.pg_pool)
-    .await?;
-
-    match record {
-      Some(record) => {
-        debug_assert!(!record.blob.is_empty());
-        Ok(record.blob)
-      },
-      None => Err(DatabaseError::RecordNotFound),
-    }
+    let data =
+      collaborate::get_collab_blob(&self.pg_pool, &params.collab_type, &params.object_id).await?;
+    debug_assert!(!data.is_empty());
+    Ok(data)
   }
 
   async fn delete_collab(&self, object_id: &str) -> Result<()> {
-    let delete_time = chrono::Utc::now();
-    sqlx::query!(
-      r#"
-        UPDATE af_collab
-        SET deleted_at = $2
-        WHERE oid = $1;
-        "#,
-      object_id,
-      delete_time
-    )
-    .execute(&self.pg_pool)
-    .await?;
+    collaborate::delete_collab(&self.pg_pool, object_id).await?;
     Ok(())
   }
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> Result<()> {
     params.validate()?;
 
-    let encrypt = 0;
-    let workspace_id = Uuid::from_str(&params.workspace_id)?;
-    sqlx::query!(
-      r#"
-        INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)
-        VALUES ($1, $2, $3, $4, $5)
-        "#,
-      params.object_id,
-      params.raw_data,
-      params.len,
-      encrypt,
-      workspace_id,
+    collaborate::create_snapshot(
+      &self.pg_pool,
+      &params.object_id,
+      &params.raw_data,
+      &params.workspace_id.parse::<Uuid>()?,
     )
-    .execute(&self.pg_pool)
     .await?;
     Ok(())
   }
 
   async fn get_snapshot_data(&self, params: QuerySnapshotParams) -> Result<RawData> {
-    let record = sqlx::query!(
-      r#"
-        SELECT blob
-        FROM af_collab_snapshot
-        WHERE sid = $1 AND deleted_at IS NULL;
-        "#,
-      params.snapshot_id,
-    )
-    .fetch_optional(&self.pg_pool)
-    .await?;
-
-    match record {
-      Some(record) => Ok(record.blob),
-      None => Err(DatabaseError::RecordNotFound),
-    }
+    let blob = collaborate::get_snapshot_blob(&self.pg_pool, params.snapshot_id).await?;
+    Ok(blob)
   }
 
   async fn get_all_snapshots(
     &self,
     params: QueryObjectSnapshotParams,
   ) -> Result<AFCollabSnapshots> {
-    let snapshots: Vec<AFCollabSnapshot> = sqlx::query_as!(
-      AFCollabSnapshot,
-      r#"
-        SELECT sid as "snapshot_id", oid as "object_id", created_at
-        FROM af_collab_snapshot where oid = $1 AND deleted_at IS NULL;
-        "#,
-      params.object_id
-    )
-    .fetch_all(&self.pg_pool)
-    .await?;
-    Ok(AFCollabSnapshots(snapshots))
+    let s = collaborate::get_all_snapshots(&self.pg_pool, &params.object_id).await?;
+    Ok(s)
   }
 }
 

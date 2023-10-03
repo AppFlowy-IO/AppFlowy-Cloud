@@ -42,8 +42,12 @@ impl CollabStorage for CollabStorageProxy {
       .insert(object_id.to_string(), collab);
   }
 
-  async fn insert_collab(&self, params: InsertCollabParams) -> database::collab::Result<()> {
-    self.inner.insert_collab(params).await
+  async fn insert_collab(
+    &self,
+    owner_uid: i64,
+    params: InsertCollabParams,
+  ) -> database::collab::Result<()> {
+    self.inner.insert_collab(owner_uid, params).await
   }
 
   async fn get_collab(&self, params: QueryCollabParams) -> database::collab::Result<RawData> {

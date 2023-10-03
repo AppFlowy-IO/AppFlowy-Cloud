@@ -16,7 +16,6 @@ async fn success_insert_collab_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(InsertCollabParams::new(
-    // 1,
     &object_id,
     CollabType::Document,
     raw_data.clone(),
@@ -43,7 +42,6 @@ async fn success_delete_collab_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(InsertCollabParams::new(
-    // 1,
     object_id.clone(),
     CollabType::Document,
     raw_data.clone(),
@@ -75,7 +73,6 @@ async fn fail_insert_collab_with_empty_payload_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let error = c
     .create_collab(InsertCollabParams::new(
-      // 1,
       Uuid::new_v4().to_string(),
       CollabType::Document,
       vec![],
@@ -94,7 +91,6 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let error = c
     .create_collab(InsertCollabParams::new(
-      // 1,
       Uuid::new_v4().to_string(),
       CollabType::Document,
       raw_data.clone(),

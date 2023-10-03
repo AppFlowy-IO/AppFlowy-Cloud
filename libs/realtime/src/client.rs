@@ -163,7 +163,7 @@ where
         ctx.stop();
       },
       ws::Message::Continuation(_) => ctx.stop(),
-      ws::Message::Nop => (),
+      ws::Message::Nop => {},
     }
   }
 }

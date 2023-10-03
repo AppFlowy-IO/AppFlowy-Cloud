@@ -49,7 +49,7 @@ async fn sign_up_but_existing_user() {
 async fn sign_up_oauth_not_available() {
   let c = client_api_client();
   let err = c
-    .generate_sign_in_url_with_provider(&OAuthProvider::Zoom)
+    .generate_oauth_url_with_provider(&OAuthProvider::Zoom)
     .await
     .err()
     .unwrap();
@@ -65,7 +65,7 @@ async fn sign_up_oauth_not_available() {
 async fn sign_up_with_google_oauth() {
   let c = client_api_client();
   let _ = c
-    .generate_sign_in_url_with_provider(&OAuthProvider::Google)
+    .generate_oauth_url_with_provider(&OAuthProvider::Google)
     .await
     .unwrap();
 }

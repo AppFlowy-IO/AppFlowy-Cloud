@@ -1,3 +1,4 @@
+use database_entity::error::DatabaseError;
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::time::SystemTimeError;
@@ -41,13 +42,19 @@ impl actix_web::error::ResponseError for AppError {
     actix_web::HttpResponse::Ok().json(self)
   }
 }
-//
+
 impl From<anyhow::Error> for AppError {
   fn from(err: anyhow::Error) -> Self {
     match err.downcast_ref::<AppError>() {
       None => AppError::new(ErrorCode::Unhandled, err.to_string()),
       Some(err) => err.clone(),
     }
+  }
+}
+
+impl From<DatabaseError> for AppError {
+  fn from(value: DatabaseError) -> Self {
+    AppError::new(ErrorCode::DatabaseError, value.to_string())
   }
 }
 

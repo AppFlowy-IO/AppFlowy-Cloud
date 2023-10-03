@@ -1,18 +1,18 @@
+use crate::biz;
+use crate::component::auth::jwt::UserUuid;
 use crate::component::storage_proxy::CollabStorageProxy;
-use crate::state::Storage;
+use crate::state::{AppState, Storage};
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use database::collab::CollabStorage;
-use database::error::StorageError;
-use database_entity::{
-  AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
-  QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
-};
+use database_entity::error::DatabaseError;
+use database_entity::{AFCollabSnapshots, QueryObjectSnapshotParams, QuerySnapshotParams, RawData};
 use shared_entity::data::AppResponse;
+use shared_entity::dto::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
 use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
-use tracing::{debug, instrument};
+use tracing::instrument;
 use validator::Validate;
 
 pub fn collab_scope() -> Scope {
@@ -30,41 +30,53 @@ pub fn collab_scope() -> Scope {
 
 #[instrument(skip_all, err)]
 async fn create_collab_handler(
+  user_uuid: UserUuid,
   payload: Json<InsertCollabParams>,
-  storage: Data<Storage<CollabStorageProxy>>,
+  state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let params = payload.into_inner();
-  if storage.collab_storage.is_exist(&params.object_id).await {
-    return Ok(Json(
-      AppResponse::Ok()
-        .with_code(ErrorCode::RecordAlreadyExists)
-        .with_message(format!("Collab:{} already exists", params.object_id)),
-    ));
-  }
+  biz::collaborate::create_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  Ok(AppResponse::Ok().into())
 
-  storage
-    .collab_storage
-    .insert_collab(params)
-    .await
-    .map_err(|err| AppError::new(ErrorCode::StorageError, err.to_string()))?;
-  Ok(Json(AppResponse::Ok()))
+  // if storage.collab_storage.is_exist(&params.object_id).await {
+  //   return Ok(Json(
+  //     AppResponse::Ok()
+  //       .with_code(ErrorCode::RecordAlreadyExists)
+  //       .with_message(format!("Collab:{} already exists", params.object_id)),
+  //   ));
+  // }
+
+  // storage
+  //   .collab_storage
+  //   .insert_collab(params)
+  //   .await
+  //   .map_err(|err| AppError::new(ErrorCode::StorageError, err.to_string()))?;
+  // Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(storage), err)]
+#[instrument(skip_all, err)]
 async fn get_collab_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
   payload: Json<QueryCollabParams>,
-  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
-  let data = storage
-    .collab_storage
-    .get_collab(payload.into_inner())
-    .await
-    .map_err(|err| match &err {
-      StorageError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
-      _ => AppError::new(ErrorCode::StorageError, err.to_string()),
-    })?;
+  // let data =
+  // storage
+  // .collab_storage
+  // .get_collab(payload.into_inner())
+  // .await
+  // .map_err(|err| match &err {
+  //   DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
+  //   _ => AppError::new(ErrorCode::DatabaseError, err.to_string()),
+  // })?;
+  // debug!("Returned data length: {}", data.len());
 
-  debug!("Returned data length: {}", data.len());
+  let data = biz::collaborate::get_collab_raw(
+    &state.pg_pool,
+    state.redis_client.clone(),
+    &user_uuid,
+    payload.into_inner(),
+  )
+  .await?;
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
@@ -78,7 +90,7 @@ async fn update_collab_handler(
     .collab_storage
     .insert_collab(params)
     .await
-    .map_err(|err| AppError::new(ErrorCode::StorageError, err.to_string()))?;
+    .map_err(|err| AppError::new(ErrorCode::DatabaseError, err.to_string()))?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -94,7 +106,7 @@ async fn delete_collab_handler(
     .collab_storage
     .delete_collab(&params.object_id)
     .await
-    .map_err(|err| AppError::new(ErrorCode::StorageError, err.to_string()))?;
+    .map_err(|err| AppError::new(ErrorCode::DatabaseError, err.to_string()))?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -107,8 +119,8 @@ async fn retrieve_snapshot_data_handler(
     .get_snapshot_data(payload.into_inner())
     .await
     .map_err(|err| match &err {
-      StorageError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
-      _ => AppError::new(ErrorCode::StorageError, err.to_string()),
+      DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
+      _ => AppError::new(ErrorCode::DatabaseError, err.to_string()),
     })?;
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
@@ -123,8 +135,8 @@ async fn retrieve_snapshots_handler(
     .get_all_snapshots(payload.into_inner())
     .await
     .map_err(|err| match &err {
-      StorageError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
-      _ => AppError::new(ErrorCode::StorageError, err.to_string()),
+      DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
+      _ => AppError::new(ErrorCode::DatabaseError, err.to_string()),
     })?;
   Ok(Json(AppResponse::Ok().with_data(data)))
 }

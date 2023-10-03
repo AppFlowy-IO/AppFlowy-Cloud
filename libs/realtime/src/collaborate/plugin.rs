@@ -7,12 +7,13 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 
 use collab::sync_protocol::awareness::Awareness;
 use collab_define::CollabType;
+use shared_entity::dto::{InsertCollabParams, QueryCollabParams};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Weak;
 
 use database::collab::CollabStorage;
-use database::error::StorageError;
-use database_entity::{InsertCollabParams, QueryCollabParams, RawData};
+use database_entity::error::DatabaseError;
+use database_entity::RawData;
 
 use crate::collaborate::group::CollabGroup;
 use crate::entities::RealtimeUser;
@@ -20,7 +21,6 @@ use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
 pub struct CollabStoragePlugin<S, U> {
-  uid: i64,
   workspace_id: String,
   storage: S,
   did_load: AtomicBool,
@@ -31,7 +31,6 @@ pub struct CollabStoragePlugin<S, U> {
 
 impl<S, U> CollabStoragePlugin<S, U> {
   pub fn new(
-    uid: i64,
     workspace_id: &str,
     collab_type: CollabType,
     storage: S,
@@ -41,7 +40,6 @@ impl<S, U> CollabStoragePlugin<S, U> {
     let did_load = AtomicBool::new(false);
     let update_count = AtomicU32::new(0);
     Self {
-      uid,
       workspace_id,
       storage,
       did_load,
@@ -84,13 +82,13 @@ where
       },
       Err(err) => {
         match &err {
-          StorageError::RecordNotFound => {
+          DatabaseError::RecordNotFound => {
             let raw_data = {
               let txn = doc.transact();
               txn.encode_state_as_update_v1(&StateVector::default())
             };
             let params = InsertCollabParams::from_raw_data(
-              self.uid,
+              // self.uid,
               object_id,
               self.collab_type.clone(),
               raw_data,
@@ -133,7 +131,7 @@ where
   fn flush(&self, object_id: &str, update: &Bytes) {
     let storage = self.storage.clone();
     let params = InsertCollabParams::from_raw_data(
-      self.uid,
+      // self.uid,
       object_id,
       self.collab_type.clone(),
       update.to_vec(),
@@ -144,7 +142,8 @@ where
       "[💭Server] start flushing {}:{} with len: {}",
       object_id,
       params.collab_type,
-      params.len
+      // params.len
+      0
     );
 
     tokio::spawn(async move {

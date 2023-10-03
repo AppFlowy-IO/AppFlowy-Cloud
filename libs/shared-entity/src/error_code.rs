@@ -31,8 +31,8 @@ pub enum ErrorCode {
   #[error("Missing Payload")]
   MissingPayload = 1004,
 
-  #[error("Storage error")]
-  StorageError = 1005,
+  #[error("Database error")]
+  DatabaseError = 1005,
 
   #[error("Open Error")]
   OpenError = 1006,

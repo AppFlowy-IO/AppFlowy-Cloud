@@ -1120,6 +1120,7 @@ dependencies = [
  "database-entity",
  "serde",
  "serde_json",
+ "shared_entity",
  "sqlx",
  "thiserror",
  "tokio",
@@ -1132,11 +1133,13 @@ dependencies = [
 name = "database-entity"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "chrono",
  "collab-define",
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror",
  "uuid",
  "validator",
 ]
@@ -2833,6 +2836,7 @@ dependencies = [
  "serde-aux",
  "serde_json",
  "serde_repr",
+ "shared_entity",
  "tempfile",
  "thiserror",
  "tokio",
@@ -3381,6 +3385,8 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "collab-define",
+ "database-entity",
  "gotrue-entity",
  "opener",
  "reqwest",

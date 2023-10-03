@@ -13,3 +13,5 @@ collab-define = { version = "0.1.0" }
 validator = { version = "0.16", features = ["validator_derive", "derive"] }
 chrono = {version="0.4",features = ["serde"]}
 uuid = { version = "1.4.1", features = ["serde", "v4"] }
+thiserror = "1.0.47"
+anyhow = "1.0.75"

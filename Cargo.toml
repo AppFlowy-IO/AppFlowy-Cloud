@@ -67,6 +67,7 @@ async-trait = "0.1.73"
 
 # collab
 collab = { version = "0.1.0" }
+collab-define = { version = "0.1.0" }
 
 #Local crate
 token = { path = "libs/token" }
@@ -82,7 +83,6 @@ collab-stream = { path = "libs/collab-stream" }
 
 [dev-dependencies]
 once_cell = "1.7.2"
-collab-define = { version = "0.1.0" }
 tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 dotenv = "0.15.0"

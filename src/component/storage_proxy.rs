@@ -1,10 +1,8 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use database::collab::{CollabPostgresDBStorageImpl, CollabStorage, StorageConfig};
-use database_entity::{
-  AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
-  QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
-};
+use database_entity::{AFCollabSnapshots, QueryObjectSnapshotParams, QuerySnapshotParams, RawData};
+use shared_entity::dto::{InsertCollabParams, InsertSnapshotParams, QueryCollabParams};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tokio::sync::RwLock;

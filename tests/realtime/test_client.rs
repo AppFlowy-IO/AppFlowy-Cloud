@@ -1,12 +1,12 @@
 use assert_json_diff::assert_json_eq;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
+use client_api::entity::dto::QueryCollabParams;
 use client_api::ws::{BusinessID, ConnectState, WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_define::CollabType;
-use database_entity::QueryCollabParams;
 use serde_json::Value;
 use sqlx::types::Uuid;
 use std::collections::HashMap;

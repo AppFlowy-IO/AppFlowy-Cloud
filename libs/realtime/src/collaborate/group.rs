@@ -108,7 +108,6 @@ where
     });
 
     let plugin = CollabStoragePlugin::new(
-      uid,
       workspace_id,
       collab_type,
       self.storage.clone(),

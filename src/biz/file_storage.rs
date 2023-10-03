@@ -3,7 +3,7 @@ use std::pin::Pin;
 use futures_util::Stream;
 
 use bytes::Bytes;
-use database::{file_storage, user::get_user_id};
+use database::{file_storage, user::uid_from_uuid};
 use s3::request::{ResponseData, ResponseDataStream};
 use shared_entity::{error::AppError, error_code::ErrorCode};
 use sqlx::types::uuid;
@@ -25,7 +25,7 @@ where
   // TODO: access control
 
   let file_type = mime.to_string();
-  let owner_uid = get_user_id(pg_pool, user_uuid).await?;
+  let owner_uid = uid_from_uuid(pg_pool, user_uuid).await?;
   let full_path = format!("{}/{}", owner_uid, file_path);
   let mut counting_reader = CountingReader::new(async_read);
   let status_code = s3_bucket

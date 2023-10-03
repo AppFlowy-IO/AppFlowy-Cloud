@@ -4,10 +4,9 @@ use std::time::Duration;
 
 use collab_define::CollabType;
 use serde_json::json;
+use shared_entity::dto::QueryCollabParams;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
-
-use database_entity::QueryCollabParams;
 
 #[tokio::test]
 async fn ws_reconnect_sync_test() {

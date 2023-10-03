@@ -131,6 +131,7 @@ pub async fn init_state(config: &Config) -> AppState {
   let s3_bucket = get_aws_s3_bucket(&config.s3).await;
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
+  let redis_client = get_redis_client(config.redis_uri.expose_secret()).await;
 
   AppState {
     pg_pool,
@@ -139,6 +140,7 @@ pub async fn init_state(config: &Config) -> AppState {
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     s3_bucket,
+    redis_client,
   }
 }
 
@@ -165,6 +167,14 @@ async fn setup_admin_account(
   .execute(pg_pool)
   .await
   .unwrap();
+}
+
+async fn get_redis_client(redis_uri: &str) -> redis::aio::ConnectionManager {
+  redis::Client::open(redis_uri)
+    .unwrap()
+    .get_tokio_connection_manager()
+    .await
+    .unwrap()
 }
 
 async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {
@@ -205,24 +215,6 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {
     .unwrap()
     .with_path_style()
 }
-
-// async fn get_aws_s3_client() -> aws_sdk_s3::Client {
-//   let credentials = Credentials::new("minioadmin", "minioadmin", None, None, "none");
-//   let config = aws_config::SdkConfig::builder()
-//     .set_region(Region {})
-//     .endpoint_url("http://localhost:9000")
-//     .credentials_provider(Some(credentials))
-//     .build();
-//
-//   let client = aws_sdk_s3::Client::new(&config);
-//   client
-//     .create_bucket()
-//     .bucket("hellothisisme")
-//     .send()
-//     .await
-//     .unwrap();
-//   client
-// }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
   PgPoolOptions::new()

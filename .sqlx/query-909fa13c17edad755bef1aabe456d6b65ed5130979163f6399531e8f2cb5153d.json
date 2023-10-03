@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE af_collab\n            SET blob = $1, len = $2, partition_key = $3, encrypt = $4, owner_uid = $5\n            WHERE oid = $6\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "909fa13c17edad755bef1aabe456d6b65ed5130979163f6399531e8f2cb5153d"
+}

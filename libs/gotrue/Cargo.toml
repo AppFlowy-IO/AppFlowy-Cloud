@@ -14,3 +14,4 @@ reqwest = { version = "0.11.20", default-features = false, features = ["json", "
 tokio = { version = "1.0.1", features = ["sync", "macros"] }
 infra = { path = "../infra" }
 gotrue-entity = { path = "../gotrue-entity" }
+tracing = "0.1"

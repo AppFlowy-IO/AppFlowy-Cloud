@@ -4,7 +4,7 @@ use sqlx::types::Uuid;
 
 use lazy_static::lazy_static;
 
-use crate::client_api_client;
+use crate::localhost_client;
 
 lazy_static! {
   pub static ref ADMIN_USER: User = {
@@ -28,7 +28,7 @@ pub fn generate_unique_email() -> String {
 
 pub async fn generate_unique_registered_user() -> User {
   // log in as admin
-  let admin_client = client_api_client();
+  let admin_client = localhost_client();
   admin_client
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await
@@ -50,7 +50,7 @@ pub async fn generate_unique_registered_user() -> User {
 
 pub async fn generate_unique_registered_user_client() -> (Client, User) {
   let registered_user = generate_unique_registered_user().await;
-  let registered_user_client = client_api_client();
+  let registered_user_client = localhost_client();
   registered_user_client
     .sign_in_password(&registered_user.email, &registered_user.password)
     .await

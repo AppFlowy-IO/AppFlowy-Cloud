@@ -17,7 +17,7 @@ use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-use crate::client_api_client;
+use crate::localhost_client;
 use crate::user::utils::{generate_unique_registered_user, User};
 
 pub(crate) struct TestClient {
@@ -47,7 +47,7 @@ impl TestClient {
 
   pub(crate) async fn new(device_id: String, registered_user: User) -> Self {
     setup_log();
-    let api_client = client_api_client();
+    let api_client = localhost_client();
     api_client
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await

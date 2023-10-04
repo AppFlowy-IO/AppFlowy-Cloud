@@ -23,22 +23,21 @@ use crate::collaborate::group::CollabGroupCache;
 use crate::error::RealtimeError;
 use tracing::{error, trace, warn};
 
-pub(crate) struct SubscribeGroupIfNeedAction<'a, U, S> {
+pub(crate) struct SubscribeGroupIfNeed<'a, U, S> {
   pub(crate) client_msg: &'a ClientMessage<U>,
   pub(crate) groups: &'a Arc<CollabGroupCache<S, U>>,
   pub(crate) edit_collab_by_user: &'a Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   pub(crate) client_stream_by_user: &'a Arc<RwLock<HashMap<U, CollabClientStream>>>,
 }
 
-impl<'a, U, S> SubscribeGroupIfNeedAction<'a, U, S>
+impl<'a, U, S> SubscribeGroupIfNeed<'a, U, S>
 where
   U: RealtimeUser,
   S: CollabStorage,
 {
   pub(crate) fn run(
     self,
-  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeedAction<'a, U, S>, SubscribeGroupCondition<U>>
-  {
+  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S>, SubscribeGroupCondition<U>> {
     let weak_client_stream = Arc::downgrade(self.client_stream_by_user);
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
     RetryIf::spawn(
@@ -49,7 +48,7 @@ where
   }
 }
 
-impl<'a, U, S> Action for SubscribeGroupIfNeedAction<'a, U, S>
+impl<'a, U, S> Action for SubscribeGroupIfNeed<'a, U, S>
 where
   U: RealtimeUser,
   S: CollabStorage,
@@ -87,7 +86,7 @@ where
         }
       }
 
-      // If the client's stream is already subscribed to the collab group, return.
+      // If the client's stream is already subscribe to the collab, return.
       if self
         .groups
         .contains_user(object_id, &self.client_msg.user)
@@ -136,11 +135,9 @@ where
                   });
 
                 let (sink, stream) = client_stream
-                  .client_channel::<CollabMessage, _, _>(
-                    object_id,
-                    move |object_id, msg| msg.object_id() == object_id,
-                    move |object_id, msg| msg.object_id == object_id,
-                  )
+                  .client_channel::<CollabMessage, _>(object_id, move |object_id, msg| {
+                    msg.object_id() == object_id
+                  })
                   .unwrap();
 
                 collab_group

@@ -2,8 +2,8 @@ use gotrue_entity::OAuthProvider;
 use shared_entity::error_code::ErrorCode;
 
 use crate::{
-  client::utils::{generate_unique_email, generate_unique_registered_user_client},
   client_api_client,
+  user::utils::{generate_unique_email, generate_unique_registered_user_client},
 };
 
 #[tokio::test]

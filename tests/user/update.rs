@@ -1,8 +1,8 @@
 use shared_entity::dto::UserUpdateParams;
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::{generate_unique_email, generate_unique_registered_user_client};
 use crate::client_api_client;
+use crate::user::utils::{generate_unique_email, generate_unique_registered_user_client};
 
 #[tokio::test]
 async fn update_but_not_logged_in() {

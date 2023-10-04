@@ -17,8 +17,8 @@ use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
-use crate::client::utils::{generate_unique_registered_user, User};
 use crate::client_api_client;
+use crate::user::utils::{generate_unique_registered_user, User};
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,

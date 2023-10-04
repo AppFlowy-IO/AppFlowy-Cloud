@@ -160,7 +160,7 @@ impl CollabStorage for CollabDatabaseStorageImpl {
         Ok(data)
       },
       Err(e) => match e {
-        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound.into()),
+        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound),
         _ => Err(e.into()),
       },
     }

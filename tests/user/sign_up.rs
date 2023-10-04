@@ -2,7 +2,7 @@ use gotrue_entity::OAuthProvider;
 use shared_entity::error_code::ErrorCode;
 
 use crate::{
-  localhost_client, test_appflowy_cloud_client,
+  localhost_client,
   user::utils::{generate_unique_email, generate_unique_registered_user_client},
 };
 

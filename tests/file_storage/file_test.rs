@@ -1,6 +1,6 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::generate_unique_registered_user_client;
+use crate::user::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn get_but_not_exists() {
@@ -18,9 +18,7 @@ async fn put_and_get() {
   let mime = mime::TEXT_PLAIN_UTF_8;
   let data = "hello world";
   let path = "mydata";
-  c1.put_file_storage_object(path, data.into(), &mime)
-    .await
-    .unwrap();
+  c1.put_file_storage_object(path, data, &mime).await.unwrap();
 
   let got_data = c1.get_file_storage_object(path).await.unwrap();
   assert_eq!(got_data, data.as_bytes());
@@ -33,10 +31,10 @@ async fn put_and_put_and_get() {
   let data1 = "my content 1";
   let data2 = "my content 2";
   let path = "mydata";
-  c1.put_file_storage_object(path, data1.into(), &mime)
+  c1.put_file_storage_object(path, data1, &mime)
     .await
     .unwrap();
-  c1.put_file_storage_object(path, data2.into(), &mime)
+  c1.put_file_storage_object(path, data2, &mime)
     .await
     .unwrap();
 
@@ -60,9 +58,7 @@ async fn put_delete_get() {
   let mime = mime::TEXT_PLAIN_UTF_8;
   let data = "my contents";
   let path = "mydata";
-  c1.put_file_storage_object(path, data.into(), &mime)
-    .await
-    .unwrap();
+  c1.put_file_storage_object(path, data, &mime).await.unwrap();
   c1.delete_file_storage_object(path).await.unwrap();
 
   let err = c1.get_file_storage_object(path).await.unwrap_err();

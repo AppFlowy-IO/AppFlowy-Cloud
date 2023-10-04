@@ -1,6 +1,6 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::generate_unique_registered_user_client;
+use crate::user::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn add_workspace_members_not_enough_permission() {

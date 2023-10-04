@@ -1,7 +1,7 @@
 use shared_entity::error_code::ErrorCode;
 
-use crate::client::utils::{generate_unique_email, generate_unique_registered_user, ADMIN_USER};
 use crate::client_api_client;
+use crate::user::utils::{generate_unique_email, generate_unique_registered_user, ADMIN_USER};
 
 #[tokio::test]
 async fn sign_in_unknown_user() {

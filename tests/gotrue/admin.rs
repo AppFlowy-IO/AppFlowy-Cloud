@@ -6,11 +6,9 @@ use gotrue::{
 };
 
 use crate::{
-  client::{
-    constants::LOCALHOST_GOTRUE,
-    utils::{generate_unique_email, ADMIN_USER},
-  },
   client_api_client,
+  user::utils::{generate_unique_email, ADMIN_USER},
+  LOCALHOST_GOTRUE,
 };
 
 #[tokio::test]

@@ -4,7 +4,7 @@ use gotrue::{
   params::AdminUserParams,
 };
 
-use crate::client::utils::{generate_unique_email, ADMIN_USER};
+use crate::user::utils::{generate_unique_email, ADMIN_USER};
 
 #[tokio::test]
 async fn gotrue_settings() {

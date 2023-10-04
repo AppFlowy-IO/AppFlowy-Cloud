@@ -513,10 +513,10 @@ impl Client {
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
 
-  pub async fn put_file_storage_object(
+  pub async fn put_file_storage_object<T: Into<Bytes>>(
     &self,
     path: &str,
-    data: Bytes,
+    data: T,
     mime: &Mime,
   ) -> Result<(), AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, path);
@@ -524,7 +524,7 @@ impl Client {
       .http_client_with_auth(Method::PUT, &url)
       .await?
       .header(header::CONTENT_TYPE, mime.to_string())
-      .body(data)
+      .body(data.into())
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()

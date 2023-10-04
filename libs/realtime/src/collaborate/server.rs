@@ -17,7 +17,7 @@ use tracing::{info, trace};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
-use crate::collaborate::retry::SubscribeGroupIfNeedAction;
+use crate::collaborate::retry::SubscribeGroupIfNeed;
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 
@@ -149,7 +149,7 @@ where
     let edit_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
-      SubscribeGroupIfNeedAction {
+      SubscribeGroupIfNeed {
         client_msg: &client_msg,
         groups: &groups,
         edit_collab_by_user: &edit_collab_by_user,
@@ -158,14 +158,14 @@ where
       .run()
       .await?;
 
-      forward_message_to_collab_group(&client_msg, &client_stream_by_user).await;
+      broadcast_message(&client_msg, &client_stream_by_user).await;
       Ok(())
     })
   }
 }
 
 #[inline]
-async fn forward_message_to_collab_group<U>(
+async fn broadcast_message<U>(
   client_msg: &ClientMessage<U>,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
 ) where
@@ -247,11 +247,10 @@ impl CollabClientStream {
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.
   #[allow(clippy::type_complexity)]
-  pub fn client_channel<T, F1, F2>(
+  pub fn client_channel<T, F1>(
     &mut self,
     object_id: &str,
     sink_filter: F1,
-    stream_filter: F2,
   ) -> Option<(
     UnboundedSenderSink<T>,
     ReceiverStream<Result<T, StreamError>>,
@@ -260,7 +259,6 @@ impl CollabClientStream {
     T:
       TryFrom<RealtimeMessage, Error = StreamError> + Into<RealtimeMessage> + Send + Sync + 'static,
     F1: Fn(&str, &T) -> bool + Send + Sync + 'static,
-    F2: Fn(&str, &RealtimeMessage) -> bool + Send + Sync + 'static,
   {
     let client_ws_sink = self.ws_sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
@@ -277,13 +275,13 @@ impl CollabClientStream {
     });
     let client_forward_sink = UnboundedSenderSink::<T>::new(tx);
 
-    // forward the message to the stream that can be subscribed by the broadcast group, which will
+    // forward the message to the stream that was subscribed by the broadcast group, which will
     // send the messages to all connected clients using the client_forward_sink
     let cloned_object_id = object_id.to_string();
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(Ok(msg))) = stream_rx.next().await {
-        if stream_filter(&cloned_object_id, &msg) {
+        if cloned_object_id == msg.object_id {
           let _ = tx.send(T::try_from(msg)).await;
         }
       }

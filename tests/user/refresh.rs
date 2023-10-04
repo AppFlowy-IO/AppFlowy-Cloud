@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use crate::client::utils::generate_unique_registered_user_client;
+use crate::user::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn refresh_success() {

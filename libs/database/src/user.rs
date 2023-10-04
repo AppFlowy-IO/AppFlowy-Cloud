@@ -47,7 +47,7 @@ pub async fn create_user_if_not_exists(
   Ok(affected_rows > 0)
 }
 
-pub async fn get_user_id(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64, sqlx::Error> {
+pub async fn uid_from_uuid(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64, sqlx::Error> {
   let uid = sqlx::query!(
     r#"
       SELECT uid FROM af_user WHERE uuid = $1

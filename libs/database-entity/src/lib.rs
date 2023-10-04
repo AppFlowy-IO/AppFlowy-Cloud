@@ -6,15 +6,14 @@ use std::ops::Deref;
 use validator::{Validate, ValidationError};
 
 pub type RawData = Vec<u8>;
+pub mod error;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabParams {
-  pub uid: i64,
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
   pub raw_data: Vec<u8>,
-  pub len: i32,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   pub collab_type: CollabType,
@@ -22,20 +21,16 @@ pub struct InsertCollabParams {
 
 impl InsertCollabParams {
   pub fn new<T: ToString>(
-    uid: i64,
     object_id: T,
     collab_type: CollabType,
     raw_data: Vec<u8>,
     workspace_id: String,
   ) -> Self {
-    let len = raw_data.len() as i32;
     let object_id = object_id.to_string();
     Self {
-      uid,
       object_id,
       collab_type,
       raw_data,
-      len,
       workspace_id,
     }
   }
@@ -63,21 +58,17 @@ fn validate_not_empty_payload(payload: &[u8]) -> Result<(), ValidationError> {
 
 impl InsertCollabParams {
   pub fn from_raw_data(
-    uid: i64,
     object_id: &str,
     collab_type: CollabType,
     raw_data: Vec<u8>,
     workspace_id: &str,
   ) -> Self {
-    let len = raw_data.len() as i32;
     let object_id = object_id.to_string();
     let workspace_id = workspace_id.to_string();
     Self {
-      uid,
       object_id,
       collab_type,
       raw_data,
-      len,
       workspace_id,
     }
   }

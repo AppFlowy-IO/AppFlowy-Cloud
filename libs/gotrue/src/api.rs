@@ -25,6 +25,7 @@ impl Client {
     format!("{}/authorize?provider={}", self.base_url, provider.as_str())
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn health(&self) -> Result<(), GoTrueError> {
     let url: String = format!("{}/health", self.base_url);
     let resp = self
@@ -36,6 +37,7 @@ impl Client {
     Ok(check_response(resp).await?)
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn settings(&self) -> Result<GoTrueSettings, GoTrueError> {
     let url: String = format!("{}/settings", self.base_url);
     let resp = self.client.get(&url).send().await?;
@@ -45,6 +47,7 @@ impl Client {
     Ok(settings)
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<SignUpResponse, GoTrueError> {
     let payload = serde_json::json!({
         "email": email,
@@ -55,6 +58,7 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn token(&self, grant: &Grant) -> Result<AccessTokenResponse, GoTrueError> {
     let url = format!("{}/token?grant_type={}", self.base_url, grant.type_as_str());
     let payload = grant.json_value();
@@ -69,6 +73,7 @@ impl Client {
     }
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn logout(&self, access_token: &str) -> Result<(), GoTrueError> {
     let resp = self
       .client
@@ -79,10 +84,12 @@ impl Client {
     Ok(check_response(resp).await?)
   }
 
+  #[tracing::instrument(skip_all, err)]
   pub async fn user_info(&self, access_token: &str) -> Result<User, GoTrueError> {
+    let url = format!("{}/user", self.base_url);
     let resp = self
       .client
-      .get(format!("{}/user", self.base_url))
+      .get(&url)
       .header("Authorization", format!("Bearer {}", access_token))
       .send()
       .await?;

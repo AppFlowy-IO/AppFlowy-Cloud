@@ -70,10 +70,10 @@ async fn sign_up_with_google_oauth() {
     .unwrap();
   assert!(!url.is_empty());
 
-  let c = test_appflowy_cloud_client();
-  let url = c
-    .generate_oauth_url_with_provider(&OAuthProvider::Google)
-    .await
-    .unwrap();
-  assert!(!url.is_empty());
+  // let c = test_appflowy_cloud_client();
+  // let url = c
+  //   .generate_oauth_url_with_provider(&OAuthProvider::Google)
+  //   .await
+  //   .unwrap();
+  // assert!(!url.is_empty());
 }

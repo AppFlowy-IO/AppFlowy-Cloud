@@ -1,4 +1,5 @@
 use crate::params::{AdminUserParams, GenerateLinkParams, GenerateLinkResponse};
+use anyhow::Context;
 
 use super::grant::Grant;
 use gotrue_entity::{
@@ -26,14 +27,21 @@ impl Client {
 
   pub async fn health(&self) -> Result<(), GoTrueError> {
     let url: String = format!("{}/health", self.base_url);
-    let resp = self.client.get(url).send().await?;
+    let resp = self
+      .client
+      .get(&url)
+      .send()
+      .await
+      .context(format!("calling {} failed", url))?;
     Ok(check_response(resp).await?)
   }
 
   pub async fn settings(&self) -> Result<GoTrueSettings, GoTrueError> {
     let url: String = format!("{}/settings", self.base_url);
-    let resp = self.client.get(url).send().await?;
-    let settings: GoTrueSettings = from_response(resp).await?;
+    let resp = self.client.get(&url).send().await?;
+    let settings: GoTrueSettings = from_response(resp)
+      .await
+      .context(format!("calling {} failed", url))?;
     Ok(settings)
   }
 

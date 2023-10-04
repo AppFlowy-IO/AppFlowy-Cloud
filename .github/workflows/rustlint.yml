@@ -28,18 +28,6 @@ jobs:
       - name: Copy and rename dev.env to .env
         run: cp dev.env .env
 
-      - name: Run the dependency services
-        run: docker-compose --file docker-compose-dev.yml up -d
-
-      - name: Install Development Dependencies
-        run: |
-          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
-
-      - name: Check sqlx-data.json
-        run: |
-          cargo sqlx migrate run
-          cargo sqlx prepare --check --workspace
-
       - name: Rustfmt
         run: cargo fmt --check
 

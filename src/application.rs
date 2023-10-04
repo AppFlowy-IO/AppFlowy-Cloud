@@ -122,7 +122,7 @@ pub async fn init_state(config: &Config) -> AppState {
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await;
-  let collab_storage = init_storage(&config, pg_pool.clone()).await;
+  let collab_storage = init_storage(config, pg_pool.clone()).await;
 
   AppState {
     pg_pool,

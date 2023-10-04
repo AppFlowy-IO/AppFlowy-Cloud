@@ -1,8 +1,8 @@
-use crate::{client_api_client, user::utils::generate_unique_registered_user_client};
+use crate::{localhost_client, user::utils::generate_unique_registered_user_client};
 
 #[tokio::test]
 async fn sign_out_but_not_sign_in() {
-  let c = client_api_client();
+  let c = localhost_client();
   let res = c.sign_out().await;
   assert!(res.is_err());
 }

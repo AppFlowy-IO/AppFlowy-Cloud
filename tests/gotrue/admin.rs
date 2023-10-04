@@ -6,7 +6,7 @@ use gotrue::{
 };
 
 use crate::{
-  client_api_client,
+  localhost_client,
   user::utils::{generate_unique_email, ADMIN_USER},
   LOCALHOST_GOTRUE,
 };
@@ -86,7 +86,7 @@ async fn admin_generate_link_and_user_sign_in() {
   let resp_text = resp.text().await.unwrap();
   let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
 
-  let client = client_api_client();
+  let client = localhost_client();
   let is_new = client
     .sign_in_with_url(&appflowy_sign_in_url)
     .await

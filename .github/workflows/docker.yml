@@ -38,6 +38,15 @@ jobs:
         run: |
           docker-compose up -d
 
+      - name: Wait for PostgreSQL to become ready
+        run: |
+         for i in {1..10}; do
+            pg_isready -h localhost -p 5432 && echo Success && exit 0
+            echo -n .
+            sleep 1
+          done
+          echo Failed waiting for Postgres && exit 1
+
       - name: Run tests
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked

@@ -1,4 +1,5 @@
 use crate::component::auth::LoggedUser;
+use crate::component::storage_proxy::CollabStorageProxy;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
 
@@ -17,6 +18,8 @@ pub struct AppState {
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
   pub s3_bucket: s3::Bucket,
+  pub redis_client: redis::aio::ConnectionManager,
+  pub collab_storage: Storage<CollabStorageProxy>,
 }
 
 impl AppState {

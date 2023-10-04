@@ -4,6 +4,7 @@ use bytes::Bytes;
 use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
+use database_entity::error::DatabaseError;
 
 use collab::sync_protocol::awareness::Awareness;
 use collab_define::CollabType;
@@ -11,7 +12,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Weak;
 
 use database::collab::CollabStorage;
-use database::error::StorageError;
 use database_entity::{InsertCollabParams, QueryCollabParams, RawData};
 
 use crate::collaborate::group::CollabGroup;
@@ -84,19 +84,18 @@ where
       },
       Err(err) => {
         match &err {
-          StorageError::RecordNotFound => {
+          DatabaseError::RecordNotFound => {
             let raw_data = {
               let txn = doc.transact();
               txn.encode_state_as_update_v1(&StateVector::default())
             };
             let params = InsertCollabParams::from_raw_data(
-              self.uid,
               object_id,
               self.collab_type.clone(),
               raw_data,
               &self.workspace_id,
             );
-            match self.storage.insert_collab(params).await {
+            match self.storage.insert_collab(self.uid, params).await {
               Ok(_) => {},
               Err(err) => tracing::error!("{:?}", err),
             }
@@ -133,7 +132,6 @@ where
   fn flush(&self, object_id: &str, update: &Bytes) {
     let storage = self.storage.clone();
     let params = InsertCollabParams::from_raw_data(
-      self.uid,
       object_id,
       self.collab_type.clone(),
       update.to_vec(),
@@ -144,12 +142,13 @@ where
       "[💭Server] start flushing {}:{} with len: {}",
       object_id,
       params.collab_type,
-      params.len
+      params.raw_data.len()
     );
 
+    let uid = self.uid;
     tokio::spawn(async move {
       let object_id = params.object_id.clone();
-      match storage.insert_collab(params).await {
+      match storage.insert_collab(uid, params).await {
         Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
         Err(err) => tracing::error!("save collab failed: {:?}", err),
       }

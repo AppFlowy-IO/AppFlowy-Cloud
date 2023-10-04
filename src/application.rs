@@ -22,7 +22,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::component::storage_proxy::CollabStorageProxy;
-use database::collab::{CollabPostgresDBStorageImpl, CollabStorage};
+use database::collab::CollabPostgresDBStorageImpl;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 use tracing_actix_web::TracingLogger;
@@ -33,18 +33,11 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build<S>(
-    config: Config,
-    state: AppState,
-    storage: Storage<S>,
-  ) -> Result<Self, anyhow::Error>
-  where
-    S: CollabStorage + Unpin,
-  {
+  pub async fn build(config: Config, state: AppState) -> Result<Self, anyhow::Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config, storage).await?;
+    let server = run(listener, state, config).await?;
 
     Ok(Self { port, server })
   }
@@ -58,15 +51,11 @@ impl Application {
   }
 }
 
-pub async fn run<S>(
+pub async fn run(
   listener: TcpListener,
   state: AppState,
   config: Config,
-  storage: Storage<S>,
-) -> Result<Server, anyhow::Error>
-where
-  S: CollabStorage + Unpin,
-{
+) -> Result<Server, anyhow::Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
     .map_err(|e| {
@@ -82,6 +71,7 @@ where
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
+  let storage = state.collab_storage.clone();
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>>::new(storage.collab_storage.clone())
     .unwrap()
     .start();
@@ -131,6 +121,8 @@ pub async fn init_state(config: &Config) -> AppState {
   let s3_bucket = get_aws_s3_bucket(&config.s3).await;
   let gotrue_client = get_gotrue_client(&config.gotrue).await;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
+  let redis_client = get_redis_client(config.redis_uri.expose_secret()).await;
+  let collab_storage = init_storage(&config, pg_pool.clone()).await;
 
   AppState {
     pg_pool,
@@ -139,6 +131,8 @@ pub async fn init_state(config: &Config) -> AppState {
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     s3_bucket,
+    redis_client,
+    collab_storage,
   }
 }
 
@@ -165,6 +159,14 @@ async fn setup_admin_account(
   .execute(pg_pool)
   .await
   .unwrap();
+}
+
+async fn get_redis_client(redis_uri: &str) -> redis::aio::ConnectionManager {
+  redis::Client::open(redis_uri)
+    .unwrap()
+    .get_tokio_connection_manager()
+    .await
+    .unwrap()
 }
 
 async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {

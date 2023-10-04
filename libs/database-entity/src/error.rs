@@ -1,7 +1,7 @@
 use sqlx::types::uuid;
 
 #[derive(Debug, thiserror::Error)]
-pub enum StorageError {
+pub enum DatabaseError {
   #[error("Record not found")]
   RecordNotFound,
 

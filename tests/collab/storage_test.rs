@@ -1,5 +1,5 @@
 use crate::{
-  client::utils::generate_unique_registered_user_client, collab::workspace_id_from_client,
+  collab::workspace_id_from_client, user::utils::generate_unique_registered_user_client,
 };
 
 use collab_define::CollabType;

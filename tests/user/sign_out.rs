@@ -1,4 +1,4 @@
-use crate::{client::utils::generate_unique_registered_user_client, client_api_client};
+use crate::{client_api_client, user::utils::generate_unique_registered_user_client};
 
 #[tokio::test]
 async fn sign_out_but_not_sign_in() {

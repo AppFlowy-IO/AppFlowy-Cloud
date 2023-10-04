@@ -14,7 +14,6 @@ pub mod error {
 }
 
 pub mod entity {
-  pub use database_entity::*;
   pub use gotrue_entity::*;
   pub use shared_entity::*;
 }

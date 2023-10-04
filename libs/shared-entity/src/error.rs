@@ -1,3 +1,4 @@
+use database_entity::error::DatabaseError;
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::time::SystemTimeError;
@@ -48,6 +49,12 @@ impl From<anyhow::Error> for AppError {
       None => AppError::new(ErrorCode::Unhandled, err.to_string()),
       Some(err) => err.clone(),
     }
+  }
+}
+
+impl From<DatabaseError> for AppError {
+  fn from(value: DatabaseError) -> Self {
+    AppError::new(ErrorCode::DatabaseError, value.to_string())
   }
 }
 

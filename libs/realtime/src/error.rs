@@ -1,4 +1,5 @@
 use collab::error::CollabError;
+use database_entity::error::DatabaseError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RealtimeError {
@@ -27,7 +28,7 @@ pub enum RealtimeError {
   CollabError(#[from] CollabError),
 
   #[error(transparent)]
-  StorageError(#[from] database::error::StorageError),
+  StorageError(#[from] DatabaseError),
 
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),

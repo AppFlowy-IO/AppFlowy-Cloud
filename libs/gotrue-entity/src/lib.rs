@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Formatter;
 use std::{collections::BTreeMap, fmt::Display};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,6 +98,15 @@ pub struct GoTrueError {
   pub code: i64,
   pub msg: String,
   pub error_id: Option<String>,
+}
+
+impl Display for GoTrueError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "gotrue error: {} code: {}, error_id: {:?}",
+      self.msg, self.code, self.error_id
+    ))
+  }
 }
 
 impl From<anyhow::Error> for GoTrueError {

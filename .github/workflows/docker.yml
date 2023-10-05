@@ -34,7 +34,7 @@ jobs:
           # delete all containers and their volumes before starting
           docker rm -f $(docker ps -a -q) && docker volume rm $(docker volume ls -q) || true
           # always rebuild
-          docker-compose up -d --build
+          # docker-compose up -d --build
           # clean up dangling images
           docker system prune
 

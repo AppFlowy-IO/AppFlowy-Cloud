@@ -3,7 +3,7 @@ use database::workspace::{
   select_user_is_workspace_owner, select_workspace_members,
 };
 use database_entity::{AFRole, AFWorkspaceMember, AFWorkspaces};
-use shared_entity::{error::AppError, error_code::ErrorCode};
+use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::uuid, PgPool};
 
 pub async fn get_workspaces(

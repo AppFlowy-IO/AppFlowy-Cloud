@@ -27,7 +27,7 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use database_entity::{AFUserProfileView, AFWorkspaceMember, InsertCollabParams};
 use database_entity::{AFWorkspaces, QueryCollabParams};
 use database_entity::{DeleteCollabParams, RawData};
-use shared_entity::error::AppError;
+use shared_entity::app_error::AppError;
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
 

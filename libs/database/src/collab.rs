@@ -3,7 +3,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab_define::CollabType;
-use database_entity::error::DatabaseError;
+use database_entity::database_error::DatabaseError;
 use database_entity::{
   AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,

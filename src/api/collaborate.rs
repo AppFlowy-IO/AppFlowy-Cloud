@@ -6,13 +6,13 @@ use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use database::collab::CollabStorage;
-use database_entity::error::DatabaseError;
+use database_entity::database_error::DatabaseError;
 use database_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
   QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
+use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
-use shared_entity::error::AppError;
 use shared_entity::error_code::ErrorCode;
 use tracing::{debug, instrument};
 

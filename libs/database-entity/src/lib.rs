@@ -6,7 +6,7 @@ use std::ops::Deref;
 use validator::{Validate, ValidationError};
 
 pub type RawData = Vec<u8>;
-pub mod error;
+pub mod database_error;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabParams {

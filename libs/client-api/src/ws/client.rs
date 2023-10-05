@@ -197,11 +197,11 @@ impl WSClient {
     Ok(channel)
   }
 
-  pub async fn subscribe_connect_state(&self) -> WSConnectStateReceiver {
+  pub fn subscribe_connect_state(&self) -> WSConnectStateReceiver {
     self.state_notify.lock().subscribe()
   }
 
-  pub async fn is_connected(&self) -> bool {
+  pub fn is_connected(&self) -> bool {
     self.state_notify.lock().state.is_connected()
   }
 

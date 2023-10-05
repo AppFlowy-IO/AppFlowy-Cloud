@@ -10,7 +10,7 @@ DB_PORT="${POSTGRES_PORT:=5433}"
 DB_HOST="${POSTGRES_HOST:=localhost}"
 
 # Stop and remove any existing containers to avoid conflicts
-docker-compose --file ./docker-compose-dev.yml down
+docker compose --file ./docker-compose-dev.yml down
 
 # Start the Docker Compose setup
 export GOTRUE_MAILER_AUTOCONFIRM=true
@@ -18,7 +18,7 @@ export GOTRUE_MAILER_AUTOCONFIRM=true
 # Enable Google OAuth when running locally
 export GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 
-docker-compose --file ./docker-compose-dev.yml up -d --build
+docker compose --file ./docker-compose-dev.yml up -d --build
 
 # Keep pinging Postgres until it's ready to accept commands
 ATTEMPTS=0
@@ -58,4 +58,4 @@ RUST_LOG=trace cargo run &
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false
-docker-compose --file ./docker-compose-dev.yml up -d
+docker compose --file ./docker-compose-dev.yml up -d

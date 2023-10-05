@@ -62,7 +62,7 @@ You'll need to install:
 
 ### Run the dependency servers
 ```bash
-docker-compose --file docker-compose-dev.yml up -d
+docker compose --file docker-compose-dev.yml up -d
 ```
 
 ### Install sqlx-cli

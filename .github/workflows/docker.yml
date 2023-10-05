@@ -34,14 +34,13 @@ jobs:
           # delete all containers and their volumes before starting
           docker rm -f $(docker ps -a -q) && docker volume rm $(docker volume ls -q) || true
           # always rebuild
-          # docker-compose up -d --build
+          docker-compose up -d --build
           # clean up dangling images
           docker system prune
 
       - name: Run tests
         run: |
           export PATH=$HOME/.cargo/bin:$PATH
-          echo $PATH && false
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           cargo sqlx prepare --check --workspace
           RUST_LOG=debug cargo test

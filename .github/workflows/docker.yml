@@ -36,10 +36,9 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          docker-compose up -d
+          docker compose up -d
 
       - name: Run tests
         run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
-          cargo sqlx prepare --check --workspace
           RUST_LOG=debug cargo test

@@ -10,3 +10,5 @@ RUN rm -rf pgjwt && \
     cd pgjwt && \
     make && \
     make install
+
+ENV LANG en_US.utf8

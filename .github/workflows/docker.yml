@@ -31,6 +31,7 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
+          whoami
           # delete all containers and their volumes before starting
           docker rm -f $(docker ps -a -q) && docker volume rm $(docker volume ls -q) || true
           # always rebuild

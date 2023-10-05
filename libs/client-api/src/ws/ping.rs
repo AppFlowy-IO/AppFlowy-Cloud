@@ -11,7 +11,7 @@ pub(crate) struct ServerFixIntervalPing {
   #[allow(dead_code)]
   stop_tx: tokio::sync::mpsc::Sender<()>,
   stop_rx: Option<tokio::sync::mpsc::Receiver<()>>,
-  state: Arc<Mutex<ConnectStateNotify>>,
+  state: Arc<parking_lot::Mutex<ConnectStateNotify>>,
   ping_count: Arc<Mutex<u32>>,
   maximum_ping_count: u32,
 }
@@ -19,7 +19,7 @@ pub(crate) struct ServerFixIntervalPing {
 impl ServerFixIntervalPing {
   pub(crate) fn new(
     duration: Duration,
-    state: Arc<Mutex<ConnectStateNotify>>,
+    state: Arc<parking_lot::Mutex<ConnectStateNotify>>,
     sender: Sender<Message>,
     maximum_ping_count: u32,
   ) -> Self {
@@ -58,7 +58,7 @@ impl ServerFixIntervalPing {
               let mut lock = ping_count.lock().await;
               if *lock >= reconnect_per_ping {
                 if let Some(state) =weak_state.upgrade() {
-                  state.lock().await.set_state(ConnectState::PingTimeout);
+                  state.lock().set_state(ConnectState::PingTimeout);
                 }
               } else {
                 *lock +=1;
@@ -73,7 +73,7 @@ impl ServerFixIntervalPing {
                 *lock = 0;
 
                 if let Some(state) =weak_state.upgrade() {
-                  state.lock().await.set_state(ConnectState::Connected);
+                  state.lock().set_state(ConnectState::Connected);
                 }
               }
             }

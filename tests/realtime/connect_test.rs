@@ -10,7 +10,7 @@ async fn realtime_connect_test() {
     ping_per_secs: 6,
     retry_connect_per_pings: 5,
   });
-  let mut state = ws_client.subscribe_connect_state().await;
+  let mut state = ws_client.subscribe_connect_state();
 
   loop {
     tokio::select! {
@@ -38,7 +38,7 @@ async fn realtime_disconnect_test() {
     .await
     .unwrap();
 
-  let mut state = ws_client.subscribe_connect_state().await;
+  let mut state = ws_client.subscribe_connect_state();
   loop {
     tokio::select! {
         _ = ws_client.disconnect() => {},

@@ -5,7 +5,7 @@ use database::{
 };
 use database_entity::AFUserProfileView;
 use gotrue::api::Client;
-use shared_entity::error::AppError;
+use shared_entity::app_error::AppError;
 
 use sqlx::{types::uuid, PgPool};
 

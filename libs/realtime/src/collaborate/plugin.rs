@@ -4,7 +4,7 @@ use bytes::Bytes;
 use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
-use database_entity::error::DatabaseError;
+use database_entity::database_error::DatabaseError;
 
 use collab::sync_protocol::awareness::Awareness;
 use collab_define::CollabType;

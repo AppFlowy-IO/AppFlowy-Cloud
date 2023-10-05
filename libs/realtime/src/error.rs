@@ -1,5 +1,5 @@
 use collab::error::CollabError;
-use database_entity::error::DatabaseError;
+use database_entity::database_error::DatabaseError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RealtimeError {

@@ -1,9 +1,9 @@
 use crate::biz;
 use crate::state::AppState;
 use database_entity::{AFWorkspaceMember, AFWorkspaces};
+use shared_entity::app_error::AppError;
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::WorkspaceMembersParams;
-use shared_entity::error::AppError;
 use sqlx::types::uuid;
 
 use crate::component::auth::jwt::UserUuid;

@@ -6,7 +6,7 @@ use database_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryObjectSnapshotParams,
   QuerySnapshotParams,
 };
-use shared_entity::{error::AppError, error_code::ErrorCode};
+use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::Uuid, PgPool};
 use validator::Validate;
 

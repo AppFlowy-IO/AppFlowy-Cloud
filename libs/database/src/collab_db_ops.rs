@@ -3,7 +3,7 @@ use std::{ops::DerefMut, str::FromStr};
 
 use anyhow::Context;
 use database_entity::{
-  error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams,
+  database_error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams,
 };
 use sqlx::{PgPool, Transaction};
 use tracing::trace;

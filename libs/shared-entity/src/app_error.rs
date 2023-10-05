@@ -1,4 +1,4 @@
-use database_entity::error::DatabaseError;
+use database_entity::database_error::DatabaseError;
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::time::SystemTimeError;

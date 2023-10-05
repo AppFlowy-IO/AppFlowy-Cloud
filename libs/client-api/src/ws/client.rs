@@ -1,6 +1,7 @@
 use futures_util::{SinkExt, StreamExt};
 use std::borrow::Cow;
 
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
@@ -12,7 +13,7 @@ use crate::ws::state::{ConnectState, ConnectStateNotify};
 use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-use tokio::sync::{oneshot, Mutex, RwLock};
+use tokio::sync::{oneshot, Mutex};
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -43,10 +44,11 @@ impl Default for WSClientConfig {
 
 type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel>>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
+
 pub struct WSClient {
   addr: Arc<parking_lot::Mutex<Option<String>>>,
   config: WSClientConfig,
-  state_notify: Arc<Mutex<ConnectStateNotify>>,
+  state_notify: Arc<parking_lot::Mutex<ConnectStateNotify>>,
   /// Sender used to send messages to the websocket.
   sender: Sender<Message>,
   channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
@@ -57,13 +59,13 @@ pub struct WSClient {
 impl WSClient {
   pub fn new(config: WSClientConfig) -> Self {
     let (sender, _) = channel(config.buffer_capacity);
-    let state = Arc::new(Mutex::new(ConnectStateNotify::new()));
+    let state_notify = Arc::new(parking_lot::Mutex::new(ConnectStateNotify::new()));
     let channels = Arc::new(RwLock::new(HashMap::new()));
     let ping = Arc::new(Mutex::new(None));
     WSClient {
       addr: Arc::new(parking_lot::Mutex::new(None)),
       config,
-      state_notify: state,
+      state_notify,
       sender,
       channels,
       ping,
@@ -118,7 +120,6 @@ impl WSClient {
               if let Some(channels) = weak_channels.upgrade() {
                 if let Some(channel) = channels
                   .read()
-                  .await
                   .get(&msg.business_id)
                   .and_then(|map| map.get(&msg.object_id))
                 {
@@ -181,7 +182,7 @@ impl WSClient {
 
   /// Return a [WebSocketChannel] that can be used to send messages to the websocket. Caller should
   /// keep the channel alive as long as it wants to receive messages from the websocket.
-  pub async fn subscribe(
+  pub fn subscribe(
     &self,
     business_id: BusinessID,
     object_id: String,
@@ -190,19 +191,18 @@ impl WSClient {
     self
       .channels
       .write()
-      .await
       .entry(business_id)
       .or_insert_with(HashMap::new)
       .insert(object_id, Arc::downgrade(&channel));
     Ok(channel)
   }
 
-  pub async fn subscribe_connect_state(&self) -> WSConnectStateReceiver {
-    self.state_notify.lock().await.subscribe()
+  pub fn subscribe_connect_state(&self) -> WSConnectStateReceiver {
+    self.state_notify.lock().subscribe()
   }
 
-  pub async fn is_connected(&self) -> bool {
-    self.state_notify.lock().await.state.is_connected()
+  pub fn is_connected(&self) -> bool {
+    self.state_notify.lock().state.is_connected()
   }
 
   pub async fn disconnect(&self) {
@@ -222,7 +222,7 @@ impl WSClient {
 
   async fn set_state(&self, state: ConnectState) {
     trace!("websocket state: {:?}", state);
-    self.state_notify.lock().await.set_state(state);
+    self.state_notify.lock().set_state(state);
   }
 }
 

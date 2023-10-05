@@ -5,7 +5,7 @@ use futures_util::Stream;
 use bytes::Bytes;
 use database::{file_storage, user::uid_from_uuid};
 use s3::request::{ResponseData, ResponseDataStream};
-use shared_entity::{error::AppError, error_code::ErrorCode};
+use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::types::uuid;
 use tokio_stream::StreamExt;
 

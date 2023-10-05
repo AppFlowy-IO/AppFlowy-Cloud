@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::app_error::AppError;
 
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;

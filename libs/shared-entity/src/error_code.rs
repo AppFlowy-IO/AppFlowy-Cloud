@@ -1,6 +1,6 @@
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use crate::error::AppError;
+use crate::app_error::AppError;
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Error, Default, PartialEq, Eq, Serialize_repr, Deserialize_repr)]

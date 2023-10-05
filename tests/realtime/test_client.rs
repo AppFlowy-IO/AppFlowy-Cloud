@@ -90,7 +90,7 @@ impl TestClient {
 
   #[allow(dead_code)]
   pub(crate) async fn wait_ws_connected(&self) {
-    let mut connect_state = self.ws_client.subscribe_connect_state().await;
+    let mut connect_state = self.ws_client.subscribe_connect_state();
 
     const TIMEOUT_DURATION: Duration = Duration::from_secs(10);
     while let Ok(Ok(state)) = timeout(TIMEOUT_DURATION, connect_state.recv()).await {
@@ -124,13 +124,12 @@ impl TestClient {
     let handler = self
       .ws_client
       .subscribe(BusinessID::CollabId, object_id.to_string())
-      .await
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
-    let ws_connect_state = self.ws_client.subscribe_connect_state().await;
+    let ws_connect_state = self.ws_client.subscribe_connect_state();
     let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
     let sync_plugin = SyncPlugin::new(
       origin.clone(),

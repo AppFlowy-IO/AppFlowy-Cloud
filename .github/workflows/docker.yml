@@ -34,12 +34,9 @@ jobs:
           sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
           sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
 
-      - name: Run Docker-Compose
+      - name: Run Docker-Compose and Run tests
         run: |
           docker-compose up -d
-
-      - name: Run tests
-        run: |
           cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           cargo sqlx prepare --check --workspace
           RUST_LOG=debug cargo test

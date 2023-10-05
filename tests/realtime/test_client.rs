@@ -124,7 +124,6 @@ impl TestClient {
     let handler = self
       .ws_client
       .subscribe(BusinessID::CollabId, object_id.to_string())
-      .await
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone()));

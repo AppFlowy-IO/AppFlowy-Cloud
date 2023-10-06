@@ -43,5 +43,5 @@ fn name_from_user_metadata(value: &serde_json::Value) -> String {
     .or(value.get("nickname"))
     .and_then(serde_json::Value::as_str)
     .map(str::to_string)
-    .unwrap_or(String::new())
+    .unwrap_or_default()
 }

@@ -12,6 +12,9 @@ jobs:
       - name: Set up env vars
         run: |
           cp dev.env .env
+          
+          # log level
+          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
 
           # jwt secret
           sed -i 's|GOTRUE_JWT_SECRET=.*|GOTRUE_JWT_SECRET=${{ secrets.GOTRUE_JWT_SECRET_TEST }}|' .env

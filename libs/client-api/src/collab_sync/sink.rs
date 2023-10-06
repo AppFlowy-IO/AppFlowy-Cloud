@@ -163,7 +163,12 @@ where
 
         let is_done = pending_msg.set_state(self.uid, MessageState::Done);
         if is_done {
-          trace!("[Client {}]: Did send: {}:{}", self.uid, object_id, msg_id);
+          trace!(
+            "[Client {}]: did send oid:{}|msg_id{} ",
+            self.uid,
+            object_id,
+            msg_id
+          );
           self.notify();
         }
         is_done

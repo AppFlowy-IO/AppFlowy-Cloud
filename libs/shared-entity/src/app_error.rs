@@ -26,7 +26,7 @@ impl AppError {
 
 impl Display for AppError {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", self.message)
+    f.write_fmt(format_args!("code:{} msg: {}", self.code, self.message))
   }
 }
 

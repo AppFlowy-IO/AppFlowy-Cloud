@@ -221,7 +221,6 @@ impl WSClient {
   }
 
   async fn set_state(&self, state: ConnectState) {
-    trace!("websocket state: {:?}", state);
     self.state_notify.lock().set_state(state);
   }
 }

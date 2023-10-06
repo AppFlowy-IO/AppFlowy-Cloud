@@ -1,0 +1,21 @@
+[package]
+name = "admin_frontend"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+axum = "0.6.20"
+leptos = "0.5.0"
+leptos_axum = "0.5.0"
+leptos_router = "0.5.0"
+tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
+tower = "0.4.13"
+tower-http = { version = "0.4.4", features = ["fs"]}
+tracing = "0.1.37"
+
+[package.metadata.leptos]
+# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
+output-name = "admin_frontend"

@@ -71,7 +71,7 @@ services:
   appflowy_cloud:
     restart: on-failure
     environment:
-      - RUST_LOG=trace
+      - RUST_LOG=${RUST_LOG:-info}
       - APP_ENVIRONMENT=production
       - APP__GOTRUE__JWT_SECRET=${GOTRUE_JWT_SECRET}
       - APP__GOTRUE__EXT_URL=${API_EXTERNAL_URL}

@@ -5,6 +5,8 @@ use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
   let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
+  println!("Start AppFlowy Cloud with RUST_LOG={}", level);
+
   let mut filters = vec![];
   filters.push(format!("actix_web={}", level));
   filters.push(format!("collab={}", level));

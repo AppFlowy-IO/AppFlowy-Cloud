@@ -66,7 +66,7 @@ sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-r
 async-trait = "0.1.73"
 
 # collab
-collab = { version = "0.1.0" }
+collab = { version = "0.1.0", features = ["async-plugin"] }
 
 #Local crate
 token = { path = "libs/token" }
@@ -126,8 +126,8 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "489cae0"  }
-collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "489cae0" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a4df0b"  }
+collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a4df0b" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

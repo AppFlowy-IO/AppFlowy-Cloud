@@ -143,7 +143,7 @@ impl TestClient {
     );
 
     collab.lock().add_plugin(Arc::new(sync_plugin));
-    collab.async_initialize().await;
+    collab.lock().initialize().await;
     let test_collab = TestCollab { origin, collab };
     self
       .collab_by_object_id

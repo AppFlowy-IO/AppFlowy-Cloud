@@ -1,7 +1,9 @@
 name: Deployment for Test Environment
 on:
   push:
-    branches: main
+    branches:
+     - 'main'
+     - 'test_deploy_*'
 
 jobs:
   deploy:

@@ -165,7 +165,7 @@ pub async fn batch_get_collab_blob(
   for params in queries {
     object_ids_by_collab_type
       .entry(params.collab_type)
-      .or_insert_with(Vec::new)
+      .or_default()
       .push(params.object_id);
   }
 

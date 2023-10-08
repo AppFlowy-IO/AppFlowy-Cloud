@@ -1,21 +1,14 @@
 use crate::collaborate::{CollabBroadcast, CollabStoragePlugin, Subscription};
-
+use crate::entities::RealtimeUser;
+use anyhow::Error;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_define::CollabType;
-
-use std::collections::HashMap;
-
-use anyhow::Error;
-
 use database::collab::CollabStorage;
-
+use std::collections::HashMap;
 use std::sync::Arc;
-
 use tokio::sync::RwLock;
-
-use crate::entities::RealtimeUser;
 use tokio::task::spawn_blocking;
 
 use tracing::{error, warn};
@@ -115,7 +108,7 @@ where
       Arc::downgrade(&group),
     );
     collab.lock().add_plugin(Arc::new(plugin));
-    collab.async_initialize().await;
+    collab.lock_arc().initialize().await;
 
     self
       .storage

@@ -53,8 +53,21 @@ then
   cargo sqlx prepare --workspace
 fi
 
+# Maximum number of restart attempts
+MAX_RESTARTS=5
+RESTARTS=0
+# Start the server and restart it on failure
+while [ "$RESTARTS" -lt "$MAX_RESTARTS" ]; do
+  RUST_LOG=trace cargo run && break
+  RESTARTS=$((RESTARTS+1))
+  echo "Server crashed! Attempting to restart ($RESTARTS/$MAX_RESTARTS)"
+  sleep 5
+done
 
-RUST_LOG=trace cargo run &
+if [ "$RESTARTS" -eq "$MAX_RESTARTS" ]; then
+  echo "Server failed to start after $MAX_RESTARTS attempts, exiting."
+  exit 1
+fi
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false

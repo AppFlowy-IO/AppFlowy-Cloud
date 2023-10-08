@@ -112,6 +112,7 @@ impl TestClient {
       .to_string()
   }
 
+  #[allow(clippy::await_holding_lock)]
   pub(crate) async fn create_collab(
     &mut self,
     workspace_id: &str,

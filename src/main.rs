@@ -23,8 +23,10 @@ async fn main() -> anyhow::Result<()> {
   );
   init_subscriber(subscriber);
 
-  let configuration = get_configuration().expect("Failed to read configuration.");
-  let state = init_state(&configuration).await;
+  let configuration = get_configuration().expect("The configuration should be configured.");
+  let state = init_state(&configuration)
+    .await
+    .expect("The AppState should be initialized");
   let application = Application::build(configuration, state).await?;
   application.run_until_stopped().await?;
 

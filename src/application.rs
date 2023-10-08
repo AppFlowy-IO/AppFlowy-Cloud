@@ -11,6 +11,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
+use anyhow::{Context, Error};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -114,17 +115,17 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(config: &Config) -> AppState {
-  let pg_pool = get_connection_pool(&config.database).await;
-  migrate(&pg_pool).await;
+pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+  let pg_pool = get_connection_pool(&config.database).await?;
+  migrate(&pg_pool).await?;
 
-  let s3_bucket = get_aws_s3_bucket(&config.s3).await;
-  let gotrue_client = get_gotrue_client(&config.gotrue).await;
-  setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await;
-  let redis_client = get_redis_client(config.redis_uri.expose_secret()).await;
-  let collab_storage = init_storage(config, pg_pool.clone()).await;
+  let s3_bucket = get_aws_s3_bucket(&config.s3).await?;
+  let gotrue_client = get_gotrue_client(&config.gotrue).await?;
+  setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
+  let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
+  let collab_storage = init_storage(config, pg_pool.clone()).await?;
 
-  AppState {
+  Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
     user: Arc::new(Default::default()),
@@ -133,17 +134,20 @@ pub async fn init_state(config: &Config) -> AppState {
     s3_bucket,
     redis_client,
     collab_storage,
-  }
+  })
 }
 
 async fn setup_admin_account(
   gotrue_client: &gotrue::api::Client,
   pg_pool: &PgPool,
   gotrue_setting: &GoTrueSetting,
-) {
+) -> Result<(), Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
-  gotrue_client.sign_up(admin_email, password).await.unwrap();
+  gotrue_client
+    .sign_up(admin_email, password)
+    .await
+    .context("failed to sign-up for admin user")?;
 
   // Unable to use query! macro here instead
   // because of the auth is a not default schema
@@ -158,25 +162,30 @@ async fn setup_admin_account(
   .bind(admin_email)
   .execute(pg_pool)
   .await
-  .unwrap();
+  .context("failed to update the admin user")?;
+  Ok(())
 }
 
-async fn get_redis_client(redis_uri: &str) -> redis::aio::ConnectionManager {
-  redis::Client::open(redis_uri)
-    .unwrap()
+async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {
+  let manager = redis::Client::open(redis_uri)
+    .context("failed to connect to redis")?
     .get_tokio_connection_manager()
     .await
-    .unwrap()
+    .context("failed to get the connection manager")?;
+  Ok(manager)
 }
 
-async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {
+async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> {
   let region = {
     match s3_setting.use_minio {
       true => s3::Region::Custom {
         region: "".to_owned(),
         endpoint: s3_setting.minio_url.to_owned(),
       },
-      false => s3_setting.region.parse::<s3::Region>().unwrap(),
+      false => s3_setting
+        .region
+        .parse::<s3::Region>()
+        .context("failed to parser s3 setting")?,
     }
   };
 
@@ -196,16 +205,14 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {
   )
   .await
   {
-    Ok(_) => {},
+    Ok(_) => Ok(()),
     Err(e) => match e {
-      s3::error::S3Error::Http(409, _) => {}, // Bucket already exists
-      _ => panic!("Failed to create bucket: {:?}", e),
+      s3::error::S3Error::Http(409, _) => Ok(()), // Bucket already exists
+      _ => Err(e),
     },
-  }
+  }?;
 
-  s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone())
-    .unwrap()
-    .with_path_style()
+  Ok(s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone())?.with_path_style())
 }
 
 // async fn get_aws_s3_client() -> aws_sdk_s3::Client {
@@ -226,28 +233,28 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> s3::Bucket {
 //   client
 // }
 
-async fn get_connection_pool(setting: &DatabaseSetting) -> PgPool {
+async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
   PgPoolOptions::new()
     .acquire_timeout(std::time::Duration::from_secs(5))
     .connect_with(setting.with_db())
     .await
-    .expect("Failed to connect to Postgres")
+    .context("failed to connect to postgres database")
 }
 
-async fn migrate(pool: &PgPool) {
+async fn migrate(pool: &PgPool) -> Result<(), Error> {
   sqlx::migrate!("./migrations")
     .run(pool)
     .await
-    .expect("Failed to run migrations");
+    .context("failed to run migrations")
 }
 
-async fn get_gotrue_client(setting: &GoTrueSetting) -> gotrue::api::Client {
+async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Client, Error> {
   let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
   gotrue_client
     .health()
     .await
-    .expect("Failed to connect to GoTrue");
-  gotrue_client
+    .context("failed to connect to GoTrue")?;
+  Ok(gotrue_client)
 }
 
 fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder {
@@ -269,10 +276,13 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
   builder
 }
 
-pub async fn init_storage(_config: &Config, pg_pool: PgPool) -> Storage<CollabStorageProxy> {
+pub async fn init_storage(
+  _config: &Config,
+  pg_pool: PgPool,
+) -> Result<Storage<CollabStorageProxy>, Error> {
   let collab_storage = CollabPostgresDBStorageImpl::new(pg_pool);
   let proxy = CollabStorageProxy::new(collab_storage);
-  Storage {
+  Ok(Storage {
     collab_storage: proxy,
-  }
+  })
 }

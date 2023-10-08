@@ -5,6 +5,8 @@ use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
   let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
+  println!("Start AppFlowy Cloud with RUST_LOG={}", level);
+
   let mut filters = vec![];
   filters.push(format!("actix_web={}", level));
   filters.push(format!("collab={}", level));
@@ -21,8 +23,10 @@ async fn main() -> anyhow::Result<()> {
   );
   init_subscriber(subscriber);
 
-  let configuration = get_configuration().expect("Failed to read configuration.");
-  let state = init_state(&configuration).await;
+  let configuration = get_configuration().expect("The configuration should be configured.");
+  let state = init_state(&configuration)
+    .await
+    .expect("The AppState should be initialized");
   let application = Application::build(configuration, state).await?;
   application.run_until_stopped().await?;
 

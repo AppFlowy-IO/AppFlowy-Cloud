@@ -6,10 +6,11 @@ use collab_define::CollabType;
 use database_entity::database_error::DatabaseError;
 use database_entity::{
   AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
-  QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
+  QueryCollabResult, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
 use sqlx::types::Uuid;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Weak;
 
 use validator::Validate;
@@ -57,6 +58,11 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
   async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData>;
+
+  async fn batch_get_collab(
+    &self,
+    queries: Vec<QueryCollabParams>,
+  ) -> HashMap<String, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.
   ///
@@ -137,7 +143,6 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
 
   async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
     params.validate()?;
-
     match collab_db_ops::get_collab_blob(&self.pg_pool, &params.collab_type, &params.object_id)
       .await
     {
@@ -150,6 +155,13 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
         _ => Err(e.into()),
       },
     }
+  }
+
+  async fn batch_get_collab(
+    &self,
+    queries: Vec<QueryCollabParams>,
+  ) -> HashMap<String, QueryCollabResult> {
+    collab_db_ops::batch_get_collab_blob(&self.pg_pool, queries).await
   }
 
   async fn delete_collab(&self, object_id: &str) -> Result<()> {

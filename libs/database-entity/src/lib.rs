@@ -2,7 +2,8 @@ use chrono::{DateTime, Utc};
 use collab_define::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::ops::Deref;
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use validator::{Validate, ValidationError};
 
 pub type RawData = Vec<u8>;
@@ -90,6 +91,23 @@ pub struct QueryCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   pub collab_type: CollabType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchQueryCollabParams(pub Vec<QueryCollabParams>);
+
+impl Deref for BatchQueryCollabParams {
+  type Target = Vec<QueryCollabParams>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl DerefMut for BatchQueryCollabParams {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,3 +229,12 @@ impl AFFileMetadata {
     format!("{}/{}", self.owner_uid, self.path)
   }
 }
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub enum QueryCollabResult {
+  Success { blob: RawData },
+  Failed { error: String },
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);

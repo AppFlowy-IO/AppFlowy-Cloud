@@ -78,6 +78,7 @@ gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
+itertools = "0.11"
 
 
 [dev-dependencies]
@@ -126,8 +127,8 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a4df0b"  }
-collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "4a4df0b" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "752bff0"  }
+collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "752bff0" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

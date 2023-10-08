@@ -1,12 +1,14 @@
-use collab_define::CollabType;
-use std::{ops::DerefMut, str::FromStr};
-
 use anyhow::Context;
+use collab_define::CollabType;
 use database_entity::{
   database_error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams,
+  QueryCollabParams, QueryCollabResult, RawData,
 };
+
 use sqlx::{PgPool, Transaction};
-use tracing::trace;
+use std::collections::HashMap;
+use std::{ops::DerefMut, str::FromStr};
+use tracing::{error, trace};
 use uuid::Uuid;
 
 pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
@@ -152,6 +154,69 @@ pub async fn get_collab_blob(
   )
   .fetch_one(pg_pool)
   .await
+}
+
+pub async fn batch_get_collab_blob(
+  pg_pool: &PgPool,
+  queries: Vec<QueryCollabParams>,
+) -> HashMap<String, QueryCollabResult> {
+  let mut results = HashMap::new();
+  let mut object_ids_by_collab_type: HashMap<CollabType, Vec<String>> = HashMap::new();
+  for params in queries {
+    object_ids_by_collab_type
+      .entry(params.collab_type)
+      .or_default()
+      .push(params.object_id);
+  }
+
+  for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
+    let partition_key = collab_type.value();
+    let par_results: Result<Vec<QueryCollabData>, sqlx::Error> = sqlx::query_as!(
+      QueryCollabData,
+      r#"
+       SELECT oid, blob
+       FROM af_collab
+       WHERE oid = ANY($1) AND partition_key = $2 AND deleted_at IS NULL;
+    "#,
+      &object_ids,
+      partition_key,
+    )
+    .fetch_all(pg_pool)
+    .await;
+
+    match par_results {
+      Ok(par_results) => {
+        object_ids.retain(|oid| !par_results.iter().any(|par_result| par_result.oid == *oid));
+
+        results.extend(par_results.into_iter().map(|par_result| {
+          (
+            par_result.oid,
+            QueryCollabResult::Success {
+              blob: par_result.blob,
+            },
+          )
+        }));
+
+        results.extend(object_ids.into_iter().map(|oid| {
+          (
+            oid,
+            QueryCollabResult::Failed {
+              error: "Record not found".to_string(),
+            },
+          )
+        }));
+      },
+      Err(err) => error!("Batch get collab errors: {}", err),
+    }
+  }
+
+  results
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct QueryCollabData {
+  oid: String,
+  blob: RawData,
 }
 
 pub async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx::Error> {

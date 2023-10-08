@@ -25,7 +25,10 @@ use tracing::instrument;
 use gotrue_entity::{AccessTokenResponse, User};
 
 use crate::notify::{ClientToken, TokenStateReceiver};
-use database_entity::{AFUserProfileView, AFWorkspaceMember, InsertCollabParams};
+use database_entity::{
+  AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult,
+  InsertCollabParams,
+};
 use database_entity::{AFWorkspaces, QueryCollabParams};
 use database_entity::{DeleteCollabParams, RawData};
 use shared_entity::app_error::AppError;
@@ -513,6 +516,23 @@ impl Client {
       .send()
       .await?;
     AppResponse::<RawData>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn batch_get_collab(
+    &self,
+    params: BatchQueryCollabParams,
+  ) -> Result<BatchQueryCollabResult, AppError> {
+    let url = format!("{}/api/collab/list", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    AppResponse::<BatchQueryCollabResult>::from_response(resp)
       .await?
       .into_data()
   }

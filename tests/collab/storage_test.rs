@@ -1,9 +1,13 @@
 use crate::{
   collab::workspace_id_from_client, user::utils::generate_unique_registered_user_client,
 };
+use std::collections::HashMap;
 
 use collab_define::CollabType;
-use database_entity::{DeleteCollabParams, InsertCollabParams, QueryCollabParams};
+use database_entity::{
+  BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
+  QueryCollabResult,
+};
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::Uuid;
 
@@ -31,6 +35,109 @@ async fn success_insert_collab_test() {
     .unwrap();
 
   assert_eq!(bytes, raw_data);
+}
+
+#[tokio::test]
+async fn success_batch_get_collab_test() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let queries = BatchQueryCollabParams(vec![
+    QueryCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      collab_type: CollabType::Document,
+    },
+    QueryCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      collab_type: CollabType::Folder,
+    },
+    QueryCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      collab_type: CollabType::Database,
+    },
+  ]);
+
+  let mut expected_results = HashMap::new();
+  for i in 0..3 {
+    let object_id = queries.0[i].object_id.clone();
+    let collab_type = queries.0[i].collab_type.clone();
+    let raw_data = format!("hello world {}", i).as_bytes().to_vec();
+
+    expected_results.insert(
+      object_id.clone(),
+      QueryCollabResult::Success {
+        blob: raw_data.clone(),
+      },
+    );
+
+    c.create_collab(InsertCollabParams::new(
+      &object_id,
+      collab_type,
+      raw_data.clone(),
+      workspace_id.clone(),
+    ))
+    .await
+    .unwrap();
+  }
+
+  let results = c.batch_get_collab(queries).await.unwrap().0;
+  for (object_id, result) in expected_results.iter() {
+    assert_eq!(result, results.get(object_id).unwrap());
+  }
+}
+
+#[tokio::test]
+async fn success_part_batch_get_collab_test() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c).await;
+  let queries = BatchQueryCollabParams(vec![
+    QueryCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      collab_type: CollabType::Document,
+    },
+    QueryCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      collab_type: CollabType::Folder,
+    },
+    QueryCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      collab_type: CollabType::Database,
+    },
+  ]);
+
+  let mut expected_results = HashMap::new();
+  for i in 0..3 {
+    let object_id = queries.0[i].object_id.clone();
+    let collab_type = queries.0[i].collab_type.clone();
+    let raw_data = format!("hello world {}", i).as_bytes().to_vec();
+    if i == 1 {
+      expected_results.insert(
+        object_id.clone(),
+        QueryCollabResult::Failed {
+          error: "Record not found".to_string(),
+        },
+      );
+    } else {
+      expected_results.insert(
+        object_id.clone(),
+        QueryCollabResult::Success {
+          blob: raw_data.clone(),
+        },
+      );
+      c.create_collab(InsertCollabParams::new(
+        &object_id,
+        collab_type,
+        raw_data.clone(),
+        workspace_id.clone(),
+      ))
+      .await
+      .unwrap();
+    }
+  }
+
+  let results = c.batch_get_collab(queries).await.unwrap().0;
+  for (object_id, result) in expected_results.iter() {
+    assert_eq!(result, results.get(object_id).unwrap());
+  }
 }
 
 #[tokio::test]

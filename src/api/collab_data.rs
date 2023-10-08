@@ -16,6 +16,7 @@ use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
 use shared_entity::error_code::ErrorCode;
 use tracing::{debug, instrument};
+use tracing_actix_web::RequestId;
 
 pub fn collab_scope() -> Scope {
   web::scope("/api/collab")
@@ -31,9 +32,10 @@ pub fn collab_scope() -> Scope {
     .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
 }
 
-#[instrument(skip_all, err)]
+#[instrument(skip(state, payload), err)]
 async fn create_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -41,9 +43,10 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(storage), err)]
+#[instrument(skip(storage, payload), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<QueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
@@ -62,9 +65,10 @@ async fn get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip(storage), err)]
+#[instrument(skip(storage, payload), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<BatchQueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
@@ -78,9 +82,10 @@ async fn batch_get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(result)))
 }
 
-#[instrument(skip_all, err)]
+#[instrument(skip(state, payload), err)]
 async fn update_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -88,9 +93,10 @@ async fn update_collab_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(level = "info", skip_all, err)]
+#[instrument(level = "info", skip(state, payload), err)]
 async fn delete_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<DeleteCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use database_entity::{
   database_error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams,
   QueryCollabParams, QueryCollabResult, RawData,

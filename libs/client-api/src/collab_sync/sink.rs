@@ -1,5 +1,5 @@
 use collab::core::origin::CollabOrigin;
-use collab_define::collab_msg::CollabSinkMessage;
+use collab_entity::collab_msg::CollabSinkMessage;
 
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -246,7 +246,6 @@ where
       // message is not mergeable.
       if sending_msg.is_mergeable() {
         while let Some(pending_msg) = pending_msg_queue.pop() {
-          debug!("merge_msg: {}", pending_msg.get_msg());
           sending_msg.merge(pending_msg);
           if !sending_msg.is_mergeable() {
             break;

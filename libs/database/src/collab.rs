@@ -2,7 +2,7 @@ use crate::collab_db_ops;
 use anyhow::Context;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use database_entity::database_error::DatabaseError;
 use database_entity::{
   AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,

@@ -2,7 +2,7 @@ use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, T
 use crate::user::utils::generate_unique_registered_user;
 use std::time::Duration;
 
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use serde_json::json;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;

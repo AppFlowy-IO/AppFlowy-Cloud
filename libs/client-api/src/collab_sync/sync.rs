@@ -12,7 +12,7 @@ use collab::core::origin::CollabOrigin;
 use collab::sync_protocol::awareness::Awareness;
 use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
-use collab_define::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
+use collab_entity::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
 use tokio::spawn;

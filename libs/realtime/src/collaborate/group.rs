@@ -4,7 +4,7 @@ use anyhow::Error;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use std::collections::HashMap;
 use std::sync::Arc;

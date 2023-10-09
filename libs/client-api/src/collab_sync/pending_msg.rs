@@ -1,4 +1,4 @@
-use collab_define::collab_msg::CollabSinkMessage;
+use collab_entity::collab_msg::CollabSinkMessage;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Display;
@@ -92,10 +92,7 @@ where
     }
 
     match self.tx.take() {
-      None => {
-        warn!("No tx for msg_id: {}", self.msg_id);
-        false
-      },
+      None => false,
       Some(tx) => {
         // Notify that the message with given id was received
         match tx.send(self.msg_id) {

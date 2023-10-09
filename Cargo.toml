@@ -79,6 +79,7 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 itertools = "0.11"
+axum_session = "0.7.0"
 
 
 [dev-dependencies]
@@ -109,7 +110,8 @@ members = [
     "libs/infra",
     "libs/shared-entity",
     "libs/gotrue",
-    "libs/gotrue-entity"
+    "libs/gotrue-entity",
+    "admin_frontend",
 ]
 
 [profile.release]

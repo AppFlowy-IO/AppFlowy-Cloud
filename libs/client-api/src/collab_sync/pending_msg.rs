@@ -92,10 +92,7 @@ where
     }
 
     match self.tx.take() {
-      None => {
-        warn!("No tx for msg_id: {}", self.msg_id);
-        false
-      },
+      None => false,
       Some(tx) => {
         // Notify that the message with given id was received
         match tx.send(self.msg_id) {

@@ -83,6 +83,12 @@ impl Client {
     Ok(())
   }
 
+  /// Retrieves the string representation of the [AccessTokenResponse]. The returned value can be
+  /// saved to the client application's local storage and used to restore the client's authentication
+  ///
+  /// This function attempts to acquire a read lock on `self.token` and retrieves the
+  /// string representation of the access token. If the lock cannot be acquired or
+  /// the token is not present, an error is returned.
   #[instrument(level = "debug", skip_all, err)]
   pub fn get_token(&self) -> Result<String, AppError> {
     let token_str = self

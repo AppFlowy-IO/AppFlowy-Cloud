@@ -246,7 +246,6 @@ where
       // message is not mergeable.
       if sending_msg.is_mergeable() {
         while let Some(pending_msg) = pending_msg_queue.pop() {
-          debug!("merge_msg: {}", pending_msg.get_msg());
           sending_msg.merge(pending_msg);
           if !sending_msg.is_mergeable() {
             break;

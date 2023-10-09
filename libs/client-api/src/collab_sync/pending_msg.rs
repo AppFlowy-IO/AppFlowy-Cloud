@@ -1,4 +1,4 @@
-use collab_define::collab_msg::CollabSinkMessage;
+use collab_entity::collab_msg::CollabSinkMessage;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Display;

@@ -1,5 +1,5 @@
 use collab::core::origin::CollabOrigin;
-use collab_define::collab_msg::CollabSinkMessage;
+use collab_entity::collab_msg::CollabSinkMessage;
 
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -6,15 +6,17 @@ use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use database::collab::CollabStorage;
+
 use database_entity::database_error::DatabaseError;
 use database_entity::{
-  AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
-  QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
+  AFCollabSnapshots, BatchQueryCollabParams, BatchQueryCollabResult, DeleteCollabParams,
+  InsertCollabParams, QueryCollabParams, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
 use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
 use shared_entity::error_code::ErrorCode;
 use tracing::{debug, instrument};
+use tracing_actix_web::RequestId;
 
 pub fn collab_scope() -> Scope {
   web::scope("/api/collab")
@@ -25,13 +27,15 @@ pub fn collab_scope() -> Scope {
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
     )
+    .service(web::resource("list").route(web::get().to(batch_get_collab_handler)))
     .service(web::resource("snapshot").route(web::get().to(retrieve_snapshot_data_handler)))
     .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
 }
 
-#[instrument(skip_all, err)]
+#[instrument(skip(state, payload), err)]
 async fn create_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -39,9 +43,10 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(storage), err)]
+#[instrument(skip(storage, payload), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<QueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
@@ -60,9 +65,27 @@ async fn get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip_all, err)]
+#[instrument(skip(storage, payload), err)]
+async fn batch_get_collab_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<BatchQueryCollabParams>,
+  storage: Data<Storage<CollabStorageProxy>>,
+) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
+  // TODO: access control for user_uuid
+  let result = BatchQueryCollabResult(
+    storage
+      .collab_storage
+      .batch_get_collab(payload.into_inner().0)
+      .await,
+  );
+  Ok(Json(AppResponse::Ok().with_data(result)))
+}
+
+#[instrument(skip(state, payload), err)]
 async fn update_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -70,9 +93,10 @@ async fn update_collab_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(level = "info", skip_all, err)]
+#[instrument(level = "info", skip(state, payload), err)]
 async fn delete_collab_handler(
   user_uuid: UserUuid,
+  required_id: RequestId,
   payload: Json<DeleteCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {

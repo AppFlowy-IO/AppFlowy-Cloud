@@ -100,6 +100,8 @@ pub struct GoTrueError {
   pub error_id: Option<String>,
 }
 
+impl std::error::Error for GoTrueError {}
+
 impl Display for GoTrueError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(

@@ -7,16 +7,16 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-axum = "0.6.20"
-leptos = "0.5.0"
-leptos_axum = "0.5.0"
-leptos_router = "0.5.0"
+axum = {version = "0.6.20", features = ["json"]}
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
-tower = "0.4.13"
-tower-http = { version = "0.4.4", features = ["fs"]}
-tracing = "0.1.37"
+askama = "0.12.1"
+axum-extra = { version = "0.8.0", features = ["cookie"] }
 serde = { version = "1.0.188", features = ["derive"] }
+serde_json = "1.0.107"
 
-[package.metadata.leptos]
-# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
-output-name = "admin_frontend"
+# local dependencies
+gotrue = { path = "../libs/gotrue" }
+gotrue-entity = { path = "../libs/gotrue-entity" }
+dotenv = "0.15.0"
+reqwest = "0.11.22"
+tower-service = "0.3.2"

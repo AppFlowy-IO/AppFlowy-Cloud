@@ -98,8 +98,8 @@ services:
   admin_frontend:
     restart: on-failure
     build:
-      context: ./admin_frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./admin_frontend/Dockerfile
     depends_on:
       - gotrue
     ports:

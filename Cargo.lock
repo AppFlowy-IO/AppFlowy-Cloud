@@ -466,6 +466,7 @@ dependencies = [
  "gotrue",
  "gotrue-entity",
  "infra",
+ "itertools",
  "jsonwebtoken",
  "lazy_static",
  "mime",
@@ -866,7 +867,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=489cae0#489cae080419bd327282f974efe49ee447390b1d"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=752bff0#752bff0b6db0419642478472ecdeb7c44a321510"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -885,7 +886,7 @@ dependencies = [
 [[package]]
 name = "collab-define"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=489cae0#489cae080419bd327282f974efe49ee447390b1d"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=752bff0#752bff0b6db0419642478472ecdeb7c44a321510"
 dependencies = [
  "anyhow",
  "bytes",

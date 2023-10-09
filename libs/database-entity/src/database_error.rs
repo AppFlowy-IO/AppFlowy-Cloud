@@ -1,6 +1,6 @@
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
-  #[error("Record not found")]
+  #[error("Database not found")]
   RecordNotFound,
 
   #[error(transparent)]

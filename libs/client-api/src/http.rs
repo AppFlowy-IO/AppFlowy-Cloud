@@ -20,11 +20,15 @@ use shared_entity::dto::UserUpdateParams;
 use shared_entity::dto::WorkspaceMembersParams;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tracing::instrument;
 
 use gotrue_entity::{AccessTokenResponse, User};
 
 use crate::notify::{ClientToken, TokenStateReceiver};
-use database_entity::{AFUserProfileView, AFWorkspaceMember, InsertCollabParams};
+use database_entity::{
+  AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult,
+  InsertCollabParams,
+};
 use database_entity::{AFWorkspaces, QueryCollabParams};
 use database_entity::{DeleteCollabParams, RawData};
 use shared_entity::app_error::AppError;
@@ -153,6 +157,7 @@ impl Client {
   /// - `Ok(String)`: A `String` containing the constructed authorization URL if the specified provider is available.
   /// - `Err(AppError)`: An `AppError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
   ///
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn generate_oauth_url_with_provider(
     &self,
     provider: &OAuthProvider,
@@ -172,6 +177,7 @@ impl Client {
   /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
   /// The URL looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn generate_sign_in_url_with_email(
     &self,
     admin_user_email: &str,
@@ -210,6 +216,7 @@ impl Client {
     Ok((user, is_new))
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   #[inline]
   async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
@@ -218,6 +225,7 @@ impl Client {
     Ok(sign_in_resp.is_new)
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn create_magic_link(&self, email: &str, password: &str) -> Result<User, AppError> {
     let user = self
       .gotrue_client
@@ -234,6 +242,7 @@ impl Client {
     Ok(user)
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn create_email_verified_user(
     &self,
     email: &str,
@@ -297,6 +306,7 @@ impl Client {
     }
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn profile(&self) -> Result<AFUserProfileView, AppError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
@@ -309,6 +319,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn workspaces(&self) -> Result<AFWorkspaces, AppError> {
     let url = format!("{}/api/workspace/list", self.base_url);
     let resp = self
@@ -321,6 +332,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspace_members(
     &self,
     workspace_uuid: uuid::Uuid,
@@ -339,6 +351,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members(
     &self,
     workspace_uuid: uuid::Uuid,
@@ -359,6 +372,7 @@ impl Client {
     Ok(())
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn remove_workspace_members(
     &self,
     workspace_uuid: uuid::Uuid,
@@ -379,6 +393,7 @@ impl Client {
     Ok(())
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<bool, AppError> {
     let access_token_resp = self
       .gotrue_client
@@ -399,6 +414,7 @@ impl Client {
   /// This function attempts to refresh the access token by sending a request to the authentication server
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn refresh(&self) -> Result<(), AppError> {
     let refresh_token = self
       .token
@@ -416,6 +432,7 @@ impl Client {
     Ok(())
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppError> {
     match self.gotrue_client.sign_up(email, password).await? {
       Authenticated(access_token_resp) => {
@@ -429,11 +446,13 @@ impl Client {
     }
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_out(&self) -> Result<(), AppError> {
     self.gotrue_client.logout(&self.access_token()?).await?;
     Ok(())
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn update(&self, params: UserUpdateParams) -> Result<(), AppError> {
     let updated_user = self
       .gotrue_client
@@ -448,6 +467,7 @@ impl Client {
     Ok(())
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn update_user_name(&self, new_name: &str) -> Result<(), AppError> {
     let url = format!("{}/api/user/update", self.base_url);
     let params = UpdateUsernameParams {
@@ -462,6 +482,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
@@ -473,6 +494,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
@@ -484,6 +506,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self
@@ -497,6 +520,24 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn batch_get_collab(
+    &self,
+    params: BatchQueryCollabParams,
+  ) -> Result<BatchQueryCollabResult, AppError> {
+    let url = format!("{}/api/collab/list", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    AppResponse::<BatchQueryCollabResult>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
     let url = format!("{}/api/collab/", self.base_url);
     let resp = self

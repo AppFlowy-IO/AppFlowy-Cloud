@@ -192,7 +192,7 @@ impl WSClient {
       .channels
       .write()
       .entry(business_id)
-      .or_insert_with(HashMap::new)
+      .or_default()
       .insert(object_id, Arc::downgrade(&channel));
     Ok(channel)
   }
@@ -221,7 +221,6 @@ impl WSClient {
   }
 
   async fn set_state(&self, state: ConnectState) {
-    trace!("websocket state: {:?}", state);
     self.state_notify.lock().set_state(state);
   }
 }

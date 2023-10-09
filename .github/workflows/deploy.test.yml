@@ -1,7 +1,9 @@
 name: Deployment for Test Environment
 on:
   push:
-    branches: main
+    branches:
+     - 'main'
+     - 'test_deploy_*'
 
 jobs:
   deploy:
@@ -12,6 +14,9 @@ jobs:
       - name: Set up env vars
         run: |
           cp dev.env .env
+          
+          # log level
+          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
 
           # jwt secret
           sed -i 's|GOTRUE_JWT_SECRET=.*|GOTRUE_JWT_SECRET=${{ secrets.GOTRUE_JWT_SECRET_TEST }}|' .env
@@ -35,4 +40,4 @@ jobs:
           echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
 
       - name: Deploy docker-compose
-        run: sudo docker-compose up -d --build --force-recreate
+        run: docker compose up -d --build --force-recreate

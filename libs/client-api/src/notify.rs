@@ -1,3 +1,4 @@
+use anyhow::Error;
 use gotrue_entity::AccessTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -21,6 +22,13 @@ impl ClientToken {
     Self {
       sender,
       token: None,
+    }
+  }
+
+  pub fn try_get(&self) -> Result<String, Error> {
+    match &self.token {
+      None => Err(anyhow::anyhow!("No access token")),
+      Some(token) => Ok(serde_json::to_string(token)?),
     }
   }
 

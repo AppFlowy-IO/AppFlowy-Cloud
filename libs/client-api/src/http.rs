@@ -73,6 +73,23 @@ impl Client {
     }
   }
 
+  #[instrument(level = "debug", skip_all, err)]
+  pub fn set_token(&self, token: &str) -> Result<(), AppError> {
+    let token = serde_json::from_str::<AccessTokenResponse>(token)?;
+    self.token.write().set(token);
+    Ok(())
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub fn get_token(&self) -> Result<String, AppError> {
+    let token_str = self
+      .token
+      .read()
+      .try_get()
+      .map_err(|err| AppError::new(ErrorCode::OAuthError, err.to_string()))?;
+    Ok(token_str)
+  }
+
   pub fn subscribe_token_state(&self) -> TokenStateReceiver {
     self.token.read().subscribe()
   }

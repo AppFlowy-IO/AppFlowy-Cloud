@@ -40,9 +40,9 @@ impl ClientToken {
   /// # Parameters
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
-  pub(crate) fn set(&mut self, token: AccessTokenResponse) {
-    tracing::trace!("Set new access token: {:?}", token);
-    self.token = Some(token);
+  pub(crate) fn set(&mut self, new_token: AccessTokenResponse) {
+    tracing::trace!("Set new access token: {:?}", new_token);
+    self.token = Some(new_token);
     let _ = self.sender.send(TokenState::Refresh);
   }
 

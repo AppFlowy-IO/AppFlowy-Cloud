@@ -75,6 +75,9 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub fn set_token(&self, token: &str) -> Result<(), AppError> {
+    if token.is_empty() {
+      return Err(AppError::new(ErrorCode::OAuthError, "Empty token"));
+    }
     let token = serde_json::from_str::<AccessTokenResponse>(token)?;
     self.token.write().set(token);
     Ok(())

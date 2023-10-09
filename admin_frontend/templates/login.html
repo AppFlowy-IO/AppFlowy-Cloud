@@ -1,0 +1,37 @@
+<html>
+      <script
+          src="https://unpkg.com/htmx.org@1.9.6"
+          integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni"
+          crossorigin="anonymous"
+      ></script>
+
+      <body>
+          <h1>Admin Login</h1>
+          <form>
+              <table>
+                  <tr>
+                      <td>
+                          <label for="email">Email:</label>
+                      </td>
+                      <td>
+                          <input type="text" id="email" name="email" required/>
+                      </td>
+
+                  </tr>
+                  <tr>
+                      <td>
+                          <label for="password">Password:</label>
+                      </td>
+                      <td>
+                          <input type="password" id="password" name="password" required/>
+                      </td>
+
+                  </tr>
+              </table>
+              <button hx-post="/web-api/login" hx-target="#response">
+                  Submit
+              </button>
+          </form>
+          <div id="response"></div>
+      </body>
+</html>

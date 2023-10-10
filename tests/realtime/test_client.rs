@@ -5,7 +5,7 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use database_entity::QueryCollabParams;
 use serde_json::Value;
 use sqlx::types::Uuid;

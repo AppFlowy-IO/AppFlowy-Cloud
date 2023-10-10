@@ -1,3 +1,4 @@
+use anyhow::Error;
 use gotrue_entity::AccessTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -24,6 +25,13 @@ impl ClientToken {
     }
   }
 
+  pub fn try_get(&self) -> Result<String, Error> {
+    match &self.token {
+      None => Err(anyhow::anyhow!("No access token")),
+      Some(token) => Ok(serde_json::to_string(token)?),
+    }
+  }
+
   /// Sets a new access token and notifies interested parties of the refresh.
   ///
   /// This function updates the internal access token state and sends a `TokenState::Refresh`
@@ -32,9 +40,9 @@ impl ClientToken {
   /// # Parameters
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
-  pub(crate) fn set(&mut self, token: AccessTokenResponse) {
-    tracing::trace!("Set new access token: {:?}", token);
-    self.token = Some(token);
+  pub(crate) fn set(&mut self, new_token: AccessTokenResponse) {
+    tracing::trace!("Set new access token: {:?}", new_token);
+    self.token = Some(new_token);
     let _ = self.sender.send(TokenState::Refresh);
   }
 

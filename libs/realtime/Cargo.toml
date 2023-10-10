@@ -24,7 +24,7 @@ serde_repr = "0.1.6"
 tokio-retry = "0.3.0"
 
 collab = { version = "0.1.0"}
-collab-define = { version = "0.1.0" }
+collab-entity = { version = "0.1.0" }
 database = { path = "../database" }
 database-entity = { path = "../database-entity" }
 yrs = "0.16.5"

@@ -1,8 +1,7 @@
-use crate::collab_db_ops;
 use anyhow::Context;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use database_entity::database_error::DatabaseError;
 use database_entity::{
   AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
@@ -13,6 +12,7 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Weak;
 
+use crate::collab::collab_db_ops;
 use validator::Validate;
 
 pub type Result<T, E = DatabaseError> = core::result::Result<T, E>;

@@ -18,7 +18,7 @@ use yrs::UpdateSubscription;
 
 use crate::collaborate::retry::SinkCollabMessageAction;
 use crate::error::{internal_error, RealtimeError};
-use collab_define::collab_msg::{
+use collab_entity::collab_msg::{
   CollabAwarenessData, CollabBroadcastData, CollabMessage, UpdateAck,
 };
 use tracing::{error, trace, warn};

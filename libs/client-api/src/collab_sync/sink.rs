@@ -244,10 +244,9 @@ where
 
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
-      if sending_msg.is_mergeable() {
+      if sending_msg.can_merge(&self.config.maximum_payload_size) {
         while let Some(pending_msg) = pending_msg_queue.pop() {
-          sending_msg.merge(pending_msg);
-          if !sending_msg.is_mergeable() {
+          if !sending_msg.merge(pending_msg, &self.config.maximum_payload_size) {
             break;
           }
         }
@@ -365,8 +364,8 @@ pub struct SinkConfig {
   /// `timeout` is the time to wait for the remote to ack the message. If the remote
   /// does not ack the message in time, the message will be sent again.
   pub send_timeout: Duration,
-  /// `max_merge_size` is the maximum size of the messages to be merged.
-  pub max_merge_size: usize,
+  /// `maximum_payload_size` is the maximum size of the messages to be merged.
+  pub maximum_payload_size: usize,
   /// `strategy` is the strategy to send the messages.
   pub strategy: SinkStrategy,
 }
@@ -388,7 +387,7 @@ impl SinkConfig {
 
   /// `max_zip_size` is the maximum size of the messages to be merged.
   pub fn with_max_merge_size(mut self, max_merge_size: usize) -> Self {
-    self.max_merge_size = max_merge_size;
+    self.maximum_payload_size = max_merge_size;
     self
   }
 
@@ -407,7 +406,7 @@ impl Default for SinkConfig {
   fn default() -> Self {
     Self {
       send_timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
-      max_merge_size: 4096,
+      maximum_payload_size: 4096,
       strategy: SinkStrategy::ASAP,
     }
   }

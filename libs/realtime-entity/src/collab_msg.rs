@@ -11,9 +11,9 @@ pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   /// Returns the length of the message in bytes.
   fn length(&self) -> usize;
   /// Returns true if the message can be merged with other messages.
-  fn mergeable(&self) -> bool;
+  fn can_merge(&self, maximum_payload_size: &usize) -> bool;
 
-  fn merge(&mut self, other: Self) -> bool;
+  fn merge(&mut self, other: Self, maximum_payload_size: &usize) -> bool;
 
   fn is_init_msg(&self) -> bool;
 
@@ -37,17 +37,21 @@ impl CollabSinkMessage for CollabMessage {
     self.payload().len()
   }
 
-  fn mergeable(&self) -> bool {
+  fn can_merge(&self, maximum_payload_size: &usize) -> bool {
     match self {
-      CollabMessage::ClientUpdateSync(sync) => sync.payload.len() < 4096,
+      CollabMessage::ClientUpdateSync(sync) => &sync.payload.len() < maximum_payload_size,
       _ => false,
     }
   }
 
-  fn merge(&mut self, other: Self) -> bool {
+  fn merge(&mut self, other: Self, maximum_payload_size: &usize) -> bool {
     match (self, other) {
       (CollabMessage::ClientUpdateSync(value), CollabMessage::ClientUpdateSync(other)) => {
-        value.merge_payload(other.payload)
+        if &value.payload.len() > maximum_payload_size {
+          false
+        } else {
+          value.merge_payload(other.payload)
+        }
       },
       _ => false,
     }

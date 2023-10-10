@@ -55,7 +55,7 @@ async fn admin_user_create_and_list() {
     .admin_list_user(&admin_token.access_token)
     .await
     .unwrap();
-  panic!("{:?}", users);
+  assert!(users.users.len() > 2);
 }
 
 #[tokio::test]

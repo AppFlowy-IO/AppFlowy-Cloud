@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Detail</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <h1>User Detail</h1>
+    <h2>{{ user.email|escape }}</h2>
+    <p>Phone: {{ user.phone|escape }}</p>
+    <p>Email Confirmed At: {{ user.email_confirmed_at|default("-") }}</p>
+    <p>Phone Confirmed At: {{ user.phone_confirmed_at|default("-")|escape }}</p>
+    <p>Last Sign In At: {{ user.last_sign_in_at|default("-")|escape }}</p>
+    <p>Created At: {{ user.created_at|escape }}</p>
+    <p>Updated At: {{ user.updated_at|escape }}</p>
+
+
+    <a href="/web/admin/users">Back to User List</a>
+</body>
+
+</html>

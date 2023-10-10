@@ -131,6 +131,20 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
+  pub async fn admin_user_details(
+    &self,
+    access_token: &str,
+    user_id: &str, // uuid
+  ) -> Result<User, GoTrueError> {
+    let resp = self
+      .client
+      .get(format!("{}/admin/users/{}", self.base_url, user_id))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
   pub async fn admin_add_user(
     &self,
     access_token: &str,

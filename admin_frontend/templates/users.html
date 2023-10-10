@@ -9,6 +9,7 @@
         <th>Id</th>
         <th>Email</th>
         <th>Created At</th>
+        <th>Action</th>
       </tr>
 
       {% for user in users %}
@@ -16,6 +17,7 @@
         <td>{{ user.id|escape }}</td>
         <td>{{ user.email|escape }}</td>
         <td>{{ user.created_at|escape }}</td>
+        <td><a href="/web/admin/users/{{ user.id }}" class="btn">Go</a></td>
       </tr>
       {% endfor %}
     </table>

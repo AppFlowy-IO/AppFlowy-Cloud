@@ -12,8 +12,8 @@ use std::ops::Deref;
 use crate::collaborate::CollabServer;
 use crate::error::RealtimeError;
 
-use collab_entity::collab_msg::CollabMessage;
 use database::collab::CollabStorage;
+use realtime_entity::collab_msg::CollabMessage;
 use std::time::{Duration, Instant};
 use tracing::error;
 

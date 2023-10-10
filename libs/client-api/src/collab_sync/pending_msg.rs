@@ -1,10 +1,9 @@
-use collab_entity::collab_msg::CollabSinkMessage;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
-use crate::collab_sync::MsgId;
+use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 use tokio::sync::oneshot;
 use tracing::{trace, warn};
 
@@ -123,8 +122,8 @@ impl<Msg> PendingMessage<Msg>
 where
   Msg: CollabSinkMessage,
 {
-  pub fn is_mergeable(&self) -> bool {
-    self.msg.mergeable()
+  pub fn can_merge(&self, maximum_payload_size: &usize) -> bool {
+    self.msg.can_merge(maximum_payload_size)
   }
 
   #[allow(dead_code)]
@@ -132,8 +131,8 @@ where
     self.msg.is_init_msg()
   }
 
-  pub fn merge(&mut self, other: Self) {
-    self.msg.merge(other.into_msg());
+  pub fn merge(&mut self, other: Self, max_size: &usize) -> bool {
+    self.msg.merge(other.into_msg(), max_size)
   }
 }
 

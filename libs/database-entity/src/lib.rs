@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;

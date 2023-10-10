@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, TestClient};
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use sqlx::types::uuid;
 
 use std::time::Duration;

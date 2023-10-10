@@ -7,7 +7,7 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use database_entity::database_error::DatabaseError;
 
 use collab::sync_protocol::awareness::Awareness;
-use collab_define::CollabType;
+use collab_entity::CollabType;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Weak;
 

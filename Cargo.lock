@@ -473,7 +473,7 @@ dependencies = [
  "chrono",
  "client-api",
  "collab",
- "collab-define",
+ "collab-entity",
  "config",
  "database",
  "database-entity",
@@ -1010,7 +1010,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "collab",
- "collab-define",
+ "collab-entity",
  "database-entity",
  "futures-core",
  "futures-util",
@@ -1039,7 +1039,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=752bff0#752bff0b6db0419642478472ecdeb7c44a321510"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6d74c89b#6d74c89b80066bd1b97729d12bf8aaed28ce242a"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1056,9 +1056,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "collab-define"
+name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=752bff0#752bff0b6db0419642478472ecdeb7c44a321510"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6d74c89b#6d74c89b80066bd1b97729d12bf8aaed28ce242a"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1307,7 +1307,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "collab",
- "collab-define",
+ "collab-entity",
  "database-entity",
  "redis",
  "serde",
@@ -1325,7 +1325,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
- "collab-define",
+ "collab-entity",
  "serde",
  "serde_json",
  "sqlx",
@@ -3029,7 +3029,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab",
- "collab-define",
+ "collab-entity",
  "database",
  "database-entity",
  "futures-util",

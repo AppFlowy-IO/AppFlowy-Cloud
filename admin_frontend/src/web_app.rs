@@ -30,8 +30,20 @@ pub async fn admin_users_handler(
   State(state): State<AppState>,
   access_token: WebAccessToken,
 ) -> Result<Html<String>, RenderError> {
-  let users = state.gotrue_client.admin_list_user(&access_token.0).await;
-  todo!()
+  let users = state
+    .gotrue_client
+    .admin_list_user(&access_token.0)
+    .await
+    .map_or_else(
+      |err| {
+        // Log the error and return an empty vector.
+        println!("Failed to fetch users: {:?}", err);
+        vec![]
+      },
+      |r| r.users,
+    );
+  let s = templates::Users { users: &users }.render()?;
+  Ok(Html(s))
 }
 
 pub async fn login_handler() -> Result<Html<String>, RenderError> {

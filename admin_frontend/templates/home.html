@@ -9,7 +9,8 @@
         .getElementById("logoutBtn")
         .addEventListener("click", function () {
           // Remove the cookie by setting its value to an empty string and its expiry date to the past.
-          document.cookie = "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+          document.cookie =
+            "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
 
           // Redirect to the login page.
           window.location.href = "/web/login";

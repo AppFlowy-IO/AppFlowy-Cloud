@@ -1,36 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<body>
+  <body>
+    <h1>User List</h1>
+    <ul id="userList"></ul>
 
-<h1>User List</h1>
-<ul id="userList"></ul>
+    <table>
+      <tr>
+        <th>Id</th>
+        <th>Email</th>
+        <th>Created At</th>
+      </tr>
 
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        // Fetch the user list from the API
-        fetch('/web-api/users')
-            .then(response => {
-                // Check if HTTP status code indicates success
-                if (!response.ok) {
-                    return Promise.reject('Failed to fetch users');
-                }
-                return response.json(); // Parse the JSON response
-            })
-            .then(data => {
-                // Display the users on the page
-                const userList = document.getElementById('userList');
-                data.forEach(user => {
-                    const li = document.createElement('li');
-                    li.textContent = `${user.name} (${user.email})`;
-                    userList.appendChild(li);
-                });
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Failed to fetch users');
-            });
-    });
-</script>
+      {% for user in users %}
+      <tr>
+        <td>{{ user.id|escape }}</td>
+        <td>{{ user.email|escape }}</td>
+        <td>{{ user.created_at|escape }}</td>
+      </tr>
+      {% endfor %}
+    </table>
 
-</body>
+    <script></script>
+  </body>
 </html>

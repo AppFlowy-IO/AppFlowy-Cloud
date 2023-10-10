@@ -8,7 +8,7 @@ services:
     depends_on:
       - appflowy_cloud
       - gotrue
- #    - admin_frontend
+      - admin_frontend
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
@@ -95,12 +95,12 @@ services:
     ports:
       - 8000:8000
 
- #admin_frontend:
- #  restart: on-failure
- #  build:
- #    context: .
- #    dockerfile: ./admin_frontend/Dockerfile
- #  depends_on:
- #    - gotrue
- #  ports:
- #    - 3000:3000
+  admin_frontend:
+    restart: on-failure
+    build:
+      context: .
+      dockerfile: ./admin_frontend/Dockerfile
+    depends_on:
+      - gotrue
+    ports:
+      - 3000:3000

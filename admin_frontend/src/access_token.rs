@@ -23,9 +23,9 @@ where
     let token = jar
       .get("access_token")
       .ok_or(AccessTokenRejection::NoAccessToken)?
-      .to_string();
+      .value();
 
-    Ok(WebAccessToken(token))
+    Ok(WebAccessToken(token.to_string()))
   }
 }
 

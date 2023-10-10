@@ -868,7 +868,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6f82af7#6f82af77abdbc6e47b44ba099c32d3d0636107d2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e08a66d3#e08a66d341889f9b3e0a79b47315a799d1b21ccc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -887,7 +887,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6f82af7#6f82af77abdbc6e47b44ba099c32d3d0636107d2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e08a66d3#e08a66d341889f9b3e0a79b47315a799d1b21ccc"
 dependencies = [
  "anyhow",
  "bytes",

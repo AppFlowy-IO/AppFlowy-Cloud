@@ -847,6 +847,7 @@ dependencies = [
  "lib0",
  "mime",
  "parking_lot",
+ "realtime-entity",
  "reqwest",
  "scraper",
  "serde",
@@ -867,7 +868,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6d74c89b#6d74c89b80066bd1b97729d12bf8aaed28ce242a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e08a66d3#e08a66d341889f9b3e0a79b47315a799d1b21ccc"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -886,7 +887,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=6d74c89b#6d74c89b80066bd1b97729d12bf8aaed28ce242a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=e08a66d3#e08a66d341889f9b3e0a79b47315a799d1b21ccc"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2822,6 +2823,7 @@ dependencies = [
  "lib0",
  "once_cell",
  "parking_lot",
+ "realtime-entity",
  "reqwest",
  "serde",
  "serde-aux",
@@ -2839,6 +2841,17 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "yrs",
+]
+
+[[package]]
+name = "realtime-entity"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "collab",
+ "collab-entity",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -3,7 +3,8 @@ use anyhow::Context;
 
 use super::grant::Grant;
 use gotrue_entity::{
-  AccessTokenResponse, GoTrueError, GoTrueSettings, OAuthError, OAuthProvider, SignUpResponse, User,
+  AccessTokenResponse, AdminListUsersResponse, GoTrueError, GoTrueSettings, OAuthError,
+  OAuthProvider, SignUpResponse, User,
 };
 use infra::reqwest::{check_response, from_body, from_response};
 
@@ -114,6 +115,19 @@ impl Client {
       .send()
       .await?;
 
+    to_gotrue_result(resp).await
+  }
+
+  pub async fn admin_list_user(
+    &self,
+    access_token: &str,
+  ) -> Result<AdminListUsersResponse, GoTrueError> {
+    let resp = self
+      .client
+      .get(format!("{}/admin/users", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
     to_gotrue_result(resp).await
   }
 

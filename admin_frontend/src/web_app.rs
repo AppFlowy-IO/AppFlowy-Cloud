@@ -1,13 +1,13 @@
 use crate::access_token::WebAccessToken;
 use crate::error::RenderError;
 use askama::Template;
+use axum::extract::State;
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
-use axum_extra::extract::cookie::CookieJar;
 
-use crate::templates;
+use crate::{templates, AppState};
 
-pub fn router() -> Router {
+pub fn router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
     .route("/home", get(home_handler))
@@ -26,7 +26,11 @@ pub async fn admin_handler(access_token: WebAccessToken) -> Result<Html<String>,
   Ok(Html(s))
 }
 
-pub async fn admin_users_handler(cookies: CookieJar) -> Result<Html<String>, RenderError> {
+pub async fn admin_users_handler(
+  State(state): State<AppState>,
+  access_token: WebAccessToken,
+) -> Result<Html<String>, RenderError> {
+  let users = state.gotrue_client.admin_list_user(&access_token.0).await;
   todo!()
 }
 

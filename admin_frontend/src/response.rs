@@ -10,6 +10,19 @@ where
   pub data: T,
 }
 
+impl<T> WebApiResponse<T>
+where
+  T: serde::Serialize,
+{
+  pub fn new(data: T) -> Self {
+    Self {
+      code: 0,
+      message: "success".to_owned(),
+      data,
+    }
+  }
+}
+
 impl<T> IntoResponse for WebApiResponse<T>
 where
   T: serde::Serialize,

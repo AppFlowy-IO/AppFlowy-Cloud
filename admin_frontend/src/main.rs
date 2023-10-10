@@ -14,7 +14,7 @@ async fn main() {
 
   let gotrue_client = gotrue::api::Client::new(
     reqwest::Client::new(),
-    &std::env::var("GOTRUE_URL").unwrap_or("http://localhost:9999".to_string()),
+    &std::env::var("GOTRUE_URL").unwrap_or("http://gotrue:9999".to_string()),
   );
 
   let state = AppState { gotrue_client };

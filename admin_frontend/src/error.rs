@@ -1,26 +1,29 @@
-use axum::{response::IntoResponse, Json};
+use axum::{http::status, response::IntoResponse};
 
-#[derive(serde::Serialize)]
+// #[derive(serde::Serialize)]
 pub struct WebApiError {
-  pub code: i16,
-  pub message: String,
+  pub status_code: status::StatusCode,
+  pub payload: String,
 }
 
 impl WebApiError {
-  pub fn new(code: i16, message: String) -> Self {
-    Self { code, message }
+  pub fn new(code: status::StatusCode, message: String) -> Self {
+    Self {
+      status_code: code,
+      payload: message,
+    }
   }
 }
 
 impl IntoResponse for WebApiError {
   fn into_response(self) -> axum::response::Response {
-    Json(self).into_response()
+    (self.status_code, self.payload).into_response()
   }
 }
 
 impl From<gotrue_entity::GoTrueError> for WebApiError {
   fn from(v: gotrue_entity::GoTrueError) -> Self {
-    WebApiError::new(500, v.to_string())
+    WebApiError::new(status::StatusCode::UNAUTHORIZED, v.to_string())
   }
 }
 

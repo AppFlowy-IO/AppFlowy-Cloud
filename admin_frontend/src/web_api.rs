@@ -1,12 +1,10 @@
-use std::borrow::Cow;
-
-use axum::response::Result;
-use axum::{extract::State, routing::post, Json, Router};
-use axum_extra::extract::cookie::Cookie;
-use axum_extra::extract::CookieJar;
-
 use crate::error::WebApiError;
+use crate::models::LoginResponse;
+use crate::response::WebApiResponse;
 use crate::{models::LoginRequest, AppState};
+use axum::response::Result;
+use axum::Json;
+use axum::{extract::State, routing::post, Router};
 
 pub fn router() -> Router<AppState> {
   Router::new()
@@ -17,10 +15,9 @@ pub fn router() -> Router<AppState> {
 // TODO: Support OAuth2 login
 // login and set the cookie
 pub async fn login_handler(
-  cookie_jar: CookieJar,
   State(state): State<AppState>,
   Json(param): Json<LoginRequest>,
-) -> Result<CookieJar, WebApiError> {
+) -> Result<WebApiResponse<LoginResponse>, WebApiError> {
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
@@ -31,12 +28,7 @@ pub async fn login_handler(
     ))
     .await?;
 
-  Ok(set_access_token_cookie(
-    cookie_jar,
-    token.access_token.into(),
-  ))
-}
-
-fn set_access_token_cookie(jar: CookieJar, token: Cow<'static, str>) -> CookieJar {
-  jar.add(Cookie::new("access_token", token))
+  Ok(WebApiResponse::new(LoginResponse {
+    access_token: token.access_token,
+  }))
 }

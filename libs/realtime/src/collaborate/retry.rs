@@ -3,10 +3,10 @@ use crate::collaborate::CollabClientStream;
 use anyhow::{anyhow, Error};
 
 use collab::core::origin::CollabOrigin;
-use collab_entity::collab_msg::CollabMessage;
 use database::collab::CollabStorage;
 use futures_util::SinkExt;
 use parking_lot::Mutex;
+use realtime_entity::collab_msg::CollabMessage;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::iter::Take;

@@ -1,5 +1,4 @@
 use collab::core::origin::CollabOrigin;
-use collab_entity::collab_msg::CollabSinkMessage;
 
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -10,6 +9,7 @@ use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
 use crate::collab_sync::{SyncError, DEFAULT_SYNC_TIMEOUT};
 use futures_util::SinkExt;
 
+use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 use tokio::spawn;
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
@@ -244,10 +244,9 @@ where
 
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
-      if sending_msg.is_mergeable() {
+      if sending_msg.can_merge(&self.config.maximum_payload_size) {
         while let Some(pending_msg) = pending_msg_queue.pop() {
-          sending_msg.merge(pending_msg);
-          if !sending_msg.is_mergeable() {
+          if !sending_msg.merge(pending_msg, &self.config.maximum_payload_size) {
             break;
           }
         }
@@ -275,7 +274,7 @@ where
 
     // Wait for the message to be acked.
     // If the message is not acked within the timeout, resend the message.
-    match tokio::time::timeout(self.config.timeout, rx).await {
+    match tokio::time::timeout(self.config.send_timeout, rx).await {
       Ok(result) => {
         match result {
           Ok(_) => match self.pending_msg_queue.try_lock() {
@@ -364,12 +363,9 @@ impl<Msg> CollabSinkRunner<Msg> {
 pub struct SinkConfig {
   /// `timeout` is the time to wait for the remote to ack the message. If the remote
   /// does not ack the message in time, the message will be sent again.
-  pub timeout: Duration,
-  /// `mergeable` indicates whether the messages are mergeable. If the messages are
-  /// mergeable, the sink will try to merge the messages before sending them.
-  pub mergeable: bool,
-  /// `max_zip_size` is the maximum size of the messages to be merged.
-  pub max_merge_size: usize,
+  pub send_timeout: Duration,
+  /// `maximum_payload_size` is the maximum size of the messages to be merged.
+  pub maximum_payload_size: usize,
   /// `strategy` is the strategy to send the messages.
   pub strategy: SinkStrategy,
 }
@@ -378,34 +374,27 @@ impl SinkConfig {
   pub fn new() -> Self {
     Self::default()
   }
-  pub fn with_timeout(mut self, secs: u64) -> Self {
+  pub fn send_timeout(mut self, secs: u64) -> Self {
     let timeout_duration = Duration::from_secs(secs);
     if let SinkStrategy::FixInterval(duration) = self.strategy {
       if timeout_duration < duration {
-        tracing::warn!("The timeout duration should greater than the fix interval duration");
+        warn!("The timeout duration should greater than the fix interval duration");
       }
     }
-    self.timeout = timeout_duration;
-    self
-  }
-
-  /// `mergeable` indicates whether the messages are mergeable. If the messages are
-  /// mergeable, the sink will try to merge the messages before sending them.
-  pub fn with_mergeable(mut self, mergeable: bool) -> Self {
-    self.mergeable = mergeable;
+    self.send_timeout = timeout_duration;
     self
   }
 
   /// `max_zip_size` is the maximum size of the messages to be merged.
   pub fn with_max_merge_size(mut self, max_merge_size: usize) -> Self {
-    self.max_merge_size = max_merge_size;
+    self.maximum_payload_size = max_merge_size;
     self
   }
 
   pub fn with_strategy(mut self, strategy: SinkStrategy) -> Self {
     if let SinkStrategy::FixInterval(duration) = strategy {
-      if self.timeout < duration {
-        tracing::warn!("The timeout duration should greater than the fix interval duration");
+      if self.send_timeout < duration {
+        warn!("The timeout duration should greater than the fix interval duration");
       }
     }
     self.strategy = strategy;
@@ -416,9 +405,8 @@ impl SinkConfig {
 impl Default for SinkConfig {
   fn default() -> Self {
     Self {
-      timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
-      mergeable: false,
-      max_merge_size: 4096,
+      send_timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
+      maximum_payload_size: 4096,
       strategy: SinkStrategy::ASAP,
     }
   }
@@ -428,9 +416,6 @@ pub enum SinkStrategy {
   /// Send the message as soon as possible.
   ASAP,
   /// Send the message in a fixed interval.
-  /// This can reduce the number of times the message is sent. Especially if using the AWS
-  /// as the storage layer, the cost of sending the message is high. However, it may increase
-  /// the latency of the message.
   FixInterval(Duration),
 }
 
@@ -439,8 +424,6 @@ impl SinkStrategy {
     matches!(self, SinkStrategy::FixInterval(_))
   }
 }
-
-pub type MsgId = u64;
 
 pub trait MsgIdCounter: Send + Sync + 'static {
   /// Get the next message id. The message id should be unique.

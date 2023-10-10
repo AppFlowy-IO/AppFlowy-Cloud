@@ -104,6 +104,7 @@ members = [
     "libs/token",
     "libs/snowflake",
     "libs/realtime",
+    "libs/realtime-entity",
     "libs/database",
     "libs/database-entity",
     "libs/client-api",
@@ -113,6 +114,9 @@ members = [
     "libs/gotrue-entity",
     "admin_frontend",
 ]
+
+[workspace.dependencies]
+realtime-entity = { workspace = true, path = "libs/realtime-entity" }
 
 [profile.release]
 lto = true
@@ -129,8 +133,8 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6d74c89b"  }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6d74c89b" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "e08a66d3"  }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "e08a66d3" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

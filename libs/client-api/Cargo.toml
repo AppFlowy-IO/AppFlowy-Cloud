@@ -37,6 +37,7 @@ collab = { version = "0.1.0", optional = true }
 collab-entity = { version = "0.1.0" }
 yrs = { version = "0.16.5", optional = true }
 lib0 = { version = "0.16.3", features = ["lib0-serde"], optional = true }
+realtime-entity = { workspace = true }
 
 
 [features]

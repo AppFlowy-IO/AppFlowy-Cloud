@@ -1,7 +1,4 @@
-use database::{
-  collab_db_ops::{self, collab_exists, insert_af_collab},
-  user,
-};
+use database::user;
 use database_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryObjectSnapshotParams,
   QuerySnapshotParams,
@@ -16,10 +13,8 @@ pub async fn create_collab(
   params: &InsertCollabParams,
 ) -> Result<(), AppError> {
   params.validate()?;
-
   // TODO: access control for user_uuid
-
-  if collab_exists(pg_pool, &params.object_id).await? {
+  if database::collab::collab_exists(pg_pool, &params.object_id).await? {
     return Err(ErrorCode::RecordAlreadyExists.into());
   }
   upsert_collab(pg_pool, user_uuid, params).await
@@ -36,7 +31,7 @@ pub async fn upsert_collab(
 
   let owner_uid = user::uid_from_uuid(pg_pool, user_uuid).await?;
   let mut tx = pg_pool.begin().await?;
-  insert_af_collab(&mut tx, owner_uid, params).await?;
+  database::collab::insert_af_collab(&mut tx, owner_uid, params).await?;
   tx.commit().await?;
   Ok(())
 }
@@ -48,7 +43,7 @@ pub async fn get_collab_snapshot(
 ) -> Result<Vec<u8>, AppError> {
   // TODO: access control for user_uuid
 
-  let blob = collab_db_ops::get_snapshot_blob(pg_pool, params.snapshot_id).await?;
+  let blob = database::collab::get_snapshot_blob(pg_pool, params.snapshot_id).await?;
   Ok(blob)
 }
 
@@ -58,8 +53,7 @@ pub async fn get_all_collab_snapshot(
   params: &QueryObjectSnapshotParams,
 ) -> Result<AFCollabSnapshots, AppError> {
   // TODO: access control for user_uuid
-
-  let snapshots = collab_db_ops::get_all_snapshots(pg_pool, &params.object_id).await?;
+  let snapshots = database::collab::get_all_snapshots(pg_pool, &params.object_id).await?;
   Ok(snapshots)
 }
 pub async fn delete_collab(
@@ -71,6 +65,6 @@ pub async fn delete_collab(
 
   // TODO: access control for user_uuid
 
-  collab_db_ops::delete_collab(pg_pool, &params.object_id).await?;
+  database::collab::delete_collab(pg_pool, &params.object_id).await?;
   Ok(())
 }

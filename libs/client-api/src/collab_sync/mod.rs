@@ -10,3 +10,5 @@ pub use error::*;
 pub use plugin::*;
 pub use sink::*;
 pub use sync::*;
+
+pub use realtime_entity::collab_msg;

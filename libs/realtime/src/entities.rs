@@ -3,7 +3,7 @@ use actix::{Message, Recipient};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 
-use collab_entity::collab_msg::CollabMessage;
+use realtime_entity::collab_msg::CollabMessage;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};

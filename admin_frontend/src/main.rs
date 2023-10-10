@@ -20,7 +20,7 @@ async fn main() {
 
   let state = AppState { gotrue_client };
 
-  let web_app_router = web_app::router();
+  let web_app_router = web_app::router().with_state(state.clone());
   let web_api_router = web_api::router().with_state(state);
 
   let app = Router::new()

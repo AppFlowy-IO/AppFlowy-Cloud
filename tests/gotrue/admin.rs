@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn admin_user_create() {
+async fn admin_user_create_and_list() {
   let http_client = reqwest::Client::new();
   let gotrue_client = Client::new(http_client, "http://localhost:9998");
   let admin_token = gotrue_client
@@ -50,6 +50,12 @@ async fn admin_user_create() {
     .await
     .unwrap();
   assert!(user_token.user.email_confirmed_at.is_some());
+
+  let users = gotrue_client
+    .admin_list_user(&admin_token.access_token)
+    .await
+    .unwrap();
+  panic!("{:?}", users);
 }
 
 #[tokio::test]

@@ -14,6 +14,12 @@ pub struct Identity {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct AdminListUsersResponse {
+  pub users: Vec<User>,
+  pub aud: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct User {
   pub id: String,
 
@@ -48,7 +54,7 @@ pub struct User {
   pub user_metadata: serde_json::Value,
 
   pub factors: Option<Vec<Factor>>,
-  pub identities: Vec<Identity>,
+  pub identities: Option<Vec<Identity>>,
 
   pub created_at: String,
   pub updated_at: String,

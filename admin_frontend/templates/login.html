@@ -1,62 +1,65 @@
+<!doctype html>
 <html>
-
-<body>
+  <body>
     <h1>Admin Login</h1>
     <form id="loginForm">
-        <table>
-            <tr>
-                <td>
-                    <label for="email">Email:</label>
-                </td>
-                <td>
-                    <input type="text" id="email" name="email" required />
-                </td>
-            </tr>
-            <tr>
-                <td>
-                    <label for="password">Password:</label>
-                </td>
-                <td>
-                    <input type="password" id="password" name="password" required />
-                </td>
-            </tr>
-        </table>
-        <button type="button" id="submitBtn">Submit</button>
+      <table>
+        <tr>
+          <td>
+            <label for="email">Email:</label>
+          </td>
+          <td>
+            <input type="text" id="email" name="email" required />
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <label for="password">Password:</label>
+          </td>
+          <td>
+            <input type="password" id="password" name="password" required />
+          </td>
+        </tr>
+      </table>
+      <button type="button" id="submitBtn">Submit</button>
     </form>
     <div id="response"></div>
 
     <script>
-	document.getElementById('submitBtn').addEventListener('click', function () {
-	    var data = {
-		email: document.getElementById('email').value,
-		password: document.getElementById('password').value
-	    };
-	    fetch('/web-api/login', {
-		method: 'POST',
-		headers: {
-		    'Content-Type': 'application/json',
-		},
-		body: JSON.stringify(data),
-	    })
-	    .then(response => {
-        	if (!response.ok) {
-        	    // If HTTP status code is not OK, throw an error with the status text
-        	    throw Error(response.statusText);
-        	}
-        	// Parse the JSON response
-        	return response.json();
-	    })
-    	    .then(data => {
-    	        // Set the token as a cookie
-    	        document.cookie = "access_token=" + data.data.access_token + "; path=/";
-		window.location.href = "/home";
-    	    })
-	    .catch((error) => {
-		console.error('Error:', error);
-		document.getElementById('response').innerText = 'Login failed: ' + error.message;
-	    });
-	});
+      document
+        .getElementById("submitBtn")
+        .addEventListener("click", function () {
+          var data = {
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value,
+          };
+          fetch("/web-api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                // If HTTP status code is not OK, throw an error with the status text
+                throw Error(response.statusText);
+              }
+              // Parse the JSON response
+              return response.json();
+            })
+            .then((data) => {
+              // Set the token as a cookie
+              document.cookie =
+                "access_token=" + data.data.access_token + "; path=/";
+              window.location.href = "/";
+            })
+            .catch((error) => {
+              console.error("Error:", error);
+              document.getElementById("response").innerText =
+                "Login failed: " + error.message;
+            });
+        });
     </script>
-</body>
-
+  </body>
 </html>

@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
   <body>
     <h1>Admin Login</h1>
     <form id="loginForm">
@@ -52,7 +52,7 @@
               // Set the token as a cookie
               document.cookie =
                 "access_token=" + data.data.access_token + "; path=/";
-              window.location.href = "/";
+              window.location.href = "/web/home";
             })
             .catch((error) => {
               console.error("Error:", error);

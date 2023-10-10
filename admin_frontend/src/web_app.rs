@@ -52,8 +52,6 @@ pub async fn admin_user_details_handler(
   access_token: WebAccessToken,
   Path(user_id): Path<String>,
 ) -> Result<Html<String>, RenderError> {
-  println!("---------- user_id: {}", user_id);
-  // http://localhost:3000/admin/users/3c093675-c4e0-4329-bd92-c1e8345afdd2
   let users = state
     .gotrue_client
     .admin_user_details(&access_token.0, &user_id)

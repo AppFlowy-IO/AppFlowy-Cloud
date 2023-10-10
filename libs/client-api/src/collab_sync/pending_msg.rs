@@ -1,10 +1,9 @@
-use collab_entity::collab_msg::CollabSinkMessage;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
-use crate::collab_sync::MsgId;
+use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 use tokio::sync::oneshot;
 use tracing::{trace, warn};
 

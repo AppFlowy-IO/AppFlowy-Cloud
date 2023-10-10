@@ -30,7 +30,7 @@ database-entity = { path = "../database-entity" }
 yrs = "0.16.5"
 lib0 = "0.16.3"
 chrono = "0.4.30"
-
+realtime-entity = { workspace = true }
 [dev-dependencies]
 actix = "0.13"
 actix-web = { version = "4.3.1" }

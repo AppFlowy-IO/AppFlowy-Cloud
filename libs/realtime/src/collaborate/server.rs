@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use actix::{Actor, Context, Handler, ResponseFuture};
 
-use collab_entity::collab_msg::CollabMessage;
 use parking_lot::Mutex;
+use realtime_entity::collab_msg::CollabMessage;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

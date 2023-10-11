@@ -17,8 +17,18 @@ anyhow = "1.0.75"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
 
-sqlx = { version = "0.7", default-features = false, features = ["postgres", "chrono", "uuid", "macros", "runtime-tokio-rustls"] }
+sqlx = { version = "0.7", default-features = false, features = ["postgres", "chrono", "uuid", "macros", "runtime-tokio-rustls", "rust_decimal"] }
 tracing = { version = "0.1.37" }
 uuid = { version = "1.4.1", features = ["serde", "v4"] }
 chrono = {version="0.4",features = ["serde"]}
 redis = "0.23.3"
+futures-util = "0.3.28"
+bytes = "1.0"
+rust-s3 = { version = "0.33.0", optional = true }
+sha2 = "0.10.8"
+base64 = "0.21.0"
+rust_decimal = "1.32.0"
+
+[features]
+default = ["s3"]
+s3 = ["rust-s3"]

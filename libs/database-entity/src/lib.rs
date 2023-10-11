@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 pub type RawData = Vec<u8>;
@@ -216,17 +217,28 @@ pub struct AFWorkspaceMember {
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
-pub struct AFFileMetadata {
-  pub owner_uid: i64,
-  pub path: String,
+pub struct AFBlobMetadata {
+  pub workspace_id: Uuid,
+  pub file_id: String,
   pub file_type: String,
   pub file_size: i64,
-  pub created_at: DateTime<Utc>,
+  pub modified_at: DateTime<Utc>,
 }
 
-impl AFFileMetadata {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AFBlobRecord {
+  pub file_id: String,
+}
+
+impl AFBlobRecord {
+  pub fn new(file_id: String) -> Self {
+    Self { file_id }
+  }
+}
+
+impl AFBlobMetadata {
   pub fn s3_path(&self) -> String {
-    format!("{}/{}", self.owner_uid, self.path)
+    format!("{}/{}", self.workspace_id, self.file_id)
   }
 }
 

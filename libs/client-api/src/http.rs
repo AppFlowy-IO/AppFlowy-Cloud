@@ -1,5 +1,12 @@
+use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
+use database_entity::{
+  AFBlobRecord, AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams,
+  BatchQueryCollabResult, InsertCollabParams,
+};
+use database_entity::{AFWorkspaces, QueryCollabParams};
+use database_entity::{DeleteCollabParams, RawData};
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
@@ -7,34 +14,25 @@ use gotrue::grant::RefreshTokenGrant;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use gotrue_entity::OAuthProvider;
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
+use gotrue_entity::{AccessTokenResponse, User};
 use mime::Mime;
 use parking_lot::RwLock;
 use reqwest::header;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use scraper::{Html, Selector};
+use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
 use shared_entity::dto::SignInTokenResponse;
 use shared_entity::dto::UpdateUsernameParams;
 use shared_entity::dto::UserUpdateParams;
 use shared_entity::dto::WorkspaceMembersParams;
+use shared_entity::error_code::url_missing_param;
+use shared_entity::error_code::ErrorCode;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::instrument;
 use url::Url;
-
-use gotrue_entity::{AccessTokenResponse, User};
-
-use crate::notify::{ClientToken, TokenStateReceiver};
-use database_entity::{
-  AFBlobRecord, AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams,
-  BatchQueryCollabResult, InsertCollabParams,
-};
-use database_entity::{AFWorkspaces, QueryCollabParams};
-use database_entity::{DeleteCollabParams, RawData};
-use shared_entity::app_error::AppError;
-use shared_entity::error_code::url_missing_param;
-use shared_entity::error_code::ErrorCode;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -586,7 +584,7 @@ impl Client {
     workspace_id: &str,
     data: T,
     mime: M,
-  ) -> Result<AFBlobRecord, AppError> {
+  ) -> Result<String, AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
     let data = data.into();
     let content_length = data.len();
@@ -598,9 +596,13 @@ impl Client {
       .body(data)
       .send()
       .await?;
-    AppResponse::<AFBlobRecord>::from_response(resp)
+    let record = AppResponse::<AFBlobRecord>::from_response(resp)
       .await?
-      .into_data()
+      .into_data()?;
+    Ok(format!(
+      "{}/api/file_storage/{}/{}",
+      self.base_url, workspace_id, record.file_id
+    ))
   }
 
   /// Only expose this method for testing
@@ -628,25 +630,10 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
-  pub async fn get_file_with_url(&self, workspace_id: &str, url: &str) -> Result<Bytes, AppError> {
-    let url = Url::parse(url)?;
-    let file_id = url
-      .path_segments()
-      .and_then(|s| s.last())
-      .ok_or(AppError::new(
-        ErrorCode::InvalidRequestParams,
-        "Invalid url",
-      ))?;
-    self.get_file(workspace_id, file_id).await
-  }
-
-  pub async fn get_file(&self, workspace_id: &str, file_id: &str) -> Result<Bytes, AppError> {
-    let url = format!(
-      "{}/api/file_storage/{}/{}",
-      self.base_url, workspace_id, file_id
-    );
+  pub async fn get_file(&self, url: &str) -> Result<Bytes, AppError> {
+    Url::parse(url)?;
     let resp = self
-      .http_client_with_auth(Method::GET, &url)
+      .http_client_with_auth(Method::GET, url)
       .await?
       .send()
       .await?;
@@ -668,13 +655,9 @@ impl Client {
     }
   }
 
-  pub async fn delete_file(&self, workspace_id: &str, file_id: &str) -> Result<(), AppError> {
-    let url = format!(
-      "{}/api/file_storage/{}/{}",
-      self.base_url, workspace_id, file_id
-    );
+  pub async fn delete_file(&self, url: &str) -> Result<(), AppError> {
     let resp = self
-      .http_client_with_auth(Method::DELETE, &url)
+      .http_client_with_auth(Method::DELETE, url)
       .await?
       .send()
       .await?;

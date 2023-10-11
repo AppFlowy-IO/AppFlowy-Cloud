@@ -1,5 +1,5 @@
-use crate::access_token::WebAccessToken;
 use crate::error::RenderError;
+use crate::session::UserSession;
 use askama::Template;
 use axum::extract::{Path, State};
 use axum::response::Result;
@@ -17,23 +17,23 @@ pub fn router() -> Router<AppState> {
     .route("/admin/users/:user_id", get(admin_user_details_handler))
 }
 
-pub async fn home_handler(_access_token: WebAccessToken) -> Result<Html<String>, RenderError> {
+pub async fn home_handler(_: UserSession) -> Result<Html<String>, RenderError> {
   let s = templates::Home {}.render()?;
   Ok(Html(s))
 }
 
-pub async fn admin_handler(_access_token: WebAccessToken) -> Result<Html<String>, RenderError> {
+pub async fn admin_handler(_: UserSession) -> Result<Html<String>, RenderError> {
   let s = templates::Admin {}.render()?;
   Ok(Html(s))
 }
 
 pub async fn admin_users_handler(
   State(state): State<AppState>,
-  access_token: WebAccessToken,
+  session: UserSession,
 ) -> Result<Html<String>, RenderError> {
   let users = state
     .gotrue_client
-    .admin_list_user(&access_token.0)
+    .admin_list_user(&session.access_token)
     .await
     .map_or_else(
       |err| {
@@ -49,12 +49,12 @@ pub async fn admin_users_handler(
 
 pub async fn admin_user_details_handler(
   State(state): State<AppState>,
-  access_token: WebAccessToken,
+  session: UserSession,
   Path(user_id): Path<String>,
 ) -> Result<Html<String>, RenderError> {
   let users = state
     .gotrue_client
-    .admin_user_details(&access_token.0, &user_id)
+    .admin_user_details(&session.access_token, &user_id)
     .await
     .unwrap(); // TODO: handle error
   let s = templates::UserDetails { user: &users }.render()?;

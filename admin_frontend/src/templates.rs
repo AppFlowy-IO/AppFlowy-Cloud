@@ -6,7 +6,9 @@ pub struct Login;
 
 #[derive(Template)]
 #[template(path = "home.html")]
-pub struct Home;
+pub struct Home<'a> {
+  pub email: &'a str,
+}
 
 #[derive(Template)]
 #[template(path = "admin.html")]

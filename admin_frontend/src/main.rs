@@ -2,6 +2,7 @@ mod access_token;
 mod error;
 mod models;
 mod response;
+mod session;
 mod templates;
 mod web_api;
 mod web_app;
@@ -17,8 +18,18 @@ async fn main() {
     reqwest::Client::new(),
     &std::env::var("GOTRUE_URL").unwrap_or("http://gotrue:9999".to_string()),
   );
+  let redis_client =
+    redis::Client::open(std::env::var("REDIS_URL").unwrap_or("redis://redis:6379".to_string()))
+      .unwrap()
+      .get_tokio_connection_manager()
+      .await
+      .unwrap();
+  let session_store = session::SessionStorage::new(redis_client);
 
-  let state = AppState { gotrue_client };
+  let state = AppState {
+    gotrue_client,
+    session_store,
+  };
 
   let web_app_router = web_app::router().with_state(state.clone());
   let web_api_router = web_api::router().with_state(state);
@@ -37,4 +48,5 @@ async fn main() {
 #[derive(Clone)]
 pub struct AppState {
   pub gotrue_client: gotrue::api::Client,
+  pub session_store: session::SessionStorage,
 }

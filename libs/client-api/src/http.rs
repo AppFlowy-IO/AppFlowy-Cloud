@@ -21,6 +21,7 @@ use shared_entity::dto::WorkspaceMembersParams;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::instrument;
+use url::Url;
 
 use gotrue_entity::{AccessTokenResponse, User};
 
@@ -623,6 +624,20 @@ impl Client {
     AppResponse::<AFBlobRecord>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  /// Get the file with the given url. The url should be in the format of
+  /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
+  pub async fn get_file_with_url(&self, workspace_id: &str, url: &str) -> Result<Bytes, AppError> {
+    let url = Url::parse(url)?;
+    let file_id = url
+      .path_segments()
+      .and_then(|s| s.last())
+      .ok_or(AppError::new(
+        ErrorCode::InvalidRequestParams,
+        "Invalid url",
+      ))?;
+    self.get_file(workspace_id, file_id).await
   }
 
   pub async fn get_file(&self, workspace_id: &str, file_id: &str) -> Result<Bytes, AppError> {

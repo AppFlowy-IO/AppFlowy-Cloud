@@ -143,7 +143,7 @@ async fn get_handler(
     .append_header((CONTENT_TYPE, metadata.file_type))
     .append_header((LAST_MODIFIED, metadata.modified_at.to_rfc2822()))
     .append_header((CONTENT_LENGTH, blob.len()))
-    .append_header((CACHE_CONTROL, "public, immutable, max-age=31536000"))
+    .append_header((CACHE_CONTROL, "public, immutable, max-age=31536000"))// 31536000 seconds = 1 year
     .body(blob);
 
   Ok(response)

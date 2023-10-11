@@ -42,6 +42,19 @@ async fn put_and_get() {
 }
 
 #[tokio::test]
+async fn put_giant_file() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let mime = mime::TEXT_PLAIN_UTF_8;
+  let error = c1
+    .put_file_with_content_length(&workspace_id, "123", &mime, 10 * 1024 * 1024 * 1024)
+    .await
+    .unwrap_err();
+
+  assert_eq!(error.code, ErrorCode::PayloadTooLarge);
+}
+
+#[tokio::test]
 async fn put_and_put_and_get() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;

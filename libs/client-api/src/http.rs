@@ -587,10 +587,36 @@ impl Client {
     mime: &Mime,
   ) -> Result<AFBlob, AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
+    let data = data.into();
+    let content_length = data.len();
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
       .header(header::CONTENT_TYPE, mime.to_string())
+      .header(header::CONTENT_LENGTH, content_length)
+      .body(data)
+      .send()
+      .await?;
+    AppResponse::<AFBlob>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Only expose this method for testing
+  #[cfg(debug_assertions)]
+  pub async fn put_file_with_content_length<T: Into<Bytes>>(
+    &self,
+    workspace_id: &str,
+    data: T,
+    mime: &Mime,
+    content_length: usize,
+  ) -> Result<AFBlob, AppError> {
+    let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .header(header::CONTENT_TYPE, mime.to_string())
+      .header(header::CONTENT_LENGTH, content_length)
       .body(data.into())
       .send()
       .await?;

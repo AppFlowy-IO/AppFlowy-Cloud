@@ -1,9 +1,17 @@
 <!doctype html>
 <html lang="en">
   <body>
-    <h1>Welcome to the Home Page</h1>
-    <button id="logoutBtn">Logout</button>
-    <button id="adminBtn">Admin</button>
+
+    <div id="content">
+        <h1>User Management</h1>
+	<p>Welcome, {{ email }}</p>
+    </div>
+
+    <div id="menu">
+        <button id="adminBtn">Admin</button>
+        <button id="logoutBtn">Logout</button>
+    </div>
+
     <script>
       document
         .getElementById("logoutBtn")

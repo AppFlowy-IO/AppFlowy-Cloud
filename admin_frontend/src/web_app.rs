@@ -17,8 +17,26 @@ pub fn router() -> Router<AppState> {
     .route("/admin/users/:user_id", get(admin_user_details_handler))
 }
 
-pub async fn home_handler(_: UserSession) -> Result<Html<String>, RenderError> {
-  let s = templates::Home {}.render()?;
+pub async fn login_handler() -> Result<Html<String>, RenderError> {
+  let s = templates::Login {}.render()?;
+  Ok(Html(s))
+}
+
+pub async fn home_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, RenderError> {
+  let user_email = state
+    .gotrue_client
+    .user_info(&session.access_token)
+    .await
+    .map(|user_info| user_info.email)
+    .unwrap_or_else(|err| {
+      println!("Failed to fetch user info: {:?}", err);
+      "".to_owned()
+    });
+
+  let s = templates::Home { email: &user_email }.render()?;
   Ok(Html(s))
 }
 
@@ -58,10 +76,5 @@ pub async fn admin_user_details_handler(
     .await
     .unwrap(); // TODO: handle error
   let s = templates::UserDetails { user: &users }.render()?;
-  Ok(Html(s))
-}
-
-pub async fn login_handler() -> Result<Html<String>, RenderError> {
-  let s = templates::Login {}.render()?;
   Ok(Html(s))
 }

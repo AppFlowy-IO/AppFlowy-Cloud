@@ -54,7 +54,14 @@ impl From<anyhow::Error> for AppError {
 
 impl From<DatabaseError> for AppError {
   fn from(value: DatabaseError) -> Self {
-    AppError::new(ErrorCode::DatabaseError, value.to_string())
+    match &value {
+      DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, value),
+      DatabaseError::UnexpectedData(_) => AppError::new(ErrorCode::InvalidRequestParams, value),
+      DatabaseError::StorageSpaceNotEnough => {
+        AppError::new(ErrorCode::StorageSpaceNotEnough, value)
+      },
+      _ => AppError::new(ErrorCode::DatabaseError, value),
+    }
   }
 }
 

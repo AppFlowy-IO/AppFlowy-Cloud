@@ -14,7 +14,7 @@ macro_rules! static_app_response {
   ($name:ident, $code:expr) => {
     #[allow(non_snake_case, missing_docs)]
     pub fn $name() -> AppResponse<T> {
-      AppResponse::new($code, $code.to_string().into())
+      AppResponse::new($code, $code.to_string())
     }
   };
 }
@@ -36,11 +36,11 @@ pub struct AppResponse<T> {
 }
 
 impl<T> AppResponse<T> {
-  pub fn new(code: ErrorCode, message: Cow<'static, str>) -> Self {
+  pub fn new<M: Into<Cow<'static, str>>>(code: ErrorCode, message: M) -> Self {
     Self {
       data: None,
       code,
-      message,
+      message: message.into(),
     }
   }
 

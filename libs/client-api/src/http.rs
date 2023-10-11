@@ -26,7 +26,7 @@ use gotrue_entity::{AccessTokenResponse, User};
 
 use crate::notify::{ClientToken, TokenStateReceiver};
 use database_entity::{
-  AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult,
+  AFBlob, AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult,
   InsertCollabParams,
 };
 use database_entity::{AFWorkspaces, QueryCollabParams};
@@ -580,13 +580,13 @@ impl Client {
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
 
-  pub async fn put_file_storage_object<T: Into<Bytes>>(
+  pub async fn put_file<T: Into<Bytes>>(
     &self,
-    path: &str,
+    workspace_id: &str,
     data: T,
     mime: &Mime,
-  ) -> Result<(), AppError> {
-    let url = format!("{}/api/file_storage/{}", self.base_url, path);
+  ) -> Result<AFBlob, AppError> {
+    let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
@@ -594,22 +594,32 @@ impl Client {
       .body(data.into())
       .send()
       .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    AppResponse::<AFBlob>::from_response(resp)
+      .await?
+      .into_data()
   }
 
-  pub async fn get_file_storage_object_stream(
-    &self,
-    path: &str,
-  ) -> Result<impl futures_core::Stream<Item = reqwest::Result<Bytes>>, AppError> {
-    let url = format!("{}/api/file_storage/{}", self.base_url, path);
+  pub async fn get_file(&self, workspace_id: &str, file_id: &str) -> Result<Bytes, AppError> {
+    let url = format!(
+      "{}/api/file_storage/{}/{}",
+      self.base_url, workspace_id, file_id
+    );
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
       .send()
       .await?;
+
     match resp.status() {
-      reqwest::StatusCode::OK => Ok(resp.bytes_stream()),
-      reqwest::StatusCode::NOT_FOUND => Err(ErrorCode::FileNotFound.into()),
+      reqwest::StatusCode::OK => {
+        let mut stream = resp.bytes_stream();
+        let mut acc: Vec<u8> = Vec::new();
+        while let Some(raw_bytes) = stream.next().await {
+          acc.extend_from_slice(&raw_bytes?);
+        }
+        Ok(Bytes::from(acc))
+      },
+      reqwest::StatusCode::NOT_FOUND => Err(ErrorCode::RecordNotFound.into()),
       c => Err(AppError::new(
         ErrorCode::Unhandled,
         format!("status code: {}, message: {}", c, resp.text().await?),
@@ -617,17 +627,11 @@ impl Client {
     }
   }
 
-  pub async fn get_file_storage_object(&self, path: &str) -> Result<Bytes, AppError> {
-    let mut acc: Vec<u8> = Vec::new();
-    let mut stream = self.get_file_storage_object_stream(path).await?;
-    while let Some(raw_bytes) = stream.next().await {
-      acc.extend_from_slice(&raw_bytes?);
-    }
-    Ok(Bytes::from(acc))
-  }
-
-  pub async fn delete_file_storage_object(&self, path: &str) -> Result<(), AppError> {
-    let url = format!("{}/api/file_storage/{}", self.base_url, path);
+  pub async fn delete_file(&self, workspace_id: &str, file_id: &str) -> Result<(), AppError> {
+    let url = format!(
+      "{}/api/file_storage/{}/{}",
+      self.base_url, workspace_id, file_id
+    );
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?

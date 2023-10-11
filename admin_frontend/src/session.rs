@@ -113,12 +113,12 @@ pub enum SessionRejection {
 impl IntoResponse for SessionRejection {
   fn into_response(self) -> axum::response::Response {
     match self {
-      SessionRejection::NoSessionId => Redirect::permanent("/web/login").into_response(),
+      SessionRejection::NoSessionId => Redirect::temporary("/web/login").into_response(),
       SessionRejection::CookieError(err) => {
         tracing::error!("session rejection cookie error: {}", err);
-        Redirect::permanent("/web/login").into_response()
+        Redirect::temporary("/web/login").into_response()
       },
-      SessionRejection::SessionNotFound => Redirect::permanent("/web/login").into_response(),
+      SessionRejection::SessionNotFound => Redirect::temporary("/web/login").into_response(),
     }
   }
 }

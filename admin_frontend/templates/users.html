@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <body>
+    <h1>User List</h1>
+
+    <!-- Button to create new user -->
+    <button id="createUserBtn">Create User</button>
+
+    <ul id="userList"></ul>
+
+    <table>
+      <tr>
+        <th>Email</th>
+        <th>Created At</th>
+        <th>Action</th>
+      </tr>
+
+      {% for user in users %}
+      <tr>
+        <td>{{ user.email|escape }}</td>
+        <td>{{ user.created_at|escape }}</td>
+        <td><a href="/web/admin/users/{{ user.id }}" class="btn">Go</a></td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <script>
+      document.getElementById('createUserBtn').addEventListener('click', function() {
+        // Get the email from the user
+        const email = prompt('Please enter the new user email:');
+        if (email) {
+          fetch("/web-api/add_user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email,
+            }),
+          })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok' + response.statusText);
+            }
+            return response.json();
+          })
+          .then((data) => {
+	    if (data.code === 0) {
+              window.location.href = "/web/admin/users/" + data.data.id;
+	    } else {
+	      throw new Error('Error creating user: ' + data.message);
+	    }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

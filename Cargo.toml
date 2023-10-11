@@ -55,9 +55,7 @@ mime = "0.3.17"
 # aws-sdk-s3 = "0.31.1"
 rust-s3 = "0.33.0"
 redis = "0.23.3"
-
-# tracing
-tracing = { version = "0.1.37" }
+tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["registry", "env-filter", "ansi", "json"] }
 tracing-bunyan-formatter = "0.3.6"
 tracing-actix-web = "0.7"
@@ -79,6 +77,8 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 itertools = "0.11"
+axum_session = "0.7.0"
+uuid = "1.4.1"
 
 
 [dev-dependencies]
@@ -110,7 +110,8 @@ members = [
     "libs/infra",
     "libs/shared-entity",
     "libs/gotrue",
-    "libs/gotrue-entity"
+    "libs/gotrue-entity",
+    "admin_frontend",
 ]
 
 [workspace.dependencies]

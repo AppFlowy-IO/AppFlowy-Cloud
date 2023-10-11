@@ -335,6 +335,7 @@ dependencies = [
  "dotenv",
  "gotrue",
  "gotrue-entity",
+ "redis",
  "reqwest",
  "serde",
  "serde_json",

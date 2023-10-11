@@ -1,5 +1,14 @@
+use axum::{
+  async_trait,
+  extract::FromRequestParts,
+  http::request::Parts,
+  response::{IntoResponse, Redirect},
+};
+use axum_extra::extract::CookieJar;
 use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::AppState;
 
 static SESSION_EXPIRATION: usize = 60 * 60 * 24; // 1 day
 
@@ -41,13 +50,18 @@ impl SessionStorage {
       )
       .await
   }
+
+  pub async fn del_user_session(&self, session_id: &str) -> redis::RedisResult<()> {
+    let key = session_id_key(session_id);
+    self.redis_client.clone().del::<_, ()>(key).await
+  }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSession {
-  session_id: String,
-  access_token: String,
-  refresh_token: String,
+  pub session_id: String,
+  pub access_token: String,
+  pub refresh_token: String,
 }
 
 impl UserSession {
@@ -56,6 +70,53 @@ impl UserSession {
       session_id,
       access_token,
       refresh_token,
+    }
+  }
+}
+
+#[async_trait]
+impl FromRequestParts<AppState> for UserSession {
+  type Rejection = SessionRejection;
+
+  async fn from_request_parts(
+    parts: &mut Parts,
+    state: &AppState,
+  ) -> Result<Self, Self::Rejection> {
+    let jar = CookieJar::from_request_parts(parts, state)
+      .await
+      .map_err(|e| SessionRejection::CookieError(e.to_string()))?;
+
+    let session_id = jar
+      .get("session_id")
+      .ok_or(SessionRejection::NoSessionId)?
+      .value();
+
+    let session = state
+      .session_store
+      .get_user_session(session_id)
+      .await
+      .ok_or(SessionRejection::SessionNotFound)?;
+
+    Ok(session)
+  }
+}
+
+#[derive(Clone, Debug)]
+pub enum SessionRejection {
+  NoSessionId,
+  SessionNotFound,
+  CookieError(String),
+}
+
+impl IntoResponse for SessionRejection {
+  fn into_response(self) -> axum::response::Response {
+    match self {
+      SessionRejection::NoSessionId => Redirect::permanent("/web/login").into_response(),
+      SessionRejection::CookieError(err) => {
+        println!("cookie error: {}", err);
+        Redirect::permanent("/web/login").into_response()
+      },
+      SessionRejection::SessionNotFound => Redirect::permanent("/web/login").into_response(),
     }
   }
 }

@@ -8,6 +8,9 @@ mod web_api;
 mod web_app;
 
 use axum::{response::Redirect, routing::get, Router};
+use reqwest::Method;
+use tower::ServiceBuilder;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
@@ -34,8 +37,15 @@ async fn main() {
   let web_app_router = web_app::router().with_state(state.clone());
   let web_api_router = web_api::router().with_state(state);
 
+  let cors = CorsLayer::new()
+    // allow `GET` and `POST` when accessing the resource
+    .allow_methods([Method::GET, Method::POST])
+    // allow requests from any origin
+    .allow_origin(Any);
+
   let app = Router::new()
     .route("/", get(|| async { Redirect::permanent("/web") }))
+    .layer(ServiceBuilder::new().layer(cors))
     .nest_service("/web", web_app_router)
     .nest_service("/web-api", web_api_router);
 

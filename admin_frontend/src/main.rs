@@ -16,6 +16,11 @@ async fn main() {
   // load from .env
   dotenv::dotenv().ok();
 
+  // set up tracing
+  tracing_subscriber::fmt()
+    .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+    .init();
+
   let gotrue_client = gotrue::api::Client::new(
     reqwest::Client::new(),
     &std::env::var("GOTRUE_URL").unwrap_or("http://gotrue:9999".to_string()),

@@ -29,26 +29,32 @@
       document.getElementById('createUserBtn').addEventListener('click', function() {
         // Get the email from the user
         const email = prompt('Please enter the new user email:');
-
-        // TODO: Validate the email, if valid, send to server and update UI
         if (email) {
-          // Assuming you will use fetch API or another method to send the data to the server
-          // Example:
-          // fetch('/createUser', {
-          //   method: 'POST',
-          //   body: JSON.stringify({ email: email }),
-          //   headers: {
-          //     'Content-Type': 'application/json',
-          //   }
-          // })
-          // .then(response => response.json())
-          // .then(data => {
-          //   // Update the UI as needed, e.g., add a new row to the table
-          //   console.log('User created:', data);
-          // })
-          // .catch((error) => {
-          //   console.error('Error:', error);
-          // });
+          fetch("/web-api/add_user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email,
+            }),
+          })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error('Network response was not ok' + response.statusText);
+            }
+            return response.json();
+          })
+          .then((data) => {
+	    if (data.code === 0) {
+              window.location.href = "/web/admin/users/" + data.data.id;
+	    } else {
+	      throw new Error('Error creating user: ' + data.message);
+	    }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+          });
         }
       });
     </script>

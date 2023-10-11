@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO af_file_metadata\n        (owner_uid, path, file_type, file_size)\n        VALUES ($1, $2, $3, $4)\n        ON CONFLICT (owner_uid, path) DO UPDATE SET\n            file_type = $3,\n            file_size = $4\n        RETURNING *\n        ",
+  "query": "\n        DELETE FROM af_blob_metadata\n        WHERE workspace_id = $1 AND file_id = $2\n        RETURNING *\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "owner_uid",
-        "type_info": "Int8"
+        "name": "workspace_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 1,
-        "name": "path",
+        "name": "file_id",
         "type_info": "Varchar"
       },
       {
@@ -25,16 +25,14 @@
       },
       {
         "ordinal": 4,
-        "name": "created_at",
+        "name": "modified_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Varchar",
-        "Varchar",
-        "Int8"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
@@ -45,5 +43,5 @@
       false
     ]
   },
-  "hash": "180e896f2f540e16284f7adc687dd93cc3933954854a4862bd235dd5cdccbe10"
+  "hash": "ce5d380d59bdc8381c370c1c3ac4ad8323677d22657b6a1223b02dac5c9d5371"
 }

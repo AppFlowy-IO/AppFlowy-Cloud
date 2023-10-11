@@ -61,8 +61,11 @@ pub enum ErrorCode {
   #[error("S3 Error")]
   S3Error = 1014,
 
-  #[error("File Not Found")]
-  FileNotFound = 1015,
+  #[error("Storage space not enough")]
+  StorageSpaceNotEnough = 1015,
+
+  #[error("Payload too large")]
+  PayloadTooLarge = 1016,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

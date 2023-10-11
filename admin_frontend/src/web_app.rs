@@ -32,7 +32,7 @@ pub async fn home_handler(
     .await
     .map(|user_info| user_info.email)
     .unwrap_or_else(|err| {
-      println!("Failed to fetch user info: {:?}", err);
+      tracing::error!("Error getting user info: {:?}", err);
       "".to_owned()
     });
 
@@ -55,8 +55,7 @@ pub async fn admin_users_handler(
     .await
     .map_or_else(
       |err| {
-        // Log the error and return an empty vector.
-        println!("Failed to fetch users: {:?}", err);
+        tracing::error!("Error getting user list: {:?}", err);
         vec![]
       },
       |r| r.users,

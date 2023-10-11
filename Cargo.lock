@@ -343,6 +343,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tower-service",
+ "tracing",
  "uuid",
 ]
 

@@ -17,11 +17,22 @@
         .getElementById("logoutBtn")
         .addEventListener("click", function () {
           // Remove the cookie by setting its value to an empty string and its expiry date to the past.
-          document.cookie =
-            "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-
-          // Redirect to the login page.
-          window.location.href = "/web/login";
+          fetch("/web-api/logout", {
+              method: "POST",
+              headers: {
+                  "Content-Type": "application/json",
+              },
+              credentials: 'same-origin',
+          })
+          .then(response => {
+              if (!response.ok) {
+                  throw new Error('Network response was not ok' + response.statusText);
+              }
+              window.location.href = "/web/login";
+          })
+          .catch(error => {
+              console.error('There was a problem with the fetch operation:', error);
+          });
         });
 
       document

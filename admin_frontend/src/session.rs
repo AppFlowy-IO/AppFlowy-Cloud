@@ -32,7 +32,7 @@ impl SessionStorage {
     match s {
       Ok(s) => Some(s),
       Err(e) => {
-        println!("redis error: {:?}", e);
+        tracing::info!("get user session in redis error: {:?}", e);
         None
       },
     }
@@ -53,7 +53,9 @@ impl SessionStorage {
 
   pub async fn del_user_session(&self, session_id: &str) -> redis::RedisResult<()> {
     let key = session_id_key(session_id);
-    self.redis_client.clone().del::<_, ()>(key).await
+    let res = self.redis_client.clone().del::<_, i64>(key).await?;
+    tracing::info!("del user session: {} res: {}", session_id, res);
+    Ok(())
   }
 }
 
@@ -113,7 +115,7 @@ impl IntoResponse for SessionRejection {
     match self {
       SessionRejection::NoSessionId => Redirect::permanent("/web/login").into_response(),
       SessionRejection::CookieError(err) => {
-        println!("cookie error: {}", err);
+        tracing::error!("session rejection cookie error: {}", err);
         Redirect::permanent("/web/login").into_response()
       },
       SessionRejection::SessionNotFound => Redirect::permanent("/web/login").into_response(),

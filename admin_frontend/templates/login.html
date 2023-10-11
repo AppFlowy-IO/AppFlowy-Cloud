@@ -41,19 +41,18 @@
             body: JSON.stringify(data),
 	    credentials: 'same-origin',
           })
-            .then((response) => {
-              if (!response.ok) {
-                // If HTTP status code is not OK, throw an error with the status text
-                throw Error(response.statusText);
-              }
-
-              window.location.href = "/web/home";
-            })
-            .catch((error) => {
-              console.error("Error:", error);
-              document.getElementById("response").innerText =
-                "Login failed: " + error.message;
-            });
+          .then((response) => {
+            if (!response.ok) {
+              // If HTTP status code is not OK, throw an error with the status text
+              throw Error(response.statusText);
+            }
+            window.location.href = "/web/home";
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            document.getElementById("response").innerText =
+              "Login failed: " + error.message;
+          });
         });
     </script>
   </body>

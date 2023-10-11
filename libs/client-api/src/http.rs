@@ -580,11 +580,11 @@ impl Client {
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
 
-  pub async fn put_file<T: Into<Bytes>>(
+  pub async fn put_file<T: Into<Bytes>, M: ToString>(
     &self,
     workspace_id: &str,
     data: T,
-    mime: &Mime,
+    mime: M,
   ) -> Result<AFBlob, AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
     let data = data.into();

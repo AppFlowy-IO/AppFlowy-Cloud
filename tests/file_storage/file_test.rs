@@ -31,13 +31,14 @@ async fn put_and_get() {
   let workspace_id = workspace_id_from_client(&c1).await;
   let mime = mime::TEXT_PLAIN_UTF_8;
   let data = "hello world";
-  let file_id = c1
-    .put_file(&workspace_id, data, &mime)
-    .await
-    .unwrap()
-    .file_id;
+  let record = c1.put_file(&workspace_id, data, &mime).await.unwrap();
 
-  let got_data = c1.get_file(&workspace_id, &file_id).await.unwrap();
+  assert_eq!(
+    record.file_id,
+    "uU0nuZNNPgilLlLX2n2r-sSE7-N6U4DukIj3rOLvzek="
+  );
+
+  let got_data = c1.get_file(&workspace_id, &record.file_id).await.unwrap();
   assert_eq!(got_data, data.as_bytes());
 }
 

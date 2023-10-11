@@ -26,8 +26,8 @@ use gotrue_entity::{AccessTokenResponse, User};
 
 use crate::notify::{ClientToken, TokenStateReceiver};
 use database_entity::{
-  AFBlob, AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult,
-  InsertCollabParams,
+  AFBlobRecord, AFUserProfileView, AFWorkspaceMember, BatchQueryCollabParams,
+  BatchQueryCollabResult, InsertCollabParams,
 };
 use database_entity::{AFWorkspaces, QueryCollabParams};
 use database_entity::{DeleteCollabParams, RawData};
@@ -585,7 +585,7 @@ impl Client {
     workspace_id: &str,
     data: T,
     mime: M,
-  ) -> Result<AFBlob, AppError> {
+  ) -> Result<AFBlobRecord, AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
     let data = data.into();
     let content_length = data.len();
@@ -597,7 +597,7 @@ impl Client {
       .body(data)
       .send()
       .await?;
-    AppResponse::<AFBlob>::from_response(resp)
+    AppResponse::<AFBlobRecord>::from_response(resp)
       .await?
       .into_data()
   }
@@ -610,7 +610,7 @@ impl Client {
     data: T,
     mime: &Mime,
     content_length: usize,
-  ) -> Result<AFBlob, AppError> {
+  ) -> Result<AFBlobRecord, AppError> {
     let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
@@ -620,7 +620,7 @@ impl Client {
       .body(data.into())
       .send()
       .await?;
-    AppResponse::<AFBlob>::from_response(resp)
+    AppResponse::<AFBlobRecord>::from_response(resp)
       .await?
       .into_data()
   }

@@ -11,7 +11,7 @@ use actix_web::{
 use actix_web::{HttpResponse, Result};
 use chrono::DateTime;
 use database::file::MAX_BLOB_SIZE;
-use database_entity::AFBlob;
+use database_entity::AFBlobRecord;
 use serde::Deserialize;
 use shared_entity::app_error::AppError;
 use shared_entity::data::{AppResponse, JsonAppResponse};
@@ -50,7 +50,7 @@ async fn put_handler(
   content_length: web::Header<ContentLength>,
   workspace_id: web::Path<Uuid>,
   required_id: RequestId,
-) -> Result<JsonAppResponse<AFBlob>> {
+) -> Result<JsonAppResponse<AFBlobRecord>> {
   let content_length = content_length.into_inner().into_inner();
   // Check content length, if it's too large, return error.
   if content_length > MAX_BLOB_SIZE {
@@ -67,12 +67,13 @@ async fn put_handler(
   let workspace_id = workspace_id.into_inner();
 
   trace!("start put blob: {}:{}", file_type, content_length);
-  let record = state
+  let file_id = state
     .bucket_storage
     .put_blob(blob_stream, workspace_id, file_type, content_length as i64)
     .await
     .map_err(AppError::from)?;
 
+  let record = AFBlobRecord::new(file_id);
   trace!("did put blob: {:?}", record);
   Ok(Json(AppResponse::Ok().with_data(record)))
 }

@@ -226,11 +226,11 @@ pub struct AFBlobMetadata {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AFBlob {
+pub struct AFBlobRecord {
   pub file_id: String,
 }
 
-impl AFBlob {
+impl AFBlobRecord {
   pub fn new(file_id: String) -> Self {
     Self { file_id }
   }

@@ -7,7 +7,7 @@ use crate::resource_usage::{
 use async_trait::async_trait;
 
 use database_entity::database_error::DatabaseError;
-use database_entity::{AFBlob, AFBlobMetadata};
+use database_entity::AFBlobMetadata;
 
 use sqlx::PgPool;
 
@@ -60,7 +60,7 @@ where
     workspace_id: Uuid,
     file_type: String,
     file_size: i64,
-  ) -> Result<AFBlob, DatabaseError>
+  ) -> Result<String, DatabaseError>
   where
     R: AsyncRead + Unpin,
   {
@@ -69,7 +69,7 @@ where
 
     // check file is exist or not
     if is_blob_metadata_exists(&self.pg_pool, &workspace_id, &file_id).await? {
-      return Ok(AFBlob::new(file_id));
+      return Ok(file_id);
     }
 
     // query the storage space of the workspace
@@ -95,7 +95,7 @@ where
       return Err(err.into());
     }
 
-    Ok(AFBlob::new(file_id))
+    Ok(file_id)
   }
 
   pub async fn delete_blob(

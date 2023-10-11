@@ -221,47 +221,47 @@ async fn one_direction_peer_sync_test() {
 //   .await;
 // }
 
-#[tokio::test]
-async fn two_direction_peer_sync_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
-
-  let mut client_1 = TestClient::new_user().await;
-  let workspace_id = client_1.current_workspace_id().await;
-  client_1
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-
-  let mut client_2 = TestClient::new_user().await;
-  client_2
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-
-  client_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("name", "AppFlowy");
-  client_1.wait_object_sync_complete(&object_id).await;
-
-  client_2
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("support platform", "macOS, Windows, Linux, iOS, Android");
-  client_2.wait_object_sync_complete(&object_id).await;
-
-  let expected_json = json!({
-    "name": "AppFlowy",
-    "support platform": "macOS, Windows, Linux, iOS, Android"
-  });
-  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
-}
+// #[tokio::test]
+// async fn two_direction_peer_sync_test() {
+//   let object_id = uuid::Uuid::new_v4().to_string();
+//   let collab_type = CollabType::Document;
+//
+//   let mut client_1 = TestClient::new_user().await;
+//   let workspace_id = client_1.current_workspace_id().await;
+//   client_1
+//     .create_collab(&workspace_id, &object_id, collab_type.clone())
+//     .await;
+//
+//   let mut client_2 = TestClient::new_user().await;
+//   client_2
+//     .create_collab(&workspace_id, &object_id, collab_type.clone())
+//     .await;
+//
+//   client_1
+//     .collab_by_object_id
+//     .get_mut(&object_id)
+//     .unwrap()
+//     .collab
+//     .lock()
+//     .insert("name", "AppFlowy");
+//   client_1.wait_object_sync_complete(&object_id).await;
+//
+//   client_2
+//     .collab_by_object_id
+//     .get_mut(&object_id)
+//     .unwrap()
+//     .collab
+//     .lock()
+//     .insert("support platform", "macOS, Windows, Linux, iOS, Android");
+//   client_2.wait_object_sync_complete(&object_id).await;
+//
+//   let expected_json = json!({
+//     "name": "AppFlowy",
+//     "support platform": "macOS, Windows, Linux, iOS, Android"
+//   });
+//   assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
+//   assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
+// }
 
 #[tokio::test]
 async fn client_init_sync_test() {

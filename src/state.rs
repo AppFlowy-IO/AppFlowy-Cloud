@@ -8,6 +8,7 @@ use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use database::file::bucket_s3_impl::S3BucketStorage;
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
@@ -17,9 +18,9 @@ pub struct AppState {
   pub user: Arc<RwLock<UserCache>>,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
-  pub s3_bucket: s3::Bucket,
   pub redis_client: redis::aio::ConnectionManager,
   pub collab_storage: Storage<CollabStorageProxy>,
+  pub bucket_storage: Arc<S3BucketStorage>,
 }
 
 impl AppState {

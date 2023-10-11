@@ -24,6 +24,7 @@ use tokio::sync::RwLock;
 
 use crate::component::storage_proxy::CollabStorageProxy;
 use database::collab::CollabPostgresDBStorageImpl;
+use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 use tracing_actix_web::TracingLogger;
@@ -120,6 +121,8 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   migrate(&pg_pool).await?;
 
   let s3_bucket = get_aws_s3_bucket(&config.s3).await?;
+  let bucket_storage = Arc::new(S3BucketStorage::from_s3_bucket(s3_bucket, pg_pool.clone()));
+
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
@@ -131,9 +134,9 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     user: Arc::new(Default::default()),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
-    s3_bucket,
     redis_client,
     collab_storage,
+    bucket_storage,
   })
 }
 

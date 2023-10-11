@@ -2,7 +2,21 @@
 <html lang="en">
   <body>
     <h1>User Detail</h1>
-    <h2>{{ user.email|escape }}</h2>
+    <h2>
+      {{ user.email|escape }}
+      <!-- Added Set Password Button -->
+      <button id="setPasswordBtn">Set Password</button>
+    </h2>
+
+    <div id="passwordModal" style="display: none;">
+      <label for="newPassword">New Password:</label>
+      <input type="password" id="newPassword" name="newPassword">
+      <button id="submitPasswordBtn">Submit</button>
+      <button id="closePasswordModalBtn">Close</button>
+    </div>
+
+    <br>
+
     <p>Phone: {{ user.phone|escape }}</p>
     <p>Email Confirmed At: {{ user.email_confirmed_at|default("-") }}</p>
     <p>Phone Confirmed At: {{ user.phone_confirmed_at|default("-")|escape }}</p>
@@ -11,5 +25,46 @@
     <p>Updated At: {{ user.updated_at|escape }}</p>
 
     <a href="/web/admin/users">Back to User List</a>
+
+    <script>
+      document.getElementById('setPasswordBtn').addEventListener('click', function() {
+        document.getElementById('passwordModal').style.display = 'block';
+      });
+
+      document.getElementById('closePasswordModalBtn').addEventListener('click', function() {
+        document.getElementById('passwordModal').style.display = 'none';
+      });
+
+      document.getElementById('submitPasswordBtn').addEventListener('click', function() {
+        const newPassword = document.getElementById('newPassword').value;
+        let confirmed = confirm("Set new password?");
+        if(confirmed && newPassword) {
+          fetch('/web-api/set_user_password', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                  userId: "{{ user.id }}",
+                  newPassword: newPassword,
+              }),
+          })
+          .then((response) => {
+              if(!response.ok) {
+                  throw new Error('Network response was not ok');
+              }
+              return response.json();
+          })
+          .then((data) => {
+              alert('Password set successfully!');
+              document.getElementById('passwordModal').style.display = 'none';
+          })
+          .catch((error) => {
+              console.error('Error setting password:', error);
+              alert('Failed to set password. Please try again later.');
+          });
+        }
+      });
+    </script>
   </body>
 </html>

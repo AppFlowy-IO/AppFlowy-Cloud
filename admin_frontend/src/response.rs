@@ -31,3 +31,12 @@ where
     Json(self).into_response()
   }
 }
+
+impl<T> From<T> for WebApiResponse<T>
+where
+  T: serde::Serialize,
+{
+  fn from(data: T) -> Self {
+    Self::new(data)
+  }
+}

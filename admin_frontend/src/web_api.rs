@@ -1,5 +1,7 @@
 use crate::error::WebApiError;
-use crate::session;
+use crate::models::AddUserRequest;
+use crate::response::WebApiResponse;
+use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
 use axum::http::status;
 use axum::response::Result;
@@ -7,12 +9,31 @@ use axum::Json;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
+use gotrue::params::AdminUserParams;
+use gotrue_entity::User;
 
 pub fn router() -> Router<AppState> {
   Router::new()
       // TODO
     .route("/login", post(login_handler))
     .route("/logout", post(logout_handler))
+    .route("/add_user", post(add_user_handler))
+}
+
+pub async fn add_user_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Json(param): Json<AddUserRequest>,
+) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+  let add_user_params = AdminUserParams {
+    email: param.email.to_owned(),
+    ..Default::default()
+  };
+  let user = state
+    .gotrue_client
+    .admin_add_user(&session.access_token, &add_user_params)
+    .await?;
+  Ok(user.into())
 }
 
 // TODO: Support OAuth2 login

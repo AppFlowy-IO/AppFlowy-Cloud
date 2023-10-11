@@ -3,7 +3,7 @@ use std::collections::btree_map::BTreeMap;
 use gotrue_entity::{Factor, Identity};
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct AdminUserParams {
   pub aud: String,
   pub role: String,

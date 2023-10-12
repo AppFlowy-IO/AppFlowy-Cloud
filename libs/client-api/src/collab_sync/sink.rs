@@ -201,7 +201,11 @@ where
       let elapsed = self.instant.lock().await.elapsed();
       // If the elapsed time is less than the fixed interval or if the remaining time until the fixed
       // interval is less than the send timeout, return.
-      if elapsed < *duration || (*duration - elapsed) < self.config.send_timeout {
+      if elapsed < *duration {
+        return Ok(());
+      }
+
+      if elapsed < self.config.send_timeout {
         return Ok(());
       }
     }

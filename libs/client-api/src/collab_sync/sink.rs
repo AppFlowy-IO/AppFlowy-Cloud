@@ -206,6 +206,8 @@ where
       }
 
       if elapsed < self.config.send_timeout {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        self.notify();
         return Ok(());
       }
     }

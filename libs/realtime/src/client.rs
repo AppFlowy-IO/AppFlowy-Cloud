@@ -141,7 +141,7 @@ where
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let msg = match msg {
       Err(err) => {
-        error!("Websocket ProtocolError: {:?}", err);
+        error!("Websocket stream error: {:?}", err);
         ctx.stop();
         return;
       },

@@ -18,6 +18,8 @@ pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
 }
 
+const MAX_FRAME_SIZE: usize = 16_384; // 16KiB
+
 #[get("/{token}/{device_id}")]
 pub async fn establish_ws_connection(
   request: HttpRequest,
@@ -38,7 +40,10 @@ pub async fn establish_ws_connection(
     Duration::from_secs(state.config.websocket.client_timeout as u64),
   );
 
-  match ws::start(client, &request, payload) {
+  match ws::WsResponseBuilder::new(client, &request, payload)
+    .frame_size(MAX_FRAME_SIZE)
+    .start()
+  {
     Ok(response) => Ok(response),
     Err(e) => {
       tracing::error!("🔴ws connection error: {:?}", e);

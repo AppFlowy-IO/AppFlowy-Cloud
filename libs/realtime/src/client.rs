@@ -12,10 +12,11 @@ use std::ops::Deref;
 use crate::collaborate::CollabServer;
 use crate::error::RealtimeError;
 
+use actix_web_actors::ws::ProtocolError;
 use database::collab::CollabStorage;
 use realtime_entity::collab_msg::CollabMessage;
 use std::time::{Duration, Instant};
-use tracing::error;
+use tracing::{debug, error};
 
 pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
   user: U,
@@ -141,8 +142,13 @@ where
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let msg = match msg {
       Err(err) => {
-        error!("Websocket stream error: {:?}", err);
-        ctx.stop();
+        error!("Websocket stream error: {}", err);
+        match err {
+          ProtocolError::Overflow => {
+            ctx.stop();
+          },
+          _ => {},
+        }
         return;
       },
       Ok(msg) => msg,
@@ -162,7 +168,7 @@ where
         ctx.close(reason);
         ctx.stop();
       },
-      ws::Message::Continuation(_) => ctx.stop(),
+      ws::Message::Continuation(_) => {},
       ws::Message::Nop => (),
     }
   }

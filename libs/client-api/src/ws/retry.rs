@@ -5,7 +5,7 @@ use crate::ws::WSError;
 use tokio::net::TcpStream;
 use tokio_retry::Action;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
-use tracing::debug;
+use tracing::{debug, error};
 
 pub(crate) struct ConnectAction {
   addr: String,
@@ -27,10 +27,12 @@ impl Action for ConnectAction {
     Box::pin(async move {
       debug!("🔵Connecting to websocket: {}", cloned_addr);
       match connect_async(&cloned_addr).await {
-        Ok((stream, _response)) => Ok(stream),
+        Ok((stream, _response)) => {
+          debug!("connect success");
+          Ok(stream)
+        },
         Err(e) => {
-          //
-          tracing::error!("🔴connect error: {:?}", e.to_string());
+          error!("connect failed: {:?}", e.to_string());
           Err(e.into())
         },
       }

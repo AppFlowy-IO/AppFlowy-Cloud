@@ -18,8 +18,7 @@ pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
 }
 
-// By default the max frame size is: 65_536.
-const MAX_FRAME_SIZE: usize = 16_384; // 16 KiB
+const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 #[get("/{token}/{device_id}")]
 pub async fn establish_ws_connection(
@@ -29,7 +28,7 @@ pub async fn establish_ws_connection(
   state: Data<AppState>,
   server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>>>>,
 ) -> Result<HttpResponse> {
-  tracing::info!("ws connect: {:?}", request);
+  tracing::info!("receive ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;

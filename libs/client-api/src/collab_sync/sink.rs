@@ -199,12 +199,9 @@ where
     // the fix interval.
     if let SinkStrategy::FixInterval(duration) = &self.config.strategy {
       let elapsed = self.instant.lock().await.elapsed();
-      // trace!(
-      //   "elapsed interval: {:?}, fix interval: {:?}",
-      //   elapsed,
-      //   duration
-      // );
-      if elapsed < *duration {
+      // If the elapsed time is less than the fixed interval or if the remaining time until the fixed
+      // interval is less than the send timeout, return.
+      if elapsed < *duration || (*duration - elapsed) < self.config.send_timeout {
         return Ok(());
       }
     }
@@ -279,7 +276,7 @@ where
         match result {
           Ok(_) => match self.pending_msg_queue.try_lock() {
             None => warn!("Failed to acquire the lock of the pending_msg_queue"),
-            Some(mut pending_msg_queue) => {
+            Some(pending_msg_queue) => {
               trace!("Pending messages: {}", pending_msg_queue.len());
               if pending_msg_queue.is_empty() {
                 if let Err(e) = self.state_notifier.send(SinkState::Finished) {

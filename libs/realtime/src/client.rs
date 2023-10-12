@@ -16,7 +16,7 @@ use actix_web_actors::ws::ProtocolError;
 use database::collab::CollabStorage;
 use realtime_entity::collab_msg::CollabMessage;
 use std::time::{Duration, Instant};
-use tracing::{debug, error};
+use tracing::error;
 
 pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
   user: U,
@@ -143,11 +143,8 @@ where
     let msg = match msg {
       Err(err) => {
         error!("Websocket stream error: {}", err);
-        match err {
-          ProtocolError::Overflow => {
-            ctx.stop();
-          },
-          _ => {},
+        if let ProtocolError::Overflow = err {
+          ctx.stop();
         }
         return;
       },

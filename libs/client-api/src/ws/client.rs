@@ -18,7 +18,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{Error, Message};
 use tokio_tungstenite::MaybeTlsStream;
 use tracing::{debug, error, info, trace, warn};
 
@@ -157,6 +157,23 @@ impl WSClient {
     });
 
     let mut sink_rx = self.sender.subscribe();
+
+    let weak_state_notify = Arc::downgrade(&self.state_notify);
+    let handle_ws_error = move |error: &Error| {
+      error!("websocket error: {:?}", error);
+      match weak_state_notify.upgrade() {
+        None => {
+          error!("ws state_notify is dropped");
+        },
+        Some(state_notify) => match &error {
+          Error::ConnectionClosed | Error::AlreadyClosed => {
+            state_notify.lock().set_state(ConnectState::Disconnected);
+          },
+          _ => {},
+        },
+      }
+    };
+
     tokio::spawn(async move {
       loop {
         tokio::select! {
@@ -165,12 +182,9 @@ impl WSClient {
             break;
           },
          Ok(msg) = sink_rx.recv() => {
-           match sink.send(msg).await {
-              Ok(_) => {},
-              Err(e) => {
-                  error!("Failed to send message via websocket: {:?}", e);
-                  break;
-              },
+           if let Err(err) = sink.send(msg).await {
+              handle_ws_error(&err);
+              break;
             }
           }
         }

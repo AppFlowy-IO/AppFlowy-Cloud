@@ -18,7 +18,8 @@ pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
 }
 
-const MAX_FRAME_SIZE: usize = 16_384; // 16KiB
+// By default the max frame size is: 65_536.
+const MAX_FRAME_SIZE: usize = 16_384; // 16 KiB
 
 #[get("/{token}/{device_id}")]
 pub async fn establish_ws_connection(

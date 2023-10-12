@@ -12,9 +12,9 @@ use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
-use gotrue_entity::OAuthProvider;
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::{AccessTokenResponse, User};
+use gotrue_entity::{GoTrueError, OAuthProvider};
 use mime::Mime;
 use parking_lot::RwLock;
 use reqwest::header;
@@ -449,12 +449,20 @@ impl Client {
       .refresh_token
       .as_str()
       .to_owned();
-    let access_token_resp = self
+    match self
       .gotrue_client
       .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
-      .await?;
-    self.token.write().set(access_token_resp);
-    Ok(())
+      .await
+    {
+      Ok(access_token_resp) => {
+        self.token.write().set(access_token_resp);
+        Ok(())
+      },
+      Err(err) => {
+        self.token.write().unset();
+        Err(AppError::from(err))
+      },
+    }
   }
 
   #[instrument(level = "debug", skip_all, err)]

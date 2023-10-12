@@ -449,12 +449,20 @@ impl Client {
       .refresh_token
       .as_str()
       .to_owned();
-    let access_token_resp = self
+    match self
       .gotrue_client
       .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
-      .await?;
-    self.token.write().set(access_token_resp);
-    Ok(())
+      .await
+    {
+      Ok(access_token_resp) => {
+        self.token.write().set(access_token_resp);
+        Ok(())
+      },
+      Err(err) => {
+        self.token.write().unset();
+        Err(AppError::from(err))
+      },
+    }
   }
 
   #[instrument(level = "debug", skip_all, err)]

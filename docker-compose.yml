@@ -36,9 +36,7 @@ services:
       - ./migrations/before:/docker-entrypoint-initdb.d
 
   pgadmin:
-    build:
-      context: .
-      dockerfile: docker/pgadmin.Dockerfile
+    image: dpage/pgadmin4
     depends_on:
       - postgres
     environment:
@@ -46,6 +44,8 @@ services:
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     ports:
       - 5400:80
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
   redis:
     image: redis

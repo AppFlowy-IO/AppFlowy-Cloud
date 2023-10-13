@@ -335,6 +335,7 @@ dependencies = [
  "dotenv",
  "gotrue",
  "gotrue-entity",
+ "jwt",
  "redis",
  "reqwest",
  "serde",
@@ -492,7 +493,6 @@ dependencies = [
  "gotrue-entity",
  "infra",
  "itertools",
- "jsonwebtoken",
  "lazy_static",
  "mime",
  "once_cell",
@@ -1911,6 +1911,8 @@ name = "gotrue-entity"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "jsonwebtoken",
+ "lazy_static",
  "reqwest",
  "serde",
  "serde_json",

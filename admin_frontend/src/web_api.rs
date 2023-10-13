@@ -1,15 +1,15 @@
 use crate::error::WebApiError;
-use crate::models::AddUserRequest;
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
+use axum::extract::Path;
 use axum::http::status;
 use axum::response::Result;
 use axum::Json;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
-use gotrue::params::AdminUserParams;
+use gotrue::params::{AdminDeleteUserParams, AdminUserParams};
 use gotrue_entity::User;
 
 pub fn router() -> Router<AppState> {
@@ -17,16 +17,34 @@ pub fn router() -> Router<AppState> {
       // TODO
     .route("/login", post(login_handler))
     .route("/logout", post(logout_handler))
-    .route("/add_user", post(add_user_handler))
+    .route("/user/:param", post(post_user_handler).delete(delete_user_handler))
 }
 
-pub async fn add_user_handler(
+pub async fn delete_user_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<AddUserRequest>,
+  Path(user_uuid): Path<String>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  state
+    .gotrue_client
+    .admin_delete_user(
+      &session.access_token,
+      &user_uuid,
+      &AdminDeleteUserParams {
+        should_soft_delete: true,
+      },
+    )
+    .await?;
+  Ok(().into())
+}
+
+pub async fn post_user_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(email): Path<String>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
-    email: param.email.to_owned(),
+    email,
     ..Default::default()
   };
   let user = state
@@ -59,7 +77,7 @@ pub async fn login_handler(
     token.access_token.to_string(),
     token.refresh_token.to_owned(),
   );
-  state.session_store.put_user_session(new_session).await?;
+  state.session_store.put_user_session(&new_session).await?;
 
   let mut cookie = Cookie::new("session_id", new_session_id.to_string());
   cookie.set_path("/");

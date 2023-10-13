@@ -1,3 +1,5 @@
+pub mod gotrue_jwt;
+
 use serde::{Deserialize, Serialize};
 use std::fmt::Formatter;
 use std::{collections::BTreeMap, fmt::Display};

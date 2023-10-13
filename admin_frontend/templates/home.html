@@ -1,15 +1,14 @@
 <!doctype html>
 <html lang="en">
   <body>
-
     <div id="content">
-        <h1>User Management</h1>
-	<p>Welcome, {{ email }}</p>
+      <h1>User Management</h1>
+      <p>Welcome, {{ email }}</p>
     </div>
 
     <div id="menu">
-        <button id="adminBtn">Admin</button>
-        <button id="logoutBtn">Logout</button>
+      <button id="adminBtn">Admin</button>
+      <button id="logoutBtn">Logout</button>
     </div>
 
     <script>
@@ -18,27 +17,27 @@
         .addEventListener("click", function () {
           // Remove the cookie by setting its value to an empty string and its expiry date to the past.
           fetch("/web-api/logout", {
-              method: "POST",
-              headers: {
-                  "Content-Type": "application/json",
-              },
-              credentials: 'same-origin',
+            method: "POST",
+            credentials: "same-origin",
           })
-          .then(response => {
+            .then((response) => {
               if (!response.ok) {
-                  throw new Error('Network response was not ok' + response.statusText);
+                throw new Error(
+                  `Network response was not ok: ${response.statusText}`,
+                );
               }
               window.location.href = "/web/login";
-          })
-          .catch(error => {
-              console.error('There was a problem with the fetch operation:', error);
-          });
+            })
+            .catch((error) => {
+              console.error(
+                `There was a problem with the fetch operation: ${error}`,
+              );
+            });
         });
 
       document
         .getElementById("adminBtn")
         .addEventListener("click", function () {
-          // Redirect to the admin page.
           window.location.href = "/web/admin";
         });
     </script>

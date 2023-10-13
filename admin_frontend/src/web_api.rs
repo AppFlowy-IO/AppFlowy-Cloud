@@ -1,4 +1,5 @@
 use crate::error::WebApiError;
+use crate::models::PutUserRequest;
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
@@ -19,8 +20,29 @@ pub fn router() -> Router<AppState> {
       // TODO
     .route("/login", post(login_handler))
     .route("/logout", post(logout_handler))
-    .route("/user/:param", post(post_user_handler).delete(delete_user_handler))
+    .route("/user/:param", post(post_user_handler).delete(delete_user_handler).put(put_user_handler))
     .route("/user/:email/generate-link", post(post_user_generate_link_handler))
+}
+
+pub async fn put_user_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(user_uuid): Path<String>,
+  Json(param): Json<PutUserRequest>,
+) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+  let res = state
+    .gotrue_client
+    .admin_put_user(
+      &session.access_token,
+      &user_uuid,
+      &AdminUserParams {
+        email: param.email.to_owned(),
+        password: Some(param.password.to_owned()),
+        ..Default::default()
+      },
+    )
+    .await?;
+  Ok(res.into())
 }
 
 pub async fn post_user_generate_link_handler(

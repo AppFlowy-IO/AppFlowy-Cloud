@@ -10,3 +10,9 @@ pub struct LoginRequest {
 pub struct LoginResponse {
   pub access_token: String,
 }
+
+#[derive(Deserialize)]
+pub struct PutUserRequest {
+  pub email: String,
+  pub password: String,
+}

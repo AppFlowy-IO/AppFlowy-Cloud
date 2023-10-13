@@ -114,7 +114,7 @@ members = [
 ]
 
 [workspace.dependencies]
-realtime-entity = { workspace = true, path = "libs/realtime-entity" }
+realtime-entity = { path = "libs/realtime-entity" }
 
 [profile.release]
 lto = true

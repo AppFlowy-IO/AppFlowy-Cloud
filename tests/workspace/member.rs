@@ -1,3 +1,4 @@
+use shared_entity::dto::{CreateWorkspaceMember, WorkspacePermission};
 use shared_entity::error_code::ErrorCode;
 
 use crate::user::utils::generate_unique_registered_user_client;
@@ -14,7 +15,13 @@ async fn add_workspace_members_not_enough_permission() {
   // using user1's client
   let email = c1.token().read().as_ref().unwrap().user.email.to_owned();
   let err = c1
-    .add_workspace_members(user2_workspace_id, [email].to_vec())
+    .add_workspace_members(
+      user2_workspace_id,
+      vec![CreateWorkspaceMember {
+        email,
+        permission: WorkspacePermission::Member,
+      }],
+    )
     .await
     .unwrap_err();
   assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
@@ -30,9 +37,15 @@ async fn add_workspace_members_then_delete() {
   let c1_workspace_id = c1_workspace.first().unwrap().workspace_id;
 
   let email = c2.token().read().as_ref().unwrap().user.email.to_owned();
-  c1.add_workspace_members(c1_workspace_id, [email].to_vec())
-    .await
-    .unwrap();
+  c1.add_workspace_members(
+    c1_workspace_id,
+    vec![CreateWorkspaceMember {
+      email,
+      permission: WorkspacePermission::Member,
+    }],
+  )
+  .await
+  .unwrap();
 
   {
     // check if user2's email is in c1's workspace members

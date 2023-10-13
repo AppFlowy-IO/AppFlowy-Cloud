@@ -1,7 +1,6 @@
-use crate::api::{collab_scope, file_storage_scope, user_scope, workspace_scope, ws_scope};
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
-use crate::middleware::cors::default_cors;
+use crate::middleware::cors_mw::default_cors;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppState, Storage};
 use actix_identity::IdentityMiddleware;
@@ -22,7 +21,13 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use crate::api::collab_data::collab_scope;
+use crate::api::file_storage::file_storage_scope;
+use crate::api::user::user_scope;
+use crate::api::workspace::{workspace_scope, workspace_scope_access_control};
+use crate::api::ws::ws_scope;
 use crate::component::storage_proxy::CollabStorageProxy;
+use crate::middleware::permission_mw::WorkspaceAccessControl;
 use database::collab::CollabPostgresDBStorageImpl;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
@@ -77,6 +82,10 @@ pub async fn run(
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>>::new(storage.collab_storage.clone())
     .unwrap()
     .start();
+
+  let mut access_control = WorkspaceAccessControl::new(state.pg_pool.clone());
+  access_control.extend(workspace_scope_access_control());
+
   let mut server = HttpServer::new(move || {
     App::new()
       .wrap(IdentityMiddleware::default())
@@ -86,6 +95,7 @@ pub async fn run(
           .build(),
       )
       .wrap(default_cors())
+      .wrap(access_control.clone())
       .wrap(TracingLogger::default())
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())

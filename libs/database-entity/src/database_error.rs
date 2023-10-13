@@ -15,6 +15,9 @@ pub enum DatabaseError {
   #[error(transparent)]
   UuidError(#[from] uuid::Error),
 
+  #[error(transparent)]
+  SqlxError(sqlx::Error),
+
   #[error("Storage space not enough")]
   StorageSpaceNotEnough,
 
@@ -35,7 +38,7 @@ impl From<sqlx::Error> for DatabaseError {
   fn from(value: sqlx::Error) -> Self {
     match value {
       Error::RowNotFound => DatabaseError::RecordNotFound,
-      _ => DatabaseError::Internal(value.into()),
+      _ => DatabaseError::SqlxError(value),
     }
   }
 }

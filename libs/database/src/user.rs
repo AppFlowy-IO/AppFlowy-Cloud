@@ -1,4 +1,5 @@
-use anyhow::{Context, Error};
+use anyhow::Context;
+use database_entity::database_error::DatabaseError;
 use sqlx::PgPool;
 use tracing::instrument;
 
@@ -6,7 +7,7 @@ pub async fn update_user_name(
   pool: &PgPool,
   uuid: &uuid::Uuid,
   name: &str,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), DatabaseError> {
   sqlx::query!(
     r#"
         UPDATE af_user
@@ -27,7 +28,7 @@ pub async fn create_user_if_not_exists(
   user_uuid: &uuid::Uuid,
   email: &str,
   name: &str,
-) -> Result<bool, Error> {
+) -> Result<bool, DatabaseError> {
   let affected_rows = sqlx::query!(
     r#"
       INSERT INTO af_user (uuid, email, name)
@@ -46,7 +47,7 @@ pub async fn create_user_if_not_exists(
   .execute(pool)
   .await
   .context(format!(
-    "Fail to insert user. uuid: {}, name: {}, email: {}",
+    "Fail to insert user to db. uuid: {}, name: {}, email: {}",
     user_uuid, name, email
   ))?
   .rows_affected();
@@ -54,7 +55,7 @@ pub async fn create_user_if_not_exists(
   Ok(affected_rows > 0)
 }
 
-pub async fn uid_from_uuid(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64, sqlx::Error> {
+pub async fn uid_from_uuid(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64, DatabaseError> {
   let uid = sqlx::query!(
     r#"
       SELECT uid FROM af_user WHERE uuid = $1

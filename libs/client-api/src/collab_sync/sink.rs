@@ -199,12 +199,15 @@ where
     // the fix interval.
     if let SinkStrategy::FixInterval(duration) = &self.config.strategy {
       let elapsed = self.instant.lock().await.elapsed();
-      // trace!(
-      //   "elapsed interval: {:?}, fix interval: {:?}",
-      //   elapsed,
-      //   duration
-      // );
+      // If the elapsed time is less than the fixed interval or if the remaining time until the fixed
+      // interval is less than the send timeout, return.
       if elapsed < *duration {
+        return Ok(());
+      }
+
+      if elapsed < self.config.send_timeout {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        self.notify();
         return Ok(());
       }
     }

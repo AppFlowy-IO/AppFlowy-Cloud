@@ -18,6 +18,8 @@ pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
 }
 
+const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
+
 #[get("/{token}/{device_id}")]
 pub async fn establish_ws_connection(
   request: HttpRequest,
@@ -26,7 +28,7 @@ pub async fn establish_ws_connection(
   state: Data<AppState>,
   server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>>>>,
 ) -> Result<HttpResponse> {
-  tracing::info!("ws connect: {:?}", request);
+  tracing::info!("receive ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
@@ -38,7 +40,10 @@ pub async fn establish_ws_connection(
     Duration::from_secs(state.config.websocket.client_timeout as u64),
   );
 
-  match ws::start(client, &request, payload) {
+  match ws::WsResponseBuilder::new(client, &request, payload)
+    .frame_size(MAX_FRAME_SIZE)
+    .start()
+  {
     Ok(response) => Ok(response),
     Err(e) => {
       tracing::error!("🔴ws connection error: {:?}", e);

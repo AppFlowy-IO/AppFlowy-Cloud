@@ -42,8 +42,14 @@ impl ClientToken {
   /// - `token`: The new `AccessTokenResponse` to be set.
   pub(crate) fn set(&mut self, new_token: AccessTokenResponse) {
     tracing::trace!("Set new access token: {:?}", new_token);
+    let is_new = match &self.token {
+      None => true,
+      Some(old_token) => old_token.access_token != new_token.access_token,
+    };
     self.token = Some(new_token);
-    let _ = self.sender.send(TokenState::Refresh);
+    if is_new {
+      let _ = self.sender.send(TokenState::Refresh);
+    }
   }
 
   /// Unsets the current access token and notifies receivers of the invalidation.
@@ -54,7 +60,6 @@ impl ClientToken {
   #[allow(dead_code)]
   pub(crate) fn unset(&mut self) {
     if self.token.is_some() {
-      tracing::trace!("Set new access token: {:?}", self.token);
       self.token = None;
       let _ = self.sender.send(TokenState::Invalid);
     }

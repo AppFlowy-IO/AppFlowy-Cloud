@@ -38,6 +38,7 @@ pub async fn put_user_handler(
       &AdminUserParams {
         email: param.email.to_owned(),
         password: Some(param.password.to_owned()),
+        email_confirm: true,
         ..Default::default()
       },
     )

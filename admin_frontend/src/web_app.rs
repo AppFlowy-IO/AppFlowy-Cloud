@@ -59,7 +59,11 @@ pub async fn admin_users_handler(
         vec![]
       },
       |r| r.users,
-    );
+    )
+    .into_iter()
+    .filter(|user| user.deleted_at.is_none())
+    .collect::<Vec<_>>();
+
   let s = templates::Users { users: &users }.render()?;
   Ok(Html(s))
 }

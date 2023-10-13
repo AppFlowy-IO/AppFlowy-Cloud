@@ -18,6 +18,7 @@ use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
+use tracing_actix_web::RequestId;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -33,9 +34,11 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
 
+#[tracing::instrument(skip(state, path), err)]
 async fn verify_handler(
   path: web::Path<String>,
   state: Data<AppState>,
+  required_id: RequestId,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
   let is_new = biz::user::token_verify(&state.pg_pool, &state.gotrue_client, &access_token).await?;
@@ -43,19 +46,22 @@ async fn verify_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-#[tracing::instrument(level = "debug", skip(state))]
+#[tracing::instrument(skip(state), err)]
 async fn profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
+  required_id: RequestId,
 ) -> Result<JsonAppResponse<AFUserProfileView>> {
   let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
+#[tracing::instrument(skip(state, auth, req), err)]
 async fn update_handler(
   auth: Authorization,
   req: Json<UpdateUsernameParams>,
   state: Data<AppState>,
+  required_id: RequestId,
 ) -> Result<JsonAppResponse<()>> {
   let params = req.into_inner();
   biz::user::update_user(&state.pg_pool, &auth.uuid()?, &params.new_name).await?;

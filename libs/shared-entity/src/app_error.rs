@@ -45,9 +45,9 @@ impl actix_web::error::ResponseError for AppError {
 //
 impl From<anyhow::Error> for AppError {
   fn from(err: anyhow::Error) -> Self {
-    match err.downcast_ref::<AppError>() {
-      None => AppError::new(ErrorCode::Unhandled, err.to_string()),
-      Some(err) => err.clone(),
+    match err.downcast::<AppError>() {
+      Err(err) => AppError::new(ErrorCode::Unhandled, err.to_string()),
+      Ok(err) => err,
     }
   }
 }

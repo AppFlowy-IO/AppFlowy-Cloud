@@ -9,7 +9,9 @@ use axum::Json;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
-use gotrue::params::{AdminDeleteUserParams, AdminUserParams};
+use gotrue::params::{
+  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
+};
 use gotrue_entity::User;
 
 pub fn router() -> Router<AppState> {
@@ -18,6 +20,25 @@ pub fn router() -> Router<AppState> {
     .route("/login", post(login_handler))
     .route("/logout", post(logout_handler))
     .route("/user/:param", post(post_user_handler).delete(delete_user_handler))
+    .route("/user/:email/generate-link", post(post_user_generate_link_handler))
+}
+
+pub async fn post_user_generate_link_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(email): Path<String>,
+) -> Result<WebApiResponse<GenerateLinkResponse>, WebApiError<'static>> {
+  let res = state
+    .gotrue_client
+    .generate_link(
+      &session.access_token,
+      &GenerateLinkParams {
+        email,
+        ..Default::default()
+      },
+    )
+    .await?;
+  Ok(res.into())
 }
 
 pub async fn delete_user_handler(

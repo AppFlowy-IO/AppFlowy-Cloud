@@ -1,13 +1,12 @@
 <!doctype html>
 <html lang="en">
   <body>
-    <h1>User Detail</h1>
-    <h2>
-      {{ user.email|escape }}
-      <!-- Added Set Password Button -->
-      <button id="setPasswordBtn">Set Password</button>
-    </h2>
+    <a href="/web/admin/users">Back to User List</a>
 
+    <h1>User Detail</h1>
+    <h2>{{ user.email|escape }}</h2>
+
+    <button id="setPasswordBtn">Set Password</button>
     <div id="passwordModal" style="display: none">
       <label for="newPassword">New Password:</label>
       <input type="password" id="newPassword" name="newPassword" />
@@ -16,7 +15,13 @@
     </div>
 
     <br />
+    <br />
+    <button id="generateInviteLinkBtn">Generate Invite Link</button>
+    <textarea id="inviteLink" readonly style="display: none"></textarea>
+    <button id="copyInviteLinkBtn" style="display: none">Copy Link</button>
 
+    <br />
+    <br />
     <p>Phone: {{ user.phone|escape }}</p>
     <p>Email Confirmed At: {{ user.email_confirmed_at|default("-") }}</p>
     <p>Phone Confirmed At: {{ user.phone_confirmed_at|default("-")|escape }}</p>
@@ -24,21 +29,18 @@
     <p>Created At: {{ user.created_at|escape }}</p>
     <p>Updated At: {{ user.updated_at|escape }}</p>
 
-    <a href="/web/admin/users">Back to User List</a>
-
     <script>
+      // Set password button
       document
         .getElementById("setPasswordBtn")
         .addEventListener("click", function () {
           document.getElementById("passwordModal").style.display = "block";
         });
-
       document
         .getElementById("closePasswordModalBtn")
         .addEventListener("click", function () {
           document.getElementById("passwordModal").style.display = "none";
         });
-
       document
         .getElementById("submitPasswordBtn")
         .addEventListener("click", function () {
@@ -70,6 +72,48 @@
                 alert("Failed to set password. Please try again later.");
               });
           }
+        });
+
+      // Generate invite link button
+      document
+        .getElementById("generateInviteLinkBtn")
+        .addEventListener("click", function () {
+          const userEmail = encodeURIComponent("{{ user.email|escape }}");
+          fetch(`/web-api/user/${userEmail}/generate-link`, {
+            method: "POST",
+          })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error("Network response was not ok");
+              }
+              return response.json();
+            })
+            .then((data) => {
+              const inviteLink = data.data.action_link;
+              document.getElementById("inviteLink").style.display = "block";
+              document.getElementById("inviteLink").value = inviteLink;
+              document.getElementById("copyInviteLinkBtn").style.display =
+                "block";
+            })
+            .catch((error) => {
+              console.error("Error generating invite link:", error);
+              alert("Failed to generate invite link. Please try again later.");
+            });
+        });
+
+      document
+        .getElementById("copyInviteLinkBtn")
+        .addEventListener("click", function () {
+          const textarea = document.getElementById("inviteLink");
+
+          // Select the link text
+          textarea.select();
+
+          // Copy it to the clipboard
+          document.execCommand("copy");
+
+          // Optionally: Inform the user
+          alert("Invite link copied to clipboard!");
         });
     </script>
   </body>

@@ -32,13 +32,8 @@ pub async fn create_user_if_not_exists(
   let affected_rows = sqlx::query!(
     r#"
       INSERT INTO af_user (uuid, email, name)
-      SELECT $1, $2, $3
-      WHERE NOT EXISTS (
-          SELECT 1 FROM public.af_user WHERE email = $2
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM public.af_user WHERE uuid = $1
-      )
+      VALUES ($1, $2, $3)
+      ON CONFLICT (email) DO NOTHING;
       "#,
     user_uuid,
     email,
@@ -47,7 +42,7 @@ pub async fn create_user_if_not_exists(
   .execute(pool)
   .await
   .context(format!(
-    "Fail to insert user to db. uuid: {}, name: {}, email: {}",
+    "Fail to insert user with uuid: {}, name: {}, email: {}",
     user_uuid, name, email
   ))?
   .rows_affected();

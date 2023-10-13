@@ -27,7 +27,7 @@ use crate::api::user::user_scope;
 use crate::api::workspace::{workspace_scope, workspace_scope_access_control};
 use crate::api::ws::ws_scope;
 use crate::component::storage_proxy::CollabStorageProxy;
-use crate::middleware::permission_mw::AccessControl;
+use crate::middleware::permission_mw::WorkspaceAccessControl;
 use database::collab::CollabPostgresDBStorageImpl;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
@@ -83,7 +83,7 @@ pub async fn run(
     .unwrap()
     .start();
 
-  let mut access_control = AccessControl::new(state.pg_pool.clone());
+  let mut access_control = WorkspaceAccessControl::new(state.pg_pool.clone());
   access_control.extend(workspace_scope_access_control());
 
   let mut server = HttpServer::new(move || {

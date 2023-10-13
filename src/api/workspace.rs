@@ -1,7 +1,7 @@
 use crate::biz::workspace;
-use crate::biz::workspace::permission::WorkspaceMemberAccessControl;
+use crate::biz::workspace::permission::WorkspaceOwnerAccessControl;
 use crate::component::auth::jwt::UserUuid;
-use crate::middleware::permission_mw::{AccessControlService, ResourcePattern};
+use crate::middleware::permission_mw::{ResourcePattern, WorkspaceAccessControlService};
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
@@ -16,25 +16,46 @@ use tracing::instrument;
 
 use uuid::Uuid;
 
+pub const WORKSPACE_ID_PATH: &str = "workspace_id";
+
 const SCOPE_PATH: &str = "/api/workspace";
+const WORKSPACE_LIST_PATH: &str = "list";
 const WORKSPACE_MEMBER_PATH: &str = "{workspace_id}/member";
+const WORKSPACE_MEMBER_PERMISSION_PATH: &str = "{workspace_id}/member/permission";
 
 pub fn workspace_scope() -> Scope {
   web::scope(SCOPE_PATH)
-    .service(web::resource("/list").route(web::get().to(list_handler)))
+    .service(web::resource(WORKSPACE_LIST_PATH).route(web::get().to(list_handler)))
     .service(
       web::resource(WORKSPACE_MEMBER_PATH)
-        .route(web::get().to(members_list_handler))
-        .route(web::post().to(members_add_handler))
-        .route(web::delete().to(members_remove_handler)),
+        .route(web::get().to(list_workspace_members_handler))
+        .route(web::post().to(add_workspace_members_handler))
+        .route(web::delete().to(remove_workspace_member_handler)),
+    )
+    .service(
+      web::resource(WORKSPACE_MEMBER_PERMISSION_PATH)
+        .route(web::post().to(update_workspace_member_permission_handler)),
     )
 }
 
-pub fn workspace_scope_access_control() -> HashMap<ResourcePattern, Arc<dyn AccessControlService>> {
-  let mut access_control: HashMap<ResourcePattern, Arc<dyn AccessControlService>> = HashMap::new();
+pub fn workspace_scope_access_control(
+) -> HashMap<ResourcePattern, Arc<dyn WorkspaceAccessControlService>> {
+  let mut access_control: HashMap<ResourcePattern, Arc<dyn WorkspaceAccessControlService>> =
+    HashMap::new();
+
+  access_control.insert(
+    format!("{}/{}", SCOPE_PATH, WORKSPACE_LIST_PATH),
+    Arc::new(WorkspaceOwnerAccessControl),
+  );
+
   access_control.insert(
     format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PATH),
-    Arc::new(WorkspaceMemberAccessControl),
+    Arc::new(WorkspaceOwnerAccessControl),
+  );
+
+  access_control.insert(
+    format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PERMISSION_PATH),
+    Arc::new(WorkspaceOwnerAccessControl),
   );
 
   access_control
@@ -49,8 +70,8 @@ async fn list_handler(
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
-#[instrument(skip_all, err)]
-async fn members_add_handler(
+#[instrument(skip(req, state), err)]
+async fn add_workspace_members_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   req: Json<WorkspaceMembersParams>,
@@ -67,7 +88,7 @@ async fn members_add_handler(
 }
 
 #[instrument(skip_all, err)]
-async fn members_list_handler(
+async fn list_workspace_members_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
@@ -78,7 +99,7 @@ async fn members_list_handler(
 }
 
 #[instrument(skip_all, err)]
-async fn members_remove_handler(
+async fn remove_workspace_member_handler(
   user_uuid: UserUuid,
   req: Json<WorkspaceMembersParams>,
   state: Data<AppState>,
@@ -92,4 +113,14 @@ async fn members_remove_handler(
   )
   .await?;
   Ok(AppResponse::Ok().into())
+}
+
+#[instrument(skip_all, err)]
+async fn update_workspace_member_permission_handler(
+  _user_uuid: UserUuid,
+  _req: Json<WorkspaceMembersParams>,
+  _state: Data<AppState>,
+  _workspace_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<()>> {
+  todo!()
 }

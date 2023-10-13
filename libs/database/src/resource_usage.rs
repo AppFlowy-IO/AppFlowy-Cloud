@@ -1,3 +1,4 @@
+use database_entity::database_error::DatabaseError;
 use database_entity::AFBlobMetadata;
 use rust_decimal::prelude::ToPrimitive;
 use sqlx::types::Decimal;
@@ -10,7 +11,7 @@ pub async fn is_blob_metadata_exists(
   pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<bool, sqlx::Error> {
+) -> Result<bool, DatabaseError> {
   let exists: (bool,) = sqlx::query_as(
     r#"
      SELECT EXISTS (
@@ -35,8 +36,8 @@ pub async fn insert_blob_metadata(
   workspace_id: &Uuid,
   file_type: &str,
   file_size: i64,
-) -> Result<AFBlobMetadata, sqlx::Error> {
-  sqlx::query_as!(
+) -> Result<AFBlobMetadata, DatabaseError> {
+  let metadata = sqlx::query_as!(
     AFBlobMetadata,
     r#"
         INSERT INTO af_blob_metadata
@@ -53,7 +54,8 @@ pub async fn insert_blob_metadata(
     file_size
   )
   .fetch_one(pg_pool)
-  .await
+  .await?;
+  Ok(metadata)
 }
 
 #[instrument(level = "trace", skip_all, err)]
@@ -61,8 +63,8 @@ pub async fn delete_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadata, sqlx::Error> {
-  sqlx::query_as!(
+) -> Result<AFBlobMetadata, DatabaseError> {
+  let metadata = sqlx::query_as!(
     AFBlobMetadata,
     r#"
         DELETE FROM af_blob_metadata
@@ -73,7 +75,8 @@ pub async fn delete_blob_metadata(
     file_id,
   )
   .fetch_one(pg_pool)
-  .await
+  .await?;
+  Ok(metadata)
 }
 
 #[instrument(level = "trace", skip_all, err)]
@@ -81,8 +84,8 @@ pub async fn get_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadata, sqlx::Error> {
-  sqlx::query_as!(
+) -> Result<AFBlobMetadata, DatabaseError> {
+  let metadata = sqlx::query_as!(
     AFBlobMetadata,
     r#"
         SELECT * FROM af_blob_metadata
@@ -92,14 +95,15 @@ pub async fn get_blob_metadata(
     file_id,
   )
   .fetch_one(pg_pool)
-  .await
+  .await?;
+  Ok(metadata)
 }
 
 #[instrument(level = "trace", skip_all, err)]
 pub async fn get_workspace_usage_size(
   pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<u64, sqlx::Error> {
+) -> Result<u64, DatabaseError> {
   let row: (Option<Decimal>,) =
     sqlx::query_as(r#"SELECT SUM(file_size) FROM af_blob_metadata WHERE workspace_id = $1;"#)
       .bind(workspace_id)

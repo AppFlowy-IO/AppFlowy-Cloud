@@ -362,10 +362,7 @@ impl Client {
     &self,
     workspace_uuid: uuid::Uuid,
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-    let url = format!(
-      "{}/api/workspace/{}/member/list",
-      self.base_url, workspace_uuid
-    );
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -382,11 +379,8 @@ impl Client {
     workspace_uuid: uuid::Uuid,
     member_emails: Vec<String>,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/workspace/member/add", self.base_url);
-    let req = WorkspaceMembersParams {
-      workspace_uuid,
-      member_emails,
-    };
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let req = WorkspaceMembersParams { member_emails };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
@@ -401,15 +395,12 @@ impl Client {
   pub async fn remove_workspace_members(
     &self,
     workspace_uuid: uuid::Uuid,
-    member_uids: Vec<String>,
+    member_emails: Vec<String>,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/workspace/member/remove", self.base_url);
-    let req = WorkspaceMembersParams {
-      workspace_uuid,
-      member_emails: member_uids,
-    };
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let req = WorkspaceMembersParams { member_emails };
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_auth(Method::DELETE, &url)
       .await?
       .json(&req)
       .send()

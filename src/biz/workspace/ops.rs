@@ -17,30 +17,30 @@ pub async fn get_workspaces(
 pub async fn add_workspace_members(
   pg_pool: &PgPool,
   user_uuid: &uuid::Uuid,
-  workspace_uuid: &uuid::Uuid,
+  workspace_id: &uuid::Uuid,
   member_emails: &[String],
 ) -> Result<(), AppError> {
-  require_user_is_workspace_owner(pg_pool, user_uuid, workspace_uuid).await?;
-  Ok(insert_workspace_members(pg_pool, workspace_uuid, member_emails, AFRole::Member).await?)
+  require_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  Ok(insert_workspace_members(pg_pool, workspace_id, member_emails, AFRole::Member).await?)
 }
 
 pub async fn remove_workspace_members(
   pg_pool: &PgPool,
   user_uuid: &uuid::Uuid,
-  workspace_uuid: &uuid::Uuid,
+  workspace_id: &uuid::Uuid,
   member_emails: &[String],
 ) -> Result<(), AppError> {
-  require_user_is_workspace_owner(pg_pool, user_uuid, workspace_uuid).await?;
-  Ok(delete_workspace_members(pg_pool, workspace_uuid, member_emails).await?)
+  require_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  Ok(delete_workspace_members(pg_pool, workspace_id, member_emails).await?)
 }
 
 pub async fn get_workspace_members(
   pg_pool: &PgPool,
   user_uuid: &uuid::Uuid,
-  workspace_uuid: &uuid::Uuid,
+  workspace_id: &uuid::Uuid,
 ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-  require_user_is_workspace_owner(pg_pool, user_uuid, workspace_uuid).await?;
-  Ok(select_workspace_members(pg_pool, workspace_uuid).await?)
+  require_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  Ok(select_workspace_members(pg_pool, workspace_id).await?)
 }
 
 async fn require_user_is_workspace_owner(

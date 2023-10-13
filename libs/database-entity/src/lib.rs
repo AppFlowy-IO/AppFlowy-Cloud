@@ -182,7 +182,7 @@ impl AFWorkspaces {
   }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
 pub enum AFRole {
   Owner,
   Member,

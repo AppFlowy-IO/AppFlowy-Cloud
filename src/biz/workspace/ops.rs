@@ -1,3 +1,4 @@
+use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
 use database::workspace::{
   delete_workspace_members, insert_workspace_member, select_all_workspaces_owned,
@@ -44,12 +45,25 @@ pub async fn add_workspace_members(
 }
 
 pub async fn remove_workspace_members(
+  user_uuid: &UserUuid,
   pg_pool: &PgPool,
-  _user_uuid: &uuid::Uuid,
-  workspace_id: &uuid::Uuid,
-  member_emails: &[String],
+  workspace_id: uuid::Uuid,
+  member_emails: Vec<String>,
 ) -> Result<(), AppError> {
-  Ok(delete_workspace_members(pg_pool, workspace_id, member_emails).await?)
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to delete workspace members")?;
+
+  for email in member_emails {
+    delete_workspace_members(user_uuid, &mut txn, &workspace_id, email).await?;
+  }
+
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to delete workspace members")?;
+  Ok(())
 }
 
 pub async fn get_workspace_members(

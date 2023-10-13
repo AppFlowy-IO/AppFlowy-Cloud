@@ -34,7 +34,7 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource(WORKSPACE_MEMBER_PERMISSION_PATH)
-        .route(web::post().to(update_workspace_member_permission_handler)),
+        .route(web::post().to(update_member_permission_handler)),
     )
 }
 
@@ -107,13 +107,18 @@ async fn remove_workspace_member_handler(
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
   let members = payload.into_inner();
-  workspace::ops::remove_workspace_members(&state.pg_pool, &user_uuid, &workspace_id, &members.0)
-    .await?;
+  workspace::ops::remove_workspace_members(
+    &user_uuid,
+    &state.pg_pool,
+    workspace_id.into_inner(),
+    members.0,
+  )
+  .await?;
   Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip_all, err)]
-async fn update_workspace_member_permission_handler(
+async fn update_member_permission_handler(
   _user_uuid: UserUuid,
   _req: Json<CreateWorkspaceMembers>,
   _state: Data<AppState>,

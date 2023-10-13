@@ -1,3 +1,5 @@
+use database_entity::AFRole;
+
 use shared_entity::dto::{CreateWorkspaceMember, WorkspacePermission};
 use shared_entity::error_code::ErrorCode;
 
@@ -5,20 +7,16 @@ use crate::user::utils::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn add_workspace_members_not_enough_permission() {
-  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let (c1, user1) = generate_unique_registered_user_client().await;
   let (c2, _user2) = generate_unique_registered_user_client().await;
-
-  let user2_workspace = c2.workspaces().await.unwrap();
-  let user2_workspace_id = user2_workspace.first().unwrap().workspace_id;
+  let workspace_id_2 = c2.workspaces().await.unwrap().first().unwrap().workspace_id;
 
   // attempt to add user2 to user1's workspace
-  // using user1's client
-  let email = c1.token().read().as_ref().unwrap().user.email.to_owned();
   let err = c1
     .add_workspace_members(
-      user2_workspace_id,
+      workspace_id_2,
       vec![CreateWorkspaceMember {
-        email,
+        email: user1.email,
         permission: WorkspacePermission::Member,
       }],
     )
@@ -71,4 +69,122 @@ async fn add_workspace_members_then_delete() {
       .iter()
       .any(|w| w.email == *c2_email));
   }
+}
+
+#[tokio::test]
+async fn workspace_member_add_new_member() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let (c2, user2) = generate_unique_registered_user_client().await;
+  let (_c3, user3) = generate_unique_registered_user_client().await;
+
+  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+
+  c1.add_workspace_members(
+    workspace_id,
+    vec![CreateWorkspaceMember {
+      email: user2.email,
+      permission: WorkspacePermission::Member,
+    }],
+  )
+  .await
+  .unwrap();
+
+  let err = c2
+    .add_workspace_members(
+      workspace_id,
+      vec![CreateWorkspaceMember {
+        email: user3.email,
+        permission: WorkspacePermission::Member,
+      }],
+    )
+    .await
+    .unwrap_err();
+
+  assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
+}
+
+#[tokio::test]
+async fn workspace_owner_add_new_owner() {
+  let (c1, user1) = generate_unique_registered_user_client().await;
+  let (_c2, user2) = generate_unique_registered_user_client().await;
+
+  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  c1.add_workspace_members(
+    workspace_id,
+    vec![CreateWorkspaceMember {
+      email: user2.email.clone(),
+      permission: WorkspacePermission::Owner,
+    }],
+  )
+  .await
+  .unwrap();
+
+  let members = c1.get_workspace_members(workspace_id).await.unwrap();
+  assert_eq!(members[0].email, user1.email);
+  assert_eq!(members[0].role, AFRole::Owner);
+
+  assert_eq!(members[1].email, user2.email);
+  assert_eq!(members[1].role, AFRole::Owner);
+}
+
+#[tokio::test]
+async fn workspace_second_owner_add_new_member() {
+  let (c1, user1) = generate_unique_registered_user_client().await;
+  let (c2, user2) = generate_unique_registered_user_client().await;
+  let (_c3, user3) = generate_unique_registered_user_client().await;
+
+  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  c1.add_workspace_members(
+    workspace_id,
+    vec![CreateWorkspaceMember {
+      email: user2.email.clone(),
+      permission: WorkspacePermission::Owner,
+    }],
+  )
+  .await
+  .unwrap();
+
+  c2.add_workspace_members(
+    workspace_id,
+    vec![CreateWorkspaceMember {
+      email: user3.email.clone(),
+      permission: WorkspacePermission::Member,
+    }],
+  )
+  .await
+  .unwrap();
+
+  let members = c1.get_workspace_members(workspace_id).await.unwrap();
+  assert_eq!(members[0].email, user1.email);
+  assert_eq!(members[0].role, AFRole::Owner);
+
+  assert_eq!(members[1].email, user2.email);
+  assert_eq!(members[1].role, AFRole::Owner);
+
+  assert_eq!(members[2].email, user3.email);
+  assert_eq!(members[2].role, AFRole::Member);
+}
+
+#[tokio::test]
+async fn workspace_second_owner_can_not_delete_origin_owner() {
+  let (c1, user1) = generate_unique_registered_user_client().await;
+  let (c2, user2) = generate_unique_registered_user_client().await;
+
+  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  c1.add_workspace_members(
+    workspace_id,
+    vec![CreateWorkspaceMember {
+      email: user2.email.clone(),
+      permission: WorkspacePermission::Owner,
+    }],
+  )
+  .await
+  .unwrap();
+
+  let err = c2
+    .remove_workspace_members(workspace_id, [user1.email].to_vec())
+    .await
+    .unwrap_err();
+
+  assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
 }

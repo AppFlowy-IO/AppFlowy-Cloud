@@ -5,10 +5,8 @@ use gotrue_entity::AccessTokenResponse;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct WorkspaceMembers(pub Vec<String>);
-
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct CreateWorkspaceMembers(pub Vec<CreateWorkspaceMember>);
-
 impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   fn from(value: Vec<CreateWorkspaceMember>) -> Self {
     Self(value)

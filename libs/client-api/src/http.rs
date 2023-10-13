@@ -418,7 +418,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(skip_all, err)]
   pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<bool, AppError> {
     let access_token_resp = self
       .gotrue_client

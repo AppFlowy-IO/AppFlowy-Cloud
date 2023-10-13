@@ -18,6 +18,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use std::sync::Arc;
 use token::{create_token, parse_token, TokenError};
 use tokio::sync::RwLock;
+use tracing::instrument;
 
 pub async fn login(
   email: String,
@@ -51,6 +52,7 @@ pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<UserCache>>) {
   cache.write().await.unauthorized(logged_user);
 }
 
+#[instrument(skip_all, err)]
 pub async fn register(
   username: String,
   email: String,

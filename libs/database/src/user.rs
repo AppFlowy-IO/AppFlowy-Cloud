@@ -1,4 +1,6 @@
+use anyhow::{Context, Error};
 use sqlx::PgPool;
+use tracing::instrument;
 
 pub async fn update_user_name(
   pool: &PgPool,
@@ -19,12 +21,13 @@ pub async fn update_user_name(
   Ok(())
 }
 
+#[instrument(skip_all, err)]
 pub async fn create_user_if_not_exists(
   pool: &PgPool,
   user_uuid: &uuid::Uuid,
   email: &str,
   name: &str,
-) -> Result<bool, sqlx::Error> {
+) -> Result<bool, Error> {
   let affected_rows = sqlx::query!(
     r#"
       INSERT INTO af_user (uuid, email, name)
@@ -41,7 +44,11 @@ pub async fn create_user_if_not_exists(
     name
   )
   .execute(pool)
-  .await?
+  .await
+  .context(format!(
+    "Fail to insert user. uuid: {}, name: {}, email: {}",
+    user_uuid, name, email
+  ))?
   .rows_affected();
 
   Ok(affected_rows > 0)

@@ -173,9 +173,8 @@ async fn broadcast_message<U>(
 {
   if let Some(client_stream) = client_streams.read().await.get(&client_msg.user) {
     trace!(
-      "[💭Server]: receives client message: [oid:{}|msg_id:{:?}]",
-      client_msg.content.object_id(),
-      client_msg.content.msg_id()
+      "[💭Server]: receives client message: {}",
+      client_msg.content,
     );
     match client_stream
       .stream_tx

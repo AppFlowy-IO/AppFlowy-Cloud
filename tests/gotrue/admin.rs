@@ -61,7 +61,7 @@ async fn admin_user_create_and_list_delete() {
   let new_user = users.iter().find(|u| u.email == user_email).unwrap();
 
   // delete user that was just created
-  let _ = gotrue_client
+  gotrue_client
     .admin_delete_user(
       &admin_token.access_token,
       &new_user.id,

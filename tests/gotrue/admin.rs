@@ -2,7 +2,7 @@ use client_api::extract_sign_in_url;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
-  params::{AdminUserParams, GenerateLinkParams},
+  params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams},
 };
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn admin_user_create_and_list() {
+async fn admin_user_create_and_list_delete() {
   let http_client = reqwest::Client::new();
   let gotrue_client = Client::new(http_client, "http://localhost:9998");
   let admin_token = gotrue_client
@@ -54,8 +54,34 @@ async fn admin_user_create_and_list() {
   let users = gotrue_client
     .admin_list_user(&admin_token.access_token)
     .await
+    .unwrap()
+    .users;
+
+  // should be able to find user that was just created
+  let new_user = users.iter().find(|u| u.email == user_email).unwrap();
+
+  // delete user that was just created
+  let _ = gotrue_client
+    .admin_delete_user(
+      &admin_token.access_token,
+      &new_user.id,
+      &AdminDeleteUserParams {
+        should_soft_delete: true,
+      },
+    )
+    .await
     .unwrap();
-  assert!(users.users.len() > 2);
+
+  let users = gotrue_client
+    .admin_list_user(&admin_token.access_token)
+    .await
+    .unwrap()
+    .users;
+
+  // user list should not contain the new user added
+  // since it's deleted
+  let found = users.iter().any(|u| u.email == user_email);
+  assert!(!found);
 }
 
 #[tokio::test]

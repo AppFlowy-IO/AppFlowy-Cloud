@@ -29,14 +29,8 @@
         // Get the email from the user
         const email = prompt('Please enter the new user email:');
         if (email) {
-          fetch("/web-api/add_user", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              email: email,
-            }),
+	  fetch(`/web-api/user/${email}`, {
+            method: "POST"
           })
           .then((response) => {
             if (!response.ok) {

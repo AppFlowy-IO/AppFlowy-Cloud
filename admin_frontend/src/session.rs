@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use axum::{
   async_trait,
   extract::FromRequestParts,
@@ -5,6 +7,8 @@ use axum::{
   response::{IntoResponse, Redirect},
 };
 use axum_extra::extract::CookieJar;
+use gotrue::grant::{Grant, RefreshTokenGrant};
+use jwt::{Claims, Header};
 use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -38,7 +42,7 @@ impl SessionStorage {
     }
   }
 
-  pub async fn put_user_session(&self, user_session: UserSession) -> redis::RedisResult<()> {
+  pub async fn put_user_session(&self, user_session: &UserSession) -> redis::RedisResult<()> {
     let key = session_id_key(&user_session.session_id);
     self
       .redis_client
@@ -93,13 +97,61 @@ impl FromRequestParts<AppState> for UserSession {
       .ok_or(SessionRejection::NoSessionId)?
       .value();
 
-    let session = state
+    let mut session = state
       .session_store
       .get_user_session(session_id)
       .await
       .ok_or(SessionRejection::SessionNotFound)?;
 
+    if has_expired(session.access_token.as_str()) {
+      // Get new pair of access token and refresh token
+      let refresh_token = session.refresh_token;
+      let new_token = state
+        .gotrue_client
+        .clone()
+        .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
+        .await
+        .map_err(|err| SessionRejection::RefreshTokenError(err.to_string()))?;
+
+      session.access_token = new_token.access_token;
+      session.refresh_token = new_token.refresh_token;
+
+      // Update session in redis
+      let _ = state
+        .session_store
+        .put_user_session(&session)
+        .await
+        .map_err(|err| {
+          tracing::error!("failed to update session in redis: {}", err);
+        });
+    }
+
     Ok(session)
+  }
+}
+
+fn has_expired(access_token: &str) -> bool {
+  match get_session_expiration(access_token) {
+    Some(expiration_seconds) => {
+      let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs();
+      now > expiration_seconds
+    },
+    None => false,
+  }
+}
+
+fn get_session_expiration(access_token: &str) -> Option<u64> {
+  // no need to verify, let the appflowy cloud server do it
+  // in that way, frontend server does not need to know the secret
+  match jwt::Token::<Header, Claims, _>::parse_unverified(access_token) {
+    Ok(unverified) => unverified.claims().registered.expiration,
+    Err(e) => {
+      tracing::error!("failed to parse unverified token: {}", e);
+      None
+    },
   }
 }
 
@@ -108,6 +160,7 @@ pub enum SessionRejection {
   NoSessionId,
   SessionNotFound,
   CookieError(String),
+  RefreshTokenError(String),
 }
 
 impl IntoResponse for SessionRejection {
@@ -119,6 +172,10 @@ impl IntoResponse for SessionRejection {
         Redirect::temporary("/web/login").into_response()
       },
       SessionRejection::SessionNotFound => Redirect::temporary("/web/login").into_response(),
+      SessionRejection::RefreshTokenError(err) => {
+        tracing::warn!("refresh token error: {}", err);
+        Redirect::temporary("/web/login").into_response()
+      },
     }
   }
 }

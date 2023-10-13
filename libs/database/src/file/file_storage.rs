@@ -92,7 +92,7 @@ where
     {
       // ff the metadata is not saved, delete the blob.
       self.client.delete_blob(&file_id).await?;
-      return Err(err.into());
+      return Err(err);
     }
 
     Ok(file_id)

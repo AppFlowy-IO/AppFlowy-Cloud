@@ -26,3 +26,4 @@ tower-http = { version = "0.4.4", features = ["cors"] }
 tower = "0.4.13"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+jwt = "0.16.0"

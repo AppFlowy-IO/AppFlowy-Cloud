@@ -1,7 +1,8 @@
 use sqlx::{
   types::{uuid, Uuid},
-  PgPool,
+  PgPool, Transaction,
 };
+use std::ops::DerefMut;
 
 use database_entity::database_error::DatabaseError;
 use database_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
@@ -47,26 +48,26 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
-pub async fn insert_workspace_members(
-  pool: &PgPool,
+pub async fn insert_workspace_member(
+  txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
-  member_emails: &[String],
+  member_email: String,
   role: AFRole,
 ) -> Result<(), DatabaseError> {
   sqlx::query!(
     r#"
-        INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
-        SELECT $1, af_user.uid, $3
-        FROM unnest($2::text[]) AS emails(email)
-        JOIN public.af_user ON af_user.email = emails.email
-        ON CONFLICT (workspace_id, uid)
-        DO NOTHING
-        "#,
+      INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
+      SELECT $1, af_user.uid, $3
+      FROM public.af_user 
+      WHERE af_user.email = $2 
+      ON CONFLICT (workspace_id, uid)
+      DO NOTHING;
+    "#,
     workspace_id,
-    member_emails,
+    member_email,
     role.id()
   )
-  .execute(pool)
+  .execute(txn.deref_mut())
   .await?;
 
   Ok(())

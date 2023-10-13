@@ -8,7 +8,7 @@ use actix_web::Result;
 use actix_web::{web, Scope};
 use database_entity::{AFWorkspaceMember, AFWorkspaces};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::WorkspaceMembersParams;
+use shared_entity::dto::{CreateWorkspaceMembers, WorkspaceMembers};
 use sqlx::types::uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -70,18 +70,19 @@ async fn list_handler(
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
-#[instrument(skip(req, state), err)]
+#[instrument(skip(payload, state), err)]
 async fn add_workspace_members_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
-  req: Json<WorkspaceMembersParams>,
+  payload: Json<CreateWorkspaceMembers>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
+  let create_members = payload.into_inner();
   workspace::ops::add_workspace_members(
     &state.pg_pool,
     &user_uuid,
     &workspace_id,
-    &req.member_emails,
+    create_members.0,
   )
   .await?;
   Ok(AppResponse::Ok().into())
@@ -101,24 +102,20 @@ async fn list_workspace_members_handler(
 #[instrument(skip_all, err)]
 async fn remove_workspace_member_handler(
   user_uuid: UserUuid,
-  req: Json<WorkspaceMembersParams>,
+  payload: Json<WorkspaceMembers>,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
-  workspace::ops::remove_workspace_members(
-    &state.pg_pool,
-    &user_uuid,
-    &workspace_id,
-    &req.member_emails,
-  )
-  .await?;
+  let members = payload.into_inner();
+  workspace::ops::remove_workspace_members(&state.pg_pool, &user_uuid, &workspace_id, &members.0)
+    .await?;
   Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip_all, err)]
 async fn update_workspace_member_permission_handler(
   _user_uuid: UserUuid,
-  _req: Json<WorkspaceMembersParams>,
+  _req: Json<CreateWorkspaceMembers>,
   _state: Data<AppState>,
   _workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {

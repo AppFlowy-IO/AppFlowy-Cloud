@@ -26,7 +26,7 @@ use shared_entity::data::AppResponse;
 use shared_entity::dto::SignInTokenResponse;
 use shared_entity::dto::UpdateUsernameParams;
 use shared_entity::dto::UserUpdateParams;
-use shared_entity::dto::WorkspaceMembersParams;
+use shared_entity::dto::{CreateWorkspaceMembers, WorkspaceMembers};
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
 use std::sync::Arc;
@@ -374,17 +374,17 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn add_workspace_members(
+  pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>>(
     &self,
     workspace_uuid: uuid::Uuid,
-    member_emails: Vec<String>,
+    members: T,
   ) -> Result<(), AppError> {
+    let members = members.into();
     let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
-    let req = WorkspaceMembersParams { member_emails };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&req)
+      .json(&members)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()?;
@@ -398,7 +398,7 @@ impl Client {
     member_emails: Vec<String>,
   ) -> Result<(), AppError> {
     let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
-    let req = WorkspaceMembersParams { member_emails };
+    let req = WorkspaceMembers(member_emails);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?

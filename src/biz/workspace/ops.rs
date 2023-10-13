@@ -1,8 +1,10 @@
+use anyhow::Context;
 use database::workspace::{
-  delete_workspace_members, insert_workspace_members, select_all_workspaces_owned,
+  delete_workspace_members, insert_workspace_member, select_all_workspaces_owned,
   select_user_is_workspace_owner, select_workspace_members,
 };
-use database_entity::{AFRole, AFWorkspaceMember, AFWorkspaces};
+use database_entity::{AFWorkspaceMember, AFWorkspaces};
+use shared_entity::dto::CreateWorkspaceMember;
 use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::uuid, PgPool};
 
@@ -18,9 +20,27 @@ pub async fn add_workspace_members(
   pg_pool: &PgPool,
   _user_uuid: &uuid::Uuid,
   workspace_id: &uuid::Uuid,
-  member_emails: &[String],
+  members: Vec<CreateWorkspaceMember>,
 ) -> Result<(), AppError> {
-  Ok(insert_workspace_members(pg_pool, workspace_id, member_emails, AFRole::Member).await?)
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to insert workspace members")?;
+  for member in members {
+    insert_workspace_member(
+      &mut txn,
+      workspace_id,
+      member.email,
+      member.permission.into(),
+    )
+    .await?;
+  }
+
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to insert workspace members")?;
+  Ok(())
 }
 
 pub async fn remove_workspace_members(

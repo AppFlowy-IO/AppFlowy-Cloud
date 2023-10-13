@@ -3,13 +3,14 @@ use sqlx::{
   PgPool,
 };
 
+use database_entity::database_error::DatabaseError;
 use database_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
 pub async fn select_all_workspaces_owned(
   pool: &PgPool,
   owner_uuid: &Uuid,
-) -> Result<Vec<AFWorkspace>, sqlx::Error> {
-  sqlx::query_as!(
+) -> Result<Vec<AFWorkspace>, DatabaseError> {
+  let workspaces = sqlx::query_as!(
     AFWorkspace,
     r#"
         SELECT * FROM public.af_workspace WHERE owner_uid = (
@@ -19,14 +20,15 @@ pub async fn select_all_workspaces_owned(
     owner_uuid
   )
   .fetch_all(pool)
-  .await
+  .await?;
+  Ok(workspaces)
 }
 
 pub async fn select_user_is_workspace_owner(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
-) -> Result<bool, sqlx::Error> {
+) -> Result<bool, DatabaseError> {
   let exists = sqlx::query_scalar!(
     r#"
         SELECT EXISTS(
@@ -50,7 +52,7 @@ pub async fn insert_workspace_members(
   workspace_id: &uuid::Uuid,
   member_emails: &[String],
   role: AFRole,
-) -> Result<(), sqlx::Error> {
+) -> Result<(), DatabaseError> {
   sqlx::query!(
     r#"
         INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
@@ -74,7 +76,7 @@ pub async fn delete_workspace_members(
   pool: &PgPool,
   workspace_id: &uuid::Uuid,
   member_emails: &[String],
-) -> Result<(), sqlx::Error> {
+) -> Result<(), DatabaseError> {
   sqlx::query!(
     r#"
         DELETE FROM public.af_workspace_member
@@ -94,8 +96,8 @@ pub async fn delete_workspace_members(
 pub async fn select_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
-) -> Result<Vec<AFWorkspaceMember>, sqlx::Error> {
-  sqlx::query_as!(
+) -> Result<Vec<AFWorkspaceMember>, DatabaseError> {
+  let members = sqlx::query_as!(
     AFWorkspaceMember,
     r#"
         SELECT af_user.email, af_workspace_member.role_id AS role
@@ -106,14 +108,15 @@ pub async fn select_workspace_members(
     workspace_id
   )
   .fetch_all(pg_pool)
-  .await
+  .await?;
+  Ok(members)
 }
 
 pub async fn select_user_profile_view_by_uuid(
   pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<Option<AFUserProfileView>, sqlx::Error> {
-  sqlx::query_as!(
+) -> Result<Option<AFUserProfileView>, DatabaseError> {
+  let user_profile = sqlx::query_as!(
     AFUserProfileView,
     r#"
         SELECT *
@@ -122,5 +125,6 @@ pub async fn select_user_profile_view_by_uuid(
     user_uuid
   )
   .fetch_optional(pool)
-  .await
+  .await?;
+  Ok(user_profile)
 }

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)\n      SELECT $1, af_user.uid, $3\n      FROM public.af_user \n      WHERE af_user.email = $2 \n      ON CONFLICT (workspace_id, uid)\n      DO NOTHING;\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7adbcbd98b1f36d2d68cae3434a7680a82e6eb905ff60585bcc9a7939dd207fd"
+}

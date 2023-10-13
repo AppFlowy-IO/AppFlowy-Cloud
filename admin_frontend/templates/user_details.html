@@ -47,14 +47,15 @@
           const newPassword = document.getElementById("newPassword").value;
           let confirmed = confirm("Set new password?");
           if (confirmed && newPassword) {
-            fetch("/web-api/set_user_password", {
-              method: "POST",
+            const user_uuid = "{{ user.id|escape }}";
+            fetch(`/web-api/user/${user_uuid}`, {
+              method: "PUT",
               headers: {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                userId: "{{ user.id }}",
-                newPassword: newPassword,
+                email: "{{ user.email|escape }}",
+                password: newPassword,
               }),
             })
               .then((response) => {

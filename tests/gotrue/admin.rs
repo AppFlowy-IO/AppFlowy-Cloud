@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn admin_user_create_and_list_delete() {
+async fn admin_user_create_list_edit_delete() {
   let http_client = reqwest::Client::new();
   let gotrue_client = Client::new(http_client, "http://localhost:9998");
   let admin_token = gotrue_client
@@ -51,6 +51,7 @@ async fn admin_user_create_and_list_delete() {
     .unwrap();
   assert!(user_token.user.email_confirmed_at.is_some());
 
+  // list users
   let users = gotrue_client
     .admin_list_user(&admin_token.access_token)
     .await
@@ -59,6 +60,32 @@ async fn admin_user_create_and_list_delete() {
 
   // should be able to find user that was just created
   let new_user = users.iter().find(|u| u.email == user_email).unwrap();
+
+  // change password for user
+  let new_password = "Hello456!";
+  let _ = gotrue_client
+    .admin_put_user(
+      &admin_token.access_token,
+      new_user.id.as_str(),
+      &AdminUserParams {
+        email: user_email.clone(),
+        password: Some(new_password.to_owned()),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(user.email, user_email);
+  assert!(user.email_confirmed_at.is_some());
+
+  // login user with new password
+  let _ = gotrue_client
+    .token(&Grant::Password(PasswordGrant {
+      email: user_email.clone(),
+      password: new_password.to_string(),
+    }))
+    .await
+    .unwrap();
 
   // delete user that was just created
   gotrue_client

@@ -3,6 +3,11 @@ use std::collections::btree_map::BTreeMap;
 use gotrue_entity::{Factor, Identity};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AdminDeleteUserParams {
+  pub should_soft_delete: bool,
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct AdminUserParams {
   pub aud: String,

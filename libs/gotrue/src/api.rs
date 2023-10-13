@@ -1,4 +1,6 @@
-use crate::params::{AdminUserParams, GenerateLinkParams, GenerateLinkResponse};
+use crate::params::{
+  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
+};
 use anyhow::Context;
 
 use super::grant::Grant;
@@ -145,6 +147,38 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
+  pub async fn admin_delete_user(
+    &self,
+    access_token: &str,
+    user_uuid: &str,
+    delete_user_params: &AdminDeleteUserParams,
+  ) -> Result<(), GoTrueError> {
+    let resp = self
+      .client
+      .delete(format!("{}/admin/users/{}", self.base_url, user_uuid))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(&delete_user_params)
+      .send()
+      .await?;
+    check_gotrue_result(resp).await
+  }
+
+  pub async fn admin_put_user(
+    &self,
+    access_token: &str,
+    user_uuid: &str,
+    admin_user_params: &AdminUserParams,
+  ) -> Result<User, GoTrueError> {
+    let resp = self
+      .client
+      .put(format!("{}/admin/users/{}", self.base_url, user_uuid))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(&admin_user_params)
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
   pub async fn admin_add_user(
     &self,
     access_token: &str,
@@ -183,6 +217,15 @@ where
   if resp.status().is_success() {
     let t: T = from_body(resp).await?;
     Ok(t)
+  } else {
+    let err: GoTrueError = from_body(resp).await?;
+    Err(err)
+  }
+}
+
+async fn check_gotrue_result(resp: reqwest::Response) -> Result<(), GoTrueError> {
+  if resp.status().is_success() {
+    Ok(())
   } else {
     let err: GoTrueError = from_body(resp).await?;
     Err(err)

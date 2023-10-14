@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    DELETE FROM public.af_workspace_member\n    WHERE \n    workspace_id = $1 \n    AND uid = (\n        SELECT uid FROM public.af_user WHERE email = $2\n    )\n    -- Ensure the user to be deleted is not the original owner\n    AND uid <> (\n        SELECT owner_uid FROM public.af_workspace WHERE workspace_id = $1\n    );\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "54c2e86c48a1549d8006bd5592eb5610985d5d43cd67efd417a0c6e52a967dfd"
+}

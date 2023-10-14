@@ -1,9 +1,8 @@
 use crate::component::auth::jwt::UserUuid;
 
-use crate::api::workspace::WORKSPACE_ID_PATH;
+use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ResourceDef, ServiceRequest, ServiceResponse};
-
 use actix_web::Error;
 use async_trait::async_trait;
 use futures_util::future::LocalBoxFuture;
@@ -13,40 +12,70 @@ use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use tracing::trace;
 
 use uuid::Uuid;
 
-#[async_trait]
-pub trait WorkspaceAccessControlService: Send + Sync {
-  async fn check_permission(
-    &self,
-    workspace_id: Uuid,
-    user_uuid: UserUuid,
-    pg_pool: &PgPool,
-  ) -> Result<(), AppError>;
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum AccessResource {
+  Workspace,
+  Collab,
 }
 
 #[async_trait]
-impl<T> WorkspaceAccessControlService for Arc<T>
-where
-  T: WorkspaceAccessControlService,
-{
-  async fn check_permission(
+pub trait AccessControlService: Send + Sync {
+  async fn check_workspace_permission(
     &self,
-    workspace_id: Uuid,
-    user_uuid: UserUuid,
+    _workspace_id: &Uuid,
+    _user_uuid: &UserUuid,
+    _pg_pool: &PgPool,
+  ) -> Result<(), AppError> {
+    Ok(())
+  }
+
+  async fn check_collab_permission(
+    &self,
+    _workspace_id: &Uuid,
+    _oid: &Uuid,
+    _user_uuid: &UserUuid,
+    _pg_pool: &PgPool,
+  ) -> Result<(), AppError> {
+    Ok(())
+  }
+}
+
+#[async_trait]
+impl<T> AccessControlService for Arc<T>
+where
+  T: AccessControlService,
+{
+  async fn check_workspace_permission(
+    &self,
+    workspace_id: &Uuid,
+    user_uuid: &UserUuid,
     pg_pool: &PgPool,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_permission(workspace_id, user_uuid, pg_pool)
+      .check_workspace_permission(workspace_id, user_uuid, pg_pool)
+      .await
+  }
+
+  async fn check_collab_permission(
+    &self,
+    workspace_id: &Uuid,
+    oid: &Uuid,
+    user_uuid: &UserUuid,
+    pg_pool: &PgPool,
+  ) -> Result<(), AppError> {
+    self
+      .as_ref()
+      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool)
       .await
   }
 }
 
-pub type ResourcePattern = String;
-pub type AccessControlServices =
-  Arc<HashMap<ResourcePattern, Arc<dyn WorkspaceAccessControlService>>>;
+pub type AccessControlServices = Arc<HashMap<AccessResource, Arc<dyn AccessControlService>>>;
 
 #[derive(Clone)]
 pub struct WorkspaceAccessControl {
@@ -62,8 +91,22 @@ impl WorkspaceAccessControl {
     }
   }
 
-  pub fn extend(&mut self, others: HashMap<String, Arc<dyn WorkspaceAccessControlService>>) {
-    Arc::make_mut(&mut self.access_control_services).extend(others)
+  pub fn with_workspace_acs<T: AccessControlService + 'static>(
+    mut self,
+    access_control_service: T,
+  ) -> Self {
+    Arc::make_mut(&mut self.access_control_services)
+      .insert(AccessResource::Workspace, Arc::new(access_control_service));
+    self
+  }
+
+  pub fn with_collab_acs<T: AccessControlService + 'static>(
+    mut self,
+    access_control_service: T,
+  ) -> Self {
+    Arc::make_mut(&mut self.access_control_services)
+      .insert(AccessResource::Collab, Arc::new(access_control_service));
+    self
   }
 }
 
@@ -121,37 +164,65 @@ where
   forward_ready!(service);
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
-    let match_pattern = req.match_pattern();
-    let access_control = match_pattern
-      .as_ref()
-      .and_then(|pattern| self.access_control_service.get(pattern).cloned());
-
-    match access_control {
+    match req.match_pattern().map(|pattern| {
+      let resource_ref = ResourceDef::new(pattern);
+      let mut path = req.match_info().clone();
+      resource_ref.capture_match_info(&mut path);
+      path
+    }) {
       None => {
         let fut = self.service.call(req);
         Box::pin(fut)
       },
-      Some(access_control) => {
+      Some(path) => {
         let user_uuid = req.extract::<UserUuid>();
-        let workspace_id = match_pattern.and_then(|pattern| {
-          let resource_ref = ResourceDef::new(pattern);
-          let mut path = req.match_info().clone();
-          resource_ref.capture_match_info(&mut path);
-          path.get(WORKSPACE_ID_PATH).map(Uuid::parse_str)
-        });
+
+        let workspace_id = path
+          .get(WORKSPACE_ID_PATH)
+          .and_then(|id| Uuid::parse_str(id).ok());
+
+        let collab_object_id = path
+          .get(COLLAB_OBJECT_ID_PATH)
+          .and_then(|id| Uuid::parse_str(id).ok());
 
         let fut = self.service.call(req);
         let pg_pool = self.pg_pool.clone();
+        let services = self.access_control_service.clone();
 
         Box::pin(async move {
-          if let Some(Ok(workspace_id)) = workspace_id {
-            if let Ok(user_uuid) = user_uuid.await {
-              access_control
-                .check_permission(workspace_id, user_uuid, &pg_pool)
-                .await
-                .map_err(Error::from)?;
+          // If the workspace_id or collab_object_id is not present, skip the access control
+          if workspace_id.is_some() || collab_object_id.is_some() {
+            let user_uuid = user_uuid.await?;
+
+            // check workspace permission
+            if let Some(workspace_id) = workspace_id {
+              if let Some(acs) = services.get(&AccessResource::Workspace) {
+                trace!("run workspace access control");
+                acs
+                  .check_workspace_permission(&workspace_id, &user_uuid, &pg_pool)
+                  .await
+                  .map_err(Error::from)?;
+              };
+            }
+
+            // check collab permission
+            if let Some(collab_object_id) = collab_object_id {
+              if let Some(acs) = services.get(&AccessResource::Collab) {
+                trace!("run collab access control");
+                acs
+                  .check_collab_permission(
+                    &workspace_id.unwrap(),
+                    &collab_object_id,
+                    &user_uuid,
+                    &pg_pool,
+                  )
+                  .await
+                  .map_err(Error::from)?;
+              };
             }
           }
+
+          // call next service
           fut.await
         })
       },

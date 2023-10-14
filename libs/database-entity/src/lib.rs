@@ -42,6 +42,8 @@ impl InsertCollabParams {
 pub struct DeleteCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
 }
 
 fn validate_not_empty_str(s: &str) -> Result<(), ValidationError> {
@@ -91,14 +93,21 @@ pub struct InsertSnapshotParams {
 pub struct QueryCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
+  pub workspace_id: String,
   pub collab_type: CollabType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BatchQueryCollabParams(pub Vec<QueryCollabParams>);
+pub struct BatchQueryCollabParams(pub Vec<BatchQueryCollab>);
 
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct BatchQueryCollab {
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+  pub collab_type: CollabType,
+}
 impl Deref for BatchQueryCollabParams {
-  type Target = Vec<QueryCollabParams>;
+  type Target = Vec<BatchQueryCollab>;
 
   fn deref(&self) -> &Self::Target {
     &self.0

@@ -165,6 +165,7 @@ impl TestClient {
 }
 
 pub async fn assert_remote_collab(
+  workspace_id: &str,
   client: &mut client_api::Client,
   object_id: &str,
   collab_type: &CollabType,
@@ -182,6 +183,7 @@ pub async fn assert_remote_collab(
        },
        result = client.get_collab(QueryCollabParams {
          object_id: object_id.clone(),
+        workspace_id: workspace_id.to_string(),
          collab_type: collab_type.clone(),
        }) => {
         retry_count += 1;
@@ -249,12 +251,14 @@ pub(crate) async fn assert_client_collab(
 #[allow(dead_code)]
 pub async fn get_collab_json_from_server(
   client: &mut client_api::Client,
+  workspace_id: &str,
   object_id: &str,
   collab_type: CollabType,
 ) -> serde_json::Value {
   let bytes = client
     .get_collab(QueryCollabParams {
       object_id: object_id.to_string(),
+      workspace_id: workspace_id.to_string(),
       collab_type,
     })
     .await

@@ -37,6 +37,7 @@ async fn ws_reconnect_sync_test() {
     .api_client
     .get_collab(QueryCollabParams {
       object_id: object_id.clone(),
+      workspace_id: workspace_id.clone(),
       collab_type: collab_type.clone(),
     })
     .await
@@ -49,6 +50,7 @@ async fn ws_reconnect_sync_test() {
   test_client.wait_object_sync_complete(&object_id).await;
 
   assert_remote_collab(
+    &workspace_id,
     &mut test_client.api_client,
     &object_id,
     &collab_type,

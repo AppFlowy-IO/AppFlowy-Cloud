@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use database::collab::{CollabPostgresDBStorageImpl, CollabStorage, StorageConfig};
 use database_entity::{
-  AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
+  AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryCollabResult, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
 use itertools::{Either, Itertools};
@@ -76,7 +76,7 @@ impl CollabStorage for CollabStorageProxy {
 
   async fn batch_get_collab(
     &self,
-    queries: Vec<QueryCollabParams>,
+    queries: Vec<BatchQueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
       queries

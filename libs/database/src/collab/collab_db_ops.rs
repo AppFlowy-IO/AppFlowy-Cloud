@@ -1,8 +1,8 @@
 use anyhow::Context;
 use collab_entity::CollabType;
 use database_entity::{
-  database_error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, InsertCollabParams,
-  QueryCollabParams, QueryCollabResult, RawData,
+  database_error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, BatchQueryCollab,
+  InsertCollabParams, QueryCollabResult, RawData,
 };
 
 use sqlx::{PgPool, Transaction};
@@ -158,7 +158,7 @@ pub async fn get_collab_blob(
 
 pub async fn batch_get_collab_blob(
   pg_pool: &PgPool,
-  queries: Vec<QueryCollabParams>,
+  queries: Vec<BatchQueryCollab>,
 ) -> HashMap<String, QueryCollabResult> {
   let mut results = HashMap::new();
   let mut object_ids_by_collab_type: HashMap<CollabType, Vec<String>> = HashMap::new();

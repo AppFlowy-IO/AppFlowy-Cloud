@@ -71,6 +71,7 @@ where
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams {
       object_id: object_id.to_string(),
+      workspace_id: self.workspace_id.clone(),
       collab_type: self.collab_type.clone(),
     };
 

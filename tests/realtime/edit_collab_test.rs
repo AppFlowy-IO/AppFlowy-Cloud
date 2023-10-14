@@ -38,6 +38,7 @@ async fn realtime_write_single_collab_test() {
   test_client.wait_object_sync_complete(&object_id).await;
 
   assert_remote_collab(
+    &workspace_id,
     &mut test_client.api_client,
     &object_id,
     &collab_type,
@@ -75,6 +76,7 @@ async fn realtime_write_multiple_collab_test() {
   // Wait for the messages to be sent
   for object_id in object_ids {
     assert_remote_collab(
+      &workspace_id,
       &mut test_client.api_client,
       &object_id,
       &CollabType::Document,
@@ -128,6 +130,7 @@ async fn one_direction_peer_sync_test() {
   .await;
 
   assert_remote_collab(
+    &workspace_id,
     &mut client_1.api_client,
     &object_id,
     &collab_type,
@@ -344,6 +347,7 @@ async fn multiple_collab_edit_test() {
   client_3.wait_object_sync_complete(&object_id_3).await;
 
   assert_remote_collab(
+    &workspace_id,
     &mut client_1.api_client,
     &object_id_1,
     &collab_type,
@@ -355,6 +359,7 @@ async fn multiple_collab_edit_test() {
   .await;
 
   assert_remote_collab(
+    &workspace_id,
     &mut client_2.api_client,
     &object_id_2,
     &collab_type,
@@ -365,6 +370,7 @@ async fn multiple_collab_edit_test() {
   )
   .await;
   assert_remote_collab(
+    &workspace_id,
     &mut client_3.api_client,
     &object_id_3,
     &collab_type,

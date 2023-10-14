@@ -1,4 +1,4 @@
-use shared_entity::dto::UserUpdateParams;
+use shared_entity::dto::auth_dto::UserUpdateParams;
 use shared_entity::error_code::ErrorCode;
 
 use crate::localhost_client;

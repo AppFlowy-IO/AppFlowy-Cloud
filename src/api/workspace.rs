@@ -8,7 +8,7 @@ use actix_web::Result;
 use actix_web::{web, Scope};
 use database_entity::{AFWorkspaceMember, AFWorkspaces};
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::{CreateWorkspaceMembers, WorkspaceMembers};
+use shared_entity::dto::workspace_dto::*;
 use sqlx::types::uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,7 +21,6 @@ pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 const SCOPE_PATH: &str = "/api/workspace";
 const WORKSPACE_LIST_PATH: &str = "list";
 const WORKSPACE_MEMBER_PATH: &str = "{workspace_id}/member";
-const WORKSPACE_MEMBER_PERMISSION_PATH: &str = "{workspace_id}/member/permission";
 
 pub fn workspace_scope() -> Scope {
   web::scope(SCOPE_PATH)
@@ -30,11 +29,8 @@ pub fn workspace_scope() -> Scope {
       web::resource(WORKSPACE_MEMBER_PATH)
         .route(web::get().to(list_workspace_members_handler))
         .route(web::post().to(add_workspace_members_handler))
+        .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
-    )
-    .service(
-      web::resource(WORKSPACE_MEMBER_PERMISSION_PATH)
-        .route(web::post().to(update_workspace_member_permission_handler)),
     )
 }
 
@@ -50,11 +46,6 @@ pub fn workspace_scope_access_control(
 
   access_control.insert(
     format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PATH),
-    Arc::new(WorkspaceOwnerAccessControl),
-  );
-
-  access_control.insert(
-    format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PERMISSION_PATH),
     Arc::new(WorkspaceOwnerAccessControl),
   );
 
@@ -106,18 +97,30 @@ async fn remove_workspace_member_handler(
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
-  let members = payload.into_inner();
-  workspace::ops::remove_workspace_members(&state.pg_pool, &user_uuid, &workspace_id, &members.0)
-    .await?;
+  let member_emails = payload
+    .into_inner()
+    .0
+    .into_iter()
+    .map(|member| member.0)
+    .collect();
+  workspace::ops::remove_workspace_members(
+    &user_uuid,
+    &state.pg_pool,
+    workspace_id.into_inner(),
+    member_emails,
+  )
+  .await?;
   Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip_all, err)]
-async fn update_workspace_member_permission_handler(
-  _user_uuid: UserUuid,
-  _req: Json<CreateWorkspaceMembers>,
-  _state: Data<AppState>,
-  _workspace_id: web::Path<Uuid>,
+async fn update_workspace_member_handler(
+  payload: Json<WorkspaceMemberChangeset>,
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
-  todo!()
+  let workspace_id = workspace_id.into_inner();
+  let changeset = payload.into_inner();
+  workspace::ops::update_workspace_member(&state.pg_pool, &workspace_id, changeset).await?;
+  Ok(AppResponse::Ok().into())
 }

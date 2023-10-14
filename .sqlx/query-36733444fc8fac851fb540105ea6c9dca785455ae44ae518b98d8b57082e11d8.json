@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n  SELECT EXISTS(\n    SELECT 1\n    FROM public.af_workspace_member\n      JOIN af_roles ON af_workspace_member.role_id = af_roles.id\n    WHERE workspace_id = $1\n    AND af_workspace_member.uid = (\n      SELECT uid FROM public.af_user WHERE uuid = $2\n    )\n    AND af_roles.name = 'Owner'\n  ) AS \"exists\";\n  ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "36733444fc8fac851fb540105ea6c9dca785455ae44ae518b98d8b57082e11d8"
+}

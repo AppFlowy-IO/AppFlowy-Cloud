@@ -182,26 +182,17 @@ impl AFWorkspaces {
   }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
 pub enum AFRole {
   Owner,
   Member,
   Guest,
 }
 
-impl AFRole {
-  pub fn id(&self) -> i32 {
-    match self {
-      AFRole::Owner => 1,
-      AFRole::Member => 2,
-      AFRole::Guest => 3,
-    }
-  }
-}
-
 impl From<i32> for AFRole {
-  fn from(item: i32) -> Self {
-    match item {
+  fn from(value: i32) -> Self {
+    // Can't modify the value of the enum
+    match value {
       1 => AFRole::Owner,
       2 => AFRole::Member,
       3 => AFRole::Guest,
@@ -210,6 +201,16 @@ impl From<i32> for AFRole {
   }
 }
 
+impl From<AFRole> for i32 {
+  fn from(role: AFRole) -> Self {
+    // Can't modify the value of the enum
+    match role {
+      AFRole::Owner => 1,
+      AFRole::Member => 2,
+      AFRole::Guest => 3,
+    }
+  }
+}
 #[derive(FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMember {
   pub email: String,

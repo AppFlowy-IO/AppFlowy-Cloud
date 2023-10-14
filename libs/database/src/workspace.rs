@@ -25,20 +25,29 @@ pub async fn select_all_workspaces_owned(
   Ok(workspaces)
 }
 
+/// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
+/// workspace_id.
 pub async fn select_user_is_workspace_owner(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
 ) -> Result<bool, DatabaseError> {
+  // 1. Identifies the user's UID in the 'af_user' table using the provided user UUID ($2).
+  // 2. Then, it checks the 'af_workspace_member' table to find a record that matches the provided workspace_id ($1) and the identified UID.
+  // 3. It joins with 'af_roles' to ensure that the role associated with the workspace member is 'Owner'.
   let exists = sqlx::query_scalar!(
     r#"
-        SELECT EXISTS(
-          SELECT 1 FROM public.af_workspace
-          WHERE workspace_id = $1 AND owner_uid = (
-            SELECT uid FROM public.af_user WHERE uuid = $2
-          )
-        )
-        "#,
+  SELECT EXISTS(
+    SELECT 1
+    FROM public.af_workspace_member
+      JOIN af_roles ON af_workspace_member.role_id = af_roles.id
+    WHERE workspace_id = $1
+    AND af_workspace_member.uid = (
+      SELECT uid FROM public.af_user WHERE uuid = $2
+    )
+    AND af_roles.name = 'Owner'
+  ) AS "exists";
+  "#,
     workspace_uuid,
     user_uuid
   )
@@ -54,6 +63,7 @@ pub async fn insert_workspace_member(
   member_email: String,
   role: AFRole,
 ) -> Result<(), DatabaseError> {
+  let role_id: i32 = role.into();
   sqlx::query!(
     r#"
       INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
@@ -65,7 +75,7 @@ pub async fn insert_workspace_member(
     "#,
     workspace_id,
     member_email,
-    role.id()
+    role_id
   )
   .execute(txn.deref_mut())
   .await?;
@@ -73,22 +83,84 @@ pub async fn insert_workspace_member(
   Ok(())
 }
 
-pub async fn delete_workspace_members(
+pub async fn upsert_workspace_member(
   pool: &PgPool,
-  workspace_id: &uuid::Uuid,
-  member_emails: &[String],
-) -> Result<(), DatabaseError> {
+  workspace_id: &Uuid,
+  email: &str,
+  role: Option<AFRole>,
+) -> Result<(), sqlx::Error> {
+  if role.is_none() {
+    return Ok(());
+  }
+
+  let role_id: Option<i32> = role.map(|role| role.into());
   sqlx::query!(
     r#"
-        DELETE FROM public.af_workspace_member
-        WHERE workspace_id = $1 AND uid IN (
-            SELECT uid FROM public.af_user WHERE email = ANY($2::text[])
+        UPDATE af_workspace_member
+        SET 
+            role_id = COALESCE($1, role_id)
+        WHERE workspace_id = $2 AND uid = (
+            SELECT uid FROM af_user WHERE email = $3
         )
         "#,
+    role_id,
     workspace_id,
-    &member_emails
+    email
   )
   .execute(pool)
+  .await?;
+
+  Ok(())
+}
+
+pub async fn delete_workspace_members(
+  _user_uuid: &Uuid,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+  workspace_id: &Uuid,
+  member_email: String,
+) -> Result<(), DatabaseError> {
+  let is_owner = sqlx::query_scalar!(
+    r#"
+  SELECT EXISTS (
+    SELECT 1 
+    FROM public.af_workspace
+    WHERE 
+        workspace_id = $1 
+        AND owner_uid = (
+            SELECT uid FROM public.af_user WHERE email = $2
+        )
+   ) AS "is_owner";
+  "#,
+    workspace_id,
+    member_email
+  )
+  .fetch_one(txn.deref_mut())
+  .await?
+  .unwrap_or(false);
+
+  if is_owner {
+    return Err(DatabaseError::NotEnoughPermissions(
+      "Owner cannot be deleted".to_string(),
+    ));
+  }
+
+  sqlx::query!(
+    r#"
+    DELETE FROM public.af_workspace_member
+    WHERE 
+    workspace_id = $1 
+    AND uid = (
+        SELECT uid FROM public.af_user WHERE email = $2
+    )
+    -- Ensure the user to be deleted is not the original owner
+    AND uid <> (
+        SELECT owner_uid FROM public.af_workspace WHERE workspace_id = $1
+    );
+    "#,
+    workspace_id,
+    member_email,
+  )
+  .execute(txn.deref_mut())
   .await?;
 
   Ok(())

@@ -23,16 +23,19 @@ use reqwest::RequestBuilder;
 use scraper::{Html, Selector};
 use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
-use shared_entity::dto::SignInTokenResponse;
-use shared_entity::dto::UpdateUsernameParams;
-use shared_entity::dto::UserUpdateParams;
-use shared_entity::dto::{CreateWorkspaceMembers, WorkspaceMembers};
+use shared_entity::dto::auth_dto::SignInTokenResponse;
+use shared_entity::dto::auth_dto::UpdateUsernameParams;
+use shared_entity::dto::auth_dto::UserUpdateParams;
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceMembers, WorkspaceMemberChangeset, WorkspaceMembers,
+};
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::instrument;
 use url::Url;
+use uuid::Uuid;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -360,7 +363,7 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspace_members(
     &self,
-    workspace_uuid: uuid::Uuid,
+    workspace_uuid: Uuid,
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {
     let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
     let resp = self
@@ -376,7 +379,7 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>>(
     &self,
-    workspace_uuid: uuid::Uuid,
+    workspace_uuid: Uuid,
     members: T,
   ) -> Result<(), AppError> {
     let members = members.into();
@@ -392,22 +395,41 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn remove_workspace_members(
+  pub async fn update_workspace_member(
     &self,
-    workspace_uuid: uuid::Uuid,
-    member_emails: Vec<String>,
+    workspace_uuid: Uuid,
+    changeset: WorkspaceMemberChangeset,
   ) -> Result<(), AppError> {
     let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
-    let req = WorkspaceMembers(member_emails);
     let resp = self
-      .http_client_with_auth(Method::DELETE, &url)
+      .http_client_with_auth(Method::PUT, &url)
       .await?
-      .json(&req)
+      .json(&changeset)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()?;
     Ok(())
   }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn remove_workspace_members(
+    &self,
+    workspace_uuid: Uuid,
+    member_emails: Vec<String>,
+  ) -> Result<(), AppError> {
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let payload = WorkspaceMembers::from(member_emails);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .json(&payload)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  // pub async fn update_workspace_member(&self, workspace_uuid: Uuid, member)
 
   #[instrument(skip_all, err)]
   pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<bool, AppError> {

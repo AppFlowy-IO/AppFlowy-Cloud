@@ -21,7 +21,6 @@ pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 const SCOPE_PATH: &str = "/api/workspace";
 const WORKSPACE_LIST_PATH: &str = "list";
 const WORKSPACE_MEMBER_PATH: &str = "{workspace_id}/member";
-const WORKSPACE_MEMBER_PERMISSION_PATH: &str = "{workspace_id}/member/{member_email}";
 
 pub fn workspace_scope() -> Scope {
   web::scope(SCOPE_PATH)
@@ -47,11 +46,6 @@ pub fn workspace_scope_access_control(
 
   access_control.insert(
     format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PATH),
-    Arc::new(WorkspaceOwnerAccessControl),
-  );
-
-  access_control.insert(
-    format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PERMISSION_PATH),
     Arc::new(WorkspaceOwnerAccessControl),
   );
 

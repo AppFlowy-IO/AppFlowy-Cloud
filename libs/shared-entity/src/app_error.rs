@@ -57,6 +57,9 @@ impl From<DatabaseError> for AppError {
     match &value {
       DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, value),
       DatabaseError::UnexpectedData(_) => AppError::new(ErrorCode::InvalidRequestParams, value),
+      DatabaseError::NotEnoughPermissions(msg) => {
+        AppError::new(ErrorCode::NotEnoughPermissions, msg.clone())
+      },
       DatabaseError::StorageSpaceNotEnough => {
         AppError::new(ErrorCode::StorageSpaceNotEnough, value)
       },

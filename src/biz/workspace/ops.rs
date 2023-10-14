@@ -1,10 +1,11 @@
+use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
 use database::workspace::{
   delete_workspace_members, insert_workspace_member, select_all_workspaces_owned,
-  select_user_is_workspace_owner, select_workspace_members,
+  select_user_is_workspace_owner, select_workspace_members, upsert_workspace_member,
 };
 use database_entity::{AFWorkspaceMember, AFWorkspaces};
-use shared_entity::dto::CreateWorkspaceMember;
+use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::uuid, PgPool};
 
@@ -27,13 +28,7 @@ pub async fn add_workspace_members(
     .await
     .context("Begin transaction to insert workspace members")?;
   for member in members {
-    insert_workspace_member(
-      &mut txn,
-      workspace_id,
-      member.email,
-      member.permission.into(),
-    )
-    .await?;
+    insert_workspace_member(&mut txn, workspace_id, member.email, member.role).await?;
   }
 
   txn
@@ -44,12 +39,25 @@ pub async fn add_workspace_members(
 }
 
 pub async fn remove_workspace_members(
+  user_uuid: &UserUuid,
   pg_pool: &PgPool,
-  _user_uuid: &uuid::Uuid,
-  workspace_id: &uuid::Uuid,
-  member_emails: &[String],
+  workspace_id: uuid::Uuid,
+  member_emails: Vec<String>,
 ) -> Result<(), AppError> {
-  Ok(delete_workspace_members(pg_pool, workspace_id, member_emails).await?)
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to delete workspace members")?;
+
+  for email in member_emails {
+    delete_workspace_members(user_uuid, &mut txn, &workspace_id, email).await?;
+  }
+
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to delete workspace members")?;
+  Ok(())
 }
 
 pub async fn get_workspace_members(
@@ -61,13 +69,13 @@ pub async fn get_workspace_members(
 }
 
 #[allow(dead_code)]
-pub async fn update_workspace_member_permission(
-  _pg_pool: &PgPool,
-  _user_uuid: &uuid::Uuid,
-  _workspace_id: &uuid::Uuid,
-  _member_emails: &[String],
+pub async fn update_workspace_member(
+  pg_pool: &PgPool,
+  workspace_id: &uuid::Uuid,
+  changeset: WorkspaceMemberChangeset,
 ) -> Result<(), AppError> {
-  todo!()
+  upsert_workspace_member(pg_pool, workspace_id, &changeset.email, changeset.role).await?;
+  Ok(())
 }
 
 pub async fn require_user_is_workspace_owner(

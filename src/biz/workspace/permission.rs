@@ -4,7 +4,7 @@ use crate::middleware::permission_mw::WorkspaceAccessControlService;
 use async_trait::async_trait;
 use shared_entity::app_error::AppError;
 use sqlx::PgPool;
-use tracing::trace;
+use tracing::{debug, trace};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -19,7 +19,9 @@ impl WorkspaceAccessControlService for WorkspaceOwnerAccessControl {
     pg_pool: &PgPool,
   ) -> Result<(), AppError> {
     let result = require_user_is_workspace_owner(pg_pool, &user_uuid, &workspace_id).await;
-    trace!("Workspace owner access control: {:?}", result);
+    if let Err(err) = result.as_ref() {
+      debug!("Workspace access control: {:?}", err);
+    }
     result
   }
 }

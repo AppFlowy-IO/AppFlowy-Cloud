@@ -24,6 +24,9 @@ pub enum DatabaseError {
   #[error("Bucket error:{0}")]
   BucketError(String),
 
+  #[error("Not enough permission:{0}")]
+  NotEnoughPermissions(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

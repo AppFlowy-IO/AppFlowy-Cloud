@@ -11,7 +11,7 @@ use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
 use database_entity::AFUserProfileView;
 use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::{SignInTokenResponse, UpdateUsernameParams};
+use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUsernameParams};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};

@@ -63,6 +63,7 @@ pub async fn insert_workspace_member(
   member_email: String,
   role: AFRole,
 ) -> Result<(), DatabaseError> {
+  let role_id: i32 = role.into();
   sqlx::query!(
     r#"
       INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
@@ -74,9 +75,39 @@ pub async fn insert_workspace_member(
     "#,
     workspace_id,
     member_email,
-    role.id()
+    role_id
   )
   .execute(txn.deref_mut())
+  .await?;
+
+  Ok(())
+}
+
+pub async fn upsert_workspace_member(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+  email: &str,
+  role: Option<AFRole>,
+) -> Result<(), sqlx::Error> {
+  if role.is_none() {
+    return Ok(());
+  }
+
+  let role_id: Option<i32> = role.map(|role| role.into());
+  sqlx::query!(
+    r#"
+        UPDATE af_workspace_member
+        SET 
+            role_id = COALESCE($1, role_id)
+        WHERE workspace_id = $2 AND uid = (
+            SELECT uid FROM af_user WHERE email = $3
+        )
+        "#,
+    role_id,
+    workspace_id,
+    email
+  )
+  .execute(pool)
   .await?;
 
   Ok(())

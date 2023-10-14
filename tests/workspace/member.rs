@@ -1,6 +1,6 @@
 use database_entity::AFRole;
 
-use shared_entity::dto::{CreateWorkspaceMember, WorkspacePermission};
+use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::error_code::ErrorCode;
 
 use crate::user::utils::generate_unique_registered_user_client;
@@ -17,7 +17,7 @@ async fn add_workspace_members_not_enough_permission() {
       workspace_id_2,
       vec![CreateWorkspaceMember {
         email: user1.email,
-        permission: WorkspacePermission::Member,
+        role: AFRole::Member,
       }],
     )
     .await
@@ -39,7 +39,7 @@ async fn add_workspace_members_then_delete() {
     c1_workspace_id,
     vec![CreateWorkspaceMember {
       email,
-      permission: WorkspacePermission::Member,
+      role: AFRole::Member,
     }],
   )
   .await
@@ -83,7 +83,7 @@ async fn workspace_member_add_new_member() {
     workspace_id,
     vec![CreateWorkspaceMember {
       email: user2.email,
-      permission: WorkspacePermission::Member,
+      role: AFRole::Member,
     }],
   )
   .await
@@ -94,7 +94,7 @@ async fn workspace_member_add_new_member() {
       workspace_id,
       vec![CreateWorkspaceMember {
         email: user3.email,
-        permission: WorkspacePermission::Member,
+        role: AFRole::Member,
       }],
     )
     .await
@@ -113,7 +113,7 @@ async fn workspace_owner_add_new_owner() {
     workspace_id,
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
-      permission: WorkspacePermission::Owner,
+      role: AFRole::Owner,
     }],
   )
   .await
@@ -138,7 +138,7 @@ async fn workspace_second_owner_add_new_member() {
     workspace_id,
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
-      permission: WorkspacePermission::Owner,
+      role: AFRole::Owner,
     }],
   )
   .await
@@ -148,7 +148,7 @@ async fn workspace_second_owner_add_new_member() {
     workspace_id,
     vec![CreateWorkspaceMember {
       email: user3.email.clone(),
-      permission: WorkspacePermission::Member,
+      role: AFRole::Member,
     }],
   )
   .await
@@ -175,7 +175,7 @@ async fn workspace_second_owner_can_not_delete_origin_owner() {
     workspace_id,
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
-      permission: WorkspacePermission::Owner,
+      role: AFRole::Owner,
     }],
   )
   .await
@@ -187,4 +187,35 @@ async fn workspace_second_owner_can_not_delete_origin_owner() {
     .unwrap_err();
 
   assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
+}
+
+#[tokio::test]
+async fn workspace_owner_update_member_role() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let (_c2, user2) = generate_unique_registered_user_client().await;
+
+  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  c1.add_workspace_members(
+    workspace_id,
+    vec![CreateWorkspaceMember {
+      email: user2.email.clone(),
+      role: AFRole::Member,
+    }],
+  )
+  .await
+  .unwrap();
+
+  let members = c1.get_workspace_members(workspace_id).await.unwrap();
+  assert_eq!(members[1].email, user2.email);
+  assert_eq!(members[1].role, AFRole::Member);
+
+  // Update user2's role to Owner
+  c1.update_workspace_member(
+    workspace_id,
+    WorkspaceMemberChangeset::new(user2.email.clone()).with_role(AFRole::Owner),
+  )
+  .await
+  .unwrap();
+  let members = c1.get_workspace_members(workspace_id).await.unwrap();
+  assert_eq!(members[1].role, AFRole::Owner);
 }

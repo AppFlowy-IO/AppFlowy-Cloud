@@ -10,6 +10,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
+use actix_web::middleware::Compat;
 use anyhow::{Context, Error};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -28,7 +29,7 @@ use crate::api::ws::ws_scope;
 use crate::biz::collab::access_control::CollabAccessControl;
 use crate::biz::workspace::access_control::WorkspaceOwnerAccessControl;
 use crate::component::storage_proxy::CollabStorageProxy;
-use crate::middleware::permission_mw::WorkspaceAccessControl;
+use crate::middleware::access_control_mw::WorkspaceAccessControl;
 use database::collab::CollabPostgresDBStorageImpl;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
@@ -85,8 +86,8 @@ pub async fn run(
     .start();
 
   let access_control = WorkspaceAccessControl::new(state.pg_pool.clone())
-    .with_workspace_acs(WorkspaceOwnerAccessControl)
-    .with_collab_acs(CollabAccessControl);
+    .with_acs(WorkspaceOwnerAccessControl)
+    .with_acs(CollabAccessControl);
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -98,7 +99,7 @@ pub async fn run(
       )
       .wrap(default_cors())
       .wrap(access_control.clone())
-      .wrap(TracingLogger::default())
+      .wrap(Compat::new(TracingLogger::default()))
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())
       .service(workspace_scope())

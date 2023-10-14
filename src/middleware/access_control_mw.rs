@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use tracing::trace;
+use tracing::error;
 
 use uuid::Uuid;
 
@@ -24,6 +24,8 @@ pub enum AccessResource {
 
 #[async_trait]
 pub trait AccessControlService: Send + Sync {
+  fn resource(&self) -> AccessResource;
+
   async fn check_workspace_permission(
     &self,
     _workspace_id: &Uuid,
@@ -36,7 +38,7 @@ pub trait AccessControlService: Send + Sync {
   async fn check_collab_permission(
     &self,
     _workspace_id: &Uuid,
-    _oid: &Uuid,
+    _oid: &str,
     _user_uuid: &UserUuid,
     _pg_pool: &PgPool,
   ) -> Result<(), AppError> {
@@ -49,6 +51,10 @@ impl<T> AccessControlService for Arc<T>
 where
   T: AccessControlService,
 {
+  fn resource(&self) -> AccessResource {
+    self.as_ref().resource()
+  }
+
   async fn check_workspace_permission(
     &self,
     workspace_id: &Uuid,
@@ -63,14 +69,14 @@ where
 
   async fn check_collab_permission(
     &self,
-    workspace_id: &Uuid,
-    oid: &Uuid,
-    user_uuid: &UserUuid,
-    pg_pool: &PgPool,
+    _workspace_id: &Uuid,
+    _oid: &str,
+    _user_uuid: &UserUuid,
+    _pg_pool: &PgPool,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool)
+      .check_collab_permission(_workspace_id, _oid, _user_uuid, _pg_pool)
       .await
   }
 }
@@ -91,21 +97,10 @@ impl WorkspaceAccessControl {
     }
   }
 
-  pub fn with_workspace_acs<T: AccessControlService + 'static>(
-    mut self,
-    access_control_service: T,
-  ) -> Self {
+  pub fn with_acs<T: AccessControlService + 'static>(mut self, access_control_service: T) -> Self {
+    let resource = access_control_service.resource();
     Arc::make_mut(&mut self.access_control_services)
-      .insert(AccessResource::Workspace, Arc::new(access_control_service));
-    self
-  }
-
-  pub fn with_collab_acs<T: AccessControlService + 'static>(
-    mut self,
-    access_control_service: T,
-  ) -> Self {
-    Arc::make_mut(&mut self.access_control_services)
-      .insert(AccessResource::Collab, Arc::new(access_control_service));
+      .insert(resource, Arc::new(access_control_service));
     self
   }
 }
@@ -180,10 +175,7 @@ where
         let workspace_id = path
           .get(WORKSPACE_ID_PATH)
           .and_then(|id| Uuid::parse_str(id).ok());
-
-        let collab_object_id = path
-          .get(COLLAB_OBJECT_ID_PATH)
-          .and_then(|id| Uuid::parse_str(id).ok());
+        let collab_object_id = path.get(COLLAB_OBJECT_ID_PATH).map(|id| id.to_string());
 
         let fut = self.service.call(req);
         let pg_pool = self.pg_pool.clone();
@@ -197,19 +189,20 @@ where
             // check workspace permission
             if let Some(workspace_id) = workspace_id {
               if let Some(acs) = services.get(&AccessResource::Workspace) {
-                trace!("run workspace access control");
-                acs
+                if let Err(err) = acs
                   .check_workspace_permission(&workspace_id, &user_uuid, &pg_pool)
                   .await
-                  .map_err(Error::from)?;
+                {
+                  error!("workspace access control: {:?}", err);
+                  return Err(Error::from(err));
+                }
               };
             }
 
             // check collab permission
             if let Some(collab_object_id) = collab_object_id {
               if let Some(acs) = services.get(&AccessResource::Collab) {
-                trace!("run collab access control");
-                acs
+                if let Err(err) = acs
                   .check_collab_permission(
                     &workspace_id.unwrap(),
                     &collab_object_id,
@@ -217,7 +210,10 @@ where
                     &pg_pool,
                   )
                   .await
-                  .map_err(Error::from)?;
+                {
+                  error!("collab access control: {:?}", err);
+                  return Err(Error::from(err));
+                }
               };
             }
           }

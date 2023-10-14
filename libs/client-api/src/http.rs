@@ -582,7 +582,7 @@ impl Client {
     params: BatchQueryCollabParams,
   ) -> Result<BatchQueryCollabResult, AppError> {
     let url = format!(
-      "{}/api/workspace/{}/collab/list",
+      "{}/api/workspace/{}/collab_list",
       self.base_url, workspace_id
     );
     let resp = self

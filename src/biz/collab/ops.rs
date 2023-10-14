@@ -1,4 +1,5 @@
 use database::user;
+use database::workspace::select_user_can_edit_collab;
 use database_entity::{
   AFCollabSnapshots, DeleteCollabParams, InsertCollabParams, QueryObjectSnapshotParams,
   QuerySnapshotParams,
@@ -61,10 +62,13 @@ pub async fn delete_collab(
 }
 
 pub async fn require_user_can_edit(
-  _pg_pool: &PgPool,
-  _user_uuid: &Uuid,
-  _oid: &Uuid,
-  _workspace_id: &Uuid,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  user_uuid: &Uuid,
+  oid: &str,
 ) -> Result<(), AppError> {
-  Ok(())
+  match select_user_can_edit_collab(pg_pool, user_uuid, workspace_id, oid).await? {
+    true => Ok(()),
+    false => Err(ErrorCode::NotEnoughPermissions.into()),
+  }
 }

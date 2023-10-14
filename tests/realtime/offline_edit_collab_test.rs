@@ -70,7 +70,6 @@ async fn ws_reconnect_sync_test() {
 #[tokio::test]
 async fn edit_document_with_one_client_online_and_other_offline_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  println!("test doc id: {}", &object_id);
   let collab_type = CollabType::Document;
   let registered_user = generate_unique_registered_user().await;
 

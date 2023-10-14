@@ -23,15 +23,12 @@ use uuid::Uuid;
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
-const SCOPE_PATH: &str = "/api/workspace";
-const WORKSPACE_LIST_RESOURCE: &str = "list";
-
 pub fn workspace_scope() -> Scope {
-  web::scope(SCOPE_PATH)
-    .service(web::resource(WORKSPACE_LIST_RESOURCE).route(web::get().to(list_handler)))
+  web::scope("/api/workspace")
+    .service(web::resource("list").route(web::get().to(list_handler)))
     .service(
       web::resource("{workspace_id}/member")
-        .route(web::get().to(list_workspace_members_handler))
+        .route(web::get().to(get_workspace_members_handler))
         .route(web::post().to(add_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
@@ -43,7 +40,9 @@ pub fn workspace_scope() -> Scope {
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
     )
-    .service(web::resource("list").route(web::get().to(batch_get_collab_handler)))
+    .service(
+      web::resource("{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
+    )
     .service(web::resource("snapshot").route(web::get().to(retrieve_snapshot_data_handler)))
     .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
 }
@@ -76,7 +75,7 @@ async fn add_workspace_members_handler(
 }
 
 #[instrument(skip_all, err)]
-async fn list_workspace_members_handler(
+async fn get_workspace_members_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,

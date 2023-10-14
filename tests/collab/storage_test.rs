@@ -207,5 +207,5 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::DatabaseError);
+  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
 }

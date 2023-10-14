@@ -291,7 +291,6 @@ async fn client_init_sync_test() {
     .create_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
   client_2.wait_object_sync_complete(&object_id).await;
-
   let expected_json = json!({
     "name": "AppFlowy",
   });
@@ -304,21 +303,16 @@ async fn multiple_collab_edit_test() {
   let collab_type = CollabType::Document;
   let object_id_1 = uuid::Uuid::new_v4().to_string();
   let mut client_1 = TestClient::new_user().await;
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id_1 = client_1.current_workspace_id().await;
   client_1
-    .create_collab(&workspace_id, &object_id_1, collab_type.clone())
+    .create_collab(&workspace_id_1, &object_id_1, collab_type.clone())
     .await;
 
   let object_id_2 = uuid::Uuid::new_v4().to_string();
   let mut client_2 = TestClient::new_user().await;
+  let workspace_id_2 = client_2.current_workspace_id().await;
   client_2
-    .create_collab(&workspace_id, &object_id_2, collab_type.clone())
-    .await;
-
-  let object_id_3 = uuid::Uuid::new_v4().to_string();
-  let mut client_3 = TestClient::new_user().await;
-  client_3
-    .create_collab(&workspace_id, &object_id_3, collab_type.clone())
+    .create_collab(&workspace_id_2, &object_id_2, collab_type.clone())
     .await;
 
   client_1
@@ -329,6 +323,7 @@ async fn multiple_collab_edit_test() {
     .lock()
     .insert("title", "I am client 1");
   client_1.wait_object_sync_complete(&object_id_1).await;
+
   client_2
     .collab_by_object_id
     .get_mut(&object_id_2)
@@ -337,17 +332,9 @@ async fn multiple_collab_edit_test() {
     .lock()
     .insert("title", "I am client 2");
   client_2.wait_object_sync_complete(&object_id_2).await;
-  client_3
-    .collab_by_object_id
-    .get_mut(&object_id_3)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("title", "I am client 3");
-  client_3.wait_object_sync_complete(&object_id_3).await;
 
   assert_remote_collab(
-    &workspace_id,
+    &workspace_id_1,
     &mut client_1.api_client,
     &object_id_1,
     &collab_type,
@@ -359,24 +346,13 @@ async fn multiple_collab_edit_test() {
   .await;
 
   assert_remote_collab(
-    &workspace_id,
+    &workspace_id_2,
     &mut client_2.api_client,
     &object_id_2,
     &collab_type,
     10,
     json!( {
       "title": "I am client 2"
-    }),
-  )
-  .await;
-  assert_remote_collab(
-    &workspace_id,
-    &mut client_3.api_client,
-    &object_id_3,
-    &collab_type,
-    10,
-    json!( {
-      "title": "I am client 3"
     }),
   )
   .await;

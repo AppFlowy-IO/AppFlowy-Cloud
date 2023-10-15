@@ -43,5 +43,8 @@ CREATE TABLE IF NOT EXISTS af_collab_snapshot (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 CREATE INDEX idx_af_collab_snapshot_oid ON af_collab_snapshot(oid);
-
-
+-- Enable RLS on the af_collab table
+ALTER TABLE af_collab ENABLE ROW LEVEL SECURITY;
+CREATE POLICY af_collab_policy ON af_collab FOR ALL TO anon,
+    authenticated USING (true);
+ALTER TABLE af_collab FORCE ROW LEVEL SECURITY;

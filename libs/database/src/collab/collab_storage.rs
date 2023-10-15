@@ -4,7 +4,7 @@ use collab::core::collab::MutexCollab;
 use collab_entity::CollabType;
 use database_entity::database_error::DatabaseError;
 use database_entity::{
-  AFCollabSnapshots, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
+  AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryCollabResult, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
 use sqlx::types::Uuid;
@@ -61,7 +61,7 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
 
   async fn batch_get_collab(
     &self,
-    queries: Vec<QueryCollabParams>,
+    queries: Vec<BatchQueryCollab>,
   ) -> HashMap<String, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.
@@ -159,7 +159,7 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
 
   async fn batch_get_collab(
     &self,
-    queries: Vec<QueryCollabParams>,
+    queries: Vec<BatchQueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     collab_db_ops::batch_get_collab_blob(&self.pg_pool, queries).await
   }

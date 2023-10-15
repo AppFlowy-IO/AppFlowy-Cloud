@@ -1,55 +1,50 @@
 use crate::biz::workspace;
-use crate::biz::workspace::permission::WorkspaceOwnerAccessControl;
 use crate::component::auth::jwt::UserUuid;
-use crate::middleware::permission_mw::{ResourcePattern, WorkspaceAccessControlService};
-use crate::state::AppState;
+use crate::state::{AppState, Storage};
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
-use database_entity::{AFWorkspaceMember, AFWorkspaces};
+use database_entity::*;
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::workspace_dto::*;
 use sqlx::types::uuid;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tracing::instrument;
 
+use tracing::{debug, instrument};
+use tracing_actix_web::RequestId;
+
+use crate::biz;
+use crate::component::storage_proxy::CollabStorageProxy;
+use database::collab::CollabStorage;
+use database_entity::database_error::DatabaseError;
+use shared_entity::app_error::AppError;
+use shared_entity::error_code::ErrorCode;
 use uuid::Uuid;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
-
-const SCOPE_PATH: &str = "/api/workspace";
-const WORKSPACE_LIST_PATH: &str = "list";
-const WORKSPACE_MEMBER_PATH: &str = "{workspace_id}/member";
+pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
 pub fn workspace_scope() -> Scope {
-  web::scope(SCOPE_PATH)
-    .service(web::resource(WORKSPACE_LIST_PATH).route(web::get().to(list_handler)))
+  web::scope("/api/workspace")
+    .service(web::resource("list").route(web::get().to(list_handler)))
     .service(
-      web::resource(WORKSPACE_MEMBER_PATH)
-        .route(web::get().to(list_workspace_members_handler))
+      web::resource("{workspace_id}/member")
+        .route(web::get().to(get_workspace_members_handler))
         .route(web::post().to(add_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
     )
-}
-
-pub fn workspace_scope_access_control(
-) -> HashMap<ResourcePattern, Arc<dyn WorkspaceAccessControlService>> {
-  let mut access_control: HashMap<ResourcePattern, Arc<dyn WorkspaceAccessControlService>> =
-    HashMap::new();
-
-  access_control.insert(
-    format!("{}/{}", SCOPE_PATH, WORKSPACE_LIST_PATH),
-    Arc::new(WorkspaceOwnerAccessControl),
-  );
-
-  access_control.insert(
-    format!("{}/{}", SCOPE_PATH, WORKSPACE_MEMBER_PATH),
-    Arc::new(WorkspaceOwnerAccessControl),
-  );
-
-  access_control
+    .service(
+      web::resource("{workspace_id}/collab/{object_id}")
+        .route(web::post().to(create_collab_handler))
+        .route(web::get().to(get_collab_handler))
+        .route(web::put().to(update_collab_handler))
+        .route(web::delete().to(delete_collab_handler)),
+    )
+    .service(
+      web::resource("{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
+    )
+    .service(web::resource("snapshot").route(web::get().to(retrieve_snapshot_data_handler)))
+    .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
 }
 
 #[instrument(skip_all, err)]
@@ -80,7 +75,7 @@ async fn add_workspace_members_handler(
 }
 
 #[instrument(skip_all, err)]
-async fn list_workspace_members_handler(
+async fn get_workspace_members_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
@@ -123,4 +118,96 @@ async fn update_workspace_member_handler(
   let changeset = payload.into_inner();
   workspace::ops::update_workspace_member(&state.pg_pool, &workspace_id, changeset).await?;
   Ok(AppResponse::Ok().into())
+}
+
+#[instrument(skip(state, payload), err)]
+async fn create_collab_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<InsertCollabParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  biz::collab::ops::create_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[instrument(skip(storage, payload), err)]
+async fn get_collab_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<QueryCollabParams>,
+  storage: Data<Storage<CollabStorageProxy>>,
+) -> Result<Json<AppResponse<RawData>>> {
+  let data = storage
+    .collab_storage
+    .get_collab(payload.into_inner())
+    .await
+    .map_err(|err| match &err {
+      DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
+      _ => AppError::new(ErrorCode::DatabaseError, err.to_string()),
+    })?;
+
+  debug!("Returned data length: {}", data.len());
+  Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
+#[instrument(skip(storage, payload), err)]
+async fn batch_get_collab_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<BatchQueryCollabParams>,
+  storage: Data<Storage<CollabStorageProxy>>,
+) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
+  let result = BatchQueryCollabResult(
+    storage
+      .collab_storage
+      .batch_get_collab(payload.into_inner().0)
+      .await,
+  );
+  Ok(Json(AppResponse::Ok().with_data(result)))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn update_collab_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<InsertCollabParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  biz::collab::ops::upsert_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  Ok(AppResponse::Ok().into())
+}
+
+#[instrument(level = "info", skip(state, payload), err)]
+async fn delete_collab_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<DeleteCollabParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  biz::collab::ops::delete_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  Ok(AppResponse::Ok().into())
+}
+
+async fn retrieve_snapshot_data_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  payload: Json<QuerySnapshotParams>,
+) -> Result<Json<AppResponse<RawData>>> {
+  let data =
+    biz::collab::ops::get_collab_snapshot(&state.pg_pool, &user_uuid, &payload.into_inner())
+      .await?;
+  Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
+#[tracing::instrument(level = "debug", skip_all)]
+async fn retrieve_snapshots_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  payload: Json<QueryObjectSnapshotParams>,
+) -> Result<Json<AppResponse<AFCollabSnapshots>>> {
+  let data =
+    biz::collab::ops::get_all_collab_snapshot(&state.pg_pool, &user_uuid, &payload.into_inner())
+      .await?;
+  Ok(Json(AppResponse::Ok().with_data(data)))
 }

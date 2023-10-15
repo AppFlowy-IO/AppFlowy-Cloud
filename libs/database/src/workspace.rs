@@ -57,6 +57,59 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
+/// Checks the user's permission to edit a collab object.
+/// user can edit collab if:
+/// 1. user is the member of the workspace
+/// 2. the collab object is not exist
+/// 3. the collab object is exist and the user is the member of the collab and the role is owner or member
+pub async fn select_user_can_edit_collab(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  object_id: &str,
+) -> Result<bool, DatabaseError> {
+  let permission_check = sqlx::query_scalar!(
+    r#"
+    WITH workspace_check AS (
+        SELECT EXISTS(
+            SELECT 1
+            FROM af_workspace_member
+            WHERE af_workspace_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND
+            af_workspace_member.workspace_id = $3
+        ) AS "workspace_exists"
+    ),
+    collab_check AS (
+        SELECT EXISTS(
+            SELECT 1
+            FROM af_collab_member
+            WHERE oid = $2
+        ) AS "collab_exists"
+    )
+    SELECT 
+        NOT collab_check.collab_exists OR (
+            workspace_check.workspace_exists AND 
+            EXISTS(
+                SELECT 1
+                FROM af_collab_member
+                JOIN af_roles ON af_collab_member.role_id = af_roles.id
+                WHERE 
+                    af_collab_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND 
+                    af_collab_member.oid = $2 AND 
+                    (af_roles.id = 1 OR af_roles.id = 2)
+            )
+        ) AS "permission_check"
+    FROM workspace_check, collab_check;
+     "#,
+    user_uuid,
+    object_id,
+    workspace_id,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(permission_check.unwrap_or(false))
+}
+
 pub async fn insert_workspace_member(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
@@ -69,7 +122,8 @@ pub async fn insert_workspace_member(
       INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
       SELECT $1, af_user.uid, $3
       FROM public.af_user 
-      WHERE af_user.email = $2 
+      WHERE 
+        af_user.email = $2 
       ON CONFLICT (workspace_id, uid)
       DO NOTHING;
     "#,
@@ -166,6 +220,7 @@ pub async fn delete_workspace_members(
   Ok(())
 }
 
+/// returns a list of workspace members, sorted by their creation time.
 pub async fn select_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
@@ -173,11 +228,12 @@ pub async fn select_workspace_members(
   let members = sqlx::query_as!(
     AFWorkspaceMember,
     r#"
-        SELECT af_user.email, af_workspace_member.role_id AS role
-        FROM public.af_workspace_member
-        JOIN public.af_user ON af_workspace_member.uid = af_user.uid
-        WHERE af_workspace_member.workspace_id = $1
-        "#,
+    SELECT af_user.email, af_workspace_member.role_id AS role
+    FROM public.af_workspace_member
+    JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+    WHERE af_workspace_member.workspace_id = $1
+    ORDER BY af_workspace_member.created_at ASC;
+    "#,
     workspace_id
   )
   .fetch_all(pg_pool)

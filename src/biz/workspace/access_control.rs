@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct WorkspaceOwnerAccessControl;
-
 #[async_trait]
 impl AccessControlService for WorkspaceOwnerAccessControl {
   fn resource(&self) -> AccessResource {

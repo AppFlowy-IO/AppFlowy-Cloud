@@ -26,7 +26,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::workspace_scope;
 use crate::api::ws::ws_scope;
-use crate::biz::collab::access_control::CollabAccessControl;
+use crate::biz::collab::access_control::{CollabAccessControl, CollabPermissionImpl};
 use crate::biz::workspace::access_control::WorkspaceOwnerAccessControl;
 use crate::component::storage_proxy::CollabStorageProxy;
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
@@ -81,9 +81,13 @@ pub async fn run(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_storage.clone();
-  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>>::new(storage.collab_storage.clone())
-    .unwrap()
-    .start();
+  let collab_permission = CollabPermissionImpl::new(state.pg_pool.clone());
+  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
+    storage.collab_storage.clone(),
+    collab_permission,
+  )
+  .unwrap()
+  .start();
 
   let access_control = WorkspaceAccessControl::new(state.pg_pool.clone())
     .with_acs(WorkspaceOwnerAccessControl)

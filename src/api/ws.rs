@@ -8,6 +8,7 @@ use std::sync::Arc;
 use realtime::client::{ClientSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
 
+use crate::biz::collab::access_control::CollabPermissionImpl;
 use database::user::uid_from_uuid;
 use shared_entity::app_error::AppError;
 use std::time::Duration;
@@ -28,7 +29,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>>>>,
+  server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>, CollabPermissionImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::info!("receive ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();

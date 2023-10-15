@@ -3,27 +3,28 @@ use crate::error::{RealtimeError, StreamError};
 use anyhow::Result;
 
 use actix::{Actor, Context, Handler, ResponseFuture};
-
+use futures_util::future::BoxFuture;
 use parking_lot::Mutex;
 use realtime_entity::collab_msg::CollabMessage;
 use std::collections::{HashMap, HashSet};
+
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::{info, trace, warn};
+use tracing::{info, trace};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
-use crate::collaborate::permission::CollabPermissionService;
+use crate::collaborate::permission::CollabPermission;
 use crate::collaborate::retry::SubscribeGroupIfNeed;
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 
 #[derive(Clone)]
-pub struct CollabServer<S, U> {
+pub struct CollabServer<S, U, P> {
   #[allow(dead_code)]
   storage: S,
   /// Keep track of all collab groups
@@ -32,18 +33,19 @@ pub struct CollabServer<S, U> {
   editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
-  permission_service: Arc<CollabPermissionService>,
+  permission_service: Arc<P>,
 }
 
-impl<S, U> CollabServer<S, U>
+impl<S, U, P> CollabServer<S, U, P>
 where
   S: CollabStorage + Clone,
   U: RealtimeUser,
+  P: CollabPermission,
 {
-  pub fn new(storage: S) -> Result<Self, RealtimeError> {
+  pub fn new(storage: S, permission_service: P) -> Result<Self, RealtimeError> {
     let groups = Arc::new(CollabGroupCache::new(storage.clone()));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
-    let permission_service = Arc::new(CollabPermissionService::new());
+    let permission_service = Arc::new(permission_service);
     Ok(Self {
       storage,
       groups,
@@ -76,18 +78,20 @@ async fn remove_user<S, U>(
   }
 }
 
-impl<S, U> Actor for CollabServer<S, U>
+impl<S, U, P> Actor for CollabServer<S, U, P>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
+  P: CollabPermission + Unpin,
 {
   type Context = Context<Self>;
 }
 
-impl<S, U> Handler<Connect<U>> for CollabServer<S, U>
+impl<S, U, P> Handler<Connect<U>> for CollabServer<S, U, P>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
+  P: CollabPermission + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -116,10 +120,11 @@ where
   }
 }
 
-impl<S, U> Handler<Disconnect<U>> for CollabServer<S, U>
+impl<S, U, P> Handler<Disconnect<U>> for CollabServer<S, U, P>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
+  P: CollabPermission + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
@@ -140,10 +145,11 @@ where
   }
 }
 
-impl<S, U> Handler<ClientMessage<U>> for CollabServer<S, U>
+impl<S, U, P> Handler<ClientMessage<U>> for CollabServer<S, U, P>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
+  P: CollabPermission + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -216,12 +222,13 @@ async fn remove_user_from_group<S, U>(
   }
 }
 
-impl<S, U> actix::Supervised for CollabServer<S, U>
+impl<S, U, P> actix::Supervised for CollabServer<S, U, P>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
+  P: CollabPermission + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U>>) {
+  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, P>>) {
     tracing::warn!("restarting");
   }
 }
@@ -268,8 +275,8 @@ impl CollabClientStream {
   where
     T:
       TryFrom<RealtimeMessage, Error = StreamError> + Into<RealtimeMessage> + Send + Sync + 'static,
-    SinkFilter: Fn(&str, &T) -> bool + Send + Sync + 'static,
-    StreamFilter: Fn(&str, &RealtimeMessage) -> bool + Send + Sync + 'static,
+    SinkFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
+    StreamFilter: Fn(&str, &RealtimeMessage) -> BoxFuture<'static, bool> + Sync + Send + 'static,
   {
     let client_ws_sink = self.ws_sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
@@ -277,9 +284,10 @@ impl CollabClientStream {
 
     // Send the message to the connected websocket client
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<T>();
-    tokio::spawn(async move {
+    tokio::task::spawn(async move {
       while let Some(msg) = rx.recv().await {
-        if sink_filter(&cloned_object_id, &msg) {
+        let can_sink = sink_filter(&cloned_object_id, &msg).await;
+        if can_sink {
           client_ws_sink.do_send(msg.into());
         }
       }
@@ -292,7 +300,7 @@ impl CollabClientStream {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(Ok(msg))) = stream_rx.next().await {
-        if stream_filter(&cloned_object_id, &msg) {
+        if stream_filter(&cloned_object_id, &msg).await {
           let _ = tx.send(T::try_from(msg)).await;
         }
       }

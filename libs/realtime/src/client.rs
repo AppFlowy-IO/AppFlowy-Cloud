@@ -18,7 +18,7 @@ use realtime_entity::collab_msg::CollabMessage;
 use std::time::{Duration, Instant};
 use tracing::error;
 
-pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
+pub struct ClientSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
   user: U,
   hb: Instant,
   pub server: Addr<CollabServer<S, U>>,
@@ -26,7 +26,7 @@ pub struct ClientWSSession<U: Unpin + RealtimeUser, S: Unpin + 'static> {
   client_timeout: Duration,
 }
 
-impl<U, S> ClientWSSession<U, S>
+impl<U, S> ClientSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
@@ -80,7 +80,7 @@ where
   }
 }
 
-impl<U, S> Actor for ClientWSSession<U, S>
+impl<U, S> Actor for ClientSession<U, S>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
@@ -121,7 +121,7 @@ where
   }
 }
 
-impl<U, S> Handler<RealtimeMessage> for ClientWSSession<U, S>
+impl<U, S> Handler<RealtimeMessage> for ClientSession<U, S>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
@@ -134,7 +134,7 @@ where
 }
 
 /// WebSocket message handler
-impl<U, S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientWSSession<U, S>
+impl<U, S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
@@ -175,7 +175,6 @@ where
 pub struct ClientWSSink(pub Recipient<RealtimeMessage>);
 impl Deref for ClientWSSink {
   type Target = Recipient<RealtimeMessage>;
-
   fn deref(&self) -> &Self::Target {
     &self.0
   }
@@ -183,13 +182,18 @@ impl Deref for ClientWSSink {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RealtimeUserImpl {
+  pub uid: i64,
   pub uuid: String,
   pub device_id: String,
 }
 
 impl RealtimeUserImpl {
-  pub fn new(uuid: String, device_id: String) -> Self {
-    Self { uuid, device_id }
+  pub fn new(uid: i64, uuid: String, device_id: String) -> Self {
+    Self {
+      uid,
+      uuid,
+      device_id,
+    }
   }
 }
 
@@ -202,4 +206,8 @@ impl Display for RealtimeUserImpl {
   }
 }
 
-impl RealtimeUser for RealtimeUserImpl {}
+impl RealtimeUser for RealtimeUserImpl {
+  fn uid(&self) -> i64 {
+    self.uid
+  }
+}

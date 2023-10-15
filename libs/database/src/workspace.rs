@@ -32,9 +32,6 @@ pub async fn select_user_is_workspace_owner(
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
 ) -> Result<bool, DatabaseError> {
-  // 1. Identifies the user's UID in the 'af_user' table using the provided user UUID ($2).
-  // 2. Then, it checks the 'af_workspace_member' table to find a record that matches the provided workspace_id ($1) and the identified UID.
-  // 3. It joins with 'af_roles' to ensure that the role associated with the workspace member is 'Owner'.
   let exists = sqlx::query_scalar!(
     r#"
   SELECT EXISTS(

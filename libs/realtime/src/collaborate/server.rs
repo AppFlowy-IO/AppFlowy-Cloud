@@ -13,10 +13,11 @@ use tokio::sync::RwLock;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::{info, trace};
+use tracing::{info, trace, warn};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
+use crate::collaborate::permission::CollabPermissionService;
 use crate::collaborate::retry::SubscribeGroupIfNeed;
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
@@ -31,6 +32,7 @@ pub struct CollabServer<S, U> {
   editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
+  permission_service: Arc<CollabPermissionService>,
 }
 
 impl<S, U> CollabServer<S, U>
@@ -41,11 +43,13 @@ where
   pub fn new(storage: S) -> Result<Self, RealtimeError> {
     let groups = Arc::new(CollabGroupCache::new(storage.clone()));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
+    let permission_service = Arc::new(CollabPermissionService::new());
     Ok(Self {
       storage,
       groups,
       editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
+      permission_service,
     })
   }
 }
@@ -147,6 +151,7 @@ where
     let client_stream_by_user = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
     let edit_collab_by_user = self.editing_collab_by_user.clone();
+    let permission_service = self.permission_service.clone();
 
     Box::pin(async move {
       SubscribeGroupIfNeed {
@@ -154,6 +159,7 @@ where
         groups: &groups,
         edit_collab_by_user: &edit_collab_by_user,
         client_stream_by_user: &client_stream_by_user,
+        permission_service: &permission_service,
       }
       .run()
       .await?;
@@ -230,7 +236,11 @@ impl TryFrom<RealtimeMessage> for CollabMessage {
 
 pub struct CollabClientStream {
   ws_sink: ClientWSSink,
-  /// Used to receive messages from the collab server
+  /// Used to receive messages from the collab server. The message will forward to the [CollabBroadcast] which
+  /// will broadcast the message to all connected clients.
+  ///
+  /// The message flow:
+  /// ClientSession(websocket) -> [CollabServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
   pub(crate) stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
 }
 
@@ -246,18 +256,20 @@ impl CollabClientStream {
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.
   #[allow(clippy::type_complexity)]
-  pub fn client_channel<T, F1>(
+  pub fn client_channel<T, SinkFilter, StreamFilter>(
     &mut self,
     object_id: &str,
-    sink_filter: F1,
-  ) -> Option<(
+    sink_filter: SinkFilter,
+    stream_filter: StreamFilter,
+  ) -> (
     UnboundedSenderSink<T>,
     ReceiverStream<Result<T, StreamError>>,
-  )>
+  )
   where
     T:
       TryFrom<RealtimeMessage, Error = StreamError> + Into<RealtimeMessage> + Send + Sync + 'static,
-    F1: Fn(&str, &T) -> bool + Send + Sync + 'static,
+    SinkFilter: Fn(&str, &T) -> bool + Send + Sync + 'static,
+    StreamFilter: Fn(&str, &RealtimeMessage) -> bool + Send + Sync + 'static,
   {
     let client_ws_sink = self.ws_sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
@@ -280,7 +292,7 @@ impl CollabClientStream {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(Ok(msg))) = stream_rx.next().await {
-        if cloned_object_id == msg.object_id {
+        if stream_filter(&cloned_object_id, &msg) {
           let _ = tx.send(T::try_from(msg)).await;
         }
       }
@@ -292,6 +304,6 @@ impl CollabClientStream {
     //
     // When receiving a message from the client_forward_stream, it will send the message to the broadcast
     // group. The message will be broadcast to all connected clients.
-    Some((client_forward_sink, client_forward_stream))
+    (client_forward_sink, client_forward_stream)
   }
 }

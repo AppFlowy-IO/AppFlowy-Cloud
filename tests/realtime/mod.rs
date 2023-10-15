@@ -1,4 +1,5 @@
-mod connect_test;
-mod edit_collab_test;
-mod offline_edit_collab_test;
+mod collab_permisson;
+mod edit_collab;
+mod edit_offline_collab;
 mod test_client;
+mod ws_connect;

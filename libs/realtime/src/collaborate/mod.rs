@@ -1,5 +1,6 @@
 mod broadcast;
 mod group;
+mod permission;
 mod plugin;
 mod retry;
 mod server;

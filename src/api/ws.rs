@@ -5,9 +5,11 @@ use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use std::sync::Arc;
 
-use realtime::client::{ClientWSSession, RealtimeUserImpl};
+use realtime::client::{ClientSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
 
+use database::user::uid_from_uuid;
+use shared_entity::app_error::AppError;
 use std::time::Duration;
 
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
@@ -32,8 +34,11 @@ pub async fn establish_ws_connection(
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let realtime_user = Arc::new(RealtimeUserImpl::new(user_uuid.to_string(), device_id));
-  let client = ClientWSSession::new(
+  let uid = uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppError::from)?;
+  let realtime_user = Arc::new(RealtimeUserImpl::new(uid, user_uuid.to_string(), device_id));
+  let client = ClientSession::new(
     realtime_user,
     server.get_ref().clone(),
     Duration::from_secs(state.config.websocket.heartbeat_interval as u64),

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use collab_entity::CollabType;
 use database_entity::{
-  BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams, QueryCollabParams,
-  QueryCollabResult,
+  BatchQueryCollab, BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams,
+  QueryCollabParams, QueryCollabResult,
 };
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::Uuid;
@@ -21,7 +21,7 @@ async fn success_insert_collab_test() {
     &object_id,
     CollabType::Document,
     raw_data.clone(),
-    workspace_id,
+    workspace_id.clone(),
   ))
   .await
   .unwrap();
@@ -29,6 +29,7 @@ async fn success_insert_collab_test() {
   let bytes = c
     .get_collab(QueryCollabParams {
       object_id,
+      workspace_id,
       collab_type: CollabType::Document,
     })
     .await
@@ -42,15 +43,15 @@ async fn success_batch_get_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
   let queries = BatchQueryCollabParams(vec![
-    QueryCollabParams {
+    BatchQueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Document,
     },
-    QueryCollabParams {
+    BatchQueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Folder,
     },
-    QueryCollabParams {
+    BatchQueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Database,
     },
@@ -79,7 +80,7 @@ async fn success_batch_get_collab_test() {
     .unwrap();
   }
 
-  let results = c.batch_get_collab(queries).await.unwrap().0;
+  let results = c.batch_get_collab(&workspace_id, queries).await.unwrap().0;
   for (object_id, result) in expected_results.iter() {
     assert_eq!(result, results.get(object_id).unwrap());
   }
@@ -90,15 +91,15 @@ async fn success_part_batch_get_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
   let queries = BatchQueryCollabParams(vec![
-    QueryCollabParams {
+    BatchQueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Document,
     },
-    QueryCollabParams {
+    BatchQueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Folder,
     },
-    QueryCollabParams {
+    BatchQueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Database,
     },
@@ -134,7 +135,7 @@ async fn success_part_batch_get_collab_test() {
     }
   }
 
-  let results = c.batch_get_collab(queries).await.unwrap().0;
+  let results = c.batch_get_collab(&workspace_id, queries).await.unwrap().0;
   for (object_id, result) in expected_results.iter() {
     assert_eq!(result, results.get(object_id).unwrap());
   }
@@ -150,13 +151,14 @@ async fn success_delete_collab_test() {
     object_id.clone(),
     CollabType::Document,
     raw_data.clone(),
-    workspace_id,
+    workspace_id.clone(),
   ))
   .await
   .unwrap();
 
   c.delete_collab(DeleteCollabParams {
     object_id: object_id.clone(),
+    workspace_id: workspace_id.clone(),
   })
   .await
   .unwrap();
@@ -164,6 +166,7 @@ async fn success_delete_collab_test() {
   let error = c
     .get_collab(QueryCollabParams {
       object_id,
+      workspace_id,
       collab_type: CollabType::Document,
     })
     .await
@@ -204,5 +207,5 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::DatabaseError);
+  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
 }

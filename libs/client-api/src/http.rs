@@ -530,7 +530,10 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab/", self.base_url);
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, params.workspace_id, &params.object_id
+    );
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
@@ -542,7 +545,10 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab/", self.base_url);
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, &params.workspace_id, &params.object_id
+    );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
@@ -554,7 +560,10 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppError> {
-    let url = format!("{}/api/collab/", self.base_url);
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, &params.workspace_id, &params.object_id
+    );
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -569,9 +578,13 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn batch_get_collab(
     &self,
+    workspace_id: &str,
     params: BatchQueryCollabParams,
   ) -> Result<BatchQueryCollabResult, AppError> {
-    let url = format!("{}/api/collab/list", self.base_url);
+    let url = format!(
+      "{}/api/workspace/{}/collab_list",
+      self.base_url, workspace_id
+    );
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -585,7 +598,10 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
-    let url = format!("{}/api/collab/", self.base_url);
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, &params.workspace_id, &params.object_id
+    );
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?

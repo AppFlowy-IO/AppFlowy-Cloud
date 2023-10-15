@@ -43,6 +43,33 @@ CREATE POLICY af_workspace_member_policy ON af_workspace_member FOR ALL TO anon,
     authenticated USING (true);
 ALTER TABLE af_workspace_member FORCE ROW LEVEL SECURITY;
 
+-- Listener for af_workspace_member table
+DROP TRIGGER IF EXISTS af_workspace_member_change_trigger ON af_workspace_member;
+
+CREATE OR REPLACE FUNCTION notify_af_workspace_member_change() RETURNS trigger AS $$
+DECLARE
+    payload TEXT;
+BEGIN
+    payload := json_build_object(
+            'old', row_to_json(OLD),
+            'new', row_to_json(NEW),
+            'action_type', TG_OP
+            )::text;
+
+    PERFORM pg_notify('af_workspace_member_channel', payload);
+    -- Return the new row state for INSERT/UPDATE, and the old state for DELETE.
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER af_workspace_member_change_trigger
+    AFTER INSERT OR UPDATE OR DELETE ON af_workspace_member
+    FOR EACH ROW EXECUTE FUNCTION notify_af_workspace_member_change();
+
 -- Index
 CREATE UNIQUE INDEX idx_af_workspace_member ON af_workspace_member (uid, workspace_id, role_id);
 -- This trigger is fired after an insert operation on the af_workspace table. It automatically creates a workspace

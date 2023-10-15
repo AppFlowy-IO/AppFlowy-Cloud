@@ -227,6 +227,13 @@ pub struct AFWorkspaceMember {
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
+pub struct AFCollabMember {
+  pub uid: i64,
+  pub oid: String,
+  pub role_id: AFRole,
+}
+
+#[derive(FromRow, Serialize, Deserialize)]
 pub struct AFBlobMetadata {
   pub workspace_id: Uuid,
   pub file_id: String,

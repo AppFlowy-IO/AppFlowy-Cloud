@@ -31,6 +31,33 @@ CREATE TABLE af_collab_member (
     PRIMARY KEY(uid, oid)
 );
 
+-- Listener
+DROP TRIGGER IF EXISTS af_collab_member_change_trigger ON af_collab_member;
+
+CREATE OR REPLACE FUNCTION notify_af_collab_member_change() RETURNS trigger AS $$
+DECLARE
+payload TEXT;
+BEGIN
+    payload := json_build_object(
+            'old', row_to_json(OLD),
+            'new', row_to_json(NEW),
+            'action_type', TG_OP
+            )::text;
+
+    PERFORM pg_notify('af_collab_member_channel', payload);
+    -- Return the new row state for INSERT/UPDATE, and the old state for DELETE.
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+ELSE
+        RETURN NEW;
+END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER af_collab_member_change_trigger
+    AFTER INSERT OR UPDATE OR DELETE ON af_collab_member
+    FOR EACH ROW EXECUTE FUNCTION notify_af_collab_member_change();
+
 -- collab snapshot. It will be used to store the snapshots of the collab.
 CREATE TABLE IF NOT EXISTS af_collab_snapshot (
     sid BIGSERIAL PRIMARY KEY,-- snapshot id

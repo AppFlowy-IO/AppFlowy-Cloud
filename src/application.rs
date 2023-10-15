@@ -27,6 +27,7 @@ use crate::api::user::user_scope;
 use crate::api::workspace::workspace_scope;
 use crate::api::ws::ws_scope;
 use crate::biz::collab::access_control::{CollabAccessControl, CollabPermissionImpl};
+use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::access_control::WorkspaceOwnerAccessControl;
 use crate::component::storage_proxy::CollabStorageProxy;
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
@@ -81,7 +82,8 @@ pub async fn run(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_storage.clone();
-  let collab_permission = CollabPermissionImpl::new(state.pg_pool.clone());
+  let collab_member_listener = state.pg_listeners.subscribe_collab_member_change();
+  let collab_permission = CollabPermissionImpl::new(state.pg_pool.clone(), collab_member_listener);
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.collab_storage.clone(),
     collab_permission,
@@ -144,6 +146,9 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
   let collab_storage = init_storage(config, pg_pool.clone()).await?;
 
+  // TODO(nathan): Maybe PgListeners shouldn't return error
+  let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
+
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
@@ -153,6 +158,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     redis_client,
     collab_storage,
     bucket_storage,
+    pg_listeners,
   })
 }
 

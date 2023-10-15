@@ -164,11 +164,12 @@ where
                   }
 
                   let msg_uid = msg.uid();
+                  let object_id = object_id.to_string();
                   let cloned_sink_permission_service = sink_permission_service.clone();
                   Box::pin(async move {
                     if let Some(uid) = msg_uid {
                       if let Err(err) = cloned_sink_permission_service
-                        .is_allowed_recv_by_user(uid)
+                        .is_allowed_recv_by_user(uid, &object_id)
                         .await
                       {
                         trace!("client:{} fail to receive message. error: {}", uid, err);
@@ -183,6 +184,7 @@ where
                     return Box::pin(future::ready(false));
                   }
 
+                  let object_id = object_id.to_string();
                   let msg_uid = msg.uid;
                   let cloned_stream_permission_service = stream_permission_service.clone();
                   Box::pin(async move {
@@ -190,7 +192,7 @@ where
                       None => true,
                       Some(uid) => {
                         match cloned_stream_permission_service
-                          .is_allowed_send_by_user(uid)
+                          .is_allowed_send_by_user(uid, &object_id)
                           .await
                         {
                           Ok(is_allowed) => is_allowed,

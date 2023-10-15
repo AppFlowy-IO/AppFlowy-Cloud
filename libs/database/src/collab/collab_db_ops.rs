@@ -1,8 +1,8 @@
 use anyhow::Context;
 use collab_entity::CollabType;
 use database_entity::{
-  database_error::DatabaseError, AFCollabSnapshot, AFCollabSnapshots, BatchQueryCollab,
-  InsertCollabParams, QueryCollabResult, RawData,
+  database_error::DatabaseError, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots,
+  BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
 };
 
 use sqlx::{PgPool, Transaction};
@@ -288,4 +288,22 @@ pub async fn get_all_snapshots(
   .fetch_all(pg_pool)
   .await?;
   Ok(AFCollabSnapshots(snapshots))
+}
+
+pub async fn select_collab_member(
+  uid: i64,
+  oid: &str,
+  pg_pool: &PgPool,
+) -> Result<AFCollabMember, DatabaseError> {
+  let member = sqlx::query_as!(
+    AFCollabMember,
+    r#"
+      SELECT * FROM af_collab_member WHERE uid = $1 AND oid = $2;
+    "#,
+    uid,
+    oid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+  Ok(member)
 }

@@ -746,10 +746,10 @@ pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
   let url = fragment
     .select(&selector)
     .next()
-    .ok_or(anyhow!("no a tag found"))?
+    .ok_or(anyhow!("no a tag found in html: {}", html_str))?
     .value()
     .attr("href")
-    .ok_or(anyhow!("no href found"))?
+    .ok_or(anyhow!("no href found in html: {}", html_str))?
     .to_string();
   Ok(url)
 }

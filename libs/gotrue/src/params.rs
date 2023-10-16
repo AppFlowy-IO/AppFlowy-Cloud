@@ -22,7 +22,7 @@ pub struct AdminUserParams {
   pub ban_duration: String,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct GenerateLinkParams {
   #[serde(rename = "type")]
   pub type_: GenerateLinkType,
@@ -34,12 +34,23 @@ pub struct GenerateLinkParams {
   pub redirect_to: String,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+impl Default for GenerateLinkParams {
+  fn default() -> Self {
+    GenerateLinkParams {
+      type_: GenerateLinkType::MagicLink,
+      email: String::default(),
+      new_email: String::default(),
+      password: String::default(),
+      data: BTreeMap::new(),
+      redirect_to: "appflowy-flutter://".to_string(),
+    }
+  }
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum GenerateLinkType {
-  #[default]
   MagicLink,
-
   Recovery,
   Invite,
   Signup,

@@ -75,7 +75,11 @@ where
               .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
 
             // before create a group, check the user is allowed to create a group.
-            match self.permission_service.is_allowed_send_by_user(uid).await {
+            match self
+              .permission_service
+              .is_allowed_send_by_user(uid, &object_id)
+              .await
+            {
               Ok(is_allowed) => {
                 if !is_allowed {
                   return Ok(());

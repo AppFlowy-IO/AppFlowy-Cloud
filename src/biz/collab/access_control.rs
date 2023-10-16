@@ -50,7 +50,7 @@ pub struct CollabPermissionImpl {
 
 #[derive(Clone, Debug)]
 enum RoleStatus {
-  Invalid,
+  Deleted,
   Valid(AFRole),
 }
 
@@ -70,7 +70,7 @@ impl CollabPermissionImpl {
           },
           CollabMemberAction::Delete => {
             if let Some(mut inner_map) = cloned_role_by_uid.write().await.get_mut(&change.uid) {
-              inner_map.insert(change.oid.clone(), RoleStatus::Invalid);
+              inner_map.insert(change.oid.clone(), RoleStatus::Deleted);
             }
           },
         }
@@ -83,6 +83,7 @@ impl CollabPermissionImpl {
     }
   }
 
+  /// Return the role of the user in the collab
   async fn get_role_state(&self, uid: i64, oid: &str) -> Option<RoleStatus> {
     self
       .role_by_uid
@@ -92,20 +93,29 @@ impl CollabPermissionImpl {
       .map(|map| map.get(oid).cloned())?
   }
 
-  async fn load_role_state(&self, uid: i64, oid: &str) -> Result<RoleStatus, Error> {
-    todo!()
+  #[inline]
+  async fn refresh_state_from_db(&self, uid: i64, oid: &str) -> Result<RoleStatus, Error> {
+    let member = database::collab::select_collab_member(uid, oid, &self.pg_pool).await?;
+    let mut outer_map = self.role_by_uid.write().await;
+    let inner_map = outer_map.entry(uid).or_insert_with(HashMap::new);
+    inner_map.insert(member.oid, RoleStatus::Valid(member.role_id.clone()));
+    Ok(RoleStatus::Valid(member.role_id))
   }
 
   #[inline]
   async fn is_user_can_edit_collab(&self, uid: i64, oid: &str) -> Result<bool, Error> {
-    match self.get_role_state(uid, oid).await {
-      None => {
-        self.load_role_state(uid, oid).await;
-      },
-      Some(status) => {},
-    }
+    let role_status = match self.get_role_state(uid, oid).await {
+      None => self.refresh_state_from_db(uid, oid).await?,
+      Some(status) => status,
+    };
 
-    todo!()
+    match role_status {
+      RoleStatus::Deleted => Ok(false),
+      RoleStatus::Valid(role) => match role {
+        AFRole::Owner | AFRole::Member => Ok(true),
+        AFRole::Guest => Ok(false),
+      },
+    }
   }
 }
 

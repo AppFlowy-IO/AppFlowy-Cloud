@@ -1429,6 +1429,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "thiserror",
+ "tracing",
  "uuid",
  "validator",
 ]

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use tracing::error;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
@@ -205,7 +206,22 @@ impl From<i32> for AFRole {
       1 => AFRole::Owner,
       2 => AFRole::Member,
       3 => AFRole::Guest,
-      _ => panic!("Invalid value for AFRole"),
+      _ => {
+        error!("Invalid role id: {}", value);
+        AFRole::Guest
+      },
+    }
+  }
+}
+
+impl From<Option<i32>> for AFRole {
+  fn from(value: Option<i32>) -> Self {
+    match value {
+      None => {
+        error!("Invalid role id: None");
+        AFRole::Guest
+      },
+      Some(value) => value.into(),
     }
   }
 }
@@ -220,6 +236,62 @@ impl From<AFRole> for i32 {
     }
   }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AFPermission {
+  pub name: String,
+  pub access_level: AFPermissionLevel,
+  pub description: String,
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+pub enum AFPermissionLevel {
+  ReadOnly,
+  ReadAndComment,
+  ReadAndWrite,
+  FullAccess,
+}
+
+impl From<i32> for AFPermissionLevel {
+  fn from(value: i32) -> Self {
+    // Can't modify the value of the enum
+    match value {
+      10 => AFPermissionLevel::ReadOnly,
+      20 => AFPermissionLevel::ReadAndComment,
+      30 => AFPermissionLevel::ReadAndWrite,
+      50 => AFPermissionLevel::FullAccess,
+      _ => {
+        error!("Invalid role id: {}", value);
+        AFPermissionLevel::ReadOnly
+      },
+    }
+  }
+}
+
+impl From<Option<i32>> for AFPermissionLevel {
+  fn from(value: Option<i32>) -> Self {
+    match value {
+      None => {
+        error!("Invalid permission level id: None");
+        AFPermissionLevel::ReadOnly
+      },
+      Some(value) => value.into(),
+    }
+  }
+}
+
+impl From<AFPermissionLevel> for i32 {
+  fn from(level: AFPermissionLevel) -> Self {
+    // Can't modify the value of the enum
+    match level {
+      AFPermissionLevel::ReadOnly => 10,
+      AFPermissionLevel::ReadAndComment => 20,
+      AFPermissionLevel::ReadAndWrite => 30,
+      AFPermissionLevel::FullAccess => 50,
+    }
+  }
+}
+
 #[derive(FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMember {
   pub email: String,

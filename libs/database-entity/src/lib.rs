@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
@@ -240,57 +241,50 @@ impl From<AFRole> for i32 {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AFPermission {
   /// The permission id
-  pub id: i64,
+  pub id: i32,
   pub name: String,
-  pub access_level: AFPermissionLevel,
+  pub access_level: AFAccessLevel,
   pub description: String,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
-pub enum AFPermissionLevel {
-  ReadOnly,
-  ReadAndComment,
-  ReadAndWrite,
-  FullAccess,
+#[derive(Deserialize_repr, Serialize_repr, Eq, PartialEq, Debug, Clone)]
+#[repr(i32)]
+pub enum AFAccessLevel {
+  // Can't modify the value of the enum
+  ReadOnly = 10,
+  ReadAndComment = 20,
+  ReadAndWrite = 30,
+  FullAccess = 50,
 }
 
-impl From<i32> for AFPermissionLevel {
+impl AFAccessLevel {
+  pub fn can_write(&self) -> bool {
+    match self {
+      AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => false,
+      AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => true,
+    }
+  }
+}
+
+impl From<i32> for AFAccessLevel {
   fn from(value: i32) -> Self {
     // Can't modify the value of the enum
     match value {
-      10 => AFPermissionLevel::ReadOnly,
-      20 => AFPermissionLevel::ReadAndComment,
-      30 => AFPermissionLevel::ReadAndWrite,
-      50 => AFPermissionLevel::FullAccess,
+      10 => AFAccessLevel::ReadOnly,
+      20 => AFAccessLevel::ReadAndComment,
+      30 => AFAccessLevel::ReadAndWrite,
+      50 => AFAccessLevel::FullAccess,
       _ => {
         error!("Invalid role id: {}", value);
-        AFPermissionLevel::ReadOnly
+        AFAccessLevel::ReadOnly
       },
     }
   }
 }
 
-impl From<Option<i32>> for AFPermissionLevel {
-  fn from(value: Option<i32>) -> Self {
-    match value {
-      None => {
-        error!("Invalid permission level id: None");
-        AFPermissionLevel::ReadOnly
-      },
-      Some(value) => value.into(),
-    }
-  }
-}
-
-impl From<AFPermissionLevel> for i32 {
-  fn from(level: AFPermissionLevel) -> Self {
-    // Can't modify the value of the enum
-    match level {
-      AFPermissionLevel::ReadOnly => 10,
-      AFPermissionLevel::ReadAndComment => 20,
-      AFPermissionLevel::ReadAndWrite => 30,
-      AFPermissionLevel::FullAccess => 50,
-    }
+impl From<AFAccessLevel> for i32 {
+  fn from(level: AFAccessLevel) -> Self {
+    level as i32
   }
 }
 
@@ -300,11 +294,18 @@ pub struct AFWorkspaceMember {
   pub role: AFRole,
 }
 
-#[derive(FromRow, Serialize, Deserialize)]
-pub struct AFCollabMember {
+#[derive(Serialize, Deserialize)]
+pub struct AFCollabMemberPermission {
   pub uid: i64,
   pub oid: String,
   pub permission: AFPermission,
+}
+
+#[derive(FromRow, Clone, Debug, Serialize, Deserialize)]
+pub struct AFCollabMember {
+  pub uid: i64,
+  pub oid: String,
+  pub permission_id: i64,
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
@@ -341,3 +342,24 @@ pub enum QueryCollabResult {
 
 #[derive(Serialize, Deserialize)]
 pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct InsertCollabMemberParams {
+  pub uid: i64,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+  pub access_level: AFAccessLevel,
+}
+
+pub type UpdateCollabMemberParams = InsertCollabMemberParams;
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CollabMemberIdentify {
+  pub uid: i64,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+}

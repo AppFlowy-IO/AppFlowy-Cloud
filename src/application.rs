@@ -82,18 +82,16 @@ pub async fn run(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_storage.clone();
-  let collab_member_listener = state.pg_listeners.subscribe_collab_member_change();
-  let collab_permission = CollabPermissionImpl::new(state.pg_pool.clone(), collab_member_listener);
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.collab_storage.clone(),
-    collab_permission,
+    state.collab_permission.clone(),
   )
   .unwrap()
   .start();
 
   let access_control = WorkspaceAccessControl::new(state.pg_pool.clone())
     .with_acs(WorkspaceOwnerAccessControl)
-    .with_acs(CollabAccessControl);
+    .with_acs(CollabAccessControl(state.collab_permission.clone()));
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -149,6 +147,12 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // TODO(nathan): Maybe PgListeners shouldn't return error
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
 
+  let collab_member_listener = pg_listeners.subscribe_collab_member_change();
+  let collab_permission = Arc::new(CollabPermissionImpl::new(
+    pg_pool.clone(),
+    collab_member_listener,
+  ));
+
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
@@ -157,6 +161,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     gotrue_client,
     redis_client,
     collab_storage,
+    collab_permission,
     bucket_storage,
     pg_listeners,
   })

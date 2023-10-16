@@ -85,7 +85,7 @@ where
       },
       Err(err) => {
         match &err {
-          DatabaseError::RecordNotFound => {
+          DatabaseError::RecordNotFound(_) => {
             let raw_data = {
               let txn = doc.transact();
               txn.encode_state_as_update_v1(&StateVector::default())

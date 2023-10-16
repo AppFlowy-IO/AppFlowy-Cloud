@@ -51,7 +51,7 @@ pub async fn create_user_if_not_exists(
   Ok(affected_rows > 0)
 }
 
-pub async fn uid_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<i64, DatabaseError> {
+pub async fn select_uid_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<i64, DatabaseError> {
   let uid = sqlx::query!(
     r#"
       SELECT uid FROM af_user WHERE uuid = $1

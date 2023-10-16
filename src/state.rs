@@ -8,9 +8,9 @@ use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::biz::collab::member_listener::CollabMemberListener;
 use crate::biz::pg_listener::PgListeners;
-use crate::biz::workspace::member_listener::WorkspaceMemberListener;
+
+use crate::biz::collab::access_control::CollabPermissionImpl;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use tokio::sync::RwLock;
 
@@ -23,6 +23,7 @@ pub struct AppState {
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: redis::aio::ConnectionManager,
   pub collab_storage: Storage<CollabStorageProxy>,
+  pub collab_permission: Arc<CollabPermissionImpl>,
   pub bucket_storage: Arc<S3BucketStorage>,
   pub pg_listeners: Arc<PgListeners>,
 }

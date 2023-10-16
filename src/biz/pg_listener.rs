@@ -18,7 +18,7 @@ impl PgListeners {
       WorkspaceMemberListener::new(pg_pool, "af_workspace_member_channel").await?;
 
     let collab_member_listener =
-      CollabMemberListener::new(pg_pool, "af_workspace_member_channel").await?;
+      CollabMemberListener::new(pg_pool, "af_collab_member_channel").await?;
 
     Ok(Self {
       workspace_member_listener,
@@ -56,7 +56,11 @@ where
             let _ = tx.send(change);
           },
           Err(err) => {
-            error!("Failed to deserialize change: {:?}", err);
+            error!(
+              "Failed to deserialize change: {:?}, payload: {}",
+              err,
+              notification.payload()
+            );
           },
         }
       }

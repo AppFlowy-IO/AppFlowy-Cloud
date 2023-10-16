@@ -42,10 +42,9 @@ where
   U: RealtimeUser,
   P: CollabPermission,
 {
-  pub fn new(storage: S, permission_service: P) -> Result<Self, RealtimeError> {
+  pub fn new(storage: S, permission_service: Arc<P>) -> Result<Self, RealtimeError> {
     let groups = Arc::new(CollabGroupCache::new(storage.clone()));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
-    let permission_service = Arc::new(permission_service);
     Ok(Self {
       storage,
       groups,

@@ -11,7 +11,7 @@ VALUES ('Owner'),
 CREATE TABLE af_permissions (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) UNIQUE NOT NULL,
-    access_level INTEGER,
+    access_level INTEGER NOT NULL,
     description TEXT
 );
 -- Insert default permissions

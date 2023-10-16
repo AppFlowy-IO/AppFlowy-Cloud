@@ -1427,6 +1427,7 @@ dependencies = [
  "collab-entity",
  "serde",
  "serde_json",
+ "serde_repr",
  "sqlx",
  "thiserror",
  "tracing",

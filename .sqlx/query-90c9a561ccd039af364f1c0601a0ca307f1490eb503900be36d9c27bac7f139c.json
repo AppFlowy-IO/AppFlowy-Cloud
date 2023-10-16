@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT uid, oid, permission_id FROM af_collab_member WHERE uid = $1 AND oid = $2\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "uid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "oid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "permission_id",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "90c9a561ccd039af364f1c0601a0ca307f1490eb503900be36d9c27bac7f139c"
+}

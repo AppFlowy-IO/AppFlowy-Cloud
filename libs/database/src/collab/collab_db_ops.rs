@@ -1,27 +1,28 @@
 use anyhow::Context;
 use collab_entity::CollabType;
 use database_entity::{
-  database_error::DatabaseError, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots, AFPermission,
-  AFPermissionLevel, BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
+  database_error::DatabaseError, AFAccessLevel, AFCollabMember, AFCollabMemberPermission,
+  AFCollabSnapshot, AFCollabSnapshots, AFPermission, BatchQueryCollab, InsertCollabParams,
+  QueryCollabResult, RawData,
 };
 
 use sqlx::postgres::PgRow;
-use sqlx::{PgPool, Row, Transaction};
+use sqlx::{Error, PgPool, Row, Transaction};
 use std::collections::HashMap;
 use std::{ops::DerefMut, str::FromStr};
-use tracing::{error, trace};
+use tracing::{error, instrument, trace};
 use uuid::Uuid;
 
 pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
-  sqlx::query_scalar!(
+  let result = sqlx::query_scalar!(
     r#"
         SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
         "#,
     &oid,
   )
   .fetch_one(pg_pool)
-  .await?
-  .ok_or(sqlx::Error::RowNotFound)
+  .await;
+  transform_record_not_found_error(result)
 }
 
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
@@ -298,11 +299,91 @@ pub async fn get_all_snapshots(
   Ok(AFCollabSnapshots(snapshots))
 }
 
+#[instrument(skip(pg_pool), err)]
+pub async fn insert_collab_member(
+  uid: i64,
+  oid: &str,
+  access_level: &AFAccessLevel,
+  pg_pool: &PgPool,
+) -> Result<(), DatabaseError> {
+  let access_level: i32 = access_level.clone().into();
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("failed to acquire a transaction to insert collab member")?;
+
+  let permission_id = sqlx::query_scalar!(
+    r#"
+        SELECT id
+        FROM af_permissions
+        WHERE access_level = $1
+        "#,
+    access_level
+  )
+  .fetch_one(txn.deref_mut())
+  .await
+  .context("Get permission id from access level fail")?;
+
+  sqlx::query!(
+    r#" 
+    INSERT INTO af_collab_member (uid, oid, permission_id)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (uid, oid)
+    DO UPDATE
+      SET permission_id = excluded.permission_id;
+    "#,
+    uid,
+    oid,
+    permission_id
+  )
+  .execute(txn.deref_mut())
+  .await
+  .context("oops fuck")?;
+
+  txn
+    .commit()
+    .await
+    .context("failed to commit the transaction to insert collab member")?;
+
+  Ok(())
+}
+
+#[allow(dead_code)]
 pub async fn select_collab_member(
   uid: i64,
   oid: &str,
   pg_pool: &PgPool,
 ) -> Result<AFCollabMember, DatabaseError> {
+  let member = sqlx::query_as!(
+    AFCollabMember,
+    r#"
+      SELECT uid, oid, permission_id FROM af_collab_member WHERE uid = $1 AND oid = $2
+    "#,
+    uid,
+    oid
+  )
+  .fetch_one(pg_pool)
+  .await?;
+  Ok(member)
+}
+
+pub async fn delete_collab_member(
+  uid: i64,
+  oid: &str,
+  pg_pool: &PgPool,
+) -> Result<(), DatabaseError> {
+  sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
+    .bind(uid)
+    .bind(oid)
+    .execute(pg_pool)
+    .await?;
+  Ok(())
+}
+pub async fn select_collab_member_permission(
+  uid: i64,
+  oid: &str,
+  pg_pool: &PgPool,
+) -> Result<AFCollabMemberPermission, DatabaseError> {
   let member = sqlx::query(
   r#"
       SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
@@ -313,22 +394,55 @@ pub async fn select_collab_member(
   )
   .bind(uid)
   .bind(oid)
-  .map(|row: PgRow| {
-    let access_level = AFPermissionLevel::from(row.get::<i32,_>(4));
+  .try_map(|row: PgRow| {
+    let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
     let permission = AFPermission {
-      id: row.get(2),
-      name: row.get(3),
+      id: row.try_get(2)?,
+      name: row.try_get(3)?,
       access_level,
-      description: row.get(5),
+      description: row.try_get(5)?,
     };
 
-    AFCollabMember {
-      uid: row.get(0),
-      oid: row.get(1),
+    Ok(AFCollabMemberPermission {
+      uid: row.try_get(0)?,
+      oid: row.try_get(1)?,
       permission,
-    }
+    })
   })
   .fetch_one(pg_pool)
   .await?;
   Ok(member)
+}
+
+pub async fn is_collab_member_exists(
+  uid: i64,
+  oid: &str,
+  pg_pool: &PgPool,
+) -> Result<bool, sqlx::Error> {
+  let result = sqlx::query_scalar!(
+    r#"
+        SELECT EXISTS (SELECT 1 FROM af_collab_member WHERE oid = $1 AND uid = $2 LIMIT 1)
+        "#,
+    &oid,
+    &uid,
+  )
+  .fetch_one(pg_pool)
+  .await;
+  transform_record_not_found_error(result)
+}
+
+#[inline]
+fn transform_record_not_found_error(
+  result: Result<Option<bool>, sqlx::Error>,
+) -> Result<bool, sqlx::Error> {
+  match result {
+    Ok(value) => Ok(value.unwrap_or(false)),
+    Err(err) => {
+      if let Error::RowNotFound = err {
+        Ok(false)
+      } else {
+        Err(err)
+      }
+    },
+  }
 }

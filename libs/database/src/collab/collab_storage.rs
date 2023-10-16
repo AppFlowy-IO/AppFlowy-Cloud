@@ -10,6 +10,7 @@ use database_entity::{
 use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
+
 use std::sync::Weak;
 
 use crate::collab::collab_db_ops;
@@ -151,7 +152,10 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
         Ok(data)
       },
       Err(e) => match e {
-        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound),
+        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound(format!(
+          "Can't find the row for query: {:?}",
+          params
+        ))),
         _ => Err(e.into()),
       },
     }

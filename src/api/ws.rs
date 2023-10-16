@@ -9,7 +9,7 @@ use realtime::client::{ClientSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
 
 use crate::biz::collab::access_control::CollabPermissionImpl;
-use database::user::uid_from_uuid;
+use database::user::select_uid_from_uuid;
 use shared_entity::app_error::AppError;
 use std::time::Duration;
 
@@ -35,7 +35,7 @@ pub async fn establish_ws_connection(
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let uid = uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppError::from)?;
   let realtime_user = Arc::new(RealtimeUserImpl::new(uid, user_uuid.to_string(), device_id));

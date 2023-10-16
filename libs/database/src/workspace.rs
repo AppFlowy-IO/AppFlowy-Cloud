@@ -59,6 +59,7 @@ pub async fn select_user_is_workspace_owner(
 /// 1. user is the member of the workspace
 /// 2. the collab object is not exist
 /// 3. the collab object is exist and the user is the member of the collab and the role is owner or member
+#[allow(dead_code)]
 pub async fn select_user_can_edit_collab(
   pg_pool: &PgPool,
   user_uuid: &Uuid,

@@ -77,7 +77,7 @@ where
             // before create a group, check the user is allowed to create a group.
             match self
               .permission_service
-              .is_allowed_send_by_user(uid, &object_id)
+              .can_send_message(uid, object_id)
               .await
             {
               Ok(is_allowed) => {
@@ -173,7 +173,7 @@ where
                   Box::pin(async move {
                     if let Some(uid) = msg_uid {
                       if let Err(err) = cloned_sink_permission_service
-                        .is_allowed_recv_by_user(uid, &object_id)
+                        .can_receive_message(uid, &object_id)
                         .await
                       {
                         trace!("client:{} fail to receive message. error: {}", uid, err);
@@ -196,7 +196,7 @@ where
                       None => true,
                       Some(uid) => {
                         match cloned_stream_permission_service
-                          .is_allowed_send_by_user(uid, &object_id)
+                          .can_send_message(uid, &object_id)
                           .await
                         {
                           Ok(is_allowed) => is_allowed,

@@ -19,6 +19,7 @@ pub fn router() -> Router<AppState> {
   Router::new()
       // TODO
     .route("/login", post(login_handler))
+    .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
     .route("/user/:param", post(post_user_handler).delete(delete_user_handler).put(put_user_handler))
     .route("/user/:email/generate-link", post(post_user_generate_link_handler))
@@ -124,6 +125,32 @@ pub async fn post_user_handler(
     .admin_add_user(&session.access_token, &add_user_params)
     .await?;
   Ok(user.into())
+}
+
+pub async fn login_refresh_handler(
+  State(state): State<AppState>,
+  jar: CookieJar,
+  Path(refresh_token): Path<String>,
+) -> Result<CookieJar, WebApiError<'static>> {
+  let token = state
+    .gotrue_client
+    .token(&gotrue::grant::Grant::RefreshToken(
+      gotrue::grant::RefreshTokenGrant { refresh_token },
+    ))
+    .await?;
+
+  let new_session_id = uuid::Uuid::new_v4();
+  let new_session = session::UserSession::new(
+    new_session_id.to_string(),
+    token.access_token.to_string(),
+    token.refresh_token.to_owned(),
+  );
+  state.session_store.put_user_session(&new_session).await?;
+
+  let mut cookie = Cookie::new("session_id", new_session_id.to_string());
+  cookie.set_path("/");
+
+  Ok(jar.add(cookie))
 }
 
 // TODO: Support OAuth2 login

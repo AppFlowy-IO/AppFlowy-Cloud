@@ -61,28 +61,30 @@
             });
         });
 
-      // OAuth
-      // Extract data from the URL fragment
-      const fragmentData = window.location.hash.substring(1); // Remove the leading #
-      const fragmentParams = new URLSearchParams(fragmentData); // Parse the fragment data as a URLSearchParams object
-      const refreshToken = fragmentParams.get("refresh_token"); // Extract the refresh_token
-      fetch(`/web-api/login_refresh/${refreshToken}`, {
-        // Login in via refresh_token
-        method: "POST",
-      })
-        .then((response) => {
-          if (!response.ok) {
-            // If HTTP status code is not OK, throw an error with the status text
-            throw Error(response.statusText);
-          }
-          window.location.href = "/web/home";
+      if (window.location.hash) {
+        // OAuth
+        // Extract data from the URL fragment
+        const fragmentData = window.location.hash.substring(1); // Remove the leading #
+        const fragmentParams = new URLSearchParams(fragmentData); // Parse the fragment data as a URLSearchParams object
+        const refreshToken = fragmentParams.get("refresh_token"); // Extract the refresh_token
+        fetch(`/web-api/login_refresh/${refreshToken}`, {
+          // Login in via refresh_token
+          method: "POST",
         })
-        .catch((error) => {
-          console.error(`Error:, ${error}`);
-          document.getElementById(
-            "response",
-          ).innerText = `OAuth Login failed: ${error.message}`;
-        });
+          .then((response) => {
+            if (!response.ok) {
+              // If HTTP status code is not OK, throw an error with the status text
+              throw Error(response.statusText);
+            }
+            window.location.href = "/web/home";
+          })
+          .catch((error) => {
+            console.error(`Error:, ${error}`);
+            document.getElementById(
+              "response",
+            ).innerText = `OAuth Login failed: ${error.message}`;
+          });
+      }
     </script>
   </body>
 </html>

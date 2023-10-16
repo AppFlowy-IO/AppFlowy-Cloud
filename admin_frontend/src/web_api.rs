@@ -4,7 +4,7 @@ use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
 use axum::extract::Path;
-use axum::http::status;
+use axum::http::{status, HeaderMap, HeaderValue};
 use axum::response::Result;
 use axum::Json;
 use axum::{extract::State, routing::post, Router};
@@ -22,6 +22,34 @@ pub fn router() -> Router<AppState> {
     .route("/logout", post(logout_handler))
     .route("/user/:param", post(post_user_handler).delete(delete_user_handler).put(put_user_handler))
     .route("/user/:email/generate-link", post(post_user_generate_link_handler))
+    .route("/oauth_login/:provider", post(post_oauth_login_handler))
+}
+
+static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
+static DEFAULT_SCHEME: HeaderValue = HeaderValue::from_static("http");
+pub async fn post_oauth_login_handler(
+  header_map: HeaderMap,
+  Path(provider): Path<String>,
+) -> Result<WebApiResponse<String>, WebApiError<'static>> {
+  let host = header_map
+    .get("host")
+    .unwrap_or(&DEFAULT_HOST)
+    .to_str()
+    .unwrap();
+  let scheme = header_map
+    .get("x-scheme")
+    .unwrap_or(&DEFAULT_SCHEME)
+    .to_str()
+    .unwrap();
+  let base_url = format!("{}://{}", scheme, host);
+
+  let oauth_url = format!(
+    "{}/authorize?provider={}&redirect_uri={}",
+    base_url,
+    &provider,
+    format!("{}/web/oauth_login_redirect", base_url)
+  );
+  Ok(oauth_url.into())
 }
 
 pub async fn put_user_handler(

@@ -15,6 +15,14 @@ pub fn router() -> Router<AppState> {
     .route("/admin", get(admin_handler))
     .route("/admin/users", get(admin_users_handler))
     .route("/admin/users/:user_id", get(admin_user_details_handler))
+    .route(
+      "/oauth_login_redirect",
+      get(oauth_login_login_redirect_handler),
+    )
+}
+
+pub async fn oauth_login_login_redirect_handler() -> Result<(), RenderError> {
+  todo!()
 }
 
 pub async fn login_handler() -> Result<Html<String>, RenderError> {

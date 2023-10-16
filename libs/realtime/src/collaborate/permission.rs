@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use database_entity::AFAccessLevel;
 use reqwest::Method;
 use std::fmt::Display;
 
@@ -12,6 +13,12 @@ pub enum CollabUserId<'a> {
 pub trait CollabPermission: Sync + Send + 'static {
   type Error: Display;
 
+  async fn get_access_level(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+  ) -> Result<AFAccessLevel, Self::Error>;
+
   /// Return true if the user from the HTTP request is allowed to access the collab object.
   /// This function will be called very frequently, so it should be very fast.
   ///  
@@ -19,7 +26,7 @@ pub trait CollabPermission: Sync + Send + 'static {
     &self,
     user: CollabUserId<'_>,
     oid: &str,
-    method: Method,
+    method: &Method,
   ) -> Result<bool, Self::Error>;
 
   /// Return true if the user is allowed to send the message.
@@ -28,11 +35,11 @@ pub trait CollabPermission: Sync + Send + 'static {
   /// The user can send the message if:
   /// 1. user is the member of the collab object
   /// 2. the permission level of the user is `ReadAndWrite` or `FullAccess`
-  async fn can_send_message(&self, uid: i64, oid: &str) -> Result<bool, Self::Error>;
+  async fn can_send_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error>;
 
   /// Return true if the user is allowed to send the message.
   /// This function will be called very frequently, so it should be very fast.
   ///
   /// The user can recv the message if the user is the member of the collab object
-  async fn can_receive_message(&self, uid: i64, oid: &str) -> Result<bool, Self::Error>;
+  async fn can_receive_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error>;
 }

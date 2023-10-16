@@ -1,9 +1,9 @@
 use anyhow::Context;
 use collab_entity::CollabType;
 use database_entity::{
-  database_error::DatabaseError, AFAccessLevel, AFCollabMember, AFCollabMemberPermission,
-  AFCollabSnapshot, AFCollabSnapshots, AFPermission, BatchQueryCollab, InsertCollabParams,
-  QueryCollabResult, RawData,
+  database_error::DatabaseError, AFAccessLevel, AFCollabMember, AFCollabSnapshot,
+  AFCollabSnapshots, AFPermission, BatchQueryCollab, InsertCollabParams, QueryCollabResult,
+  RawData,
 };
 
 use sqlx::postgres::PgRow;
@@ -348,25 +348,6 @@ pub async fn insert_collab_member(
   Ok(())
 }
 
-#[allow(dead_code)]
-pub async fn select_collab_member(
-  uid: i64,
-  oid: &str,
-  pg_pool: &PgPool,
-) -> Result<AFCollabMember, DatabaseError> {
-  let member = sqlx::query_as!(
-    AFCollabMember,
-    r#"
-      SELECT uid, oid, permission_id FROM af_collab_member WHERE uid = $1 AND oid = $2
-    "#,
-    uid,
-    oid
-  )
-  .fetch_one(pg_pool)
-  .await?;
-  Ok(member)
-}
-
 pub async fn delete_collab_member(
   uid: i64,
   oid: &str,
@@ -379,11 +360,32 @@ pub async fn delete_collab_member(
     .await?;
   Ok(())
 }
-pub async fn select_collab_member_permission(
-  uid: i64,
+
+pub async fn select_collab_members(
   oid: &str,
   pg_pool: &PgPool,
-) -> Result<AFCollabMemberPermission, DatabaseError> {
+) -> Result<Vec<AFCollabMember>, DatabaseError> {
+  let members = sqlx::query(
+    r#"
+      SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
+      FROM af_collab_member
+      JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
+      WHERE af_collab_member.oid = $1
+      "#,
+  )
+  .bind(oid)
+  .try_map(collab_member_try_from_row)
+  .fetch_all(pg_pool)
+  .await?;
+
+  Ok(members)
+}
+
+pub async fn select_collab_member(
+  uid: &i64,
+  oid: &str,
+  pg_pool: &PgPool,
+) -> Result<AFCollabMember, DatabaseError> {
   let member = sqlx::query(
   r#"
       SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
@@ -394,26 +396,29 @@ pub async fn select_collab_member_permission(
   )
   .bind(uid)
   .bind(oid)
-  .try_map(|row: PgRow| {
-    let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
-    let permission = AFPermission {
-      id: row.try_get(2)?,
-      name: row.try_get(3)?,
-      access_level,
-      description: row.try_get(5)?,
-    };
-
-    Ok(AFCollabMemberPermission {
-      uid: row.try_get(0)?,
-      oid: row.try_get(1)?,
-      permission,
-    })
-  })
+  .try_map(collab_member_try_from_row)
   .fetch_one(pg_pool)
   .await?;
   Ok(member)
 }
 
+fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error> {
+  let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
+  let permission = AFPermission {
+    id: row.try_get(2)?,
+    name: row.try_get(3)?,
+    access_level,
+    description: row.try_get(5)?,
+  };
+
+  Ok(AFCollabMember {
+    uid: row.try_get(0)?,
+    oid: row.try_get(1)?,
+    permission,
+  })
+}
+
+#[inline]
 pub async fn is_collab_member_exists(
   uid: i64,
   oid: &str,

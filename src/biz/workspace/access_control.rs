@@ -22,7 +22,7 @@ impl HttpAccessControlService for WorkspaceOwnerAccessControl {
     pg_pool: &PgPool,
   ) -> Result<(), AppError> {
     trace!(
-      "workspace access control: workspace_id: {:?}, user_uuid: {:?}",
+      "workspace_id: {:?}, user_uuid: {:?}",
       workspace_id,
       user_uuid
     );

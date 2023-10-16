@@ -1,9 +1,9 @@
 use database::user;
 
 use database_entity::{
-  AFCollabMemberPermission, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
-  InsertCollabMemberParams, InsertCollabParams, QueryObjectSnapshotParams, QuerySnapshotParams,
-  UpdateCollabMemberParams,
+  AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
+  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryObjectSnapshotParams,
+  QuerySnapshotParams, UpdateCollabMemberParams,
 };
 use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::Uuid, PgPool};
@@ -104,11 +104,10 @@ pub async fn upsert_collab_member(
 pub async fn get_collab_member(
   pg_pool: &PgPool,
   params: &CollabMemberIdentify,
-) -> Result<AFCollabMemberPermission, AppError> {
+) -> Result<AFCollabMember, AppError> {
   params.validate()?;
   let collab_member =
-    database::collab::select_collab_member_permission(params.uid, &params.object_id, pg_pool)
-      .await?;
+    database::collab::select_collab_member(&params.uid, &params.object_id, pg_pool).await?;
   Ok(collab_member)
 }
 
@@ -119,4 +118,12 @@ pub async fn delete_collab_member(
   params.validate()?;
   database::collab::delete_collab_member(params.uid, &params.object_id, pg_pool).await?;
   Ok(())
+}
+pub async fn get_collab_member_list(
+  pg_pool: &PgPool,
+  params: &QueryCollabMembers,
+) -> Result<Vec<AFCollabMember>, AppError> {
+  params.validate()?;
+  let collab_member = database::collab::select_collab_members(&params.object_id, pg_pool).await?;
+  Ok(collab_member)
 }

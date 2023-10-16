@@ -8,12 +8,13 @@ use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
 use sqlx::PgPool;
 
+use actix_router::{Path, Url};
 use actix_web::http::Method;
 use database::user::select_uid_from_uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tracing::trace;
+use tracing::{trace, warn};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -36,16 +37,13 @@ where
     user_uuid: &Uuid,
     _pg_pool: &PgPool,
     method: Method,
+    _path: Path<Url>,
   ) -> Result<(), AppError> {
-    trace!(
-      "Collab access control: oid: {:?}, user_uuid: {:?}",
-      oid,
-      user_uuid
-    );
+    trace!("oid: {:?}, user_uuid: {:?}", oid, user_uuid);
 
     match self
       .0
-      .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, method)
+      .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)
       .await
       .map_err(AppError::from)
     {
@@ -53,7 +51,13 @@ where
         if can_access {
           Ok(())
         } else {
-          Err(AppError::new(ErrorCode::NotEnoughPermissions, "123"))
+          Err(AppError::new(
+            ErrorCode::NotEnoughPermissions,
+            format!(
+              "Not enough permissions to access the collab: {} with http method: {}",
+              oid, method
+            ),
+          ))
         }
       },
       Err(err) => {
@@ -92,15 +96,22 @@ impl CollabPermissionImpl {
     let cloned_member_status_by_uid = member_status_by_uid.clone();
     tokio::spawn(async move {
       while let Ok(change) = listener.recv().await {
-        let oid = change.oid().to_string();
-        let uid = change.uid();
         match change.action_type {
           CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
-            let _ = refresh_from_db(uid, &oid, &cloned_pg_pool, &cloned_member_status_by_uid).await;
+            if let (Some(oid), Some(uid)) = (change.new_oid(), change.new_uid()) {
+              let _ =
+                refresh_from_db(uid, oid, &cloned_pg_pool, &cloned_member_status_by_uid).await;
+            } else {
+              warn!("The oid or uid is None")
+            }
           },
           CollabMemberAction::DELETE => {
-            if let Some(inner_map) = cloned_member_status_by_uid.write().await.get_mut(&uid) {
-              inner_map.insert(oid, MemberStatus::Deleted);
+            if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
+              if let Some(inner_map) = cloned_member_status_by_uid.write().await.get_mut(uid) {
+                inner_map.insert(oid.to_string(), MemberStatus::Deleted);
+              }
+            } else {
+              warn!("The oid or uid is None")
             }
           },
         }
@@ -114,43 +125,46 @@ impl CollabPermissionImpl {
   }
 
   /// Return the role of the user in the collab
-  async fn get_role_state(&self, uid: i64, oid: &str) -> Option<MemberStatus> {
+  async fn get_role_state(&self, uid: &i64, oid: &str) -> Option<MemberStatus> {
     self
       .member_status_by_uid
       .read()
       .await
-      .get(&uid)
+      .get(uid)
       .map(|map| map.get(oid).cloned())?
   }
 
   #[inline]
   async fn get_user_collab_access_level(
     &self,
-    uid: i64,
+    uid: &i64,
     oid: &str,
-  ) -> Result<Option<AFAccessLevel>, AppError> {
-    let role_status = match self.get_role_state(uid, oid).await {
+  ) -> Result<AFAccessLevel, AppError> {
+    let member_status = match self.get_role_state(uid, oid).await {
       None => refresh_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid).await?,
       Some(status) => status,
     };
 
-    match role_status {
-      MemberStatus::Deleted => Ok(None),
-      MemberStatus::Valid(access_level) => Ok(Some(access_level)),
+    match member_status {
+      MemberStatus::Deleted => Err(AppError::new(
+        ErrorCode::NotEnoughPermissions,
+        "The user is not the member of the collab",
+      )),
+      MemberStatus::Valid(access_level) => Ok(access_level),
     }
   }
 }
 
 #[inline]
 async fn refresh_from_db(
-  uid: i64,
+  uid: &i64,
   oid: &str,
   pg_pool: &PgPool,
   member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
 ) -> Result<MemberStatus, AppError> {
-  let member = database::collab::select_collab_member_permission(uid, oid, pg_pool).await?;
+  let member = database::collab::select_collab_member(uid, oid, pg_pool).await?;
   let mut outer_map = member_status_by_uid.write().await;
-  let inner_map = outer_map.entry(uid).or_insert_with(HashMap::new);
+  let inner_map = outer_map.entry(*uid).or_insert_with(HashMap::new);
   inner_map.insert(
     member.oid,
     MemberStatus::Valid(member.permission.access_level.clone()),
@@ -161,51 +175,49 @@ async fn refresh_from_db(
 impl CollabPermission for CollabPermissionImpl {
   type Error = AppError;
 
+  async fn get_access_level(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+  ) -> Result<AFAccessLevel, Self::Error> {
+    match user {
+      CollabUserId::UserId(uid) => self.get_user_collab_access_level(uid, oid).await,
+      CollabUserId::UserUuid(uuid) => {
+        let uid = select_uid_from_uuid(&self.pg_pool, uuid).await?;
+        self.get_user_collab_access_level(&uid, oid).await
+      },
+    }
+  }
+
   async fn can_access_http_method(
     &self,
     user: CollabUserId<'_>,
     oid: &str,
-    method: Method,
+    method: &Method,
   ) -> Result<bool, Self::Error> {
-    let level = match user {
-      CollabUserId::UserId(uid) => self.get_user_collab_access_level(*uid, oid).await,
-      CollabUserId::UserUuid(uuid) => {
-        let uid = select_uid_from_uuid(&self.pg_pool, uuid).await?;
-        self.get_user_collab_access_level(uid, oid).await
-      },
-    }?;
-
+    let level = self.get_access_level(user, oid).await?;
     trace!("Collab member access level: {:?}", level);
-    let can = match level {
-      None => false,
-      Some(level) => {
-        if Method::POST == method || Method::PUT == method || Method::DELETE == method {
-          level.can_write()
-        } else {
-          true
-        }
-      },
-    };
-
-    Ok(can)
-  }
-
-  #[inline]
-  async fn can_send_message(&self, uid: i64, oid: &str) -> Result<bool, Self::Error> {
-    match self.get_user_collab_access_level(uid, oid).await? {
-      None => Ok(false),
-      Some(level) => match level {
-        AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => Ok(false),
-        AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => Ok(true),
-      },
+    if Method::POST == method || Method::PUT == method || Method::DELETE == method {
+      Ok(level.can_write())
+    } else {
+      Ok(true)
     }
   }
 
   #[inline]
-  async fn can_receive_message(&self, uid: i64, oid: &str) -> Result<bool, Self::Error> {
-    match self.get_user_collab_access_level(uid, oid).await? {
-      None => Ok(false),
-      Some(_) => Ok(true),
+  async fn can_send_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
+    let level = self.get_user_collab_access_level(uid, oid).await?;
+    match level {
+      AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => Ok(false),
+      AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => Ok(true),
     }
+  }
+
+  #[inline]
+  async fn can_receive_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
+    self
+      .get_user_collab_access_level(uid, oid)
+      .await
+      .map(|_| true)
   }
 }

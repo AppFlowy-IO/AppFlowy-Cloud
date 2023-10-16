@@ -295,14 +295,17 @@ pub struct AFWorkspaceMember {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct AFCollabMemberPermission {
+pub struct AFCollabMember {
   pub uid: i64,
   pub oid: String,
   pub permission: AFPermission,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct AFCollabMembers(pub Vec<AFCollabMember>);
+
 #[derive(FromRow, Clone, Debug, Serialize, Deserialize)]
-pub struct AFCollabMember {
+pub struct AFCollabMemberRow {
   pub uid: i64,
   pub oid: String,
   pub permission_id: i64,
@@ -358,6 +361,14 @@ pub type UpdateCollabMemberParams = InsertCollabMemberParams;
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CollabMemberIdentify {
   pub uid: i64,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct QueryCollabMembers {
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   #[validate(custom = "validate_not_empty_str")]

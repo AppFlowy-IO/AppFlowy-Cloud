@@ -1,6 +1,7 @@
 use crate::component::auth::jwt::UserUuid;
 
 use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
+use actix_router::{Path, Url};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ResourceDef, ServiceRequest, ServiceResponse};
 use actix_web::http::Method;
@@ -45,6 +46,7 @@ pub trait HttpAccessControlService: Send + Sync {
     user_uuid: &Uuid,
     pg_pool: &PgPool,
     method: Method,
+    path: Path<Url>,
   ) -> Result<(), AppError> {
     Ok(())
   }
@@ -78,10 +80,11 @@ where
     user_uuid: &Uuid,
     pg_pool: &PgPool,
     method: Method,
+    path: Path<Url>,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool, method)
+      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool, method, path)
       .await
   }
 }
@@ -218,6 +221,7 @@ where
                     &user_uuid,
                     &pg_pool,
                     method,
+                    path,
                   )
                   .await
                 {

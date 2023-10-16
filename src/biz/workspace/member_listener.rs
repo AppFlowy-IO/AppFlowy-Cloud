@@ -2,6 +2,7 @@ use crate::biz::pg_listener::PostgresDBListener;
 use collab::preclude::Uuid;
 use serde::Deserialize;
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Deserialize, Clone, Debug)]
 pub enum WorkspaceMemberAction {
   INSERT,

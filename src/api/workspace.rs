@@ -48,6 +48,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(delete_collab_member_handler)),
     )
     .service(
+      web::resource("{workspace_id}/collab/{object_id}/member/list")
+        .route(web::get().to(get_collab_member_list_handler)),
+    )
+    .service(
       web::resource("{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
     )
     .service(web::resource("snapshot").route(web::get().to(retrieve_snapshot_data_handler)))
@@ -245,7 +249,7 @@ async fn get_collab_member_handler(
   required_id: RequestId,
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<AFCollabMemberPermission>>> {
+) -> Result<Json<AppResponse<AFCollabMember>>> {
   let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload.into_inner()).await?;
   Ok(Json(AppResponse::Ok().with_data(member)))
 }
@@ -259,4 +263,16 @@ async fn delete_collab_member_handler(
 ) -> Result<Json<AppResponse<()>>> {
   biz::collab::ops::delete_collab_member(&state.pg_pool, &payload.into_inner()).await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn get_collab_member_list_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<QueryCollabMembers>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFCollabMembers>>> {
+  let members =
+    biz::collab::ops::get_collab_member_list(&state.pg_pool, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok().with_data(AFCollabMembers(members))))
 }

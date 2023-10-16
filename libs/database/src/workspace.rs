@@ -88,11 +88,11 @@ pub async fn select_user_can_edit_collab(
             EXISTS(
                 SELECT 1
                 FROM af_collab_member
-                JOIN af_roles ON af_collab_member.role_id = af_roles.id
+                JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
                 WHERE 
                     af_collab_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND 
                     af_collab_member.oid = $2 AND 
-                    (af_roles.id = 1 OR af_roles.id = 2)
+                    af_permissions.access_level > 20
             )
         ) AS "permission_check"
     FROM workspace_check, collab_check;

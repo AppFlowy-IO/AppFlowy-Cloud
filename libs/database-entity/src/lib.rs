@@ -239,6 +239,8 @@ impl From<AFRole> for i32 {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AFPermission {
+  /// The permission id
+  pub id: i64,
   pub name: String,
   pub access_level: AFPermissionLevel,
   pub description: String,
@@ -302,7 +304,7 @@ pub struct AFWorkspaceMember {
 pub struct AFCollabMember {
   pub uid: i64,
   pub oid: String,
-  pub role_id: AFRole,
+  pub permission: AFPermission,
 }
 
 #[derive(FromRow, Serialize, Deserialize)]

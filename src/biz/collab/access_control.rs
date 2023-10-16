@@ -4,7 +4,7 @@ use crate::component::auth::jwt::UserUuid;
 use crate::middleware::access_control_mw::{AccessControlService, AccessResource};
 use anyhow::Error;
 use async_trait::async_trait;
-use database_entity::AFRole;
+use database_entity::{AFCollabMember, AFPermissionLevel, AFRole};
 use realtime::collaborate::CollabPermission;
 use shared_entity::app_error::AppError;
 use sqlx::PgPool;
@@ -40,18 +40,18 @@ impl AccessControlService for CollabAccessControl {
   }
 }
 
-type RoleStatusByOid = HashMap<String, RoleStatus>;
+type CollabMemberStatusByOid = HashMap<String, MemberStatus>;
 
 /// Use to check if the user is allowed to send or receive the [CollabMessage]
 pub struct CollabPermissionImpl {
   pg_pool: PgPool,
-  role_by_uid: Arc<RwLock<HashMap<i64, RoleStatusByOid>>>,
+  role_by_uid: Arc<RwLock<HashMap<i64, CollabMemberStatusByOid>>>,
 }
 
 #[derive(Clone, Debug)]
-enum RoleStatus {
+enum MemberStatus {
   Deleted,
-  Valid(AFRole),
+  Valid(AFPermissionLevel),
 }
 
 impl CollabPermissionImpl {
@@ -66,11 +66,11 @@ impl CollabPermissionImpl {
           CollabMemberAction::Insert | CollabMemberAction::Update => {
             let mut outer_map = cloned_role_by_uid.write().await;
             let inner_map = outer_map.entry(change.uid).or_insert_with(HashMap::new);
-            inner_map.insert(change.oid.clone(), RoleStatus::Valid(change.role));
+            inner_map.insert(change.oid.clone(), MemberStatus::Valid(change.role));
           },
           CollabMemberAction::Delete => {
             if let Some(mut inner_map) = cloned_role_by_uid.write().await.get_mut(&change.uid) {
-              inner_map.insert(change.oid.clone(), RoleStatus::Deleted);
+              inner_map.insert(change.oid.clone(), MemberStatus::Deleted);
             }
           },
         }
@@ -84,7 +84,7 @@ impl CollabPermissionImpl {
   }
 
   /// Return the role of the user in the collab
-  async fn get_role_state(&self, uid: i64, oid: &str) -> Option<RoleStatus> {
+  async fn get_role_state(&self, uid: i64, oid: &str) -> Option<MemberStatus> {
     self
       .role_by_uid
       .read()
@@ -94,12 +94,15 @@ impl CollabPermissionImpl {
   }
 
   #[inline]
-  async fn refresh_state_from_db(&self, uid: i64, oid: &str) -> Result<RoleStatus, Error> {
+  async fn refresh_state_from_db(&self, uid: i64, oid: &str) -> Result<MemberStatus, Error> {
     let member = database::collab::select_collab_member(uid, oid, &self.pg_pool).await?;
     let mut outer_map = self.role_by_uid.write().await;
     let inner_map = outer_map.entry(uid).or_insert_with(HashMap::new);
-    inner_map.insert(member.oid, RoleStatus::Valid(member.role_id.clone()));
-    Ok(RoleStatus::Valid(member.role_id))
+    inner_map.insert(
+      member.oid,
+      MemberStatus::Valid(member.permission.access_level.clone()),
+    );
+    Ok(MemberStatus::Valid(member.permission.access_level))
   }
 
   #[inline]
@@ -110,10 +113,10 @@ impl CollabPermissionImpl {
     };
 
     match role_status {
-      RoleStatus::Deleted => Ok(false),
-      RoleStatus::Valid(role) => match role {
-        AFRole::Owner | AFRole::Member => Ok(true),
-        AFRole::Guest => Ok(false),
+      MemberStatus::Deleted => Ok(false),
+      MemberStatus::Valid(access_level) => match access_level {
+        AFPermissionLevel::ReadOnly | AFPermissionLevel::ReadAndComment => Ok(false),
+        AFPermissionLevel::ReadAndWrite | AFPermissionLevel::FullAccess => Ok(true),
       },
     }
   }

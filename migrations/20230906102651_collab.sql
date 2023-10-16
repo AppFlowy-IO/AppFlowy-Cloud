@@ -27,7 +27,7 @@ VALUES IN (5);
 CREATE TABLE af_collab_member (
     uid BIGINT REFERENCES af_user(uid) ON DELETE CASCADE,
     oid TEXT NOT NULL ,
-    role_id INTEGER REFERENCES af_roles(id),
+    permission_id INTEGER REFERENCES af_permissions(id),
     PRIMARY KEY(uid, oid)
 );
 

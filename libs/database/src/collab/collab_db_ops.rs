@@ -1,11 +1,12 @@
 use anyhow::Context;
 use collab_entity::CollabType;
 use database_entity::{
-  database_error::DatabaseError, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots,
-  BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
+  database_error::DatabaseError, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots, AFPermission,
+  AFPermissionLevel, BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
 };
 
-use sqlx::{PgPool, Transaction};
+use sqlx::postgres::PgRow;
+use sqlx::{PgPool, Row, Transaction};
 use std::collections::HashMap;
 use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, trace};
@@ -88,10 +89,17 @@ pub async fn insert_af_collab(
       }
     },
     None => {
-      // Get the 'Owner' role_id from af_roles
-      let role_id: i32 = sqlx::query_scalar!("SELECT id FROM af_roles WHERE name = 'Owner'")
-        .fetch_one(tx.deref_mut())
-        .await?;
+      // Get the permission_id of the Owner
+      let permission_id: i32 = sqlx::query_scalar!(
+        r#"
+          SELECT rp.permission_id 
+          FROM af_role_permissions rp
+          JOIN af_roles ON rp.role_id = af_roles.id
+          WHERE af_roles.name = 'Owner';
+        "#
+      )
+      .fetch_one(tx.deref_mut())
+      .await?;
 
       trace!(
         "Insert new af_collab row: {}:{}:{}",
@@ -102,16 +110,16 @@ pub async fn insert_af_collab(
 
       // Insert into af_collab_member
       sqlx::query!(
-        "INSERT INTO af_collab_member (oid, uid, role_id) VALUES ($1, $2, $3)",
+        "INSERT INTO af_collab_member (oid, uid, permission_id) VALUES ($1, $2, $3)",
         params.object_id,
         owner_uid,
-        role_id
+        permission_id
       )
       .execute(tx.deref_mut())
       .await
       .context(format!(
         "Insert af_collab_member failed: {}:{}:{}",
-        owner_uid, params.object_id, role_id
+        owner_uid, params.object_id, permission_id
       ))?;
 
       sqlx::query!(
@@ -295,14 +303,31 @@ pub async fn select_collab_member(
   oid: &str,
   pg_pool: &PgPool,
 ) -> Result<AFCollabMember, DatabaseError> {
-  let member = sqlx::query_as!(
-    AFCollabMember,
-    r#"
-      SELECT * FROM af_collab_member WHERE uid = $1 AND oid = $2;
-    "#,
-    uid,
-    oid,
+  let member = sqlx::query(
+  r#"
+      SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
+      FROM af_collab_member
+      JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
+      WHERE af_collab_member.uid = $1 AND af_collab_member.oid = $2
+      "#,
   )
+  .bind(uid)
+  .bind(oid)
+  .map(|row: PgRow| {
+    let access_level = AFPermissionLevel::from(row.get::<i32,_>(4));
+    let permission = AFPermission {
+      id: row.get(2),
+      name: row.get(3),
+      access_level,
+      description: row.get(5),
+    };
+
+    AFCollabMember {
+      uid: row.get(0),
+      oid: row.get(1),
+      permission,
+    }
+  })
   .fetch_one(pg_pool)
   .await?;
   Ok(member)

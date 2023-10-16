@@ -69,14 +69,14 @@ where
 
   async fn check_collab_permission(
     &self,
-    _workspace_id: &Uuid,
-    _oid: &str,
-    _user_uuid: &UserUuid,
-    _pg_pool: &PgPool,
+    workspace_id: &Uuid,
+    oid: &str,
+    user_uuid: &UserUuid,
+    pg_pool: &PgPool,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_collab_permission(_workspace_id, _oid, _user_uuid, _pg_pool)
+      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool)
       .await
   }
 }

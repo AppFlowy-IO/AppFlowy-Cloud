@@ -1,13 +1,13 @@
 use crate::collaborate::CollabClientStream;
-
 use anyhow::{anyhow, Error};
-
 use collab::core::origin::CollabOrigin;
 use database::collab::CollabStorage;
 use futures_util::SinkExt;
 use parking_lot::Mutex;
 use realtime_entity::collab_msg::CollabMessage;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::future;
 use std::future::Future;
 use std::iter::Take;
 use std::pin::Pin;
@@ -20,24 +20,28 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, Retry, RetryIf};
 
 use crate::collaborate::group::CollabGroupCache;
+use crate::collaborate::permission::CollabPermission;
 use crate::error::RealtimeError;
 use tracing::{error, trace, warn};
 
-pub(crate) struct SubscribeGroupIfNeed<'a, U, S> {
+pub(crate) struct SubscribeGroupIfNeed<'a, U, S, P> {
   pub(crate) client_msg: &'a ClientMessage<U>,
   pub(crate) groups: &'a Arc<CollabGroupCache<S, U>>,
   pub(crate) edit_collab_by_user: &'a Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   pub(crate) client_stream_by_user: &'a Arc<RwLock<HashMap<U, CollabClientStream>>>,
+  pub(crate) permission_service: &'a Arc<P>,
 }
 
-impl<'a, U, S> SubscribeGroupIfNeed<'a, U, S>
+impl<'a, U, S, P> SubscribeGroupIfNeed<'a, U, S, P>
 where
   U: RealtimeUser,
   S: CollabStorage,
+  P: CollabPermission,
 {
   pub(crate) fn run(
     self,
-  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S>, SubscribeGroupCondition<U>> {
+  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S, P>, SubscribeGroupCondition<U>>
+  {
     let weak_client_stream = Arc::downgrade(self.client_stream_by_user);
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
     RetryIf::spawn(
@@ -48,10 +52,11 @@ where
   }
 }
 
-impl<'a, U, S> Action for SubscribeGroupIfNeed<'a, U, S>
+impl<'a, U, S, P> Action for SubscribeGroupIfNeed<'a, U, S, P>
 where
   U: RealtimeUser,
   S: CollabStorage,
+  P: CollabPermission,
 {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + 'a>>;
   type Item = ();
@@ -68,6 +73,24 @@ where
               .origin
               .client_user_id()
               .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
+
+            // before create a group, check the user is allowed to create a group.
+            match self
+              .permission_service
+              .can_send_message(&uid, object_id)
+              .await
+            {
+              Ok(is_allowed) => {
+                if !is_allowed {
+                  return Ok(());
+                }
+              },
+              Err(err) => {
+                warn!("fail to create group. error: {}", err);
+                return Ok(());
+              },
+            }
+
             self
               .groups
               .create_group(
@@ -112,38 +135,88 @@ where
         None => warn!("The client stream is not found"),
         Some(client_stream) => {
           if let Some(collab_group) = self.groups.get_group(object_id).await {
-            collab_group
+            if let Entry::Vacant(entry) = collab_group
               .subscribers
               .write()
               .await
               .entry(self.client_msg.user.clone())
-              .or_insert_with(|| {
-                trace!(
-                  "[💭Server]: {} subscribe group:{}",
-                  self.client_msg.user,
-                  self.client_msg.content.object_id()
-                );
+            {
+              trace!(
+                "[💭Server]: {} subscribe group:{}",
+                self.client_msg.user,
+                self.client_msg.content.object_id()
+              );
 
-                self
-                  .edit_collab_by_user
-                  .lock()
-                  .entry(self.client_msg.user.clone())
-                  .or_default()
-                  .insert(Editing {
-                    object_id: object_id.to_string(),
-                    origin: origin.clone(),
-                  });
+              self
+                .edit_collab_by_user
+                .lock()
+                .entry(self.client_msg.user.clone())
+                .or_default()
+                .insert(Editing {
+                  object_id: object_id.to_string(),
+                  origin: origin.clone(),
+                });
 
-                let (sink, stream) = client_stream
-                  .client_channel::<CollabMessage, _>(object_id, move |object_id, msg| {
-                    msg.object_id() == object_id
+              let sink_permission_service = self.permission_service.clone();
+              let stream_permission_service = self.permission_service.clone();
+
+              let (sink, stream) = client_stream.client_channel::<CollabMessage, _, _>(
+                object_id,
+                move |object_id, msg| {
+                  if msg.object_id() != object_id {
+                    return Box::pin(future::ready(false));
+                  }
+
+                  let msg_uid = msg.uid();
+                  let object_id = object_id.to_string();
+                  let cloned_sink_permission_service = sink_permission_service.clone();
+                  Box::pin(async move {
+                    if let Some(uid) = msg_uid {
+                      if let Err(err) = cloned_sink_permission_service
+                        .can_receive_message(&uid, &object_id)
+                        .await
+                      {
+                        trace!("client:{} fail to receive message. error: {}", uid, err);
+                        return false;
+                      }
+                    }
+                    true
                   })
-                  .unwrap();
+                },
+                move |object_id, msg| {
+                  if msg.object_id != object_id {
+                    return Box::pin(future::ready(false));
+                  }
 
+                  let object_id = object_id.to_string();
+                  let msg_uid = msg.uid;
+                  let cloned_stream_permission_service = stream_permission_service.clone();
+                  Box::pin(async move {
+                    match msg_uid {
+                      None => true,
+                      Some(uid) => {
+                        match cloned_stream_permission_service
+                          .can_send_message(&uid, &object_id)
+                          .await
+                        {
+                          Ok(is_allowed) => is_allowed,
+                          Err(err) => {
+                            trace!("client:{} fail to send message. error: {}", uid, err);
+                            false
+                          },
+                        }
+                      },
+                    }
+                  })
+                },
+              );
+
+              entry.insert(
                 collab_group
                   .broadcast
-                  .subscribe(origin.clone(), sink, stream)
-              });
+                  .subscribe(origin.clone(), sink, stream),
+              );
+            }
           }
         },
       }

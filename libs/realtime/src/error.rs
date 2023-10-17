@@ -30,6 +30,12 @@ pub enum RealtimeError {
   #[error(transparent)]
   StorageError(#[from] DatabaseError),
 
+  #[error("Received message from client:{0}, but the client does not have sufficient permissions to write")]
+  NotEnoughPermissionToWrite(i64),
+
+  #[error("Client:{0} does not have enough permission to read")]
+  NotEnoughPermissionToRead(i64),
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }

@@ -32,9 +32,6 @@ pub async fn select_user_is_workspace_owner(
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
 ) -> Result<bool, DatabaseError> {
-  // 1. Identifies the user's UID in the 'af_user' table using the provided user UUID ($2).
-  // 2. Then, it checks the 'af_workspace_member' table to find a record that matches the provided workspace_id ($1) and the identified UID.
-  // 3. It joins with 'af_roles' to ensure that the role associated with the workspace member is 'Owner'.
   let exists = sqlx::query_scalar!(
     r#"
   SELECT EXISTS(
@@ -62,6 +59,7 @@ pub async fn select_user_is_workspace_owner(
 /// 1. user is the member of the workspace
 /// 2. the collab object is not exist
 /// 3. the collab object is exist and the user is the member of the collab and the role is owner or member
+#[allow(dead_code)]
 pub async fn select_user_can_edit_collab(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
@@ -91,11 +89,11 @@ pub async fn select_user_can_edit_collab(
             EXISTS(
                 SELECT 1
                 FROM af_collab_member
-                JOIN af_roles ON af_collab_member.role_id = af_roles.id
+                JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
                 WHERE 
                     af_collab_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND 
                     af_collab_member.oid = $2 AND 
-                    (af_roles.id = 1 OR af_roles.id = 2)
+                    af_permissions.access_level > 20
             )
         ) AS "permission_check"
     FROM workspace_check, collab_check;

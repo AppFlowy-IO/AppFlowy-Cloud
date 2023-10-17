@@ -26,7 +26,8 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::workspace_scope;
 use crate::api::ws::ws_scope;
-use crate::biz::collab::access_control::CollabAccessControl;
+use crate::biz::collab::access_control::{CollabAccessControl, CollabPermissionImpl};
+use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::access_control::WorkspaceOwnerAccessControl;
 use crate::component::storage_proxy::CollabStorageProxy;
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
@@ -81,13 +82,16 @@ pub async fn run(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_storage.clone();
-  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>>::new(storage.collab_storage.clone())
-    .unwrap()
-    .start();
+  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
+    storage.collab_storage.clone(),
+    state.collab_permission.clone(),
+  )
+  .unwrap()
+  .start();
 
   let access_control = WorkspaceAccessControl::new(state.pg_pool.clone())
     .with_acs(WorkspaceOwnerAccessControl)
-    .with_acs(CollabAccessControl);
+    .with_acs(CollabAccessControl(state.collab_permission.clone()));
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -138,6 +142,15 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
+
+  // TODO(nathan): Maybe PgListeners shouldn't return error
+  let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
+  let collab_member_listener = pg_listeners.subscribe_collab_member_change();
+  let collab_permission = Arc::new(CollabPermissionImpl::new(
+    pg_pool.clone(),
+    collab_member_listener,
+  ));
+
   let collab_storage = init_storage(config, pg_pool.clone()).await?;
 
   Ok(AppState {
@@ -148,7 +161,9 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     gotrue_client,
     redis_client,
     collab_storage,
+    collab_permission,
     bucket_storage,
+    pg_listeners,
   })
 }
 

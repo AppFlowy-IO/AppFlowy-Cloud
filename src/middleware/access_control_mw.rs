@@ -1,8 +1,10 @@
 use crate::component::auth::jwt::UserUuid;
 
 use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
+use actix_router::{Path, Url};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ResourceDef, ServiceRequest, ServiceResponse};
+use actix_web::http::Method;
 use actix_web::Error;
 use async_trait::async_trait;
 use futures_util::future::LocalBoxFuture;
@@ -23,33 +25,37 @@ pub enum AccessResource {
 }
 
 #[async_trait]
-pub trait AccessControlService: Send + Sync {
+pub trait HttpAccessControlService: Send + Sync {
   fn resource(&self) -> AccessResource;
 
+  #[allow(unused_variables)]
   async fn check_workspace_permission(
     &self,
-    _workspace_id: &Uuid,
-    _user_uuid: &UserUuid,
-    _pg_pool: &PgPool,
+    workspace_id: &Uuid,
+    user_uuid: &UserUuid,
+    pg_pool: &PgPool,
   ) -> Result<(), AppError> {
     Ok(())
   }
 
+  #[allow(unused_variables)]
   async fn check_collab_permission(
     &self,
-    _workspace_id: &Uuid,
-    _oid: &str,
-    _user_uuid: &UserUuid,
-    _pg_pool: &PgPool,
+    workspace_id: &Uuid,
+    oid: &str,
+    user_uuid: &Uuid,
+    pg_pool: &PgPool,
+    method: Method,
+    path: Path<Url>,
   ) -> Result<(), AppError> {
     Ok(())
   }
 }
 
 #[async_trait]
-impl<T> AccessControlService for Arc<T>
+impl<T> HttpAccessControlService for Arc<T>
 where
-  T: AccessControlService,
+  T: HttpAccessControlService,
 {
   fn resource(&self) -> AccessResource {
     self.as_ref().resource()
@@ -69,19 +75,21 @@ where
 
   async fn check_collab_permission(
     &self,
-    _workspace_id: &Uuid,
-    _oid: &str,
-    _user_uuid: &UserUuid,
-    _pg_pool: &PgPool,
+    workspace_id: &Uuid,
+    oid: &str,
+    user_uuid: &Uuid,
+    pg_pool: &PgPool,
+    method: Method,
+    path: Path<Url>,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_collab_permission(_workspace_id, _oid, _user_uuid, _pg_pool)
+      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool, method, path)
       .await
   }
 }
 
-pub type AccessControlServices = Arc<HashMap<AccessResource, Arc<dyn AccessControlService>>>;
+pub type AccessControlServices = Arc<HashMap<AccessResource, Arc<dyn HttpAccessControlService>>>;
 
 #[derive(Clone)]
 pub struct WorkspaceAccessControl {
@@ -97,7 +105,10 @@ impl WorkspaceAccessControl {
     }
   }
 
-  pub fn with_acs<T: AccessControlService + 'static>(mut self, access_control_service: T) -> Self {
+  pub fn with_acs<T: HttpAccessControlService + 'static>(
+    mut self,
+    access_control_service: T,
+  ) -> Self {
     let resource = access_control_service.resource();
     Arc::make_mut(&mut self.access_control_services)
       .insert(resource, Arc::new(access_control_service));
@@ -177,6 +188,7 @@ where
           .and_then(|id| Uuid::parse_str(id).ok());
         let collab_object_id = path.get(COLLAB_OBJECT_ID_PATH).map(|id| id.to_string());
 
+        let method = req.method().clone();
         let fut = self.service.call(req);
         let pg_pool = self.pg_pool.clone();
         let services = self.access_control_service.clone();
@@ -208,6 +220,8 @@ where
                     &collab_object_id,
                     &user_uuid,
                     &pg_pool,
+                    method,
+                    path,
                   )
                   .await
                 {

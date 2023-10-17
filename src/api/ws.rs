@@ -5,9 +5,12 @@ use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use std::sync::Arc;
 
-use realtime::client::{ClientWSSession, RealtimeUserImpl};
+use realtime::client::{ClientSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
 
+use crate::biz::collab::access_control::CollabPermissionImpl;
+use database::user::select_uid_from_uuid;
+use shared_entity::app_error::AppError;
 use std::time::Duration;
 
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
@@ -26,14 +29,17 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>>>>,
+  server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>, CollabPermissionImpl>>>,
 ) -> Result<HttpResponse> {
   tracing::info!("receive ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let realtime_user = Arc::new(RealtimeUserImpl::new(user_uuid.to_string(), device_id));
-  let client = ClientWSSession::new(
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppError::from)?;
+  let realtime_user = Arc::new(RealtimeUserImpl::new(uid, user_uuid.to_string(), device_id));
+  let client = ClientSession::new(
     realtime_user,
     server.get_ref().clone(),
     Duration::from_secs(state.config.websocket.heartbeat_interval as u64),

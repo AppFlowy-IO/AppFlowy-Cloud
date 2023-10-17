@@ -22,6 +22,7 @@ async-trait = "0.1.73"
 anyhow = "1.0.75"
 serde_repr = "0.1.6"
 tokio-retry = "0.3.0"
+reqwest = "0.11.18"
 
 collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }
@@ -31,6 +32,8 @@ yrs = "0.16.5"
 lib0 = "0.16.3"
 chrono = "0.4.30"
 realtime-entity = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
+
 [dev-dependencies]
 actix = "0.13"
 actix-web = { version = "4.3.1" }
@@ -45,4 +48,3 @@ tracing-log = "0.1.1"
 serde-aux = "4.2.0"
 tempfile = "3.8.0"
 assert-json-diff = "2.0.2"
-uuid = { version = "1", features = ["v4"] }

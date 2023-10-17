@@ -25,7 +25,7 @@ async fn refresh_trigger() {
     .as_secs() as i64;
 
   // querying that requires auth should trigger a refresh
-  let _workspaces = c.workspaces().await.unwrap();
+  let _workspaces = c.get_workspaces().await.unwrap();
   let new_token = c.access_token().unwrap();
 
   assert_ne!(old_access_token, new_token);

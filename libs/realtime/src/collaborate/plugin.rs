@@ -75,7 +75,7 @@ where
       collab_type: self.collab_type.clone(),
     };
 
-    match self.storage.get_collab(params).await {
+    match self.storage.get_collab(&self.uid, params).await {
       Ok(raw_data) => match init_collab_with_raw_data(raw_data, doc) {
         Ok(_) => {},
         Err(e) => {
@@ -85,7 +85,7 @@ where
       },
       Err(err) => {
         match &err {
-          DatabaseError::RecordNotFound => {
+          DatabaseError::RecordNotFound(_) => {
             let raw_data = {
               let txn = doc.transact();
               txn.encode_state_as_update_v1(&StateVector::default())
@@ -96,7 +96,7 @@ where
               raw_data,
               &self.workspace_id,
             );
-            match self.storage.insert_collab(self.uid, params).await {
+            match self.storage.insert_collab(&self.uid, params).await {
               Ok(_) => {},
               Err(err) => tracing::error!("{:?}", err),
             }
@@ -149,7 +149,7 @@ where
     let uid = self.uid;
     tokio::spawn(async move {
       let object_id = params.object_id.clone();
-      match storage.insert_collab(uid, params).await {
+      match storage.insert_collab(&uid, params).await {
         Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
         Err(err) => tracing::error!("save collab failed: {:?}", err),
       }

@@ -89,9 +89,11 @@ async fn add_collab_member_test() {
     .await
     .unwrap();
 
+  // create new client
   let (c_2, _user) = generate_unique_registered_user_client().await;
   let uid_2 = c_2.get_profile().await.unwrap().uid.unwrap();
 
+  // add new member
   c_1
     .add_collab_member(InsertCollabMemberParams {
       uid: uid_2,
@@ -102,6 +104,7 @@ async fn add_collab_member_test() {
     .await
     .unwrap();
 
+  // check the member is added and its permission is correct
   let member = c_1
     .get_collab_member(CollabMemberIdentify {
       uid: uid_2,
@@ -110,7 +113,6 @@ async fn add_collab_member_test() {
     })
     .await
     .unwrap();
-
   assert_eq!(
     member.permission.access_level,
     AFAccessLevel::ReadAndComment

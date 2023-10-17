@@ -18,9 +18,6 @@ pub enum DatabaseError {
   #[error(transparent)]
   SqlxError(sqlx::Error),
 
-  #[error(transparent)]
-  PgDatabaseError(sqlx::postgres::PgDatabaseError),
-
   #[error("Storage space not enough")]
   StorageSpaceNotEnough,
 

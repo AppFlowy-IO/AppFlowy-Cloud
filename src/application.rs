@@ -142,16 +142,16 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
-  let collab_storage = init_storage(config, pg_pool.clone()).await?;
 
   // TODO(nathan): Maybe PgListeners shouldn't return error
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
-
   let collab_member_listener = pg_listeners.subscribe_collab_member_change();
   let collab_permission = Arc::new(CollabPermissionImpl::new(
     pg_pool.clone(),
     collab_member_listener,
   ));
+
+  let collab_storage = init_storage(config, pg_pool.clone()).await?;
 
   Ok(AppState {
     pg_pool,

@@ -49,7 +49,7 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 ///
 pub async fn insert_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
-  owner_uid: i64,
+  owner_uid: &i64,
   params: &InsertCollabParams,
 ) -> Result<(), DatabaseError> {
   let encrypt = 0;

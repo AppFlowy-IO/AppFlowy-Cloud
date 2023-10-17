@@ -15,6 +15,7 @@ use tracing_actix_web::RequestId;
 use crate::biz;
 use crate::component::storage_proxy::CollabStorageProxy;
 use database::collab::CollabStorage;
+use database::user::select_uid_from_uuid;
 use database_entity::database_error::DatabaseError;
 use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
@@ -142,16 +143,20 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(storage, payload), err)]
+#[instrument(skip(storage, payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
   payload: Json<QueryCollabParams>,
+  state: Data<AppState>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppError::from)?;
   let data = storage
     .collab_storage
-    .get_collab(payload.into_inner())
+    .get_collab(&uid, payload.into_inner())
     .await
     .map_err(|err| match err {
       DatabaseError::RecordNotFound(msg) => AppError::new(ErrorCode::RecordNotFound, msg),
@@ -162,17 +167,21 @@ async fn get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip(storage, payload), err)]
+#[instrument(skip(storage, payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
+  state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppError::from)?;
   let result = BatchQueryCollabResult(
     storage
       .collab_storage
-      .batch_get_collab(payload.into_inner().0)
+      .batch_get_collab(&uid, payload.into_inner().0)
       .await,
   );
   Ok(Json(AppResponse::Ok().with_data(result)))

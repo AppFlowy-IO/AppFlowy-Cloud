@@ -41,34 +41,22 @@ where
   ) -> Result<(), AppError> {
     trace!("oid: {:?}, user_uuid: {:?}", oid, user_uuid);
 
-    match self
+    let can_access = self
       .0
       .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)
       .await
-      .map_err(AppError::from)
-    {
-      Ok(can_access) => {
-        if can_access {
-          Ok(())
-        } else {
-          Err(AppError::new(
-            ErrorCode::NotEnoughPermissions,
-            format!(
-              "Not enough permissions to access the collab: {} with http method: {}",
-              oid, method
-            ),
-          ))
-        }
-      },
-      Err(err) => {
-        // If the collab is not found which means the user is the owner of the collab
-        if err.is_record_not_found() {
-          Ok(())
-        } else {
-          Err(err)
-        }
-      },
+      .map_err(AppError::from)?;
+
+    if !can_access {
+      return Err(AppError::new(
+        ErrorCode::NotEnoughPermissions,
+        format!(
+          "Not enough permissions to access the collab: {} with http method: {}",
+          oid, method
+        ),
+      ));
     }
+    Ok(())
   }
 }
 
@@ -179,12 +167,23 @@ impl CollabPermission for CollabPermissionImpl {
     &self,
     user: CollabUserId<'_>,
     oid: &str,
-  ) -> Result<AFAccessLevel, Self::Error> {
-    match user {
+  ) -> Result<Option<AFAccessLevel>, Self::Error> {
+    let result = match user {
       CollabUserId::UserId(uid) => self.get_user_collab_access_level(uid, oid).await,
       CollabUserId::UserUuid(uuid) => {
         let uid = select_uid_from_uuid(&self.pg_pool, uuid).await?;
         self.get_user_collab_access_level(&uid, oid).await
+      },
+    };
+
+    match result {
+      Ok(level) => Ok(Some(level)),
+      Err(err) => {
+        if err.is_record_not_found() {
+          Ok(None)
+        } else {
+          Err(err)
+        }
       },
     }
   }
@@ -196,28 +195,41 @@ impl CollabPermission for CollabPermissionImpl {
     method: &Method,
   ) -> Result<bool, Self::Error> {
     let level = self.get_access_level(user, oid).await?;
-    trace!("Collab member access level: {:?}", level);
-    if Method::POST == method || Method::PUT == method || Method::DELETE == method {
-      Ok(level.can_write())
-    } else {
-      Ok(true)
+    trace!("access level: {:?}", level);
+
+    match level {
+      None => Ok(true),
+      Some(level) => {
+        if Method::POST == method || Method::PUT == method || Method::DELETE == method {
+          Ok(level.can_write())
+        } else {
+          Ok(true)
+        }
+      },
     }
   }
 
   #[inline]
   async fn can_send_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
-    let level = self.get_user_collab_access_level(uid, oid).await?;
-    match level {
-      AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => Ok(false),
-      AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => Ok(true),
+    match self
+      .get_access_level(CollabUserId::UserId(uid), oid)
+      .await?
+    {
+      None => Ok(true),
+      Some(level) => match level {
+        AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => Ok(false),
+        AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => Ok(true),
+      },
     }
   }
 
   #[inline]
   async fn can_receive_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
-    self
-      .get_user_collab_access_level(uid, oid)
-      .await
-      .map(|_| true)
+    Ok(
+      self
+        .get_access_level(CollabUserId::UserId(uid), oid)
+        .await
+        .is_ok(),
+    )
   }
 }

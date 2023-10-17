@@ -13,11 +13,13 @@ pub enum CollabUserId<'a> {
 pub trait CollabPermission: Sync + Send + 'static {
   type Error: Display;
 
+  /// Return the access level of the user in the collab
+  /// If the collab object is not found, return None. Otherwise, return the access level of the user
   async fn get_access_level(
     &self,
     user: CollabUserId<'_>,
     oid: &str,
-  ) -> Result<AFAccessLevel, Self::Error>;
+  ) -> Result<Option<AFAccessLevel>, Self::Error>;
 
   /// Return true if the user from the HTTP request is allowed to access the collab object.
   /// This function will be called very frequently, so it should be very fast.

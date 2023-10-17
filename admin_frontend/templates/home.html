@@ -7,8 +7,29 @@
     </div>
 
     <div id="menu">
+      <button id="changePasswordBtn">Change Password</button>
       <button id="adminBtn">Admin</button>
       <button id="logoutBtn">Logout</button>
+    </div>
+
+    <!-- Modal for password change -->
+    <div id="passwordChangeModal" class="modal">
+      <div class="modal-content">
+        <h2>Change Password</h2>
+        <input
+          type="password"
+          id="newPassword"
+          class="modal-input"
+          placeholder="New Password"
+        />
+        <input
+          type="password"
+          id="confirmPassword"
+          class="modal-input"
+          placeholder="Confirm Password"
+        />
+        <button id="confirmPasswordChange" class="modal-button">Confirm</button>
+      </div>
     </div>
 
     <script>
@@ -39,6 +60,33 @@
         .getElementById("adminBtn")
         .addEventListener("click", function () {
           window.location.href = "/web/admin";
+        });
+
+      // Show the password change modal
+      document
+        .getElementById("changePasswordBtn")
+        .addEventListener("click", function () {
+          const modal = document.getElementById("passwordChangeModal");
+          modal.style.display = "block";
+        });
+
+      // Handle the password change confirmation
+      document
+        .getElementById("confirmPasswordChange")
+        .addEventListener("click", function () {
+          const newPassword = document.getElementById("newPassword").value;
+          const confirmPassword =
+            document.getElementById("confirmPassword").value;
+
+          if (newPassword === confirmPassword) {
+            // Passwords match; you can perform password change logic here
+            alert("Password changed successfully!");
+            // Close the modal
+            const modal = document.getElementById("passwordChangeModal");
+            modal.style.display = "none";
+          } else {
+            alert("Passwords do not match. Please try again.");
+          }
         });
     </script>
   </body>

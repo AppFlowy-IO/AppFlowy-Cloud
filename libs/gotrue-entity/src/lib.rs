@@ -269,3 +269,16 @@ pub enum SignUpResponse {
   Authenticated(AccessTokenResponse),
   NotAuthenticated(User),
 }
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct UserUpdateParams {
+  email: String,
+  password: Option<String>,
+  nonce: String,
+  data: BTreeMap<String, serde_json::Value>,
+  app_metadata: BTreeMap<String, serde_json::Value>,
+  phone: String,
+  channel: String,
+  code_challenge: String,
+  code_challenge_method: String,
+}

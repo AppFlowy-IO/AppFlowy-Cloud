@@ -41,10 +41,8 @@ pub trait HttpAccessControlService: Send + Sync {
   #[allow(unused_variables)]
   async fn check_collab_permission(
     &self,
-    workspace_id: &Uuid,
     oid: &str,
     user_uuid: &Uuid,
-    pg_pool: &PgPool,
     method: Method,
     path: Path<Url>,
   ) -> Result<(), AppError> {
@@ -75,16 +73,14 @@ where
 
   async fn check_collab_permission(
     &self,
-    workspace_id: &Uuid,
     oid: &str,
     user_uuid: &Uuid,
-    pg_pool: &PgPool,
     method: Method,
     path: Path<Url>,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_collab_permission(workspace_id, oid, user_uuid, pg_pool, method, path)
+      .check_collab_permission(oid, user_uuid, method, path)
       .await
   }
 }
@@ -215,14 +211,7 @@ where
             if let Some(collab_object_id) = collab_object_id {
               if let Some(acs) = services.get(&AccessResource::Collab) {
                 if let Err(err) = acs
-                  .check_collab_permission(
-                    &workspace_id.unwrap(),
-                    &collab_object_id,
-                    &user_uuid,
-                    &pg_pool,
-                    method,
-                    path,
-                  )
+                  .check_collab_permission(&collab_object_id, &user_uuid, method, path)
                   .await
                 {
                   error!("collab access control: {:?}", err);

@@ -32,15 +32,12 @@ where
 
   async fn check_collab_permission(
     &self,
-    _workspace_id: &Uuid,
     oid: &str,
     user_uuid: &Uuid,
-    _pg_pool: &PgPool,
     method: Method,
     _path: Path<Url>,
   ) -> Result<(), AppError> {
     trace!("oid: {:?}, user_uuid: {:?}", oid, user_uuid);
-
     let can_access = self
       .0
       .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)

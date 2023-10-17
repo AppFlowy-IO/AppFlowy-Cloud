@@ -22,6 +22,10 @@ impl AppError {
       message: message.into(),
     }
   }
+
+  pub fn is_record_not_found(&self) -> bool {
+    self.code == ErrorCode::RecordNotFound
+  }
 }
 
 impl Display for AppError {
@@ -54,11 +58,13 @@ impl From<anyhow::Error> for AppError {
 
 impl From<DatabaseError> for AppError {
   fn from(value: DatabaseError) -> Self {
-    match &value {
-      DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, value),
-      DatabaseError::UnexpectedData(_) => AppError::new(ErrorCode::InvalidRequestParams, value),
+    match value {
+      DatabaseError::RecordNotFound(msg) => AppError::new(ErrorCode::RecordNotFound, msg),
+      DatabaseError::UnexpectedData(msg) => {
+        AppError::new(ErrorCode::InvalidRequestParams, msg.to_string())
+      },
       DatabaseError::NotEnoughPermissions(msg) => {
-        AppError::new(ErrorCode::NotEnoughPermissions, msg.clone())
+        AppError::new(ErrorCode::NotEnoughPermissions, msg)
       },
       DatabaseError::StorageSpaceNotEnough => {
         AppError::new(ErrorCode::StorageSpaceNotEnough, value)

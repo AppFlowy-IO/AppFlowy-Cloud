@@ -9,7 +9,13 @@ use crate::user::utils::generate_unique_registered_user_client;
 async fn add_workspace_members_not_enough_permission() {
   let (c1, user1) = generate_unique_registered_user_client().await;
   let (c2, _user2) = generate_unique_registered_user_client().await;
-  let workspace_id_2 = c2.workspaces().await.unwrap().first().unwrap().workspace_id;
+  let workspace_id_2 = c2
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
 
   // attempt to add user2 to user1's workspace
   let err = c1
@@ -31,7 +37,7 @@ async fn add_workspace_members_then_delete() {
   let (c2, _user2) = generate_unique_registered_user_client().await;
   let c2_email = c2.token().read().as_ref().unwrap().user.email.clone();
 
-  let c1_workspace = c1.workspaces().await.unwrap();
+  let c1_workspace = c1.get_workspaces().await.unwrap();
   let c1_workspace_id = c1_workspace.first().unwrap().workspace_id;
 
   let email = c2.token().read().as_ref().unwrap().user.email.to_owned();
@@ -77,7 +83,13 @@ async fn workspace_member_add_new_member() {
   let (c2, user2) = generate_unique_registered_user_client().await;
   let (_c3, user3) = generate_unique_registered_user_client().await;
 
-  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  let workspace_id = c1
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
 
   c1.add_workspace_members(
     workspace_id,
@@ -108,7 +120,13 @@ async fn workspace_owner_add_new_owner() {
   let (c1, user1) = generate_unique_registered_user_client().await;
   let (_c2, user2) = generate_unique_registered_user_client().await;
 
-  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  let workspace_id = c1
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
   c1.add_workspace_members(
     workspace_id,
     vec![CreateWorkspaceMember {
@@ -133,7 +151,13 @@ async fn workspace_second_owner_add_new_member() {
   let (c2, user2) = generate_unique_registered_user_client().await;
   let (_c3, user3) = generate_unique_registered_user_client().await;
 
-  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  let workspace_id = c1
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
   c1.add_workspace_members(
     workspace_id,
     vec![CreateWorkspaceMember {
@@ -170,7 +194,13 @@ async fn workspace_second_owner_can_not_delete_origin_owner() {
   let (c1, user1) = generate_unique_registered_user_client().await;
   let (c2, user2) = generate_unique_registered_user_client().await;
 
-  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  let workspace_id = c1
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
   c1.add_workspace_members(
     workspace_id,
     vec![CreateWorkspaceMember {
@@ -194,7 +224,13 @@ async fn workspace_owner_update_member_role() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let (_c2, user2) = generate_unique_registered_user_client().await;
 
-  let workspace_id = c1.workspaces().await.unwrap().first().unwrap().workspace_id;
+  let workspace_id = c1
+    .get_workspaces()
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .workspace_id;
   c1.add_workspace_members(
     workspace_id,
     vec![CreateWorkspaceMember {

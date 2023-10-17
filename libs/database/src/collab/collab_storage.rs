@@ -10,6 +10,7 @@ use database_entity::{
 use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
+
 use std::sync::Weak;
 
 use crate::collab::collab_db_ops;
@@ -46,7 +47,7 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_collab(&self, owner_uid: i64, params: InsertCollabParams) -> Result<()>;
+  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> Result<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
@@ -57,10 +58,11 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
-  async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData>;
+  async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> Result<RawData>;
 
   async fn batch_get_collab(
     &self,
+    uid: &i64,
     queries: Vec<BatchQueryCollab>,
   ) -> HashMap<String, QueryCollabResult>;
 
@@ -73,7 +75,7 @@ pub trait CollabStorage: Clone + Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
-  async fn delete_collab(&self, object_id: &str) -> Result<()>;
+  async fn delete_collab(&self, uid: &i64, object_id: &str) -> Result<()>;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> Result<()>;
 
@@ -125,7 +127,7 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
       .unwrap_or(false)
   }
 
-  async fn insert_collab(&self, owner_uid: i64, params: InsertCollabParams) -> Result<()> {
+  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> Result<()> {
     params.validate()?;
 
     let mut transaction = self
@@ -133,7 +135,7 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
       .begin()
       .await
       .context("Failed to acquire a Postgres transaction to insert collab")?;
-    collab_db_ops::insert_af_collab(&mut transaction, owner_uid, &params).await?;
+    collab_db_ops::insert_af_collab(&mut transaction, uid, &params).await?;
     transaction
       .commit()
       .await
@@ -141,7 +143,7 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
     Ok(())
   }
 
-  async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData> {
+  async fn get_collab(&self, _uid: &i64, params: QueryCollabParams) -> Result<RawData> {
     params.validate()?;
     match collab_db_ops::get_collab_blob(&self.pg_pool, &params.collab_type, &params.object_id)
       .await
@@ -151,7 +153,10 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
         Ok(data)
       },
       Err(e) => match e {
-        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound),
+        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound(format!(
+          "Can't find the row for query: {:?}",
+          params
+        ))),
         _ => Err(e.into()),
       },
     }
@@ -159,12 +164,13 @@ impl CollabStorage for CollabPostgresDBStorageImpl {
 
   async fn batch_get_collab(
     &self,
+    _uid: &i64,
     queries: Vec<BatchQueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     collab_db_ops::batch_get_collab_blob(&self.pg_pool, queries).await
   }
 
-  async fn delete_collab(&self, object_id: &str) -> Result<()> {
+  async fn delete_collab(&self, _uid: &i64, object_id: &str) -> Result<()> {
     collab_db_ops::delete_collab(&self.pg_pool, object_id).await?;
     Ok(())
   }

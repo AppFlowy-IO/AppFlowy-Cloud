@@ -3,8 +3,8 @@ use std::borrow::Cow;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
-  #[error("Record not found")]
-  RecordNotFound,
+  #[error("Record not found:{0}")]
+  RecordNotFound(String),
 
   #[error(transparent)]
   UnexpectedData(#[from] validator::ValidationErrors),
@@ -33,14 +33,16 @@ pub enum DatabaseError {
 
 impl DatabaseError {
   pub fn is_not_found(&self) -> bool {
-    matches!(self, Self::RecordNotFound)
+    matches!(self, Self::RecordNotFound(_))
   }
 }
 
 impl From<sqlx::Error> for DatabaseError {
   fn from(value: sqlx::Error) -> Self {
     match value {
-      Error::RowNotFound => DatabaseError::RecordNotFound,
+      Error::RowNotFound => {
+        DatabaseError::RecordNotFound("Can't find the row in the database".to_string())
+      },
       _ => DatabaseError::SqlxError(value),
     }
   }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM af_roles WHERE name = 'Owner'",
+  "query": "\n        SELECT id\n        FROM af_permissions\n        WHERE access_level = $1\n        ",
   "describe": {
     "columns": [
       {
@@ -10,11 +10,13 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int4"
+      ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "0ddce840c29eb21dcc803f45e9c4d0719ae8969cbd309bf478f43e6be340a933"
+  "hash": "54346ddd488f0c8fde7125f17827bcc89ecbf285c4e2270b38bb4d7082b40db2"
 }

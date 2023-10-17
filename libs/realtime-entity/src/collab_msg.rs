@@ -131,6 +131,10 @@ impl CollabMessage {
     }
   }
 
+  pub fn uid(&self) -> Option<i64> {
+    self.origin().and_then(|origin| origin.client_user_id())
+  }
+
   pub fn object_id(&self) -> &str {
     match self {
       CollabMessage::ClientInit(value) => &value.object_id,

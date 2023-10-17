@@ -103,7 +103,7 @@ impl TestClient {
   pub(crate) async fn current_workspace_id(&self) -> String {
     self
       .api_client
-      .workspaces()
+      .get_workspaces()
       .await
       .unwrap()
       .first()
@@ -119,7 +119,7 @@ impl TestClient {
     object_id: &str,
     collab_type: CollabType,
   ) {
-    let uid = self.api_client.profile().await.unwrap().uid.unwrap();
+    let uid = self.api_client.get_profile().await.unwrap().uid.unwrap();
 
     // Subscribe to object
     let handler = self

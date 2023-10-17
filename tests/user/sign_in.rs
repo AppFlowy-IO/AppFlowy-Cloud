@@ -64,9 +64,9 @@ async fn sign_in_success() {
       .confirmed_at
       .is_some());
 
-    let workspaces = c.workspaces().await.unwrap();
+    let workspaces = c.get_workspaces().await.unwrap();
     assert_eq!(workspaces.0.len(), 1);
-    let profile = c.profile().await.unwrap();
+    let profile = c.get_profile().await.unwrap();
     let latest_workspace = workspaces.get_latest(&profile);
     assert!(latest_workspace.is_some());
   }
@@ -81,7 +81,7 @@ async fn sign_in_success() {
     assert!(!is_new);
 
     // workspaces should be the same
-    let workspaces = c.workspaces().await.unwrap();
+    let workspaces = c.get_workspaces().await.unwrap();
     assert_eq!(workspaces.0.len(), 1);
   }
 }

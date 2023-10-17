@@ -15,6 +15,7 @@ use tracing_actix_web::RequestId;
 use crate::biz;
 use crate::component::storage_proxy::CollabStorageProxy;
 use database::collab::CollabStorage;
+use database::user::select_uid_from_uuid;
 use database_entity::database_error::DatabaseError;
 use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
@@ -39,6 +40,17 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_handler))
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
+    )
+    .service(
+      web::resource("{workspace_id}/collab/{object_id}/member")
+        .route(web::post().to(create_collab_member_handler))
+        .route(web::get().to(get_collab_member_handler))
+        .route(web::put().to(update_collab_member_handler))
+        .route(web::delete().to(delete_collab_member_handler)),
+    )
+    .service(
+      web::resource("{workspace_id}/collab/{object_id}/member/list")
+        .route(web::get().to(get_collab_member_list_handler)),
     )
     .service(
       web::resource("{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
@@ -131,19 +143,23 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(storage, payload), err)]
+#[instrument(skip(storage, payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
   payload: Json<QueryCollabParams>,
+  state: Data<AppState>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppError::from)?;
   let data = storage
     .collab_storage
-    .get_collab(payload.into_inner())
+    .get_collab(&uid, payload.into_inner())
     .await
-    .map_err(|err| match &err {
-      DatabaseError::RecordNotFound => AppError::new(ErrorCode::RecordNotFound, err.to_string()),
+    .map_err(|err| match err {
+      DatabaseError::RecordNotFound(msg) => AppError::new(ErrorCode::RecordNotFound, msg),
       _ => AppError::new(ErrorCode::DatabaseError, err.to_string()),
     })?;
 
@@ -151,17 +167,21 @@ async fn get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip(storage, payload), err)]
+#[instrument(skip(storage, payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
+  state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
   storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppError::from)?;
   let result = BatchQueryCollabResult(
     storage
       .collab_storage
-      .batch_get_collab(payload.into_inner().0)
+      .batch_get_collab(&uid, payload.into_inner().0)
       .await,
   );
   Ok(Json(AppResponse::Ok().with_data(result)))
@@ -210,4 +230,58 @@ async fn retrieve_snapshots_handler(
     biz::collab::ops::get_all_collab_snapshot(&state.pg_pool, &user_uuid, &payload.into_inner())
       .await?;
   Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn create_collab_member_handler(
+  required_id: RequestId,
+  payload: Json<InsertCollabMemberParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  biz::collab::ops::create_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn update_collab_member_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<UpdateCollabMemberParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  biz::collab::ops::upsert_collab_member(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+#[instrument(skip(state, payload), err)]
+async fn get_collab_member_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<CollabMemberIdentify>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFCollabMember>>> {
+  let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok().with_data(member)))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn delete_collab_member_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<CollabMemberIdentify>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn get_collab_member_list_handler(
+  user_uuid: UserUuid,
+  required_id: RequestId,
+  payload: Json<QueryCollabMembers>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFCollabMembers>>> {
+  let members =
+    biz::collab::ops::get_collab_member_list(&state.pg_pool, &payload.into_inner()).await?;
+  Ok(Json(AppResponse::Ok().with_data(AFCollabMembers(members))))
 }

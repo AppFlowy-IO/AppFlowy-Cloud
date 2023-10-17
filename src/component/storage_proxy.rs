@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use database::collab::{CollabPostgresDBStorageImpl, CollabStorage, StorageConfig};
+use database::collab::{CollabPostgresDBStorageImpl, CollabStorage, Result, StorageConfig};
 use database_entity::{
   AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryCollabResult, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
@@ -48,15 +48,11 @@ impl CollabStorage for CollabStorageProxy {
       .insert(object_id.to_string(), collab);
   }
 
-  async fn insert_collab(
-    &self,
-    owner_uid: i64,
-    params: InsertCollabParams,
-  ) -> database::collab::Result<()> {
-    self.inner.insert_collab(owner_uid, params).await
+  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> Result<()> {
+    self.inner.insert_collab(uid, params).await
   }
 
-  async fn get_collab(&self, params: QueryCollabParams) -> database::collab::Result<RawData> {
+  async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> Result<RawData> {
     let collab = self
       .collab_by_object_id
       .read()
@@ -65,7 +61,7 @@ impl CollabStorage for CollabStorageProxy {
       .and_then(|collab| collab.upgrade());
 
     match collab {
-      None => self.inner.get_collab(params).await,
+      None => self.inner.get_collab(uid, params).await,
       Some(collab) => {
         info!("Get collab data:{} from memory", params.object_id);
         let data = collab.encode_as_update_v1().0;
@@ -76,6 +72,7 @@ impl CollabStorage for CollabStorageProxy {
 
   async fn batch_get_collab(
     &self,
+    uid: &i64,
     queries: Vec<BatchQueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
@@ -109,12 +106,12 @@ impl CollabStorage for CollabStorageProxy {
       });
 
     results.extend(results_from_memory);
-    results.extend(self.inner.batch_get_collab(queries).await);
+    results.extend(self.inner.batch_get_collab(uid, queries).await);
     results
   }
 
-  async fn delete_collab(&self, object_id: &str) -> database::collab::Result<()> {
-    self.inner.delete_collab(object_id).await
+  async fn delete_collab(&self, uid: &i64, object_id: &str) -> Result<()> {
+    self.inner.delete_collab(uid, object_id).await
   }
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> database::collab::Result<()> {

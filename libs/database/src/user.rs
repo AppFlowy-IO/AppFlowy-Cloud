@@ -2,6 +2,7 @@ use anyhow::Context;
 use database_entity::database_error::DatabaseError;
 use sqlx::PgPool;
 use tracing::instrument;
+use uuid::Uuid;
 
 pub async fn update_user_name(
   pool: &PgPool,
@@ -50,12 +51,12 @@ pub async fn create_user_if_not_exists(
   Ok(affected_rows > 0)
 }
 
-pub async fn uid_from_uuid(pool: &PgPool, gotrue_uuid: &uuid::Uuid) -> Result<i64, DatabaseError> {
+pub async fn select_uid_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<i64, DatabaseError> {
   let uid = sqlx::query!(
     r#"
       SELECT uid FROM af_user WHERE uuid = $1
     "#,
-    gotrue_uuid
+    user_uuid
   )
   .fetch_one(pool)
   .await?

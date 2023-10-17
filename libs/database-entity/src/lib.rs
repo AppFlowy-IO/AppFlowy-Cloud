@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use tracing::error;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
@@ -205,7 +207,22 @@ impl From<i32> for AFRole {
       1 => AFRole::Owner,
       2 => AFRole::Member,
       3 => AFRole::Guest,
-      _ => panic!("Invalid value for AFRole"),
+      _ => {
+        error!("Invalid role id: {}", value);
+        AFRole::Guest
+      },
+    }
+  }
+}
+
+impl From<Option<i32>> for AFRole {
+  fn from(value: Option<i32>) -> Self {
+    match value {
+      None => {
+        error!("Invalid role id: None");
+        AFRole::Guest
+      },
+      Some(value) => value.into(),
     }
   }
 }
@@ -220,10 +237,78 @@ impl From<AFRole> for i32 {
     }
   }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AFPermission {
+  /// The permission id
+  pub id: i32,
+  pub name: String,
+  pub access_level: AFAccessLevel,
+  pub description: String,
+}
+
+#[derive(Deserialize_repr, Serialize_repr, Eq, PartialEq, Debug, Clone)]
+#[repr(i32)]
+pub enum AFAccessLevel {
+  // Can't modify the value of the enum
+  ReadOnly = 10,
+  ReadAndComment = 20,
+  ReadAndWrite = 30,
+  FullAccess = 50,
+}
+
+impl AFAccessLevel {
+  pub fn can_write(&self) -> bool {
+    match self {
+      AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => false,
+      AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => true,
+    }
+  }
+}
+
+impl From<i32> for AFAccessLevel {
+  fn from(value: i32) -> Self {
+    // Can't modify the value of the enum
+    match value {
+      10 => AFAccessLevel::ReadOnly,
+      20 => AFAccessLevel::ReadAndComment,
+      30 => AFAccessLevel::ReadAndWrite,
+      50 => AFAccessLevel::FullAccess,
+      _ => {
+        error!("Invalid role id: {}", value);
+        AFAccessLevel::ReadOnly
+      },
+    }
+  }
+}
+
+impl From<AFAccessLevel> for i32 {
+  fn from(level: AFAccessLevel) -> Self {
+    level as i32
+  }
+}
+
 #[derive(FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMember {
   pub email: String,
   pub role: AFRole,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AFCollabMember {
+  pub uid: i64,
+  pub oid: String,
+  pub permission: AFPermission,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AFCollabMembers(pub Vec<AFCollabMember>);
+
+#[derive(FromRow, Clone, Debug, Serialize, Deserialize)]
+pub struct AFCollabMemberRow {
+  pub uid: i64,
+  pub oid: String,
+  pub permission_id: i64,
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
@@ -260,3 +345,32 @@ pub enum QueryCollabResult {
 
 #[derive(Serialize, Deserialize)]
 pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct InsertCollabMemberParams {
+  pub uid: i64,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+  pub access_level: AFAccessLevel,
+}
+
+pub type UpdateCollabMemberParams = InsertCollabMemberParams;
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CollabMemberIdentify {
+  pub uid: i64,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct QueryCollabMembers {
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+}

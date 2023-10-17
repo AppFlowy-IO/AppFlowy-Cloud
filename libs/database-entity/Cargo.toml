@@ -15,3 +15,5 @@ chrono = {version="0.4",features = ["serde"]}
 uuid = { version = "1.4.1", features = ["serde", "v4"] }
 thiserror = "1.0.47"
 anyhow = "1.0.75"
+tracing = "0.1"
+serde_repr = "0.1.16"

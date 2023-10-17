@@ -4,7 +4,7 @@ use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
 use axum::extract::Path;
-use axum::http::status;
+use axum::http::{status, HeaderMap, HeaderValue};
 use axum::response::Result;
 use axum::Json;
 use axum::{extract::State, routing::post, Router};
@@ -19,9 +19,38 @@ pub fn router() -> Router<AppState> {
   Router::new()
       // TODO
     .route("/login", post(login_handler))
+    .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
     .route("/user/:param", post(post_user_handler).delete(delete_user_handler).put(put_user_handler))
     .route("/user/:email/generate-link", post(post_user_generate_link_handler))
+    .route("/oauth_login/:provider", post(post_oauth_login_handler))
+}
+
+static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
+static DEFAULT_SCHEME: HeaderValue = HeaderValue::from_static("http");
+pub async fn post_oauth_login_handler(
+  header_map: HeaderMap,
+  Path(provider): Path<String>,
+) -> Result<WebApiResponse<String>, WebApiError<'static>> {
+  let host = header_map
+    .get("host")
+    .unwrap_or(&DEFAULT_HOST)
+    .to_str()
+    .unwrap();
+  let scheme = header_map
+    .get("x-scheme")
+    .unwrap_or(&DEFAULT_SCHEME)
+    .to_str()
+    .unwrap();
+  let base_url = format!("{}://{}", scheme, host);
+
+  let oauth_url = format!(
+    "{}/authorize?provider={}&redirect_uri={}",
+    base_url,
+    &provider,
+    format!("{}/web/oauth_login_redirect", base_url)
+  );
+  Ok(oauth_url.into())
 }
 
 pub async fn put_user_handler(
@@ -96,6 +125,32 @@ pub async fn post_user_handler(
     .admin_add_user(&session.access_token, &add_user_params)
     .await?;
   Ok(user.into())
+}
+
+pub async fn login_refresh_handler(
+  State(state): State<AppState>,
+  jar: CookieJar,
+  Path(refresh_token): Path<String>,
+) -> Result<CookieJar, WebApiError<'static>> {
+  let token = state
+    .gotrue_client
+    .token(&gotrue::grant::Grant::RefreshToken(
+      gotrue::grant::RefreshTokenGrant { refresh_token },
+    ))
+    .await?;
+
+  let new_session_id = uuid::Uuid::new_v4();
+  let new_session = session::UserSession::new(
+    new_session_id.to_string(),
+    token.access_token.to_string(),
+    token.refresh_token.to_owned(),
+  );
+  state.session_store.put_user_session(&new_session).await?;
+
+  let mut cookie = Cookie::new("session_id", new_session_id.to_string());
+  cookie.set_path("/");
+
+  Ok(jar.add(cookie))
 }
 
 // TODO: Support OAuth2 login

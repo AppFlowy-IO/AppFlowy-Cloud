@@ -46,7 +46,8 @@ services:
     depends_on:
       - postgres
     environment:
-      - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
+      - GOTRUE_SITE_URL=                                              # redirected to AppFlowy application
+      - URI_ALLOW_LIST=*                                              # adjust restrict if necessary
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}

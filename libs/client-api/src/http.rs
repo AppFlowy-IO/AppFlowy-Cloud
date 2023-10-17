@@ -124,28 +124,14 @@ impl Client {
       .try_for_each(|f| -> Result<(), AppError> {
         let (k, v) = f.split_once('=').ok_or(url_missing_param("key=value"))?;
         match k {
-          "access_token" => {
-            access_token = Some(v.to_string());
-          },
-          "token_type" => {
-            token_type = Some(v.to_string());
-          },
-          "expires_in" => {
-            expires_in = Some(v.parse::<i64>().context("parser expires_in failed")?);
-          },
-          "expires_at" => {
-            expires_at = Some(v.parse::<i64>().context("parser expires_at failed")?);
-          },
-          "refresh_token" => {
-            refresh_token = Some(v.to_string());
-          },
-          "provider_access_token" => {
-            provider_access_token = Some(v.to_string());
-          },
-          "provider_refresh_token" => {
-            provider_refresh_token = Some(v.to_string());
-          },
-          _ => {},
+          "access_token" => access_token = Some(v.to_string()),
+          "token_type" => token_type = Some(v.to_string()),
+          "expires_in" => expires_in = Some(v.parse::<i64>().context("parser expires_in failed")?),
+          "expires_at" => expires_at = Some(v.parse::<i64>().context("parser expires_at failed")?),
+          "refresh_token" => refresh_token = Some(v.to_string()),
+          "provider_access_token" => provider_access_token = Some(v.to_string()),
+          "provider_refresh_token" => provider_refresh_token = Some(v.to_string()),
+          x => tracing::warn!("unhandled param in url: {}", x),
         };
         Ok(())
       })?;
@@ -196,7 +182,7 @@ impl Client {
     }
 
     Ok(format!(
-      "{}/authorize?provider={}",
+      "{}/authorize?provider={}&redirect_to=appflowy-flutter://",
       self.gotrue_client.base_url,
       provider.as_str(),
     ))
@@ -760,10 +746,10 @@ pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
   let url = fragment
     .select(&selector)
     .next()
-    .ok_or(anyhow!("no a tag found"))?
+    .ok_or(anyhow!("no a tag found in html: {}", html_str))?
     .value()
     .attr("href")
-    .ok_or(anyhow!("no href found"))?
+    .ok_or(anyhow!("no href found in html: {}", html_str))?
     .to_string();
   Ok(url)
 }

@@ -14,7 +14,7 @@ jobs:
       - name: Set up env vars
         run: |
           cp dev.env .env
-          
+
           # log level
           sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
 
@@ -40,4 +40,6 @@ jobs:
           echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
 
       - name: Deploy docker-compose
-        run: docker compose up -d --build --force-recreate
+        run: |
+          docker compose up -d --build --force-recreate
+          docker system prune --force

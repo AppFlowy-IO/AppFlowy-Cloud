@@ -5,6 +5,8 @@ services:
     ports:
       - 9000:9000
       - 9001:9001
+    environment:
+      - MINIO_BROWSER_REDIRECT_URL=${MINIO_BROWSER_REDIRECT_URL}
     command: server /data --console-address ":9001"
 
   postgres:

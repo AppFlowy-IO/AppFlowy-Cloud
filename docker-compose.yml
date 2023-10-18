@@ -8,6 +8,17 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
+  portainer_init:
+    depends_on:
+      - portainer
+    image: alpine/curl
+    restart: on-failure
+    environment:
+      - PORTAINER_PASSWORD=${PORTAINER_PASSWORD}
+    volumes:
+      - ./docker/portainer/setup.sh:/setup.sh
+    command: ./setup.sh
+
   nginx:
     restart: on-failure
     image: nginx

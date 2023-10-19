@@ -68,6 +68,7 @@ async fn list_handler(
 
 #[instrument(skip(payload, state), err)]
 async fn add_workspace_members_handler(
+  required_id: RequestId,
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   payload: Json<CreateWorkspaceMembers>,

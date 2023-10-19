@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
-use tracing::debug;
 
 use crate::localhost_client;
 use crate::user::utils::{generate_unique_registered_user, User};
@@ -42,7 +41,6 @@ impl TestClient {
     Self::new(device_id, registered_user).await
   }
 
-  #[allow(dead_code)]
   pub(crate) async fn add_client_as_workspace_member(
     &self,
     workspace_id: &str,
@@ -50,7 +48,6 @@ impl TestClient {
     role: AFRole,
   ) {
     let profile = other_client.api_client.get_profile().await.unwrap();
-    debug!("profile: {:?}", profile);
     let email = profile.email.unwrap();
     self
       .api_client
@@ -143,6 +140,12 @@ impl TestClient {
   }
 
   pub(crate) async fn wait_object_sync_complete(&self, object_id: &str) {
+    self
+      .wait_object_sync_complete_with_secs(object_id, 20)
+      .await;
+  }
+
+  pub(crate) async fn wait_object_sync_complete_with_secs(&self, object_id: &str, secs: u64) {
     let mut sync_state = self
       .collab_by_object_id
       .get(object_id)
@@ -151,8 +154,8 @@ impl TestClient {
       .lock()
       .subscribe_sync_state();
 
-    const TIMEOUT_DURATION: Duration = Duration::from_secs(20);
-    while let Ok(Some(state)) = timeout(TIMEOUT_DURATION, sync_state.next()).await {
+    let duration = Duration::from_secs(secs);
+    while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
       if state == SyncState::SyncFinished {
         break;
       }
@@ -222,6 +225,12 @@ impl TestClient {
 
     self.wait_object_sync_complete(&object_id).await;
     object_id
+  }
+
+  pub(crate) async fn open_workspace(&mut self, workspace_id: &str) {
+    self
+      .open_collab(workspace_id, workspace_id, CollabType::Folder)
+      .await;
   }
 
   #[allow(clippy::await_holding_lock)]

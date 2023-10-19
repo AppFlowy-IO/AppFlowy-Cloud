@@ -1,7 +1,7 @@
 use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
 use database::collab::insert_collab_member_with_txn;
-use database::user::select_uid_from_uuid;
+use database::user::select_uid_from_email;
 use database::workspace::{
   delete_workspace_members, insert_workspace_member_with_txn, select_all_workspaces_owned,
   select_workspace_members, upsert_workspace_member,
@@ -22,7 +22,7 @@ pub async fn get_workspaces(
 
 pub async fn add_workspace_members(
   pg_pool: &PgPool,
-  user_uuid: &uuid::Uuid,
+  _user_uuid: &uuid::Uuid,
   workspace_id: &uuid::Uuid,
   members: Vec<CreateWorkspaceMember>,
 ) -> Result<(), AppError> {
@@ -35,13 +35,11 @@ pub async fn add_workspace_members(
     let access_level = match &member.role {
       AFRole::Owner => AFAccessLevel::FullAccess,
       AFRole::Member => AFAccessLevel::ReadAndWrite,
-      AFRole::Guest => AFAccessLevel::ReadAndComment,
+      AFRole::Guest => AFAccessLevel::ReadOnly,
     };
+    let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
 
     insert_workspace_member_with_txn(&mut txn, workspace_id, member.email, member.role).await?;
-
-    // Insert the user as a collab member of the folder collab object.
-    let uid = select_uid_from_uuid(txn.deref_mut(), user_uuid).await?;
     insert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
   }
 

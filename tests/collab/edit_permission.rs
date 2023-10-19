@@ -284,6 +284,7 @@ async fn edit_collab_with_full_access_permission_test() {
   )
   .await;
 }
+
 #[tokio::test]
 async fn edit_collab_with_full_access_then_readonly_permission() {
   let collab_type = CollabType::Document;

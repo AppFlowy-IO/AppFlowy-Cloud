@@ -1,13 +1,16 @@
 use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
+use database::collab::insert_collab_member_with_txn;
+use database::user::select_uid_from_uuid;
 use database::workspace::{
-  delete_workspace_members, insert_workspace_member, select_all_workspaces_owned,
+  delete_workspace_members, insert_workspace_member_with_txn, select_all_workspaces_owned,
   select_workspace_members, upsert_workspace_member,
 };
-use database_entity::{AFWorkspaceMember, AFWorkspaces};
+use database_entity::{AFAccessLevel, AFRole, AFWorkspaceMember, AFWorkspaces};
 use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::{types::uuid, PgPool};
+use std::ops::DerefMut;
 
 pub async fn get_workspaces(
   pg_pool: &PgPool,
@@ -19,7 +22,7 @@ pub async fn get_workspaces(
 
 pub async fn add_workspace_members(
   pg_pool: &PgPool,
-  _user_uuid: &uuid::Uuid,
+  user_uuid: &uuid::Uuid,
   workspace_id: &uuid::Uuid,
   members: Vec<CreateWorkspaceMember>,
 ) -> Result<(), AppError> {
@@ -27,8 +30,19 @@ pub async fn add_workspace_members(
     .begin()
     .await
     .context("Begin transaction to insert workspace members")?;
+
   for member in members {
-    insert_workspace_member(&mut txn, workspace_id, member.email, member.role).await?;
+    let access_level = match &member.role {
+      AFRole::Owner => AFAccessLevel::FullAccess,
+      AFRole::Member => AFAccessLevel::ReadAndWrite,
+      AFRole::Guest => AFAccessLevel::ReadAndComment,
+    };
+
+    insert_workspace_member_with_txn(&mut txn, workspace_id, member.email, member.role).await?;
+
+    // Insert the user as a collab member of the folder collab object.
+    let uid = select_uid_from_uuid(txn.deref_mut(), user_uuid).await?;
+    insert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
   }
 
   txn

@@ -126,7 +126,7 @@ pub async fn select_user_can_edit_collab(
   Ok(permission_check.unwrap_or(false))
 }
 
-pub async fn insert_workspace_member(
+pub async fn insert_workspace_member_with_txn(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
   member_email: String,

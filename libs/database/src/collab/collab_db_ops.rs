@@ -9,6 +9,7 @@ use database_entity::{
 use sqlx::postgres::PgRow;
 use sqlx::{Error, PgPool, Row, Transaction};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, event, instrument};
 use uuid::Uuid;
@@ -311,25 +312,21 @@ pub async fn get_all_snapshots(
   Ok(AFCollabSnapshots(snapshots))
 }
 
-#[instrument(skip(pg_pool), err)]
-pub async fn insert_collab_member(
+#[instrument(skip(txn), err)]
+pub async fn insert_collab_member_with_txn<T: AsRef<str> + Debug>(
   uid: i64,
-  oid: &str,
+  oid: T,
   access_level: &AFAccessLevel,
-  pg_pool: &PgPool,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), DatabaseError> {
+  let oid = oid.as_ref();
   let access_level: i32 = access_level.clone().into();
-  let mut txn = pg_pool
-    .begin()
-    .await
-    .context("failed to acquire a transaction to insert collab member")?;
-
   let permission_id = sqlx::query_scalar!(
     r#"
-        SELECT id
-        FROM af_permissions
-        WHERE access_level = $1
-        "#,
+     SELECT id
+     FROM af_permissions
+     WHERE access_level = $1
+    "#,
     access_level
   )
   .fetch_one(txn.deref_mut())
@@ -355,11 +352,27 @@ pub async fn insert_collab_member(
     uid, oid
   ))?;
 
+  Ok(())
+}
+
+#[instrument(skip(pg_pool), err)]
+pub async fn insert_collab_member(
+  uid: i64,
+  oid: &str,
+  access_level: &AFAccessLevel,
+  pg_pool: &PgPool,
+) -> Result<(), DatabaseError> {
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("failed to acquire a transaction to insert collab member")?;
+
+  insert_collab_member_with_txn(uid, oid, access_level, &mut txn).await?;
+
   txn
     .commit()
     .await
     .context("failed to commit the transaction to insert collab member")?;
-
   Ok(())
 }
 

@@ -48,7 +48,7 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 /// * There's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
 ///
 
-#[instrument(level = "trace", skip(tx), fields(oid=%params.object_id), err)]
+#[instrument(level = "trace", skip(tx, params), fields(oid=%params.object_id), err)]
 pub async fn insert_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   uid: &i64,

@@ -1,0 +1,36 @@
+<style>
+  /* Right-align the content of .right-align class */
+  .text-align-right {
+    text-align: right;
+  }
+
+  .text-align-center {
+    text-align: center;
+  }
+
+  .vertical-align-middle {
+    vertical-align: middle;
+  }
+
+  .display-flex {
+    display: flex;
+  }
+
+  .justify-content-center {
+    justify-content: center;
+  }
+
+  #message {
+    display: none; /* Initially hidden */
+    position: fixed; /* Positioned relative to the viewport */
+    top: 0; /* At the top */
+    left: 50%; /* Centered horizontally */
+    transform: translateX(-50%); /* Adjust for exact centering */
+    padding: 10px 20px;
+    background-color: #ffd700; /* Golden background for notification */
+    color: #000; /* Text color */
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000; /* To ensure it appears above other elements */
+  }
+</style>

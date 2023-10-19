@@ -1,0 +1,32 @@
+<table>
+  <tr>
+    <td>
+      <button onclick="window.location.href='/web/home'">Home</button>
+    </td>
+
+    <td class="right-align">
+      <button id="logoutBtn">Logout</button>
+    </td>
+  </tr>
+</table>
+
+<script>
+  document.getElementById("logoutBtn").addEventListener("click", function () {
+    // Remove the cookie by setting its value to an empty string and its expiry date to the past.
+    fetch("/web-api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(
+            `Network response was not ok: ${response.statusText}`,
+          );
+        }
+        window.location.href = "/web/login";
+      })
+      .catch((error) => {
+        console.error(`There was a problem with the fetch operation: ${error}`);
+      });
+  });
+</script>

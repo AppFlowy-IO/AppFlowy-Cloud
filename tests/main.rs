@@ -1,4 +1,8 @@
 use client_api::Client;
+use std::sync::Once;
+use tracing_subscriber::fmt::Subscriber;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 mod collab;
 mod gotrue;
@@ -27,4 +31,20 @@ pub const DEV_GOTRUE: &str = "https://test.appflowy.cloud/gotrue";
 #[allow(dead_code)]
 pub fn test_appflowy_cloud_client() -> Client {
   Client::new(DEV_URL, DEV_WS, DEV_GOTRUE)
+}
+
+pub fn setup_log() {
+  static START: Once = Once::new();
+  START.call_once(|| {
+    let level = "trace";
+    let mut filters = vec![];
+    filters.push(format!("client_api={}", level));
+    std::env::set_var("RUST_LOG", filters.join(","));
+
+    let subscriber = Subscriber::builder()
+      .with_ansi(true)
+      .with_env_filter(EnvFilter::from_default_env())
+      .finish();
+    subscriber.try_init().unwrap();
+  });
 }

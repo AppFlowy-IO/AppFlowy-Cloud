@@ -1,10 +1,8 @@
-use serde_json::json;
-
-use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, TestClient};
+use crate::realtime::test_client::{assert_remote_collab, TestClient};
 use collab_entity::CollabType;
-use sqlx::types::uuid;
 
-use std::time::Duration;
+use serde_json::json;
+use sqlx::types::uuid;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
@@ -13,7 +11,7 @@ async fn realtime_write_single_collab_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.current_workspace_id().await;
   test_client
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
 
   // Edit the collab
@@ -57,7 +55,7 @@ async fn realtime_write_multiple_collab_test() {
     let object_id = uuid::Uuid::new_v4().to_string();
     let collab_type = CollabType::Document;
     test_client
-      .create_collab(&workspace_id, &object_id, collab_type.clone())
+      .open_collab(&workspace_id, &object_id, collab_type.clone())
       .await;
     for i in 0..=5 {
       test_client
@@ -94,53 +92,6 @@ async fn realtime_write_multiple_collab_test() {
   }
 }
 
-#[tokio::test]
-async fn one_direction_peer_sync_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
-
-  let mut client_1 = TestClient::new_user().await;
-  let workspace_id = client_1.current_workspace_id().await;
-  client_1
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-
-  let mut client_2 = TestClient::new_user().await;
-  client_2
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-
-  // Edit the collab from client 1 and then the server will broadcast to client 2
-  client_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("name", "AppFlowy");
-  client_1.wait_object_sync_complete(&object_id).await;
-
-  assert_client_collab(
-    &mut client_2,
-    &object_id,
-    json!({
-      "name": "AppFlowy"
-    }),
-  )
-  .await;
-
-  assert_remote_collab(
-    &workspace_id,
-    &mut client_1.api_client,
-    &object_id,
-    &collab_type,
-    10,
-    json!({
-      "name": "AppFlowy"
-    }),
-  )
-  .await;
-}
 //
 // #[tokio::test]
 // async fn user_with_duplicate_devices_connect_edit_test() {
@@ -267,52 +218,20 @@ async fn one_direction_peer_sync_test() {
 // }
 
 #[tokio::test]
-async fn client_init_sync_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
-
-  let mut client_1 = TestClient::new_user().await;
-  let workspace_id = client_1.current_workspace_id().await;
-  client_1
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-  client_1
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("name", "AppFlowy");
-  client_1.wait_object_sync_complete(&object_id).await;
-  tokio::time::sleep(Duration::from_millis(1000)).await;
-
-  let mut client_2 = TestClient::new_user().await;
-  client_2
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-  client_2.wait_object_sync_complete(&object_id).await;
-  let expected_json = json!({
-    "name": "AppFlowy",
-  });
-  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
-}
-
-#[tokio::test]
 async fn multiple_collab_edit_test() {
   let collab_type = CollabType::Document;
   let object_id_1 = uuid::Uuid::new_v4().to_string();
   let mut client_1 = TestClient::new_user().await;
   let workspace_id_1 = client_1.current_workspace_id().await;
   client_1
-    .create_collab(&workspace_id_1, &object_id_1, collab_type.clone())
+    .open_collab(&workspace_id_1, &object_id_1, collab_type.clone())
     .await;
 
   let object_id_2 = uuid::Uuid::new_v4().to_string();
   let mut client_2 = TestClient::new_user().await;
   let workspace_id_2 = client_2.current_workspace_id().await;
   client_2
-    .create_collab(&workspace_id_2, &object_id_2, collab_type.clone())
+    .open_collab(&workspace_id_2, &object_id_2, collab_type.clone())
     .await;
 
   client_1

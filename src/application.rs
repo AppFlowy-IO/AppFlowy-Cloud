@@ -2,7 +2,7 @@ use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
 use crate::middleware::cors_mw::default_cors;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::{AppState, Storage};
+use crate::state::AppState;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -26,12 +26,15 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::workspace_scope;
 use crate::api::ws::ws_scope;
-use crate::biz::collab::access_control::{CollabAccessControl, CollabPermissionImpl};
+use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabHttpAccessControl};
+use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
-use crate::biz::workspace::access_control::WorkspaceOwnerAccessControl;
-use crate::component::storage_proxy::CollabStorageProxy;
+use crate::biz::workspace::access_control::{
+  WorkspaceAccessControlImpl, WorkspaceHttpAccessControl,
+};
+
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
-use database::collab::CollabPostgresDBStorageImpl;
+
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
@@ -83,15 +86,17 @@ pub async fn run(
 
   let storage = state.collab_storage.clone();
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
-    storage.collab_storage.clone(),
-    state.collab_permission.clone(),
+    storage.clone(),
+    state.collab_access_control.clone(),
   )
   .unwrap()
   .start();
 
-  let access_control = WorkspaceAccessControl::new(state.pg_pool.clone())
-    .with_acs(WorkspaceOwnerAccessControl)
-    .with_acs(CollabAccessControl(state.collab_permission.clone()));
+  let access_control = WorkspaceAccessControl::new()
+    .with_acs(WorkspaceHttpAccessControl(
+      state.workspace_access_control.clone(),
+    ))
+    .with_acs(CollabHttpAccessControl(state.collab_access_control.clone()));
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -133,25 +138,46 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 }
 
 pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+  // Postgres
   let pg_pool = get_connection_pool(&config.database).await?;
   migrate(&pg_pool).await?;
 
+  // Bucket storage
   let s3_bucket = get_aws_s3_bucket(&config.s3).await?;
   let bucket_storage = Arc::new(S3BucketStorage::from_s3_bucket(s3_bucket, pg_pool.clone()));
 
+  // Gotrue
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
+
+  // Redis
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
 
-  // TODO(nathan): Maybe PgListeners shouldn't return error
+  // Pg listeners
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
+
+  // Collab access control
   let collab_member_listener = pg_listeners.subscribe_collab_member_change();
-  let collab_permission = Arc::new(CollabPermissionImpl::new(
+  let collab_access_control = Arc::new(CollabAccessControlImpl::new(
     pg_pool.clone(),
     collab_member_listener,
   ));
 
-  let collab_storage = init_storage(config, pg_pool.clone()).await?;
+  // Workspace access control
+  let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
+  let workspace_access_control = Arc::new(WorkspaceAccessControlImpl::new(
+    pg_pool.clone(),
+    workspace_member_listener,
+  ));
+
+  let collab_storage = Arc::new(
+    init_collab_storage(
+      pg_pool.clone(),
+      collab_access_control.clone(),
+      workspace_access_control.clone(),
+    )
+    .await,
+  );
 
   Ok(AppState {
     pg_pool,
@@ -161,7 +187,8 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     gotrue_client,
     redis_client,
     collab_storage,
-    collab_permission,
+    collab_access_control,
+    workspace_access_control,
     bucket_storage,
     pg_listeners,
   })
@@ -304,15 +331,4 @@ fn make_ssl_acceptor_builder(certificate: Secret<String>) -> SslAcceptorBuilder 
     .set_max_proto_version(Some(openssl::ssl::SslVersion::TLS1_3))
     .unwrap();
   builder
-}
-
-pub async fn init_storage(
-  _config: &Config,
-  pg_pool: PgPool,
-) -> Result<Storage<CollabStorageProxy>, Error> {
-  let collab_storage = CollabPostgresDBStorageImpl::new(pg_pool);
-  let proxy = CollabStorageProxy::new(collab_storage);
-  Ok(Storage {
-    collab_storage: proxy,
-  })
 }

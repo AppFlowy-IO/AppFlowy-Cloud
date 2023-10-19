@@ -114,7 +114,7 @@ async fn get_handler(
     .await;
 
   if let Err(err) = result.as_ref() {
-    return if err.is_not_found() {
+    return if err.is_record_not_found() {
       Ok(HttpResponse::NotFound().finish())
     } else {
       Ok(HttpResponse::InternalServerError().finish())

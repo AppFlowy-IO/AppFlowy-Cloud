@@ -2,11 +2,11 @@ use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
 use database::workspace::{
   delete_workspace_members, insert_workspace_member, select_all_workspaces_owned,
-  select_user_is_workspace_owner, select_workspace_members, upsert_workspace_member,
+  select_workspace_members, upsert_workspace_member,
 };
 use database_entity::{AFWorkspaceMember, AFWorkspaces};
+use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
-use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::uuid, PgPool};
 
 pub async fn get_workspaces(
@@ -76,15 +76,4 @@ pub async fn update_workspace_member(
 ) -> Result<(), AppError> {
   upsert_workspace_member(pg_pool, workspace_id, &changeset.email, changeset.role).await?;
   Ok(())
-}
-
-pub async fn require_user_is_workspace_owner(
-  pg_pool: &PgPool,
-  user_uuid: &uuid::Uuid,
-  workspace_uuid: &uuid::Uuid,
-) -> Result<(), AppError> {
-  match select_user_is_workspace_owner(pg_pool, user_uuid, workspace_uuid).await? {
-    true => Ok(()),
-    false => Err(ErrorCode::NotEnoughPermissions.into()),
-  }
 }

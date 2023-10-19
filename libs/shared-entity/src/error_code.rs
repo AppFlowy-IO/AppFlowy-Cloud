@@ -32,7 +32,7 @@ pub enum ErrorCode {
   MissingPayload = 1004,
 
   #[error("Database error")]
-  DatabaseError = 1005,
+  DBError = 1005,
 
   #[error("Open Error")]
   OpenError = 1006,

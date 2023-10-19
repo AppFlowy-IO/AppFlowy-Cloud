@@ -9,7 +9,7 @@ use actix_web_actors::ws;
 use bytes::Bytes;
 use std::ops::Deref;
 
-use crate::collaborate::{CollabPermission, CollabServer};
+use crate::collaborate::{CollabAccessControl, CollabServer};
 use crate::error::RealtimeError;
 
 use actix_web_actors::ws::ProtocolError;
@@ -18,7 +18,11 @@ use realtime_entity::collab_msg::CollabMessage;
 use std::time::{Duration, Instant};
 use tracing::error;
 
-pub struct ClientSession<U: Unpin + RealtimeUser, S: Unpin + 'static, P: Unpin + CollabPermission> {
+pub struct ClientSession<
+  U: Unpin + RealtimeUser,
+  S: Unpin + 'static,
+  P: Unpin + CollabAccessControl,
+> {
   user: U,
   hb: Instant,
   pub server: Addr<CollabServer<S, U, P>>,
@@ -30,7 +34,7 @@ impl<U, S, P> ClientSession<U, S, P>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
-  P: CollabPermission + Unpin,
+  P: CollabAccessControl + Unpin,
 {
   pub fn new(
     user: U,
@@ -85,7 +89,7 @@ impl<U, S, P> Actor for ClientSession<U, S, P>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
-  P: CollabPermission + Unpin,
+  P: CollabAccessControl + Unpin,
 {
   type Context = ws::WebsocketContext<Self>;
 
@@ -127,7 +131,7 @@ impl<U, S, P> Handler<RealtimeMessage> for ClientSession<U, S, P>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
-  P: CollabPermission + Unpin,
+  P: CollabAccessControl + Unpin,
 {
   type Result = ();
 
@@ -141,7 +145,7 @@ impl<U, S, P> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSe
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
-  P: CollabPermission + Unpin,
+  P: CollabAccessControl + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let msg = match msg {

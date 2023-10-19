@@ -8,14 +8,12 @@ use std::sync::Arc;
 use realtime::client::{ClientSession, RealtimeUserImpl};
 use realtime::collaborate::CollabServer;
 
-use crate::biz::collab::access_control::CollabPermissionImpl;
+use crate::biz::collab::access_control::CollabAccessControlImpl;
+use crate::biz::collab::storage::CollabPostgresDBStorage;
+use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 use database::user::select_uid_from_uuid;
 use shared_entity::app_error::AppError;
 use std::time::Duration;
-
-use crate::component::auth::jwt::{authorization_from_token, UserUuid};
-
-use crate::component::storage_proxy::CollabStorageProxy;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
@@ -23,13 +21,16 @@ pub fn ws_scope() -> Scope {
 
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
+type CollabServerData = Data<
+  Addr<CollabServer<CollabPostgresDBStorage, Arc<RealtimeUserImpl>, Arc<CollabAccessControlImpl>>>,
+>;
 #[get("/{token}/{device_id}")]
 pub async fn establish_ws_connection(
   request: HttpRequest,
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<Addr<CollabServer<CollabStorageProxy, Arc<RealtimeUserImpl>, CollabPermissionImpl>>>,
+  server: CollabServerData,
 ) -> Result<HttpResponse> {
   tracing::info!("receive ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();

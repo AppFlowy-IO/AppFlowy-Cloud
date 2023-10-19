@@ -1,17 +1,15 @@
+use crate::biz::collab::access_control::CollabAccessControlImpl;
+use crate::biz::collab::storage::CollabPostgresDBStorage;
+use crate::biz::pg_listener::PgListeners;
+use crate::biz::workspace::access_control::WorkspaceAccessControlImpl;
 use crate::component::auth::LoggedUser;
-use crate::component::storage_proxy::CollabStorageProxy;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
-
+use database::file::bucket_s3_impl::S3BucketStorage;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::collections::BTreeMap;
 use std::sync::Arc;
-
-use crate::biz::pg_listener::PgListeners;
-
-use crate::biz::collab::access_control::CollabPermissionImpl;
-use database::file::bucket_s3_impl::S3BucketStorage;
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
@@ -22,8 +20,9 @@ pub struct AppState {
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: redis::aio::ConnectionManager,
-  pub collab_storage: Storage<CollabStorageProxy>,
-  pub collab_permission: Arc<CollabPermissionImpl>,
+  pub collab_storage: Arc<CollabPostgresDBStorage>,
+  pub collab_access_control: Arc<CollabAccessControlImpl>,
+  pub workspace_access_control: Arc<WorkspaceAccessControlImpl>,
   pub bucket_storage: Arc<S3BucketStorage>,
   pub pg_listeners: Arc<PgListeners>,
 }
@@ -36,11 +35,6 @@ impl AppState {
   pub async fn next_user_id(&self) -> i64 {
     self.id_gen.write().await.next_id()
   }
-}
-
-#[derive(Clone)]
-pub struct Storage<CollabStorage: Clone> {
-  pub collab_storage: CollabStorage,
 }
 
 #[derive(Clone, Debug, Copy)]

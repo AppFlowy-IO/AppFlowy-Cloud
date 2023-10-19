@@ -9,7 +9,7 @@ use serde_json::Error;
 
 use crate::error_code::ErrorCode;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
 pub struct AppError {
   pub code: ErrorCode,
   pub message: Cow<'static, str>,
@@ -33,8 +33,6 @@ impl Display for AppError {
     f.write_fmt(format_args!("code:{} msg: {}", self.code, self.message))
   }
 }
-
-impl std::error::Error for AppError {}
 
 #[cfg(feature = "cloud")]
 impl actix_web::error::ResponseError for AppError {
@@ -69,7 +67,7 @@ impl From<DatabaseError> for AppError {
       DatabaseError::StorageSpaceNotEnough => {
         AppError::new(ErrorCode::StorageSpaceNotEnough, value)
       },
-      _ => AppError::new(ErrorCode::DatabaseError, value),
+      _ => AppError::new(ErrorCode::DBError, value),
     }
   }
 }

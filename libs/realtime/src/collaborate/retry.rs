@@ -20,7 +20,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, Retry, RetryIf};
 
 use crate::collaborate::group::CollabGroupCache;
-use crate::collaborate::permission::CollabPermission;
+use crate::collaborate::permission::CollabAccessControl;
 use crate::error::RealtimeError;
 use tracing::{error, trace, warn};
 
@@ -29,14 +29,14 @@ pub(crate) struct SubscribeGroupIfNeed<'a, U, S, P> {
   pub(crate) groups: &'a Arc<CollabGroupCache<S, U>>,
   pub(crate) edit_collab_by_user: &'a Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   pub(crate) client_stream_by_user: &'a Arc<RwLock<HashMap<U, CollabClientStream>>>,
-  pub(crate) permission_service: &'a Arc<P>,
+  pub(crate) access_control: &'a Arc<P>,
 }
 
 impl<'a, U, S, P> SubscribeGroupIfNeed<'a, U, S, P>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  P: CollabPermission,
+  P: CollabAccessControl,
 {
   pub(crate) fn run(
     self,
@@ -56,7 +56,7 @@ impl<'a, U, S, P> Action for SubscribeGroupIfNeed<'a, U, S, P>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  P: CollabPermission,
+  P: CollabAccessControl,
 {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + 'a>>;
   type Item = ();
@@ -73,23 +73,6 @@ where
               .origin
               .client_user_id()
               .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
-
-            // before create a group, check the user is allowed to create a group.
-            match self
-              .permission_service
-              .can_send_message(&uid, object_id)
-              .await
-            {
-              Ok(is_allowed) => {
-                if !is_allowed {
-                  return Ok(());
-                }
-              },
-              Err(err) => {
-                warn!("fail to create group. error: {}", err);
-                return Ok(());
-              },
-            }
 
             self
               .groups
@@ -147,6 +130,7 @@ where
                 self.client_msg.content.object_id()
               );
 
+              let client_uid = self.client_msg.user.uid();
               self
                 .edit_collab_by_user
                 .lock()
@@ -157,8 +141,8 @@ where
                   origin: origin.clone(),
                 });
 
-              let sink_permission_service = self.permission_service.clone();
-              let stream_permission_service = self.permission_service.clone();
+              let sink_permission_service = self.access_control.clone();
+              let stream_permission_service = self.access_control.clone();
 
               let (sink, stream) = client_stream.client_channel::<CollabMessage, _, _>(
                 object_id,
@@ -167,44 +151,69 @@ where
                     return Box::pin(future::ready(false));
                   }
 
-                  let msg_uid = msg.uid();
                   let object_id = object_id.to_string();
                   let cloned_sink_permission_service = sink_permission_service.clone();
                   Box::pin(async move {
-                    if let Some(uid) = msg_uid {
-                      if let Err(err) = cloned_sink_permission_service
-                        .can_receive_message(&uid, &object_id)
-                        .await
-                      {
-                        trace!("client:{} fail to receive message. error: {}", uid, err);
-                        return false;
-                      }
+                    match cloned_sink_permission_service
+                      .can_receive_collab_update(&client_uid, &object_id)
+                      .await
+                    {
+                      Ok(is_allowed) => {
+                        if !is_allowed {
+                          warn!(
+                            "user:{} is not allowed to receive object:{} updates",
+                            client_uid, object_id,
+                          );
+                        }
+
+                        is_allowed
+                      },
+                      Err(err) => {
+                        trace!(
+                          "user:{} fail to receive updates by error: {}",
+                          client_uid,
+                          err
+                        );
+                        false
+                      },
                     }
-                    true
                   })
                 },
                 move |object_id, msg| {
-                  if msg.object_id != object_id {
+                  if msg.object_id() != object_id {
                     return Box::pin(future::ready(false));
                   }
 
+                  let is_init = msg.is_init();
                   let object_id = object_id.to_string();
-                  let msg_uid = msg.uid;
                   let cloned_stream_permission_service = stream_permission_service.clone();
+
                   Box::pin(async move {
-                    match msg_uid {
-                      None => true,
-                      Some(uid) => {
-                        match cloned_stream_permission_service
-                          .can_send_message(&uid, &object_id)
-                          .await
-                        {
-                          Ok(is_allowed) => is_allowed,
-                          Err(err) => {
-                            trace!("client:{} fail to send message. error: {}", uid, err);
-                            false
-                          },
+                    // If the message is init sync, and it's allow the send to the group.
+                    if is_init {
+                      return true;
+                    }
+
+                    match cloned_stream_permission_service
+                      .can_send_collab_update(&client_uid, &object_id)
+                      .await
+                    {
+                      Ok(is_allowed) => {
+                        if !is_allowed {
+                          warn!(
+                            "client:{} is not allowed to send object:{} updates",
+                            client_uid, object_id,
+                          );
                         }
+                        is_allowed
+                      },
+                      Err(err) => {
+                        trace!(
+                          "client:{} can't  send update with error: {}",
+                          client_uid,
+                          err
+                        );
+                        false
                       },
                     }
                   })

@@ -9,7 +9,6 @@ use actix_web::Error;
 use async_trait::async_trait;
 use futures_util::future::LocalBoxFuture;
 use shared_entity::app_error::AppError;
-use sqlx::PgPool;
 use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::ops::{Deref, DerefMut};
@@ -33,7 +32,7 @@ pub trait HttpAccessControlService: Send + Sync {
     &self,
     workspace_id: &Uuid,
     user_uuid: &UserUuid,
-    pg_pool: &PgPool,
+    method: Method,
   ) -> Result<(), AppError> {
     Ok(())
   }
@@ -63,11 +62,11 @@ where
     &self,
     workspace_id: &Uuid,
     user_uuid: &UserUuid,
-    pg_pool: &PgPool,
+    method: Method,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_workspace_permission(workspace_id, user_uuid, pg_pool)
+      .check_workspace_permission(workspace_id, user_uuid, method)
       .await
   }
 
@@ -87,18 +86,14 @@ where
 
 pub type AccessControlServices = Arc<HashMap<AccessResource, Arc<dyn HttpAccessControlService>>>;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct WorkspaceAccessControl {
-  pg_pool: PgPool,
   access_control_services: AccessControlServices,
 }
 
 impl WorkspaceAccessControl {
-  pub fn new(pg_pool: PgPool) -> Self {
-    Self {
-      pg_pool,
-      access_control_services: Arc::new(Default::default()),
-    }
+  pub fn new() -> Self {
+    Self::default()
   }
 
   pub fn with_acs<T: HttpAccessControlService + 'static>(
@@ -141,7 +136,6 @@ where
   fn new_transform(&self, service: S) -> Self::Future {
     ready(Ok(WorkspaceAccessControlMiddleware {
       service,
-      pg_pool: self.pg_pool.clone(),
       access_control_service: self.access_control_services.clone(),
     }))
   }
@@ -149,7 +143,6 @@ where
 
 pub struct WorkspaceAccessControlMiddleware<S> {
   service: S,
-  pg_pool: PgPool,
   access_control_service: AccessControlServices,
 }
 
@@ -186,7 +179,6 @@ where
 
         let method = req.method().clone();
         let fut = self.service.call(req);
-        let pg_pool = self.pg_pool.clone();
         let services = self.access_control_service.clone();
 
         Box::pin(async move {
@@ -198,7 +190,7 @@ where
             if let Some(workspace_id) = workspace_id {
               if let Some(acs) = services.get(&AccessResource::Workspace) {
                 if let Err(err) = acs
-                  .check_workspace_permission(&workspace_id, &user_uuid, &pg_pool)
+                  .check_workspace_permission(&workspace_id, &user_uuid, method.clone())
                   .await
                 {
                   error!("workspace access control: {:?}", err);

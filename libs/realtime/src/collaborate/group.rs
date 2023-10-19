@@ -11,19 +11,19 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 
-use tracing::{error, warn};
+use tracing::{error, event, warn};
 
 pub struct CollabGroupCache<S, U> {
   group_by_object_id: Arc<RwLock<HashMap<String, Arc<CollabGroup<U>>>>>,
-  storage: S,
+  storage: Arc<S>,
 }
 
 impl<S, U> CollabGroupCache<S, U>
 where
-  S: CollabStorage + Clone,
+  S: CollabStorage,
   U: RealtimeUser,
 {
-  pub fn new(storage: S) -> Self {
+  pub fn new(storage: Arc<S>) -> Self {
     Self {
       group_by_object_id: Arc::new(RwLock::new(HashMap::new())),
       storage,
@@ -88,7 +88,11 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) -> Arc<CollabGroup<U>> {
-    tracing::trace!("Create new group for object_id:{}", object_id);
+    event!(
+      tracing::Level::INFO,
+      "Create new group for object_id:{}",
+      object_id
+    );
     let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
     let broadcast = CollabBroadcast::new(object_id, collab.clone(), 10);
     let collab = Arc::new(collab.clone());

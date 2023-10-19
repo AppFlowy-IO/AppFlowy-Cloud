@@ -9,7 +9,7 @@ use crate::user::utils::generate_unique_registered_user_client;
 async fn add_workspace_members_not_enough_permission() {
   let (c1, user1) = generate_unique_registered_user_client().await;
   let (c2, _user2) = generate_unique_registered_user_client().await;
-  let workspace_id_2 = c2
+  let workspace_id = c2
     .get_workspaces()
     .await
     .unwrap()
@@ -20,7 +20,7 @@ async fn add_workspace_members_not_enough_permission() {
   // attempt to add user2 to user1's workspace
   let err = c1
     .add_workspace_members(
-      workspace_id_2,
+      workspace_id.to_string(),
       vec![CreateWorkspaceMember {
         email: user1.email,
         role: AFRole::Member,
@@ -42,7 +42,7 @@ async fn add_workspace_members_then_delete() {
 
   let email = c2.token().read().as_ref().unwrap().user.email.to_owned();
   c1.add_workspace_members(
-    c1_workspace_id,
+    c1_workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email,
       role: AFRole::Member,
@@ -92,7 +92,7 @@ async fn workspace_member_add_new_member() {
     .workspace_id;
 
   c1.add_workspace_members(
-    workspace_id,
+    workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email: user2.email,
       role: AFRole::Member,
@@ -103,7 +103,7 @@ async fn workspace_member_add_new_member() {
 
   let err = c2
     .add_workspace_members(
-      workspace_id,
+      workspace_id.to_string(),
       vec![CreateWorkspaceMember {
         email: user3.email,
         role: AFRole::Member,
@@ -128,7 +128,7 @@ async fn workspace_owner_add_new_owner() {
     .unwrap()
     .workspace_id;
   c1.add_workspace_members(
-    workspace_id,
+    workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
       role: AFRole::Owner,
@@ -159,7 +159,7 @@ async fn workspace_second_owner_add_new_member() {
     .unwrap()
     .workspace_id;
   c1.add_workspace_members(
-    workspace_id,
+    workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
       role: AFRole::Owner,
@@ -169,7 +169,7 @@ async fn workspace_second_owner_add_new_member() {
   .unwrap();
 
   c2.add_workspace_members(
-    workspace_id,
+    workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email: user3.email.clone(),
       role: AFRole::Member,
@@ -202,7 +202,7 @@ async fn workspace_second_owner_can_not_delete_origin_owner() {
     .unwrap()
     .workspace_id;
   c1.add_workspace_members(
-    workspace_id,
+    workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
       role: AFRole::Owner,
@@ -232,7 +232,7 @@ async fn workspace_owner_update_member_role() {
     .unwrap()
     .workspace_id;
   c1.add_workspace_members(
-    workspace_id,
+    workspace_id.to_string(),
     vec![CreateWorkspaceMember {
       email: user2.email.clone(),
       role: AFRole::Member,

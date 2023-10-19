@@ -158,7 +158,7 @@ impl Client {
     check_gotrue_result(resp).await
   }
 
-  pub async fn admin_put_user(
+  pub async fn admin_update_user(
     &self,
     access_token: &str,
     user_uuid: &str,

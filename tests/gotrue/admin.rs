@@ -64,7 +64,7 @@ async fn admin_user_create_list_edit_delete() {
   // change password for user
   let new_password = "Hello456!";
   let _ = gotrue_client
-    .admin_put_user(
+    .admin_update_user(
       &admin_token.access_token,
       new_user.id.as_str(),
       &AdminUserParams {

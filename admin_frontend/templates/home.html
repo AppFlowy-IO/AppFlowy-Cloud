@@ -7,30 +7,20 @@
     </div>
 
     <div id="menu">
-      <button id="changePasswordBtn">Change Password</button>
       <button id="adminBtn">Admin</button>
       <button id="logoutBtn">Logout</button>
     </div>
-
-    <!-- Modal for password change -->
-    <div id="passwordChangeModal" class="modal">
-      <div class="modal-content">
-        <h2>Change Password</h2>
-        <input
-          type="password"
-          id="newPassword"
-          class="modal-input"
-          placeholder="New Password"
-        />
-        <input
-          type="password"
-          id="confirmPassword"
-          class="modal-input"
-          placeholder="Confirm Password"
-        />
-        <button id="confirmPasswordChange" class="modal-button">Confirm</button>
-      </div>
-    </div>
+    <br />
+    <h2>Change Password</h2>
+    <input type="password" id="newPassword" placeholder="New Password" />
+    <br />
+    <input
+      type="password"
+      id="confirmPassword"
+      placeholder="Confirm Password"
+    />
+    <br />
+    <button id="confirmPasswordChange" class="modal-button">Confirm</button>
 
     <script>
       document
@@ -62,15 +52,7 @@
           window.location.href = "/web/admin";
         });
 
-      // Show the password change modal
-      document
-        .getElementById("changePasswordBtn")
-        .addEventListener("click", function () {
-          const modal = document.getElementById("passwordChangeModal");
-          modal.style.display = "block";
-        });
-
-      // Handle the password change confirmation
+      // Handle the password change button
       document
         .getElementById("confirmPasswordChange")
         .addEventListener("click", function () {
@@ -78,12 +60,33 @@
           const confirmPassword =
             document.getElementById("confirmPassword").value;
 
+          fetch("/web-api/change_password", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ new_password: newPassword }),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                // If HTTP status code is not OK, throw an error with the status text
+                throw Error(response.statusText);
+              }
+              alert("Password changed successfully!");
+              // Close the modal
+              const modal = document.getElementById("passwordChangeModal");
+              modal.style.display = "none";
+            })
+            .catch((error) => {
+              console.error(`Error:, ${error}`);
+              document.getElementById(
+                "response",
+              ).innerText = `Login failed: ${error.message}`;
+            });
+
           if (newPassword === confirmPassword) {
             // Passwords match; you can perform password change logic here
             alert("Password changed successfully!");
-            // Close the modal
-            const modal = document.getElementById("passwordChangeModal");
-            modal.style.display = "none";
           } else {
             alert("Passwords do not match. Please try again.");
           }

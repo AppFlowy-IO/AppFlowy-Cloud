@@ -48,13 +48,12 @@
           let confirmed = confirm("Set new password?");
           if (confirmed && newPassword) {
             const user_uuid = "{{ user.id|escape }}";
-            fetch(`/web-api/user/${user_uuid}`, {
+            fetch(`/web-api/admin/user/${user_uuid}`, {
               method: "PUT",
               headers: {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                email: "{{ user.email|escape }}",
                 password: newPassword,
               }),
             })
@@ -80,7 +79,7 @@
         .getElementById("generateInviteLinkBtn")
         .addEventListener("click", function () {
           const userEmail = encodeURIComponent("{{ user.email|escape }}");
-          fetch(`/web-api/user/${userEmail}/generate-link`, {
+          fetch(`/web-api/admin/user/${userEmail}/generate-link`, {
             method: "POST",
           })
             .then((response) => {

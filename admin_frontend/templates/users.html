@@ -34,7 +34,7 @@
           // Get the email from the user
           const email = prompt("Please enter the new user email:");
           if (email) {
-            fetch(`/web-api/user/${email}`, {
+            fetch(`/web-api/admin/user/${email}`, {
               method: "POST",
             })
               .then((response) => {
@@ -75,7 +75,7 @@
             const userId = e.target.getAttribute("data-user-id");
 
             // Call delete API
-            fetch(`/web-api/user/${userId}`, {
+            fetch(`/web-api/admin/user/${userId}`, {
               method: "DELETE",
             })
               .then((response) => {

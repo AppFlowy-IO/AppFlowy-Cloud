@@ -4,6 +4,7 @@ use askama::Template;
 use axum::extract::{Path, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
+use gotrue_entity::User;
 
 use crate::{templates, AppState};
 
@@ -26,7 +27,10 @@ pub async fn home_handler(
   session: UserSession,
 ) -> Result<Html<String>, RenderError> {
   match state.gotrue_client.user_info(&session.access_token).await {
-    Ok(user) => render_template(templates::Home { email: &user.email }),
+    Ok(user) => render_template(templates::Home {
+      email: &user.email,
+      is_admin: is_admin(&user),
+    }),
     Err(err) => {
       tracing::error!("Error getting user info: {:?}", err);
       login_handler().await
@@ -80,4 +84,8 @@ where
 {
   let s = x.render()?;
   Ok(Html(s))
+}
+
+fn is_admin(user: &User) -> bool {
+  user.role == "supabase_admin"
 }

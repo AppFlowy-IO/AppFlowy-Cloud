@@ -7,10 +7,13 @@
     {% include "top_bar.html" %}
     <h2>Welcome, {{ email }}</h2>
 
+    {% if is_admin %}
     <div id="menu">
       <button id="adminBtn">Admin</button>
+      <br />
     </div>
-    <br />
+    {% endif %}
+
     <h3>Change Password</h3>
     <input type="password" id="newPassword" placeholder="New Password" />
     <br />

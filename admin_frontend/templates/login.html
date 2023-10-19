@@ -1,36 +1,70 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    {% include "style.html" %}
+  </head>
   <body>
-    <h1>Admin Login</h1>
-    <form id="loginForm">
-      <table>
-        <tr>
-          <td>
-            <label for="email">Email:</label>
-          </td>
-          <td>
-            <input type="text" id="email" name="email" required />
-          </td>
-        </tr>
-        <tr>
-          <td>
-            <label for="password">Password:</label>
-          </td>
-          <td>
-            <input type="password" id="password" name="password" required />
-          </td>
-        </tr>
-      </table>
-      <button type="button" id="submitBtn">Submit</button>
-    </form>
-    <div id="response"></div>
+    {% include "message.html" %}
+    <h2 class="text-align-center">AppFlowy Cloud</h2>
+    <table class="text-align-center justify-content-center display-flex">
+      <tr>
+        <td>
+          <h3>Login</h3>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input
+            class="text-align-center"
+            type="text"
+            id="email"
+            name="email"
+            placeholder="Email"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input
+            class="text-align-center"
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Password"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <button type="button" id="submitBtn">Submit</button>
+        </td>
+      </tr>
+    </table>
 
-    <div id="oauth2Login">
-      <p>Or login with:</p>
-      <a href="/gotrue/authorize?provider=google&redirect_to=/web/login"
-        >Google</a
-      >
-    </div>
+    <br />
+    <table class="text-align-center justify-content-center display-flex">
+      <tr>
+        <td>
+          <h3>OAuth Login</h3>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
+            <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
+              <img
+                src="https://static-00.iconduck.com/assets.00/google-icon-2048x2048-czn3g8x8.png"
+                alt="Login with Google"
+                width="30"
+                height="30"
+              />
+            </a>
+          </a>
+        </td>
+      </tr>
+    </table>
 
     <script>
       document
@@ -47,20 +81,15 @@
             },
             body: JSON.stringify(data),
             credentials: "same-origin",
-          })
-            .then((response) => {
-              if (!response.ok) {
-                // If HTTP status code is not OK, throw an error with the status text
-                throw Error(response.statusText);
-              }
+          }).then((response) => {
+            if (!response.ok) {
+              response.text().then((text) => {
+                displayMessage(`Login failed: ${response.statusText} ${text}`);
+              });
+            } else {
               window.location.href = "/web/home";
-            })
-            .catch((error) => {
-              console.error(`Error:, ${error}`);
-              document.getElementById(
-                "response",
-              ).innerText = `Login failed: ${error.message}`;
-            });
+            }
+          });
         });
 
       if (window.location.hash) {
@@ -72,20 +101,16 @@
         fetch(`/web-api/login_refresh/${refreshToken}`, {
           // Login in via refresh_token
           method: "POST",
-        })
-          .then((response) => {
-            if (!response.ok) {
-              // If HTTP status code is not OK, throw an error with the status text
-              throw Error(response.statusText);
-            }
-            window.location.href = "/web/home";
-          })
-          .catch((error) => {
-            console.error(`Error:, ${error}`);
-            document.getElementById(
-              "response",
-            ).innerText = `OAuth Login failed: ${error.message}`;
-          });
+        }).then((response) => {
+          if (!response.ok) {
+            response.text().then((text) => {
+              displayMessage(
+                `OAuth Login failed: ${response.statusText} ${text}`,
+              );
+            });
+          }
+          window.location.href = "/web/home";
+        });
       }
     </script>
   </body>

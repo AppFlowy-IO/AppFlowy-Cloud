@@ -8,6 +8,7 @@ pub struct Login;
 #[template(path = "home.html")]
 pub struct Home<'a> {
   pub email: &'a str,
+  pub is_admin: bool,
 }
 
 #[derive(Template)]

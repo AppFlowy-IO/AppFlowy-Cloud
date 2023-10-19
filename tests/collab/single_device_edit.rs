@@ -1,4 +1,4 @@
-use crate::realtime::test_client::{assert_remote_collab, TestClient};
+use crate::util::test_client::{assert_remote_collab, TestClient};
 use collab_entity::CollabType;
 
 use serde_json::json;

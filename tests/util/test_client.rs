@@ -6,7 +6,9 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database_entity::{AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams};
+use database_entity::{
+  AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
+};
 use serde_json::Value;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::types::Uuid;
@@ -16,8 +18,9 @@ use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::debug;
 
+use crate::localhost_client;
 use crate::user::utils::{generate_unique_registered_user, User};
-use crate::{localhost_client, setup_log};
+use crate::util::setup_log;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -73,6 +76,32 @@ impl TestClient {
     self
       .api_client
       .add_collab_member(InsertCollabMemberParams {
+        uid,
+        workspace_id: workspace_id.to_string(),
+        object_id: object_id.to_string(),
+        access_level,
+      })
+      .await
+      .unwrap();
+  }
+
+  pub(crate) async fn update_collab_member_access_level(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    other_client: &TestClient,
+    access_level: AFAccessLevel,
+  ) {
+    let uid = other_client
+      .api_client
+      .get_profile()
+      .await
+      .unwrap()
+      .uid
+      .unwrap();
+    self
+      .api_client
+      .update_collab_member(UpdateCollabMemberParams {
         uid,
         workspace_id: workspace_id.to_string(),
         object_id: object_id.to_string(),

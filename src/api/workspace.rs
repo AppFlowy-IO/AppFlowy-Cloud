@@ -1,24 +1,22 @@
+use crate::biz;
+
 use crate::biz::workspace;
 use crate::component::auth::jwt::UserUuid;
-use crate::state::{AppState, Storage};
+use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
-use database_entity::*;
-use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::workspace_dto::*;
-use sqlx::types::uuid;
-
-use tracing::{debug, instrument};
-use tracing_actix_web::RequestId;
-
-use crate::biz;
-use crate::component::storage_proxy::CollabStorageProxy;
 use database::collab::CollabStorage;
 use database::user::select_uid_from_uuid;
 use database_entity::database_error::DatabaseError;
+use database_entity::*;
 use shared_entity::app_error::AppError;
+use shared_entity::data::{AppResponse, JsonAppResponse};
+use shared_entity::dto::workspace_dto::*;
 use shared_entity::error_code::ErrorCode;
+use sqlx::types::uuid;
+use tracing::{debug, instrument};
+use tracing_actix_web::RequestId;
 use uuid::Uuid;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
@@ -43,10 +41,10 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("{workspace_id}/collab/{object_id}/member")
-        .route(web::post().to(create_collab_member_handler))
+        .route(web::post().to(add_collab_member_handler))
         .route(web::get().to(get_collab_member_handler))
         .route(web::put().to(update_collab_member_handler))
-        .route(web::delete().to(delete_collab_member_handler)),
+        .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
       web::resource("{workspace_id}/collab/{object_id}/member/list")
@@ -143,43 +141,41 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(storage, payload, state), err)]
+#[instrument(skip(payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
-  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<RawData>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppError::from)?;
-  let data = storage
+  let data = state
     .collab_storage
     .get_collab(&uid, payload.into_inner())
     .await
     .map_err(|err| match err {
       DatabaseError::RecordNotFound(msg) => AppError::new(ErrorCode::RecordNotFound, msg),
-      _ => AppError::new(ErrorCode::DatabaseError, err.to_string()),
+      _ => AppError::new(ErrorCode::DBError, err.to_string()),
     })?;
 
   debug!("Returned data length: {}", data.len());
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip(storage, payload, state), err)]
+#[instrument(skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
-  storage: Data<Storage<CollabStorageProxy>>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppError::from)?;
   let result = BatchQueryCollabResult(
-    storage
+    state
       .collab_storage
       .batch_get_collab(&uid, payload.into_inner().0)
       .await,
@@ -233,7 +229,7 @@ async fn retrieve_snapshots_handler(
 }
 
 #[instrument(skip(state, payload), err)]
-async fn create_collab_member_handler(
+async fn add_collab_member_handler(
   required_id: RequestId,
   payload: Json<InsertCollabMemberParams>,
   state: Data<AppState>,
@@ -264,7 +260,7 @@ async fn get_collab_member_handler(
 }
 
 #[instrument(skip(state, payload), err)]
-async fn delete_collab_member_handler(
+async fn remove_collab_member_handler(
   user_uuid: UserUuid,
   required_id: RequestId,
   payload: Json<CollabMemberIdentify>,

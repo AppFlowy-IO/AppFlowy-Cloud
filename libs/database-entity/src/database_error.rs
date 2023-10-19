@@ -32,7 +32,7 @@ pub enum DatabaseError {
 }
 
 impl DatabaseError {
-  pub fn is_not_found(&self) -> bool {
+  pub fn is_record_not_found(&self) -> bool {
     matches!(self, Self::RecordNotFound(_))
   }
 }

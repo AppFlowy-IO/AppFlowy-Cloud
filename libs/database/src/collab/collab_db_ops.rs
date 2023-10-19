@@ -10,7 +10,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{Error, PgPool, Row, Transaction};
 use std::collections::HashMap;
 use std::{ops::DerefMut, str::FromStr};
-use tracing::{error, instrument, trace};
+use tracing::{error, event, instrument};
 use uuid::Uuid;
 
 pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
@@ -47,15 +47,16 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 /// * There's a database operation failure.
 /// * There's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
 ///
+
+#[instrument(level = "trace", skip(tx, params), fields(oid=%params.object_id), err)]
 pub async fn insert_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
-  owner_uid: &i64,
+  uid: &i64,
   params: &InsertCollabParams,
 ) -> Result<(), DatabaseError> {
   let encrypt = 0;
   let partition_key = params.collab_type.value();
   let workspace_id = Uuid::from_str(&params.workspace_id)?;
-  // Check if the row exists and get its workspace_id
   let existing_workspace_id: Option<Uuid> = sqlx::query_scalar!(
     "SELECT workspace_id FROM af_collab WHERE oid = $1",
     &params.object_id
@@ -64,9 +65,14 @@ pub async fn insert_af_collab(
   .await?;
 
   match existing_workspace_id {
-    Some(existing_id) => {
-      if existing_id == workspace_id {
-        trace!("Update existing af_collab row");
+    Some(existing_workspace_id) => {
+      if existing_workspace_id == workspace_id {
+        event!(
+          tracing::Level::TRACE,
+          "Update collab row:{}",
+          params.object_id
+        );
+
         sqlx::query!(
           "UPDATE af_collab \
         SET blob = $2, len = $3, partition_key = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1",
@@ -75,13 +81,13 @@ pub async fn insert_af_collab(
           params.raw_data.len() as i32,
           partition_key,
           encrypt,
-          owner_uid,
+          uid,
         )
         .execute(tx.deref_mut())
         .await
         .context(format!(
-          "Update af_collab failed: {}:{}",
-          owner_uid, params.object_id
+          "user:{} update af_collab:{} failed",
+          uid, params.object_id
         ))?;
       } else {
         return Err(DatabaseError::Internal(anyhow::anyhow!(
@@ -102,25 +108,31 @@ pub async fn insert_af_collab(
       .fetch_one(tx.deref_mut())
       .await?;
 
-      trace!(
-        "Insert new af_collab row: {}:{}:{}",
-        owner_uid,
+      event!(
+        tracing::Level::TRACE,
+        "Insert new collab row: {}:{}:{}",
+        uid,
         params.object_id,
         params.workspace_id
       );
 
-      // Insert into af_collab_member
       sqlx::query!(
-        "INSERT INTO af_collab_member (oid, uid, permission_id) VALUES ($1, $2, $3)",
+        r#"
+        INSERT INTO af_collab_member (uid, oid, permission_id)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (uid, oid)
+        DO UPDATE
+          SET permission_id = excluded.permission_id;
+        "#,
+        uid,
         params.object_id,
-        owner_uid,
         permission_id
       )
       .execute(tx.deref_mut())
       .await
       .context(format!(
         "Insert af_collab_member failed: {}:{}:{}",
-        owner_uid, params.object_id, permission_id
+        uid, params.object_id, permission_id
       ))?;
 
       sqlx::query!(
@@ -131,14 +143,14 @@ pub async fn insert_af_collab(
         params.raw_data.len() as i32,
         partition_key,
         encrypt,
-        owner_uid,
+        uid,
         workspace_id,
       )
       .execute(tx.deref_mut())
       .await
       .context(format!(
         "Insert new af_collab failed: {}:{}:{}",
-        owner_uid, params.object_id, params.collab_type
+        uid, params.object_id, params.collab_type
       ))?;
     },
   }
@@ -146,7 +158,7 @@ pub async fn insert_af_collab(
   Ok(())
 }
 
-pub async fn get_collab_blob(
+pub async fn select_collab_blob(
   pg_pool: &PgPool,
   collab_type: &CollabType,
   object_id: &str,
@@ -165,7 +177,7 @@ pub async fn get_collab_blob(
   .await
 }
 
-pub async fn batch_get_collab_blob(
+pub async fn batch_select_collab_blob(
   pg_pool: &PgPool,
   queries: Vec<BatchQueryCollab>,
 ) -> HashMap<String, QueryCollabResult> {
@@ -338,7 +350,10 @@ pub async fn insert_collab_member(
   )
   .execute(txn.deref_mut())
   .await
-  .context("oops fuck")?;
+  .context(format!(
+    "failed to insert collab member: user:{} oid:{}",
+    uid, oid
+  ))?;
 
   txn
     .commit()
@@ -450,4 +465,17 @@ fn transform_record_not_found_error(
       }
     },
   }
+}
+
+#[inline]
+pub async fn is_collab_exists(oid: &str, pg_pool: &PgPool) -> Result<bool, sqlx::Error> {
+  let result = sqlx::query_scalar!(
+    r#"
+        SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
+        "#,
+    &oid,
+  )
+  .fetch_one(pg_pool)
+  .await;
+  transform_record_not_found_error(result)
 }

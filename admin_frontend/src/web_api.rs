@@ -43,12 +43,11 @@ pub async fn post_oauth_login_handler(
     .to_str()
     .unwrap();
   let base_url = format!("{}://{}", scheme, host);
+  let redirect_uri = format!("{}/web/oauth_login_redirect", base_url);
 
   let oauth_url = format!(
     "{}/authorize?provider={}&redirect_uri={}",
-    base_url,
-    &provider,
-    format!("{}/web/oauth_login_redirect", base_url)
+    base_url, &provider, redirect_uri
   );
   Ok(oauth_url.into())
 }

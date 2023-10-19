@@ -7,6 +7,7 @@ use database_entity::{
 };
 use shared_entity::{app_error::AppError, error_code::ErrorCode};
 use sqlx::{types::Uuid, PgPool};
+use tracing::trace;
 use validator::Validate;
 
 pub async fn create_collab(
@@ -74,6 +75,7 @@ pub async fn create_collab_member(
     return Err(ErrorCode::RecordAlreadyExists.into());
   }
 
+  trace!("Inserting collab member: {:?}", params);
   database::collab::insert_collab_member(
     params.uid,
     &params.object_id,

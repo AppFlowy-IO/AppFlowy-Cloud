@@ -200,6 +200,13 @@ pub enum AFRole {
   Guest,
 }
 
+impl AFRole {
+  /// The user can create a [Collab] if the user is [AFRole::Owner] or [AFRole::Member] of the workspace.
+  pub fn can_create_collab(&self) -> bool {
+    matches!(self, AFRole::Owner | AFRole::Member)
+  }
+}
+
 impl From<i32> for AFRole {
   fn from(value: i32) -> Self {
     // Can't modify the value of the enum
@@ -262,6 +269,15 @@ impl AFAccessLevel {
     match self {
       AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => false,
       AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => true,
+    }
+  }
+
+  pub fn can_delete(&self) -> bool {
+    match self {
+      AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment | AFAccessLevel::ReadAndWrite => {
+        false
+      },
+      AFAccessLevel::FullAccess => true,
     }
   }
 }

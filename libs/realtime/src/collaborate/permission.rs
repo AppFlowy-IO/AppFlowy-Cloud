@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use database_entity::AFAccessLevel;
 use reqwest::Method;
-use std::fmt::Display;
+use serde::de::StdError;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum CollabUserId<'a> {
@@ -9,17 +10,28 @@ pub enum CollabUserId<'a> {
   UserUuid(&'a uuid::Uuid),
 }
 
+impl<'a> From<&'a i64> for CollabUserId<'a> {
+  fn from(uid: &'a i64) -> Self {
+    CollabUserId::UserId(uid)
+  }
+}
+
+impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
+  fn from(uid: &'a uuid::Uuid) -> Self {
+    CollabUserId::UserUuid(uid)
+  }
+}
+
 #[async_trait]
-pub trait CollabPermission: Sync + Send + 'static {
-  type Error: Display;
+pub trait CollabAccessControl: Sync + Send + 'static {
+  type Error: StdError + Sync + Send;
 
   /// Return the access level of the user in the collab
-  /// If the collab object is not found, return None. Otherwise, return the access level of the user
-  async fn get_access_level(
+  async fn get_collab_access_level(
     &self,
     user: CollabUserId<'_>,
     oid: &str,
-  ) -> Result<Option<AFAccessLevel>, Self::Error>;
+  ) -> Result<AFAccessLevel, Self::Error>;
 
   /// Return true if the user from the HTTP request is allowed to access the collab object.
   /// This function will be called very frequently, so it should be very fast.
@@ -37,11 +49,48 @@ pub trait CollabPermission: Sync + Send + 'static {
   /// The user can send the message if:
   /// 1. user is the member of the collab object
   /// 2. the permission level of the user is `ReadAndWrite` or `FullAccess`
-  async fn can_send_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error>;
+  /// 3. If the collab object is not found which means the collab object is created by the user.
+  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error>;
 
   /// Return true if the user is allowed to send the message.
   /// This function will be called very frequently, so it should be very fast.
   ///
   /// The user can recv the message if the user is the member of the collab object
-  async fn can_receive_message(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error>;
+  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error>;
+}
+//
+#[async_trait]
+impl<T> CollabAccessControl for Arc<T>
+where
+  T: CollabAccessControl,
+{
+  type Error = <T as CollabAccessControl>::Error;
+
+  async fn get_collab_access_level(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+  ) -> Result<AFAccessLevel, Self::Error> {
+    self.as_ref().get_collab_access_level(user, oid).await
+  }
+
+  async fn can_access_http_method(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+    method: &Method,
+  ) -> Result<bool, Self::Error> {
+    self
+      .as_ref()
+      .can_access_http_method(user, oid, method)
+      .await
+  }
+
+  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
+    self.as_ref().can_send_collab_update(uid, oid).await
+  }
+
+  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
+    self.as_ref().can_receive_collab_update(uid, oid).await
+  }
 }

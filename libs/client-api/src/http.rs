@@ -485,20 +485,20 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update(
+  pub async fn user_update(
     &self,
-    params: &UserUpdateParams,
-    name: Option<&str>,
+    gotrue_params: &UserUpdateParams,
+    new_name: Option<&str>,
   ) -> Result<(), AppError> {
     let updated_user = self
       .gotrue_client
-      .update_user(&self.access_token()?, params)
+      .update_user(&self.access_token()?, gotrue_params)
       .await?;
     if let Some(t) = self.token.write().as_mut() {
       t.user = updated_user;
     }
-    if let Some(name) = name {
-      self.update_user_name(name).await?;
+    if let Some(new_name) = new_name {
+      self.update_user_name(new_name).await?;
     }
     Ok(())
   }

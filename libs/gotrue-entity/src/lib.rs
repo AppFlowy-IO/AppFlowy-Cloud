@@ -272,13 +272,13 @@ pub enum SignUpResponse {
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct UserUpdateParams {
-  email: String,
-  password: Option<String>,
-  nonce: String,
-  data: BTreeMap<String, serde_json::Value>,
-  app_metadata: BTreeMap<String, serde_json::Value>,
-  phone: String,
-  channel: String,
-  code_challenge: String,
-  code_challenge_method: String,
+  pub email: String,
+  pub password: Option<String>,
+  pub nonce: String,
+  pub data: BTreeMap<String, serde_json::Value>,
+  pub app_metadata: Option<BTreeMap<String, serde_json::Value>>,
+  pub phone: String,
+  pub channel: String,
+  pub code_challenge: String,
+  pub code_challenge_method: String,
 }

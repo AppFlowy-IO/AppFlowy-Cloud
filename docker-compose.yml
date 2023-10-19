@@ -1,6 +1,26 @@
 version: '3'
 services:
+  portainer:
+    restart: on-failure
+    image: portainer/portainer-ce:latest
+    ports:
+      - 9442:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  portainer_init:
+    depends_on:
+      - portainer
+    image: alpine/curl
+    restart: on-failure
+    environment:
+      - PORTAINER_PASSWORD=${PORTAINER_PASSWORD}
+    volumes:
+      - ./docker/portainer/setup.sh:/setup.sh
+    command: ./setup.sh
+
   nginx:
+    restart: on-failure
     image: nginx
     ports:
       - 80:80
@@ -10,12 +30,14 @@ services:
       - appflowy_cloud
       - gotrue
       - admin_frontend
+      - portainer
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
 
   minio:
+    restart: on-failure
     image: minio/minio
     ports:
       - 9000:9000
@@ -25,6 +47,7 @@ services:
     command: server /data --console-address ":9001"
 
   postgres:
+    restart: on-failure
     build:
       context: .
       dockerfile: docker/postgres.Dockerfile
@@ -39,6 +62,7 @@ services:
       - ./migrations/before:/docker-entrypoint-initdb.d
 
   pgadmin:
+    restart: on-failure
     image: dpage/pgadmin4
     depends_on:
       - postgres
@@ -51,15 +75,16 @@ services:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
   redis:
+    restart: on-failure
     image: redis
     ports:
       - 6380:6379
 
   gotrue:
+    restart: on-failure
     build:
       context: .
       dockerfile: docker/gotrue.Dockerfile
-    restart: on-failure
     depends_on:
       - postgres
     environment:

@@ -18,31 +18,24 @@ pub fn router() -> Router<AppState> {
 }
 
 pub async fn login_handler() -> Result<Html<String>, RenderError> {
-  let s = templates::Login {}.render()?;
-  Ok(Html(s))
+  render_template(templates::Login {})
 }
 
 pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, RenderError> {
-  let user_email = state
-    .gotrue_client
-    .user_info(&session.access_token)
-    .await
-    .map(|user_info| user_info.email)
-    .unwrap_or_else(|err| {
+  match state.gotrue_client.user_info(&session.access_token).await {
+    Ok(user) => render_template(templates::Home { email: &user.email }),
+    Err(err) => {
       tracing::error!("Error getting user info: {:?}", err);
-      "".to_owned()
-    });
-
-  let s = templates::Home { email: &user_email }.render()?;
-  Ok(Html(s))
+      login_handler().await
+    },
+  }
 }
 
 pub async fn admin_handler(_: UserSession) -> Result<Html<String>, RenderError> {
-  let s = templates::Admin {}.render()?;
-  Ok(Html(s))
+  render_template(templates::Admin {})
 }
 
 pub async fn admin_users_handler(
@@ -64,8 +57,7 @@ pub async fn admin_users_handler(
     .filter(|user| user.deleted_at.is_none())
     .collect::<Vec<_>>();
 
-  let s = templates::Users { users: &users }.render()?;
-  Ok(Html(s))
+  render_template(templates::Users { users: &users })
 }
 
 pub async fn admin_user_details_handler(
@@ -78,6 +70,14 @@ pub async fn admin_user_details_handler(
     .admin_user_details(&session.access_token, &user_id)
     .await
     .unwrap(); // TODO: handle error
-  let s = templates::UserDetails { user: &users }.render()?;
+
+  render_template(templates::UserDetails { user: &users })
+}
+
+fn render_template<T>(x: T) -> Result<Html<String>, RenderError>
+where
+  T: Template,
+{
+  let s = x.render()?;
   Ok(Html(s))
 }

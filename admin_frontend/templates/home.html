@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    {% include "style.html" %}
+  </head>
   <body>
-    <div id="content">
-      <h1>User Management</h1>
-      <p>Welcome, {{ email }}</p>
-    </div>
+    {% include "top_bar.html" %}
+    <h2>Welcome, {{ email }}</h2>
 
     <div id="menu">
       <button id="adminBtn">Admin</button>
-      <button id="logoutBtn">Logout</button>
     </div>
     <br />
-    <h2>Change Password</h2>
+    <h3>Change Password</h3>
     <input type="password" id="newPassword" placeholder="New Password" />
     <br />
     <input
@@ -23,29 +23,6 @@
     <button id="confirmPasswordChange" class="modal-button">Confirm</button>
 
     <script>
-      document
-        .getElementById("logoutBtn")
-        .addEventListener("click", function () {
-          // Remove the cookie by setting its value to an empty string and its expiry date to the past.
-          fetch("/web-api/logout", {
-            method: "POST",
-            credentials: "same-origin",
-          })
-            .then((response) => {
-              if (!response.ok) {
-                throw new Error(
-                  `Network response was not ok: ${response.statusText}`,
-                );
-              }
-              window.location.href = "/web/login";
-            })
-            .catch((error) => {
-              console.error(
-                `There was a problem with the fetch operation: ${error}`,
-              );
-            });
-        });
-
       document
         .getElementById("adminBtn")
         .addEventListener("click", function () {

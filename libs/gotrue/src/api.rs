@@ -6,7 +6,7 @@ use anyhow::Context;
 use super::grant::Grant;
 use gotrue_entity::{
   AccessTokenResponse, AdminListUsersResponse, GoTrueError, GoTrueSettings, OAuthError,
-  OAuthProvider, SignUpResponse, User,
+  OAuthProvider, SignUpResponse, User, UserUpdateParams,
 };
 use infra::reqwest::{check_response, from_body, from_response};
 
@@ -102,18 +102,13 @@ impl Client {
   pub async fn update_user(
     &self,
     access_token: &str,
-    email: Option<String>,
-    password: Option<String>,
+    update_user_params: &UserUpdateParams,
   ) -> Result<User, GoTrueError> {
-    let payload = serde_json::json!({
-        "email": email,
-        "password": password,
-    });
     let resp = self
       .client
       .put(format!("{}/user", self.base_url))
       .header("Authorization", format!("Bearer {}", access_token))
-      .json(&payload)
+      .json(update_user_params)
       .send()
       .await?;
 
@@ -163,7 +158,7 @@ impl Client {
     check_gotrue_result(resp).await
   }
 
-  pub async fn admin_put_user(
+  pub async fn admin_update_user(
     &self,
     access_token: &str,
     user_uuid: &str,

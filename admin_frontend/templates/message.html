@@ -1,0 +1,20 @@
+<div id="message"></div>
+
+<script>
+  function displayMessage(message) {
+    const notification = document.getElementById("message");
+    notification.textContent = message; // Assign the message
+    notification.style.display = "block"; // Show the notification
+
+    // Hide after 5 seconds
+    setTimeout(function () {
+      notification.style.display = "none";
+    }, 2000);
+  }
+
+  function displayHttpStatusAndPayload(response) {
+    response.text().then((text) => {
+      displayMessage(`${response.statusText}: ${text}`);
+    });
+  }
+</script>

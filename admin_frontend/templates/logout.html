@@ -1,0 +1,17 @@
+<button id="logoutBtn">Logout</button>
+
+<script>
+  document.getElementById("logoutBtn").addEventListener("click", function () {
+    // Remove the cookie by setting its value to an empty string and its expiry date to the past.
+    fetch("/web-api/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    }).then((response) => {
+      if (!response.ok) {
+        displayHttpStatusAndPayload(response);
+      } else {
+        window.location.href = "/web/login";
+      }
+    });
+  });
+</script>

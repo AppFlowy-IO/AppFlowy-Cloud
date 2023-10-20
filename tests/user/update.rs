@@ -1,4 +1,4 @@
-use shared_entity::dto::auth_dto::UserUpdateParams;
+use gotrue_entity::UserUpdateParams;
 use shared_entity::error_code::ErrorCode;
 
 use crate::localhost_client;
@@ -10,10 +10,13 @@ async fn update_but_not_logged_in() {
   let new_email = generate_unique_email();
   let new_password = "Hello123!";
   let res = c
-    .update(
-      UserUpdateParams::new()
-        .with_email(new_email)
-        .with_password(new_password),
+    .user_update(
+      &UserUpdateParams {
+        email: new_email,
+        password: Some(new_password.to_owned()),
+        ..Default::default()
+      },
+      None,
     )
     .await;
   assert!(res.is_err());
@@ -26,10 +29,13 @@ async fn update_password_same_password() {
     .await
     .unwrap();
   let err = c
-    .update(
-      UserUpdateParams::new()
-        .with_email(&user.email)
-        .with_password(&user.password),
+    .user_update(
+      &UserUpdateParams {
+        email: user.email.to_owned(),
+        password: Some(user.password.to_owned()),
+        ..Default::default()
+      },
+      None,
     )
     .await
     .err()
@@ -50,16 +56,28 @@ async fn update_password_and_revert() {
     c.sign_in_password(&user.email, &user.password)
       .await
       .unwrap();
-    c.update(UserUpdateParams::new().with_password(new_password))
-      .await
-      .unwrap();
+    c.user_update(
+      &UserUpdateParams {
+        password: Some(new_password.to_owned()),
+        ..Default::default()
+      },
+      None,
+    )
+    .await
+    .unwrap();
   }
   {
     // revert password to old_password
     let c = localhost_client();
     c.sign_in_password(&user.email, new_password).await.unwrap();
-    c.update(UserUpdateParams::new().with_password(&user.password))
-      .await
-      .unwrap();
+    c.user_update(
+      &UserUpdateParams {
+        password: Some(user.password.to_owned()),
+        ..Default::default()
+      },
+      None,
+    )
+    .await
+    .unwrap();
   }
 }

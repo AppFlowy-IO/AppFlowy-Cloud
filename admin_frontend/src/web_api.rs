@@ -1,11 +1,12 @@
 use crate::error::WebApiError;
-use crate::models::PutUserRequest;
+use crate::models::{ChangePasswordRequest, PutUserRequest, WebAdminCreateUserRequest};
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap, HeaderValue};
 use axum::response::Result;
+use axum::routing::delete;
 use axum::Json;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
@@ -13,17 +14,42 @@ use axum_extra::extract::CookieJar;
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
 };
-use gotrue_entity::User;
+use gotrue_entity::{User, UserUpdateParams};
 
 pub fn router() -> Router<AppState> {
   Router::new()
-      // TODO
     .route("/login", post(login_handler))
     .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
-    .route("/user/:param", post(post_user_handler).delete(delete_user_handler).put(put_user_handler))
-    .route("/user/:email/generate-link", post(post_user_generate_link_handler))
+    .route("/admin/user", post(admin_add_user_handler))
+    .route(
+      "/admin/user/:param",
+      delete(admin_delete_user_handler).put(admin_update_user_handler),
+    )
+    .route(
+      "/admin/user/:email/generate-link",
+      post(post_user_generate_link_handler),
+    )
+    .route("/change_password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
+}
+
+pub async fn change_password_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Json(param): Json<ChangePasswordRequest>,
+) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+  let res = state
+    .gotrue_client
+    .update_user(
+      &session.access_token,
+      &UserUpdateParams {
+        password: Some(param.new_password),
+        ..Default::default()
+      },
+    )
+    .await?;
+  Ok(res.into())
 }
 
 static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
@@ -52,7 +78,7 @@ pub async fn post_oauth_login_handler(
   Ok(oauth_url.into())
 }
 
-pub async fn put_user_handler(
+pub async fn admin_update_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_uuid): Path<String>,
@@ -60,11 +86,10 @@ pub async fn put_user_handler(
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let res = state
     .gotrue_client
-    .admin_put_user(
+    .admin_update_user(
       &session.access_token,
       &user_uuid,
       &AdminUserParams {
-        email: param.email.to_owned(),
         password: Some(param.password.to_owned()),
         email_confirm: true,
         ..Default::default()
@@ -92,7 +117,7 @@ pub async fn post_user_generate_link_handler(
   Ok(res.into())
 }
 
-pub async fn delete_user_handler(
+pub async fn admin_delete_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_uuid): Path<String>,
@@ -110,13 +135,15 @@ pub async fn delete_user_handler(
   Ok(().into())
 }
 
-pub async fn post_user_handler(
+pub async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Path(email): Path<String>,
+  Json(param): Json<WebAdminCreateUserRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
-    email,
+    email: param.email,
+    password: Some(param.password),
+    email_confirm: !param.require_email_verification,
     ..Default::default()
   };
   let user = state

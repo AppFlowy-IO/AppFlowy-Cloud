@@ -1,9 +1,10 @@
-use crate::error::RenderError;
+use crate::error::WebAppError;
 use crate::session::UserSession;
 use askama::Template;
 use axum::extract::{Path, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
+use gotrue_entity::User;
 
 use crate::{templates, AppState};
 
@@ -12,43 +13,67 @@ pub fn router() -> Router<AppState> {
     .route("/", get(home_handler))
     .route("/home", get(home_handler))
     .route("/login", get(login_handler))
-    .route("/admin", get(admin_handler))
+
+    // User actions
+    .route("/user/change_password", get(user_change_password_handler))
+    .route("/user/user", get(user_user_handler))
+    .route("/user/create_user", get(admin_users_create_handler))
+
+    // Admin actions
+    .route("/admin/home", get(admin_home_handler))
     .route("/admin/users", get(admin_users_handler))
     .route("/admin/users/:user_id", get(admin_user_details_handler))
+    .route("/admin/users/create", get(admin_users_create_handler))
 }
 
-pub async fn login_handler() -> Result<Html<String>, RenderError> {
-  let s = templates::Login {}.render()?;
-  Ok(Html(s))
+pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::CreateUser {})
+}
+
+pub async fn user_user_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  let user = state.gotrue_client.user_info(&session.access_token).await?;
+  render_template(templates::UserDetails { user: &user })
+}
+
+pub async fn login_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::Login {})
+}
+
+pub async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::ChangePassword {})
 }
 
 pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
-) -> Result<Html<String>, RenderError> {
-  let user_email = state
-    .gotrue_client
-    .user_info(&session.access_token)
-    .await
-    .map(|user_info| user_info.email)
-    .unwrap_or_else(|err| {
+) -> Result<Html<String>, WebAppError> {
+  match state.gotrue_client.user_info(&session.access_token).await {
+    Ok(user) => render_template(templates::Home {
+      email: &user.email,
+      is_admin: is_admin(&user),
+    }),
+    Err(err) => {
       tracing::error!("Error getting user info: {:?}", err);
-      "".to_owned()
-    });
-
-  let s = templates::Home { email: &user_email }.render()?;
-  Ok(Html(s))
+      login_handler().await
+    },
+  }
 }
 
-pub async fn admin_handler(_: UserSession) -> Result<Html<String>, RenderError> {
-  let s = templates::Admin {}.render()?;
-  Ok(Html(s))
+pub async fn admin_home_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  let user = state.gotrue_client.user_info(&session.access_token).await?;
+  render_template(templates::Admin { email: &user.email })
 }
 
 pub async fn admin_users_handler(
   State(state): State<AppState>,
   session: UserSession,
-) -> Result<Html<String>, RenderError> {
+) -> Result<Html<String>, WebAppError> {
   let users = state
     .gotrue_client
     .admin_list_user(&session.access_token)
@@ -64,20 +89,31 @@ pub async fn admin_users_handler(
     .filter(|user| user.deleted_at.is_none())
     .collect::<Vec<_>>();
 
-  let s = templates::Users { users: &users }.render()?;
-  Ok(Html(s))
+  render_template(templates::AdminUsers { users: &users })
 }
 
 pub async fn admin_user_details_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_id): Path<String>,
-) -> Result<Html<String>, RenderError> {
-  let users = state
+) -> Result<Html<String>, WebAppError> {
+  let user = state
     .gotrue_client
     .admin_user_details(&session.access_token, &user_id)
     .await
     .unwrap(); // TODO: handle error
-  let s = templates::UserDetails { user: &users }.render()?;
+
+  render_template(templates::AdminUserDetails { user: &user })
+}
+
+fn render_template<T>(x: T) -> Result<Html<String>, WebAppError>
+where
+  T: Template,
+{
+  let s = x.render()?;
   Ok(Html(s))
+}
+
+fn is_admin(user: &User) -> bool {
+  user.role == "supabase_admin"
 }

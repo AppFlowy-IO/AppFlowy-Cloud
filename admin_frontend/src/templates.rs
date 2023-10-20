@@ -1,6 +1,10 @@
 use askama::Template;
 
 #[derive(Template)]
+#[template(path = "change_password.html")]
+pub struct ChangePassword;
+
+#[derive(Template)]
 #[template(path = "login.html")]
 pub struct Login;
 
@@ -8,21 +12,34 @@ pub struct Login;
 #[template(path = "home.html")]
 pub struct Home<'a> {
   pub email: &'a str,
+  pub is_admin: bool,
 }
 
 #[derive(Template)]
-#[template(path = "admin.html")]
-pub struct Admin;
+#[template(path = "create_user.html")]
+pub struct CreateUser;
 
 #[derive(Template)]
-#[template(path = "users.html")]
-pub struct Users<'a> {
+#[template(path = "admin_home.html")]
+pub struct Admin<'a> {
+  pub email: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "admin_users.html")]
+pub struct AdminUsers<'a> {
   pub users: &'a [gotrue_entity::User],
 }
 
 #[derive(Template)]
 #[template(path = "user_details.html")]
 pub struct UserDetails<'a> {
+  pub user: &'a gotrue_entity::User,
+}
+
+#[derive(Template)]
+#[template(path = "admin_user_details.html")]
+pub struct AdminUserDetails<'a> {
   pub user: &'a gotrue_entity::User,
 }
 

@@ -2,16 +2,15 @@ use crate::biz::workspace::member_listener::{WorkspaceMemberAction, WorkspaceMem
 use crate::component::auth::jwt::UserUuid;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
 use actix_http::Method;
-use anyhow::Context;
 use async_trait::async_trait;
 use database::user::select_uid_from_uuid;
-use database::workspace::select_user_role;
 use database_entity::AFRole;
 use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
 use sqlx::PgPool;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::ops::DerefMut;
+
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{instrument, trace, warn};
@@ -30,7 +29,7 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
 /// Represents the role of the user in the workspace by the workspace id.
 /// - Key: workspace id of
 /// - Value: the member status of the user in the workspace
-type MemberStatusByWorkspaceId = HashMap<String, MemberStatus>;
+type MemberStatusByWorkspaceId = HashMap<Uuid, MemberStatus>;
 
 /// Represents the role of the various workspaces for a user
 /// - Key: User's UID
@@ -66,6 +65,53 @@ impl WorkspaceAccessControlImpl {
       member_status_by_uid,
     }
   }
+
+  pub async fn update_member(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) {
+    update_workspace_member_status(uid, workspace_id, role, &self.member_status_by_uid).await;
+  }
+
+  pub async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) {
+    if let Some(inner_map) = self.member_status_by_uid.write().await.get_mut(uid) {
+      if let Entry::Occupied(mut entry) = inner_map.entry(*workspace_id) {
+        entry.insert(MemberStatus::Deleted);
+      }
+    }
+  }
+
+  #[inline]
+  async fn get_user_workspace_role(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<AFRole, AppError> {
+    let member_status = self
+      .member_status_by_uid
+      .read()
+      .await
+      .get(uid)
+      .and_then(|map| map.get(workspace_id).cloned());
+
+    let member_status = match member_status {
+      None => {
+        reload_workspace_member_status_from_db(
+          uid,
+          workspace_id,
+          &self.pg_pool,
+          &self.member_status_by_uid,
+        )
+        .await?
+      },
+      Some(status) => status,
+    };
+
+    match member_status {
+      MemberStatus::Deleted => Err(AppError::new(
+        ErrorCode::NotEnoughPermissions,
+        format!("user:{} is not a member of workspace:{}", uid, workspace_id),
+      )),
+      MemberStatus::Valid(access_level) => Ok(access_level),
+    }
+  }
 }
 
 #[inline]
@@ -77,7 +123,7 @@ async fn update_workspace_member_status(
 ) {
   let mut outer_map = member_status_by_uid.write().await;
   let inner_map = outer_map.entry(*uid).or_insert_with(HashMap::new);
-  inner_map.insert(workspace_id.to_string(), MemberStatus::Valid(role));
+  inner_map.insert(*workspace_id, MemberStatus::Valid(role));
 }
 
 #[inline]
@@ -122,7 +168,7 @@ fn spawn_listen_on_workspace_member_change(
           None => warn!("The workspace member change can't be None when the action is DELETE"),
           Some(change) => {
             if let Some(inner_map) = member_status_by_uid.write().await.get_mut(&change.uid) {
-              inner_map.insert(change.workspace_id.to_string(), MemberStatus::Deleted);
+              inner_map.insert(change.workspace_id, MemberStatus::Deleted);
             }
           },
         },
@@ -138,22 +184,13 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     user_uuid: &Uuid,
     workspace_id: &Uuid,
   ) -> Result<AFRole, AppError> {
-    let mut txn = self
-      .pg_pool
-      .begin()
-      .await
-      .context("failed to acquire a transaction to query role")?;
-    let uid = select_uid_from_uuid(txn.deref_mut(), user_uuid).await?;
-    let role = select_user_role(txn.deref_mut(), &uid, workspace_id).await?;
-    txn
-      .commit()
-      .await
-      .context("failed to commit transaction to query role")?;
+    let uid = select_uid_from_uuid(&self.pg_pool, user_uuid).await?;
+    let role = self.get_user_workspace_role(&uid, workspace_id).await?;
     Ok(role)
   }
 
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let role = select_user_role(&self.pg_pool, uid, workspace_id).await?;
+    let role = self.get_user_workspace_role(uid, workspace_id).await?;
     Ok(role)
   }
 }

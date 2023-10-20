@@ -131,7 +131,7 @@ pub async fn select_user_can_edit_collab(
 pub async fn insert_workspace_member_with_txn(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
-  member_email: String,
+  member_email: &str,
   role: AFRole,
 ) -> Result<(), DatabaseError> {
   let role_id: i32 = role.into();
@@ -199,7 +199,7 @@ pub async fn delete_workspace_members(
   _user_uuid: &Uuid,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
-  member_email: String,
+  member_email: &str,
 ) -> Result<(), DatabaseError> {
   let is_owner = sqlx::query_scalar!(
     r#"

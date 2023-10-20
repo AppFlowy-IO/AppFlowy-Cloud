@@ -12,6 +12,7 @@ use realtime::collaborate::{CollabAccessControl, CollabUserId};
 use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
 use sqlx::PgPool;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -74,18 +75,10 @@ impl CollabAccessControlImpl {
 
   pub async fn remove_member(&self, uid: &i64, oid: &str) {
     if let Some(inner_map) = self.member_status_by_uid.write().await.get_mut(uid) {
-      inner_map.insert(oid.to_string(), MemberStatus::Deleted);
+      if let Entry::Occupied(mut entry) = inner_map.entry(oid.to_string()) {
+        entry.insert(MemberStatus::Deleted);
+      }
     }
-  }
-
-  /// Return the role of the user in the collab
-  async fn get_role_state(&self, uid: &i64, oid: &str) -> Option<MemberStatus> {
-    self
-      .member_status_by_uid
-      .read()
-      .await
-      .get(uid)
-      .map(|map| map.get(oid).cloned())?
   }
 
   #[inline]
@@ -94,7 +87,14 @@ impl CollabAccessControlImpl {
     uid: &i64,
     oid: &str,
   ) -> Result<AFAccessLevel, AppError> {
-    let member_status = match self.get_role_state(uid, oid).await {
+    let member_status = self
+      .member_status_by_uid
+      .read()
+      .await
+      .get(uid)
+      .and_then(|map| map.get(oid).cloned());
+
+    let member_status = match member_status {
       None => {
         reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
           .await?
@@ -105,7 +105,7 @@ impl CollabAccessControlImpl {
     match member_status {
       MemberStatus::Deleted => Err(AppError::new(
         ErrorCode::NotEnoughPermissions,
-        "The user is not the member of the collab",
+        format!("user:{} is not a member of collab:{}", uid, oid),
       )),
       MemberStatus::Valid(access_level) => Ok(access_level),
     }

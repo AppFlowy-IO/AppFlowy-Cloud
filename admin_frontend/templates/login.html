@@ -6,13 +6,13 @@
   <body>
     {% include "message.html" %}
 
-    <div class="display-flex align-items-center">
+    <div class="flex-row-align-center">
       <img
         src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
         width="30"
         height="30"
       />
-      <h2 style="margin-left: 10px">AppFlowy Cloud</h2>
+      <h2>AppFlowy Cloud</h2>
     </div>
 
     <div class="flex-column-align-center">
@@ -64,9 +64,7 @@
 
       <div class="width-100pc">
         <h3 class="text-align-center">OAuth2 Login</h3>
-        <table
-          class="justify-content-center display-flex"
-        >
+        <table class="justify-content-center display-flex">
           <tr>
             <td>
               <a
@@ -102,9 +100,7 @@
             credentials: "same-origin",
           }).then((response) => {
             if (!response.ok) {
-              response.text().then((text) => {
-                displayMessage(`Login failed: ${response.statusText} ${text}`);
-              });
+              displayHttpStatusAndPayload(response);
             } else {
               window.location.href = "/web/home";
             }
@@ -122,13 +118,10 @@
           method: "POST",
         }).then((response) => {
           if (!response.ok) {
-            response.text().then((text) => {
-              displayMessage(
-                `OAuth Login failed: ${response.statusText} ${text}`,
-              );
-            });
+            displayHttpStatusAndPayload(response);
+          } else {
+            window.location.href = "/web/home";
           }
-          window.location.href = "/web/home";
         });
       }
     </script>

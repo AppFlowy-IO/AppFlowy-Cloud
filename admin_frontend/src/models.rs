@@ -20,3 +20,10 @@ pub struct PutUserRequest {
 pub struct ChangePasswordRequest {
   pub new_password: String,
 }
+
+#[derive(Deserialize)]
+pub struct WebAdminCreateUserRequest {
+  pub email: String,
+  pub password: String,
+  pub require_email_verification: bool,
+}

@@ -1,11 +1,12 @@
 use crate::error::WebApiError;
-use crate::models::{ChangePasswordRequest, PutUserRequest};
+use crate::models::{ChangePasswordRequest, PutUserRequest, WebAdminCreateUserRequest};
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::LoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap, HeaderValue};
 use axum::response::Result;
+use axum::routing::delete;
 use axum::Json;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
@@ -20,11 +21,10 @@ pub fn router() -> Router<AppState> {
     .route("/login", post(login_handler))
     .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
+    .route("/admin/user", post(admin_add_user_handler))
     .route(
       "/admin/user/:param",
-      post(admin_add_user_handler)
-        .delete(admin_delete_user_handler)
-        .put(admin_update_user_handler),
+      delete(admin_delete_user_handler).put(admin_update_user_handler),
     )
     .route(
       "/admin/user/:email/generate-link",
@@ -138,10 +138,12 @@ pub async fn admin_delete_user_handler(
 pub async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Path(email): Path<String>,
+  Json(param): Json<WebAdminCreateUserRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
-    email,
+    email: param.email,
+    password: Some(param.password),
+    email_confirm: !param.require_email_verification,
     ..Default::default()
   };
   let user = state

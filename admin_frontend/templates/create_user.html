@@ -1,0 +1,75 @@
+<div>
+  <h4>Please enter the following information to create a new user</h4>
+  <table>
+    <tr>
+      <td>Email:</td>
+      <td>
+        <input
+          class="width-100pc display-block"
+          type="text"
+          id="newUserEmail"
+          name="email"
+          placeholder="user@example.com"
+          required
+        />
+      </td>
+    </tr>
+    <tr>
+      <td>Password:</td>
+      <td>
+        <input
+          class="width-100pc display-block"
+          type="password"
+          id="newUserPassword"
+          name="password"
+          placeholder="********"
+          required
+        />
+      </td>
+    </tr>
+    <tr>
+      <td>Require Email Verification:</td>
+      <td>
+        <input
+          type="checkbox"
+          id="newUserRequireEmailVerification"
+          name="requireEmailVerification"
+        />
+      </td>
+    </tr>
+    <tr>
+      <td>
+        <button id="createUserBtn">Create</button>
+      </td>
+    </tr>
+  </table>
+
+  <script>
+    document
+      .getElementById("createUserBtn")
+      .addEventListener("click", function () {
+        // Get the email from the user
+        fetch("/web-api/admin/user", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: document.getElementById("newUserEmail").value,
+            password: document.getElementById("newUserPassword").value,
+            require_email_verification: document.getElementById(
+              "newUserRequireEmailVerification",
+            ).checked,
+          }),
+        }).then((response) => {
+          if (!response.ok) {
+            displayHttpStatusAndPayload(response);
+          } else {
+            response.json().then((data) => {
+              window.location.href = `/web/admin/users/${data.data.id}`;
+            });
+          }
+        });
+      });
+  </script>
+</div>

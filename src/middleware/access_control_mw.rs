@@ -23,6 +23,12 @@ pub enum AccessResource {
   Collab,
 }
 
+/// The access control service for http request.
+/// It is used to check the permission of the request if the request is related to workspace or collab.
+/// If the request is not related to workspace or collab, it will be skipped.
+///
+/// The collab and workspace access control can be separated into different traits. Currently, they are
+/// combined into one trait.
 #[async_trait]
 pub trait HttpAccessControlService: Send + Sync {
   fn resource(&self) -> AccessResource;
@@ -84,11 +90,14 @@ where
   }
 }
 
-pub type AccessControlServices = Arc<HashMap<AccessResource, Arc<dyn HttpAccessControlService>>>;
+pub type HttpAccessControlServices =
+  Arc<HashMap<AccessResource, Arc<dyn HttpAccessControlService>>>;
 
+/// Implement the access control for the workspace and collab.
+/// It will check the permission of the request if the request is related to workspace or collab.
 #[derive(Clone, Default)]
 pub struct WorkspaceAccessControl {
-  access_control_services: AccessControlServices,
+  access_control_services: HttpAccessControlServices,
 }
 
 impl WorkspaceAccessControl {
@@ -108,7 +117,7 @@ impl WorkspaceAccessControl {
 }
 
 impl Deref for WorkspaceAccessControl {
-  type Target = AccessControlServices;
+  type Target = HttpAccessControlServices;
 
   fn deref(&self) -> &Self::Target {
     &self.access_control_services
@@ -141,9 +150,17 @@ where
   }
 }
 
+/// Each request will be handled by this middleware. It will check the permission of the request
+/// if the request is related to workspace or collab. The [WORKSPACE_ID_PATH] and [COLLAB_OBJECT_ID_PATH]
+/// are used to identify the workspace and collab.
+///
+/// For example, if the request path is `/api/workspace/{workspace_id}/collab/{object_id}`, then the
+/// [WorkspaceAccessControlMiddleware] will check the permission of the workspace and collab.
+///
+///
 pub struct WorkspaceAccessControlMiddleware<S> {
   service: S,
-  access_control_service: AccessControlServices,
+  access_control_service: HttpAccessControlServices,
 }
 
 impl<S, B> Service<ServiceRequest> for WorkspaceAccessControlMiddleware<S>

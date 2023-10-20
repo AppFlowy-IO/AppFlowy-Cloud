@@ -3,7 +3,9 @@ use sqlx::{
   Executor, PgPool, Postgres, Transaction,
 };
 use std::ops::DerefMut;
+use tracing::{event, instrument};
 
+use crate::user::select_uid_from_email;
 use database_entity::database_error::DatabaseError;
 use database_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
@@ -126,10 +128,10 @@ pub async fn select_user_can_edit_collab(
   Ok(permission_check.unwrap_or(false))
 }
 
-pub async fn insert_workspace_member(
+pub async fn insert_workspace_member_with_txn(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
-  member_email: String,
+  member_email: &str,
   role: AFRole,
 ) -> Result<(), DatabaseError> {
   let role_id: i32 = role.into();
@@ -153,6 +155,8 @@ pub async fn insert_workspace_member(
   Ok(())
 }
 
+#[inline]
+#[instrument(level = "trace", skip(pool, email, role), err)]
 pub async fn upsert_workspace_member(
   pool: &PgPool,
   workspace_id: &Uuid,
@@ -163,12 +167,20 @@ pub async fn upsert_workspace_member(
     return Ok(());
   }
 
-  let role_id: Option<i32> = role.map(|role| role.into());
+  event!(
+    tracing::Level::TRACE,
+    "update workspace member: workspace_id:{}, uid {:?}, role:{:?}",
+    workspace_id,
+    select_uid_from_email(pool, email).await,
+    role
+  );
+
+  let role_id: i32 = role.unwrap().into();
   sqlx::query!(
     r#"
         UPDATE af_workspace_member
         SET 
-            role_id = COALESCE($1, role_id)
+            role_id = $1 
         WHERE workspace_id = $2 AND uid = (
             SELECT uid FROM af_user WHERE email = $3
         )
@@ -187,7 +199,7 @@ pub async fn delete_workspace_members(
   _user_uuid: &Uuid,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
-  member_email: String,
+  member_email: &str,
 ) -> Result<(), DatabaseError> {
   let is_owner = sqlx::query_scalar!(
     r#"
@@ -237,16 +249,17 @@ pub async fn delete_workspace_members(
 }
 
 /// returns a list of workspace members, sorted by their creation time.
-pub async fn select_workspace_members(
+pub async fn select_workspace_member_list(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
 ) -> Result<Vec<AFWorkspaceMember>, DatabaseError> {
   let members = sqlx::query_as!(
     AFWorkspaceMember,
     r#"
-    SELECT af_user.email, af_workspace_member.role_id AS role
+    SELECT af_user.email,
+    af_workspace_member.role_id AS role
     FROM public.af_workspace_member
-    JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+        JOIN public.af_user ON af_workspace_member.uid = af_user.uid
     WHERE af_workspace_member.workspace_id = $1
     ORDER BY af_workspace_member.created_at ASC;
     "#,
@@ -255,6 +268,28 @@ pub async fn select_workspace_members(
   .fetch_all(pg_pool)
   .await?;
   Ok(members)
+}
+
+pub async fn select_workspace_member(
+  pg_pool: &PgPool,
+  uid: &i64,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceMember, DatabaseError> {
+  let member = sqlx::query_as!(
+    AFWorkspaceMember,
+    r#"
+    SELECT af_user.email, af_workspace_member.role_id AS role
+    FROM public.af_workspace_member
+      JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+    WHERE af_workspace_member.workspace_id = $1 
+    AND af_workspace_member.uid = $2 
+    "#,
+    workspace_id,
+    uid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+  Ok(member)
 }
 
 pub async fn select_user_profile_view_by_uuid(

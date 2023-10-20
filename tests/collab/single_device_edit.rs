@@ -1,4 +1,4 @@
-use crate::realtime::test_client::{assert_remote_collab, TestClient};
+use crate::util::test_client::{assert_server_collab, TestClient};
 use collab_entity::CollabType;
 
 use serde_json::json;
@@ -35,7 +35,7 @@ async fn realtime_write_single_collab_test() {
   });
   test_client.wait_object_sync_complete(&object_id).await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut test_client.api_client,
     &object_id,
@@ -73,7 +73,7 @@ async fn realtime_write_multiple_collab_test() {
 
   // Wait for the messages to be sent
   for object_id in object_ids {
-    assert_remote_collab(
+    assert_server_collab(
       &workspace_id,
       &mut test_client.api_client,
       &object_id,
@@ -252,7 +252,7 @@ async fn multiple_collab_edit_test() {
     .insert("title", "I am client 2");
   client_2.wait_object_sync_complete(&object_id_2).await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id_1,
     &mut client_1.api_client,
     &object_id_1,
@@ -264,7 +264,7 @@ async fn multiple_collab_edit_test() {
   )
   .await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id_2,
     &mut client_2.api_client,
     &object_id_2,

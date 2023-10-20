@@ -7,7 +7,7 @@ use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use database::collab::CollabStorage;
-use database::user::select_uid_from_uuid;
+use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::database_error::DatabaseError;
 use database_entity::*;
 use shared_entity::app_error::AppError;
@@ -68,6 +68,7 @@ async fn list_handler(
 
 #[instrument(skip(payload, state), err)]
 async fn add_workspace_members_handler(
+  required_id: RequestId,
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   payload: Json<CreateWorkspaceMembers>,
@@ -78,9 +79,19 @@ async fn add_workspace_members_handler(
     &state.pg_pool,
     &user_uuid,
     &workspace_id,
-    create_members.0,
+    &create_members.0,
   )
   .await?;
+
+  for member in create_members.0 {
+    let uid = select_uid_from_email(&state.pg_pool, &member.email)
+      .await
+      .map_err(AppError::from)?;
+    state
+      .workspace_access_control
+      .update_member(&uid, &workspace_id, member.role)
+      .await;
+  }
   Ok(AppResponse::Ok().into())
 }
 
@@ -107,14 +118,25 @@ async fn remove_workspace_member_handler(
     .0
     .into_iter()
     .map(|member| member.0)
-    .collect();
+    .collect::<Vec<String>>();
   workspace::ops::remove_workspace_members(
     &user_uuid,
     &state.pg_pool,
-    workspace_id.into_inner(),
-    member_emails,
+    &workspace_id,
+    &member_emails,
   )
   .await?;
+
+  for email in member_emails {
+    let uid = select_uid_from_email(&state.pg_pool, &email)
+      .await
+      .map_err(AppError::from)?;
+    state
+      .workspace_access_control
+      .remove_member(&uid, &workspace_id)
+      .await;
+  }
+
   Ok(AppResponse::Ok().into())
 }
 
@@ -126,7 +148,18 @@ async fn update_workspace_member_handler(
 ) -> Result<JsonAppResponse<()>> {
   let workspace_id = workspace_id.into_inner();
   let changeset = payload.into_inner();
-  workspace::ops::update_workspace_member(&state.pg_pool, &workspace_id, changeset).await?;
+  workspace::ops::update_workspace_member(&state.pg_pool, &workspace_id, &changeset).await?;
+
+  if let Some(role) = changeset.role {
+    let uid = select_uid_from_email(&state.pg_pool, &changeset.email)
+      .await
+      .map_err(AppError::from)?;
+    state
+      .workspace_access_control
+      .update_member(&uid, &workspace_id, role)
+      .await;
+  }
+
   Ok(AppResponse::Ok().into())
 }
 
@@ -234,7 +267,12 @@ async fn add_collab_member_handler(
   payload: Json<InsertCollabMemberParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::create_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  biz::collab::ops::create_collab_member(&state.pg_pool, &payload).await?;
+  state
+    .collab_access_control
+    .update_member(&payload.uid, &payload.object_id, payload.access_level)
+    .await;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -245,7 +283,14 @@ async fn update_collab_member_handler(
   payload: Json<UpdateCollabMemberParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::upsert_collab_member(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  biz::collab::ops::upsert_collab_member(&state.pg_pool, &user_uuid, &payload).await?;
+
+  state
+    .collab_access_control
+    .update_member(&payload.uid, &payload.object_id, payload.access_level)
+    .await;
+
   Ok(Json(AppResponse::Ok()))
 }
 #[instrument(skip(state, payload), err)]
@@ -255,7 +300,8 @@ async fn get_collab_member_handler(
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMember>>> {
-  let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload).await?;
   Ok(Json(AppResponse::Ok().with_data(member)))
 }
 
@@ -266,7 +312,13 @@ async fn remove_collab_member_handler(
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload).await?;
+  state
+    .collab_access_control
+    .remove_member(&payload.uid, &payload.object_id)
+    .await;
+
   Ok(Json(AppResponse::Ok()))
 }
 

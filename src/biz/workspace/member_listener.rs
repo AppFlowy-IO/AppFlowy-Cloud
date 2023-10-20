@@ -1,6 +1,6 @@
 use crate::biz::pg_listener::PostgresDBListener;
-use collab::preclude::Uuid;
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Deserialize, Clone, Debug)]

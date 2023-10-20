@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT id\n        FROM af_permissions\n        WHERE access_level = $1\n        ",
+  "query": "\n     SELECT id\n     FROM af_permissions\n     WHERE access_level = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "54346ddd488f0c8fde7125f17827bcc89ecbf285c4e2270b38bb4d7082b40db2"
+  "hash": "5752d8de85c68896b5d85d52941c252bedb826c473bf94d9f3945c1b15327acb"
 }

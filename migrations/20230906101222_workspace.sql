@@ -16,17 +16,6 @@ CREATE POLICY af_workspace_policy ON af_workspace FOR ALL TO anon,
     authenticated USING (true);
 ALTER TABLE af_workspace FORCE ROW LEVEL SECURITY;
 
--- This trigger is fired after an insert operation on the af_user table. It automatically creates a workspace
--- in the af_workspace table with the uid of the new user profile as the owner_uid
-CREATE OR REPLACE FUNCTION create_af_workspace_func() RETURNS TRIGGER AS $$BEGIN
-INSERT INTO af_workspace (owner_uid)
-VALUES (NEW.uid);
-RETURN NEW;
-END $$LANGUAGE plpgsql;
-CREATE TRIGGER create_af_workspace_trigger
-AFTER
-INSERT ON af_user FOR EACH ROW EXECUTE FUNCTION create_af_workspace_func();
-
 -- af_workspace_member contains all the members associated with a workspace and their roles.
 CREATE TABLE IF NOT EXISTS af_workspace_member (
     uid BIGINT NOT NULL,
@@ -72,27 +61,6 @@ CREATE TRIGGER af_workspace_member_change_trigger
 
 -- Index
 CREATE UNIQUE INDEX idx_af_workspace_member ON af_workspace_member (uid, workspace_id, role_id);
--- This trigger is fired after an insert operation on the af_workspace table. It automatically creates a workspace
--- member in the af_workspace_member table. If the user is the owner of the workspace, they are given the role 'Owner'.
-CREATE OR REPLACE FUNCTION manage_af_workspace_member_role_func() RETURNS TRIGGER AS $$ BEGIN
-INSERT INTO af_workspace_member (uid, role_id, workspace_id)
-VALUES (
-        NEW.owner_uid,
-        (
-            SELECT id
-            FROM af_roles
-            WHERE name = 'Owner'
-        ),
-        NEW.workspace_id
-    ) ON CONFLICT (uid, workspace_id) DO
-UPDATE
-SET role_id = EXCLUDED.role_id;
-RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-CREATE TRIGGER manage_af_workspace_member_role_trigger
-AFTER
-INSERT ON af_workspace FOR EACH ROW EXECUTE FUNCTION manage_af_workspace_member_role_func();
 -- Insert a workspace member if the user with given uid is the owner of the workspace
 CREATE OR REPLACE FUNCTION insert_af_workspace_member_if_owner(
         p_uid BIGINT,

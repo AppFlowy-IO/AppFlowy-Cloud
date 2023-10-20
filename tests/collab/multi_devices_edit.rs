@@ -1,5 +1,5 @@
-use crate::realtime::test_client::{assert_client_collab, assert_remote_collab, TestClient};
 use crate::user::utils::generate_unique_registered_user;
+use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
 use std::time::Duration;
 
 use collab_entity::CollabType;
@@ -49,7 +49,7 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
   // Wait for the messages to be sent
   test_client.wait_object_sync_complete(&object_id).await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut test_client.api_client,
     &object_id,

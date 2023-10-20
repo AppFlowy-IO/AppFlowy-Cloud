@@ -9,7 +9,8 @@ use database_entity::database_error::DatabaseError;
 use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
+use tracing::{error, trace};
 
 use database::collab::CollabStorage;
 use database_entity::{InsertCollabParams, QueryCollabParams, RawData};
@@ -22,7 +23,7 @@ use yrs::{ReadTxn, StateVector, Transact, Update};
 pub struct CollabStoragePlugin<S, U> {
   uid: i64,
   workspace_id: String,
-  storage: S,
+  storage: Arc<S>,
   did_load: AtomicBool,
   update_count: AtomicU32,
   group: Weak<CollabGroup<U>>,
@@ -37,6 +38,7 @@ impl<S, U> CollabStoragePlugin<S, U> {
     storage: S,
     group: Weak<CollabGroup<U>>,
   ) -> Self {
+    let storage = Arc::new(storage);
     let workspace_id = workspace_id.to_string();
     let did_load = AtomicBool::new(false);
     let update_count = AtomicU32::new(0);
@@ -78,34 +80,27 @@ where
     match self.storage.get_collab(&self.uid, params).await {
       Ok(raw_data) => match init_collab_with_raw_data(raw_data, doc) {
         Ok(_) => {},
-        Err(e) => {
-          // TODO: retry?
-          tracing::error!("🔴Init collab failed: {:?}", e);
-        },
+        Err(e) => error!("🔴Init collab failed: {:?}", e),
       },
-      Err(err) => {
-        match &err {
-          DatabaseError::RecordNotFound(_) => {
-            let raw_data = {
-              let txn = doc.transact();
-              txn.encode_state_as_update_v1(&StateVector::default())
-            };
-            let params = InsertCollabParams::from_raw_data(
-              object_id,
-              self.collab_type.clone(),
-              raw_data,
-              &self.workspace_id,
-            );
-            match self.storage.insert_collab(&self.uid, params).await {
-              Ok(_) => {},
-              Err(err) => tracing::error!("{:?}", err),
-            }
-          },
-          _ => {
-            tracing::error!("Get collab failed: {:?}", err);
-            // TODO: retry?
-          },
-        }
+      Err(err) => match &err {
+        DatabaseError::RecordNotFound(_) => {
+          let raw_data = {
+            let txn = doc.transact();
+            txn.encode_state_as_update_v1(&StateVector::default())
+          };
+          let params = InsertCollabParams::from_raw_data(
+            object_id,
+            self.collab_type.clone(),
+            raw_data,
+            &self.workspace_id,
+          );
+
+          trace!("Collab not found, create new one");
+          if let Err(err) = self.storage.insert_collab(&self.uid, params).await {
+            error!("fail to create new collab in plugin: {:?}", err);
+          }
+        },
+        _ => error!("{:?}", err),
       },
     }
   }

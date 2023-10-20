@@ -1,6 +1,6 @@
 use sqlx::{
   types::{uuid, Uuid},
-  PgPool, Transaction,
+  Executor, PgPool, Postgres, Transaction,
 };
 use std::ops::DerefMut;
 
@@ -52,6 +52,24 @@ pub async fn select_user_is_workspace_owner(
   .await?;
 
   Ok(exists.unwrap_or(false))
+}
+
+pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
+  exectuor: E,
+  uid: &i64,
+  workspace_uuid: &Uuid,
+) -> Result<AFRole, DatabaseError> {
+  let row = sqlx::query_scalar!(
+    r#"
+     SELECT role_id FROM af_workspace_member
+     WHERE workspace_id = $1 AND uid = $2 
+    "#,
+    workspace_uuid,
+    uid
+  )
+  .fetch_one(exectuor)
+  .await?;
+  Ok(AFRole::from(row))
 }
 
 /// Checks the user's permission to edit a collab object.

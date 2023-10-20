@@ -7,17 +7,17 @@ use serde_json::json;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
 
-use database_entity::QueryCollabParams;
+use database_entity::{AFAccessLevel, QueryCollabParams};
 
 #[tokio::test]
-async fn ws_reconnect_sync_test() {
+async fn edit_collab_with_ws_reconnect_sync_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
 
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.current_workspace_id().await;
   test_client
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
 
   // Disconnect the client and edit the collab. The updates will not be sent to the server.
@@ -68,16 +68,18 @@ async fn ws_reconnect_sync_test() {
 }
 
 #[tokio::test]
-async fn edit_document_with_one_client_online_and_other_offline_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
+async fn edit_collab_with_different_devices_test() {
   let collab_type = CollabType::Document;
   let registered_user = generate_unique_registered_user().await;
-
   let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
+  let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
+
   let workspace_id = client_1.current_workspace_id().await;
-  client_1
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
+  let object_id = client_1
+    .create_collab(&workspace_id, collab_type.clone())
     .await;
+
+  // client 1 edit the collab
   client_1
     .collab_by_object_id
     .get_mut(&object_id)
@@ -87,12 +89,10 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
     .insert("name", "work");
   client_1.wait_object_sync_complete(&object_id).await;
 
-  let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
   client_2
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
   tokio::time::sleep(Duration::from_millis(1000)).await;
-
   client_2.disconnect().await;
   client_2
     .collab_by_object_id
@@ -108,25 +108,35 @@ async fn edit_document_with_one_client_online_and_other_offline_test() {
   let expected_json = json!({
     "name": "workspace"
   });
-  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
+  assert_client_collab(&mut client_1, &object_id, expected_json.clone(), 10).await;
+  assert_client_collab(&mut client_2, &object_id, expected_json.clone(), 10).await;
 }
 
 #[tokio::test]
 async fn edit_document_with_both_clients_offline_then_online_sync_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
+  let _object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
-
   let mut client_1 = TestClient::new_user().await;
+  let mut client_2 = TestClient::new_user().await;
+
   let workspace_id = client_1.current_workspace_id().await;
+  let object_id = client_1
+    .create_collab(&workspace_id, collab_type.clone())
+    .await;
+
+  // add client 2 as a member of the collab
   client_1
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .add_client_as_collab_member(
+      &workspace_id,
+      &object_id,
+      &client_2,
+      AFAccessLevel::ReadAndWrite,
+    )
     .await;
   client_1.disconnect().await;
 
-  let mut client_2 = TestClient::new_user().await;
   client_2
-    .create_collab(&workspace_id, &object_id, collab_type.clone())
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
   client_2.disconnect().await;
 
@@ -168,6 +178,6 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     "8": "Task 8",
     "9": "Task 9"
   });
-  assert_client_collab(&mut client_1, &object_id, expected_json.clone()).await;
-  assert_client_collab(&mut client_2, &object_id, expected_json.clone()).await;
+  assert_client_collab(&mut client_1, &object_id, expected_json.clone(), 10).await;
+  assert_client_collab(&mut client_2, &object_id, expected_json.clone(), 10).await;
 }

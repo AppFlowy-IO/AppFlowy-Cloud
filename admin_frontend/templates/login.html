@@ -5,66 +5,85 @@
   </head>
   <body>
     {% include "message.html" %}
-    <h2 class="text-align-center">AppFlowy Cloud</h2>
-    <table class="text-align-center justify-content-center display-flex">
-      <tr>
-        <td>
-          <h3>Email Login</h3>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <input
-            class="text-align-center"
-            type="text"
-            id="email"
-            name="email"
-            placeholder="Email"
-            required
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <input
-            class="text-align-center"
-            type="password"
-            id="password"
-            name="password"
-            placeholder="Password"
-            required
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <button type="button" id="submitBtn">Submit</button>
-        </td>
-      </tr>
-    </table>
 
-    <br />
-    <table class="text-align-center justify-content-center display-flex">
-      <tr>
-        <td>
-          <h3>OAuth2 Login</h3>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
-            <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
-              <img
-                src="https://static-00.iconduck.com/assets.00/google-icon-2048x2048-czn3g8x8.png"
-                alt="Login with Google"
-                width="30"
-                height="30"
+    <div class="display-flex align-items-center">
+      <img
+        src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
+        width="30"
+        height="30"
+      />
+      <h2 style="margin-left: 10px">AppFlowy Cloud</h2>
+    </div>
+
+    <div class="flex-column-align-center">
+      <div class="width-100pc">
+        <h3 class="text-align-center">Email Login</h3>
+        <table>
+          <tr>
+            <td>Email:</td>
+            <td>
+              <input
+                class="width-100pc display-block"
+                type="text"
+                id="email"
+                name="email"
+                placeholder="user@example.com"
+                required
               />
-            </a>
-          </a>
-        </td>
-      </tr>
-    </table>
+            </td>
+          </tr>
+          <tr>
+            <td>Password:</td>
+            <td>
+              <input
+                class="width-100pc display-block"
+                type="password"
+                id="password"
+                name="password"
+                placeholder="********"
+                required
+              />
+            </td>
+          </tr>
+        </table>
+
+        <br />
+        <button class="width-100pc display-block" id="submitBtn">
+          Sign In
+        </button>
+      </div>
+
+      <div class="display-flex align-items-center width-100pc">
+        <hr class="flex-grow-1" />
+        <br />
+        <br />
+        <br />
+        <span style="margin-left: 10px; margin-right: 10px"> or</span>
+        <hr class="flex-grow-1" />
+      </div>
+
+      <div class="width-100pc">
+        <h3 class="text-align-center">OAuth2 Login</h3>
+        <table
+          class="justify-content-center display-flex"
+        >
+          <tr>
+            <td>
+              <a
+                href="/gotrue/authorize?provider=google&redirect_to=/web/login"
+              >
+                <img
+                  src="https://static-00.iconduck.com/assets.00/google-icon-2048x2048-czn3g8x8.png"
+                  alt="Login with Google"
+                  width="30"
+                  height="30"
+                />
+              </a>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
 
     <script>
       document

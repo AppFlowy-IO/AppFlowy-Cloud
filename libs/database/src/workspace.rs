@@ -249,16 +249,17 @@ pub async fn delete_workspace_members(
 }
 
 /// returns a list of workspace members, sorted by their creation time.
-pub async fn select_workspace_members(
+pub async fn select_workspace_member_list(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
 ) -> Result<Vec<AFWorkspaceMember>, DatabaseError> {
   let members = sqlx::query_as!(
     AFWorkspaceMember,
     r#"
-    SELECT af_user.email, af_workspace_member.role_id AS role
+    SELECT af_user.email,
+    af_workspace_member.role_id AS role
     FROM public.af_workspace_member
-    JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+        JOIN public.af_user ON af_workspace_member.uid = af_user.uid
     WHERE af_workspace_member.workspace_id = $1
     ORDER BY af_workspace_member.created_at ASC;
     "#,
@@ -267,6 +268,28 @@ pub async fn select_workspace_members(
   .fetch_all(pg_pool)
   .await?;
   Ok(members)
+}
+
+pub async fn select_workspace_member(
+  pg_pool: &PgPool,
+  uid: &i64,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceMember, DatabaseError> {
+  let member = sqlx::query_as!(
+    AFWorkspaceMember,
+    r#"
+    SELECT af_user.email, af_workspace_member.role_id AS role
+    FROM public.af_workspace_member
+      JOIN public.af_user ON af_workspace_member.uid = af_user.uid
+    WHERE af_workspace_member.workspace_id = $1 
+    AND af_workspace_member.uid = $2 
+    "#,
+    workspace_id,
+    uid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+  Ok(member)
 }
 
 pub async fn select_user_profile_view_by_uuid(

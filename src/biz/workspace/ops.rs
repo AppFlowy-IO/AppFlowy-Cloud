@@ -4,7 +4,7 @@ use database::collab::upsert_collab_member_with_txn;
 use database::user::select_uid_from_email;
 use database::workspace::{
   delete_workspace_members, insert_workspace_member_with_txn, select_all_workspaces_owned,
-  select_workspace_members, upsert_workspace_member,
+  select_workspace_member_list, upsert_workspace_member,
 };
 use database_entity::{AFAccessLevel, AFRole, AFWorkspaceMember, AFWorkspaces};
 use shared_entity::app_error::AppError;
@@ -77,7 +77,7 @@ pub async fn get_workspace_members(
   _user_uuid: &uuid::Uuid,
   workspace_id: &uuid::Uuid,
 ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-  Ok(select_workspace_members(pg_pool, workspace_id).await?)
+  Ok(select_workspace_member_list(pg_pool, workspace_id).await?)
 }
 
 #[allow(dead_code)]

@@ -15,18 +15,22 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{instrument, trace, warn};
+use tracing::{instrument, warn};
 use uuid::Uuid;
-
-/// Represents the access levels of various collaboration objects for a user.
-/// - Key: User's UID.
-/// - Value: A mapping between the collaboration object's OID and the user's role within that collaboration.
-type MemberStatusByUid = HashMap<i64, CollabMemberStatusByOid>;
 
 /// Represents the access level of a collaboration object identified by its OID.
 /// - Key: OID of the collaboration object.
 /// - Value: The user's role within the collaboration.
+///
 type CollabMemberStatusByOid = HashMap<String, MemberStatus>;
+
+/// Represents the access levels of various collaboration objects for a user.
+/// - Key: User's UID.
+/// - Value: A mapping between the collaboration object's OID and the user's access level within that collaboration.
+///
+///  uid -> oid -> access level of the user in the collab
+///
+type MemberStatusByUid = HashMap<i64, CollabMemberStatusByOid>;
 
 /// Used to cache the access level of a user for collaboration objects.
 /// The cache will be updated after the user's access level for a collaboration object is changed.
@@ -41,44 +45,20 @@ pub struct CollabAccessControlImpl {
 
 #[derive(Clone, Debug)]
 enum MemberStatus {
-  /// The user is not the member of the collab. When the user is not the member of the collab,
-  /// it don't need to query the database to get the role of the user in the collab
+  /// Mark the user is not the member of the collab.
+  /// it don't need to query the database to get the access level of the user in the collab
+  /// when the user is not the member of the collab
   Deleted,
   /// The user is the member of the collab
   Valid(AFAccessLevel),
 }
 
 impl CollabAccessControlImpl {
-  pub fn new(pg_pool: PgPool, mut listener: broadcast::Receiver<CollabMemberChange>) -> Self {
+  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<CollabMemberChange>) -> Self {
     let member_status_by_uid = Arc::new(RwLock::new(HashMap::new()));
 
-    // Update the role of the user when the role of the collab member is changed
-    let cloned_pg_pool = pg_pool.clone();
-    let cloned_member_status_by_uid = member_status_by_uid.clone();
-    tokio::spawn(async move {
-      while let Ok(change) = listener.recv().await {
-        match change.action_type {
-          CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
-            if let (Some(oid), Some(uid)) = (change.new_oid(), change.new_uid()) {
-              let _ =
-                refresh_from_db(uid, oid, &cloned_pg_pool, &cloned_member_status_by_uid).await;
-            } else {
-              warn!("The oid or uid is None")
-            }
-          },
-          CollabMemberAction::DELETE => {
-            if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
-              if let Some(inner_map) = cloned_member_status_by_uid.write().await.get_mut(uid) {
-                inner_map.insert(oid.to_string(), MemberStatus::Deleted);
-              }
-            } else {
-              warn!("The oid or uid is None")
-            }
-          },
-        }
-      }
-    });
-
+    // Listen to the changes of the collab member and update the memory cache
+    spawn_listen_on_collab_member_change(listener, pg_pool.clone(), member_status_by_uid.clone());
     Self {
       pg_pool,
       member_status_by_uid,
@@ -89,7 +69,7 @@ impl CollabAccessControlImpl {
   /// where these notifications aren't received promptly, leading to potential inconsistencies in the user's access level.
   /// Therefore, it's essential to update the user's access level in the cache whenever there's a change.
   pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
-    update_member_status(uid, oid, access_level, &self.member_status_by_uid).await;
+    update_collab_member_status(uid, oid, access_level, &self.member_status_by_uid).await;
   }
 
   pub async fn remove_member(&self, uid: &i64, oid: &str) {
@@ -115,7 +95,10 @@ impl CollabAccessControlImpl {
     oid: &str,
   ) -> Result<AFAccessLevel, AppError> {
     let member_status = match self.get_role_state(uid, oid).await {
-      None => refresh_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid).await?,
+      None => {
+        reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
+          .await?
+      },
       Some(status) => status,
     };
 
@@ -129,8 +112,44 @@ impl CollabAccessControlImpl {
   }
 }
 
+fn spawn_listen_on_collab_member_change(
+  mut listener: broadcast::Receiver<CollabMemberChange>,
+  pg_pool: PgPool,
+  member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
+) {
+  tokio::spawn(async move {
+    while let Ok(change) = listener.recv().await {
+      match change.action_type {
+        CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
+          if let (Some(oid), Some(uid)) = (change.new_oid(), change.new_uid()) {
+            if let Err(err) =
+              reload_collab_member_status_from_db(uid, oid, &pg_pool, &member_status_by_uid).await
+            {
+              warn!(
+                "Failed to reload the collab member status from db: {:?}, error: {}",
+                change, err
+              );
+            }
+          } else {
+            warn!("The oid or uid is None")
+          }
+        },
+        CollabMemberAction::DELETE => {
+          if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
+            if let Some(inner_map) = member_status_by_uid.write().await.get_mut(uid) {
+              inner_map.insert(oid.to_string(), MemberStatus::Deleted);
+            }
+          } else {
+            warn!("The oid or uid is None")
+          }
+        },
+      }
+    }
+  });
+}
+
 #[inline]
-async fn update_member_status(
+async fn update_collab_member_status(
   uid: &i64,
   oid: &str,
   access_level: AFAccessLevel,
@@ -142,7 +161,7 @@ async fn update_member_status(
 }
 
 #[inline]
-async fn refresh_from_db(
+async fn reload_collab_member_status_from_db(
   uid: &i64,
   oid: &str,
   pg_pool: &PgPool,
@@ -150,7 +169,7 @@ async fn refresh_from_db(
 ) -> Result<MemberStatus, AppError> {
   let member = database::collab::select_collab_member(uid, oid, pg_pool).await?;
   let status = MemberStatus::Valid(member.permission.access_level.clone());
-  update_member_status(
+  update_collab_member_status(
     uid,
     oid,
     member.permission.access_level,

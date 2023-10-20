@@ -16,7 +16,7 @@ use actix_web_actors::ws::ProtocolError;
 use database::collab::CollabStorage;
 use realtime_entity::collab_msg::CollabMessage;
 use std::time::{Duration, Instant};
-use tracing::error;
+use tracing::{error, warn};
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -67,21 +67,27 @@ where
 
   fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
     tracing::debug!("Receive binary message with len: {}", bytes.len());
-    let message = RealtimeMessage::from_vec(bytes.to_vec())?;
-    match CollabMessage::from_vec(&message.payload) {
-      Ok(collab_msg) => {
-        self.server.do_send(ClientMessage {
-          business_id: message.business_id,
-          user: self.user.clone(),
-          content: collab_msg,
-        });
+    match RealtimeMessage::from_vec(bytes.to_vec()) {
+      Ok(message) => {
+        match CollabMessage::from_vec(&message.payload) {
+          Ok(collab_msg) => {
+            self.server.do_send(ClientMessage {
+              business_id: message.business_id,
+              user: self.user.clone(),
+              content: collab_msg,
+            });
+          },
+          Err(e) => {
+            warn!("Parser realtime payload failed: {:?}", e);
+          },
+        }
+        Ok(())
       },
-      Err(e) => {
-        tracing::warn!("Parser realtime payload failed: {:?}", e);
+      Err(err) => {
+        error!("Parse realtime message failed: {:?}", err);
+        Ok(())
       },
     }
-
-    Ok(())
   }
 }
 

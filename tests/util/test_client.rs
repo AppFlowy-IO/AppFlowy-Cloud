@@ -6,7 +6,9 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database_entity::{AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams};
+use database_entity::{
+  AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
+};
 use serde_json::Value;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::types::Uuid;
@@ -14,10 +16,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
-use tracing::debug;
 
+use crate::localhost_client;
 use crate::user::utils::{generate_unique_registered_user, User};
-use crate::{localhost_client, setup_log};
+use crate::util::setup_log;
 
 pub(crate) struct TestClient {
   pub ws_client: WSClient,
@@ -39,7 +41,6 @@ impl TestClient {
     Self::new(device_id, registered_user).await
   }
 
-  #[allow(dead_code)]
   pub(crate) async fn add_client_as_workspace_member(
     &self,
     workspace_id: &str,
@@ -47,7 +48,6 @@ impl TestClient {
     role: AFRole,
   ) {
     let profile = other_client.api_client.get_profile().await.unwrap();
-    debug!("profile: {:?}", profile);
     let email = profile.email.unwrap();
     self
       .api_client
@@ -73,6 +73,32 @@ impl TestClient {
     self
       .api_client
       .add_collab_member(InsertCollabMemberParams {
+        uid,
+        workspace_id: workspace_id.to_string(),
+        object_id: object_id.to_string(),
+        access_level,
+      })
+      .await
+      .unwrap();
+  }
+
+  pub(crate) async fn update_collab_member_access_level(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    other_client: &TestClient,
+    access_level: AFAccessLevel,
+  ) {
+    let uid = other_client
+      .api_client
+      .get_profile()
+      .await
+      .unwrap()
+      .uid
+      .unwrap();
+    self
+      .api_client
+      .update_collab_member(UpdateCollabMemberParams {
         uid,
         workspace_id: workspace_id.to_string(),
         object_id: object_id.to_string(),
@@ -114,6 +140,12 @@ impl TestClient {
   }
 
   pub(crate) async fn wait_object_sync_complete(&self, object_id: &str) {
+    self
+      .wait_object_sync_complete_with_secs(object_id, 20)
+      .await;
+  }
+
+  pub(crate) async fn wait_object_sync_complete_with_secs(&self, object_id: &str, secs: u64) {
     let mut sync_state = self
       .collab_by_object_id
       .get(object_id)
@@ -122,8 +154,8 @@ impl TestClient {
       .lock()
       .subscribe_sync_state();
 
-    const TIMEOUT_DURATION: Duration = Duration::from_secs(20);
-    while let Ok(Some(state)) = timeout(TIMEOUT_DURATION, sync_state.next()).await {
+    let duration = Duration::from_secs(secs);
+    while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
       if state == SyncState::SyncFinished {
         break;
       }
@@ -195,6 +227,12 @@ impl TestClient {
     object_id
   }
 
+  pub(crate) async fn open_workspace(&mut self, workspace_id: &str) {
+    self
+      .open_collab(workspace_id, workspace_id, CollabType::Folder)
+      .await;
+  }
+
   #[allow(clippy::await_holding_lock)]
   pub(crate) async fn open_collab(
     &mut self,
@@ -247,7 +285,7 @@ impl TestClient {
   }
 }
 
-pub async fn assert_remote_collab(
+pub async fn assert_server_collab(
   workspace_id: &str,
   client: &mut client_api::Client,
   object_id: &str,
@@ -274,11 +312,13 @@ pub async fn assert_remote_collab(
           Ok(data) => {
             let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.to_vec()], vec![]).unwrap().to_json_value();
             if retry_count > 10 {
+              dbg!(workspace_id, object_id);
               assert_json_eq!(json, expected);
-               break;
+              break;
             }
 
             if json == expected {
+              dbg!(workspace_id, object_id);
               break;
             }
             tokio::time::sleep(Duration::from_millis(1000)).await;

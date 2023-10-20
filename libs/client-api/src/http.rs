@@ -363,6 +363,26 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn get_workspace_members2<W: AsRef<str>>(
+    &self,
+    workspace_id: W,
+  ) -> Result<Vec<AFWorkspaceMember>, AppError> {
+    let url = format!(
+      "{}/api/workspace/{}/member",
+      self.base_url,
+      workspace_id.as_ref()
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,
     workspace_id: W,
@@ -402,12 +422,16 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn remove_workspace_members(
+  pub async fn remove_workspace_members<T: AsRef<str>>(
     &self,
-    workspace_uuid: Uuid,
+    workspace_id: T,
     member_emails: Vec<String>,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let url = format!(
+      "{}/api/workspace/{}/member",
+      self.base_url,
+      workspace_id.as_ref()
+    );
     let payload = WorkspaceMembers::from(member_emails);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)

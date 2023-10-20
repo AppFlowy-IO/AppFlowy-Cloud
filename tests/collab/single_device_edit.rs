@@ -9,7 +9,7 @@ async fn realtime_write_single_collab_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
   let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.current_workspace_id().await;
+  let workspace_id = test_client.workspace_id().await;
   test_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
@@ -49,7 +49,7 @@ async fn realtime_write_single_collab_test() {
 #[tokio::test]
 async fn realtime_write_multiple_collab_test() {
   let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.current_workspace_id().await;
+  let workspace_id = test_client.workspace_id().await;
   let mut object_ids = vec![];
   for _ in 0..5 {
     let object_id = uuid::Uuid::new_v4().to_string();
@@ -222,14 +222,14 @@ async fn multiple_collab_edit_test() {
   let collab_type = CollabType::Document;
   let object_id_1 = uuid::Uuid::new_v4().to_string();
   let mut client_1 = TestClient::new_user().await;
-  let workspace_id_1 = client_1.current_workspace_id().await;
+  let workspace_id_1 = client_1.workspace_id().await;
   client_1
     .open_collab(&workspace_id_1, &object_id_1, collab_type.clone())
     .await;
 
   let object_id_2 = uuid::Uuid::new_v4().to_string();
   let mut client_2 = TestClient::new_user().await;
-  let workspace_id_2 = client_2.current_workspace_id().await;
+  let workspace_id_2 = client_2.workspace_id().await;
   client_2
     .open_collab(&workspace_id_2, &object_id_2, collab_type.clone())
     .await;

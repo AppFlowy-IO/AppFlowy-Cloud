@@ -1,0 +1,73 @@
+<div>
+  <table>
+    <tr>
+      <th>Email</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+
+    {% for user in users %}
+    <tr>
+      <td>{{ user.email|escape }}</td>
+      <td>{{ user.created_at|escape }}</td>
+      <td>
+        <button
+          hx-target="#main-content"
+          hx-get="/web/admin/users/{{ user.id }}"
+        >
+          More Info
+        </button>
+        <button class="deletUserBtn" data-user-id="{{ user.id }}">
+          Delete
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <script>
+    // Get all delete buttons
+    var deleteButtons = document.querySelectorAll(".deletUserBtn");
+
+    deleteButtons.forEach((btn) => {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault(); // Prevent default behaviour
+
+        // Confirm the deletion
+        if (!confirm("Are you sure you want to delete this user?")) {
+          return;
+        }
+
+        // Get user ID from the data attribute
+        const userId = e.target.getAttribute("data-user-id");
+
+        // Call delete API
+        fetch(`/web-api/admin/user/${userId}`, {
+          method: "DELETE",
+        })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(
+                `Network response was not ok: ${response.statusText}`,
+              );
+            }
+            return response.json();
+          })
+          .then((data) => {
+            if (data.code === 0) {
+              // Mark the row as deleted
+              e.target.closest("tr").style.textDecoration = "line-through";
+              // Optionally disable the delete button
+              e.target.disabled = true;
+            } else {
+              throw new Error(`Error deleting user: ${data.message}`);
+            }
+          })
+          .catch((error) => {
+            console.error(`Error: ${error}`);
+            alert(`Failed to delete user: ${error}`);
+          });
+      });
+    });
+  </script>
+</div>

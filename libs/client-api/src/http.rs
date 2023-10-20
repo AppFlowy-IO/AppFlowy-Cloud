@@ -13,9 +13,9 @@ use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
-use gotrue_entity::OAuthProvider;
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::{AccessTokenResponse, User};
+use gotrue_entity::{OAuthProvider, UserUpdateParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use reqwest::header;
@@ -26,7 +26,6 @@ use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUsernameParams;
-use shared_entity::dto::auth_dto::UserUpdateParams;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMembers, WorkspaceMemberChangeset, WorkspaceMembers,
 };
@@ -490,16 +489,20 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update(&self, params: UserUpdateParams) -> Result<(), AppError> {
+  pub async fn user_update(
+    &self,
+    gotrue_params: &UserUpdateParams,
+    new_name: Option<&str>,
+  ) -> Result<(), AppError> {
     let updated_user = self
       .gotrue_client
-      .update_user(&self.access_token()?, params.email, params.password)
+      .update_user(&self.access_token()?, gotrue_params)
       .await?;
     if let Some(t) = self.token.write().as_mut() {
       t.user = updated_user;
     }
-    if let Some(name) = params.name {
-      self.update_user_name(&name).await?;
+    if let Some(new_name) = new_name {
+      self.update_user_name(new_name).await?;
     }
     Ok(())
   }

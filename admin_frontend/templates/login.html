@@ -1,33 +1,86 @@
 <!doctype html>
 <html lang="en">
+  <head>
+    {% include "style.html" %}
+  </head>
   <body>
-    <h1>Admin Login</h1>
-    <form id="loginForm">
-      <table>
-        <tr>
-          <td>
-            <label for="email">Email:</label>
-          </td>
-          <td>
-            <input type="text" id="email" name="email" required />
-          </td>
-        </tr>
-        <tr>
-          <td>
-            <label for="password">Password:</label>
-          </td>
-          <td>
-            <input type="password" id="password" name="password" required />
-          </td>
-        </tr>
-      </table>
-      <button type="button" id="submitBtn">Submit</button>
-    </form>
-    <div id="response"></div>
+    {% include "message.html" %}
 
-    <div id="oauth2Login">
-      <p>Or login with:</p>
-      <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">Google</a>
+    <div class="flex-row-align-center">
+      <img
+        src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
+        width="30"
+        height="30"
+      />
+      <h2>AppFlowy Cloud</h2>
+    </div>
+
+    <div class="flex-column-align-center">
+      <div class="width-100pc">
+        <h3 class="text-align-center">Email Login</h3>
+        <table>
+          <tr>
+            <td>Email:</td>
+            <td>
+              <input
+                class="width-100pc display-block"
+                type="text"
+                id="email"
+                name="email"
+                placeholder="user@example.com"
+                required
+              />
+            </td>
+          </tr>
+          <tr>
+            <td>Password:</td>
+            <td>
+              <input
+                class="width-100pc display-block"
+                type="password"
+                id="password"
+                name="password"
+                placeholder="********"
+                required
+              />
+            </td>
+          </tr>
+        </table>
+
+        <br />
+        <button class="width-100pc display-block" id="submitBtn">
+          Sign In
+        </button>
+      </div>
+
+      <div class="display-flex align-items-center width-100pc">
+        <hr class="flex-grow-1" />
+        <br />
+        <br />
+        <br />
+        <span style="margin-left: 10px; margin-right: 10px"> or</span>
+        <hr class="flex-grow-1" />
+      </div>
+
+      <div class="width-100pc">
+        <h3 class="text-align-center">OAuth2 Login</h3>
+        <table class="justify-content-center display-flex">
+          <tr>
+            <td>
+              <a
+                href="/gotrue/authorize?provider=google&redirect_to=/web/login"
+              >
+                <img
+                  src="https://static-00.iconduck.com/assets.00/google-icon-2048x2048-czn3g8x8.png"
+                  alt="Login with Google"
+                  width="30"
+                  height="30"
+                />
+              </a>
+            </td>
+          </tr>
+        </table>
+      </div>
     </div>
 
     <script>
@@ -45,20 +98,13 @@
             },
             body: JSON.stringify(data),
             credentials: "same-origin",
-          })
-            .then((response) => {
-              if (!response.ok) {
-                // If HTTP status code is not OK, throw an error with the status text
-                throw Error(response.statusText);
-              }
+          }).then((response) => {
+            if (!response.ok) {
+              displayHttpStatusAndPayload(response);
+            } else {
               window.location.href = "/web/home";
-            })
-            .catch((error) => {
-              console.error(`Error:, ${error}`);
-              document.getElementById(
-                "response",
-              ).innerText = `Login failed: ${error.message}`;
-            });
+            }
+          });
         });
 
       if (window.location.hash) {
@@ -70,20 +116,13 @@
         fetch(`/web-api/login_refresh/${refreshToken}`, {
           // Login in via refresh_token
           method: "POST",
-        })
-          .then((response) => {
-            if (!response.ok) {
-              // If HTTP status code is not OK, throw an error with the status text
-              throw Error(response.statusText);
-            }
+        }).then((response) => {
+          if (!response.ok) {
+            displayHttpStatusAndPayload(response);
+          } else {
             window.location.href = "/web/home";
-          })
-          .catch((error) => {
-            console.error(`Error:, ${error}`);
-            document.getElementById(
-              "response",
-            ).innerText = `OAuth Login failed: ${error.message}`;
-          });
+          }
+        });
       }
     </script>
   </body>

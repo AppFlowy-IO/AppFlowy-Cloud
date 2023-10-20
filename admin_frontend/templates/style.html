@@ -1,0 +1,82 @@
+<style>
+  .text-align-right {
+    text-align: right;
+  }
+
+  .flex-column-align-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Horizontally center the content */
+    width: 50%; /* Set the width of the div to 50% */
+    margin: 0 auto; /* Horizontally center the div */
+  }
+
+  .border {
+    border: 1px solid;
+  }
+
+  .text-align-center {
+    text-align: center;
+  }
+
+  .text-align-left {
+    text-align: left;
+  }
+
+  .vertical-align-top {
+    vertical-align: top;
+  }
+
+  .vertical-align-middle {
+    vertical-align: middle;
+  }
+
+  .flex-row-align-center {
+    display: flex;
+    flex-direction: row; /* set direction to row */
+    align-items: center; /* vertically center align the items */
+    justify-content: center; /* horizontally center align the items */
+  }
+
+  .width-100pc {
+    width: 100%;
+  }
+
+  .align-items-center {
+    align-items: center;
+  }
+
+  .display-inline-block {
+    display: inline-block;
+  }
+
+  .display-block {
+    display: block;
+  }
+
+  .display-flex {
+    display: flex;
+  }
+
+  .justify-content-center {
+    justify-content: center;
+  }
+
+  .flex-grow-1 {
+    flex-grow: 1;
+  }
+
+  #message {
+    display: none; /* Initially hidden */
+    position: fixed; /* Positioned relative to the viewport */
+    top: 0; /* At the top */
+    left: 50%; /* Centered horizontally */
+    transform: translateX(-50%); /* Adjust for exact centering */
+    padding: 10px 20px;
+    background-color: #ffd700; /* Golden background for notification */
+    color: #000; /* Text color */
+    border-radius: 5px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000; /* To ensure it appears above other elements */
+  }
+</style>

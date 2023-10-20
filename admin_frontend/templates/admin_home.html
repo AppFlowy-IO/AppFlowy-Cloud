@@ -4,12 +4,12 @@
     {% include "style.html" %} {% include "sidebar_style.html" %}
   </head>
   <body>
-    {% include "message.html" %} {% include "top_menu_bar.html" %} You are
-    logged in as <b>{{ email }}</b>
+    {% include "message.html" %} {% include "admin_top_menu_bar.html" %} You are
+    logged in as <b>Admin</b> as <b>{{ email }}</b>
     <hr />
     <table>
       <tr>
-        <td>{% include "sidebar.html" %}</td>
+        <td>{% include "admin_sidebar.html" %}</td>
         <td class="text-align-left vertical-align-top">
           <div id="main-content"></div>
         </td>

@@ -1,0 +1,22 @@
+<div class="sidebar">
+  <script
+    src="https://unpkg.com/htmx.org@1.9.6"
+    integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni"
+    crossorigin="anonymous"
+  ></script>
+  <table>
+    <thead>
+      <tr>
+        <th>Menu</th>
+      </tr>
+    </thead>
+    <tr>
+      <td hx-target="#main-content" hx-get="/web/user/user">User</td>
+    </tr>
+    <tr>
+      <td hx-target="#main-content" hx-get="/web/user/change_password">
+        Change Password
+      </td>
+    </tr>
+  </table>
+</div>

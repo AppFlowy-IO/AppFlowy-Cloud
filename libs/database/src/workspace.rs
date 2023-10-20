@@ -3,7 +3,9 @@ use sqlx::{
   Executor, PgPool, Postgres, Transaction,
 };
 use std::ops::DerefMut;
+use tracing::{event, instrument};
 
+use crate::user::select_uid_from_email;
 use database_entity::database_error::DatabaseError;
 use database_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
 
@@ -153,6 +155,8 @@ pub async fn insert_workspace_member_with_txn(
   Ok(())
 }
 
+#[inline]
+#[instrument(level = "trace", skip(pool, email, role), err)]
 pub async fn upsert_workspace_member(
   pool: &PgPool,
   workspace_id: &Uuid,
@@ -163,12 +167,20 @@ pub async fn upsert_workspace_member(
     return Ok(());
   }
 
-  let role_id: Option<i32> = role.map(|role| role.into());
+  event!(
+    tracing::Level::TRACE,
+    "update workspace member: workspace_id:{}, uid {:?}, role:{:?}",
+    workspace_id,
+    select_uid_from_email(pool, email).await,
+    role
+  );
+
+  let role_id: i32 = role.unwrap().into();
   sqlx::query!(
     r#"
         UPDATE af_workspace_member
         SET 
-            role_id = COALESCE($1, role_id)
+            role_id = $1 
         WHERE workspace_id = $2 AND uid = (
             SELECT uid FROM af_user WHERE email = $3
         )

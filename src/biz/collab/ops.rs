@@ -31,7 +31,7 @@ pub async fn upsert_collab(
 
   let owner_uid = user::select_uid_from_uuid(pg_pool, user_uuid).await?;
   let mut tx = pg_pool.begin().await?;
-  database::collab::insert_af_collab(&mut tx, &owner_uid, params).await?;
+  database::collab::insert_into_af_collab(&mut tx, &owner_uid, params).await?;
   tx.commit().await?;
   Ok(())
 }

@@ -285,7 +285,7 @@ impl TestClient {
   }
 }
 
-pub async fn assert_remote_collab(
+pub async fn assert_server_collab(
   workspace_id: &str,
   client: &mut client_api::Client,
   object_id: &str,
@@ -312,11 +312,13 @@ pub async fn assert_remote_collab(
           Ok(data) => {
             let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.to_vec()], vec![]).unwrap().to_json_value();
             if retry_count > 10 {
+              dbg!(workspace_id, object_id);
               assert_json_eq!(json, expected);
-               break;
+              break;
             }
 
             if json == expected {
+              dbg!(workspace_id, object_id);
               break;
             }
             tokio::time::sleep(Duration::from_millis(1000)).await;

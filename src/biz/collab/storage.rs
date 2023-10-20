@@ -92,22 +92,24 @@ where
 
     // Check if the user has enough permissions to insert collab
     let has_permission = if self.is_collab_exist(&params.object_id).await? {
-      event!(
-        tracing::Level::TRACE,
-        "user:{} try to update exist collab:{}",
-        uid,
-        params.object_id
-      );
       // If the collab already exists, check if the user has enough permissions to update collab
-      self
+      let level = self
         .access_control
         .get_collab_access_level(uid, &params.object_id)
         .await
         .context(format!(
           "Can't find the access level when user:{} try to insert collab",
           uid
-        ))?
-        .can_write()
+        ))?;
+      event!(
+        tracing::Level::TRACE,
+        "user:{} with {:?} try to update exist collab:{}",
+        uid,
+        level,
+        params.object_id
+      );
+
+      level.can_write()
     } else {
       // If the collab doesn't exist, check if the user has enough permissions to create collab.
       // If the user is the owner or member of the workspace, the user can create collab.
@@ -117,9 +119,9 @@ where
         .await?;
       event!(
         tracing::Level::TRACE,
-        "user:{}:{:?} insert new collab:{}",
-        uid,
+        "[{:?}]user:{} try to insert new collab:{}",
         role,
+        uid,
         params.object_id
       );
       role.can_create_collab()

@@ -50,7 +50,7 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 ///
 
 #[instrument(level = "trace", skip(tx, params), fields(oid=%params.object_id), err)]
-pub async fn insert_af_collab(
+pub async fn insert_into_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   uid: &i64,
   params: &InsertCollabParams,
@@ -68,12 +68,6 @@ pub async fn insert_af_collab(
   match existing_workspace_id {
     Some(existing_workspace_id) => {
       if existing_workspace_id == workspace_id {
-        event!(
-          tracing::Level::TRACE,
-          "Update collab row:{}",
-          params.object_id
-        );
-
         sqlx::query!(
           "UPDATE af_collab \
         SET blob = $2, len = $3, partition_key = $4, encrypt = $5, owner_uid = $6 WHERE oid = $1",
@@ -90,6 +84,11 @@ pub async fn insert_af_collab(
           "user:{} update af_collab:{} failed",
           uid, params.object_id
         ))?;
+        event!(
+          tracing::Level::TRACE,
+          "did update collab row:{}",
+          params.object_id
+        );
       } else {
         return Err(DatabaseError::Internal(anyhow::anyhow!(
           "Inserting a row with an existing object_id but different workspace_id"
@@ -108,14 +107,6 @@ pub async fn insert_af_collab(
       )
       .fetch_one(tx.deref_mut())
       .await?;
-
-      event!(
-        tracing::Level::TRACE,
-        "Insert new collab row: {}:{}:{}",
-        uid,
-        params.object_id,
-        params.workspace_id
-      );
 
       sqlx::query!(
         r#"
@@ -153,13 +144,21 @@ pub async fn insert_af_collab(
         "Insert new af_collab failed: {}:{}:{}",
         uid, params.object_id, params.collab_type
       ))?;
+
+      event!(
+        tracing::Level::TRACE,
+        "did insert new collab row: {}:{}:{}",
+        uid,
+        params.object_id,
+        params.workspace_id
+      );
     },
   }
 
   Ok(())
 }
 
-pub async fn select_collab_blob(
+pub async fn select_blob_from_af_collab(
   pg_pool: &PgPool,
   collab_type: &CollabType,
   object_id: &str,
@@ -313,7 +312,7 @@ pub async fn get_all_snapshots(
 }
 
 #[instrument(skip(txn), err)]
-pub async fn insert_collab_member_with_txn<T: AsRef<str> + Debug>(
+pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   uid: i64,
   oid: T,
   access_level: &AFAccessLevel,
@@ -367,7 +366,7 @@ pub async fn insert_collab_member(
     .await
     .context("failed to acquire a transaction to insert collab member")?;
 
-  insert_collab_member_with_txn(uid, oid, access_level, &mut txn).await?;
+  upsert_collab_member_with_txn(uid, oid, access_level, &mut txn).await?;
 
   txn
     .commit()

@@ -1,4 +1,4 @@
-use crate::util::test_client::{assert_client_collab, assert_remote_collab, TestClient};
+use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
 use collab_entity::CollabType;
 use database_entity::AFAccessLevel;
 use serde_json::json;
@@ -70,7 +70,7 @@ async fn recv_remote_updates_with_readonly_permission_test() {
     "name": "AppFlowy"
   });
   assert_client_collab(&mut client_2, &object_id, expected.clone(), 10).await;
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &object_id,
@@ -104,7 +104,7 @@ async fn init_sync_with_readonly_permission_test() {
   let expected = json!({
     "name": "AppFlowy"
   });
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &object_id,
@@ -174,7 +174,7 @@ async fn edit_collab_with_readonly_permission_test() {
   )
   .await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &object_id,
@@ -224,7 +224,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
   });
   assert_client_collab(&mut client_2, &object_id, expected.clone(), 5).await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &object_id,
@@ -274,7 +274,7 @@ async fn edit_collab_with_full_access_permission_test() {
   });
   assert_client_collab(&mut client_2, &object_id, expected.clone(), 5).await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &object_id,
@@ -318,6 +318,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .collab
       .lock()
       .insert("title", "hello world");
+    client_2.wait_object_sync_complete(&object_id).await;
   }
 
   // update the permission from full access to readonly, then the server will reject the subsequent
@@ -350,7 +351,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
     5,
   )
   .await;
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &object_id,

@@ -216,7 +216,7 @@ impl CollabStorage for CollabStoragePgImpl {
       .begin()
       .await
       .context("Failed to acquire a Postgres transaction to insert collab")?;
-    collab_db_ops::insert_af_collab(&mut transaction, uid, &params).await?;
+    collab_db_ops::insert_into_af_collab(&mut transaction, uid, &params).await?;
     transaction
       .commit()
       .await
@@ -225,8 +225,12 @@ impl CollabStorage for CollabStoragePgImpl {
   }
 
   async fn get_collab(&self, _uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData> {
-    match collab_db_ops::select_collab_blob(&self.pg_pool, &params.collab_type, &params.object_id)
-      .await
+    match collab_db_ops::select_blob_from_af_collab(
+      &self.pg_pool,
+      &params.collab_type,
+      &params.object_id,
+    )
+    .await
     {
       Ok(data) => {
         debug_assert!(!data.is_empty());

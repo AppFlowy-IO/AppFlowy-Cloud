@@ -1,6 +1,6 @@
 use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
-use database::collab::insert_collab_member_with_txn;
+use database::collab::upsert_collab_member_with_txn;
 use database::user::select_uid_from_email;
 use database::workspace::{
   delete_workspace_members, insert_workspace_member_with_txn, select_all_workspaces_owned,
@@ -40,7 +40,7 @@ pub async fn add_workspace_members(
     let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
 
     insert_workspace_member_with_txn(&mut txn, workspace_id, member.email, member.role).await?;
-    insert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
+    upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
   }
 
   txn

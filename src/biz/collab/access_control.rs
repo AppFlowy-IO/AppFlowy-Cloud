@@ -1,70 +1,39 @@
 use crate::biz::collab::member_listener::{CollabMemberAction, CollabMemberChange};
+use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
-
+use actix_router::{Path, Url};
+use actix_web::http::Method;
 use async_trait::async_trait;
+use database::collab::CollabStorageAccessControl;
+use database::user::select_uid_from_uuid;
+use database_entity::database_error::DatabaseError;
 use database_entity::{AFAccessLevel, AFRole};
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
 use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
 use sqlx::PgPool;
-
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
-use actix_router::{Path, Url};
-use actix_web::http::Method;
-
-use database::collab::CollabStorageAccessControl;
-use database::user::select_uid_from_uuid;
-use database_entity::database_error::DatabaseError;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 
-#[derive(Clone)]
-pub struct CollabHttpAccessControl<AC: CollabAccessControl>(pub Arc<AC>);
-
-#[async_trait]
-impl<AC> HttpAccessControlService for CollabHttpAccessControl<AC>
-where
-  AC: CollabAccessControl,
-  AppError: From<<AC as CollabAccessControl>::Error>,
-{
-  fn resource(&self) -> AccessResource {
-    AccessResource::Collab
-  }
-
-  async fn check_collab_permission(
-    &self,
-    oid: &str,
-    user_uuid: &Uuid,
-    method: Method,
-    _path: Path<Url>,
-  ) -> Result<(), AppError> {
-    trace!("oid: {:?}, user_uuid: {:?}", oid, user_uuid);
-    let can_access = self
-      .0
-      .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)
-      .await
-      .map_err(AppError::from)?;
-
-    if !can_access {
-      return Err(AppError::new(
-        ErrorCode::NotEnoughPermissions,
-        format!(
-          "Not enough permissions to access the collab: {} with http method: {}",
-          oid, method
-        ),
-      ));
-    }
-    Ok(())
-  }
-}
-
+/// Represents the access levels of various collaboration objects for a user.
+/// - Key: User's UID.
+/// - Value: A mapping between the collaboration object's OID and the user's role within that collaboration.
 type MemberStatusByUid = HashMap<i64, CollabMemberStatusByOid>;
+
+/// Represents the access level of a collaboration object identified by its OID.
+/// - Key: OID of the collaboration object.
+/// - Value: The user's role within the collaboration.
 type CollabMemberStatusByOid = HashMap<String, MemberStatus>;
 
-/// Use to check if the user is allowed to send or receive the [CollabMessage]
+/// Used to cache the access level of a user for collaboration objects.
+/// The cache will be updated after the user's access level for a collaboration object is changed.
+/// The change is broadcasted by the `CollabMemberListener` or set by the [CollabAccessControlImpl::update_member] method.
+///
+/// TODO(nathan): broadcast the member access level changes to all connected devices
+///
 pub struct CollabAccessControlImpl {
   pg_pool: PgPool,
   member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
@@ -72,7 +41,10 @@ pub struct CollabAccessControlImpl {
 
 #[derive(Clone, Debug)]
 enum MemberStatus {
+  /// The user is not the member of the collab. When the user is not the member of the collab,
+  /// it don't need to query the database to get the role of the user in the collab
   Deleted,
+  /// The user is the member of the collab
   Valid(AFAccessLevel),
 }
 
@@ -113,6 +85,19 @@ impl CollabAccessControlImpl {
     }
   }
 
+  /// The member's access level may be altered by PostgreSQL notifications. However, there are instances
+  /// where these notifications aren't received promptly, leading to potential inconsistencies in the user's access level.
+  /// Therefore, it's essential to update the user's access level in the cache whenever there's a change.
+  pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
+    update_member_status(uid, oid, access_level, &self.member_status_by_uid).await;
+  }
+
+  pub async fn remove_member(&self, uid: &i64, oid: &str) {
+    if let Some(inner_map) = self.member_status_by_uid.write().await.get_mut(uid) {
+      inner_map.insert(oid.to_string(), MemberStatus::Deleted);
+    }
+  }
+
   /// Return the role of the user in the collab
   async fn get_role_state(&self, uid: &i64, oid: &str) -> Option<MemberStatus> {
     self
@@ -145,6 +130,18 @@ impl CollabAccessControlImpl {
 }
 
 #[inline]
+async fn update_member_status(
+  uid: &i64,
+  oid: &str,
+  access_level: AFAccessLevel,
+  member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
+) {
+  let mut outer_map = member_status_by_uid.write().await;
+  let inner_map = outer_map.entry(*uid).or_insert_with(HashMap::new);
+  inner_map.insert(oid.to_string(), MemberStatus::Valid(access_level));
+}
+
+#[inline]
 async fn refresh_from_db(
   uid: &i64,
   oid: &str,
@@ -152,12 +149,17 @@ async fn refresh_from_db(
   member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
 ) -> Result<MemberStatus, AppError> {
   let member = database::collab::select_collab_member(uid, oid, pg_pool).await?;
-  let mut outer_map = member_status_by_uid.write().await;
-  let inner_map = outer_map.entry(*uid).or_insert_with(HashMap::new);
-  let status = MemberStatus::Valid(member.permission.access_level);
-  inner_map.insert(member.oid, status.clone());
+  let status = MemberStatus::Valid(member.permission.access_level.clone());
+  update_member_status(
+    uid,
+    oid,
+    member.permission.access_level,
+    member_status_by_uid,
+  )
+  .await;
   Ok(status)
 }
+
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
   type Error = AppError;
@@ -232,6 +234,45 @@ impl CollabAccessControl for CollabAccessControlImpl {
         .await
         .is_ok(),
     )
+  }
+}
+
+#[derive(Clone)]
+pub struct CollabHttpAccessControl<AC: CollabAccessControl>(pub Arc<AC>);
+
+#[async_trait]
+impl<AC> HttpAccessControlService for CollabHttpAccessControl<AC>
+where
+  AC: CollabAccessControl,
+  AppError: From<<AC as CollabAccessControl>::Error>,
+{
+  fn resource(&self) -> AccessResource {
+    AccessResource::Collab
+  }
+
+  async fn check_collab_permission(
+    &self,
+    oid: &str,
+    user_uuid: &Uuid,
+    method: Method,
+    _path: Path<Url>,
+  ) -> Result<(), AppError> {
+    let can_access = self
+      .0
+      .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)
+      .await
+      .map_err(AppError::from)?;
+
+    if !can_access {
+      return Err(AppError::new(
+        ErrorCode::NotEnoughPermissions,
+        format!(
+          "Not enough permissions to access the collab: {} with http method: {}",
+          oid, method
+        ),
+      ));
+    }
+    Ok(())
   }
 }
 

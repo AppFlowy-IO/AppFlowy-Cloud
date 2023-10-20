@@ -1,4 +1,4 @@
-use crate::util::test_client::{assert_client_collab, assert_remote_collab, TestClient};
+use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
 use collab_entity::CollabType;
 
 use database_entity::AFRole;
@@ -74,6 +74,10 @@ async fn edit_workspace_with_guest_permission() {
   client_1.wait_object_sync_complete(&workspace_id).await;
 
   client_2.open_workspace(&workspace_id).await;
+  // make sure the client 2 has received the remote updates before the client 2 edits the collab
+  client_2
+    .wait_object_sync_complete_with_secs(&workspace_id, 10)
+    .await;
   client_2
     .collab_by_object_id
     .get_mut(&workspace_id)
@@ -88,7 +92,7 @@ async fn edit_workspace_with_guest_permission() {
   assert_client_collab(&mut client_1, &workspace_id, json!({"name": "zack"}), 3).await;
   assert_client_collab(&mut client_2, &workspace_id, json!({"name": "nathan"}), 3).await;
 
-  assert_remote_collab(
+  assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
     &workspace_id,

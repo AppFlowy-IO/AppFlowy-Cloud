@@ -235,7 +235,12 @@ async fn add_collab_member_handler(
   payload: Json<InsertCollabMemberParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::create_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  biz::collab::ops::create_collab_member(&state.pg_pool, &payload).await?;
+  state
+    .collab_access_control
+    .update_member(&payload.uid, &payload.object_id, payload.access_level)
+    .await;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -246,7 +251,14 @@ async fn update_collab_member_handler(
   payload: Json<UpdateCollabMemberParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::upsert_collab_member(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  biz::collab::ops::upsert_collab_member(&state.pg_pool, &user_uuid, &payload).await?;
+
+  state
+    .collab_access_control
+    .update_member(&payload.uid, &payload.object_id, payload.access_level)
+    .await;
+
   Ok(Json(AppResponse::Ok()))
 }
 #[instrument(skip(state, payload), err)]
@@ -256,7 +268,8 @@ async fn get_collab_member_handler(
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMember>>> {
-  let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  let member = biz::collab::ops::get_collab_member(&state.pg_pool, &payload).await?;
   Ok(Json(AppResponse::Ok().with_data(member)))
 }
 
@@ -267,7 +280,13 @@ async fn remove_collab_member_handler(
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload).await?;
+  state
+    .collab_access_control
+    .remove_member(&payload.uid, &payload.object_id)
+    .await;
+
   Ok(Json(AppResponse::Ok()))
 }
 

@@ -15,7 +15,7 @@ use gotrue::grant::RefreshTokenGrant;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::{AccessTokenResponse, User};
-use gotrue_entity::{OAuthProvider, UserUpdateParams};
+use gotrue_entity::{OAuthProvider, UpdateGotrueUserParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use reqwest::header;
@@ -363,6 +363,26 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn get_workspace_members2<W: AsRef<str>>(
+    &self,
+    workspace_id: W,
+  ) -> Result<Vec<AFWorkspaceMember>, AppError> {
+    let url = format!(
+      "{}/api/workspace/{}/member",
+      self.base_url,
+      workspace_id.as_ref()
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,
     workspace_id: W,
@@ -402,12 +422,16 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn remove_workspace_members(
+  pub async fn remove_workspace_members<T: AsRef<str>>(
     &self,
-    workspace_uuid: Uuid,
+    workspace_id: T,
     member_emails: Vec<String>,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let url = format!(
+      "{}/api/workspace/{}/member",
+      self.base_url,
+      workspace_id.as_ref()
+    );
     let payload = WorkspaceMembers::from(member_emails);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
@@ -489,30 +513,21 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn user_update(
-    &self,
-    gotrue_params: &UserUpdateParams,
-    new_name: Option<&str>,
-  ) -> Result<(), AppError> {
+  pub async fn update_user(&self, params: UpdateUsernameParams) -> Result<(), AppError> {
+    let gotrue_params = UpdateGotrueUserParams::new()
+      .with_opt_email(params.email.clone())
+      .with_opt_password(params.password.clone());
+
     let updated_user = self
       .gotrue_client
-      .update_user(&self.access_token()?, gotrue_params)
+      .update_user(&self.access_token()?, &gotrue_params)
       .await?;
-    if let Some(t) = self.token.write().as_mut() {
-      t.user = updated_user;
-    }
-    if let Some(new_name) = new_name {
-      self.update_user_name(new_name).await?;
-    }
-    Ok(())
-  }
 
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_user_name(&self, new_name: &str) -> Result<(), AppError> {
+    if let Some(token) = self.token.write().as_mut() {
+      token.user = updated_user;
+    }
+
     let url = format!("{}/api/user/update", self.base_url);
-    let params = UpdateUsernameParams {
-      new_name: new_name.to_string(),
-    };
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?

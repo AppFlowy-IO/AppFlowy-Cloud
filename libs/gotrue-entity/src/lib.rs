@@ -271,7 +271,7 @@ pub enum SignUpResponse {
 }
 
 #[derive(Default, Serialize, Deserialize)]
-pub struct UserUpdateParams {
+pub struct UpdateGotrueUserParams {
   pub email: String,
   pub password: Option<String>,
   pub nonce: String,
@@ -281,4 +281,20 @@ pub struct UserUpdateParams {
   pub channel: String,
   pub code_challenge: String,
   pub code_challenge_method: String,
+}
+
+impl UpdateGotrueUserParams {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn with_opt_email<T: ToString>(mut self, email: Option<T>) -> Self {
+    self.email = email.map(|v| v.to_string()).unwrap_or_default();
+    self
+  }
+
+  pub fn with_opt_password<T: ToString>(mut self, password: Option<T>) -> Self {
+    self.password = password.map(|v| v.to_string());
+    self
+  }
 }

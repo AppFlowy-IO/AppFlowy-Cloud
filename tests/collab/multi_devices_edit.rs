@@ -15,7 +15,7 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
   let collab_type = CollabType::Document;
 
   let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.current_workspace_id().await;
+  let workspace_id = test_client.workspace_id().await;
   test_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
@@ -74,7 +74,7 @@ async fn edit_collab_with_different_devices_test() {
   let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
   let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -119,7 +119,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;

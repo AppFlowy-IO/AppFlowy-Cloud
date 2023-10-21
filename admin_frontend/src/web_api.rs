@@ -14,7 +14,7 @@ use axum_extra::extract::CookieJar;
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
 };
-use gotrue_entity::{User, UserUpdateParams};
+use gotrue_entity::{UpdateGotrueUserParams, User};
 
 pub fn router() -> Router<AppState> {
   Router::new()
@@ -43,7 +43,7 @@ pub async fn change_password_handler(
     .gotrue_client
     .update_user(
       &session.access_token,
-      &UserUpdateParams {
+      &UpdateGotrueUserParams {
         password: Some(param.new_password),
         ..Default::default()
       },

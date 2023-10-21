@@ -8,19 +8,28 @@ use gotrue_entity::User;
 
 use crate::{templates, AppState};
 
-pub fn router() -> Router<AppState> {
+pub fn router(state: AppState) -> Router<AppState> {
+  Router::new()
+    .nest_service("/", page_router().with_state(state.clone()))
+    .nest_service("/components", component_router().with_state(state))
+}
+
+pub fn page_router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
-    .route("/home", get(home_handler))
     .route("/login", get(login_handler))
+    .route("/home", get(home_handler))
+    .route("/admin/home", get(admin_home_handler))
+}
 
+pub fn component_router() -> Router<AppState> {
+  Router::new()
     // User actions
     .route("/user/change_password", get(user_change_password_handler))
     .route("/user/user", get(user_user_handler))
     .route("/user/create_user", get(admin_users_create_handler))
 
     // Admin actions
-    .route("/admin/home", get(admin_home_handler))
     .route("/admin/users", get(admin_users_handler))
     .route("/admin/users/:user_id", get(admin_user_details_handler))
     .route("/admin/users/create", get(admin_users_create_handler))
@@ -50,16 +59,11 @@ pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  match state.gotrue_client.user_info(&session.access_token).await {
-    Ok(user) => render_template(templates::Home {
-      email: &user.email,
-      is_admin: is_admin(&user),
-    }),
-    Err(err) => {
-      tracing::error!("Error getting user info: {:?}", err);
-      login_handler().await
-    },
-  }
+  let user = state.gotrue_client.user_info(&session.access_token).await?;
+  render_template(templates::Home {
+    email: &user.email,
+    is_admin: is_admin(&user),
+  })
 }
 
 pub async fn admin_home_handler(

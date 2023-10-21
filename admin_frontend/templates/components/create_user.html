@@ -1,4 +1,4 @@
-<div>
+<div id="create-user">
   <h4>Please enter the following information to create a new user</h4>
   <table>
     <tr>
@@ -65,9 +65,7 @@
           if (!response.ok) {
             displayHttpStatusAndPayload(response);
           } else {
-            response.json().then((data) => {
-              window.location.href = `/web/admin/users/${data.data.id}`;
-            });
+            displaySuccess("User created successfully");
           }
         });
       });

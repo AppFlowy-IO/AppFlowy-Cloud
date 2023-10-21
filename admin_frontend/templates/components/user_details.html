@@ -1,4 +1,5 @@
 <div>
+  <p>Email: {{ user.email|escape }}</p>
   <p>Role: {{ user.role|escape }}</p>
   <p>Phone: {{ user.phone|escape }}</p>
   <p>Email Confirmed At: {{ user.email_confirmed_at|default("-") }}</p>

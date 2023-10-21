@@ -1,0 +1,23 @@
+#login-parent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex-direction: column;
+}
+
+#login-splash {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+}
+
+#login-signin {
+  min-width: 256px;
+  max-width: 512px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}

@@ -22,7 +22,7 @@ uuid = { version = "1.4.1", features = ["v4"] }
 dotenv = "0.15.0"
 reqwest = "0.11.22"
 tower-service = "0.3.2"
-tower-http = { version = "0.4.4", features = ["cors"] }
+tower-http = { version = "0.4.4", features = ["cors", "fs"] }
 tower = "0.4.13"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

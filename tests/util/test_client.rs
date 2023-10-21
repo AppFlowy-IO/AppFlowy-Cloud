@@ -1,4 +1,5 @@
 use assert_json_diff::assert_json_eq;
+use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{BusinessID, WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
@@ -9,9 +10,12 @@ use collab_entity::CollabType;
 use database_entity::{
   AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
 };
+use mime::Mime;
 use serde_json::Value;
 use shared_entity::app_error::AppError;
-use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
+};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -197,6 +201,51 @@ impl TestClient {
         break;
       }
     }
+  }
+
+  #[allow(dead_code)]
+  pub async fn download_file(&self, url: &str) -> Vec<u8> {
+    self.api_client.get_file(url).await.unwrap().to_vec()
+  }
+
+  pub async fn upload_file<T: Into<Bytes>, M: ToString>(&self, data: T, mime: M) -> String {
+    let workspace_id = self.workspace_id().await;
+    let file_id = Uuid::new_v4().to_string();
+    self
+      .api_client
+      .put_file(&workspace_id, data, mime)
+      .await
+      .unwrap();
+    file_id
+  }
+
+  pub async fn upload_file_with_size<T: Into<Bytes>>(
+    &self,
+    data: T,
+    mime: &Mime,
+    size: usize,
+  ) -> String {
+    let workspace_id = self.workspace_id().await;
+    let file_id = Uuid::new_v4().to_string();
+    self
+      .api_client
+      .put_file_with_content_length(&workspace_id, data, mime, size)
+      .await
+      .unwrap();
+    file_id
+  }
+
+  pub async fn delete_file(&self, url: &str) {
+    self.api_client.delete_file(url).await.unwrap();
+  }
+
+  pub async fn get_workspace_usage(&self) -> WorkspaceSpaceUsage {
+    let workspace_id = self.workspace_id().await;
+    self
+      .api_client
+      .get_workspace_usage(&workspace_id)
+      .await
+      .unwrap()
   }
 
   pub(crate) async fn workspace_id(&self) -> String {

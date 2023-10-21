@@ -27,7 +27,8 @@ use shared_entity::data::AppResponse;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUsernameParams;
 use shared_entity::dto::workspace_dto::{
-  CreateWorkspaceMembers, WorkspaceMemberChangeset, WorkspaceMembers,
+  CreateWorkspaceMembers, WorkspaceBlobMetadata, WorkspaceMemberChangeset, WorkspaceMembers,
+  WorkspaceSpaceUsage,
 };
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
@@ -796,6 +797,36 @@ impl Client {
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_workspace_usage(
+    &self,
+    workspace_id: &str,
+  ) -> Result<WorkspaceSpaceUsage, AppError> {
+    let url = format!("{}/api/file_storage/{}/usage", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<WorkspaceSpaceUsage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_workspace_all_blob_metadata(
+    &self,
+    workspace_id: &str,
+  ) -> Result<WorkspaceBlobMetadata, AppError> {
+    let url = format!("{}/api/file_storage/{}/blobs", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<WorkspaceBlobMetadata>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   async fn http_client_with_auth(

@@ -10,11 +10,13 @@ use actix_web::{
 };
 use actix_web::{HttpResponse, Result};
 use chrono::DateTime;
-use database::file::MAX_BLOB_SIZE;
+use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
+use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
 use database_entity::AFBlobRecord;
 use serde::Deserialize;
 use shared_entity::app_error::AppError;
 use shared_entity::data::{AppResponse, JsonAppResponse};
+use shared_entity::dto::workspace_dto::{WorkspaceBlobMetadata, WorkspaceSpaceUsage};
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::Uuid;
 use std::pin::Pin;
@@ -34,6 +36,13 @@ pub fn file_storage_scope() -> Scope {
         .route(web::get().to(get_handler))
         .route(web::delete().to(delete_handler)),
     )
+    .service(
+      web::resource("/{workspace_id}/usage").route(web::get().to(get_workspace_usage_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/blobs")
+        .route(web::get().to(get_all_workspace_blob_metadata_handler)),
+    )
 }
 
 #[derive(Deserialize, Debug)]
@@ -49,7 +58,7 @@ async fn put_handler(
   content_type: web::Header<ContentType>,
   content_length: web::Header<ContentLength>,
   workspace_id: web::Path<Uuid>,
-  required_id: RequestId,
+  request_id: RequestId,
 ) -> Result<JsonAppResponse<AFBlobRecord>> {
   let content_length = content_length.into_inner().into_inner();
   // Check content length, if it's too large, return error.
@@ -99,7 +108,7 @@ async fn delete_handler(
 async fn get_handler(
   state: Data<AppState>,
   path: web::Path<BlobPathInfo>,
-  required_id: RequestId,
+  request_id: RequestId,
   req: HttpRequest,
 ) -> Result<HttpResponse<BoxBody>> {
   let BlobPathInfo {
@@ -150,6 +159,36 @@ async fn get_handler(
   Ok(response)
 }
 
+#[instrument(level = "debug", skip(state), err)]
+async fn get_workspace_usage_handler(
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<WorkspaceSpaceUsage>> {
+  let current = get_workspace_usage_size(&state.pg_pool, &workspace_id)
+    .await
+    .map_err(AppError::from)?;
+  let usage = WorkspaceSpaceUsage {
+    consumed_capacity: current,
+    total_capacity: MAX_USAGE,
+  };
+  Ok(AppResponse::Ok().with_data(usage).into())
+}
+
+// TODO(nathan): implement pagination
+#[instrument(level = "debug", skip(state), err)]
+async fn get_all_workspace_blob_metadata_handler(
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<WorkspaceBlobMetadata>> {
+  let workspace_blob_metadata = get_all_workspace_blob_metadata(&state.pg_pool, &workspace_id)
+    .await
+    .map_err(AppError::from)?;
+  Ok(
+    AppResponse::Ok()
+      .with_data(WorkspaceBlobMetadata(workspace_blob_metadata))
+      .into(),
+  )
+}
 fn payload_to_async_read(payload: actix_web::web::Payload) -> Pin<Box<dyn AsyncRead>> {
   let mapped =
     payload.map(|chunk| chunk.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));

@@ -1,12 +1,11 @@
 use anyhow::Result;
-use database::{
-  user::{create_user_if_not_exists, update_user_name},
-  workspace::select_user_profile_view_by_uuid,
-};
+use database::{user::create_user_if_not_exists, workspace::select_user_profile_view_by_uuid};
 use database_entity::AFUserProfileView;
 use gotrue::api::Client;
 use shared_entity::app_error::AppError;
+use uuid::Uuid;
 
+use shared_entity::dto::auth_dto::UpdateUsernameParams;
 use sqlx::{types::uuid, PgPool};
 
 pub async fn token_verify(
@@ -31,8 +30,12 @@ pub async fn get_profile(
   Ok(profile)
 }
 
-pub async fn update_user(pg_pool: &PgPool, uuid: &uuid::Uuid, name: &str) -> Result<(), AppError> {
-  Ok(update_user_name(pg_pool, uuid, name).await?)
+pub async fn update_user(
+  pg_pool: &PgPool,
+  user_uuid: Uuid,
+  params: UpdateUsernameParams,
+) -> Result<(), AppError> {
+  Ok(database::user::update_user(pg_pool, &user_uuid, params.name, params.email).await?)
 }
 
 // Best effort to get user's name after oauth

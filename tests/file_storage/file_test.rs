@@ -25,6 +25,8 @@ async fn put_and_get() {
 
   let got_data = c1.get_file(&file_url).await.unwrap();
   assert_eq!(got_data, data.as_bytes());
+
+  c1.delete_file(&file_url).await.unwrap();
 }
 
 #[tokio::test]
@@ -55,6 +57,9 @@ async fn put_and_put_and_get() {
 
   let got_data = c1.get_file(&url_2).await.unwrap();
   assert_eq!(got_data, data2.as_bytes());
+
+  c1.delete_file(&url_1).await.unwrap();
+  c1.delete_file(&url_2).await.unwrap();
 }
 
 #[tokio::test]

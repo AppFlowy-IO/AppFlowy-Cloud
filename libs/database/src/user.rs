@@ -1,25 +1,48 @@
 use anyhow::Context;
 use database_entity::database_error::DatabaseError;
-use sqlx::{Executor, PgPool, Postgres};
-use tracing::instrument;
+use sqlx::postgres::PgArguments;
+use sqlx::{Arguments, Executor, PgPool, Postgres};
+use tracing::{instrument, warn};
 use uuid::Uuid;
 
-pub async fn update_user_name(
+#[instrument(skip_all, err)]
+pub async fn update_user(
   pool: &PgPool,
-  uuid: &uuid::Uuid,
-  name: &str,
+  user_uuid: &uuid::Uuid,
+  name: Option<String>,
+  email: Option<String>,
 ) -> Result<(), DatabaseError> {
-  sqlx::query!(
-    r#"
-        UPDATE af_user
-        SET name = $1
-        WHERE uuid = $2
-        "#,
-    name,
-    uuid
-  )
-  .execute(pool)
-  .await?;
+  let mut set_clauses = Vec::new();
+  let mut args = PgArguments::default();
+  let mut args_num = 0;
+
+  if let Some(n) = name {
+    args_num += 1;
+    set_clauses.push(format!("name = ${}", args_num));
+    args.add(n);
+  }
+
+  if let Some(e) = email {
+    args_num += 1;
+    set_clauses.push(format!("email = ${}", args_num));
+    args.add(e);
+  }
+
+  if set_clauses.is_empty() {
+    warn!("No update params provided");
+    return Ok(());
+  }
+
+  // where
+  args_num += 1;
+  let query = format!(
+    "UPDATE af_user SET {} WHERE uuid = ${}",
+    set_clauses.join(", "),
+    args_num
+  );
+  args.add(user_uuid);
+
+  sqlx::query_with(&query, args).execute(pool).await?;
   Ok(())
 }
 

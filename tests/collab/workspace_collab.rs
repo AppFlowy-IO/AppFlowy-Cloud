@@ -9,7 +9,7 @@ async fn edit_workspace_without_permission() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   client_1.open_workspace(&workspace_id).await;
   client_2.open_workspace(&workspace_id).await;
 
@@ -30,12 +30,12 @@ async fn edit_workspace_without_permission() {
 async fn init_sync_workspace_with_guest_permission() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   client_1.open_workspace(&workspace_id).await;
 
   // add client 2 as the member of the workspace then the client 2 will receive the update.
   client_1
-    .add_client_as_workspace_member(&workspace_id, &client_2, AFRole::Guest)
+    .add_workspace_member(&workspace_id, &client_2, AFRole::Guest)
     .await;
   client_2.open_workspace(&workspace_id).await;
 
@@ -56,12 +56,12 @@ async fn init_sync_workspace_with_guest_permission() {
 async fn edit_workspace_with_guest_permission() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   client_1.open_workspace(&workspace_id).await;
 
   // add client 2 as the member of the workspace then the client 2 will receive the update.
   client_1
-    .add_client_as_workspace_member(&workspace_id, &client_2, AFRole::Guest)
+    .add_workspace_member(&workspace_id, &client_2, AFRole::Guest)
     .await;
 
   client_1

@@ -2,7 +2,7 @@ use anyhow::Context;
 use database_entity::database_error::DatabaseError;
 use sqlx::postgres::PgArguments;
 use sqlx::{Arguments, Executor, PgPool, Postgres};
-use tracing::instrument;
+use tracing::{instrument, warn};
 use uuid::Uuid;
 
 #[instrument(skip_all, err)]
@@ -29,9 +29,8 @@ pub async fn update_user(
   }
 
   if set_clauses.is_empty() {
-    return Err(DatabaseError::InvalidParams(
-      "No update params provided".to_string(),
-    ));
+    warn!("No update params provided");
+    return Ok(());
   }
 
   // where

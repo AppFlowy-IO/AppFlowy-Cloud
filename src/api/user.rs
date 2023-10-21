@@ -56,15 +56,15 @@ async fn profile_handler(
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
-#[tracing::instrument(skip(state, auth, req), err)]
+#[tracing::instrument(skip(state, auth, payload), err)]
 async fn update_handler(
   auth: Authorization,
-  req: Json<UpdateUsernameParams>,
+  payload: Json<UpdateUsernameParams>,
   state: Data<AppState>,
   required_id: RequestId,
 ) -> Result<JsonAppResponse<()>> {
-  let params = req.into_inner();
-  biz::user::update_user(&state.pg_pool, &auth.uuid()?, &params.new_name).await?;
+  let params = payload.into_inner();
+  biz::user::update_user(&state.pg_pool, auth.uuid()?, params).await?;
   Ok(AppResponse::Ok().into())
 }
 

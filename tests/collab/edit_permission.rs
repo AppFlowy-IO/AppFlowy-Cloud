@@ -9,7 +9,7 @@ async fn recv_updates_without_permission_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -37,7 +37,7 @@ async fn recv_remote_updates_with_readonly_permission_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -87,7 +87,7 @@ async fn init_sync_with_readonly_permission_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -136,7 +136,7 @@ async fn edit_collab_with_readonly_permission_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -191,7 +191,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -241,7 +241,7 @@ async fn edit_collab_with_full_access_permission_test() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;
@@ -291,7 +291,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
-  let workspace_id = client_1.current_workspace_id().await;
+  let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
     .create_collab(&workspace_id, collab_type.clone())
     .await;

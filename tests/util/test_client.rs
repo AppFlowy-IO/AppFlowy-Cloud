@@ -1,6 +1,6 @@
 use assert_json_diff::assert_json_eq;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
-use client_api::ws::{BusinessID, ConnectState, WSClient, WSClientConfig};
+use client_api::ws::{BusinessID, WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -10,7 +10,8 @@ use database_entity::{
   AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
 };
 use serde_json::Value;
-use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
+use shared_entity::app_error::AppError;
+use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -35,25 +36,104 @@ pub(crate) struct TestCollab {
 }
 
 impl TestClient {
+  pub(crate) async fn new(device_id: String, registered_user: User, invoke_ws_conn: bool) -> Self {
+    setup_log();
+    let api_client = localhost_client();
+    api_client
+      .sign_in_password(&registered_user.email, &registered_user.password)
+      .await
+      .unwrap();
+
+    // Connect to server via websocket
+    let ws_client = WSClient::new(WSClientConfig {
+      buffer_capacity: 100,
+      ping_per_secs: 6,
+      retry_connect_per_pings: 5,
+    });
+
+    if invoke_ws_conn {
+      ws_client
+        .connect(api_client.ws_url(&device_id).unwrap())
+        .await
+        .unwrap();
+    }
+    Self {
+      ws_client,
+      api_client,
+      collab_by_object_id: Default::default(),
+      device_id,
+    }
+  }
+
   pub(crate) async fn new_user() -> Self {
     let registered_user = generate_unique_registered_user().await;
     let device_id = Uuid::new_v4().to_string();
-    Self::new(device_id, registered_user).await
+    Self::new(device_id, registered_user, true).await
   }
 
-  pub(crate) async fn add_client_as_workspace_member(
+  pub(crate) async fn new_user_without_ws_conn() -> Self {
+    let registered_user = generate_unique_registered_user().await;
+    let device_id = Uuid::new_v4().to_string();
+    Self::new(device_id, registered_user, false).await
+  }
+
+  pub(crate) async fn user_with_new_device(registered_user: User) -> Self {
+    let device_id = Uuid::new_v4().to_string();
+    Self::new(device_id, registered_user, true).await
+  }
+
+  pub(crate) async fn add_workspace_member(
     &self,
     workspace_id: &str,
     other_client: &TestClient,
     role: AFRole,
   ) {
-    let profile = other_client.api_client.get_profile().await.unwrap();
-    let email = profile.email.unwrap();
+    self
+      .try_add_workspace_member(workspace_id, other_client, role)
+      .await
+      .unwrap();
+  }
+
+  pub(crate) async fn try_update_workspace_member(
+    &self,
+    workspace_id: &str,
+    other_client: &TestClient,
+    role: AFRole,
+  ) -> Result<(), AppError> {
+    let workspace_id = Uuid::parse_str(workspace_id).unwrap();
+    let email = other_client.email().await;
+    self
+      .api_client
+      .update_workspace_member(
+        workspace_id,
+        WorkspaceMemberChangeset::new(email).with_role(role),
+      )
+      .await
+  }
+
+  pub(crate) async fn try_add_workspace_member(
+    &self,
+    workspace_id: &str,
+    other_client: &TestClient,
+    role: AFRole,
+  ) -> Result<(), AppError> {
+    let email = other_client.email().await;
     self
       .api_client
       .add_workspace_members(workspace_id, vec![CreateWorkspaceMember { email, role }])
       .await
-      .unwrap();
+  }
+
+  pub(crate) async fn try_remove_workspace_member(
+    &self,
+    workspace_id: &str,
+    other_client: &TestClient,
+  ) -> Result<(), AppError> {
+    let email = other_client.email().await;
+    self
+      .api_client
+      .remove_workspace_members(workspace_id.to_string(), vec![email])
+      .await
   }
 
   pub(crate) async fn add_client_as_collab_member(
@@ -63,13 +143,7 @@ impl TestClient {
     other_client: &TestClient,
     access_level: AFAccessLevel,
   ) {
-    let uid = other_client
-      .api_client
-      .get_profile()
-      .await
-      .unwrap()
-      .uid
-      .unwrap();
+    let uid = other_client.uid().await;
     self
       .api_client
       .add_collab_member(InsertCollabMemberParams {
@@ -89,13 +163,7 @@ impl TestClient {
     other_client: &TestClient,
     access_level: AFAccessLevel,
   ) {
-    let uid = other_client
-      .api_client
-      .get_profile()
-      .await
-      .unwrap()
-      .uid
-      .unwrap();
+    let uid = other_client.uid().await;
     self
       .api_client
       .update_collab_member(UpdateCollabMemberParams {
@@ -106,37 +174,6 @@ impl TestClient {
       })
       .await
       .unwrap();
-  }
-
-  pub(crate) async fn user_with_new_device(registered_user: User) -> Self {
-    let device_id = Uuid::new_v4().to_string();
-    Self::new(device_id, registered_user).await
-  }
-
-  pub(crate) async fn new(device_id: String, registered_user: User) -> Self {
-    setup_log();
-    let api_client = localhost_client();
-    api_client
-      .sign_in_password(&registered_user.email, &registered_user.password)
-      .await
-      .unwrap();
-
-    // Connect to server via websocket
-    let ws_client = WSClient::new(WSClientConfig {
-      buffer_capacity: 100,
-      ping_per_secs: 6,
-      retry_connect_per_pings: 5,
-    });
-    ws_client
-      .connect(api_client.ws_url(&device_id).unwrap())
-      .await
-      .unwrap();
-    Self {
-      ws_client,
-      api_client,
-      collab_by_object_id: Default::default(),
-      device_id,
-    }
   }
 
   pub(crate) async fn wait_object_sync_complete(&self, object_id: &str) {
@@ -162,19 +199,7 @@ impl TestClient {
     }
   }
 
-  #[allow(dead_code)]
-  pub(crate) async fn wait_ws_connected(&self) {
-    let mut connect_state = self.ws_client.subscribe_connect_state();
-
-    const TIMEOUT_DURATION: Duration = Duration::from_secs(10);
-    while let Ok(Ok(state)) = timeout(TIMEOUT_DURATION, connect_state.recv()).await {
-      if state == ConnectState::Connected {
-        break;
-      }
-    }
-  }
-
-  pub(crate) async fn current_workspace_id(&self) -> String {
+  pub(crate) async fn workspace_id(&self) -> String {
     self
       .api_client
       .get_workspaces()
@@ -185,6 +210,15 @@ impl TestClient {
       .workspace_id
       .to_string()
   }
+
+  pub(crate) async fn email(&self) -> String {
+    self.api_client.get_profile().await.unwrap().email.unwrap()
+  }
+
+  pub(crate) async fn uid(&self) -> i64 {
+    self.api_client.get_profile().await.unwrap().uid.unwrap()
+  }
+
   #[allow(clippy::await_holding_lock)]
   pub(crate) async fn create_collab(
     &mut self,

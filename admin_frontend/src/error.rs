@@ -5,8 +5,6 @@ use axum::{
   response::{IntoResponse, Redirect},
 };
 
-use crate::templates;
-
 pub struct WebApiError<'a> {
   pub status_code: status::StatusCode,
   pub payload: Cow<'a, str>,

@@ -6,7 +6,7 @@ use anyhow::Context;
 use super::grant::Grant;
 use gotrue_entity::{
   AccessTokenResponse, AdminListUsersResponse, GoTrueError, GoTrueSettings, OAuthError,
-  OAuthProvider, SignUpResponse, User, UserUpdateParams,
+  OAuthProvider, SignUpResponse, UpdateGotrueUserParams, User,
 };
 use infra::reqwest::{check_response, from_body, from_response};
 
@@ -102,7 +102,7 @@ impl Client {
   pub async fn update_user(
     &self,
     access_token: &str,
-    update_user_params: &UserUpdateParams,
+    update_user_params: &UpdateGotrueUserParams,
   ) -> Result<User, GoTrueError> {
     let resp = self
       .client

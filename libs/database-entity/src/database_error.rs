@@ -27,6 +27,9 @@ pub enum DatabaseError {
   #[error("Not enough permission:{0}")]
   NotEnoughPermissions(String),
 
+  #[error("Invalid params:{0}")]
+  InvalidParams(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

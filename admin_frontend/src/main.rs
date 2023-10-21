@@ -1,4 +1,3 @@
-mod assets;
 mod error;
 mod models;
 mod response;

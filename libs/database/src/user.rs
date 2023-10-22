@@ -1,16 +1,32 @@
 use anyhow::Context;
 use database_entity::database_error::DatabaseError;
 use sqlx::postgres::PgArguments;
+use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres};
 use tracing::{instrument, warn};
 use uuid::Uuid;
 
+/// Updates the user's details in the `af_user` table.
+///
+/// This function allows for updating the user's name, email, and metadata based on the provided UUID.
+/// If the `metadata` is provided, it merges the new metadata with the existing one, with the new values
+/// overriding the old ones in case of conflicts.
+///
+/// # Arguments
+///
+/// * `pool` - A reference to the database connection pool.
+/// * `user_uuid` - The UUID of the user to be updated.
+/// * `name` - An optional new name for the user.
+/// * `email` - An optional new email for the user.
+/// * `metadata` - An optional JSON value containing new metadata for the user.
+///
 #[instrument(skip_all, err)]
 pub async fn update_user(
   pool: &PgPool,
   user_uuid: &uuid::Uuid,
   name: Option<String>,
   email: Option<String>,
+  metadata: Option<JsonValue>,
 ) -> Result<(), DatabaseError> {
   let mut set_clauses = Vec::new();
   let mut args = PgArguments::default();
@@ -26,6 +42,13 @@ pub async fn update_user(
     args_num += 1;
     set_clauses.push(format!("email = ${}", args_num));
     args.add(e);
+  }
+
+  if let Some(m) = metadata {
+    args_num += 1;
+    // Merge existing metadata with new metadata
+    set_clauses.push(format!("metadata = metadata || ${}", args_num));
+    args.add(m);
   }
 
   if set_clauses.is_empty() {

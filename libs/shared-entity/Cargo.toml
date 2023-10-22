@@ -17,7 +17,7 @@ gotrue-entity = { path = "../gotrue-entity" }
 database-entity = { path = "../database-entity" }
 
 actix-web = { version = "4.4.0", default-features = false, features = ["http2"], optional = true }
-sqlx = { version = "0.7", default-features = false, features = ["postgres"], optional = true }
+sqlx = { version = "0.7", default-features = false, features = ["postgres", "json"], optional = true }
 validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }
 opener = "0.6.1"
 url = "2.4.1"

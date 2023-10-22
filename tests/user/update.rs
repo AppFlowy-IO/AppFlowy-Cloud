@@ -1,4 +1,5 @@
-use shared_entity::dto::auth_dto::UpdateUsernameParams;
+use serde_json::json;
+use shared_entity::dto::auth_dto::{UpdateUsernameParams, UserMetaData};
 use shared_entity::error_code::ErrorCode;
 
 use crate::localhost_client;
@@ -72,4 +73,70 @@ async fn update_user_name() {
 
   let profile = c.get_profile().await.unwrap();
   assert_eq!(profile.name.unwrap().as_str(), "lucas");
+}
+
+#[tokio::test]
+async fn update_user_metadata() {
+  let (c, user) = generate_unique_registered_user_client().await;
+  c.sign_in_password(&user.email, &user.password)
+    .await
+    .unwrap();
+
+  let mut metadata = UserMetaData::new();
+  metadata.insert("str_value", "value");
+  metadata.insert("int_value", 1);
+
+  c.update_user(UpdateUsernameParams::new().with_metadata(metadata.clone()))
+    .await
+    .unwrap();
+
+  let profile = c.get_profile().await.unwrap();
+  assert_eq!(profile.metadata.unwrap(), json!(metadata));
+}
+
+#[tokio::test]
+async fn user_metadata_override() {
+  let (c, user) = generate_unique_registered_user_client().await;
+  c.sign_in_password(&user.email, &user.password)
+    .await
+    .unwrap();
+
+  let mut metadata_1 = UserMetaData::new();
+  metadata_1.insert("str_value", "value");
+  metadata_1.insert("int_value", 1);
+  c.update_user(UpdateUsernameParams::new().with_metadata(metadata_1.clone()))
+    .await
+    .unwrap();
+
+  let mut metadata_2 = UserMetaData::new();
+  metadata_2.insert("bool_value", false);
+  c.update_user(UpdateUsernameParams::new().with_metadata(metadata_2))
+    .await
+    .unwrap();
+  metadata_1.insert("bool_value", false);
+
+  let profile = c.get_profile().await.unwrap();
+  assert_eq!(profile.metadata.unwrap(), json!(metadata_1));
+}
+
+#[tokio::test]
+async fn user_empty_metadata_override() {
+  let (c, user) = generate_unique_registered_user_client().await;
+  c.sign_in_password(&user.email, &user.password)
+    .await
+    .unwrap();
+
+  let mut metadata_1 = UserMetaData::new();
+  metadata_1.insert("str_value", "value");
+  metadata_1.insert("int_value", 1);
+  c.update_user(UpdateUsernameParams::new().with_metadata(metadata_1.clone()))
+    .await
+    .unwrap();
+
+  c.update_user(UpdateUsernameParams::new().with_metadata(UserMetaData::new()))
+    .await
+    .unwrap();
+
+  let profile = c.get_profile().await.unwrap();
+  assert_eq!(profile.metadata.unwrap(), json!(metadata_1));
 }

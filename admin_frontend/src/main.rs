@@ -9,7 +9,10 @@ mod web_app;
 use axum::{response::Redirect, routing::get, Router};
 use reqwest::Method;
 use tower::ServiceBuilder;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+  cors::{Any, CorsLayer},
+  services::ServeDir,
+};
 
 #[tokio::main]
 async fn main() {
@@ -38,7 +41,7 @@ async fn main() {
     session_store,
   };
 
-  let web_app_router = web_app::router().with_state(state.clone());
+  let web_app_router = web_app::router(state.clone()).with_state(state.clone());
   let web_api_router = web_api::router().with_state(state);
 
   let cors = CorsLayer::new()
@@ -51,7 +54,8 @@ async fn main() {
     .route("/", get(|| async { Redirect::permanent("/web") }))
     .layer(ServiceBuilder::new().layer(cors))
     .nest_service("/web", web_app_router)
-    .nest_service("/web-api", web_api_router);
+    .nest_service("/web-api", web_api_router)
+    .nest_service("/assets", ServeDir::new("assets"));
 
   axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
     .serve(app.into_make_service())

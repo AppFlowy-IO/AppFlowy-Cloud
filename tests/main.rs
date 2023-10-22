@@ -1,11 +1,8 @@
 use client_api::Client;
-
 mod collab;
 mod gotrue;
 mod user;
 mod util;
-
-mod file_storage;
 mod websocket;
 mod workspace;
 

@@ -12,6 +12,7 @@ use database_entity::AFBlobMetadata;
 use sqlx::PgPool;
 
 use tokio::io::AsyncRead;
+use tracing::{event, instrument};
 use uuid::Uuid;
 
 /// Maximum size of a blob in bytes.
@@ -54,6 +55,7 @@ where
     Self { client, pg_pool }
   }
 
+  #[instrument(skip_all, err)]
   pub async fn put_blob<R>(
     &self,
     blob_stream: R,
@@ -65,15 +67,22 @@ where
     R: AsyncRead + Unpin,
   {
     let (blob, file_id) = BlobStreamReader::new(blob_stream).finish().await?;
-    debug_assert!(blob.len() == file_size as usize);
 
     // check file is exist or not
     if is_blob_metadata_exists(&self.pg_pool, &workspace_id, &file_id).await? {
+      event!(tracing::Level::TRACE, "file:{} is already exist", file_id);
       return Ok(file_id);
     }
 
     // query the storage space of the workspace
     let usage = get_workspace_usage_size(&self.pg_pool, &workspace_id).await?;
+    event!(
+      tracing::Level::TRACE,
+      "workspace consumed space: {}, new file:{} with size: {}",
+      usage,
+      file_id,
+      file_size
+    );
     if usage > MAX_USAGE {
       return Err(DatabaseError::StorageSpaceNotEnough);
     }
@@ -90,7 +99,13 @@ where
     )
     .await
     {
-      // ff the metadata is not saved, delete the blob.
+      event!(
+        tracing::Level::ERROR,
+        "failed to save metadata, file_id: {}, err: {}",
+        file_id,
+        err
+      );
+      // if the metadata is not saved, delete the blob.
       self.client.delete_blob(&file_id).await?;
       return Err(err);
     }

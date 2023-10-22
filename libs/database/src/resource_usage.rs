@@ -99,6 +99,47 @@ pub async fn get_blob_metadata(
   Ok(metadata)
 }
 
+/// Return all blob metadata of a workspace
+#[instrument(level = "trace", skip_all, err)]
+pub async fn get_all_workspace_blob_metadata(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Vec<AFBlobMetadata>, DatabaseError> {
+  let all_metadata = sqlx::query_as!(
+    AFBlobMetadata,
+    r#"
+        SELECT * FROM af_blob_metadata
+        WHERE workspace_id = $1 
+        "#,
+    workspace_id,
+  )
+  .fetch_all(pg_pool)
+  .await?;
+  Ok(all_metadata)
+}
+
+/// Return all blob ids of a workspace
+#[instrument(level = "trace", skip_all, err)]
+pub async fn get_all_workspace_blob_ids(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Vec<String>, DatabaseError> {
+  let file_ids = sqlx::query!(
+    r#"
+    SELECT file_id FROM af_blob_metadata
+    WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_all(pg_pool)
+  .await?
+  .into_iter()
+  .map(|record| record.file_id)
+  .collect();
+  Ok(file_ids)
+}
+
+/// Return the total size of a workspace in bytes
 #[instrument(level = "trace", skip_all, err)]
 pub async fn get_workspace_usage_size(
   pool: &PgPool,

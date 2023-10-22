@@ -7,7 +7,7 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use database_entity::{
+use database_entity::dto::{
   AFAccessLevel, AFBlobMetadata, AFRole, InsertCollabMemberParams, QueryCollabParams,
   UpdateCollabMemberParams,
 };

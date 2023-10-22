@@ -1,5 +1,5 @@
 use anyhow::Context;
-use database_entity::database_error::DatabaseError;
+use database_entity::error::DatabaseError;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres};

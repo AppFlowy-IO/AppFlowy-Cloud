@@ -14,7 +14,7 @@ use axum_extra::extract::CookieJar;
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
 };
-use gotrue_entity::{UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{UpdateGotrueUserParams, User};
 
 pub fn router() -> Router<AppState> {
   Router::new()

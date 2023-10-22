@@ -1,22 +1,19 @@
+use crate::collaborate::group::CollabGroup;
+use crate::entities::RealtimeUser;
 use crate::error::RealtimeError;
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab::core::collab::TransactionMutExt;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
-use database_entity::database_error::DatabaseError;
-
 use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
+use database::collab::CollabStorage;
+use database_entity::dto::{InsertCollabParams, QueryCollabParams, RawData};
+use database_entity::error::DatabaseError;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tracing::{error, trace};
-
-use database::collab::CollabStorage;
-use database_entity::{InsertCollabParams, QueryCollabParams, RawData};
-
-use crate::collaborate::group::CollabGroup;
-use crate::entities::RealtimeUser;
 use yrs::updates::decoder::Decode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 

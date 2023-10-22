@@ -1,13 +1,13 @@
+use super::grant::Grant;
 use crate::params::{
   AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
 };
 use anyhow::Context;
-
-use super::grant::Grant;
-use gotrue_entity::{
-  AccessTokenResponse, AdminListUsersResponse, GoTrueError, GoTrueSettings, OAuthError,
-  OAuthProvider, SignUpResponse, UpdateGotrueUserParams, User,
+use gotrue_entity::dto::{
+  AccessTokenResponse, AdminListUsersResponse, GoTrueSettings, OAuthProvider, SignUpResponse,
+  UpdateGotrueUserParams, User,
 };
+use gotrue_entity::error::{GoTrueError, OAuthError};
 use infra::reqwest::{check_response, from_body, from_response};
 
 #[derive(Clone)]

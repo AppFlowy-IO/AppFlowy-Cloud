@@ -6,16 +6,20 @@ use database::workspace::{
   delete_workspace_members, insert_workspace_member_with_txn, select_all_workspaces_owned,
   select_workspace_member_list, upsert_workspace_member,
 };
-use database_entity::{AFAccessLevel, AFRole, AFWorkspaceMember, AFWorkspaces};
+use database_entity::dto::{AFAccessLevel, AFRole};
+use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRows};
 use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::{types::uuid, PgPool};
 use std::ops::DerefMut;
 use uuid::Uuid;
 
-pub async fn get_workspaces(pg_pool: &PgPool, user_uuid: &Uuid) -> Result<AFWorkspaces, AppError> {
+pub async fn get_workspaces(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+) -> Result<AFWorkspaceRows, AppError> {
   let workspaces = select_all_workspaces_owned(pg_pool, user_uuid).await?;
-  Ok(AFWorkspaces(workspaces))
+  Ok(AFWorkspaceRows(workspaces))
 }
 
 pub async fn add_workspace_members(
@@ -75,7 +79,7 @@ pub async fn get_workspace_members(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
-) -> Result<Vec<AFWorkspaceMember>, AppError> {
+) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
   Ok(select_workspace_member_list(pg_pool, workspace_id).await?)
 }
 

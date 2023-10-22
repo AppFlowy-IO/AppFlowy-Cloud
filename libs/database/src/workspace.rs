@@ -1,3 +1,4 @@
+use database_entity::dto::AFRole;
 use sqlx::{
   types::{uuid, Uuid},
   Executor, PgPool, Postgres, Transaction,
@@ -6,15 +7,15 @@ use std::ops::DerefMut;
 use tracing::{event, instrument};
 
 use crate::user::select_uid_from_email;
-use database_entity::database_error::DatabaseError;
-use database_entity::{AFRole, AFUserProfileView, AFWorkspace, AFWorkspaceMember};
+use database_entity::error::DatabaseError;
+use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
 
 pub async fn select_all_workspaces_owned(
   pool: &PgPool,
   owner_uuid: &Uuid,
-) -> Result<Vec<AFWorkspace>, DatabaseError> {
+) -> Result<Vec<AFWorkspaceRow>, DatabaseError> {
   let workspaces = sqlx::query_as!(
-    AFWorkspace,
+    AFWorkspaceRow,
     r#"
         SELECT * FROM public.af_workspace WHERE owner_uid = (
             SELECT uid FROM public.af_user WHERE uuid = $1
@@ -252,9 +253,9 @@ pub async fn delete_workspace_members(
 pub async fn select_workspace_member_list(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
-) -> Result<Vec<AFWorkspaceMember>, DatabaseError> {
+) -> Result<Vec<AFWorkspaceMemberRow>, DatabaseError> {
   let members = sqlx::query_as!(
-    AFWorkspaceMember,
+    AFWorkspaceMemberRow,
     r#"
     SELECT af_user.email,
     af_workspace_member.role_id AS role
@@ -274,9 +275,9 @@ pub async fn select_workspace_member(
   pg_pool: &PgPool,
   uid: &i64,
   workspace_id: &Uuid,
-) -> Result<AFWorkspaceMember, DatabaseError> {
+) -> Result<AFWorkspaceMemberRow, DatabaseError> {
   let member = sqlx::query_as!(
-    AFWorkspaceMember,
+    AFWorkspaceMemberRow,
     r#"
     SELECT af_user.email, af_workspace_member.role_id AS role
     FROM public.af_workspace_member
@@ -295,9 +296,9 @@ pub async fn select_workspace_member(
 pub async fn select_user_profile_view_by_uuid(
   pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<Option<AFUserProfileView>, DatabaseError> {
+) -> Result<Option<AFUserProfileRow>, DatabaseError> {
   let user_profile = sqlx::query_as!(
-    AFUserProfileView,
+    AFUserProfileRow,
     r#"
         SELECT *
         FROM public.af_user_profile_view WHERE uuid = $1

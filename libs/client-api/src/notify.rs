@@ -1,5 +1,5 @@
 use anyhow::Error;
-use gotrue_entity::AccessTokenResponse;
+use gotrue_entity::dto::AccessTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 

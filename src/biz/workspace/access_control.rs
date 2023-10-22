@@ -4,13 +4,13 @@ use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlServ
 use actix_http::Method;
 use async_trait::async_trait;
 use database::user::select_uid_from_uuid;
-use database_entity::AFRole;
 use shared_entity::app_error::AppError;
 use shared_entity::error_code::ErrorCode;
 use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
+use database_entity::dto::AFRole;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{instrument, trace, warn};

@@ -1,5 +1,5 @@
 use crate::biz::pg_listener::PostgresDBListener;
-use database_entity::AFCollabMemberRow;
+use database_entity::pg_row::AFCollabMemberRow;
 use serde::Deserialize;
 
 #[allow(clippy::upper_case_acronyms)]

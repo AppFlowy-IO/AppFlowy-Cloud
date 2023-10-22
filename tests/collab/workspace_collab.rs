@@ -1,7 +1,7 @@
 use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
 use collab_entity::CollabType;
 
-use database_entity::AFRole;
+use database_entity::dto::AFRole;
 use serde_json::json;
 
 #[tokio::test]

@@ -32,19 +32,19 @@ pub struct Admin<'a> {
 #[derive(Template)]
 #[template(path = "components/admin_users.html")]
 pub struct AdminUsers<'a> {
-  pub users: &'a [gotrue_entity::User],
+  pub users: &'a [gotrue_entity::dto::User],
 }
 
 #[derive(Template)]
 #[template(path = "components/user_details.html")]
 pub struct UserDetails<'a> {
-  pub user: &'a gotrue_entity::User,
+  pub user: &'a gotrue_entity::dto::User,
 }
 
 #[derive(Template)]
 #[template(path = "components/admin_user_details.html")]
 pub struct AdminUserDetails<'a> {
-  pub user: &'a gotrue_entity::User,
+  pub user: &'a gotrue_entity::dto::User,
 }
 
 // Any filter defined in the module `filters` is accessible in your template.

@@ -6,7 +6,7 @@ use serde_json::json;
 use shared_entity::app_error::AppError;
 use uuid::Uuid;
 
-use shared_entity::dto::auth_dto::UpdateUsernameParams;
+use shared_entity::dto::auth_dto::UpdateUserParams;
 use sqlx::{types::uuid, PgPool};
 
 pub async fn token_verify(
@@ -34,7 +34,7 @@ pub async fn get_profile(
 pub async fn update_user(
   pg_pool: &PgPool,
   user_uuid: Uuid,
-  params: UpdateUsernameParams,
+  params: UpdateUserParams,
 ) -> Result<(), AppError> {
   let metadata = params.metadata.map(|m| json!(m.into_inner()));
   Ok(database::user::update_user(pg_pool, &user_uuid, params.name, params.email, metadata).await?)

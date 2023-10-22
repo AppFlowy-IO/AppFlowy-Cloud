@@ -1,5 +1,5 @@
 use serde_json::json;
-use shared_entity::dto::auth_dto::{UpdateUsernameParams, UserMetaData};
+use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
 use shared_entity::error_code::ErrorCode;
 
 use crate::localhost_client;
@@ -9,7 +9,7 @@ use crate::user::utils::generate_unique_registered_user_client;
 async fn update_but_not_logged_in() {
   let client = localhost_client();
   let error = client
-    .update_user(UpdateUsernameParams::new().with_name("new name"))
+    .update_user(UpdateUserParams::new().with_name("new name"))
     .await
     .unwrap_err();
 
@@ -24,7 +24,7 @@ async fn update_password_same_password() {
     .unwrap();
   let err = c
     .update_user(
-      UpdateUsernameParams::new()
+      UpdateUserParams::new()
         .with_password(user.password)
         .with_email(user.email),
     )
@@ -47,7 +47,7 @@ async fn update_password_and_revert() {
       .await
       .unwrap();
 
-    c.update_user(UpdateUsernameParams::new().with_password(new_password))
+    c.update_user(UpdateUserParams::new().with_password(new_password))
       .await
       .unwrap();
   }
@@ -55,7 +55,7 @@ async fn update_password_and_revert() {
     // revert password to old_password
     let c = localhost_client();
     c.sign_in_password(&user.email, new_password).await.unwrap();
-    c.update_user(UpdateUsernameParams::new().with_password(user.password))
+    c.update_user(UpdateUserParams::new().with_password(user.password))
       .await
       .unwrap();
   }
@@ -67,7 +67,7 @@ async fn update_user_name() {
   c.sign_in_password(&user.email, &user.password)
     .await
     .unwrap();
-  c.update_user(UpdateUsernameParams::new().with_name("lucas"))
+  c.update_user(UpdateUserParams::new().with_name("lucas"))
     .await
     .unwrap();
 
@@ -86,7 +86,7 @@ async fn update_user_metadata() {
   metadata.insert("str_value", "value");
   metadata.insert("int_value", 1);
 
-  c.update_user(UpdateUsernameParams::new().with_metadata(metadata.clone()))
+  c.update_user(UpdateUserParams::new().with_metadata(metadata.clone()))
     .await
     .unwrap();
 
@@ -104,13 +104,13 @@ async fn user_metadata_override() {
   let mut metadata_1 = UserMetaData::new();
   metadata_1.insert("str_value", "value");
   metadata_1.insert("int_value", 1);
-  c.update_user(UpdateUsernameParams::new().with_metadata(metadata_1.clone()))
+  c.update_user(UpdateUserParams::new().with_metadata(metadata_1.clone()))
     .await
     .unwrap();
 
   let mut metadata_2 = UserMetaData::new();
   metadata_2.insert("bool_value", false);
-  c.update_user(UpdateUsernameParams::new().with_metadata(metadata_2))
+  c.update_user(UpdateUserParams::new().with_metadata(metadata_2))
     .await
     .unwrap();
   metadata_1.insert("bool_value", false);
@@ -129,11 +129,11 @@ async fn user_empty_metadata_override() {
   let mut metadata_1 = UserMetaData::new();
   metadata_1.insert("str_value", "value");
   metadata_1.insert("int_value", 1);
-  c.update_user(UpdateUsernameParams::new().with_metadata(metadata_1.clone()))
+  c.update_user(UpdateUserParams::new().with_metadata(metadata_1.clone()))
     .await
     .unwrap();
 
-  c.update_user(UpdateUsernameParams::new().with_metadata(UserMetaData::new()))
+  c.update_user(UpdateUserParams::new().with_metadata(UserMetaData::new()))
     .await
     .unwrap();
 

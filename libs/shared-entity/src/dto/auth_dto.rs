@@ -26,14 +26,14 @@ impl UserMetaData {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Default)]
-pub struct UpdateUsernameParams {
+pub struct UpdateUserParams {
   pub name: Option<String>,
   pub password: Option<String>,
   pub email: Option<String>,
   pub metadata: Option<UserMetaData>,
 }
 
-impl UpdateUsernameParams {
+impl UpdateUserParams {
   pub fn new() -> Self {
     Self::default()
   }

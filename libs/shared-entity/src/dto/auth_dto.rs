@@ -1,6 +1,6 @@
 // Data Transfer Objects (DTO)
 
-use gotrue_entity::AccessTokenResponse;
+use gotrue_entity::dto::AccessTokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -1,4 +1,5 @@
-use database_entity::{AFBlobMetadata, AFRole};
+use database_entity::dto::AFRole;
+use database_entity::pg_row::AFBlobMetadataRow;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -67,4 +68,4 @@ pub struct WorkspaceSpaceUsage {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct WorkspaceBlobMetadata(pub Vec<AFBlobMetadata>);
+pub struct WorkspaceBlobMetadata(pub Vec<AFBlobMetadataRow>);

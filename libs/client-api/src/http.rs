@@ -1,21 +1,17 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
-use database_entity::{
-  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfileView,
-  AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify,
-  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, UpdateCollabMemberParams,
+use database_entity::dto::{
+  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile, AFWorkspaceMember,
+  AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify,
+  DeleteCollabParams, InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers,
+  QueryCollabParams, RawData, UpdateCollabMemberParams,
 };
-use database_entity::{AFWorkspaces, QueryCollabParams};
-use database_entity::{DeleteCollabParams, RawData};
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
-use gotrue_entity::SignUpResponse::{Authenticated, NotAuthenticated};
-use gotrue_entity::{AccessTokenResponse, User};
-use gotrue_entity::{OAuthProvider, UpdateGotrueUserParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use reqwest::header;
@@ -39,6 +35,8 @@ use tokio::io::AsyncReadExt;
 use tracing::instrument;
 use url::Url;
 
+use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
+use gotrue_entity::dto::{AccessTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
 use uuid::Uuid;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
@@ -325,14 +323,14 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_profile(&self) -> Result<AFUserProfileView, AppError> {
+  pub async fn get_profile(&self) -> Result<AFUserProfile, AppError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
       .send()
       .await?;
-    AppResponse::<AFUserProfileView>::from_response(resp)
+    AppResponse::<AFUserProfile>::from_response(resp)
       .await?
       .into_data()
   }

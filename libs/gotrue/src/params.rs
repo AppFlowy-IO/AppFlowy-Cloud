@@ -1,6 +1,6 @@
 use std::collections::btree_map::BTreeMap;
 
-use gotrue_entity::{Factor, Identity};
+use gotrue_entity::dto::{Factor, Identity};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]

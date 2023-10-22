@@ -9,7 +9,6 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
-use database_entity::AFUserProfileView;
 use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
 
@@ -18,6 +17,7 @@ use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
+use database_entity::pg_row::AFUserProfileRow;
 use tracing_actix_web::RequestId;
 
 pub fn user_scope() -> Scope {
@@ -51,7 +51,7 @@ async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
   required_id: RequestId,
-) -> Result<JsonAppResponse<AFUserProfileView>> {
+) -> Result<JsonAppResponse<AFUserProfileRow>> {
   let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }

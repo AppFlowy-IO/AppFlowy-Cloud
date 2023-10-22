@@ -3,7 +3,7 @@ use collab::core::collab::MutexCollab;
 use database::collab::{
   CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, StorageConfig,
 };
-use database_entity::{
+use database_entity::dto::{
   AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
   QueryCollabResult, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
 };
@@ -12,7 +12,7 @@ use itertools::{Either, Itertools};
 use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabStorageAccessControlImpl};
 use crate::biz::workspace::access_control::WorkspaceAccessControlImpl;
 use anyhow::Context;
-use database_entity::database_error::DatabaseError;
+use database_entity::error::DatabaseError;
 use sqlx::PgPool;
 use std::{
   collections::HashMap,

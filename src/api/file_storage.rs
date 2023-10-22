@@ -12,7 +12,8 @@ use actix_web::{HttpResponse, Result};
 use chrono::DateTime;
 use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
-use database_entity::{AFBlobMetadata, AFBlobRecord};
+use database_entity::dto::AFBlobRecord;
+use database_entity::pg_row::AFBlobMetadataRow;
 use serde::Deserialize;
 use shared_entity::app_error::AppError;
 use shared_entity::data::{AppResponse, JsonAppResponse};
@@ -173,7 +174,7 @@ async fn get_blob_handler(
 async fn get_blob_metadata_handler(
   state: Data<AppState>,
   path: web::Path<PathInfo>,
-) -> Result<JsonAppResponse<AFBlobMetadata>> {
+) -> Result<JsonAppResponse<AFBlobMetadataRow>> {
   let PathInfo {
     workspace_id,
     file_id,

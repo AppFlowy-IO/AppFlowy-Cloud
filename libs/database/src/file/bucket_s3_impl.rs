@@ -1,6 +1,6 @@
 use crate::file::{BucketClient, BucketStorage, ResponseBlob};
 use async_trait::async_trait;
-use database_entity::database_error::DatabaseError;
+use database_entity::error::DatabaseError;
 use s3::error::S3Error;
 
 pub type S3BucketStorage = BucketStorage<BucketClientS3Impl>;

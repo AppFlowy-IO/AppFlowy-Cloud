@@ -1,4 +1,4 @@
-use gotrue_entity::OAuthProvider;
+use gotrue_entity::dto::OAuthProvider;
 use shared_entity::error_code::ErrorCode;
 
 use crate::{

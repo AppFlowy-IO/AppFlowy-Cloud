@@ -1,4 +1,4 @@
-use database_entity::database_error::DatabaseError;
+use database_entity::error::DatabaseError;
 use std::fmt::Display;
 use std::num::ParseIntError;
 use std::time::SystemTimeError;
@@ -72,8 +72,8 @@ impl From<DatabaseError> for AppError {
   }
 }
 
-impl From<gotrue_entity::GoTrueError> for AppError {
-  fn from(err: gotrue_entity::GoTrueError) -> Self {
+impl From<gotrue_entity::error::GoTrueError> for AppError {
+  fn from(err: gotrue_entity::error::GoTrueError) -> Self {
     match (err.code, err.msg.as_str()) {
       (400, m) if m.starts_with("oauth error") => AppError::new(ErrorCode::OAuthError, err.msg),
       (401, _) => AppError::new(ErrorCode::OAuthError, err.msg),
@@ -90,8 +90,8 @@ impl From<gotrue_entity::GoTrueError> for AppError {
 }
 
 #[cfg(feature = "cloud")]
-impl From<gotrue_entity::OAuthError> for AppError {
-  fn from(err: gotrue_entity::OAuthError) -> Self {
+impl From<gotrue_entity::error::OAuthError> for AppError {
+  fn from(err: gotrue_entity::error::OAuthError) -> Self {
     AppError::new(ErrorCode::OAuthError, err.to_string())
   }
 }

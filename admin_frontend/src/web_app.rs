@@ -4,7 +4,7 @@ use askama::Template;
 use axum::extract::{Path, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
-use gotrue_entity::User;
+use gotrue_entity::dto::User;
 
 use crate::{templates, AppState};
 

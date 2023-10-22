@@ -13,9 +13,9 @@ pub mod error {
   pub use shared_entity::error_code::ErrorCode;
 }
 
-// Export all entities that will be used in the frontend application
+// Export all dto entities that will be used in the frontend application
 pub mod entity {
-  pub use database_entity::*;
-  pub use gotrue_entity::*;
-  pub use shared_entity::*;
+  pub use database_entity::dto::*;
+  pub use gotrue_entity::dto::*;
+  pub use shared_entity::dto::*;
 }

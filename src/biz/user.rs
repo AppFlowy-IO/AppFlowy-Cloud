@@ -1,11 +1,11 @@
 use anyhow::Result;
 use database::{user::create_user_if_not_exists, workspace::select_user_profile_view_by_uuid};
-use database_entity::AFUserProfileView;
 use gotrue::api::Client;
 use serde_json::json;
 use shared_entity::app_error::AppError;
 use uuid::Uuid;
 
+use database_entity::pg_row::AFUserProfileRow;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use sqlx::{types::uuid, PgPool};
 
@@ -24,7 +24,7 @@ pub async fn token_verify(
 pub async fn get_profile(
   pg_pool: &PgPool,
   uuid: &uuid::Uuid,
-) -> Result<AFUserProfileView, AppError> {
+) -> Result<AFUserProfileRow, AppError> {
   let profile = select_user_profile_view_by_uuid(pg_pool, uuid)
     .await?
     .ok_or(sqlx::Error::RowNotFound)?;

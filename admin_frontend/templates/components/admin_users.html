@@ -1,4 +1,4 @@
-<div>
+<div id="admin-users">
   <table>
     <tr>
       <th>Email</th>
@@ -12,8 +12,8 @@
       <td>{{ user.created_at|escape }}</td>
       <td>
         <button
-          hx-target="#main-content"
-          hx-get="/web/admin/users/{{ user.id }}"
+          hx-target="#admin-users"
+          hx-get="/web/components/admin/users/{{ user.id }}"
         >
           More Info
         </button>

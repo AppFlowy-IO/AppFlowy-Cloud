@@ -1,0 +1,28 @@
+<!-- prettier-ignore -->
+{% extends "layouts/base.html" %}
+
+<!-- prettier-ignore -->
+{% block title %} Home {% endblock %}
+
+<!-- prettier-ignore -->
+{% block head %}
+<link href="/assets/sidebar.css" rel="stylesheet" />
+<link href="/assets/top_menu_bar.css" rel="stylesheet" />
+<link href="/assets/home.css" rel="stylesheet" />
+{% endblock %}
+
+<!-- prettier-ignore -->
+{% block content %}
+
+<!-- prettier-ignore -->
+{% include "components/admin_top_menu_bar.html" %}
+
+<span>You are logged in as <b>Admin</b> as <b>{{ email }}</b></span>
+
+<hr />
+<div id="home">
+  {% include "components/admin_sidebar.html" %}
+  <div id="sidebar-content"></div>
+</div>
+
+{% endblock %}

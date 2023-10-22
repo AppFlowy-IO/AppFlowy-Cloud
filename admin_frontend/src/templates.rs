@@ -1,44 +1,48 @@
 use askama::Template;
 
 #[derive(Template)]
-#[template(path = "change_password.html")]
+#[template(path = "components/change_password.html")]
 pub struct ChangePassword;
 
 #[derive(Template)]
-#[template(path = "login.html")]
+#[template(path = "pages/login.html")]
 pub struct Login;
 
+// #[derive(Template)]
+// #[template(path = "login.html")]
+// pub struct Login;
+
 #[derive(Template)]
-#[template(path = "home.html")]
+#[template(path = "pages/home.html")]
 pub struct Home<'a> {
   pub email: &'a str,
   pub is_admin: bool,
 }
 
 #[derive(Template)]
-#[template(path = "create_user.html")]
+#[template(path = "components/create_user.html")]
 pub struct CreateUser;
 
 #[derive(Template)]
-#[template(path = "admin_home.html")]
+#[template(path = "pages/admin_home.html")]
 pub struct Admin<'a> {
   pub email: &'a str,
 }
 
 #[derive(Template)]
-#[template(path = "admin_users.html")]
+#[template(path = "components/admin_users.html")]
 pub struct AdminUsers<'a> {
   pub users: &'a [gotrue_entity::User],
 }
 
 #[derive(Template)]
-#[template(path = "user_details.html")]
+#[template(path = "components/user_details.html")]
 pub struct UserDetails<'a> {
   pub user: &'a gotrue_entity::User,
 }
 
 #[derive(Template)]
-#[template(path = "admin_user_details.html")]
+#[template(path = "components/admin_user_details.html")]
 pub struct AdminUserDetails<'a> {
   pub user: &'a gotrue_entity::User,
 }

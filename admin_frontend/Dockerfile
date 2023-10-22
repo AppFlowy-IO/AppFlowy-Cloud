@@ -37,6 +37,6 @@ RUN apt-get update -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/admin_frontend /usr/local/bin/admin_frontend
-COPY Cargo.toml /app/Cargo.toml
+COPY --from=builder /app/admin_frontend/assets /app/assets
 ENV RUST_BACKTRACE 1
 CMD ["admin_frontend"]

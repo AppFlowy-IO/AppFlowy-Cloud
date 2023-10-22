@@ -1,0 +1,38 @@
+<div id="message"></div>
+
+<script>
+  function displayMessage(message, afColor) {
+    const top_message_box = document.getElementById("message");
+    top_message_box.innerHTML = message;
+    top_message_box.style.display = "block";
+    top_message_box.style.backgroundColor = afColor;
+    top_message_box.classList.add("slideIn");
+
+    setTimeout(function () {
+      top_message_box.classList.remove("slideIn");
+      top_message_box.style.display = "none";
+    }, 3000);
+  }
+
+  // e.g. color_name: "--af-red"
+  function getAfColor(color_name) {
+    const rootStyle = getComputedStyle(document.documentElement);
+    return rootStyle.getPropertyValue(color_name).trim();
+  }
+
+  function displayHttpStatusAndPayload(response) {
+    response.text().then((text) => {
+      displayFail(`
+      <b>${response.status}: ${response.statusText}</b>
+      <br>${text}`);
+    });
+  }
+
+  function displaySuccess(message) {
+    displayMessage(message, getAfColor("--af-dark-cyan"));
+  }
+
+  function displayFail(message) {
+    displayMessage(message, getAfColor("--af-dark-red"));
+  }
+</script>

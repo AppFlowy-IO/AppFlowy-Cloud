@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use database_entity::AFAccessLevel;
+use database_entity::dto::AFAccessLevel;
 use reqwest::Method;
 use serde::de::StdError;
 use std::sync::Arc;

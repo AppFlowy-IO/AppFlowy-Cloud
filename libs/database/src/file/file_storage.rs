@@ -3,14 +3,10 @@ use crate::resource_usage::{
   delete_blob_metadata, get_blob_metadata, get_workspace_usage_size, insert_blob_metadata,
   is_blob_metadata_exists,
 };
-
 use async_trait::async_trait;
-
-use database_entity::database_error::DatabaseError;
-use database_entity::AFBlobMetadata;
-
+use database_entity::error::DatabaseError;
+use database_entity::pg_row::AFBlobMetadataRow;
 use sqlx::PgPool;
-
 use tokio::io::AsyncRead;
 use tracing::{event, instrument};
 use uuid::Uuid;
@@ -117,7 +113,7 @@ where
     &self,
     workspace_id: &Uuid,
     file_id: &str,
-  ) -> Result<AFBlobMetadata, DatabaseError> {
+  ) -> Result<AFBlobMetadataRow, DatabaseError> {
     self.client.delete_blob(file_id).await?;
     let resp = delete_blob_metadata(&self.pg_pool, workspace_id, file_id).await?;
     Ok(resp)
@@ -127,7 +123,7 @@ where
     &self,
     workspace_id: &Uuid,
     file_id: &str,
-  ) -> Result<AFBlobMetadata, DatabaseError> {
+  ) -> Result<AFBlobMetadataRow, DatabaseError> {
     let metadata = get_blob_metadata(&self.pg_pool, workspace_id, file_id).await?;
     Ok(metadata)
   }

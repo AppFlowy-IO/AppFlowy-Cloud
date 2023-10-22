@@ -1,5 +1,5 @@
-use database_entity::database_error::DatabaseError;
-use database_entity::AFBlobMetadata;
+use database_entity::error::DatabaseError;
+use database_entity::pg_row::AFBlobMetadataRow;
 use rust_decimal::prelude::ToPrimitive;
 use sqlx::types::Decimal;
 use sqlx::PgPool;
@@ -36,9 +36,9 @@ pub async fn insert_blob_metadata(
   workspace_id: &Uuid,
   file_type: &str,
   file_size: i64,
-) -> Result<AFBlobMetadata, DatabaseError> {
+) -> Result<AFBlobMetadataRow, DatabaseError> {
   let metadata = sqlx::query_as!(
-    AFBlobMetadata,
+    AFBlobMetadataRow,
     r#"
         INSERT INTO af_blob_metadata
         (workspace_id, file_id, file_type, file_size)
@@ -63,9 +63,9 @@ pub async fn delete_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadata, DatabaseError> {
+) -> Result<AFBlobMetadataRow, DatabaseError> {
   let metadata = sqlx::query_as!(
-    AFBlobMetadata,
+    AFBlobMetadataRow,
     r#"
         DELETE FROM af_blob_metadata
         WHERE workspace_id = $1 AND file_id = $2
@@ -84,9 +84,9 @@ pub async fn get_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadata, DatabaseError> {
+) -> Result<AFBlobMetadataRow, DatabaseError> {
   let metadata = sqlx::query_as!(
-    AFBlobMetadata,
+    AFBlobMetadataRow,
     r#"
         SELECT * FROM af_blob_metadata
         WHERE workspace_id = $1 AND file_id = $2
@@ -104,9 +104,9 @@ pub async fn get_blob_metadata(
 pub async fn get_all_workspace_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<Vec<AFBlobMetadata>, DatabaseError> {
+) -> Result<Vec<AFBlobMetadataRow>, DatabaseError> {
   let all_metadata = sqlx::query_as!(
-    AFBlobMetadata,
+    AFBlobMetadataRow,
     r#"
         SELECT * FROM af_blob_metadata
         WHERE workspace_id = $1 

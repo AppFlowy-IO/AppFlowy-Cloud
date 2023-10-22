@@ -1,5 +1,5 @@
 use crate::util::test_client::TestClient;
-use database_entity::AFRole;
+use database_entity::dto::AFRole;
 use shared_entity::error_code::ErrorCode;
 
 #[tokio::test]

@@ -7,7 +7,7 @@ use serde_json::json;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
 
-use database_entity::{AFAccessLevel, QueryCollabParams};
+use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 
 #[tokio::test]
 async fn edit_collab_with_ws_reconnect_sync_test() {

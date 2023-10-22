@@ -4,7 +4,7 @@ use crate::{
 use std::collections::HashMap;
 
 use collab_entity::CollabType;
-use database_entity::{
+use database_entity::dto::{
   BatchQueryCollab, BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams,
   QueryCollabParams, QueryCollabResult,
 };

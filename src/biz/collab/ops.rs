@@ -1,6 +1,6 @@
 use database::user;
 
-use database_entity::{
+use database_entity::dto::{
   AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
   InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryObjectSnapshotParams,
   QuerySnapshotParams, UpdateCollabMemberParams,

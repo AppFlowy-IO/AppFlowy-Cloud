@@ -1,10 +1,10 @@
 use anyhow::Context;
 use collab_entity::CollabType;
-use database_entity::{
-  database_error::DatabaseError, AFAccessLevel, AFCollabMember, AFCollabSnapshot,
-  AFCollabSnapshots, AFPermission, BatchQueryCollab, InsertCollabParams, QueryCollabResult,
-  RawData,
+use database_entity::dto::{
+  AFAccessLevel, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots, AFPermission,
+  BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
 };
+use database_entity::error::DatabaseError;
 
 use sqlx::postgres::PgRow;
 use sqlx::{Error, PgPool, Row, Transaction};

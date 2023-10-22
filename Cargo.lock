@@ -3997,6 +3997,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "collab-entity",
  "database-entity",
  "gotrue-entity",
  "opener",

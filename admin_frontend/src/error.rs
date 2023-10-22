@@ -30,8 +30,8 @@ impl IntoResponse for WebApiError<'_> {
   }
 }
 
-impl From<gotrue_entity::GoTrueError> for WebApiError<'_> {
-  fn from(v: gotrue_entity::GoTrueError) -> Self {
+impl From<gotrue_entity::error::GoTrueError> for WebApiError<'_> {
+  fn from(v: gotrue_entity::error::GoTrueError) -> Self {
     WebApiError::new(status::StatusCode::UNAUTHORIZED, v.to_string())
   }
 }
@@ -44,7 +44,7 @@ impl From<redis::RedisError> for WebApiError<'_> {
 
 pub enum WebAppError {
   AskamaError(askama::Error),
-  GoTrueError(gotrue_entity::GoTrueError),
+  GoTrueError(gotrue_entity::error::GoTrueError),
 }
 
 impl IntoResponse for WebAppError {
@@ -68,8 +68,8 @@ impl From<askama::Error> for WebAppError {
   }
 }
 
-impl From<gotrue_entity::GoTrueError> for WebAppError {
-  fn from(v: gotrue_entity::GoTrueError) -> Self {
+impl From<gotrue_entity::error::GoTrueError> for WebAppError {
+  fn from(v: gotrue_entity::error::GoTrueError) -> Self {
     WebAppError::GoTrueError(v)
   }
 }

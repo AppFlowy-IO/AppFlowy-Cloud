@@ -1,20 +1,18 @@
+use crate::collab::{collab_db_ops, is_collab_exists};
 use anyhow::Context;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab_entity::CollabType;
-use database_entity::database_error::DatabaseError;
-use database_entity::{
+use database_entity::dto::{
   AFAccessLevel, AFCollabSnapshots, AFRole, BatchQueryCollab, InsertCollabParams,
   InsertSnapshotParams, QueryCollabParams, QueryCollabResult, QueryObjectSnapshotParams,
   QuerySnapshotParams, RawData,
 };
+use database_entity::error::DatabaseError;
 use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
-
 use std::sync::{Arc, Weak};
-
-use crate::collab::{collab_db_ops, is_collab_exists};
 use validator::Validate;
 
 pub type DatabaseResult<T, E = DatabaseError> = core::result::Result<T, E>;

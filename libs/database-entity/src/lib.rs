@@ -160,6 +160,7 @@ pub struct AFUserProfileView {
   pub email: Option<String>,
   pub password: Option<String>,
   pub name: Option<String>,
+  pub metadata: Option<serde_json::Value>,
   pub encryption_sign: Option<String>,
   pub deleted_at: Option<DateTime<Utc>>,
   pub updated_at: Option<DateTime<Utc>>,

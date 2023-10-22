@@ -2,6 +2,7 @@ use anyhow::Result;
 use database::{user::create_user_if_not_exists, workspace::select_user_profile_view_by_uuid};
 use database_entity::AFUserProfileView;
 use gotrue::api::Client;
+use serde_json::json;
 use shared_entity::app_error::AppError;
 use uuid::Uuid;
 
@@ -35,7 +36,8 @@ pub async fn update_user(
   user_uuid: Uuid,
   params: UpdateUsernameParams,
 ) -> Result<(), AppError> {
-  Ok(database::user::update_user(pg_pool, &user_uuid, params.name, params.email).await?)
+  let metadata = params.metadata.map(|m| json!(m.into_inner()));
+  Ok(database::user::update_user(pg_pool, &user_uuid, params.name, params.email, metadata).await?)
 }
 
 // Best effort to get user's name after oauth

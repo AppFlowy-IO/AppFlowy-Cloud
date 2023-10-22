@@ -23,11 +23,11 @@ use tracing_actix_web::RequestId;
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
     // auth server integration
-    .service(web::resource("/verify/{access_token}").route(web::get().to(verify_handler)))
-    .service(web::resource("/update").route(web::post().to(update_handler)))
-    .service(web::resource("/profile").route(web::get().to(profile_handler)))
+    .service(web::resource("/verify/{access_token}").route(web::get().to(verify_user_handler)))
+    .service(web::resource("/update").route(web::post().to(update_user_handler)))
+    .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
 
-    // native
+    // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
@@ -35,7 +35,7 @@ pub fn user_scope() -> Scope {
 }
 
 #[tracing::instrument(skip(state, path), err)]
-async fn verify_handler(
+async fn verify_user_handler(
   path: web::Path<String>,
   state: Data<AppState>,
   required_id: RequestId,
@@ -47,7 +47,7 @@ async fn verify_handler(
 }
 
 #[tracing::instrument(skip(state), err)]
-async fn profile_handler(
+async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
   required_id: RequestId,
@@ -57,7 +57,7 @@ async fn profile_handler(
 }
 
 #[tracing::instrument(skip(state, auth, payload), err)]
-async fn update_handler(
+async fn update_user_handler(
   auth: Authorization,
   payload: Json<UpdateUsernameParams>,
   state: Data<AppState>,

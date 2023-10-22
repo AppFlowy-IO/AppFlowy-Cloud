@@ -66,6 +66,9 @@ pub enum ErrorCode {
 
   #[error("Payload too large")]
   PayloadTooLarge = 1016,
+
+  #[error("io error")]
+  IO = 1017,
 }
 
 /// Implements conversion from `anyhow::Error` to `ErrorCode`.

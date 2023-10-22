@@ -12,7 +12,7 @@ use actix_web::{HttpResponse, Result};
 use chrono::DateTime;
 use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
-use database_entity::AFBlobRecord;
+use database_entity::{AFBlobMetadata, AFBlobRecord};
 use serde::Deserialize;
 use shared_entity::app_error::AppError;
 use shared_entity::data::{AppResponse, JsonAppResponse};
@@ -23,18 +23,22 @@ use std::pin::Pin;
 use tokio::io::AsyncRead;
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{instrument, trace};
+use tracing::{event, instrument};
 use tracing_actix_web::RequestId;
 
 use crate::state::AppState;
 
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")
-    .service(web::resource("/{workspace_id}").route(web::put().to(put_handler)))
+    .service(web::resource("/{workspace_id}/blob").route(web::put().to(put_blob_handler)))
     .service(
-      web::resource("/{workspace_id}/{file_id:.*}")
-        .route(web::get().to(get_handler))
-        .route(web::delete().to(delete_handler)),
+      web::resource("/{workspace_id}/blob/{file_id:.*}")
+        .route(web::get().to(get_blob_handler))
+        .route(web::delete().to(delete_blob_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/metadata/{file_id:.*}")
+        .route(web::get().to(get_blob_metadata_handler)),
     )
     .service(
       web::resource("/{workspace_id}/usage").route(web::get().to(get_workspace_usage_handler)),
@@ -46,13 +50,13 @@ pub fn file_storage_scope() -> Scope {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct BlobPathInfo {
+struct PathInfo {
   workspace_id: Uuid,
   file_id: String,
 }
 
 #[instrument(skip(state, payload), err)]
-async fn put_handler(
+async fn put_blob_handler(
   state: Data<AppState>,
   payload: Payload,
   content_type: web::Header<ContentType>,
@@ -75,7 +79,12 @@ async fn put_handler(
   let blob_stream = payload_to_async_read(payload);
   let workspace_id = workspace_id.into_inner();
 
-  trace!("start put blob: {}:{}", file_type, content_length);
+  event!(
+    tracing::Level::TRACE,
+    "start put blob: {}:{}",
+    file_type,
+    content_length
+  );
   let file_id = state
     .bucket_storage
     .put_blob(blob_stream, workspace_id, file_type, content_length as i64)
@@ -83,19 +92,20 @@ async fn put_handler(
     .map_err(AppError::from)?;
 
   let record = AFBlobRecord::new(file_id);
-  trace!("did put blob: {:?}", record);
+  event!(tracing::Level::TRACE, "did put blob: {:?}", record);
   Ok(Json(AppResponse::Ok().with_data(record)))
 }
 
 #[instrument(level = "debug", skip(state), err)]
-async fn delete_handler(
+async fn delete_blob_handler(
   state: Data<AppState>,
-  path: web::Path<BlobPathInfo>,
+  path: web::Path<PathInfo>,
 ) -> Result<JsonAppResponse<()>> {
-  let BlobPathInfo {
+  let PathInfo {
     workspace_id,
     file_id,
   } = path.into_inner();
+
   state
     .bucket_storage
     .delete_blob(&workspace_id, &file_id)
@@ -105,13 +115,13 @@ async fn delete_handler(
 }
 
 #[instrument(skip(state), err)]
-async fn get_handler(
+async fn get_blob_handler(
   state: Data<AppState>,
-  path: web::Path<BlobPathInfo>,
+  path: web::Path<PathInfo>,
   request_id: RequestId,
   req: HttpRequest,
 ) -> Result<HttpResponse<BoxBody>> {
-  let BlobPathInfo {
+  let PathInfo {
     workspace_id,
     file_id,
   } = path.into_inner();
@@ -159,6 +169,26 @@ async fn get_handler(
   Ok(response)
 }
 
+#[instrument(skip(state), err)]
+async fn get_blob_metadata_handler(
+  state: Data<AppState>,
+  path: web::Path<PathInfo>,
+) -> Result<JsonAppResponse<AFBlobMetadata>> {
+  let PathInfo {
+    workspace_id,
+    file_id,
+  } = path.into_inner();
+
+  // Get the metadata
+  let metadata = state
+    .bucket_storage
+    .get_blob_metadata(&workspace_id, &file_id)
+    .await
+    .map_err(AppError::from)?;
+
+  Ok(Json(AppResponse::Ok().with_data(metadata)))
+}
+
 #[instrument(level = "debug", skip(state), err)]
 async fn get_workspace_usage_handler(
   state: Data<AppState>,
@@ -189,7 +219,7 @@ async fn get_all_workspace_blob_metadata_handler(
       .into(),
   )
 }
-fn payload_to_async_read(payload: actix_web::web::Payload) -> Pin<Box<dyn AsyncRead>> {
+fn payload_to_async_read(payload: Payload) -> Pin<Box<dyn AsyncRead>> {
   let mapped =
     payload.map(|chunk| chunk.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
   let reader = StreamReader::new(mapped);

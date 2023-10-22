@@ -2,9 +2,9 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use database_entity::{
-  AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfileView, AFWorkspaceMember,
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify, InsertCollabMemberParams,
-  InsertCollabParams, QueryCollabMembers, UpdateCollabMemberParams,
+  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfileView,
+  AFWorkspaceMember, BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify,
+  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, UpdateCollabMemberParams,
 };
 use database_entity::{AFWorkspaces, QueryCollabParams};
 use database_entity::{DeleteCollabParams, RawData};
@@ -34,8 +34,11 @@ use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
 use tracing::instrument;
 use url::Url;
+
 use uuid::Uuid;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
@@ -714,13 +717,13 @@ impl Client {
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
 
-  pub async fn put_file<T: Into<Bytes>, M: ToString>(
+  pub async fn put_blob<T: Into<Bytes>, M: ToString>(
     &self,
     workspace_id: &str,
     data: T,
     mime: M,
   ) -> Result<String, AppError> {
-    let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
+    let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
     let data = data.into();
     let content_length = data.len();
     let resp = self
@@ -735,21 +738,43 @@ impl Client {
       .await?
       .into_data()?;
     Ok(format!(
-      "{}/api/file_storage/{}/{}",
+      "{}/api/file_storage/{}/blob/{}",
       self.base_url, workspace_id, record.file_id
     ))
   }
 
+  pub async fn put_blob_with_path(
+    &self,
+    workspace_id: &str,
+    file_path: &str,
+  ) -> Result<String, AppError> {
+    if file_path.is_empty() {
+      return Err(AppError::new(
+        ErrorCode::InvalidRequestParams,
+        "path is empty",
+      ));
+    }
+
+    let mut file = File::open(&file_path).await?;
+    let mime = mime_guess::from_path(file_path)
+      .first_or_octet_stream()
+      .to_string();
+
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).await?;
+    self.put_blob(workspace_id, buffer, mime).await
+  }
+
   /// Only expose this method for testing
   #[cfg(debug_assertions)]
-  pub async fn put_file_with_content_length<T: Into<Bytes>>(
+  pub async fn put_blob_with_content_length<T: Into<Bytes>>(
     &self,
     workspace_id: &str,
     data: T,
     mime: &Mime,
     content_length: usize,
   ) -> Result<AFBlobRecord, AppError> {
-    let url = format!("{}/api/file_storage/{}", self.base_url, workspace_id);
+    let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
@@ -765,10 +790,10 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
-  pub async fn get_file(&self, url: &str) -> Result<Bytes, AppError> {
-    Url::parse(url)?;
+  pub async fn get_blob<T: AsRef<str>>(&self, url: T) -> Result<Bytes, AppError> {
+    Url::parse(url.as_ref())?;
     let resp = self
-      .http_client_with_auth(Method::GET, url)
+      .http_client_with_auth(Method::GET, url.as_ref())
       .await?
       .send()
       .await?;
@@ -790,7 +815,19 @@ impl Client {
     }
   }
 
-  pub async fn delete_file(&self, url: &str) -> Result<(), AppError> {
+  pub async fn get_blob_metadata<T: AsRef<str>>(&self, url: T) -> Result<AFBlobMetadata, AppError> {
+    let resp = self
+      .http_client_with_auth(Method::GET, url.as_ref())
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<AFBlobMetadata>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn delete_blob(&self, url: &str) -> Result<(), AppError> {
     let resp = self
       .http_client_with_auth(Method::DELETE, url)
       .await?

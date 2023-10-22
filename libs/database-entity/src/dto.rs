@@ -1,4 +1,6 @@
-use crate::pg_row::{AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRows};
+use crate::pg_row::{
+  AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow, AFWorkspaceRows,
+};
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -311,5 +313,6 @@ pub type RawData = Vec<u8>;
 /// Make alias for the database entity. Hiding the Sqlx Rows type.
 pub type AFUserProfile = AFUserProfileRow;
 pub type AFWorkspaces = AFWorkspaceRows;
+pub type AFWorkspace = AFWorkspaceRow;
 pub type AFWorkspaceMember = AFWorkspaceMemberRow;
 pub type AFBlobMetadata = AFBlobMetadataRow;

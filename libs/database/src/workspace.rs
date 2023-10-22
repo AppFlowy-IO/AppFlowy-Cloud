@@ -300,9 +300,9 @@ pub async fn select_user_profile_view_by_uuid(
   let user_profile = sqlx::query_as!(
     AFUserProfileRow,
     r#"
-        SELECT *
-        FROM public.af_user_profile_view WHERE uuid = $1
-        "#,
+      SELECT *
+      FROM public.af_user_profile_view WHERE uuid = $1
+    "#,
     user_uuid
   )
   .fetch_optional(pool)

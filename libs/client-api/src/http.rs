@@ -25,7 +25,7 @@ use scraper::{Html, Selector};
 use shared_entity::app_error::AppError;
 use shared_entity::data::AppResponse;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
-use shared_entity::dto::auth_dto::UpdateUsernameParams;
+use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMembers, WorkspaceBlobMetadata, WorkspaceMemberChangeset, WorkspaceMembers,
   WorkspaceSpaceUsage,
@@ -517,7 +517,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_user(&self, params: UpdateUsernameParams) -> Result<(), AppError> {
+  pub async fn update_user(&self, params: UpdateUserParams) -> Result<(), AppError> {
     let gotrue_params = UpdateGotrueUserParams::new()
       .with_opt_email(params.email.clone())
       .with_opt_password(params.password.clone());

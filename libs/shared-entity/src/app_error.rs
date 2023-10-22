@@ -159,6 +159,12 @@ impl From<SystemTimeError> for AppError {
   }
 }
 
+impl From<std::io::Error> for AppError {
+  fn from(value: std::io::Error) -> Self {
+    AppError::new(ErrorCode::IO, value.to_string())
+  }
+}
+
 #[cfg(feature = "cloud")]
 impl From<s3::error::S3Error> for AppError {
   fn from(value: s3::error::S3Error) -> Self {

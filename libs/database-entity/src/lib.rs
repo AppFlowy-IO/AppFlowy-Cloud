@@ -347,12 +347,6 @@ impl AFBlobRecord {
   }
 }
 
-impl AFBlobMetadata {
-  pub fn s3_path(&self) -> String {
-    format!("{}/{}", self.workspace_id, self.file_id)
-  }
-}
-
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub enum QueryCollabResult {
   Success { blob: RawData },

@@ -1,4 +1,5 @@
 use assert_json_diff::assert_json_eq;
+use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{BusinessID, WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
@@ -7,14 +8,21 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::{
-  AFAccessLevel, AFRole, InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
+  AFAccessLevel, AFBlobMetadata, AFRole, InsertCollabMemberParams, QueryCollabParams,
+  UpdateCollabMemberParams,
 };
+use image::io::Reader as ImageReader;
 use serde_json::Value;
 use shared_entity::app_error::AppError;
-use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
+};
 use sqlx::types::Uuid;
 use std::collections::HashMap;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tempfile::tempdir;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
 
@@ -197,6 +205,46 @@ impl TestClient {
         break;
       }
     }
+  }
+
+  pub async fn download_blob<T: AsRef<str>>(&self, url: T) -> Vec<u8> {
+    self.api_client.get_blob(url).await.unwrap().to_vec()
+  }
+
+  #[allow(dead_code)]
+  pub async fn get_blob_metadata<T: AsRef<str>>(&self, url: T) -> AFBlobMetadata {
+    self.api_client.get_blob_metadata(url).await.unwrap()
+  }
+
+  pub async fn upload_blob<T: Into<Bytes>, M: ToString>(&self, data: T, mime: M) -> String {
+    let workspace_id = self.workspace_id().await;
+    self
+      .api_client
+      .put_blob(&workspace_id, data, mime)
+      .await
+      .unwrap()
+  }
+
+  pub async fn upload_file_with_path(&self, path: &str) -> String {
+    let workspace_id = self.workspace_id().await;
+    self
+      .api_client
+      .put_blob_with_path(&workspace_id, path)
+      .await
+      .unwrap()
+  }
+
+  pub async fn delete_file(&self, url: &str) {
+    self.api_client.delete_blob(url).await.unwrap();
+  }
+
+  pub async fn get_workspace_usage(&self) -> WorkspaceSpaceUsage {
+    let workspace_id = self.workspace_id().await;
+    self
+      .api_client
+      .get_workspace_usage(&workspace_id)
+      .await
+      .unwrap()
   }
 
   pub(crate) async fn workspace_id(&self) -> String {
@@ -425,4 +473,53 @@ pub async fn get_collab_json_from_server(
   Collab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![bytes.to_vec()], vec![])
     .unwrap()
     .to_json_value()
+}
+
+pub fn generate_temp_file_path<T: AsRef<Path>>(file_name: T) -> TestTempFile {
+  let mut path = tempdir().unwrap().into_path();
+  path.push(file_name);
+  TestTempFile(path)
+}
+
+pub struct TestTempFile(PathBuf);
+
+impl TestTempFile {
+  fn cleanup(dir: &PathBuf) {
+    let _ = std::fs::remove_dir_all(dir);
+  }
+}
+
+impl AsRef<Path> for TestTempFile {
+  fn as_ref(&self) -> &Path {
+    &self.0
+  }
+}
+
+impl Deref for TestTempFile {
+  type Target = PathBuf;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl Drop for TestTempFile {
+  fn drop(&mut self) {
+    Self::cleanup(&self.0)
+  }
+}
+
+pub fn assert_image_equal<P: AsRef<Path>>(path1: P, path2: P) {
+  let img1 = ImageReader::open(path1)
+    .unwrap()
+    .decode()
+    .unwrap()
+    .into_rgba8();
+  let img2 = ImageReader::open(path2)
+    .unwrap()
+    .decode()
+    .unwrap()
+    .into_rgba8();
+
+  assert_eq!(img1, img2)
 }

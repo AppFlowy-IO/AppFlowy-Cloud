@@ -1,9 +1,10 @@
-use database_entity::AFRole;
+use database_entity::{AFBlobMetadata, AFRole};
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct WorkspaceMembers(pub Vec<WorkspaceMember>);
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct WorkspaceMember(pub String);
 impl Deref for WorkspaceMember {
   type Target = String;
@@ -18,7 +19,7 @@ impl From<Vec<String>> for WorkspaceMembers {
   }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct CreateWorkspaceMembers(pub Vec<CreateWorkspaceMember>);
 impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   fn from(value: Vec<CreateWorkspaceMember>) -> Self {
@@ -26,13 +27,13 @@ impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct CreateWorkspaceMember {
   pub email: String,
   pub role: AFRole,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct WorkspaceMemberChangeset {
   pub email: String,
   pub role: Option<AFRole>,
@@ -58,3 +59,12 @@ impl WorkspaceMemberChangeset {
     self
   }
 }
+
+#[derive(Deserialize, Serialize)]
+pub struct WorkspaceSpaceUsage {
+  pub total_capacity: u64,
+  pub consumed_capacity: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WorkspaceBlobMetadata(pub Vec<AFBlobMetadata>);

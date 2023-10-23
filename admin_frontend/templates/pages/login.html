@@ -13,16 +13,12 @@
 <!-- prettier-ignore -->
 {% block content %}
 <div id="login-parent">
-  <div id="login-splash">
-    <img
-      src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
-      width="32"
-      height="32"
-    />
-    <h2>AppFlowy Cloud</h2>
-  </div>
-
   <div id="login-signin">
+    <div id="login-splash">
+      {% include "../assets/logo.html" %}
+      <h2>AppFlowy Cloud</h2>
+    </div>
+
     <h3>Email Login</h3>
     <table style="width: 100%">
       <tr>
@@ -49,7 +45,7 @@
       </tr>
     </table>
     <br />
-    <button style="width: 100%" id="submitBtn">Sign In</button>
+    <button type="button" style="width: 100%" id="submitBtn">Sign In</button>
     <br />
 
     <table style="width: 100%">

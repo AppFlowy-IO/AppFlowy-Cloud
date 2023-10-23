@@ -217,7 +217,9 @@ pub async fn delete_workspace_members(
     AND uid = (
         SELECT uid FROM public.af_user WHERE email = $2
     )
-    -- Ensure the user to be deleted is not the original owner
+    -- Ensure the user to be deleted is not the original owner. 
+    -- 1. TODO(nathan): User must transfer ownership to another user first.
+    -- 2. User must have at least one workspace
     AND uid <> (
         SELECT owner_uid FROM public.af_workspace WHERE workspace_id = $1
     );

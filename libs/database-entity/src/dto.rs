@@ -319,7 +319,7 @@ pub struct AFUserProfile {
   pub name: Option<String>,
   pub metadata: Option<serde_json::Value>,
   pub encryption_sign: Option<String>,
-  pub latest_workspace_id: Option<Uuid>,
+  pub latest_workspace_id: Uuid,
 }
 
 impl TryFrom<AFUserProfileRow> for AFUserProfile {
@@ -332,6 +332,11 @@ impl TryFrom<AFUserProfileRow> for AFUserProfile {
     let uuid = value
       .uuid
       .ok_or(DatabaseError::Internal(anyhow!("Unexpect empty uuid")))?;
+    let latest_workspace_id = value
+      .latest_workspace_id
+      .ok_or(DatabaseError::Internal(anyhow!(
+        "Unexpect empty latest_workspace_id"
+      )))?;
     Ok(Self {
       uid,
       uuid,
@@ -340,7 +345,7 @@ impl TryFrom<AFUserProfileRow> for AFUserProfile {
       name: value.name,
       metadata: value.metadata,
       encryption_sign: value.encryption_sign,
-      latest_workspace_id: value.latest_workspace_id,
+      latest_workspace_id,
     })
   }
 }

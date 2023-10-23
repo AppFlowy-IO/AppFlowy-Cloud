@@ -184,7 +184,7 @@ impl Client {
     }
 
     Ok(format!(
-      "{}/authorize?provider={}&redirect_to=appflowy-flutter://",
+      "{}/authorize?provider={}",
       self.gotrue_client.base_url,
       provider.as_str(),
     ))

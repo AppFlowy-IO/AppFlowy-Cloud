@@ -4,10 +4,7 @@
     <tr>
       <td>Email:</td>
       <td>
-        <input
-          id="invitedUserEmail"
-          placeholder="myfriend@example.com"
-        />
+        <input id="invitedUserEmail" placeholder="myfriend@example.com" />
       </td>
     </tr>
     <tr>
@@ -18,26 +15,24 @@
   </table>
 
   <script>
-    document
-      .getElementById("inviteBtn")
-      .addEventListener("click", function () {
-        // Get the email from the user
-	var invitedUserEmail = document.getElementById("invitedUserEmail").value;
-        fetch("/web-api/invite", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: invitedUserEmail,
-          }),
-        }).then((response) => {
-          if (!response.ok) {
-            displayHttpStatusAndPayload(response);
-          } else {
-            displaySuccess(`Invitation sent to ${invitedUserEmail}`);
-          }
-        });
+    document.getElementById("inviteBtn").addEventListener("click", function () {
+      // Get the email from the user
+      var invitedUserEmail = document.getElementById("invitedUserEmail").value;
+      fetch("/web-api/invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: invitedUserEmail,
+        }),
+      }).then((response) => {
+        if (!response.ok) {
+          displayHttpStatusAndPayload(response);
+        } else {
+          displaySuccess(`Invitation sent to ${invitedUserEmail}`);
+        }
       });
+    });
   </script>
 </div>

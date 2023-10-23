@@ -44,7 +44,6 @@ impl actix_web::error::ResponseError for AppError {
     actix_web::HttpResponse::Ok().json(self)
   }
 }
-//
 impl From<anyhow::Error> for AppError {
   fn from(err: anyhow::Error) -> Self {
     match err.downcast::<AppError>() {

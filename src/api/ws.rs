@@ -14,6 +14,7 @@ use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 use database::user::select_uid_from_uuid;
 use shared_entity::app_error::AppError;
 use std::time::Duration;
+use tracing::instrument;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
@@ -24,6 +25,8 @@ const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 type CollabServerData = Data<
   Addr<CollabServer<CollabPostgresDBStorage, Arc<RealtimeUserImpl>, Arc<CollabAccessControlImpl>>>,
 >;
+
+#[instrument(skip_all, err)]
 #[get("/{token}/{device_id}")]
 pub async fn establish_ws_connection(
   request: HttpRequest,

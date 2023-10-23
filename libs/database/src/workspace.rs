@@ -357,10 +357,10 @@ pub async fn select_all_user_workspaces(
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-        SELECT * FROM public.af_workspace WHERE owner_uid = (
-            SELECT uid FROM public.af_user WHERE uuid = $1
-            )
-        "#,
+      SELECT * FROM public.af_workspace WHERE owner_uid = (
+        SELECT uid FROM public.af_user WHERE uuid = $1
+      )
+    "#,
     owner_uuid
   )
   .fetch_all(pool)

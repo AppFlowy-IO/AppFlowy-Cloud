@@ -377,9 +377,9 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspace_members(
     &self,
-    workspace_uuid: Uuid,
+    workspace_id: &str,
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?

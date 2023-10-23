@@ -8,7 +8,7 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFBlobMetadata, AFRole, AFUserWorkspaceInfo, AFWorkspace,
+  AFAccessLevel, AFBlobMetadata, AFRole, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember,
   InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
 };
 use image::io::Reader as ImageReader;
@@ -150,6 +150,14 @@ impl TestClient {
       .api_client
       .remove_workspace_members(workspace_id.to_string(), vec![email])
       .await
+  }
+
+  pub async fn get_workspace_members(&self, workspace_id: &str) -> Vec<AFWorkspaceMember> {
+    self
+      .api_client
+      .get_workspace_members(workspace_id)
+      .await
+      .unwrap()
   }
 
   pub(crate) async fn add_client_as_collab_member(

@@ -157,6 +157,23 @@ async fn add_workspace_member_and_owner_then_delete_all() {
 }
 
 #[tokio::test]
+async fn workspace_owner_remove_self_from_workspace() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = c1.workspace_id().await;
+
+  // the workspace owner can not remove 'self' from the workspace
+  let error = c1
+    .try_remove_workspace_member(&workspace_id, &c1)
+    .await
+    .unwrap_err();
+  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+
+  let members = c1.get_workspace_members(&workspace_id).await;
+  assert_eq!(members.len(), 1);
+  assert_eq!(members[0].email, c1.email().await);
+}
+
+#[tokio::test]
 async fn workspace_second_owner_can_not_delete_origin_owner() {
   let c1 = TestClient::new_user_without_ws_conn().await;
   let c2 = TestClient::new_user_without_ws_conn().await;

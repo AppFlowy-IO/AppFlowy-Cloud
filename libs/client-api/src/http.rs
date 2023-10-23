@@ -59,6 +59,8 @@ pub struct Client {
   token: Arc<RwLock<ClientToken>>,
 }
 
+const DESKTOP_CALLBACK_URL: &str = "appflowy-flutter://login-callback";
+
 impl Client {
   /// Constructs a new `Client` instance.
   ///
@@ -185,11 +187,22 @@ impl Client {
       return Err(ErrorCode::InvalidOAuthProvider.into());
     }
 
-    Ok(format!(
-      "{}/authorize?provider={}",
-      self.gotrue_client.base_url,
-      provider.as_str(),
-    ))
+    let url = format!("{}/authorize", self.gotrue_client.base_url,);
+
+    let mut url = Url::parse(&url)?;
+    url
+      .query_pairs_mut()
+      .append_pair("provider", provider.as_str())
+      .append_pair("redirect_to", DESKTOP_CALLBACK_URL);
+
+    if let OAuthProvider::Google = provider {
+      url
+        .query_pairs_mut()
+        .append_pair("access_type", "offline")
+        .append_pair("prompt", "consent");
+    }
+
+    Ok(url.to_string())
   }
 
   /// Returns an OAuth URL by constructing the authorization URL for the specified provider.

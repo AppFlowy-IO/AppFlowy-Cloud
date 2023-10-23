@@ -318,6 +318,8 @@ pub struct AFUserProfile {
   pub password: Option<String>,
   pub name: Option<String>,
   pub metadata: Option<serde_json::Value>,
+  pub encryption_sign: Option<String>,
+  pub latest_workspace_id: Option<Uuid>,
 }
 
 impl TryFrom<AFUserProfileRow> for AFUserProfile {
@@ -337,6 +339,8 @@ impl TryFrom<AFUserProfileRow> for AFUserProfile {
       password: value.password,
       name: value.name,
       metadata: value.metadata,
+      encryption_sign: value.encryption_sign,
+      latest_workspace_id: value.latest_workspace_id,
     })
   }
 }
@@ -384,7 +388,7 @@ pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 #[derive(Serialize, Deserialize)]
 pub struct AFUserWorkspaceInfo {
   pub user_profile: AFUserProfile,
-  pub visiting_workspace: Option<AFWorkspace>,
+  pub visiting_workspace: AFWorkspace,
   pub workspaces: Vec<AFWorkspace>,
 }
 

@@ -48,12 +48,10 @@ pub async fn get_user_workspace_info(
     .ok_or(sqlx::Error::RowNotFound)?;
 
   // Get the latest workspace that the user has visited recently
-  let visiting_workspace = match row.latest_workspace_id {
-    None => None,
-    Some(workspace_id) => {
-      AFWorkspace::try_from(select_workspace(txn.deref_mut(), &workspace_id).await?).ok()
-    },
-  };
+  // TODO(nathan): the visiting_workspace might be None if the user get deleted from the workspace
+  let visiting_workspace = AFWorkspace::try_from(
+    select_workspace(txn.deref_mut(), &row.latest_workspace_id.unwrap()).await?,
+  )?;
 
   // Get the user profile
   let user_profile = AFUserProfile::try_from(row)?;

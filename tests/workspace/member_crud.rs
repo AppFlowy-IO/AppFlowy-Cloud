@@ -178,7 +178,7 @@ async fn user_workspace_info() {
   let info = c1.get_user_workspace_info().await;
   assert_eq!(info.workspaces.len(), 1);
   assert_eq!(
-    info.visiting_workspace.unwrap().workspace_id.to_string(),
+    info.visiting_workspace.workspace_id.to_string(),
     workspace_id
   );
 
@@ -189,7 +189,6 @@ async fn user_workspace_info() {
   // c2 should have 2 workspaces
   let info = c2.get_user_workspace_info().await;
   assert_eq!(info.workspaces.len(), 2);
-  assert!(info.visiting_workspace.is_some());
 }
 
 #[tokio::test]
@@ -204,7 +203,7 @@ async fn get_user_workspace_info_after_open_workspace() {
   let info = c2.get_user_workspace_info().await;
   let workspace_id_c2 = c1.workspace_id().await;
   assert_eq!(
-    info.visiting_workspace.unwrap().workspace_id.to_string(),
+    info.visiting_workspace.workspace_id.to_string(),
     workspace_id_c2
   );
 
@@ -212,7 +211,7 @@ async fn get_user_workspace_info_after_open_workspace() {
   c2.open_workspace(&workspace_id_c1).await;
   let info = c2.get_user_workspace_info().await;
   assert_eq!(
-    info.visiting_workspace.unwrap().workspace_id.to_string(),
+    info.visiting_workspace.workspace_id.to_string(),
     workspace_id_c1
   );
 }

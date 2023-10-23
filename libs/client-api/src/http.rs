@@ -11,6 +11,7 @@ use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
+use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
@@ -241,21 +242,21 @@ impl Client {
     Ok(sign_in_resp.is_new)
   }
 
+  // Invites another user by sending a magic link to the user's email address.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_magic_link(&self, email: &str, password: &str) -> Result<User, AppError> {
-    let user = self
+  pub async fn invite(&self, email: &str) -> Result<(), AppError> {
+    self
       .gotrue_client
-      .admin_add_user(
+      .magic_link(
         &self.access_token()?,
-        &AdminUserParams {
+        &MagicLinkParams {
           email: email.to_owned(),
-          password: Some(password.to_owned()),
-          email_confirm: true,
           ..Default::default()
         },
+        "appflowy-flutter://",
       )
       .await?;
-    Ok(user)
+    Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]

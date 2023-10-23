@@ -21,6 +21,7 @@ pub fn router() -> Router<AppState> {
     .route("/login", post(login_handler))
     .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
+    .route("/admin/invite", post(invite_handler))
     .route("/admin/user", post(admin_add_user_handler))
     .route(
       "/admin/user/:param",
@@ -32,6 +33,26 @@ pub fn router() -> Router<AppState> {
     )
     .route("/change_password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
+}
+
+// invite another user, this will trigger email sending
+// to the target user
+pub async fn invite_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Json(param): Json<ChangePasswordRequest>,
+) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+  let res = state
+    .gotrue_client
+    .update_user(
+      &session.access_token,
+      &UpdateGotrueUserParams {
+        password: Some(param.new_password),
+        ..Default::default()
+      },
+    )
+    .await?;
+  Ok(res.into())
 }
 
 pub async fn change_password_handler(

@@ -1,8 +1,11 @@
 use crate::error::WebApiError;
-use crate::models::{ChangePasswordRequest, PutUserRequest, WebAdminCreateUserRequest};
+use crate::models::{
+  WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiInviteUserRequest,
+  WebApiPutUserRequest,
+};
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
-use crate::{models::LoginRequest, AppState};
+use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap, HeaderValue};
 use axum::response::Result;
@@ -12,7 +15,7 @@ use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use gotrue::params::{
-  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
+  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse, MagicLinkParams,
 };
 use gotrue_entity::dto::{UpdateGotrueUserParams, User};
 
@@ -21,33 +24,39 @@ pub fn router() -> Router<AppState> {
     .route("/login", post(login_handler))
     .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
-    .route("/admin/invite", post(invite_handler))
+
+
+    // user
+    .route("/change_password", post(change_password_handler))
+    .route("/oauth_login/:provider", post(post_oauth_login_handler))
+    .route("/invite", post(invite_handler))
+
+    // admin
     .route("/admin/user", post(admin_add_user_handler))
     .route(
-      "/admin/user/:param",
+      "/admin/user/:user_uuid",
       delete(admin_delete_user_handler).put(admin_update_user_handler),
     )
     .route(
       "/admin/user/:email/generate-link",
       post(post_user_generate_link_handler),
     )
-    .route("/change_password", post(change_password_handler))
-    .route("/oauth_login/:provider", post(post_oauth_login_handler))
 }
 
-// invite another user, this will trigger email sending
+// Invite another user, this will trigger email sending
 // to the target user
 pub async fn invite_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<ChangePasswordRequest>,
-) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+
+  Json(param): Json<WebApiInviteUserRequest>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   let res = state
     .gotrue_client
-    .update_user(
+    .magic_link(
       &session.access_token,
-      &UpdateGotrueUserParams {
-        password: Some(param.new_password),
+      &MagicLinkParams {
+        email: param.email,
         ..Default::default()
       },
     )
@@ -58,7 +67,7 @@ pub async fn invite_handler(
 pub async fn change_password_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<ChangePasswordRequest>,
+  Json(param): Json<WebApiChangePasswordRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let res = state
     .gotrue_client
@@ -103,7 +112,7 @@ pub async fn admin_update_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_uuid): Path<String>,
-  Json(param): Json<PutUserRequest>,
+  Json(param): Json<WebApiPutUserRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let res = state
     .gotrue_client
@@ -159,7 +168,7 @@ pub async fn admin_delete_user_handler(
 pub async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<WebAdminCreateUserRequest>,
+  Json(param): Json<WebApiAdminCreateUserRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
     email: param.email,
@@ -205,7 +214,7 @@ pub async fn login_refresh_handler(
 pub async fn login_handler(
   State(state): State<AppState>,
   jar: CookieJar,
-  Json(param): Json<LoginRequest>,
+  Json(param): Json<WebApiLoginRequest>,
 ) -> Result<CookieJar, WebApiError<'static>> {
   let token = state
     .gotrue_client

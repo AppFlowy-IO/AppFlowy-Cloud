@@ -24,6 +24,10 @@ pub struct Home<'a> {
 pub struct CreateUser;
 
 #[derive(Template)]
+#[template(path = "components/invite.html")]
+pub struct Invite;
+
+#[derive(Template)]
 #[template(path = "pages/admin_home.html")]
 pub struct Admin<'a> {
   pub email: &'a str,

@@ -25,14 +25,18 @@ pub fn page_router() -> Router<AppState> {
 pub fn component_router() -> Router<AppState> {
   Router::new()
     // User actions
-    .route("/user/change_password", get(user_change_password_handler))
     .route("/user/user", get(user_user_handler))
-    .route("/user/create_user", get(admin_users_create_handler))
+    .route("/user/change_password", get(user_change_password_handler))
+    .route("/user/invite", get(user_invite_handler))
 
     // Admin actions
     .route("/admin/users", get(admin_users_handler))
     .route("/admin/users/:user_id", get(admin_user_details_handler))
     .route("/admin/users/create", get(admin_users_create_handler))
+}
+
+pub async fn user_invite_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::Invite {})
 }
 
 pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {

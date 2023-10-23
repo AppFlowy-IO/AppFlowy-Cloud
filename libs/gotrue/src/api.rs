@@ -208,13 +208,11 @@ impl Client {
     &self,
     access_token: &str,
     magic_link_params: &MagicLinkParams,
-    redirect_to: &str,
   ) -> Result<(), GoTrueError> {
     let resp = self
       .client
       .post(format!("{}/magiclink", self.base_url))
       .header("Authorization", format!("Bearer {}", access_token))
-      .header("Referer", redirect_to)
       .json(&magic_link_params)
       .send()
       .await?;

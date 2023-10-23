@@ -253,7 +253,6 @@ impl Client {
           email: email.to_owned(),
           ..Default::default()
         },
-        "appflowy-flutter://",
       )
       .await?;
     Ok(())

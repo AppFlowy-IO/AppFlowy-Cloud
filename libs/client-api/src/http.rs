@@ -165,7 +165,9 @@ impl Client {
   ///
   /// For example, the OAuth URL on Google looks like `https://appflowy.io/authorize?provider=google`.
   /// The deep link looks like `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
-
+  ///
+  /// The appflowy-flutter:// is a hardcoded schema in the frontend application
+  ///
   /// # Parameters
   /// - `provider`: A reference to an `OAuthProvider` indicating which OAuth provider to use for login.
   ///
@@ -500,7 +502,7 @@ impl Client {
       .token
       .read()
       .as_ref()
-      .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
+      .ok_or(AppError::new(ErrorCode::NotLoggedIn, "No access token"))?
       .refresh_token
       .as_str()
       .to_owned();

@@ -244,7 +244,12 @@ struct RetryCondition {
   addr: Weak<parking_lot::Mutex<Option<String>>>,
 }
 impl Condition<WSError> for RetryCondition {
-  fn should_retry(&mut self, _error: &WSError) -> bool {
+  fn should_retry(&mut self, error: &WSError) -> bool {
+    if let WSError::AuthError(err) = error {
+      debug!("WSClient auth error: {}, stop retry connn", err);
+      return false;
+    }
+
     let should_retry = self
       .addr
       .upgrade()

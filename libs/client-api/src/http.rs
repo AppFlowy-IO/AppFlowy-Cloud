@@ -59,6 +59,9 @@ pub struct Client {
   token: Arc<RwLock<ClientToken>>,
 }
 
+/// Hardcoded schema in the frontend application. Do not change this value.
+const DESKTOP_CALLBACK_URL: &str = "appflowy-flutter://login-callback";
+
 impl Client {
   /// Constructs a new `Client` instance.
   ///
@@ -165,7 +168,9 @@ impl Client {
   ///
   /// For example, the OAuth URL on Google looks like `https://appflowy.io/authorize?provider=google`.
   /// The deep link looks like `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
-
+  ///
+  /// The appflowy-flutter:// is a hardcoded schema in the frontend application
+  ///
   /// # Parameters
   /// - `provider`: A reference to an `OAuthProvider` indicating which OAuth provider to use for login.
   ///
@@ -183,11 +188,30 @@ impl Client {
       return Err(ErrorCode::InvalidOAuthProvider.into());
     }
 
-    Ok(format!(
-      "{}/authorize?provider={}&redirect_to=appflowy-flutter://",
-      self.gotrue_client.base_url,
-      provider.as_str(),
-    ))
+    let url = format!("{}/authorize", self.gotrue_client.base_url,);
+
+    let mut url = Url::parse(&url)?;
+    url
+      .query_pairs_mut()
+      .append_pair("provider", provider.as_str())
+      .append_pair("redirect_to", DESKTOP_CALLBACK_URL);
+
+    if let OAuthProvider::Google = provider {
+      url
+        .query_pairs_mut()
+          // In many cases, especially for server-side applications or mobile apps that might need to 
+          // interact with Google services on behalf of the user without the user being actively 
+          // engaged, access_type=offline is preferred to ensure long-term access.
+        .append_pair("access_type", "offline")
+          // In Google OAuth2.0, the prompt parameter is used to control the OAuth2.0 flow's behavior.
+          // It determines if the user is re-prompted for authentication and/or consent.
+          // 1. none: The authorization server does not display any authentication or consent user interface pages.
+          // 2. consent: The authorization server prompts the user for consent before returning information to the client
+          // 3. select_account: The authorization server prompts the user to select a user account.
+        .append_pair("prompt", "consent");
+    }
+
+    Ok(url.to_string())
   }
 
   /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
@@ -500,7 +524,7 @@ impl Client {
       .token
       .read()
       .as_ref()
-      .ok_or::<AppError>(ErrorCode::NotLoggedIn.into())?
+      .ok_or(AppError::new(ErrorCode::NotLoggedIn, "No access token"))?
       .refresh_token
       .as_str()
       .to_owned();

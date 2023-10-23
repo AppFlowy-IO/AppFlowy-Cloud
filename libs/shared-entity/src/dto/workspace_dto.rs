@@ -49,12 +49,10 @@ impl WorkspaceMemberChangeset {
       name: None,
     }
   }
-
   pub fn with_role(mut self, role: AFRole) -> Self {
     self.role = Some(role);
     self
   }
-
   pub fn with_name(mut self, name: String) -> Self {
     self.name = Some(name);
     self

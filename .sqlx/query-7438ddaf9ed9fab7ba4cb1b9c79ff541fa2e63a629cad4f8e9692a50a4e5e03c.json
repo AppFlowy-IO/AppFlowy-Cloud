@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT *\n        FROM public.af_user_profile_view WHERE uuid = $1\n        ",
+  "query": "\n      SELECT *\n      FROM public.af_user_profile_view WHERE uuid = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -78,5 +78,5 @@
       true
     ]
   },
-  "hash": "a4610ec5cb6fdccf7ef07a0526d35b7659a7e953b47b1e7b87188fa4b7277b1f"
+  "hash": "7438ddaf9ed9fab7ba4cb1b9c79ff541fa2e63a629cad4f8e9692a50a4e5e03c"
 }

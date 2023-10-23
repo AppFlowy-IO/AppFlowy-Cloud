@@ -2,7 +2,6 @@ use crate::dto::AFRole;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::ops::Deref;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -31,31 +30,6 @@ pub struct AFUserProfileRow {
   pub latest_workspace_id: Option<Uuid>,
 }
 
-#[derive(Debug, FromRow, Deserialize, Serialize)]
-pub struct AFWorkspaceRows(pub Vec<AFWorkspaceRow>);
-
-impl Deref for AFWorkspaceRows {
-  type Target = Vec<AFWorkspaceRow>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl From<Vec<AFWorkspaceRow>> for AFWorkspaceRows {
-  fn from(v: Vec<AFWorkspaceRow>) -> Self {
-    Self(v)
-  }
-}
-
-impl AFWorkspaceRows {
-  pub fn get_latest(&self, profile: &AFUserProfileRow) -> Option<AFWorkspaceRow> {
-    match profile.latest_workspace_id {
-      Some(ws_id) => self.0.iter().find(|ws| ws.workspace_id == ws_id).cloned(),
-      None => None,
-    }
-  }
-}
 #[derive(FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMemberRow {
   pub email: String,

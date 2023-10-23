@@ -13,7 +13,7 @@ async fn collab_owner_permission_test() {
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
-  let uid = c.get_profile().await.unwrap().uid.unwrap();
+  let uid = c.get_profile().await.unwrap().uid;
 
   c.create_collab(InsertCollabParams::new(
     &object_id,
@@ -42,7 +42,7 @@ async fn update_collab_member_permission_test() {
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
-  let uid = c.get_profile().await.unwrap().uid.unwrap();
+  let uid = c.get_profile().await.unwrap().uid;
 
   c.create_collab(InsertCollabParams::new(
     &object_id,
@@ -91,7 +91,7 @@ async fn add_collab_member_test() {
 
   // create new client
   let (c_2, _user) = generate_unique_registered_user_client().await;
-  let uid_2 = c_2.get_profile().await.unwrap().uid.unwrap();
+  let uid_2 = c_2.get_profile().await.unwrap().uid;
 
   // add new member
   c_1
@@ -136,7 +136,7 @@ async fn add_collab_member_then_remove_test() {
 
   // Create new client
   let (c_2, _user) = generate_unique_registered_user_client().await;
-  let uid_2 = c_2.get_profile().await.unwrap().uid.unwrap();
+  let uid_2 = c_2.get_profile().await.unwrap().uid;
 
   // Add new member
   c_1

@@ -319,7 +319,7 @@ where
       .get_collab_access_level(uid.into(), oid)
       .await
       .map_err(|err| {
-        to_database_error(
+        app_err_to_database_error(
           err,
           format!(
             "failed to get the collab access level of user:{} for object:{}",
@@ -336,7 +336,7 @@ where
       .get_role_from_uid(uid, &workspace_id.parse()?)
       .await
       .map_err(|err| {
-        to_database_error(
+        app_err_to_database_error(
           err,
           format!(
             "failed to get the role of the user:{} in workspace:{}",
@@ -347,7 +347,7 @@ where
   }
 }
 
-fn to_database_error(err: AppError, msg: String) -> DatabaseError {
+fn app_err_to_database_error(err: AppError, msg: String) -> DatabaseError {
   if err.is_record_not_found() {
     DatabaseError::RecordNotFound(msg)
   } else {

@@ -17,7 +17,8 @@ use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
-use database_entity::pg_row::AFUserProfileRow;
+use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
+
 use tracing_actix_web::RequestId;
 
 pub fn user_scope() -> Scope {
@@ -26,6 +27,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/verify/{access_token}").route(web::get().to(verify_user_handler)))
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
+      .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
 
     // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))
@@ -38,7 +40,7 @@ pub fn user_scope() -> Scope {
 async fn verify_user_handler(
   path: web::Path<String>,
   state: Data<AppState>,
-  required_id: RequestId,
+  request_id: RequestId,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
   let is_new = biz::user::token_verify(&state.pg_pool, &state.gotrue_client, &access_token).await?;
@@ -50,10 +52,20 @@ async fn verify_user_handler(
 async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-  required_id: RequestId,
-) -> Result<JsonAppResponse<AFUserProfileRow>> {
+  request_id: RequestId,
+) -> Result<JsonAppResponse<AFUserProfile>> {
   let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(profile).into())
+}
+
+#[tracing::instrument(skip(state), err)]
+async fn get_user_workspace_info_handler(
+  uuid: UserUuid,
+  state: Data<AppState>,
+  request_id: RequestId,
+) -> Result<JsonAppResponse<AFUserWorkspaceInfo>> {
+  let info = biz::user::get_user_workspace_info(&state.pg_pool, &uuid).await?;
+  Ok(AppResponse::Ok().with_data(info).into())
 }
 
 #[tracing::instrument(skip(state, auth, payload), err)]
@@ -61,7 +73,7 @@ async fn update_user_handler(
   auth: Authorization,
   payload: Json<UpdateUserParams>,
   state: Data<AppState>,
-  required_id: RequestId,
+  request_id: RequestId,
 ) -> Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
   biz::user::update_user(&state.pg_pool, auth.uuid()?, params).await?;

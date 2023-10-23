@@ -25,6 +25,7 @@ pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
     .service(web::resource("list").route(web::get().to(list_handler)))
+    .service(web::resource("{workspace_id}/open").route(web::put().to(open_workspace_handler)))
     .service(
       web::resource("{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))
@@ -62,7 +63,7 @@ async fn list_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let workspaces = workspace::ops::get_workspaces(&state.pg_pool, &uuid).await?;
+  let workspaces = workspace::ops::get_all_user_workspaces(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
@@ -138,6 +139,17 @@ async fn remove_workspace_member_handler(
   }
 
   Ok(AppResponse::Ok().into())
+}
+
+#[instrument(skip_all, err)]
+async fn open_workspace_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<AFWorkspace>> {
+  let workspace_id = workspace_id.into_inner();
+  let workspace = workspace::ops::open_workspace(&state.pg_pool, &user_uuid, &workspace_id).await?;
+  Ok(AppResponse::Ok().with_data(workspace).into())
 }
 
 #[instrument(skip_all, err)]

@@ -1,8 +1,8 @@
 -- af_workspace contains all the workspaces. Each workspace contains a list of members defined in af_workspace_member
 CREATE TABLE IF NOT EXISTS af_workspace (
-    workspace_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    database_storage_id UUID DEFAULT uuid_generate_v4(),
-    owner_uid BIGINT REFERENCES af_user(uid) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL PRIMARY KEY DEFAULT uuid_generate_v4(),
+    database_storage_id UUID NOT NULL DEFAULT uuid_generate_v4(),
+    owner_uid BIGINT NOT NULL REFERENCES af_user(uid) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     -- 0: Free
     workspace_type INTEGER NOT NULL DEFAULT 0,

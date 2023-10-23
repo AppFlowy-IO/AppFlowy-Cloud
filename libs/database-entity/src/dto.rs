@@ -1,6 +1,8 @@
+use crate::error::DatabaseError;
 use crate::pg_row::{
   AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow, AFWorkspaceRows,
 };
+use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -8,6 +10,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use tracing::error;
+use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -309,10 +312,83 @@ pub struct AFCollabMembers(pub Vec<AFCollabMember>);
 
 pub type RawData = Vec<u8>;
 
+#[derive(Serialize, Deserialize)]
+pub struct AFUserProfile {
+  pub uid: i64,
+  pub uuid: Uuid,
+  pub email: Option<String>,
+  pub password: Option<String>,
+  pub name: Option<String>,
+  pub metadata: Option<serde_json::Value>,
+}
+
+impl TryFrom<AFUserProfileRow> for AFUserProfile {
+  type Error = DatabaseError;
+
+  fn try_from(value: AFUserProfileRow) -> Result<Self, Self::Error> {
+    let uid = value
+      .uid
+      .ok_or(DatabaseError::Internal(anyhow!("Unexpect empty uid")))?;
+    let uuid = value
+      .uuid
+      .ok_or(DatabaseError::Internal(anyhow!("Unexpect empty uuid")))?;
+    Ok(Self {
+      uid,
+      uuid,
+      email: value.email,
+      password: value.password,
+      name: value.name,
+      metadata: value.metadata,
+    })
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AFWorkspace {
+  pub workspace_id: Uuid,
+  pub database_storage_id: Uuid,
+  pub owner_uid: i64,
+  pub workspace_type: i32,
+  pub workspace_name: String,
+  pub created_at: DateTime<Utc>,
+}
+
+impl TryFrom<AFWorkspaceRow> for AFWorkspace {
+  type Error = DatabaseError;
+
+  fn try_from(value: AFWorkspaceRow) -> Result<Self, Self::Error> {
+    let owner_uid = value
+      .owner_uid
+      .ok_or(DatabaseError::Internal(anyhow!("Unexpect empty owner_uid")))?;
+    let database_storage_id = value
+      .database_storage_id
+      .ok_or(DatabaseError::Internal(anyhow!(
+        "Unexpect empty workspace_id"
+      )))?;
+
+    let workspace_name = value.workspace_name.unwrap_or_default();
+    let created_at = value.created_at.unwrap_or_else(Utc::now);
+
+    Ok(Self {
+      workspace_id: value.workspace_id,
+      database_storage_id,
+      owner_uid,
+      workspace_type: value.workspace_type,
+      workspace_name,
+      created_at,
+    })
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AFUserWorkspaceInfo {
+  pub user_profile: AFUserProfile,
+  pub visiting_workspace: Option<AFWorkspace>,
+  pub workspaces: Vec<AFWorkspace>,
+}
+
 /// ***************************************************************
 /// Make alias for the database entity. Hiding the Sqlx Rows type.
-pub type AFUserProfile = AFUserProfileRow;
 pub type AFWorkspaces = AFWorkspaceRows;
-pub type AFWorkspace = AFWorkspaceRow;
 pub type AFWorkspaceMember = AFWorkspaceMemberRow;
 pub type AFBlobMetadata = AFBlobMetadataRow;

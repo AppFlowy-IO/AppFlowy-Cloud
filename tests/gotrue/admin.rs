@@ -153,5 +153,5 @@ async fn admin_generate_link_and_user_sign_in() {
   assert!(is_new);
 
   let workspaces = client.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.len(), 1);
+  assert_eq!(workspaces.0.len(), 1);
 }

@@ -10,24 +10,6 @@ use crate::user::select_uid_from_email;
 use database_entity::error::DatabaseError;
 use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
 
-pub async fn select_all_workspaces_owned(
-  pool: &PgPool,
-  owner_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, DatabaseError> {
-  let workspaces = sqlx::query_as!(
-    AFWorkspaceRow,
-    r#"
-        SELECT * FROM public.af_workspace WHERE owner_uid = (
-            SELECT uid FROM public.af_user WHERE uuid = $1
-            )
-        "#,
-    owner_uuid
-  )
-  .fetch_all(pool)
-  .await?;
-  Ok(workspaces)
-}
-
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.
 pub async fn select_user_is_workspace_owner(
@@ -235,7 +217,9 @@ pub async fn delete_workspace_members(
     AND uid = (
         SELECT uid FROM public.af_user WHERE email = $2
     )
-    -- Ensure the user to be deleted is not the original owner
+    -- Ensure the user to be deleted is not the original owner. 
+    -- 1. TODO(nathan): User must transfer ownership to another user first.
+    -- 2. User must have at least one workspace
     AND uid <> (
         SELECT owner_uid FROM public.af_workspace WHERE workspace_id = $1
     );
@@ -293,19 +277,93 @@ pub async fn select_workspace_member(
   Ok(member)
 }
 
-pub async fn select_user_profile_view_by_uuid(
-  pool: &PgPool,
+pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
   user_uuid: &Uuid,
 ) -> Result<Option<AFUserProfileRow>, DatabaseError> {
   let user_profile = sqlx::query_as!(
     AFUserProfileRow,
     r#"
-        SELECT *
-        FROM public.af_user_profile_view WHERE uuid = $1
-        "#,
+      SELECT *
+      FROM public.af_user_profile_view WHERE uuid = $1
+    "#,
     user_uuid
   )
-  .fetch_optional(pool)
+  .fetch_optional(executor)
   .await?;
   Ok(user_profile)
+}
+
+pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceRow, DatabaseError> {
+  let workspace = sqlx::query_as!(
+    AFWorkspaceRow,
+    r#"
+       SELECT * FROM public.af_workspace WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(workspace)
+}
+pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<(), DatabaseError> {
+  sqlx::query!(
+    r#"
+       UPDATE af_workspace_member
+       SET updated_at = CURRENT_TIMESTAMP
+       WHERE uid = (SELECT uid FROM public.af_user WHERE uuid = $1) AND workspace_id = $2;
+    "#,
+    user_uuid,
+    workspace_id
+  )
+  .execute(executor)
+  .await?;
+  Ok(())
+}
+
+/// Returns a list of workspaces that the user is a member of.
+pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  user_uuid: &Uuid,
+) -> Result<Vec<AFWorkspaceRow>, DatabaseError> {
+  let workspaces = sqlx::query_as!(
+    AFWorkspaceRow,
+    r#"
+      SELECT w.* 
+      FROM af_workspace w
+      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
+      WHERE wm.uid = (
+         SELECT uid FROM public.af_user WHERE uuid = $1
+      );
+    "#,
+    user_uuid
+  )
+  .fetch_all(executor)
+  .await?;
+  Ok(workspaces)
+}
+
+pub async fn select_all_user_workspaces(
+  pool: &PgPool,
+  owner_uuid: &Uuid,
+) -> Result<Vec<AFWorkspaceRow>, DatabaseError> {
+  let workspaces = sqlx::query_as!(
+    AFWorkspaceRow,
+    r#"
+      SELECT * FROM public.af_workspace WHERE owner_uid = (
+        SELECT uid FROM public.af_user WHERE uuid = $1
+      )
+    "#,
+    owner_uuid
+  )
+  .fetch_all(pool)
+  .await?;
+  Ok(workspaces)
 }

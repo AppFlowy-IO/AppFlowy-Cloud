@@ -2,10 +2,10 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use database_entity::dto::{
-  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile, AFWorkspaceMember,
-  AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify,
-  DeleteCollabParams, InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers,
-  QueryCollabParams, RawData, UpdateCollabMemberParams,
+  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
+  BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams, InsertCollabMemberParams,
+  InsertCollabParams, QueryCollabMembers, QueryCollabParams, RawData, UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -336,6 +336,19 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn get_user_workspace_info(&self) -> Result<AFUserWorkspaceInfo, AppError> {
+    let url = format!("{}/api/user/workspace", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<AFUserWorkspaceInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppError> {
     let url = format!("{}/api/workspace/list", self.base_url);
     let resp = self
@@ -349,11 +362,24 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppError> {
+    let url = format!("{}/api/workspace/{}/open", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .send()
+      .await?;
+    AppResponse::<AFWorkspace>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspace_members(
     &self,
-    workspace_uuid: Uuid,
+    workspace_id: &str,
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?

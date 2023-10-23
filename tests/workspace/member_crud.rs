@@ -157,6 +157,23 @@ async fn add_workspace_member_and_owner_then_delete_all() {
 }
 
 #[tokio::test]
+async fn workspace_owner_remove_self_from_workspace() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = c1.workspace_id().await;
+
+  // the workspace owner can not remove 'self' from the workspace
+  let error = c1
+    .try_remove_workspace_member(&workspace_id, &c1)
+    .await
+    .unwrap_err();
+  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+
+  let members = c1.get_workspace_members(&workspace_id).await;
+  assert_eq!(members.len(), 1);
+  assert_eq!(members[0].email, c1.email().await);
+}
+
+#[tokio::test]
 async fn workspace_second_owner_can_not_delete_origin_owner() {
   let c1 = TestClient::new_user_without_ws_conn().await;
   let c2 = TestClient::new_user_without_ws_conn().await;
@@ -169,4 +186,49 @@ async fn workspace_second_owner_can_not_delete_origin_owner() {
     .await
     .unwrap_err();
   assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+}
+
+#[tokio::test]
+async fn user_workspace_info() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = c1.workspace_id().await;
+  let info = c1.get_user_workspace_info().await;
+  assert_eq!(info.workspaces.len(), 1);
+  assert_eq!(
+    info.visiting_workspace.workspace_id.to_string(),
+    workspace_id
+  );
+
+  let c2 = TestClient::new_user_without_ws_conn().await;
+  c1.add_workspace_member(&workspace_id, &c2, AFRole::Owner)
+    .await;
+
+  // c2 should have 2 workspaces
+  let info = c2.get_user_workspace_info().await;
+  assert_eq!(info.workspaces.len(), 2);
+}
+
+#[tokio::test]
+async fn get_user_workspace_info_after_open_workspace() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id_c1 = c1.workspace_id().await;
+
+  let c2 = TestClient::new_user_without_ws_conn().await;
+  c1.add_workspace_member(&workspace_id_c1, &c2, AFRole::Owner)
+    .await;
+
+  let info = c2.get_user_workspace_info().await;
+  let workspace_id_c2 = c1.workspace_id().await;
+  assert_eq!(
+    info.visiting_workspace.workspace_id.to_string(),
+    workspace_id_c2
+  );
+
+  // After open workspace, the visiting workspace should be the workspace that user just opened
+  c2.open_workspace(&workspace_id_c1).await;
+  let info = c2.get_user_workspace_info().await;
+  assert_eq!(
+    info.visiting_workspace.workspace_id.to_string(),
+    workspace_id_c1
+  );
 }

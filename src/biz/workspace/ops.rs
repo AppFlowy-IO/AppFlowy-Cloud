@@ -3,23 +3,46 @@ use anyhow::Context;
 use database::collab::upsert_collab_member_with_txn;
 use database::user::select_uid_from_email;
 use database::workspace::{
-  delete_workspace_members, insert_workspace_member_with_txn, select_all_workspaces_owned,
-  select_workspace_member_list, upsert_workspace_member,
+  delete_workspace_members, insert_workspace_member_with_txn, select_all_user_workspaces,
+  select_workspace, select_workspace_member_list, update_updated_at_of_workspace,
+  upsert_workspace_member,
 };
-use database_entity::dto::{AFAccessLevel, AFRole};
-use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRows};
+use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
+use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::{types::uuid, PgPool};
 use std::ops::DerefMut;
 use uuid::Uuid;
 
-pub async fn get_workspaces(
+pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<AFWorkspaceRows, AppError> {
-  let workspaces = select_all_workspaces_owned(pg_pool, user_uuid).await?;
-  Ok(AFWorkspaceRows(workspaces))
+) -> Result<Vec<AFWorkspaceRow>, AppError> {
+  let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
+  Ok(workspaces)
+}
+
+/// Returns the workspace with the given workspace_id and update the updated_at field of the
+/// workspace.
+pub async fn open_workspace(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspace, AppError> {
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to open workspace")?;
+  let row = select_workspace(txn.deref_mut(), workspace_id).await?;
+  update_updated_at_of_workspace(txn.deref_mut(), user_uuid, workspace_id).await?;
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to open workspace")?;
+  let workspace = AFWorkspace::try_from(row)?;
+
+  Ok(workspace)
 }
 
 pub async fn add_workspace_members(

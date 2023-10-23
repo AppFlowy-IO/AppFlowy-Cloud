@@ -15,7 +15,7 @@ use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
-use tracing::{debug, instrument};
+use tracing::{debug, event, instrument};
 use tracing_actix_web::RequestId;
 use uuid::Uuid;
 
@@ -63,13 +63,27 @@ async fn list_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let workspaces = workspace::ops::get_all_user_workspaces(&state.pg_pool, &uuid).await?;
-  Ok(AppResponse::Ok().with_data(workspaces).into())
+  let rows = workspace::ops::get_all_user_workspaces(&state.pg_pool, &uuid).await?;
+  let workspaces = rows
+    .into_iter()
+    .flat_map(|row| {
+      let result = AFWorkspace::try_from(row);
+      if let Err(err) = &result {
+        event!(
+          tracing::Level::ERROR,
+          "Failed to convert workspace row to AFWorkspace: {:?}",
+          err
+        );
+      }
+      result
+    })
+    .collect::<Vec<_>>();
+  Ok(AppResponse::Ok().with_data(AFWorkspaces(workspaces)).into())
 }
 
 #[instrument(skip(payload, state), err)]
 async fn add_workspace_members_handler(
-  required_id: RequestId,
+  request_id: RequestId,
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   payload: Json<CreateWorkspaceMembers>,

@@ -261,6 +261,7 @@ impl TestClient {
       .get_workspaces()
       .await
       .unwrap()
+      .0
       .first()
       .unwrap()
       .workspace_id

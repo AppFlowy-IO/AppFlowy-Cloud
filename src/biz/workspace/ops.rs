@@ -8,7 +8,7 @@ use database::workspace::{
   upsert_workspace_member,
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
-use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRows};
+use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::{types::uuid, PgPool};
@@ -18,9 +18,9 @@ use uuid::Uuid;
 pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<AFWorkspaceRows, AppError> {
+) -> Result<Vec<AFWorkspaceRow>, AppError> {
   let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
-  Ok(AFWorkspaceRows(workspaces))
+  Ok(workspaces)
 }
 
 /// Returns the workspace with the given workspace_id and update the updated_at field of the

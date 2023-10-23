@@ -30,6 +30,6 @@ impl From<Error> for WSError {
         return WSError::AuthError("Unauthorized ws connection".to_string());
       }
     }
-    return WSError::TungsteniteError(value);
+    WSError::TungsteniteError(value)
   }
 }

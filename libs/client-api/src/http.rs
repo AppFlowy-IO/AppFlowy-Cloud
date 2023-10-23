@@ -59,6 +59,7 @@ pub struct Client {
   token: Arc<RwLock<ClientToken>>,
 }
 
+/// Hardcoded schema in the frontend application. Do not change this value.
 const DESKTOP_CALLBACK_URL: &str = "appflowy-flutter://login-callback";
 
 impl Client {
@@ -198,7 +199,15 @@ impl Client {
     if let OAuthProvider::Google = provider {
       url
         .query_pairs_mut()
+          // In many cases, especially for server-side applications or mobile apps that might need to 
+          // interact with Google services on behalf of the user without the user being actively 
+          // engaged, access_type=offline is preferred to ensure long-term access.
         .append_pair("access_type", "offline")
+          // In Google OAuth2.0, the prompt parameter is used to control the OAuth2.0 flow's behavior.
+          // It determines if the user is re-prompted for authentication and/or consent.
+          // 1. none: The authorization server does not display any authentication or consent user interface pages.
+          // 2. consent: The authorization server prompts the user for consent before returning information to the client
+          // 3. select_account: The authorization server prompts the user to select a user account.
         .append_pair("prompt", "consent");
     }
 

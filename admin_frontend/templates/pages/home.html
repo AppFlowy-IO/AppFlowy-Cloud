@@ -17,12 +17,11 @@
 <!-- prettier-ignore -->
 {% include "components/top_menu_bar.html" %}
 
-<span>You are logged in as <b>{{ email }}</b></span>
-
-<hr />
-<div id="home">
-  {% include "components/sidebar.html" %}
-  <div id="sidebar-content"></div>
+<div id="home" style="border-top: 1px solid">
+  <div style="border-right: 1px solid">
+    {% include "components/sidebar.html" %}
+  </div>
+  <div style="margin: 16px" id="sidebar-content"></div>
 </div>
 
 {% endblock %}

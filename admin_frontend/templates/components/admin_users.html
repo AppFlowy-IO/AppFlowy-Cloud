@@ -12,12 +12,13 @@
       <td>{{ user.created_at|escape }}</td>
       <td>
         <button
+          class="button cyan"
           hx-target="#admin-users"
           hx-get="/web/components/admin/users/{{ user.id }}"
         >
           More Info
         </button>
-        <button class="deletUserBtn" data-user-id="{{ user.id }}">
+        <button class="deletUserBtn button red" data-user-id="{{ user.id }}">
           Delete
         </button>
       </td>

@@ -8,21 +8,17 @@
 }
 
 #sidebar th {
-  color: var(--af-cyan); /* Text color */
-  background-color: var(--af-purple); /* Button background color */
   padding: 16px 16px; /* Padding to give button-like space */
   text-align: center; /* Centering text */
 }
 
 #sidebar td {
-  background-color: var(--af-dark-purple); /* Button background color */
-  color: var(--af-dark-yellow); /* Text color */
+  color: var(--af-dark-purple); /* Text color */
   padding: 16px 16px; /* Padding to give button-like space */
   text-align: center; /* Centering text */
   cursor: pointer; /* Changing the cursor on hover to indicate clickability */
 }
 
 #sidebar td:hover {
-  color: var(--af-yellow);
-  background-color: var(--af-purple);
+  color: var(--af-darker-yellow);
 }

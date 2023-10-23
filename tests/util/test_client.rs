@@ -8,8 +8,8 @@ use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFBlobMetadata, AFRole, InsertCollabMemberParams, QueryCollabParams,
-  UpdateCollabMemberParams,
+  AFAccessLevel, AFBlobMetadata, AFRole, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember,
+  InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
 };
 use image::io::Reader as ImageReader;
 use serde_json::Value;
@@ -102,6 +102,14 @@ impl TestClient {
       .unwrap();
   }
 
+  pub(crate) async fn get_user_workspace_info(&self) -> AFUserWorkspaceInfo {
+    self.api_client.get_user_workspace_info().await.unwrap()
+  }
+
+  pub(crate) async fn open_workspace(&self, workspace_id: &str) -> AFWorkspace {
+    self.api_client.open_workspace(workspace_id).await.unwrap()
+  }
+
   pub(crate) async fn try_update_workspace_member(
     &self,
     workspace_id: &str,
@@ -142,6 +150,14 @@ impl TestClient {
       .api_client
       .remove_workspace_members(workspace_id.to_string(), vec![email])
       .await
+  }
+
+  pub async fn get_workspace_members(&self, workspace_id: &str) -> Vec<AFWorkspaceMember> {
+    self
+      .api_client
+      .get_workspace_members(workspace_id)
+      .await
+      .unwrap()
   }
 
   pub(crate) async fn add_client_as_collab_member(
@@ -253,6 +269,7 @@ impl TestClient {
       .get_workspaces()
       .await
       .unwrap()
+      .0
       .first()
       .unwrap()
       .workspace_id
@@ -264,7 +281,7 @@ impl TestClient {
   }
 
   pub(crate) async fn uid(&self) -> i64 {
-    self.api_client.get_profile().await.unwrap().uid.unwrap()
+    self.api_client.get_profile().await.unwrap().uid
   }
 
   #[allow(clippy::await_holding_lock)]
@@ -274,15 +291,13 @@ impl TestClient {
     collab_type: CollabType,
   ) -> String {
     let object_id = Uuid::new_v4().to_string();
-    let uid = self.api_client.get_profile().await.unwrap().uid.unwrap();
-
     // Subscribe to object
     let handler = self
       .ws_client
       .subscribe(BusinessID::CollabId, object_id.clone())
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
-    let origin = CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone()));
+    let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![]));
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();
@@ -309,7 +324,7 @@ impl TestClient {
     object_id
   }
 
-  pub(crate) async fn open_workspace(&mut self, workspace_id: &str) {
+  pub(crate) async fn edit_workspace_collab(&mut self, workspace_id: &str) {
     self
       .open_collab(workspace_id, workspace_id, CollabType::Folder)
       .await;
@@ -322,15 +337,13 @@ impl TestClient {
     object_id: &str,
     collab_type: CollabType,
   ) {
-    let uid = self.api_client.get_profile().await.unwrap().uid.unwrap();
-
     // Subscribe to object
     let handler = self
       .ws_client
       .subscribe(BusinessID::CollabId, object_id.to_string())
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
-    let origin = CollabOrigin::Client(CollabClient::new(uid, self.device_id.clone()));
+    let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();

@@ -66,10 +66,17 @@
     </table>
 
     <h3>OAuth Login</h3>
-    <div>
-      <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
-        {% include "../assets/google/logo.html" %}
-      </a>
+    <div id="oauth-container">
+      <div class="oauth-icon">
+        <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
+          {% include "../assets/google/logo.html" %}
+        </a>
+      </div>
+      <div class="oauth-icon">
+        <a href="/gotrue/authorize?provider=discord&redirect_to=/web/login">
+          {% include "../assets/discord/logo.html" %}
+        </a>
+      </div>
     </div>
   </div>
 </div>

@@ -65,7 +65,7 @@ pub async fn home_handler(
 ) -> Result<Html<String>, WebAppError> {
   let user = state.gotrue_client.user_info(&session.access_token).await?;
   render_template(templates::Home {
-    email: &user.email,
+    user: &user,
     is_admin: is_admin(&user),
   })
 }
@@ -75,7 +75,7 @@ pub async fn admin_home_handler(
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
   let user = state.gotrue_client.user_info(&session.access_token).await?;
-  render_template(templates::Admin { email: &user.email })
+  render_template(templates::AdminHome { user: &user })
 }
 
 pub async fn admin_users_handler(

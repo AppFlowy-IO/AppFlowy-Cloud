@@ -200,8 +200,8 @@ impl Client {
     if let OAuthProvider::Google = provider {
       url
         .query_pairs_mut()
-          // In many cases, especially for server-side applications or mobile apps that might need to 
-          // interact with Google services on behalf of the user without the user being actively 
+          // In many cases, especially for server-side applications or mobile apps that might need to
+          // interact with Google services on behalf of the user without the user being actively
           // engaged, access_type=offline is preferred to ensure long-term access.
         .append_pair("access_type", "offline")
           // In Google OAuth2.0, the prompt parameter is used to control the OAuth2.0 flow's behavior.
@@ -240,7 +240,7 @@ impl Client {
 
     let link_resp = self
       .gotrue_client
-      .generate_link(&admin_token.access_token, &admin_user_params)
+      .admin_generate_link(&admin_token.access_token, &admin_user_params)
       .await?;
     assert_eq!(link_resp.email, user_email);
 

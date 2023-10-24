@@ -189,7 +189,7 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
-  pub async fn generate_link(
+  pub async fn admin_generate_link(
     &self,
     access_token: &str,
     generate_link_params: &GenerateLinkParams,

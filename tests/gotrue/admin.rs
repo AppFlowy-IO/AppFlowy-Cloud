@@ -134,7 +134,7 @@ async fn admin_generate_link_and_user_sign_in_and_invite() {
       ..Default::default()
     };
     let link_resp = gotrue_client
-      .generate_link(&admin_token.access_token, &admin_user_params)
+      .admin_generate_link(&admin_token.access_token, &admin_user_params)
       .await
       .unwrap();
 

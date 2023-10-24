@@ -1,7 +1,7 @@
 use crate::error::WebApiError;
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiInviteUserRequest,
-  WebApiPutUserRequest,
+  WebApiOpenAppResponse, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
@@ -14,6 +14,7 @@ use axum::Json;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
+use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::{
   AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse, MagicLinkParams,
 };
@@ -25,11 +26,11 @@ pub fn router() -> Router<AppState> {
     .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
 
-
     // user
     .route("/change_password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
     .route("/invite", post(invite_handler))
+    .route("/open_app", post(open_app_handler))
 
     // admin
     .route("/admin/user", post(admin_add_user_handler))
@@ -43,12 +44,39 @@ pub fn router() -> Router<AppState> {
     )
 }
 
+// provide a link which when open in browser, opens the appflowy app
+pub async fn open_app_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<WebApiResponse<WebApiOpenAppResponse>, WebApiError<'static>> {
+  let access_token_resp = state
+    .gotrue_client
+    .token(&Grant::RefreshToken(RefreshTokenGrant {
+      refresh_token: session.refresh_token.to_owned(),
+    }))
+    .await?;
+
+  let app_sign_in_url = format!(
+      "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
+        access_token_resp.access_token,
+        access_token_resp.expires_at,
+        access_token_resp.expires_in,
+        access_token_resp.refresh_token,
+        access_token_resp.token_type,
+  );
+  Ok(
+    WebApiOpenAppResponse {
+      link: app_sign_in_url,
+    }
+    .into(),
+  )
+}
+
 // Invite another user, this will trigger email sending
 // to the target user
 pub async fn invite_handler(
   State(state): State<AppState>,
   session: UserSession,
-
   Json(param): Json<WebApiInviteUserRequest>,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   let res = state
@@ -136,7 +164,7 @@ pub async fn post_user_generate_link_handler(
 ) -> Result<WebApiResponse<GenerateLinkResponse>, WebApiError<'static>> {
   let res = state
     .gotrue_client
-    .generate_link(
+    .admin_generate_link(
       &session.access_token,
       &GenerateLinkParams {
         email,

@@ -9,6 +9,7 @@
 <link href="/assets/sidebar.css" rel="stylesheet" />
 <link href="/assets/top_menu_bar.css" rel="stylesheet" />
 <link href="/assets/home.css" rel="stylesheet" />
+<link href="/assets/navigate.css" rel="stylesheet" />
 {% endblock %}
 
 <!-- prettier-ignore -->
@@ -21,7 +22,9 @@
   <div style="border-right: 1px solid">
     {% include "components/admin_sidebar.html" %}
   </div>
-  <div style="margin: 16px" id="sidebar-content"></div>
+  <div style="margin: 16px" id="sidebar-content">
+    {% include "components/admin_navigate.html" %}
+  </div>
 </div>
 
 {% endblock %}

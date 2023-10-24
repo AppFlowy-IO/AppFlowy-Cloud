@@ -1,0 +1,32 @@
+<table style="border-collapse: collapse">
+  <tr class="nav-item">
+    <td>Open AppFlowy</td>
+    <td>
+      <div id="openAppFlowyBtn" class="svg-container button" href="/???">
+        {% include "../assets/logo.html" %}
+      </div>
+    </td>
+  </tr>
+</table>
+
+<script>
+  document
+    .getElementById("openAppFlowyBtn")
+    .addEventListener("click", function () {
+      fetch("/web-api/open_app", {
+        method: "POST",
+      }).then((response) => {
+        if (!response.ok) {
+          displayHttpStatusAndPayload(response);
+        } else {
+          response.json().then((data) => {
+            if (data && data.data.link) {
+              window.open(data.data.link, '_blank');
+            } else {
+              displayFail("No link returned");
+            }
+          });
+        }
+      });
+    });
+</script>

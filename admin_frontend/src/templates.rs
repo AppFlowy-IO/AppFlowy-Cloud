@@ -29,6 +29,14 @@ pub struct CreateUser;
 pub struct Invite;
 
 #[derive(Template)]
+#[template(path = "components/admin_navigate.html")]
+pub struct AdminNavigate;
+
+#[derive(Template)]
+#[template(path = "components/navigate.html")]
+pub struct Navigate;
+
+#[derive(Template)]
 #[template(path = "pages/admin_home.html")]
 pub struct AdminHome<'a> {
   pub user: &'a User,

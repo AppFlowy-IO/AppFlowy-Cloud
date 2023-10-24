@@ -9,6 +9,7 @@
 <link href="/assets/sidebar.css" rel="stylesheet" />
 <link href="/assets/top_menu_bar.css" rel="stylesheet" />
 <link href="/assets/home.css" rel="stylesheet" />
+<link href="/assets/navigate.css" rel="stylesheet" />
 {% endblock %}
 
 <!-- prettier-ignore -->
@@ -22,8 +23,7 @@
     {% include "components/sidebar.html" %}
   </div>
   <div style="margin: 16px" id="sidebar-content">
-    <h3>Quick Links</h3>
-    <div>{% include "../assets/logo.html" %} Open AppFlowy</div>
+    {% include "components/navigate.html" %}
   </div>
 </div>
 

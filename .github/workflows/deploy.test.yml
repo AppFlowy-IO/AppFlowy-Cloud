@@ -50,7 +50,6 @@ jobs:
           echo "${{ secrets.APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
           echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
           
-          cat .env
 
       - name: Deploy docker-compose
         run: |

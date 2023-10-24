@@ -320,6 +320,7 @@ pub struct AFUserProfile {
   pub metadata: Option<serde_json::Value>,
   pub encryption_sign: Option<String>,
   pub latest_workspace_id: Uuid,
+  pub updated_at: i64,
 }
 
 impl TryFrom<AFUserProfileRow> for AFUserProfile {
@@ -346,6 +347,7 @@ impl TryFrom<AFUserProfileRow> for AFUserProfile {
       metadata: value.metadata,
       encryption_sign: value.encryption_sign,
       latest_workspace_id,
+      updated_at: value.updated_at.map(|v| v.timestamp()).unwrap_or(0),
     })
   }
 }

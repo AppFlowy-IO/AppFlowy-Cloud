@@ -6,12 +6,10 @@
 }
 
 .sidebar-item {
-  color: var(--af-dark-purple); /* Text color */
   padding: 16px 16px; /* Padding to give button-like space */
-  text-align: center; /* Centering text */
   cursor: pointer; /* Changing the cursor on hover to indicate clickability */
 }
 
-.sidebar-item hover {
-  color: var(--af-darker-yellow);
+.sidebar-item:hover {
+  text-shadow: 0 0 8px;
 }

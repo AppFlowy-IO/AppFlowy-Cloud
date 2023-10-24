@@ -1,24 +1,17 @@
 #sidebar {
+  display: flex;
+  flex-direction: column;
   width: 128px;
   height: 100vh;
 }
 
-#sidebar table {
-  width: 100%;
-}
-
-#sidebar th {
-  padding: 16px 16px; /* Padding to give button-like space */
-  text-align: center; /* Centering text */
-}
-
-#sidebar td {
+.sidebar-item {
   color: var(--af-dark-purple); /* Text color */
   padding: 16px 16px; /* Padding to give button-like space */
   text-align: center; /* Centering text */
   cursor: pointer; /* Changing the cursor on hover to indicate clickability */
 }
 
-#sidebar td:hover {
+.sidebar-item hover {
   color: var(--af-darker-yellow);
 }

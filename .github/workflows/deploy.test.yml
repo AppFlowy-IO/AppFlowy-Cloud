@@ -7,6 +7,7 @@ on:
 
 jobs:
   deploy:
+    environment: test.appflowy.cloud
     runs-on: [self-hosted, test-deploy]
     steps:
       - uses: actions/checkout@v3
@@ -29,15 +30,26 @@ jobs:
           sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
           # Google OAuth
           sed -i 's|GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*|GOTRUE_EXTERNAL_GOOGLE_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=.*|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID_TEST }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_SECRET=.*|GOTRUE_EXTERNAL_GOOGLE_SECRET=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_SECRET_TEST }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI_TEST }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=.*|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_SECRET=.*|GOTRUE_EXTERNAL_GOOGLE_SECRET=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_SECRET }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI }}|' .env
+          # GitHub OAuth
+          sed -i 's|GOTRUE_EXTERNAL_GITHUB_ENABLED=.*|GOTRUE_EXTERNAL_GITHUB_ENABLED=true|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=.*|GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GITHUB_CLIENT_ID }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GITHUB_SECRET=.*|GOTRUE_EXTERNAL_GITHUB_SECRET=${{ secrets.GOTRUE_EXTERNAL_GITHUB_SECRET }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI }}|' .env
+          # Discord OAuth
+          sed -i 's|GOTRUE_EXTERNAL_DISCORD_ENABLED=.*|GOTRUE_EXTERNAL_DISCORD_ENABLED=true|' .env
+          sed -i 's|GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=.*|GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_DISCORD_CLIENT_ID }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_DISCORD_SECRET=.*|GOTRUE_EXTERNAL_DISCORD_SECRET=${{ secrets.GOTRUE_EXTERNAL_DISCORD_SECRET }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=.*|GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI }}|' .env
           # Server Host
           sed -i 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=${{ secrets.API_EXTERNAL_URL_TEST }}|' .env
 
           # SSL
           echo "${{ secrets.APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
           echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
+          
 
       - name: Deploy docker-compose
         run: |

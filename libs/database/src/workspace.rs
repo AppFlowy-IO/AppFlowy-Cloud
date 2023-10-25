@@ -246,7 +246,7 @@ pub async fn select_workspace_member_list(
   let members = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
-    SELECT af_user.email,
+    SELECT af_user.name, af_user.email,
     af_workspace_member.role_id AS role
     FROM public.af_workspace_member
         JOIN public.af_user ON af_workspace_member.uid = af_user.uid
@@ -269,7 +269,7 @@ pub async fn select_workspace_member(
   let member = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
-    SELECT af_user.email, af_workspace_member.role_id AS role
+    SELECT af_user.name, af_user.email, af_workspace_member.role_id AS role
     FROM public.af_workspace_member
       JOIN public.af_user ON af_workspace_member.uid = af_user.uid
     WHERE af_workspace_member.workspace_id = $1 

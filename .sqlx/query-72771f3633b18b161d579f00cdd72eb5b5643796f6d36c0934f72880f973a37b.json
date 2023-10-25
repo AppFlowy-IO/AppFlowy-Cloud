@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT af_user.name, af_user.email,\n    af_workspace_member.role_id AS role\n    FROM public.af_workspace_member\n        JOIN public.af_user ON af_workspace_member.uid = af_user.uid\n    WHERE af_workspace_member.workspace_id = $1\n    ORDER BY af_workspace_member.created_at ASC;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "role",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "72771f3633b18b161d579f00cdd72eb5b5643796f6d36c0934f72880f973a37b"
+}

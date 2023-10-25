@@ -38,7 +38,6 @@ use url::Url;
 
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{AccessTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
-use uuid::Uuid;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -123,7 +122,7 @@ impl Client {
     let mut provider_access_token: Option<String> = None;
     let mut provider_refresh_token: Option<String> = None;
 
-    url::Url::parse(url)?
+    Url::parse(url)?
       .fragment()
       .ok_or(url_missing_param("fragment"))?
       .split('&')
@@ -283,24 +282,43 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn create_magic_link(&self, email: &str, password: &str) -> Result<User, AppError> {
+    Ok(
+      self
+        .gotrue_client
+        .admin_add_user(
+          &self.access_token()?,
+          &AdminUserParams {
+            email: email.to_owned(),
+            password: Some(password.to_owned()),
+            email_confirm: true,
+            ..Default::default()
+          },
+        )
+        .await?,
+    )
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn create_email_verified_user(
     &self,
     email: &str,
     password: &str,
   ) -> Result<User, AppError> {
-    let user = self
-      .gotrue_client
-      .admin_add_user(
-        &self.access_token()?,
-        &AdminUserParams {
-          email: email.to_owned(),
-          password: Some(password.to_owned()),
-          email_confirm: true,
-          ..Default::default()
-        },
-      )
-      .await?;
-    Ok(user)
+    Ok(
+      self
+        .gotrue_client
+        .admin_add_user(
+          &self.access_token()?,
+          &AdminUserParams {
+            email: email.to_owned(),
+            password: Some(password.to_owned()),
+            email_confirm: true,
+            ..Default::default()
+          },
+        )
+        .await?,
+    )
   }
 
   /// Only expose this method for testing
@@ -468,12 +486,16 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_workspace_member(
+  pub async fn update_workspace_member<T: AsRef<str>>(
     &self,
-    workspace_uuid: Uuid,
+    workspace_id: T,
     changeset: WorkspaceMemberChangeset,
   ) -> Result<(), AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_uuid);
+    let url = format!(
+      "{}/api/workspace/{}/member",
+      self.base_url,
+      workspace_id.as_ref()
+    );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?

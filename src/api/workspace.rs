@@ -116,9 +116,18 @@ async fn get_workspace_members_handler(
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspaceMember>>> {
-  let ws_members =
-    workspace::ops::get_workspace_members(&state.pg_pool, &user_uuid, &workspace_id).await?;
-  Ok(AppResponse::Ok().with_data(ws_members).into())
+  let members = workspace::ops::get_workspace_members(&state.pg_pool, &user_uuid, &workspace_id)
+    .await?
+    .into_iter()
+    .map(|member| AFWorkspaceMember {
+      name: member.name,
+      email: member.email,
+      role: member.role,
+      avatar_url: None,
+    })
+    .collect();
+
+  Ok(AppResponse::Ok().with_data(members).into())
 }
 
 #[instrument(skip_all, err)]

@@ -1,5 +1,5 @@
 use crate::error::DatabaseError;
-use crate::pg_row::{AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
+use crate::pg_row::{AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceRow};
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
@@ -399,7 +399,14 @@ pub struct AFUserWorkspaceInfo {
   pub workspaces: Vec<AFWorkspace>,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct AFWorkspaceMember {
+  pub name: String,
+  pub email: String,
+  pub role: AFRole,
+  pub avatar_url: Option<String>,
+}
+
 /// ***************************************************************
 /// Make alias for the database entity. Hiding the Sqlx Rows type.
-pub type AFWorkspaceMember = AFWorkspaceMemberRow;
 pub type AFBlobMetadata = AFBlobMetadataRow;

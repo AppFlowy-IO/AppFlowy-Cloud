@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT EXISTS(\n      SELECT 1 \n      FROM af_user \n      WHERE uuid = $1\n    ) AS user_exists;\n  ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_exists",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c95a9130eb573498248beab702f0fd3d173b6456d079466683be78f1c9bb4f76"
+}

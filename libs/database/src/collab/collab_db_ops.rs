@@ -14,6 +14,7 @@ use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, event, instrument};
 use uuid::Uuid;
 
+#[inline]
 pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
     r#"
@@ -49,6 +50,7 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 /// * There's an attempt to insert a row with an existing `object_id` but a different `workspace_id`.
 ///
 
+#[inline]
 #[instrument(level = "trace", skip(tx, params), fields(oid=%params.object_id), err)]
 pub async fn insert_into_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
@@ -158,6 +160,7 @@ pub async fn insert_into_af_collab(
   Ok(())
 }
 
+#[inline]
 pub async fn select_blob_from_af_collab(
   pg_pool: &PgPool,
   collab_type: &CollabType,
@@ -177,6 +180,7 @@ pub async fn select_blob_from_af_collab(
   .await
 }
 
+#[inline]
 pub async fn batch_select_collab_blob(
   pg_pool: &PgPool,
   queries: Vec<BatchQueryCollab>,
@@ -240,6 +244,7 @@ struct QueryCollabData {
   blob: RawData,
 }
 
+#[inline]
 pub async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx::Error> {
   sqlx::query!(
     r#"
@@ -279,6 +284,7 @@ pub async fn create_snapshot(
   Ok(())
 }
 
+#[inline]
 pub async fn get_snapshot_blob(pg_pool: &PgPool, snapshot_id: i64) -> Result<Vec<u8>, sqlx::Error> {
   let blob = sqlx::query!(
     r#"
@@ -311,6 +317,7 @@ pub async fn get_all_snapshots(
   Ok(AFCollabSnapshots(snapshots))
 }
 
+#[inline]
 #[instrument(skip(txn), err)]
 pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   uid: i64,
@@ -355,6 +362,7 @@ pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
 }
 
 #[instrument(skip(pg_pool), err)]
+#[inline]
 pub async fn insert_collab_member(
   uid: i64,
   oid: &str,
@@ -388,6 +396,7 @@ pub async fn delete_collab_member(
   Ok(())
 }
 
+#[inline]
 pub async fn select_collab_members(
   oid: &str,
   pg_pool: &PgPool,
@@ -408,6 +417,7 @@ pub async fn select_collab_members(
   Ok(members)
 }
 
+#[inline]
 pub async fn select_collab_member(
   uid: &i64,
   oid: &str,

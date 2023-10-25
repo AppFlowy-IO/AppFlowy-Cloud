@@ -52,6 +52,7 @@ where
   }
 
   #[instrument(skip_all, err)]
+  #[inline]
   pub async fn put_blob<R>(
     &self,
     blob_stream: R,

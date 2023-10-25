@@ -12,6 +12,7 @@ use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspac
 
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.
+#[inline]
 pub async fn select_user_is_workspace_owner(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
@@ -39,6 +40,7 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
+#[inline]
 pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
   exectuor: E,
   uid: &i64,
@@ -111,6 +113,7 @@ pub async fn select_user_can_edit_collab(
   Ok(permission_check.unwrap_or(false))
 }
 
+#[inline]
 pub async fn insert_workspace_member_with_txn(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
@@ -178,6 +181,7 @@ pub async fn upsert_workspace_member(
   Ok(())
 }
 
+#[inline]
 pub async fn delete_workspace_members(
   _user_uuid: &Uuid,
   txn: &mut Transaction<'_, sqlx::Postgres>,
@@ -234,6 +238,7 @@ pub async fn delete_workspace_members(
 }
 
 /// returns a list of workspace members, sorted by their creation time.
+#[inline]
 pub async fn select_workspace_member_list(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
@@ -255,6 +260,7 @@ pub async fn select_workspace_member_list(
   Ok(members)
 }
 
+#[inline]
 pub async fn select_workspace_member(
   pg_pool: &PgPool,
   uid: &i64,
@@ -277,6 +283,7 @@ pub async fn select_workspace_member(
   Ok(member)
 }
 
+#[inline]
 pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
@@ -294,6 +301,7 @@ pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
   Ok(user_profile)
 }
 
+#[inline]
 pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
@@ -309,6 +317,7 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
   Ok(workspace)
 }
+#[inline]
 pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
@@ -329,6 +338,7 @@ pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postg
 }
 
 /// Returns a list of workspaces that the user is a member of.
+#[inline]
 pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
@@ -350,6 +360,7 @@ pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
   Ok(workspaces)
 }
 
+#[inline]
 pub async fn select_all_user_workspaces(
   pool: &PgPool,
   owner_uuid: &Uuid,

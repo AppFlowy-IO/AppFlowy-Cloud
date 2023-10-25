@@ -29,10 +29,10 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::error_code::url_missing_param;
 use shared_entity::error_code::ErrorCode;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use tracing::instrument;
+use tracing::{event, instrument};
 use url::Url;
 
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
@@ -81,7 +81,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub fn set_token(&self, token: &str) -> Result<(), AppError> {
+  pub fn restore_token(&self, token: &str) -> Result<(), AppError> {
     if token.is_empty() {
       return Err(AppError::new(ErrorCode::OAuthError, "Empty token"));
     }
@@ -321,7 +321,15 @@ impl Client {
   pub fn token_expires_at(&self) -> Result<i64, AppError> {
     match &self.token.try_read() {
       None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
-      Some(token) => Ok(token.as_ref().ok_or(ErrorCode::NotLoggedIn)?.expires_at),
+      Some(token) => Ok(
+        token
+          .as_ref()
+          .ok_or(AppError::new(
+            ErrorCode::NotLoggedIn,
+            "fail to get expires_at",
+          ))?
+          .expires_at,
+      ),
     }
   }
 
@@ -334,12 +342,15 @@ impl Client {
   /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
   ///
   pub fn access_token(&self) -> Result<String, AppError> {
-    match &self.token.try_read() {
+    match &self.token.try_read_for(Duration::from_secs(2)) {
       None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
       Some(token) => Ok(
         token
           .as_ref()
-          .ok_or(ErrorCode::NotLoggedIn)?
+          .ok_or(AppError::new(
+            ErrorCode::NotLoggedIn,
+            "fail to get access token. Token is empty",
+          ))?
           .access_token
           .clone(),
       ),
@@ -524,7 +535,10 @@ impl Client {
       .token
       .read()
       .as_ref()
-      .ok_or(AppError::new(ErrorCode::NotLoggedIn, "No access token"))?
+      .ok_or(AppError::new(
+        ErrorCode::NotLoggedIn,
+        "fail to refresh user token",
+      ))?
       .refresh_token
       .as_str()
       .to_owned();
@@ -538,6 +552,7 @@ impl Client {
         Ok(())
       },
       Err(err) => {
+        event!(tracing::Level::ERROR, "refresh token failed: {}", err);
         self.token.write().unset();
         Err(AppError::from(err))
       },
@@ -561,6 +576,7 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_out(&self) -> Result<(), AppError> {
     self.gotrue_client.logout(&self.access_token()?).await?;
+    self.token.write().unset();
     Ok(())
   }
 

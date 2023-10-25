@@ -41,13 +41,13 @@ impl ClientToken {
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
   pub(crate) fn set(&mut self, new_token: AccessTokenResponse) {
-    tracing::trace!("Set new access token: {:?}", new_token);
     let is_new = match &self.token {
       None => true,
       Some(old_token) => old_token.access_token != new_token.access_token,
     };
     self.token = Some(new_token);
     if is_new {
+      tracing::trace!("Set new access token: {:?}", self.token);
       let _ = self.sender.send(TokenState::Refresh);
     }
   }

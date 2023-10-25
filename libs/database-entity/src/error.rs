@@ -44,7 +44,7 @@ impl From<sqlx::Error> for DatabaseError {
   fn from(value: sqlx::Error) -> Self {
     match value {
       Error::RowNotFound => {
-        DatabaseError::RecordNotFound("Can't find the row in the database".to_string())
+        DatabaseError::RecordNotFound("Can't find the row in the pg".to_string())
       },
       _ => DatabaseError::SqlxError(value),
     }

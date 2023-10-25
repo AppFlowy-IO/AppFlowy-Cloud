@@ -32,9 +32,11 @@ pub struct AFUserProfileRow {
 
 #[derive(FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMemberRow {
+  pub name: String,
   pub email: String,
   pub role: AFRole,
 }
+
 #[derive(FromRow, Clone, Debug, Serialize, Deserialize)]
 pub struct AFCollabMemberRow {
   pub uid: i64,

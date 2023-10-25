@@ -12,6 +12,7 @@ use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::{types::uuid, PgPool};
+use std::collections::HashMap;
 use std::ops::DerefMut;
 use uuid::Uuid;
 
@@ -45,35 +46,60 @@ pub async fn open_workspace(
   Ok(workspace)
 }
 
+/// Returns the list of uid of members that are added to the workspace.
+/// Adds members to a workspace.
+///
+/// This function is responsible for adding a list of members to a specified workspace.
+/// Each member is associated with a role, which determines their access level within the workspace.
+/// The function performs the following operations:
+/// 1. Begins a database transaction.
+/// 2. For each member:
+///    - Determines the access level based on the member's role.
+///    - If the member exists (based on their email), inserts them into the workspace and updates their collaboration access level.
+/// 3. Commits the database transaction.
+///
+/// # Returns
+/// - A `Result` containing a `HashMap` where the key is the user ID (`uid`) and the value is the role (`AFRole`) assigned to the user in the workspace.
+///   If there's an error during the operation, an `AppError` is returned.
+///
 pub async fn add_workspace_members(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
-  members: &[CreateWorkspaceMember],
-) -> Result<(), AppError> {
+  members: Vec<CreateWorkspaceMember>,
+) -> Result<HashMap<i64, AFRole>, AppError> {
   let mut txn = pg_pool
     .begin()
     .await
     .context("Begin transaction to insert workspace members")?;
 
-  for member in members {
+  let mut role_by_uid = HashMap::new();
+  for member in members.into_iter() {
     let access_level = match &member.role {
       AFRole::Owner => AFAccessLevel::FullAccess,
       AFRole::Member => AFAccessLevel::ReadAndWrite,
       AFRole::Guest => AFAccessLevel::ReadOnly,
     };
-    let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
 
+    let uid = select_uid_from_email(txn.deref_mut(), &member.email)
+      .await
+      .map_err(|err| {
+        AppError::from(err).with_message(format!(
+          "Failed to get uid from email {} when adding workspace members",
+          member.email
+        ))
+      })?;
     insert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
       .await?;
     upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
+    role_by_uid.insert(uid, member.role);
   }
 
   txn
     .commit()
     .await
     .context("Commit transaction to insert workspace members")?;
-  Ok(())
+  Ok(role_by_uid)
 }
 
 pub async fn remove_workspace_members(

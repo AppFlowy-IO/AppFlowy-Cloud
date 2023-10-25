@@ -1,5 +1,6 @@
 use crate::util::test_client::TestClient;
 use database_entity::dto::AFRole;
+use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use shared_entity::error_code::ErrorCode;
 
 #[tokio::test]
@@ -33,6 +34,26 @@ async fn add_duplicate_workspace_members() {
     .await;
   c1.add_workspace_member(&workspace_id, &c2, AFRole::Member)
     .await;
+}
+
+#[tokio::test]
+async fn add_not_exist_workspace_members() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = c1.workspace_id().await;
+  let email = format!("{}@appflowy.io", uuid::Uuid::new_v4());
+  let err = c1
+    .api_client
+    .add_workspace_members(
+      workspace_id,
+      vec![CreateWorkspaceMember {
+        email,
+        role: AFRole::Member,
+      }],
+    )
+    .await
+    .unwrap_err();
+
+  assert_eq!(err.code, ErrorCode::RecordNotFound);
 }
 #[tokio::test]
 async fn update_workspace_member_role_not_enough_permission() {

@@ -90,21 +90,18 @@ async fn add_workspace_members_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let create_members = payload.into_inner();
-  workspace::ops::add_workspace_members(
+  let role_by_uid = workspace::ops::add_workspace_members(
     &state.pg_pool,
     &user_uuid,
     &workspace_id,
-    &create_members.0,
+    create_members.0,
   )
   .await?;
 
-  for member in create_members.0 {
-    let uid = select_uid_from_email(&state.pg_pool, &member.email)
-      .await
-      .map_err(AppError::from)?;
+  for (uid, role) in role_by_uid {
     state
       .workspace_access_control
-      .update_member(&uid, &workspace_id, member.role)
+      .update_member(&uid, &workspace_id, role)
       .await;
   }
   Ok(AppResponse::Ok().into())
@@ -152,13 +149,15 @@ async fn remove_workspace_member_handler(
   .await?;
 
   for email in member_emails {
-    let uid = select_uid_from_email(&state.pg_pool, &email)
+    if let Ok(uid) = select_uid_from_email(&state.pg_pool, &email)
       .await
-      .map_err(AppError::from)?;
-    state
-      .workspace_access_control
-      .remove_member(&uid, &workspace_id)
-      .await;
+      .map_err(AppError::from)
+    {
+      state
+        .workspace_access_control
+        .remove_member(&uid, &workspace_id)
+        .await;
+    }
   }
 
   Ok(AppResponse::Ok().into())

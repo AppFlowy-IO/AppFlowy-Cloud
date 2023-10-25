@@ -43,7 +43,13 @@ async fn verify_user_handler(
   request_id: RequestId,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
-  let is_new = biz::user::token_verify(&state.pg_pool, &state.gotrue_client, &access_token).await?;
+  let is_new = biz::user::verify_token(
+    &state.pg_pool,
+    &state.id_gen,
+    &state.gotrue_client,
+    &access_token,
+  )
+  .await?;
   let resp = SignInTokenResponse { is_new };
   Ok(AppResponse::Ok().with_data(resp).into())
 }

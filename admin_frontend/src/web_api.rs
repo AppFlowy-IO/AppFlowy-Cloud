@@ -56,6 +56,9 @@ pub async fn open_app_handler(
     }))
     .await?;
 
+  // appflowy-flutter:// -> scheme that opens the Appflowy app
+  // login-callback -> agreed upon convention that frontend recognizes
+  // The rest are params that are passed to the app needed for login
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
         access_token_resp.access_token,

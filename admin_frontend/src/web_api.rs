@@ -1,7 +1,7 @@
 use crate::error::WebApiError;
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiInviteUserRequest,
-  WebApiOpenAppResponse, WebApiPutUserRequest,
+  WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
@@ -10,14 +10,12 @@ use axum::extract::Path;
 use axum::http::{status, HeaderMap, HeaderValue};
 use axum::response::Result;
 use axum::routing::delete;
-use axum::Json;
+use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use gotrue::grant::{Grant, RefreshTokenGrant};
-use gotrue::params::{
-  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse, MagicLinkParams,
-};
+use gotrue::params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, MagicLinkParams};
 use gotrue_entity::dto::{UpdateGotrueUserParams, User};
 
 pub fn router() -> Router<AppState> {
@@ -48,7 +46,7 @@ pub fn router() -> Router<AppState> {
 pub async fn open_app_handler(
   State(state): State<AppState>,
   session: UserSession,
-) -> Result<WebApiResponse<WebApiOpenAppResponse>, WebApiError<'static>> {
+) -> Result<HeaderMap, WebApiError<'static>> {
   let access_token_resp = state
     .gotrue_client
     .token(&Grant::RefreshToken(RefreshTokenGrant {
@@ -67,12 +65,7 @@ pub async fn open_app_handler(
         access_token_resp.refresh_token,
         access_token_resp.token_type,
   );
-  Ok(
-    WebApiOpenAppResponse {
-      link: app_sign_in_url,
-    }
-    .into(),
-  )
+  Ok(htmx_redirect(&app_sign_in_url))
 }
 
 // Invite another user, this will trigger email sending
@@ -80,7 +73,7 @@ pub async fn open_app_handler(
 pub async fn invite_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<WebApiInviteUserRequest>,
+  Form(param): Form<WebApiInviteUserRequest>,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   let res = state
     .gotrue_client
@@ -98,8 +91,14 @@ pub async fn invite_handler(
 pub async fn change_password_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<WebApiChangePasswordRequest>,
+  Form(param): Form<WebApiChangePasswordRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+  if param.new_password != param.confirm_password {
+    return Err(WebApiError::new(
+      status::StatusCode::BAD_REQUEST,
+      "passwords do not match",
+    ));
+  }
   let res = state
     .gotrue_client
     .update_user(
@@ -143,7 +142,7 @@ pub async fn admin_update_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_uuid): Path<String>,
-  Json(param): Json<WebApiPutUserRequest>,
+  Form(param): Form<WebApiPutUserRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let res = state
     .gotrue_client
@@ -164,7 +163,7 @@ pub async fn post_user_generate_link_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(email): Path<String>,
-) -> Result<WebApiResponse<GenerateLinkResponse>, WebApiError<'static>> {
+) -> Result<String, WebApiError<'static>> {
   let res = state
     .gotrue_client
     .admin_generate_link(
@@ -175,7 +174,7 @@ pub async fn post_user_generate_link_handler(
       },
     )
     .await?;
-  Ok(res.into())
+  Ok(res.action_link)
 }
 
 pub async fn admin_delete_user_handler(
@@ -199,7 +198,7 @@ pub async fn admin_delete_user_handler(
 pub async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
-  Json(param): Json<WebApiAdminCreateUserRequest>,
+  Form(param): Form<WebApiAdminCreateUserRequest>,
 ) -> Result<WebApiResponse<User>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
     email: param.email,
@@ -245,8 +244,8 @@ pub async fn login_refresh_handler(
 pub async fn login_handler(
   State(state): State<AppState>,
   jar: CookieJar,
-  Json(param): Json<WebApiLoginRequest>,
-) -> Result<CookieJar, WebApiError<'static>> {
+  Form(param): Form<WebApiLoginRequest>,
+) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
@@ -265,16 +264,16 @@ pub async fn login_handler(
   );
   state.session_store.put_user_session(&new_session).await?;
 
-  let mut cookie = Cookie::new("session_id", new_session_id.to_string());
-  cookie.set_path("/");
-
-  Ok(jar.add(cookie))
+  Ok((
+    jar.add(new_session_cookie(new_session_id)),
+    htmx_redirect("/web/home"),
+  ))
 }
 
 pub async fn logout_handler(
   State(state): State<AppState>,
   jar: CookieJar,
-) -> Result<CookieJar, WebApiError<'static>> {
+) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
   let session_id = jar
     .get("session_id")
     .ok_or(WebApiError::new(
@@ -284,5 +283,20 @@ pub async fn logout_handler(
     .value();
 
   state.session_store.del_user_session(session_id).await?;
-  Ok(jar.remove(Cookie::named("session_id")))
+  Ok((
+    jar.remove(Cookie::named("session_id")),
+    htmx_redirect("/web/login"),
+  ))
+}
+
+fn htmx_redirect(url: &str) -> HeaderMap {
+  let mut h = HeaderMap::new();
+  h.insert("HX-Redirect", url.parse().unwrap());
+  h
+}
+
+fn new_session_cookie(id: uuid::Uuid) -> Cookie<'static> {
+  let mut cookie = Cookie::new("session_id", id.to_string());
+  cookie.set_path("/");
+  cookie
 }

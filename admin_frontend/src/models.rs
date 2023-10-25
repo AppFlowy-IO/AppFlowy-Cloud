@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct WebApiLoginRequest {
@@ -14,6 +14,7 @@ pub struct WebApiPutUserRequest {
 #[derive(Deserialize)]
 pub struct WebApiChangePasswordRequest {
   pub new_password: String,
+  pub confirm_password: String,
 }
 
 #[derive(Deserialize)]
@@ -26,9 +27,4 @@ pub struct WebApiAdminCreateUserRequest {
 #[derive(Deserialize)]
 pub struct WebApiInviteUserRequest {
   pub email: String,
-}
-
-#[derive(Serialize)]
-pub struct WebApiOpenAppResponse {
-  pub link: String,
 }

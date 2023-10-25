@@ -1,43 +1,32 @@
-<div id="create-user">
+<div id="invite-user">
   <h4>Please enter the following email invite a new user</h4>
-  <table>
-    <tr>
-      <td>Email:</td>
-      <td>
-        <input
-          class="input"
-          id="invitedUserEmail"
-          placeholder="myfriend@example.com"
-        />
-      </td>
-    </tr>
-    <tr>
-      <td></td>
-      <td style="text-align: right">
-        <button class="button cyan" id="inviteBtn">Invite</button>
-      </td>
-    </tr>
-  </table>
-
-  <script>
-    document.getElementById("inviteBtn").addEventListener("click", function () {
-      // Get the email from the user
-      var invitedUserEmail = document.getElementById("invitedUserEmail").value;
-      fetch("/web-api/invite", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: invitedUserEmail,
-        }),
-      }).then((response) => {
-        if (!response.ok) {
-          displayHttpStatusAndPayload(response);
-        } else {
-          displaySuccess(`Invitation sent to ${invitedUserEmail}`);
-        }
-      });
-    });
-  </script>
+  <form>
+    <table>
+      <tr>
+        <td>Email:</td>
+        <td>
+          <input
+            class="input"
+            name="email"
+            placeholder="myfriend@example.com"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td style="text-align: right">
+          <button
+            hx-post="/web-api/invite"
+            hx-target="#none"
+            class="button cyan"
+            type="submit"
+            id="inviteBtn"
+          >
+            Invite
+          </button>
+        </td>
+      </tr>
+    </table>
+  </form>
 </div>

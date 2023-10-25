@@ -9,8 +9,8 @@
     top_message_box.style.backgroundColor = afColor;
     document.body.appendChild(top_message_box);
     top_message_box.classList.add("slideIn");
-    setTimeout(function() {
-        top_message_box.remove();
+    setTimeout(function () {
+      top_message_box.remove();
     }, 2500);
   }
 
@@ -26,6 +26,12 @@
       <b>${response.status}: ${response.statusText}</b>
       <br>${text}`);
     });
+  }
+
+  function displayHttpFail(statusCode, statusText, responseText) {
+    displayFail(`
+      <b>${statusCode}: ${statusText}</b>
+      <br>${responseText}`);
   }
 
   function displaySuccess(message) {

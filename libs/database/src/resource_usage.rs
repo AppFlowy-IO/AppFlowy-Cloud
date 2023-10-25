@@ -7,6 +7,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 #[instrument(level = "trace", skip_all, err)]
+#[inline]
 pub async fn is_blob_metadata_exists(
   pool: &PgPool,
   workspace_id: &Uuid,
@@ -59,6 +60,7 @@ pub async fn insert_blob_metadata(
 }
 
 #[instrument(level = "trace", skip_all, err)]
+#[inline]
 pub async fn delete_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
@@ -101,6 +103,7 @@ pub async fn get_blob_metadata(
 
 /// Return all blob metadata of a workspace
 #[instrument(level = "trace", skip_all, err)]
+#[inline]
 pub async fn get_all_workspace_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
@@ -120,6 +123,7 @@ pub async fn get_all_workspace_blob_metadata(
 
 /// Return all blob ids of a workspace
 #[instrument(level = "trace", skip_all, err)]
+#[inline]
 pub async fn get_all_workspace_blob_ids(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
@@ -141,6 +145,7 @@ pub async fn get_all_workspace_blob_ids(
 
 /// Return the total size of a workspace in bytes
 #[instrument(level = "trace", skip_all, err)]
+#[inline]
 pub async fn get_workspace_usage_size(
   pool: &PgPool,
   workspace_id: &Uuid,

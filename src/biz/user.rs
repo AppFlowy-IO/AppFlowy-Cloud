@@ -1,27 +1,45 @@
 use anyhow::{Context, Result};
-use database::{user::create_user_if_not_exists, workspace::select_user_profile};
 use gotrue::api::Client;
 use serde_json::json;
 use shared_entity::app_error::AppError;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use uuid::Uuid;
 
-use database::workspace::{select_user_workspace, select_workspace};
+use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 
+use database::user::{create_user, is_user_exist};
 use shared_entity::dto::auth_dto::UpdateUserParams;
+use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool};
+use tokio::sync::RwLock;
 use tracing::instrument;
 
-pub async fn token_verify(
+/// Verify the token from the gotrue server and create the user if it is a new user
+/// Return true if the user is a new user
+///
+#[instrument(skip_all, err)]
+pub async fn verify_token(
   pg_pool: &PgPool,
+  id_gen: &Arc<RwLock<Snowflake>>,
   gotrue_client: &Client,
   access_token: &str,
 ) -> Result<bool, AppError> {
   let user = gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
-  let is_new = create_user_if_not_exists(pg_pool, &user_uuid, &user.email, &name).await?;
+
+  let mut txn = pg_pool.begin().await?;
+  let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
+  if is_new {
+    let new_uid = id_gen.write().await.next_id();
+    create_user(pg_pool, new_uid, &user_uuid, &user.email, &name).await?;
+  }
+  txn
+    .commit()
+    .await
+    .context("fail to commit transaction to verify token")?;
   Ok(is_new)
 }
 

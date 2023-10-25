@@ -11,6 +11,7 @@ use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::RefreshTokenGrant;
+use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
@@ -199,8 +200,8 @@ impl Client {
     if let OAuthProvider::Google = provider {
       url
         .query_pairs_mut()
-          // In many cases, especially for server-side applications or mobile apps that might need to 
-          // interact with Google services on behalf of the user without the user being actively 
+          // In many cases, especially for server-side applications or mobile apps that might need to
+          // interact with Google services on behalf of the user without the user being actively
           // engaged, access_type=offline is preferred to ensure long-term access.
         .append_pair("access_type", "offline")
           // In Google OAuth2.0, the prompt parameter is used to control the OAuth2.0 flow's behavior.
@@ -239,7 +240,7 @@ impl Client {
 
     let link_resp = self
       .gotrue_client
-      .generate_link(&admin_token.access_token, &admin_user_params)
+      .admin_generate_link(&admin_token.access_token, &admin_user_params)
       .await?;
     assert_eq!(link_resp.email, user_email);
 
@@ -265,21 +266,20 @@ impl Client {
     Ok(sign_in_resp.is_new)
   }
 
+  // Invites another user by sending a magic link to the user's email address.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_magic_link(&self, email: &str, password: &str) -> Result<User, AppError> {
-    let user = self
+  pub async fn invite(&self, email: &str) -> Result<(), AppError> {
+    self
       .gotrue_client
-      .admin_add_user(
+      .magic_link(
         &self.access_token()?,
-        &AdminUserParams {
+        &MagicLinkParams {
           email: email.to_owned(),
-          password: Some(password.to_owned()),
-          email_confirm: true,
           ..Default::default()
         },
       )
       .await?;
-    Ok(user)
+    Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]

@@ -1,16 +1,29 @@
 <div id="top-menu-bar">
   <div id="top-menu-bar-left">
-    <img
-      src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
-      width="32"
-      height="32"
-    />
-    <h2>AppFlowy Cloud</h2>
+    {% include "../assets/logo.html" %}
+    <h2>&nbsp; AppFlowy Cloud &nbsp;</h2>
+
+    <div
+      hx-target="#sidebar-content"
+      hx-get="/web/components/user/user"
+      class="button cyan"
+    >
+      {{ user.email }}
+    </div>
   </div>
 
   <div id="top-menu-bar-right">
     <!-- prettier-ignore -->
-    {% if is_admin %} <a href="/web/admin/home">Admin</a> {% endif %}
+    {% if is_admin %}
+    <div id="adminBtn" class="button red">Admin</div>
+    <script>
+      document
+        .getElementById("adminBtn")
+        .addEventListener("click", function () {
+          window.location.href = "/web/admin/home";
+        });
+    </script>
+    {% endif %}
 
     <!-- prettier-ignore -->
     {% include "components/logout.html" %}

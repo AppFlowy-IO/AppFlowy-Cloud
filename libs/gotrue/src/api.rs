@@ -1,6 +1,6 @@
 use super::grant::Grant;
 use crate::params::{
-  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse,
+  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse, MagicLinkParams,
 };
 use anyhow::Context;
 use gotrue_entity::dto::{
@@ -189,7 +189,7 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
-  pub async fn generate_link(
+  pub async fn admin_generate_link(
     &self,
     access_token: &str,
     generate_link_params: &GenerateLinkParams,
@@ -202,6 +202,21 @@ impl Client {
       .send()
       .await?;
     to_gotrue_result(resp).await
+  }
+
+  pub async fn magic_link(
+    &self,
+    access_token: &str,
+    magic_link_params: &MagicLinkParams,
+  ) -> Result<(), GoTrueError> {
+    let resp = self
+      .client
+      .post(format!("{}/magiclink", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(&magic_link_params)
+      .send()
+      .await?;
+    check_gotrue_result(resp).await
   }
 }
 

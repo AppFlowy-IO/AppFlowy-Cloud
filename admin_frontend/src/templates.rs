@@ -1,4 +1,5 @@
 use askama::Template;
+use gotrue_entity::dto::User;
 
 #[derive(Template)]
 #[template(path = "components/change_password.html")]
@@ -15,7 +16,7 @@ pub struct Login;
 #[derive(Template)]
 #[template(path = "pages/home.html")]
 pub struct Home<'a> {
-  pub email: &'a str,
+  pub user: &'a User,
   pub is_admin: bool,
 }
 
@@ -24,9 +25,21 @@ pub struct Home<'a> {
 pub struct CreateUser;
 
 #[derive(Template)]
+#[template(path = "components/invite.html")]
+pub struct Invite;
+
+#[derive(Template)]
+#[template(path = "components/admin_navigate.html")]
+pub struct AdminNavigate;
+
+#[derive(Template)]
+#[template(path = "components/navigate.html")]
+pub struct Navigate;
+
+#[derive(Template)]
 #[template(path = "pages/admin_home.html")]
-pub struct Admin<'a> {
-  pub email: &'a str,
+pub struct AdminHome<'a> {
+  pub user: &'a User,
 }
 
 #[derive(Template)]

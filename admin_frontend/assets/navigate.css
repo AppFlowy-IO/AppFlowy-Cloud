@@ -1,0 +1,21 @@
+.nav-item {
+  border-bottom: 2px solid;
+}
+
+.svg-container {
+  margin: 16px;
+  display: flex; /* Using Flexbox for alignment */
+  height: 64px;
+  align-items: center; /* Vertically center the SVG */
+  justify-content: flex-start; /* Align the SVG to the left */
+}
+
+.svg-container:hover {
+  filter: drop-shadow(0px 0px 8px);
+}
+
+.svg-container svg {
+  height: 100%;
+  width: auto;
+  display: block;
+}

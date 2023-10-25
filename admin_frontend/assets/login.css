@@ -7,9 +7,10 @@
 }
 
 #login-splash {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-evenly;
   flex-direction: row;
 }
 
@@ -20,4 +21,17 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+#oauth-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.oauth-icon {
+  margin: 12px;
+  width: 48px;
 }

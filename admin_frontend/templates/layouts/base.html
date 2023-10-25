@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link href="/assets/base.css" rel="stylesheet" />
     <link href="/assets/message.css" rel="stylesheet" />
     <title>{% block title %}{{ title }}{% endblock %}</title>
@@ -16,5 +17,20 @@
     {% include "components/message.html" %}
 
     <div id="content">{% block content %}{% endblock %}</div>
+
+    <!-- place for htmx result that are not updating document -->
+    <div id="none" style="display: none"></div>
   </body>
 </html>
+
+<script>
+  document.body.addEventListener("htmx:afterRequest", function (evt) {
+    const detail = evt.detail;
+    if (detail.failed) {
+      const xhr = detail.xhr;
+      displayHttpFail(xhr.status, xhr.statusText, xhr.responseText);
+    } else if (detail.target.id === "none") {
+      displaySuccess("Success");
+    }
+  });
+</script>

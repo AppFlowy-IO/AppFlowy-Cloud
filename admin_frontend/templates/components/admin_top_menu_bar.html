@@ -1,15 +1,26 @@
 <div id="top-menu-bar">
   <div id="top-menu-bar-left">
-    <img
-      src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
-      width="32"
-      height="32"
-    />
-    <h2>AppFlowy Cloud</h2>
+    {% include "../assets/logo.html" %}
+    <h2>&nbsp; AppFlowy Cloud &nbsp;</h2>
+
+    <div
+      hx-target="#sidebar-content"
+      hx-get="/web/components/user/user"
+      class="button red"
+    >
+      {{ user.email }}
+    </div>
   </div>
 
   <div id="top-menu-bar-right">
-    <a href="/web">User</a>
+    <div id="adminBtn" class="button cyan">User</div>
+    <script>
+      document
+        .getElementById("adminBtn")
+        .addEventListener("click", function () {
+          window.location.href = "/web/home";
+        });
+    </script>
 
     <!-- prettier-ignore -->
     {% include "components/logout.html" %}

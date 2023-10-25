@@ -1,20 +1,22 @@
 @keyframes slideIn {
   from {
-    top: -100%;
+    top: -20%;
   }
   to {
-    top: 0;
+    top: 1%;
   }
 }
 
-#message.slideIn {
-  animation: slideIn 0.25s forwards;
+.message.slideIn {
+  animation: slideIn 0.2s forwards;
 }
 
-#message {
+.message {
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
   display: none;
   position: fixed;
-  top: 0;
   left: 50%;
   transform: translateX(-50%);
   color: #fff;

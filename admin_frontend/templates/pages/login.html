@@ -2,107 +2,96 @@
 {% extends "layouts/base.html" %}
 
 <!-- prettier-ignore -->
-{% block title %} Login {% endblock %}
+{% block title %} AppFlowy Cloud Login {% endblock %}
 
 <!-- prettier-ignore -->
 {% block head %}
 <link href="/assets/login.css" rel="stylesheet" />
+<link href="/assets/google/logo.css" rel="stylesheet" />
 {% endblock %}
 
 <!-- prettier-ignore -->
 {% block content %}
 <div id="login-parent">
-  <div id="login-splash">
-    <img
-      src="https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png"
-      width="32"
-      height="32"
-    />
-    <h2>AppFlowy Cloud</h2>
-  </div>
-
   <div id="login-signin">
+    <div id="login-splash">
+      {% include "../assets/logo.html" %}
+      <h2>AppFlowy Cloud</h2>
+    </div>
+
     <h3>Email Login</h3>
-    <table style="width: 100%">
-      <tr>
-        <td>Email:</td>
-        <td>
-          <input
-            style="width: 100%"
-            type="text"
-            id="email"
-            placeholder="user@example.com"
-          />
-        </td>
-      </tr>
-      <tr>
-        <td>Password:</td>
-        <td>
-          <input
-            style="width: 100%"
-            type="password"
-            id="password"
-            placeholder="********"
-          />
-        </td>
-      </tr>
-    </table>
-    <br />
-    <button style="width: 100%" id="submitBtn">Sign In</button>
+    <form hx-post="/web-api/login">
+      <table style="width: 100%">
+        <tr>
+          <td>Email:</td>
+          <td>
+            <input
+              class="input"
+              style="width: 100%"
+              type="text"
+              id="email"
+              name="email"
+              placeholder="user@example.com"
+            />
+          </td>
+        </tr>
+        <tr>
+          <td>Password:</td>
+          <td>
+            <input
+              class="input"
+              style="width: 100%"
+              type="password"
+              id="password"
+              name="password"
+              placeholder="********"
+            />
+          </td>
+        </tr>
+      </table>
+      <br />
+      <button
+        class="button cyan"
+        type="submit"
+        style="width: 100%; padding: 8px 8px"
+        id="submitBtn"
+      >
+        Sign In
+      </button>
+    </form>
     <br />
 
     <table style="width: 100%">
       <tr style="display: flex">
         <td style="width: 100%; margin: auto"><hr /></td>
-        <td style="flex: 1; text-align: center">or</td>
+        <td style="flex: 1; text-align: center">&nbsp;or&nbsp;</td>
         <td style="width: 100%; margin: auto"><hr /></td>
       </tr>
     </table>
 
     <h3>OAuth Login</h3>
-    <table>
-      <tbody>
-        <tr>
-          <td>
-            <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
-              <img
-                src="https://static-00.iconduck.com/assets.00/google-icon-2048x2048-czn3g8x8.png"
-                alt="Login with Google"
-                width="30"
-                height="30"
-              />
-            </a>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div id="oauth-container">
+      <div class="oauth-icon">
+        <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
+          {% include "../assets/google/logo.html" %}
+        </a>
+      </div>
+      <div class="oauth-icon">
+        <a href="/gotrue/authorize?provider=discord&redirect_to=/web/login">
+          {% include "../assets/discord/logo.html" %}
+        </a>
+      </div>
+      <div class="oauth-icon">
+        <a href="/gotrue/authorize?provider=github&redirect_to=/web/login">
+          {% include "../assets/github/logo.html" %}
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
-  // Email Login
-  document.getElementById("submitBtn").addEventListener("click", function () {
-    var data = {
-      email: document.getElementById("email").value,
-      password: document.getElementById("password").value,
-    };
-    fetch("/web-api/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-      credentials: "same-origin",
-    }).then((response) => {
-      if (!response.ok) {
-        displayHttpStatusAndPayload(response);
-      } else {
-        window.location.href = "/web/home";
-      }
-    });
-  });
-
-  // OAuth Login
+  // OAuthLogin
   if (window.location.hash) {
     // Extract data from the URL fragment
     const fragmentData = window.location.hash.substring(1); // Remove the leading #

@@ -1,3 +1,7 @@
+body {
+  font-family: sans-serif;
+}
+
 :root {
   --af-purple: #9327ff;
   --af-dark-purple: #8427e0;
@@ -8,4 +12,69 @@
   --af-yellow: #ffce00;
   --af-dark-yellow: #ffbd00;
   --af-darker-yellow: #f7931e;
+}
+
+.button {
+  border: none;
+  border-radius: 4px;
+  margin: 4px 4px;
+  padding: 4px 8px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.purple:hover {
+  background-color: var(--af-dark-purple);
+}
+
+.purple {
+  background-color: var(--af-dark-purple);
+}
+
+.purple:hover {
+  background-color: var(--af-purple);
+}
+
+.red {
+  background-color: var(--af-dark-red);
+}
+
+.red:hover {
+  background-color: var(--af-red);
+}
+
+.cyan {
+  background-color: var(--af-dark-cyan);
+}
+
+.cyan:hover {
+  background-color: var(--af-cyan);
+}
+
+.yellow {
+  background-color: var(--af-darker-yellow);
+}
+
+.yellow:hover {
+  background-color: var(--af-yellow);
+}
+
+.input {
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 2px solid #808080;
+  margin: 4px 0;
+  padding: 4px 8px;
+  font-size: 16px;
+  color: #333;
+  background-color: #f5f5f5;
+  outline: none;
+}
+
+.input:hover {
+  border-color: var(--af-dark-cyan);
+}
+
+.input:focus {
+  border-color: var(--af-cyan);
 }

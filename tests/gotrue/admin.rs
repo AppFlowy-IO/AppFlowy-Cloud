@@ -112,46 +112,59 @@ async fn admin_user_create_list_edit_delete() {
 }
 
 #[tokio::test]
-async fn admin_generate_link_and_user_sign_in() {
-  let http_client = reqwest::Client::new();
-  let gotrue_client = Client::new(http_client, LOCALHOST_GOTRUE);
-  let admin_token = gotrue_client
-    .token(&Grant::Password(PasswordGrant {
-      email: ADMIN_USER.email.clone(),
-      password: ADMIN_USER.password.clone(),
-    }))
-    .await
-    .unwrap();
+async fn admin_generate_link_and_user_sign_in_and_invite() {
+  // admin generate link for new user
+  let new_user_sign_in_link = {
+    let http_client = reqwest::Client::new();
+    let gotrue_client = Client::new(http_client, LOCALHOST_GOTRUE);
+    let admin_token = gotrue_client
+      .token(&Grant::Password(PasswordGrant {
+        email: ADMIN_USER.email.clone(),
+        password: ADMIN_USER.password.clone(),
+      }))
+      .await
+      .unwrap();
 
-  // new user params
-  let user_email = generate_unique_email();
+    // new user params
+    let user_email = generate_unique_email();
 
-  // create link
-  let admin_user_params: GenerateLinkParams = GenerateLinkParams {
-    email: user_email.clone(),
-    ..Default::default()
+    // create link
+    let admin_user_params: GenerateLinkParams = GenerateLinkParams {
+      email: user_email.clone(),
+      ..Default::default()
+    };
+    let link_resp = gotrue_client
+      .admin_generate_link(&admin_token.access_token, &admin_user_params)
+      .await
+      .unwrap();
+
+    assert_eq!(link_resp.email, user_email);
+    link_resp.action_link
   };
-  let link_resp = gotrue_client
-    .generate_link(&admin_token.access_token, &admin_user_params)
-    .await
-    .unwrap();
 
-  assert_eq!(link_resp.email, user_email);
+  // new user sign in with link,
+  // invite another user through magic link
+  {
+    let reqwest_client = reqwest::Client::new();
+    let resp = reqwest_client
+      .get(new_user_sign_in_link)
+      .send()
+      .await
+      .unwrap();
+    let resp_text = resp.text().await.unwrap();
+    let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
 
-  // visit action link
-  let action_link = link_resp.action_link;
-  let reqwest_client = reqwest::Client::new();
-  let resp = reqwest_client.get(action_link).send().await.unwrap();
-  let resp_text = resp.text().await.unwrap();
-  let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
+    let client = localhost_client();
+    let is_new = client
+      .sign_in_with_url(&appflowy_sign_in_url)
+      .await
+      .unwrap();
+    assert!(is_new);
 
-  let client = localhost_client();
-  let is_new = client
-    .sign_in_with_url(&appflowy_sign_in_url)
-    .await
-    .unwrap();
-  assert!(is_new);
+    let workspaces = client.get_workspaces().await.unwrap();
+    assert_eq!(workspaces.0.len(), 1);
 
-  let workspaces = client.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.0.len(), 1);
+    let friend_email = generate_unique_email();
+    client.invite(&friend_email).await.unwrap();
+  }
 }

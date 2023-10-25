@@ -34,6 +34,14 @@ pub struct GenerateLinkParams {
   pub redirect_to: String,
 }
 
+#[derive(Default, Deserialize, Serialize)]
+pub struct MagicLinkParams {
+  pub email: String,
+  pub data: BTreeMap<String, serde_json::Value>,
+  pub code_challenge_method: String,
+  pub code_challenge: String,
+}
+
 impl Default for GenerateLinkParams {
   fn default() -> Self {
     GenerateLinkParams {

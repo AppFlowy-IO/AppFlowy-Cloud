@@ -1,24 +1,25 @@
 <div class="sidebar"></div>
 
 <div id="sidebar">
-  <table>
-    <thead>
-      <tr>
-        <th>Admin Menu</th>
-      </tr>
-    </thead>
-    <tr>
-      <td hx-target="#sidebar-content" hx-get="/web/components/admin/users">
-        List Users
-      </td>
-    </tr>
-    <tr>
-      <td
-        hx-target="#sidebar-content"
-        hx-get="/web/components/admin/users/create"
-      >
-        Create User
-      </td>
-    </tr>
-  </table>
+  <div
+    class="sidebar-item"
+    hx-target="#sidebar-content"
+    hx-get="/web/components/admin/navigate"
+  >
+    Navigate
+  </div>
+  <div
+    class="sidebar-item"
+    hx-target="#sidebar-content"
+    hx-get="/web/components/admin/users"
+  >
+    List Users
+  </div>
+  <div
+    class="sidebar-item"
+    hx-target="#sidebar-content"
+    hx-get="/web/components/admin/users/create"
+  >
+    Create User
+  </div>
 </div>

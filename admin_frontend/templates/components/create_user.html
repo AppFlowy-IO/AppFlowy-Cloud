@@ -1,73 +1,45 @@
 <div id="create-user">
   <h4>Please enter the following information to create a new user</h4>
-  <table>
-    <tr>
-      <td>Email:</td>
-      <td>
-        <input
-          class="width-100pc display-block"
-          type="text"
-          id="newUserEmail"
-          name="email"
-          placeholder="user@example.com"
-          required
-        />
-      </td>
-    </tr>
-    <tr>
-      <td>Password:</td>
-      <td>
-        <input
-          class="width-100pc display-block"
-          type="password"
-          id="newUserPassword"
-          name="password"
-          placeholder="********"
-          required
-        />
-      </td>
-    </tr>
-    <tr>
-      <td>Require Email Verification:</td>
-      <td>
-        <input
-          type="checkbox"
-          id="newUserRequireEmailVerification"
-          name="requireEmailVerification"
-        />
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <button id="createUserBtn">Create</button>
-      </td>
-    </tr>
-  </table>
-
-  <script>
-    document
-      .getElementById("createUserBtn")
-      .addEventListener("click", function () {
-        // Get the email from the user
-        fetch("/web-api/admin/user", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email: document.getElementById("newUserEmail").value,
-            password: document.getElementById("newUserPassword").value,
-            require_email_verification: document.getElementById(
-              "newUserRequireEmailVerification",
-            ).checked,
-          }),
-        }).then((response) => {
-          if (!response.ok) {
-            displayHttpStatusAndPayload(response);
-          } else {
-            displaySuccess("User created successfully");
-          }
-        });
-      });
-  </script>
+  <form hx-post="/web-api/admin/user" hx-target="#none">
+    <table>
+      <tr>
+        <td>Email:</td>
+        <td>
+          <input
+            class="input"
+            name="email"
+            placeholder="user@example.com"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>Password:</td>
+        <td>
+          <input
+            class="input"
+            type="password"
+            name="password"
+            placeholder="********"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>Require Email Verification:</td>
+        <td>
+          <select name="require_email_verification" class="input">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td style="text-align: right">
+          <button class="button cyan" type="submit">Create</button>
+        </td>
+      </tr>
+    </table>
+  </form>
 </div>

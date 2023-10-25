@@ -2,16 +2,16 @@
 
 <script>
   function displayMessage(message, afColor) {
-    const top_message_box = document.getElementById("message");
+    var top_message_box = document.createElement("div");
+    top_message_box.className = "message";
     top_message_box.innerHTML = message;
     top_message_box.style.display = "block";
     top_message_box.style.backgroundColor = afColor;
+    document.body.appendChild(top_message_box);
     top_message_box.classList.add("slideIn");
-
     setTimeout(function () {
-      top_message_box.classList.remove("slideIn");
-      top_message_box.style.display = "none";
-    }, 3000);
+      top_message_box.remove();
+    }, 2500);
   }
 
   // e.g. color_name: "--af-red"
@@ -26,6 +26,12 @@
       <b>${response.status}: ${response.statusText}</b>
       <br>${text}`);
     });
+  }
+
+  function displayHttpFail(statusCode, statusText, responseText) {
+    displayFail(`
+      <b>${statusCode}: ${statusText}</b>
+      <br>${responseText}`);
   }
 
   function displaySuccess(message) {

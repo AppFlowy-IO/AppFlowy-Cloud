@@ -116,7 +116,7 @@ impl TestClient {
     other_client: &TestClient,
     role: AFRole,
   ) -> Result<(), AppError> {
-    let workspace_id = Uuid::parse_str(workspace_id).unwrap();
+    let workspace_id = Uuid::parse_str(workspace_id).unwrap().to_string();
     let email = other_client.email().await;
     self
       .api_client

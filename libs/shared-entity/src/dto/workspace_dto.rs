@@ -49,8 +49,8 @@ impl WorkspaceMemberChangeset {
       name: None,
     }
   }
-  pub fn with_role(mut self, role: AFRole) -> Self {
-    self.role = Some(role);
+  pub fn with_role<T: Into<AFRole>>(mut self, role: T) -> Self {
+    self.role = Some(role.into());
     self
   }
   pub fn with_name(mut self, name: String) -> Self {

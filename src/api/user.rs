@@ -21,19 +21,28 @@ use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
 
 use tracing_actix_web::RequestId;
 
+use super::metrics::{Method, Metrics};
+
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
+    .service(web::resource("/test_metric").route(web::get().to(test_metric)))
+
     // auth server integration
     .service(web::resource("/verify/{access_token}").route(web::get().to(verify_user_handler)))
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
-      .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
+    .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
 
     // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))
     .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn test_metric(metrics: Data<Metrics>) -> Result<JsonAppResponse<()>> {
+  metrics.inc_requests(Method::GET);
+  Ok(AppResponse::Ok().into())
 }
 
 #[tracing::instrument(skip(state, path), err)]

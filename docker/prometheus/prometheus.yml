@@ -8,3 +8,8 @@ scrape_configs:
   scrape_interval: 5s
   static_configs:
     - targets: [node-exporter:9100]
+
+- job_name: appflowy-cloud
+  scrape_interval: 5s
+  static_configs:
+    - targets: [appflowy_cloud:8000]

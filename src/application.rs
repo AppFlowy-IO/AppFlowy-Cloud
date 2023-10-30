@@ -36,6 +36,7 @@ use crate::biz::workspace::access_control::{
 };
 
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
+use crate::middleware::metrics_mw::MetricsMiddleware;
 
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
@@ -102,6 +103,7 @@ pub async fn run(
   // Initialize metrics that which are registered in the registry.
   let (metrics, registry) = metrics_registry();
   let registry_arc = Arc::new(registry);
+  let metrics_arc = Arc::new(metrics);
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -111,6 +113,7 @@ pub async fn run(
           .cookie_name(HEADER_TOKEN.to_string())
           .build(),
       )
+      .wrap(MetricsMiddleware)
       .wrap(default_cors())
       .wrap(access_control.clone())
       .wrap(Compat::new(TracingLogger::default()))
@@ -120,7 +123,7 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
-      .app_data(Data::new(metrics.clone()))
+      .app_data(Data::new(metrics_arc.clone()))
       .app_data(Data::new(registry_arc.clone()))
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))

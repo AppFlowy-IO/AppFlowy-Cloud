@@ -12,4 +12,5 @@ scrape_configs:
 - job_name: appflowy-cloud
   scrape_interval: 5s
   static_configs:
-    - targets: [appflowy_cloud:8000]
+    # - targets: [appflowy_cloud:8000]
+    - targets: [host.docker.internal:8000]

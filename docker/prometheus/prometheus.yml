@@ -18,3 +18,8 @@ scrape_configs:
   scrape_interval: 5s
   static_configs:
     - targets: [gotrue:9100]
+
+- job_name: nginx-exporter
+  scrape_interval: 5s
+  static_configs:
+    - targets: [nginx-exporter:9113]

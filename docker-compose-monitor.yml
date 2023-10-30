@@ -1,7 +1,8 @@
 version: '3'
 services:
+  # Database, Scraper
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus
     ports:
       - 9090:9090
     volumes:
@@ -9,6 +10,20 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
 
+  # Web UI
+  grafana:
+    image: grafana/grafana
+    restart: unless-stopped
+    ports:
+      - 3001:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./docker/grafana/datasources/:/etc/grafana/provisioning/datasources/
+
+  # Scrapped by Prometheus for docker container
   cadvisor:
     image: gcr.io/cadvisor/cadvisor
     ports:
@@ -19,8 +34,9 @@ services:
     - /sys:/sys:ro
     - /var/lib/docker/:/var/lib/docker:ro
 
+  # Scrapped by Prometheus for host machine
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter
     restart: unless-stopped
     ports:
       - 9100:9100
@@ -34,14 +50,10 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
 
-  grafana:
-    image: grafana/grafana
+  # Scrapped by Prometheus for nginx routing
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter
     restart: unless-stopped
+    command: "-nginx.scrape-uri=http://nginx:8080/stub_status"
     ports:
-      - 3001:3000
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=password
-      - GF_USERS_ALLOW_SIGN_UP=false
-    volumes:
-      - ./docker/grafana/datasources/:/etc/grafana/provisioning/datasources/
+      - 9114:9113

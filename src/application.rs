@@ -8,6 +8,7 @@ use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
+use actix_web::middleware::Compat;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
@@ -19,6 +20,7 @@ use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
+use tracing_actix_web::TracingLogger;
 
 use tokio::sync::RwLock;
 
@@ -111,7 +113,7 @@ pub async fn run(
       )
       .wrap(default_cors())
       .wrap(access_control.clone())
-      // .wrap(Compat::new(TracingLogger::default()))
+      .wrap(Compat::new(TracingLogger::default()))
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())
       .service(workspace_scope())

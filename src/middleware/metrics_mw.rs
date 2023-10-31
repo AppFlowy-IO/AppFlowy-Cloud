@@ -82,7 +82,7 @@ fn duration_to_ms(duration: Duration) -> f64 {
 }
 
 fn get_request_id(req: &ServiceRequest) -> Option<String> {
-  match req.headers().get(HeaderName::from_static("x-forwarded-id")) {
+  match req.headers().get(HeaderName::from_static("x-request-id")) {
     Some(h) => match h.to_str() {
       Ok(s) => Some(s.to_owned()),
       Err(e) => {

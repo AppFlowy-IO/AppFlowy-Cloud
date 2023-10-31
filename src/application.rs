@@ -107,13 +107,13 @@ pub async fn run(
 
   let mut server = HttpServer::new(move || {
     App::new()
+      .wrap(MetricsMiddleware)
       .wrap(IdentityMiddleware::default())
       .wrap(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
           .cookie_name(HEADER_TOKEN.to_string())
           .build(),
       )
-      .wrap(MetricsMiddleware)
       .wrap(default_cors())
       .wrap(access_control.clone())
       .wrap(Compat::new(TracingLogger::default()))

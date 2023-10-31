@@ -6,9 +6,7 @@ use prometheus_client::encoding::text::encode;
 use prometheus_client::encoding::EncodeLabelSet;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::exemplar::CounterWithExemplar;
-use prometheus_client::metrics::exemplar::HistogramWithExemplars;
 use prometheus_client::metrics::family::Family;
-use prometheus_client::metrics::histogram::exponential_buckets;
 use prometheus_client::registry::Registry;
 use std::sync::Arc;
 
@@ -42,14 +40,9 @@ pub struct PathLabel {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct StatusCodeLabel {
+pub struct ResultLabel {
   pub path: String,
   pub status_code: u16,
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
-pub struct TimeWindowLabel {
-  pub window: String,
 }
 
 // Metrics contains list of metrics that are collected by the application.
@@ -58,13 +51,8 @@ pub struct TimeWindowLabel {
 #[derive(Clone)]
 pub struct AppFlowyCloudMetrics {
   requests_count: Family<PathLabel, Counter>,
-  requests_latency: Family<PathLabel, HistogramWithExemplars<TraceLabel>>,
-  requests_result: Family<StatusCodeLabel, CounterWithExemplar<TraceLabel>>,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq, EncodeLabelSet, Debug, Default)]
-pub struct ResultLabel {
-  pub result: String,
+  requests_latency: Family<PathLabel, CounterWithExemplar<TraceLabel>>,
+  requests_result: Family<ResultLabel, CounterWithExemplar<TraceLabel>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, EncodeLabelSet, Debug, Default)]
@@ -74,30 +62,26 @@ pub struct TraceLabel {
 
 impl AppFlowyCloudMetrics {
   fn init() -> Self {
-    let latency: Family<PathLabel, HistogramWithExemplars<TraceLabel>> =
-      Family::new_with_constructor(|| {
-        HistogramWithExemplars::new(exponential_buckets(16.0, 2.0, 10))
-      });
-
     Self {
       requests_count: Family::default(),
-      requests_latency: latency,
+      requests_latency: Family::default(),
       requests_result: Family::default(),
     }
   }
 
   fn register(self, registry: &mut Registry) {
-    registry.register(
+    let af_registry = registry.sub_registry_with_prefix("appflowy_cloud_");
+    af_registry.register(
       "requests_count",
-      "total count of requests",
+      "number of requests",
       self.requests_count.clone(),
     );
-    registry.register(
+    af_registry.register(
       "requests_latency",
-      "response response time",
+      "request response time",
       self.requests_latency.clone(),
     );
-    registry.register(
+    af_registry.register(
       "requests_result",
       "status code of response",
       self.requests_result.clone(),
@@ -105,7 +89,7 @@ impl AppFlowyCloudMetrics {
   }
 
   // app services/middleware should call this method to increase the request count for the path
-  pub fn record_request(&self, trace_id: Option<String>, path: String, ms: f64, status_code: u16) {
+  pub fn record_request(&self, trace_id: Option<String>, path: String, ms: u64, status_code: u16) {
     self
       .requests_count
       .get_or_create(&PathLabel { path: path.clone() })
@@ -113,10 +97,10 @@ impl AppFlowyCloudMetrics {
     self
       .requests_latency
       .get_or_create(&PathLabel { path: path.clone() })
-      .observe(ms, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
+      .inc_by(ms, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
     self
       .requests_result
-      .get_or_create(&StatusCodeLabel { path, status_code })
+      .get_or_create(&ResultLabel { path, status_code })
       .inc_by(1, trace_id.clone().map(|s| TraceLabel { trace_id: s }));
   }
 }

@@ -6,7 +6,6 @@ use actix_web::Error;
 use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::api::metrics::AppFlowyCloudMetrics;
 
@@ -65,20 +64,18 @@ where
       let res = res.await?;
       let end = std::time::Instant::now();
       let duration = end.duration_since(start);
-      let duration_ms = duration_to_ms(duration);
       let status = res.status();
       if let Some(endpoint) = endpoint {
-        metrics.record_request(request_id, endpoint, duration_ms, status.into());
+        metrics.record_request(
+          request_id,
+          endpoint,
+          duration.as_millis() as u64,
+          status.into(),
+        );
       }
       Ok(res)
     })
   }
-}
-
-fn duration_to_ms(duration: Duration) -> f64 {
-  let seconds_as_ms = (duration.as_secs() as f64) * 1000.0;
-  let nanos_as_ms = (duration.subsec_nanos() as f64) / 1_000_000.0;
-  seconds_as_ms + nanos_as_ms
 }
 
 fn get_request_id(req: &ServiceRequest) -> Option<String> {

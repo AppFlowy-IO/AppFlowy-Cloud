@@ -428,23 +428,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_workspace_members(
-    &self,
-    workspace_id: &str,
-  ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-    AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_workspace_members2<W: AsRef<str>>(
+  pub async fn get_workspace_members<W: AsRef<str>>(
     &self,
     workspace_id: W,
   ) -> Result<Vec<AFWorkspaceMember>, AppError> {

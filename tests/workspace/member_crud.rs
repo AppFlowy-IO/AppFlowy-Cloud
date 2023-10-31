@@ -84,7 +84,7 @@ async fn update_workspace_member_role_from_guest_to_member() {
     .await;
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members[0].email, c1.email().await);
@@ -97,7 +97,7 @@ async fn update_workspace_member_role_from_guest_to_member() {
     .unwrap();
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members[0].email, c1.email().await);
@@ -124,7 +124,7 @@ async fn workspace_second_owner_add_member() {
 
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members.len(), 3);
@@ -154,7 +154,7 @@ async fn add_workspace_member_and_owner_then_delete_all() {
 
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members[0].email, c1.email().await);
@@ -170,7 +170,7 @@ async fn add_workspace_member_and_owner_then_delete_all() {
     .unwrap();
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members.len(), 1);

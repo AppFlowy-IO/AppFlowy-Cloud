@@ -6,6 +6,7 @@ services:
     ports:
       - 9090:9090
     volumes:
+      - prometheus-data:/prometheus  # This volume stores the actual Prometheus data
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -21,6 +22,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
+      - grafana-data:/var/lib/grafana   # This volume stores Grafana's data
       - ./docker/grafana/datasources/:/etc/grafana/provisioning/datasources/
 
   # Scrapped by Prometheus for docker container
@@ -57,3 +59,11 @@ services:
     command: "-nginx.scrape-uri=http://nginx:8080/stub_status"
     ports:
       - 9114:9113
+
+volumes:
+  prometheus-data:
+    external: false
+
+volumes:
+  grafana-data:
+    external: false

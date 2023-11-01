@@ -29,7 +29,7 @@ Exiting: error loading config file: config file ("filebeat.yml") can only be wri
 $ docker logs appflowy-cloud-filebeat-1
 ...Non-zero metrics in the last 30s...
 ```
-- Solution: give read permission to docker logs: `chmod -w docker/filebeat/filebeat.yml`
+- Solution: give read permission to docker logs: `chmod -R a+r /var/lib/docker/containers`
 
 ## Web UI Setup
 - After deployment, you will have a Grafana dashboard server, sign in with your username and password defined previously

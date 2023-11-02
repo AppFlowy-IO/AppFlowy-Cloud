@@ -31,7 +31,7 @@ impl Action for ConnectAction {
         &cloned_addr,
         Some(WebSocketConfig {
           max_message_size: Some(64 << 20), // 64MB
-          max_frame_size: Some(65_536),     // 64 KB
+          max_frame_size: Some(16 * 1024),  // 16 KB
           ..WebSocketConfig::default()
         }),
         false,

@@ -10,6 +10,7 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --enable-feature=exemplar-storage
 
   # Web UI
   grafana:

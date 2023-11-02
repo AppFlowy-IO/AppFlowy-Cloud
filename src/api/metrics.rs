@@ -70,7 +70,7 @@ impl AppFlowyCloudMetrics {
   }
 
   fn register(self, registry: &mut Registry) {
-    let af_registry = registry.sub_registry_with_prefix("appflowy_cloud_");
+    let af_registry = registry.sub_registry_with_prefix("appflowy_cloud");
     af_registry.register(
       "requests_count",
       "number of requests",

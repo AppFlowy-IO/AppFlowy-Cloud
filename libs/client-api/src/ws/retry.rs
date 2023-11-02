@@ -30,8 +30,8 @@ impl Action for ConnectAction {
       match connect_async_with_config(
         &cloned_addr,
         Some(WebSocketConfig {
-          max_message_size: Some(64 << 20), // 64MB
-          max_frame_size: Some(16 * 1024),  // 16 KB
+          max_message_size: Some(65_536), // 64KB
+          max_frame_size: Some(65_536),   // 64KB
           ..WebSocketConfig::default()
         }),
         false,

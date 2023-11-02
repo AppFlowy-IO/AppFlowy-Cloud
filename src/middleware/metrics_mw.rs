@@ -45,6 +45,7 @@ where
   forward_ready!(service);
 
   fn call(&self, req: ServiceRequest) -> Self::Future {
+    // Get the metrics from the app_data
     let metrics = match req.app_data::<Data<Arc<AppFlowyCloudMetrics>>>() {
       Some(m) => m.clone(),
       None => {

@@ -1,7 +1,7 @@
 use crate::util::test_client::TestClient;
+use app_error::ErrorCode;
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
-use shared_entity::error_code::ErrorCode;
 
 #[tokio::test]
 async fn add_workspace_members_not_enough_permission() {
@@ -84,7 +84,7 @@ async fn update_workspace_member_role_from_guest_to_member() {
     .await;
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members[0].email, c1.email().await);
@@ -97,7 +97,7 @@ async fn update_workspace_member_role_from_guest_to_member() {
     .unwrap();
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members[0].email, c1.email().await);
@@ -124,7 +124,7 @@ async fn workspace_second_owner_add_member() {
 
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members.len(), 3);
@@ -154,7 +154,7 @@ async fn add_workspace_member_and_owner_then_delete_all() {
 
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members[0].email, c1.email().await);
@@ -170,7 +170,7 @@ async fn add_workspace_member_and_owner_then_delete_all() {
     .unwrap();
   let members = c1
     .api_client
-    .get_workspace_members2(&workspace_id)
+    .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members.len(), 1);

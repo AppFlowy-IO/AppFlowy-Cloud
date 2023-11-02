@@ -1,5 +1,6 @@
 use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
+use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
 use database::user::select_uid_from_email;
 use database::workspace::{
@@ -9,17 +10,18 @@ use database::workspace::{
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
 use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
-use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
+use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use tracing::instrument;
 use uuid::Uuid;
 
 pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, AppError> {
+) -> Result<Vec<AFWorkspaceRow>, AppResponseError> {
   let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
   Ok(workspaces)
 }
@@ -30,7 +32,7 @@ pub async fn open_workspace(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
-) -> Result<AFWorkspace, AppError> {
+) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool
     .begin()
     .await
@@ -62,6 +64,7 @@ pub async fn open_workspace(
 /// - A `Result` containing a `HashMap` where the key is the user ID (`uid`) and the value is the role (`AFRole`) assigned to the user in the workspace.
 ///   If there's an error during the operation, an `AppError` is returned.
 ///
+#[instrument(level = "debug", skip_all, err)]
 pub async fn add_workspace_members(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
@@ -81,14 +84,11 @@ pub async fn add_workspace_members(
       AFRole::Guest => AFAccessLevel::ReadOnly,
     };
 
-    let uid = select_uid_from_email(txn.deref_mut(), &member.email)
-      .await
-      .map_err(|err| {
-        AppError::from(err).with_message(format!(
-          "Failed to get uid from email {} when adding workspace members",
-          member.email
-        ))
-      })?;
+    let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
+    // .context(format!(
+    //   "Failed to get uid from email {} when adding workspace members",
+    //   member.email
+    // ))?;
     insert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
       .await?;
     upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
@@ -107,7 +107,7 @@ pub async fn remove_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   member_emails: &[String],
-) -> Result<(), AppError> {
+) -> Result<(), AppResponseError> {
   let mut txn = pg_pool
     .begin()
     .await
@@ -128,7 +128,7 @@ pub async fn get_workspace_members(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
-) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
+) -> Result<Vec<AFWorkspaceMemberRow>, AppResponseError> {
   Ok(select_workspace_member_list(pg_pool, workspace_id).await?)
 }
 

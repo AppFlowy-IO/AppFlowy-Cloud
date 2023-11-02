@@ -1,11 +1,11 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots, AFPermission,
   BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
 };
-use database_entity::error::DatabaseError;
 
+use app_error::AppError;
 use sqlx::postgres::PgRow;
 use sqlx::{Error, PgPool, Row, Transaction};
 use std::collections::HashMap;
@@ -56,7 +56,7 @@ pub async fn insert_into_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   uid: &i64,
   params: &InsertCollabParams,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let encrypt = 0;
   let partition_key = params.collab_type.value();
   let workspace_id = Uuid::from_str(&params.workspace_id)?;
@@ -92,7 +92,7 @@ pub async fn insert_into_af_collab(
           params.object_id
         );
       } else {
-        return Err(DatabaseError::Internal(anyhow::anyhow!(
+        return Err(AppError::Internal(anyhow!(
           "Inserting a row with an existing object_id but different workspace_id"
         )));
       }
@@ -324,7 +324,7 @@ pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   oid: T,
   access_level: &AFAccessLevel,
   txn: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let oid = oid.as_ref();
   let access_level: i32 = access_level.clone().into();
   let permission_id = sqlx::query_scalar!(
@@ -368,7 +368,7 @@ pub async fn insert_collab_member(
   oid: &str,
   access_level: &AFAccessLevel,
   pg_pool: &PgPool,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let mut txn = pg_pool
     .begin()
     .await
@@ -383,11 +383,7 @@ pub async fn insert_collab_member(
   Ok(())
 }
 
-pub async fn delete_collab_member(
-  uid: i64,
-  oid: &str,
-  pg_pool: &PgPool,
-) -> Result<(), DatabaseError> {
+pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Result<(), AppError> {
   sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
     .bind(uid)
     .bind(oid)
@@ -400,7 +396,7 @@ pub async fn delete_collab_member(
 pub async fn select_collab_members(
   oid: &str,
   pg_pool: &PgPool,
-) -> Result<Vec<AFCollabMember>, DatabaseError> {
+) -> Result<Vec<AFCollabMember>, AppError> {
   let members = sqlx::query(
     r#"
       SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
@@ -422,7 +418,7 @@ pub async fn select_collab_member(
   uid: &i64,
   oid: &str,
   pg_pool: &PgPool,
-) -> Result<AFCollabMember, DatabaseError> {
+) -> Result<AFCollabMember, AppError> {
   let member = sqlx::query(
   r#"
       SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description

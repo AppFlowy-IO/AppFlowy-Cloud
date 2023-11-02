@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
+use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
   AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
@@ -19,16 +20,13 @@ use reqwest::header;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use scraper::{Html, Selector};
-use shared_entity::app_error::AppError;
-use shared_entity::data::AppResponse;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMembers, WorkspaceBlobMetadata, WorkspaceMemberChangeset, WorkspaceMembers,
   WorkspaceSpaceUsage,
 };
-use shared_entity::error_code::url_missing_param;
-use shared_entity::error_code::ErrorCode;
+use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs::File;
@@ -83,7 +81,7 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub fn restore_token(&self, token: &str) -> Result<(), AppError> {
     if token.is_empty() {
-      return Err(AppError::new(ErrorCode::OAuthError, "Empty token"));
+      return Err(AppError::OAuthError("Empty token".to_string()));
     }
     let token = serde_json::from_str::<AccessTokenResponse>(token)?;
     self.token.write().set(token);
@@ -102,7 +100,7 @@ impl Client {
       .token
       .read()
       .try_get()
-      .map_err(|err| AppError::new(ErrorCode::OAuthError, err.to_string()))?;
+      .map_err(|err| AppError::OAuthError(err.to_string()))?;
     Ok(token_str)
   }
 
@@ -113,7 +111,7 @@ impl Client {
   /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
   /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
-  pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppError> {
+  pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppResponseError> {
     let mut access_token: Option<String> = None;
     let mut token_type: Option<String> = None;
     let mut expires_in: Option<i64> = None;
@@ -126,7 +124,7 @@ impl Client {
       .fragment()
       .ok_or(url_missing_param("fragment"))?
       .split('&')
-      .try_for_each(|f| -> Result<(), AppError> {
+      .try_for_each(|f| -> Result<(), AppResponseError> {
         let (k, v) = f.split_once('=').ok_or(url_missing_param("key=value"))?;
         match k {
           "access_token" => access_token = Some(v.to_string()),
@@ -182,10 +180,12 @@ impl Client {
   pub async fn generate_oauth_url_with_provider(
     &self,
     provider: &OAuthProvider,
-  ) -> Result<String, AppError> {
+  ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
-      return Err(ErrorCode::InvalidOAuthProvider.into());
+      return Err(AppResponseError::from(AppError::InvalidOAuthProvider(
+        provider.as_str().to_owned(),
+      )));
     }
 
     let url = format!("{}/authorize", self.gotrue_client.base_url,);
@@ -223,7 +223,7 @@ impl Client {
     admin_user_email: &str,
     admin_user_password: &str,
     user_email: &str,
-  ) -> Result<String, AppError> {
+  ) -> Result<String, AppResponseError> {
     let admin_token = self
       .gotrue_client
       .token(&Grant::Password(PasswordGrant {
@@ -250,7 +250,7 @@ impl Client {
   }
 
   #[inline]
-  async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppError> {
+  async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppResponseError> {
     let user = self.gotrue_client.user_info(access_token).await?;
     let is_new = self.verify_token_cloud(access_token).await?;
     Ok((user, is_new))
@@ -258,7 +258,7 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   #[inline]
-  async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppError> {
+  async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppResponseError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
     let resp = self.cloud_client.get(&url).send().await?;
     let sign_in_resp: SignInTokenResponse = AppResponse::from_response(resp).await?.into_data()?;
@@ -267,7 +267,7 @@ impl Client {
 
   // Invites another user by sending a magic link to the user's email address.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn invite(&self, email: &str) -> Result<(), AppError> {
+  pub async fn invite(&self, email: &str) -> Result<(), AppResponseError> {
     self
       .gotrue_client
       .magic_link(
@@ -282,7 +282,11 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_magic_link(&self, email: &str, password: &str) -> Result<User, AppError> {
+  pub async fn create_magic_link(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<User, AppResponseError> {
     Ok(
       self
         .gotrue_client
@@ -304,7 +308,7 @@ impl Client {
     &self,
     email: &str,
     password: &str,
-  ) -> Result<User, AppError> {
+  ) -> Result<User, AppResponseError> {
     Ok(
       self
         .gotrue_client
@@ -338,14 +342,11 @@ impl Client {
   #[inline]
   pub fn token_expires_at(&self) -> Result<i64, AppError> {
     match &self.token.try_read() {
-      None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
+      None => Err(AppError::Unhandled("Failed to read token".to_string())),
       Some(token) => Ok(
         token
           .as_ref()
-          .ok_or(AppError::new(
-            ErrorCode::NotLoggedIn,
-            "fail to get expires_at",
-          ))?
+          .ok_or(AppError::NotLoggedIn("fail to get expires_at".to_string()))?
           .expires_at,
       ),
     }
@@ -361,13 +362,12 @@ impl Client {
   ///
   pub fn access_token(&self) -> Result<String, AppError> {
     match &self.token.try_read_for(Duration::from_secs(2)) {
-      None => Err(AppError::new(ErrorCode::Unhandled, "Failed to read token")),
+      None => Err(AppError::Unhandled("Failed to read token".to_string())),
       Some(token) => Ok(
         token
           .as_ref()
-          .ok_or(AppError::new(
-            ErrorCode::NotLoggedIn,
-            "fail to get access token. Token is empty",
+          .ok_or(AppError::NotLoggedIn(
+            "fail to get access token. Token is empty".to_string(),
           ))?
           .access_token
           .clone(),
@@ -376,7 +376,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_profile(&self) -> Result<AFUserProfile, AppError> {
+  pub async fn get_profile(&self) -> Result<AFUserProfile, AppResponseError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -389,7 +389,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_user_workspace_info(&self) -> Result<AFUserWorkspaceInfo, AppError> {
+  pub async fn get_user_workspace_info(&self) -> Result<AFUserWorkspaceInfo, AppResponseError> {
     let url = format!("{}/api/user/workspace", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -402,7 +402,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppError> {
+  pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
     let url = format!("{}/api/workspace/list", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -415,7 +415,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppError> {
+  pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace/{}/open", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
@@ -428,26 +428,10 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_workspace_members(
-    &self,
-    workspace_id: &str,
-  ) -> Result<Vec<AFWorkspaceMember>, AppError> {
-    let url = format!("{}/api/workspace/{}/member", self.base_url, workspace_id);
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-    AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_workspace_members2<W: AsRef<str>>(
+  pub async fn get_workspace_members<W: AsRef<str>>(
     &self,
     workspace_id: W,
-  ) -> Result<Vec<AFWorkspaceMember>, AppError> {
+  ) -> Result<Vec<AFWorkspaceMember>, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/member",
       self.base_url,
@@ -468,7 +452,7 @@ impl Client {
     &self,
     workspace_id: W,
     members: T,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let members = members.into();
     let url = format!(
       "{}/api/workspace/{}/member",
@@ -490,7 +474,7 @@ impl Client {
     &self,
     workspace_id: T,
     changeset: WorkspaceMemberChangeset,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/member",
       self.base_url,
@@ -511,7 +495,7 @@ impl Client {
     &self,
     workspace_id: T,
     member_emails: Vec<String>,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/member",
       self.base_url,
@@ -531,7 +515,11 @@ impl Client {
   // pub async fn update_workspace_member(&self, workspace_uuid: Uuid, member)
 
   #[instrument(skip_all, err)]
-  pub async fn sign_in_password(&self, email: &str, password: &str) -> Result<bool, AppError> {
+  pub async fn sign_in_password(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<bool, AppResponseError> {
     let access_token_resp = self
       .gotrue_client
       .token(&Grant::Password(PasswordGrant {
@@ -552,15 +540,14 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh(&self) -> Result<(), AppError> {
+  pub async fn refresh(&self) -> Result<(), AppResponseError> {
     let refresh_token = self
       .token
       .read()
       .as_ref()
-      .ok_or(AppError::new(
-        ErrorCode::NotLoggedIn,
-        "fail to refresh user token",
-      ))?
+      .ok_or(AppResponseError::from(AppError::NotLoggedIn(
+        "fail to refresh user token".to_owned(),
+      )))?
       .refresh_token
       .as_str()
       .to_owned();
@@ -576,13 +563,13 @@ impl Client {
       Err(err) => {
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
         self.token.write().unset();
-        Err(AppError::from(err))
+        Err(AppResponseError::from(err))
       },
     }
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppError> {
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
     match self.gotrue_client.sign_up(email, password).await? {
       Authenticated(access_token_resp) => {
         self.token.write().set(access_token_resp);
@@ -596,14 +583,14 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn sign_out(&self) -> Result<(), AppError> {
+  pub async fn sign_out(&self) -> Result<(), AppResponseError> {
     self.gotrue_client.logout(&self.access_token()?).await?;
     self.token.write().unset();
     Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_user(&self, params: UpdateUserParams) -> Result<(), AppError> {
+  pub async fn update_user(&self, params: UpdateUserParams) -> Result<(), AppResponseError> {
     let gotrue_params = UpdateGotrueUserParams::new()
       .with_opt_email(params.email.clone())
       .with_opt_password(params.password.clone());
@@ -628,7 +615,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
+  pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, params.workspace_id, &params.object_id
@@ -643,7 +630,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppError> {
+  pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -658,7 +645,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppError> {
+  pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -679,7 +666,7 @@ impl Client {
     &self,
     workspace_id: &str,
     params: BatchQueryCollabParams,
-  ) -> Result<BatchQueryCollabResult, AppError> {
+  ) -> Result<BatchQueryCollabResult, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab_list",
       self.base_url, workspace_id
@@ -696,7 +683,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppError> {
+  pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -711,7 +698,10 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn add_collab_member(&self, params: InsertCollabMemberParams) -> Result<(), AppError> {
+  pub async fn add_collab_member(
+    &self,
+    params: InsertCollabMemberParams,
+  ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member",
       self.base_url, params.workspace_id, &params.object_id
@@ -729,7 +719,7 @@ impl Client {
   pub async fn get_collab_member(
     &self,
     params: CollabMemberIdentify,
-  ) -> Result<AFCollabMember, AppError> {
+  ) -> Result<AFCollabMember, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member",
       self.base_url, params.workspace_id, &params.object_id
@@ -749,7 +739,7 @@ impl Client {
   pub async fn update_collab_member(
     &self,
     params: UpdateCollabMemberParams,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member",
       self.base_url, params.workspace_id, &params.object_id
@@ -764,7 +754,10 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn remove_collab_member(&self, params: CollabMemberIdentify) -> Result<(), AppError> {
+  pub async fn remove_collab_member(
+    &self,
+    params: CollabMemberIdentify,
+  ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member",
       self.base_url, params.workspace_id, &params.object_id
@@ -782,7 +775,7 @@ impl Client {
   pub async fn get_collab_members(
     &self,
     params: QueryCollabMembers,
-  ) -> Result<AFCollabMembers, AppError> {
+  ) -> Result<AFCollabMembers, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}/member/list",
       self.base_url, params.workspace_id, &params.object_id
@@ -798,7 +791,7 @@ impl Client {
       .into_data()
   }
 
-  pub fn ws_url(&self, device_id: &str) -> Result<String, AppError> {
+  pub fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
     let access_token = self.access_token()?;
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
@@ -808,7 +801,7 @@ impl Client {
     workspace_id: &str,
     data: T,
     mime: M,
-  ) -> Result<String, AppError> {
+  ) -> Result<String, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
     let data = data.into();
     let content_length = data.len();
@@ -833,12 +826,9 @@ impl Client {
     &self,
     workspace_id: &str,
     file_path: &str,
-  ) -> Result<String, AppError> {
+  ) -> Result<String, AppResponseError> {
     if file_path.is_empty() {
-      return Err(AppError::new(
-        ErrorCode::InvalidRequestParams,
-        "path is empty",
-      ));
+      return Err(AppError::InvalidRequestParams("path is empty".to_owned()).into());
     }
 
     let mut file = File::open(&file_path).await?;
@@ -859,7 +849,7 @@ impl Client {
     data: T,
     mime: &Mime,
     content_length: usize,
-  ) -> Result<AFBlobRecord, AppError> {
+  ) -> Result<AFBlobRecord, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
@@ -876,7 +866,7 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
-  pub async fn get_blob<T: AsRef<str>>(&self, url: T) -> Result<Bytes, AppError> {
+  pub async fn get_blob<T: AsRef<str>>(&self, url: T) -> Result<Bytes, AppResponseError> {
     Url::parse(url.as_ref())?;
     let resp = self
       .http_client_with_auth(Method::GET, url.as_ref())
@@ -893,15 +883,21 @@ impl Client {
         }
         Ok(Bytes::from(acc))
       },
-      reqwest::StatusCode::NOT_FOUND => Err(ErrorCode::RecordNotFound.into()),
-      c => Err(AppError::new(
-        ErrorCode::Unhandled,
-        format!("status code: {}, message: {}", c, resp.text().await?),
-      )),
+      reqwest::StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
+        url.as_ref().to_owned(),
+      ))),
+      c => Err(AppResponseError::from(AppError::Unhandled(format!(
+        "status code: {}, message: {}",
+        c,
+        resp.text().await?
+      )))),
     }
   }
 
-  pub async fn get_blob_metadata<T: AsRef<str>>(&self, url: T) -> Result<AFBlobMetadata, AppError> {
+  pub async fn get_blob_metadata<T: AsRef<str>>(
+    &self,
+    url: T,
+  ) -> Result<AFBlobMetadata, AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::GET, url.as_ref())
       .await?
@@ -913,7 +909,7 @@ impl Client {
       .into_data()
   }
 
-  pub async fn delete_blob(&self, url: &str) -> Result<(), AppError> {
+  pub async fn delete_blob(&self, url: &str) -> Result<(), AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::DELETE, url)
       .await?
@@ -925,7 +921,7 @@ impl Client {
   pub async fn get_workspace_usage(
     &self,
     workspace_id: &str,
-  ) -> Result<WorkspaceSpaceUsage, AppError> {
+  ) -> Result<WorkspaceSpaceUsage, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/usage", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -940,7 +936,7 @@ impl Client {
   pub async fn get_workspace_all_blob_metadata(
     &self,
     workspace_id: &str,
-  ) -> Result<WorkspaceBlobMetadata, AppError> {
+  ) -> Result<WorkspaceBlobMetadata, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/blobs", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -956,7 +952,7 @@ impl Client {
     &self,
     method: Method,
     url: &str,
-  ) -> Result<RequestBuilder, AppError> {
+  ) -> Result<RequestBuilder, AppResponseError> {
     let expires_at = self.token_expires_at()?;
 
     // Refresh token if it's about to expire
@@ -1017,4 +1013,8 @@ pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
     .ok_or(anyhow!("no href found in html: {}", html_str))?
     .to_string();
   Ok(url)
+}
+
+pub fn url_missing_param(param: &str) -> AppResponseError {
+  AppError::UrlMissingParameter(param.to_string()).into()
 }

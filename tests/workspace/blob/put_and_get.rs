@@ -1,11 +1,9 @@
 use crate::collab::workspace_id_from_client;
-use reqwest::Url;
-use shared_entity::error_code::ErrorCode;
-
-use std::path::Path;
-
 use crate::user::utils::generate_unique_registered_user_client;
 use crate::util::test_client::{assert_image_equal, generate_temp_file_path, TestClient};
+use app_error::ErrorCode;
+use reqwest::Url;
+use std::path::Path;
 
 #[tokio::test]
 async fn get_but_not_exists() {

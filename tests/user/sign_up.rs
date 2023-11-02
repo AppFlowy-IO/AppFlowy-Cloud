@@ -1,5 +1,5 @@
+use app_error::ErrorCode;
 use gotrue_entity::dto::OAuthProvider;
-use shared_entity::error_code::ErrorCode;
 
 use crate::{
   localhost_client, test_appflowy_cloud_client,
@@ -25,7 +25,7 @@ async fn sign_up_invalid_email() {
   assert_eq!(error.code, ErrorCode::InvalidRequestParams);
   assert_eq!(
     error.message,
-    "Unable to validate email address: invalid format"
+    "Invalid parameters:Unable to validate email address: invalid format"
   );
 }
 
@@ -36,7 +36,10 @@ async fn sign_up_invalid_password() {
   let c = localhost_client();
   let error = c.sign_up(&email, password).await.unwrap_err();
   assert_eq!(error.code, ErrorCode::InvalidRequestParams);
-  assert_eq!(error.message, "Password should be at least 6 characters");
+  assert_eq!(
+    error.message,
+    "Invalid parameters:Password should be at least 6 characters"
+  );
 }
 
 #[tokio::test]

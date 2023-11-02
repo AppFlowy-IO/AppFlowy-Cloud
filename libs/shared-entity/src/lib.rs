@@ -1,7 +1,5 @@
-pub mod app_error;
-pub mod data;
-pub mod error_code;
+pub mod response;
 
-#[cfg(feature = "cloud")]
-mod data_actix;
 pub mod dto;
+#[cfg(feature = "cloud")]
+mod response_actix;

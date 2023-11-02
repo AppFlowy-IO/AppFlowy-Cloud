@@ -4,12 +4,12 @@ use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlServ
 use actix_http::Method;
 use async_trait::async_trait;
 use database::user::select_uid_from_uuid;
-use shared_entity::app_error::AppError;
-use shared_entity::error_code::ErrorCode;
+
 use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
+use app_error::AppError;
 use database_entity::dto::AFRole;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -105,10 +105,10 @@ impl WorkspaceAccessControlImpl {
     };
 
     match member_status {
-      MemberStatus::Deleted => Err(AppError::new(
-        ErrorCode::NotEnoughPermissions,
-        format!("user:{} is not a member of workspace:{}", uid, workspace_id),
-      )),
+      MemberStatus::Deleted => Err(AppError::NotEnoughPermissions(format!(
+        "user:{} is not a member of workspace:{}",
+        uid, workspace_id
+      ))),
       MemberStatus::Valid(access_level) => Ok(access_level),
     }
   }
@@ -225,22 +225,19 @@ where
           if matches!(role, AFRole::Owner) {
             Ok(())
           } else {
-            Err(AppError::new(
-              ErrorCode::NotEnoughPermissions,
-              format!(
-                "User:{:?} doesn't have the enough permission to access workspace:{}",
-                user_uuid, workspace_id
-              ),
-            ))
+            Err(AppError::NotEnoughPermissions(format!(
+              "User:{:?} doesn't have the enough permission to access workspace:{}",
+              user_uuid, workspace_id
+            )))
           }
         } else {
           Ok(())
         }
       },
-      Err(err) => Err(AppError::new(
-        ErrorCode::NotEnoughPermissions,
-        err.to_string(),
-      )),
+      Err(err) => Err(AppError::NotEnoughPermissions(format!(
+        "Can't find the role of the user:{:?} in the workspace:{:?}. error: {}",
+        user_uuid, workspace_id, err
+      ))),
     }
   }
 }

@@ -12,7 +12,7 @@ use crate::biz::collab::access_control::CollabAccessControlImpl;
 use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 use database::user::select_uid_from_uuid;
-use shared_entity::app_error::AppError;
+use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::instrument;
 
@@ -41,7 +41,7 @@ pub async fn establish_ws_connection(
   let user_uuid = UserUuid::from_auth(auth)?;
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
   let realtime_user = Arc::new(RealtimeUserImpl::new(uid, user_uuid.to_string(), device_id));
   let client = ClientSession::new(
     realtime_user,

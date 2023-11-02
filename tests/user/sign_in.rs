@@ -1,7 +1,6 @@
-use shared_entity::error_code::ErrorCode;
-
 use crate::localhost_client;
 use crate::user::utils::{generate_unique_email, generate_unique_registered_user, ADMIN_USER};
+use app_error::ErrorCode;
 
 #[tokio::test]
 async fn sign_in_unknown_user() {
@@ -94,7 +93,7 @@ async fn sign_in_with_invalid_url() {
       assert_eq!(e.code, ErrorCode::OAuthError);
       assert!(e
         .message
-        .starts_with("invalid JWT: unable to parse or verify signature, token is expired by"));
+        .contains("invalid JWT: unable to parse or verify signature, token is expired by"));
     },
   }
 }

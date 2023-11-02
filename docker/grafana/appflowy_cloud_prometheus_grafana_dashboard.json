@@ -140,7 +140,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(appflowy_cloud__requests_latency_total[$__interval])/rate(appflowy_cloud__requests_count_total[$__interval])",
+          "exemplar": true,
+          "expr": "rate(appflowy_cloud_requests_latency_total[$__interval])/rate(appflowy_cloud_requests_count_total[$__interval])",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -236,7 +237,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(appflowy_cloud__requests_result_total{status_code!~\"2..\"}[$__interval])\n",
+          "exemplar": true,
+          "expr": "rate(appflowy_cloud_requests_result_total{status_code!~\"2..\"}[$__interval])\n",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,
@@ -331,7 +333,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(appflowy_cloud__requests_count_total[$__interval])",
+          "expr": "rate(appflowy_cloud_requests_count_total[$__interval])",
           "instant": false,
           "legendFormat": "__auto",
           "range": true,

@@ -1,3 +1,4 @@
+use crate::api::metrics::{metrics_registry, metrics_scope};
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
 use crate::middleware::cors_mw::default_cors;
@@ -7,10 +8,10 @@ use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
+use actix_web::middleware::Compat;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
-use actix_web::middleware::Compat;
 use anyhow::{Context, Error};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -19,6 +20,7 @@ use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
+use tracing_actix_web::TracingLogger;
 
 use tokio::sync::RwLock;
 
@@ -34,11 +36,11 @@ use crate::biz::workspace::access_control::{
 };
 
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
+use crate::middleware::metrics_mw::MetricsMiddleware;
 
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
-use tracing_actix_web::TracingLogger;
 
 pub struct Application {
   port: u16,
@@ -98,8 +100,14 @@ pub async fn run(
     ))
     .with_acs(CollabHttpAccessControl(state.collab_access_control.clone()));
 
+  // Initialize metrics that which are registered in the registry.
+  let (metrics, registry) = metrics_registry();
+  let registry_arc = Arc::new(registry);
+  let metrics_arc = Arc::new(metrics);
+
   let mut server = HttpServer::new(move || {
     App::new()
+      .wrap(MetricsMiddleware)
       .wrap(IdentityMiddleware::default())
       .wrap(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
@@ -114,6 +122,9 @@ pub async fn run(
       .service(workspace_scope())
       .service(ws_scope())
       .service(file_storage_scope())
+      .service(metrics_scope())
+      .app_data(Data::new(metrics_arc.clone()))
+      .app_data(Data::new(registry_arc.clone()))
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
@@ -271,24 +282,6 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
 
   Ok(s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone())?.with_path_style())
 }
-
-// async fn get_aws_s3_client() -> aws_sdk_s3::Client {
-//   let credentials = Credentials::new("minioadmin", "minioadmin", None, None, "none");
-//   let config = aws_config::SdkConfig::builder()
-//     .set_region(Region {})
-//     .endpoint_url("http://localhost:9000")
-//     .credentials_provider(Some(credentials))
-//     .build();
-//
-//   let client = aws_sdk_s3::Client::new(&config);
-//   client
-//     .create_bucket()
-//     .bucket("hellothisisme")
-//     .send()
-//     .await
-//     .unwrap();
-//   client
-// }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
   PgPoolOptions::new()

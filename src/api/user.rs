@@ -27,7 +27,7 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/verify/{access_token}").route(web::get().to(verify_user_handler)))
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
-      .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
+    .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
 
     // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))

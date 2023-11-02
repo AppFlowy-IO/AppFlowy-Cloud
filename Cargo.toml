@@ -76,6 +76,7 @@ database-entity = { path = "libs/database-entity" }
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error"] }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 itertools = "0.11"
 axum_session = "0.7.0"
@@ -114,10 +115,12 @@ members = [
     "libs/gotrue",
     "libs/gotrue-entity",
     "admin_frontend",
+    "libs/app_error",
 ]
 
 [workspace.dependencies]
 realtime-entity = { path = "libs/realtime-entity" }
+app-error = { path = "libs/app_error" }
 
 [profile.release]
 lto = true
@@ -134,8 +137,8 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c23dff3"  }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c23dff3" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8861d7a"  }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "8861d7a" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

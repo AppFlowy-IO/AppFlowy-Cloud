@@ -9,8 +9,8 @@ use crate::component::auth::{InputParamsError, LoginRequest};
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
-use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
+use shared_entity::response::{AppResponse, JsonAppResponse};
 
 use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
@@ -19,6 +19,7 @@ use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
 
+use shared_entity::response::AppResponseError;
 use tracing_actix_web::RequestId;
 
 pub fn user_scope() -> Scope {
@@ -49,7 +50,8 @@ async fn verify_user_handler(
     &state.gotrue_client,
     &access_token,
   )
-  .await?;
+  .await
+  .map_err(AppResponseError::from)?;
   let resp = SignInTokenResponse { is_new };
   Ok(AppResponse::Ok().with_data(resp).into())
 }
@@ -60,7 +62,9 @@ async fn get_user_profile_handler(
   state: Data<AppState>,
   request_id: RequestId,
 ) -> Result<JsonAppResponse<AFUserProfile>> {
-  let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
+  let profile = biz::user::get_profile(&state.pg_pool, &uuid)
+    .await
+    .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 

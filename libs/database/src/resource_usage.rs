@@ -1,4 +1,4 @@
-use database_entity::error::DatabaseError;
+use app_error::AppError;
 use database_entity::pg_row::AFBlobMetadataRow;
 use rust_decimal::prelude::ToPrimitive;
 use sqlx::types::Decimal;
@@ -12,7 +12,7 @@ pub async fn is_blob_metadata_exists(
   pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<bool, DatabaseError> {
+) -> Result<bool, AppError> {
   let exists: (bool,) = sqlx::query_as(
     r#"
      SELECT EXISTS (
@@ -37,7 +37,7 @@ pub async fn insert_blob_metadata(
   workspace_id: &Uuid,
   file_type: &str,
   file_size: i64,
-) -> Result<AFBlobMetadataRow, DatabaseError> {
+) -> Result<AFBlobMetadataRow, AppError> {
   let metadata = sqlx::query_as!(
     AFBlobMetadataRow,
     r#"
@@ -65,7 +65,7 @@ pub async fn delete_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadataRow, DatabaseError> {
+) -> Result<AFBlobMetadataRow, AppError> {
   let metadata = sqlx::query_as!(
     AFBlobMetadataRow,
     r#"
@@ -86,7 +86,7 @@ pub async fn get_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadataRow, DatabaseError> {
+) -> Result<AFBlobMetadataRow, AppError> {
   let metadata = sqlx::query_as!(
     AFBlobMetadataRow,
     r#"
@@ -107,7 +107,7 @@ pub async fn get_blob_metadata(
 pub async fn get_all_workspace_blob_metadata(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<Vec<AFBlobMetadataRow>, DatabaseError> {
+) -> Result<Vec<AFBlobMetadataRow>, AppError> {
   let all_metadata = sqlx::query_as!(
     AFBlobMetadataRow,
     r#"
@@ -127,7 +127,7 @@ pub async fn get_all_workspace_blob_metadata(
 pub async fn get_all_workspace_blob_ids(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<Vec<String>, DatabaseError> {
+) -> Result<Vec<String>, AppError> {
   let file_ids = sqlx::query!(
     r#"
     SELECT file_id FROM af_blob_metadata
@@ -146,10 +146,7 @@ pub async fn get_all_workspace_blob_ids(
 /// Return the total size of a workspace in bytes
 #[instrument(level = "trace", skip_all, err)]
 #[inline]
-pub async fn get_workspace_usage_size(
-  pool: &PgPool,
-  workspace_id: &Uuid,
-) -> Result<u64, DatabaseError> {
+pub async fn get_workspace_usage_size(pool: &PgPool, workspace_id: &Uuid) -> Result<u64, AppError> {
   let row: (Option<Decimal>,) =
     sqlx::query_as(r#"SELECT SUM(file_size) FROM af_blob_metadata WHERE workspace_id = $1;"#)
       .bind(workspace_id)

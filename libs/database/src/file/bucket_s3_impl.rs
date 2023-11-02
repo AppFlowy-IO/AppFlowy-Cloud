@@ -1,7 +1,6 @@
 use crate::file::{BucketClient, BucketStorage, ResponseBlob};
+use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::error::DatabaseError;
-use s3::error::S3Error;
 
 pub type S3BucketStorage = BucketStorage<BucketClientS3Impl>;
 
@@ -16,9 +15,8 @@ pub struct BucketClientS3Impl(s3::Bucket);
 #[async_trait]
 impl BucketClient for BucketClientS3Impl {
   type ResponseData = S3ResponseData;
-  type Error = S3BucketError;
 
-  async fn put_blob<P>(&self, id: P, blob: Vec<u8>) -> Result<(), Self::Error>
+  async fn put_blob<P>(&self, id: P, blob: Vec<u8>) -> Result<(), AppError>
   where
     P: AsRef<str> + Send,
   {
@@ -27,7 +25,7 @@ impl BucketClient for BucketClientS3Impl {
     Ok(())
   }
 
-  async fn delete_blob<P>(&self, id: P) -> Result<Self::ResponseData, Self::Error>
+  async fn delete_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
   where
     P: AsRef<str> + Send,
   {
@@ -36,7 +34,7 @@ impl BucketClient for BucketClientS3Impl {
     Ok(S3ResponseData(response))
   }
 
-  async fn get_blob<P>(&self, id: P) -> Result<Self::ResponseData, Self::Error>
+  async fn get_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
   where
     P: AsRef<str> + Send,
   {
@@ -52,39 +50,24 @@ impl ResponseBlob for S3ResponseData {
   }
 }
 
-pub struct S3BucketError(String);
-impl From<S3Error> for S3BucketError {
-  fn from(value: S3Error) -> Self {
-    Self(value.to_string())
-  }
-}
-
-impl From<S3BucketError> for DatabaseError {
-  fn from(value: S3BucketError) -> Self {
-    DatabaseError::BucketError(format!("{:?}", value.0))
-  }
-}
-
 #[inline]
-fn check_s3_response_data(resp: &s3::request::ResponseData) -> Result<(), S3BucketError> {
+fn check_s3_response_data(resp: &s3::request::ResponseData) -> Result<(), AppError> {
   let status_code = resp.status_code();
   match status_code {
     200..=299 => Ok(()),
     error_code => {
       let text = resp.bytes();
       let s = String::from_utf8_lossy(text);
-      Err(S3BucketError(format!(
-        "S3 error: {}, code: {}",
-        s, error_code
-      )))
+      let msg = format!("S3 error: {}, code: {}", s, error_code);
+      Err(AppError::S3ResponseError(msg))
     },
   }
 }
 
 #[inline]
-fn check_s3_status_code(status_code: u16) -> Result<(), S3BucketError> {
+fn check_s3_status_code(status_code: u16) -> Result<(), AppError> {
   match status_code {
     200..=299 => Ok(()),
-    error_code => Err(S3BucketError(format!("S3 error: {}", error_code))),
+    error_code => Err(AppError::S3ResponseError(format!("{}", error_code))),
   }
 }

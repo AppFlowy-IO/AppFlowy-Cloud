@@ -1,22 +1,25 @@
-use crate::app_error::AppError;
-
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
+use app_error::{AppError, ErrorCode};
 use std::fmt::{Debug, Display};
 
 #[cfg(feature = "cloud")]
-pub use crate::data_actix::*;
+pub use crate::response_actix::*;
 
-use crate::error_code::ErrorCode;
 /// A macro to generate static AppResponse functions with predefined error codes.
 macro_rules! static_app_response {
-  ($name:ident, $code:expr) => {
+  ($name:ident, $error:expr) => {
     #[allow(non_snake_case, missing_docs)]
     pub fn $name() -> AppResponse<T> {
-      AppResponse::new($code, $code.to_string())
+      AppResponse::new($error.code(), $error.to_string())
     }
-  };
+  }; // ($name:ident, $code:expr, $msg:expr) => {
+     //   #[allow(non_snake_case, missing_docs)]
+     //   pub fn $name(msg: $msg) -> AppResponse<T> {
+     //     AppResponse::new($code, $code(msg.to_string()).to_string())
+     //   }
+     // };
 }
 
 /// Represents a standardized application response.
@@ -44,39 +47,34 @@ impl<T> AppResponse<T> {
     }
   }
 
-  static_app_response!(Ok, ErrorCode::Ok);
-  static_app_response!(Unhandled, ErrorCode::Unhandled);
-  static_app_response!(InvalidEmail, ErrorCode::InvalidEmail);
-  static_app_response!(InvalidPassword, ErrorCode::InvalidPassword);
-  static_app_response!(OAuthError, ErrorCode::OAuthError);
+  static_app_response!(Ok, AppError::Ok);
 
-  pub fn split(self) -> (Option<T>, AppError) {
-    if self.code == ErrorCode::Ok {
-      (self.data, AppError::new(self.code, self.message))
+  pub fn split(self) -> (Option<T>, AppResponseError) {
+    if self.is_ok() {
+      (self.data, AppResponseError::new(self.code, self.message))
     } else {
-      (None, AppError::new(self.code, self.message))
+      (None, AppResponseError::new(self.code, self.message))
     }
   }
 
-  pub fn into_data(self) -> Result<T, AppError> {
-    if self.code == ErrorCode::Ok {
+  pub fn into_data(self) -> Result<T, AppResponseError> {
+    if self.is_ok() {
       match self.data {
-        None => Err(AppError::new(
-          ErrorCode::MissingPayload,
-          "missing payload".to_string(),
-        )),
+        None => Err(AppResponseError::from(AppError::MissingPayload(
+          "".to_string(),
+        ))),
         Some(data) => Ok(data),
       }
     } else {
-      Err(AppError::new(self.code, self.message))
+      Err(AppResponseError::new(self.code, self.message))
     }
   }
 
-  pub fn into_error(self) -> Result<(), AppError> {
+  pub fn into_error(self) -> Result<(), AppResponseError> {
     if matches!(self.code, ErrorCode::Ok) {
       Ok(())
     } else {
-      Err(AppError::new(self.code, self.message))
+      Err(AppResponseError::new(self.code, self.message))
     }
   }
 
@@ -105,7 +103,7 @@ where
   T: Display,
 {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!("{}:{}", self.code, self.message))
+    f.write_fmt(format_args!("{:?}:{}", self.code, self.message))
   }
 }
 
@@ -119,10 +117,10 @@ impl<T> std::error::Error for AppResponse<T> where T: Debug + Display {}
 ///
 impl<T, T1> From<T1> for AppResponse<T>
 where
-  T1: Into<AppError>,
+  T1: Into<AppResponseError>,
 {
   fn from(value: T1) -> Self {
-    let err: AppError = value.into();
+    let err: AppResponseError = value.into();
     AppResponse::new(err.code, err.message)
   }
 }
@@ -141,5 +139,61 @@ where
     let bytes = resp.bytes().await?;
     let resp = serde_json::from_slice(&bytes)?;
     Ok(resp)
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
+pub struct AppResponseError {
+  pub code: ErrorCode,
+  pub message: Cow<'static, str>,
+}
+
+impl AppResponseError {
+  pub fn new(code: ErrorCode, message: impl Into<Cow<'static, str>>) -> Self {
+    Self {
+      code,
+      message: message.into(),
+    }
+  }
+
+  pub fn with_message(&self, message: impl Into<Cow<'static, str>>) -> Self {
+    Self {
+      code: self.code,
+      message: message.into(),
+    }
+  }
+
+  pub fn is_record_not_found(&self) -> bool {
+    matches!(self.code, ErrorCode::RecordNotFound)
+  }
+}
+
+impl<T> From<T> for AppResponseError
+where
+  AppError: std::convert::From<T>,
+{
+  fn from(value: T) -> Self {
+    let err = AppError::from(value);
+    Self {
+      code: err.code(),
+      message: Cow::Owned(err.to_string()),
+    }
+  }
+}
+
+impl Display for AppResponseError {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!("code:{:?} msg: {}", self.code, self.message))
+  }
+}
+
+#[cfg(feature = "cloud")]
+impl actix_web::error::ResponseError for AppResponseError {
+  fn status_code(&self) -> actix_web::http::StatusCode {
+    actix_web::http::StatusCode::OK
+  }
+
+  fn error_response(&self) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Ok().json(self)
   }
 }

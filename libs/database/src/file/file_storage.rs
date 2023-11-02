@@ -3,8 +3,8 @@ use crate::resource_usage::{
   delete_blob_metadata, get_blob_metadata, get_workspace_usage_size, insert_blob_metadata,
   is_blob_metadata_exists,
 };
+use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::error::DatabaseError;
 use database_entity::pg_row::AFBlobMetadataRow;
 use sqlx::PgPool;
 use tokio::io::AsyncRead;
@@ -22,17 +22,16 @@ pub trait ResponseBlob {
 #[async_trait]
 pub trait BucketClient {
   type ResponseData: ResponseBlob;
-  type Error: Into<DatabaseError>;
 
-  async fn put_blob<P>(&self, id: P, blob: Vec<u8>) -> Result<(), Self::Error>
+  async fn put_blob<P>(&self, id: P, blob: Vec<u8>) -> Result<(), AppError>
   where
     P: AsRef<str> + Send;
 
-  async fn delete_blob<P>(&self, id: P) -> Result<Self::ResponseData, Self::Error>
+  async fn delete_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
   where
     P: AsRef<str> + Send;
 
-  async fn get_blob<P>(&self, id: P) -> Result<Self::ResponseData, Self::Error>
+  async fn get_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
   where
     P: AsRef<str> + Send;
 }
@@ -45,7 +44,6 @@ pub struct BucketStorage<C> {
 impl<C> BucketStorage<C>
 where
   C: BucketClient,
-  DatabaseError: From<<C as BucketClient>::Error>,
 {
   pub fn new(client: C, pg_pool: PgPool) -> Self {
     Self { client, pg_pool }
@@ -59,7 +57,7 @@ where
     workspace_id: Uuid,
     file_type: String,
     file_size: i64,
-  ) -> Result<String, DatabaseError>
+  ) -> Result<String, AppError>
   where
     R: AsyncRead + Unpin,
   {
@@ -81,7 +79,7 @@ where
       file_size
     );
     if usage > MAX_USAGE {
-      return Err(DatabaseError::StorageSpaceNotEnough);
+      return Err(AppError::StorageSpaceNotEnough);
     }
 
     self.client.put_blob(&file_id, blob).await?;
@@ -114,7 +112,7 @@ where
     &self,
     workspace_id: &Uuid,
     file_id: &str,
-  ) -> Result<AFBlobMetadataRow, DatabaseError> {
+  ) -> Result<AFBlobMetadataRow, AppError> {
     self.client.delete_blob(file_id).await?;
     let resp = delete_blob_metadata(&self.pg_pool, workspace_id, file_id).await?;
     Ok(resp)
@@ -124,12 +122,12 @@ where
     &self,
     workspace_id: &Uuid,
     file_id: &str,
-  ) -> Result<AFBlobMetadataRow, DatabaseError> {
+  ) -> Result<AFBlobMetadataRow, AppError> {
     let metadata = get_blob_metadata(&self.pg_pool, workspace_id, file_id).await?;
     Ok(metadata)
   }
 
-  pub async fn get_blob(&self, file_id: &str) -> Result<Vec<u8>, DatabaseError> {
+  pub async fn get_blob(&self, file_id: &str) -> Result<Vec<u8>, AppError> {
     let blob = self.client.get_blob(file_id).await?.to_blob();
     Ok(blob)
   }

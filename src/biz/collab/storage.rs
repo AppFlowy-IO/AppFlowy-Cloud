@@ -12,7 +12,7 @@ use itertools::{Either, Itertools};
 use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabStorageAccessControlImpl};
 use crate::biz::workspace::access_control::WorkspaceAccessControlImpl;
 use anyhow::Context;
-use database_entity::error::DatabaseError;
+use app_error::AppError;
 use sqlx::PgPool;
 use std::{
   collections::HashMap,
@@ -128,7 +128,7 @@ where
     };
 
     if !has_permission {
-      return Err(DatabaseError::NotEnoughPermissions(format!(
+      return Err(AppError::NotEnoughPermissions(format!(
         "user:{} doesn't have enough permissions to insert collab {}",
         uid, params.object_id
       )));
@@ -138,7 +138,7 @@ where
 
   async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData> {
     params.validate()?;
-    let _ = self
+    self
       .access_control
       .get_collab_access_level(uid, &params.object_id)
       .await?;
@@ -211,7 +211,7 @@ where
       ))?
       .can_delete()
     {
-      return Err(DatabaseError::NotEnoughPermissions(format!(
+      return Err(AppError::NotEnoughPermissions(format!(
         "user:{} doesn't have enough permissions to delete collab {}",
         uid, object_id
       )));

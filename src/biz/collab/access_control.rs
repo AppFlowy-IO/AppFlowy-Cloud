@@ -3,14 +3,14 @@ use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
 use actix_router::{Path, Url};
 use actix_web::http::Method;
+use anyhow::Context;
+use app_error::AppError;
 use async_trait::async_trait;
 use database::collab::CollabStorageAccessControl;
 use database::user::select_uid_from_uuid;
 use database_entity::dto::{AFAccessLevel, AFRole};
-use database_entity::error::DatabaseError;
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
-use shared_entity::app_error::AppError;
-use shared_entity::error_code::ErrorCode;
+
 use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -96,17 +96,27 @@ impl CollabAccessControlImpl {
 
     let member_status = match member_status {
       None => {
-        reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
-          .await?
+        let result =
+          reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
+            .await;
+
+        // If the collab object is not found which means the collab object is created by the user.
+        if let Err(err) = result.as_ref() {
+          if err.is_record_not_found() {
+            return Ok(AFAccessLevel::FullAccess);
+          }
+        }
+
+        result?
       },
       Some(status) => status,
     };
 
     match member_status {
-      MemberStatus::Deleted => Err(AppError::new(
-        ErrorCode::NotEnoughPermissions,
-        format!("user:{} is not a member of collab:{}", uid, oid),
-      )),
+      MemberStatus::Deleted => Err(AppError::NotEnoughPermissions(format!(
+        "user:{} is not a member of collab:{}",
+        uid, oid
+      ))),
       MemberStatus::Valid(access_level) => Ok(access_level),
     }
   }
@@ -181,12 +191,11 @@ async fn reload_collab_member_status_from_db(
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  type Error = AppError;
   async fn get_collab_access_level(
     &self,
     user: CollabUserId<'_>,
     oid: &str,
-  ) -> Result<AFAccessLevel, Self::Error> {
+  ) -> Result<AFAccessLevel, AppError> {
     let level = match user {
       CollabUserId::UserId(uid) => self.get_user_collab_access_level(uid, oid).await,
       CollabUserId::UserUuid(uuid) => {
@@ -203,7 +212,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
     user: CollabUserId<'_>,
     oid: &str,
     method: &Method,
-  ) -> Result<bool, Self::Error> {
+  ) -> Result<bool, AppError> {
     match self.get_collab_access_level(user, oid).await {
       Ok(level) => {
         if Method::POST == method || Method::PUT == method || Method::DELETE == method {
@@ -223,7 +232,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   #[inline]
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
+  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     let result = self
       .get_collab_access_level(CollabUserId::UserId(uid), oid)
       .await;
@@ -246,7 +255,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   #[inline]
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, Self::Error> {
+  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     Ok(
       self
         .get_collab_access_level(CollabUserId::UserId(uid), oid)
@@ -263,7 +272,6 @@ pub struct CollabHttpAccessControl<AC: CollabAccessControl>(pub Arc<AC>);
 impl<AC> HttpAccessControlService for CollabHttpAccessControl<AC>
 where
   AC: CollabAccessControl,
-  AppError: From<<AC as CollabAccessControl>::Error>,
 {
   fn resource(&self) -> AccessResource {
     AccessResource::Collab
@@ -279,17 +287,13 @@ where
     let can_access = self
       .0
       .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)
-      .await
-      .map_err(AppError::from)?;
+      .await?;
 
     if !can_access {
-      return Err(AppError::new(
-        ErrorCode::NotEnoughPermissions,
-        format!(
-          "Not enough permissions to access the collab: {} with http method: {}",
-          oid, method
-        ),
-      ));
+      return Err(AppError::NotEnoughPermissions(format!(
+        "Not enough permissions to access the collab: {} with http method: {}",
+        oid, method
+      )));
     }
     Ok(())
   }
@@ -305,52 +309,26 @@ pub struct CollabStorageAccessControlImpl<CollabAC, WorkspaceAC> {
 impl<CollabAC, WorkspaceAC> CollabStorageAccessControl
   for CollabStorageAccessControlImpl<CollabAC, WorkspaceAC>
 where
-  CollabAC: CollabAccessControl<Error = AppError>,
+  CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  #[instrument(level = "trace", skip_all)]
-  async fn get_collab_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-  ) -> Result<AFAccessLevel, DatabaseError> {
+  #[instrument(level = "trace", skip_all, err)]
+  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     let level = self
       .collab_access_control
       .get_collab_access_level(uid.into(), oid)
       .await
-      .map_err(|err| {
-        app_err_to_database_error(
-          err,
-          format!(
-            "failed to get the collab access level of user:{} for object:{}",
-            uid, oid
-          ),
-        )
-      })?;
+      .context(format!(
+        "fail to get the collab access level of user:{} for object:{}",
+        uid, oid
+      ))?;
     Ok(level)
   }
 
-  async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, DatabaseError> {
+  async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, AppError> {
     self
       .workspace_access_control
       .get_role_from_uid(uid, &workspace_id.parse()?)
       .await
-      .map_err(|err| {
-        app_err_to_database_error(
-          err,
-          format!(
-            "failed to get the role of the user:{} in workspace:{}",
-            uid, workspace_id
-          ),
-        )
-      })
-  }
-}
-
-fn app_err_to_database_error(err: AppError, msg: String) -> DatabaseError {
-  if err.is_record_not_found() {
-    DatabaseError::RecordNotFound(msg)
-  } else {
-    DatabaseError::Internal(anyhow::Error::new(err))
   }
 }

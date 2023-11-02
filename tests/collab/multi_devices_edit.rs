@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use collab_entity::CollabType;
 use serde_json::json;
-use shared_entity::error_code::ErrorCode;
 use sqlx::types::uuid;
 
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
@@ -42,7 +41,7 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
     })
     .await
     .unwrap_err();
-  assert_eq!(err.code, ErrorCode::RecordNotFound);
+  assert!(err.is_record_not_found());
 
   // After reconnect the collab should be synced to the server.
   test_client.reconnect().await;

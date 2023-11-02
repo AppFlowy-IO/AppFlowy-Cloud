@@ -1,9 +1,8 @@
-use serde_json::json;
-use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
-use shared_entity::error_code::ErrorCode;
-
 use crate::localhost_client;
 use crate::user::utils::generate_unique_registered_user_client;
+use app_error::ErrorCode;
+use serde_json::json;
+use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
 
 #[tokio::test]
 async fn update_but_not_logged_in() {
@@ -33,7 +32,7 @@ async fn update_password_same_password() {
   assert_eq!(err.code, ErrorCode::InvalidRequestParams);
   assert_eq!(
     err.message,
-    "New password should be different from the old password."
+    "Invalid parameters:New password should be different from the old password."
   );
 }
 

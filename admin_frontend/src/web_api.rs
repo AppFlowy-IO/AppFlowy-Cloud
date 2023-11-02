@@ -85,7 +85,7 @@ pub async fn invite_handler(
       },
     )
     .await?;
-  Ok(().into())
+  Ok(WebApiResponse::from(()))
 }
 
 pub async fn change_password_handler(

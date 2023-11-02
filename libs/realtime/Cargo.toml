@@ -23,6 +23,7 @@ anyhow = "1.0.75"
 serde_repr = "0.1.6"
 tokio-retry = "0.3.0"
 reqwest = "0.11.18"
+app-error = { workspace = true }
 
 collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }

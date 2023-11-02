@@ -211,7 +211,7 @@ where
                   .check_workspace_permission(&workspace_id, &user_uuid, method.clone())
                   .await
                 {
-                  error!("workspace access control: {:?}", err);
+                  error!("workspace access control: {}", err);
                   return Err(Error::from(err));
                 }
               };

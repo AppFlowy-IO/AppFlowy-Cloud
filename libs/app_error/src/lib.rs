@@ -218,16 +218,16 @@ impl ErrorCode {
 }
 
 #[derive(Serialize)]
-struct AFErrorSerde {
+struct AppErrorSerde {
   code: ErrorCode,
-  msg: String,
+  message: String,
 }
 
-impl From<&AppError> for AFErrorSerde {
+impl From<&AppError> for AppErrorSerde {
   fn from(value: &AppError) -> Self {
     Self {
       code: value.code(),
-      msg: value.to_string(),
+      message: value.to_string(),
     }
   }
 }
@@ -239,6 +239,6 @@ impl actix_web::error::ResponseError for AppError {
   }
 
   fn error_response(&self) -> actix_web::HttpResponse {
-    actix_web::HttpResponse::Ok().json(AFErrorSerde::from(self))
+    actix_web::HttpResponse::Ok().json(AppErrorSerde::from(self))
   }
 }

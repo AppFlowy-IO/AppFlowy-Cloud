@@ -234,6 +234,15 @@ impl WSClient {
     }
   }
 
+  pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {
+    self.sender.send(msg.into()).unwrap();
+    Ok(())
+  }
+
+  pub fn sender(&self) -> Sender<Message> {
+    self.sender.clone()
+  }
+
   async fn set_state(&self, state: ConnectState) {
     self.state_notify.lock().set_state(state);
   }

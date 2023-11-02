@@ -2,7 +2,6 @@
 pub mod gotrue;
 
 use serde::Serialize;
-use sqlx::Error;
 use thiserror::Error;
 
 #[derive(Debug, Error, Default)]
@@ -140,13 +139,15 @@ impl AppError {
 
 #[cfg(feature = "sqlx_error")]
 impl From<sqlx::Error> for AppError {
-  fn from(value: Error) -> Self {
+  fn from(value: sqlx::Error) -> Self {
     let msg = value
       .as_database_error()
       .map(|err| err.message())
       .unwrap_or("");
     match value {
-      Error::RowNotFound => AppError::RecordNotFound(format!("Record not exist in db. {})", msg)),
+      sqlx::Error::RowNotFound => {
+        AppError::RecordNotFound(format!("Record not exist in db. {})", msg))
+      },
       _ => AppError::SqlxError(msg.to_owned()),
     }
   }

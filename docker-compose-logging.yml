@@ -44,7 +44,5 @@ services:
 volumes:
   opensearch-data:
     external: false
-
-volumes:
   opensearch-dashboards-data:
     external: false

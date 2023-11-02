@@ -64,7 +64,5 @@ services:
 volumes:
   prometheus-data:
     external: false
-
-volumes:
   grafana-data:
     external: false

@@ -75,7 +75,7 @@ pub async fn invite_handler(
   session: UserSession,
   Form(param): Form<WebApiInviteUserRequest>,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
-  let res = state
+  state
     .gotrue_client
     .magic_link(
       &session.access_token,
@@ -85,7 +85,7 @@ pub async fn invite_handler(
       },
     )
     .await?;
-  Ok(res.into())
+  Ok(().into())
 }
 
 pub async fn change_password_handler(

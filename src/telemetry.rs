@@ -32,7 +32,7 @@ where
     .with_max_level(tracing::Level::TRACE)
     .with_thread_ids(false)
     .with_file(false)
-    .pretty()
+    // .pretty() // Use in development
     .finish()
     .with(env_filter)
     .with(JsonStorageLayer)

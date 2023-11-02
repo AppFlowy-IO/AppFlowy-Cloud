@@ -346,7 +346,9 @@ impl Client {
       Some(token) => Ok(
         token
           .as_ref()
-          .ok_or(AppError::NotLoggedIn("fail to get expires_at".to_string()).into())?
+          .ok_or(AppResponseError::from(AppError::NotLoggedIn(
+            "fail to get expires_at".to_string(),
+          )))?
           .expires_at,
       ),
     }

@@ -12,24 +12,7 @@ A simple guide to deploy the monitoring tools for AppFlowy Cloud
 ```
 docker compose --file docker-compose-monitor.yml up -d
 ```
-- Check deployment
-```
-docker ps -a
-```
-## Common problems
-### Filebeat did not start successfully
-```
-$ docker logs appflowy-cloud-filebeat-1
-Exiting: error loading config file: config file ("filebeat.yml") can only be writable by the owner but the permissions are "-rw-rw-r--" (to fix the permissions use: 'chmod go-w /usr/share/filebeat/filebeat.yml')
-```
-- Solution: remove write permission on the file: `chmod -w docker/filebeat/filebeat.yml`
-
-### No Logs
-```
-$ docker logs appflowy-cloud-filebeat-1
-...Non-zero metrics in the last 30s...
-```
-- Solution: give read permission to docker logs: `chmod -R a+r /var/lib/docker/containers`
+- Quick check: `docker ps -a`
 
 ## Web UI Setup
 - After deployment, you will have a Grafana dashboard server, sign in with your username and password defined previously

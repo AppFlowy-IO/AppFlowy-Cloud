@@ -1,4 +1,4 @@
-use actix_http::header::{HeaderMap, HeaderName};
+use actix_http::header::HeaderName;
 use std::future::{ready, Ready};
 use tracing::{Instrument, Level};
 

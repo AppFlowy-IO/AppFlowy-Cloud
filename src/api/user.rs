@@ -43,7 +43,6 @@ async fn verify_user_handler(
   state: Data<AppState>,
   request_id: RequestId,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
-  tracing::info!("verifying user ...");
   let access_token = path.into_inner();
   let is_new = biz::user::verify_token(
     &state.pg_pool,

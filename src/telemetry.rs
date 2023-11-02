@@ -26,6 +26,7 @@ where
 
   let formatting_layer = BunyanFormattingLayer::new(name, sink);
   tracing_subscriber::fmt()
+    .json()
     .with_ansi(true)
     .with_target(true)
     .with_max_level(tracing::Level::TRACE)

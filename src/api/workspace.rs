@@ -198,7 +198,7 @@ async fn update_workspace_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn create_collab_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -209,7 +209,7 @@ async fn create_collab_handler(
 #[instrument(skip(payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<RawData>>> {
@@ -229,7 +229,7 @@ async fn get_collab_handler(
 #[instrument(skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
@@ -248,7 +248,7 @@ async fn batch_get_collab_handler(
 #[instrument(skip(state, payload), err)]
 async fn update_collab_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -259,7 +259,7 @@ async fn update_collab_handler(
 #[instrument(level = "info", skip(state, payload), err)]
 async fn delete_collab_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<DeleteCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -292,7 +292,7 @@ async fn retrieve_snapshots_handler(
 
 #[instrument(skip(state, payload), err)]
 async fn add_collab_member_handler(
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<InsertCollabMemberParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -308,7 +308,7 @@ async fn add_collab_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn update_collab_member_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<UpdateCollabMemberParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -325,7 +325,7 @@ async fn update_collab_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn get_collab_member_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMember>>> {
@@ -337,7 +337,7 @@ async fn get_collab_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn remove_collab_member_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -354,7 +354,7 @@ async fn remove_collab_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn get_collab_member_list_handler(
   user_uuid: UserUuid,
-  required_id: RequestId,
+  request_id: RequestId,
   payload: Json<QueryCollabMembers>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMembers>>> {

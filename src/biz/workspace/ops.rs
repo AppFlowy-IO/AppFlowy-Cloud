@@ -15,6 +15,7 @@ use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use tracing::instrument;
 use uuid::Uuid;
 
 pub async fn get_all_user_workspaces(
@@ -63,6 +64,7 @@ pub async fn open_workspace(
 /// - A `Result` containing a `HashMap` where the key is the user ID (`uid`) and the value is the role (`AFRole`) assigned to the user in the workspace.
 ///   If there's an error during the operation, an `AppError` is returned.
 ///
+#[instrument(level = "debug", skip_all, err)]
 pub async fn add_workspace_members(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
@@ -82,12 +84,11 @@ pub async fn add_workspace_members(
       AFRole::Guest => AFAccessLevel::ReadOnly,
     };
 
-    let uid = select_uid_from_email(txn.deref_mut(), &member.email)
-      .await
-      .context(format!(
-        "Failed to get uid from email {} when adding workspace members",
-        member.email
-      ))?;
+    let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
+    // .context(format!(
+    //   "Failed to get uid from email {} when adding workspace members",
+    //   member.email
+    // ))?;
     insert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
       .await?;
     upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;

@@ -93,7 +93,7 @@ async fn sign_in_with_invalid_url() {
       assert_eq!(e.code, ErrorCode::OAuthError);
       assert!(e
         .message
-        .starts_with("invalid JWT: unable to parse or verify signature, token is expired by"));
+        .contains("invalid JWT: unable to parse or verify signature, token is expired by"));
     },
   }
 }

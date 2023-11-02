@@ -96,8 +96,15 @@ impl CollabAccessControlImpl {
 
     let member_status = match member_status {
       None => {
-        reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
-          .await?
+        let result =
+          reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
+            .await;
+
+        // If the collab object is not found which means the collab object is created by the user.
+        if result.as_ref().is_err_and(|err| err.is_record_not_found()) {
+          return Ok(AFAccessLevel::FullAccess);
+        }
+        result?
       },
       Some(status) => status,
     };
@@ -309,7 +316,7 @@ where
       .get_collab_access_level(uid.into(), oid)
       .await
       .context(format!(
-        "failed to get the collab access level of user:{} for object:{}",
+        "fail to get the collab access level of user:{} for object:{}",
         uid, oid
       ))?;
     Ok(level)

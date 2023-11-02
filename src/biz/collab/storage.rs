@@ -138,7 +138,7 @@ where
 
   async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData> {
     params.validate()?;
-    let _ = self
+    self
       .access_control
       .get_collab_access_level(uid, &params.object_id)
       .await?;

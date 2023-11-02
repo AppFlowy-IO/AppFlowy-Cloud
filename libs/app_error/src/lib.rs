@@ -2,6 +2,7 @@
 pub mod gotrue;
 
 use serde::Serialize;
+use sqlx::Error;
 use thiserror::Error;
 
 #[derive(Debug, Error, Default)]
@@ -28,7 +29,7 @@ pub enum AppError {
   #[error("Invalid password:{0}")]
   InvalidPassword(String),
 
-  #[error("OAuth authentication error:{0}")]
+  #[error("OAuth error:{0}")]
   OAuthError(String),
 
   #[error("Missing Payload:{0}")]
@@ -43,7 +44,7 @@ pub enum AppError {
   #[error("Invalid Url:{0}")]
   InvalidUrl(String),
 
-  #[error("Invalid Request Parameters:{0}")]
+  #[error("Invalid parameters:{0}")]
   InvalidRequestParams(String),
 
   #[error("Url Missing Parameter:{0}")]
@@ -78,8 +79,8 @@ pub enum AppError {
   IOError(#[from] std::io::Error),
 
   #[cfg(feature = "sqlx_error")]
-  #[error(transparent)]
-  SqlxError(#[from] sqlx::Error),
+  #[error("postgres db error: {0}")]
+  SqlxError(String),
 
   #[cfg(feature = "validation_error")]
   #[error(transparent)]
@@ -128,11 +129,25 @@ impl AppError {
       #[cfg(feature = "sqlx_error")]
       AppError::SqlxError(_) => ErrorCode::SqlxError,
       #[cfg(feature = "validation_error")]
-      AppError::ValidatorError(_) => ErrorCode::ValidatorError,
+      AppError::ValidatorError(_) => ErrorCode::InvalidRequestParams,
       AppError::S3ResponseError(_) => ErrorCode::S3ResponseError,
-      AppError::UrlError(_) => ErrorCode::UrlError,
+      AppError::UrlError(_) => ErrorCode::InvalidUrl,
       AppError::SerdeError(_) => ErrorCode::SerdeError,
       AppError::ReqwestError(_) => ErrorCode::Unhandled,
+    }
+  }
+}
+
+#[cfg(feature = "sqlx_error")]
+impl From<sqlx::Error> for AppError {
+  fn from(value: Error) -> Self {
+    let msg = value
+      .as_database_error()
+      .map(|err| err.message())
+      .unwrap_or("");
+    match value {
+      Error::RowNotFound => AppError::RecordNotFound(format!("Record not exist in db. {})", msg)),
+      _ => AppError::SqlxError(msg.to_owned()),
     }
   }
 }
@@ -142,6 +157,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
   fn from(err: crate::gotrue::GoTrueError) -> Self {
     match (err.code, err.msg.as_str()) {
       (400, m) if m.starts_with("oauth error") => AppError::OAuthError(err.msg),
+      (400, m) if m.starts_with("User already registered") => AppError::OAuthError(err.msg),
       (401, _) => AppError::OAuthError(err.msg),
       (422, _) => AppError::InvalidRequestParams(err.msg),
       _ => AppError::Unhandled(format!(
@@ -190,11 +206,8 @@ pub enum ErrorCode {
   IOError = 1019,
   #[cfg(feature = "sqlx_error")]
   SqlxError = 1020,
-  #[cfg(feature = "validation_error")]
-  ValidatorError = 1021,
-  S3ResponseError = 1022,
-  UrlError = 1023,
-  SerdeError = 1024,
+  S3ResponseError = 1021,
+  SerdeError = 1022,
 }
 
 impl ErrorCode {

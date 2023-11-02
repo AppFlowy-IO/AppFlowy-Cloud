@@ -32,7 +32,7 @@ async fn update_password_same_password() {
   assert_eq!(err.code, ErrorCode::InvalidRequestParams);
   assert_eq!(
     err.message,
-    "New password should be different from the old password."
+    "Invalid parameters:New password should be different from the old password."
   );
 }
 

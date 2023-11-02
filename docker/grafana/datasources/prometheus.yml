@@ -3,4 +3,7 @@ datasources:
   access: proxy
   type: prometheus
   url: http://prometheus:9090
+  jsonData:
+    exemplarTraceIdDestinations:
+    - name: trace_id
   isDefault: true

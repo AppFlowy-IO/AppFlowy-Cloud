@@ -62,6 +62,7 @@ tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 async-trait = "0.1.73"
+prometheus-client = "0.22.0"
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }

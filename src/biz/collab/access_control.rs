@@ -101,9 +101,12 @@ impl CollabAccessControlImpl {
             .await;
 
         // If the collab object is not found which means the collab object is created by the user.
-        if result.as_ref().is_err_and(|err| err.is_record_not_found()) {
-          return Ok(AFAccessLevel::FullAccess);
+        if let Err(err) = result.as_ref() {
+          if err.is_record_not_found() {
+            return Ok(AFAccessLevel::FullAccess);
+          }
         }
+
         result?
       },
       Some(status) => status,

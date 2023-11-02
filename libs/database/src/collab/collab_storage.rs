@@ -1,5 +1,6 @@
 use crate::collab::{collab_db_ops, is_collab_exists};
 use anyhow::Context;
+use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab_entity::CollabType;
@@ -8,7 +9,6 @@ use database_entity::dto::{
   InsertSnapshotParams, QueryCollabParams, QueryCollabResult, QueryObjectSnapshotParams,
   QuerySnapshotParams, RawData,
 };
-use app_error::AppError;
 use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;

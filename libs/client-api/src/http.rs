@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
+use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
   AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
@@ -7,7 +8,6 @@ use database_entity::dto::{
   BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams, InsertCollabMemberParams,
   InsertCollabParams, QueryCollabMembers, QueryCollabParams, RawData, UpdateCollabMemberParams,
 };
-use app_error::AppError;
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;

@@ -7,8 +7,8 @@ use std::ops::DerefMut;
 use tracing::{event, instrument};
 
 use crate::user::select_uid_from_email;
-use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
 use app_error::AppError;
+use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
 
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.

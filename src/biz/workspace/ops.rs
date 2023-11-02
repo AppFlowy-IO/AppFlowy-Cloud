@@ -1,5 +1,6 @@
 use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
+use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
 use database::user::select_uid_from_email;
 use database::workspace::{
@@ -9,7 +10,6 @@ use database::workspace::{
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
 use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
-use app_error::AppError;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};

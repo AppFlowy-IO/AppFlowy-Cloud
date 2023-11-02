@@ -9,8 +9,8 @@ use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use database_entity::dto::AFRole;
 use app_error::AppError;
+use database_entity::dto::AFRole;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{instrument, trace, warn};

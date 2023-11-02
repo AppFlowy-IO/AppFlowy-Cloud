@@ -1,11 +1,11 @@
 use database::user;
 
+use app_error::AppError;
 use database_entity::dto::{
   AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
   InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryObjectSnapshotParams,
   QuerySnapshotParams, UpdateCollabMemberParams,
 };
-use app_error::AppError;
 
 use sqlx::{types::Uuid, PgPool};
 use tracing::trace;

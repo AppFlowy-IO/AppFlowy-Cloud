@@ -1,6 +1,7 @@
 use crate::collaborate::group::CollabGroup;
 use crate::entities::RealtimeUser;
 use crate::error::RealtimeError;
+use app_error::AppError;
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab::core::collab::TransactionMutExt;
@@ -10,7 +11,6 @@ use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{InsertCollabParams, QueryCollabParams, RawData};
-use app_error::AppError;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tracing::{error, trace};

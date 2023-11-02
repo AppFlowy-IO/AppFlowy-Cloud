@@ -1,6 +1,6 @@
+use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::AFAccessLevel;
-use app_error::AppError;
 use reqwest::Method;
 
 use std::sync::Arc;

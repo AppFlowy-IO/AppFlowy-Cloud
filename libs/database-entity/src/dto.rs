@@ -1,8 +1,8 @@
 use crate::pg_row::{AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceRow};
 use anyhow::anyhow;
+use app_error::AppError;
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
-use app_error::AppError;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;

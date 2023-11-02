@@ -9,8 +9,8 @@ use uuid::Uuid;
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 
-use database::user::{create_user, is_user_exist};
 use app_error::AppError;
+use database::user::{create_user, is_user_exist};
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool};

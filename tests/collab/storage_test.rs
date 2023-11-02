@@ -3,12 +3,12 @@ use crate::{
 };
 use std::collections::HashMap;
 
+use app_error::ErrorCode;
 use collab_entity::CollabType;
 use database_entity::dto::{
   BatchQueryCollab, BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams,
   QueryCollabParams, QueryCollabResult,
 };
-use app_error::ErrorCode;
 use sqlx::types::Uuid;
 
 #[tokio::test]

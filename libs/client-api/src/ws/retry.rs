@@ -5,9 +5,7 @@ use crate::ws::WSError;
 use tokio::net::TcpStream;
 use tokio_retry::Action;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
-use tokio_tungstenite::{
-  connect_async, connect_async_with_config, MaybeTlsStream, WebSocketStream,
-};
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
 use tracing::{error, info};
 
 pub(crate) struct ConnectAction {

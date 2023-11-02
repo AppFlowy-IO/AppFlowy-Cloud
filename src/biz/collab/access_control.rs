@@ -282,7 +282,7 @@ where
     oid: &str,
     user_uuid: &Uuid,
     method: Method,
-    path: &Path<Url>,
+    _path: &Path<Url>,
   ) -> Result<(), AppError> {
     let can_access = self
       .0

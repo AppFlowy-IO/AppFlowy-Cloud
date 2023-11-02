@@ -246,7 +246,7 @@ struct RetryCondition {
 impl Condition<WSError> for RetryCondition {
   fn should_retry(&mut self, error: &WSError) -> bool {
     if let WSError::AuthError(err) = error {
-      debug!("WSClient auth error: {}, stop retry connn", err);
+      debug!("WSClient auth error: {}, stop retry connect", err);
       return false;
     }
 

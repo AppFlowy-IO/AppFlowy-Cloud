@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::data::AppResponse;
+use crate::response::AppResponse;
 use actix_web::web::Json;
 use std::fmt::{Debug, Display};
 

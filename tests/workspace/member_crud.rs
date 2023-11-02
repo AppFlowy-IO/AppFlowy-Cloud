@@ -1,7 +1,7 @@
 use crate::util::test_client::TestClient;
 use database_entity::dto::AFRole;
+use app_error::ErrorCode;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
-use shared_entity::error_code::ErrorCode;
 
 #[tokio::test]
 async fn add_workspace_members_not_enough_permission() {

@@ -9,11 +9,9 @@ use actix_web::{web, Scope};
 use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
-use database_entity::error::DatabaseError;
-use shared_entity::app_error::AppError;
-use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::workspace_dto::*;
-use shared_entity::error_code::ErrorCode;
+use shared_entity::response::AppResponseError;
+use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
 use tracing::{debug, event, instrument};
 use tracing_actix_web::RequestId;
@@ -151,7 +149,7 @@ async fn remove_workspace_member_handler(
   for email in member_emails {
     if let Ok(uid) = select_uid_from_email(&state.pg_pool, &email)
       .await
-      .map_err(AppError::from)
+      .map_err(AppResponseError::from)
     {
       state
         .workspace_access_control
@@ -187,7 +185,7 @@ async fn update_workspace_member_handler(
   if let Some(role) = changeset.role {
     let uid = select_uid_from_email(&state.pg_pool, &changeset.email)
       .await
-      .map_err(AppError::from)?;
+      .map_err(AppResponseError::from)?;
     state
       .workspace_access_control
       .update_member(&uid, &workspace_id, role)
@@ -217,15 +215,12 @@ async fn get_collab_handler(
 ) -> Result<Json<AppResponse<RawData>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
   let data = state
     .collab_storage
     .get_collab(&uid, payload.into_inner())
     .await
-    .map_err(|err| match err {
-      DatabaseError::RecordNotFound(msg) => AppError::new(ErrorCode::RecordNotFound, msg),
-      _ => AppError::new(ErrorCode::DBError, err.to_string()),
-    })?;
+    .map_err(AppResponseError::from)?;
 
   debug!("Returned data length: {}", data.len());
   Ok(Json(AppResponse::Ok().with_data(data)))
@@ -240,7 +235,7 @@ async fn batch_get_collab_handler(
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
   let result = BatchQueryCollabResult(
     state
       .collab_storage

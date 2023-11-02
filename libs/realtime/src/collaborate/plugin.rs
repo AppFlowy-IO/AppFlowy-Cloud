@@ -10,7 +10,7 @@ use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{InsertCollabParams, QueryCollabParams, RawData};
-use database_entity::error::DatabaseError;
+use app_error::AppError;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tracing::{error, trace};
@@ -80,7 +80,7 @@ where
         Err(e) => error!("🔴Init collab failed: {:?}", e),
       },
       Err(err) => match &err {
-        DatabaseError::RecordNotFound(_) => {
+        AppError::RecordNotFound(_) => {
           let raw_data = {
             let txn = doc.transact();
             txn.encode_state_as_update_v1(&StateVector::default())

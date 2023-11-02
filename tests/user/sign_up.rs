@@ -1,5 +1,5 @@
+use app_error::ErrorCode;
 use gotrue_entity::dto::OAuthProvider;
-use shared_entity::error_code::ErrorCode;
 
 use crate::{
   localhost_client, test_appflowy_cloud_client,

@@ -8,7 +8,7 @@ use database_entity::dto::{
   BatchQueryCollab, BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams,
   QueryCollabParams, QueryCollabResult,
 };
-use shared_entity::error_code::ErrorCode;
+use app_error::ErrorCode;
 use sqlx::types::Uuid;
 
 #[tokio::test]

@@ -8,13 +8,14 @@ use actix_web::http::Method;
 use actix_web::Error;
 use async_trait::async_trait;
 use futures_util::future::LocalBoxFuture;
-use shared_entity::app_error::AppError;
+
 use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tracing::error;
 
+use app_error::AppError;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

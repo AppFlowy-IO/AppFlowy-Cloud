@@ -75,6 +75,7 @@ database-entity = { path = "libs/database-entity" }
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error"] }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 itertools = "0.11"
 axum_session = "0.7.0"
@@ -113,10 +114,12 @@ members = [
     "libs/gotrue",
     "libs/gotrue-entity",
     "admin_frontend",
+    "libs/app_error",
 ]
 
 [workspace.dependencies]
 realtime-entity = { path = "libs/realtime-entity" }
+app-error = { path = "libs/app_error" }
 
 [profile.release]
 lto = true

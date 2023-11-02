@@ -1,11 +1,12 @@
 use database::user;
 
+use app_error::AppError;
 use database_entity::dto::{
   AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
   InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryObjectSnapshotParams,
   QuerySnapshotParams, UpdateCollabMemberParams,
 };
-use shared_entity::{app_error::AppError, error_code::ErrorCode};
+
 use sqlx::{types::Uuid, PgPool};
 use tracing::trace;
 use validator::Validate;
@@ -17,7 +18,10 @@ pub async fn create_collab(
 ) -> Result<(), AppError> {
   params.validate()?;
   if database::collab::collab_exists(pg_pool, &params.object_id).await? {
-    return Err(ErrorCode::RecordAlreadyExists.into());
+    return Err(AppError::RecordAlreadyExists(format!(
+      "Collab with object_id {} already exists",
+      params.object_id
+    )));
   }
   upsert_collab(pg_pool, user_uuid, params).await
 }
@@ -64,7 +68,7 @@ pub async fn delete_collab(
 }
 
 /// Create a new collab member
-/// If the collab member already exists, return [ErrorCode::RecordAlreadyExists]
+/// If the collab member already exists, return [AppError::RecordAlreadyExists]
 /// If the collab member does not exist, create a new one
 pub async fn create_collab_member(
   pg_pool: &PgPool,
@@ -72,7 +76,10 @@ pub async fn create_collab_member(
 ) -> Result<(), AppError> {
   params.validate()?;
   if database::collab::is_collab_member_exists(params.uid, &params.object_id, pg_pool).await? {
-    return Err(ErrorCode::RecordAlreadyExists.into());
+    return Err(AppError::RecordAlreadyExists(format!(
+      "Collab member with uid {} and object_id {} already exists",
+      params.uid, params.object_id
+    )));
   }
 
   trace!("Inserting collab member: {:?}", params);

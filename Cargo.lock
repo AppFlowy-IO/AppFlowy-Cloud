@@ -465,6 +465,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4668cab20f66d8d020e1fbc0ebe47217433c1b6c8f2040faf858554e394ace6"
 
 [[package]]
+name = "app-error"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "anyhow",
+ "reqwest",
+ "rust-s3",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "sqlx",
+ "thiserror",
+ "url",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "appflowy-cloud"
 version = "0.1.0"
 dependencies = [
@@ -479,6 +497,7 @@ dependencies = [
  "actix-web",
  "actix-web-actors",
  "anyhow",
+ "app-error",
  "argon2",
  "assert-json-diff",
  "async-trait",
@@ -1115,6 +1134,7 @@ name = "client-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app-error",
  "bytes",
  "collab",
  "collab-entity",
@@ -1148,7 +1168,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c23dff3#c23dff3b58fa635a7fb4b5e2dbc18ebd76cfbd53"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8861d7a#8861d7a45a2bda493f307483561d92e31fffff4c"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1167,7 +1187,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c23dff3#c23dff3b58fa635a7fb4b5e2dbc18ebd76cfbd53"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8861d7a#8861d7a45a2bda493f307483561d92e31fffff4c"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1443,6 +1463,7 @@ name = "database"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app-error",
  "async-trait",
  "base64 0.21.4",
  "bytes",
@@ -1469,6 +1490,7 @@ name = "database-entity"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app-error",
  "chrono",
  "collab-entity",
  "serde",
@@ -1979,6 +2001,7 @@ name = "gotrue-entity"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "app-error",
  "jsonwebtoken",
  "lazy_static",
  "reqwest",
@@ -3362,6 +3385,7 @@ dependencies = [
  "actix-web",
  "actix-web-actors",
  "anyhow",
+ "app-error",
  "assert-json-diff",
  "async-trait",
  "bytes",
@@ -4021,6 +4045,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "app-error",
  "collab-entity",
  "database-entity",
  "gotrue-entity",

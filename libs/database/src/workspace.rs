@@ -7,7 +7,7 @@ use std::ops::DerefMut;
 use tracing::{event, instrument};
 
 use crate::user::select_uid_from_email;
-use database_entity::error::DatabaseError;
+use app_error::AppError;
 use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
 
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
@@ -17,7 +17,7 @@ pub async fn select_user_is_workspace_owner(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
-) -> Result<bool, DatabaseError> {
+) -> Result<bool, AppError> {
   let exists = sqlx::query_scalar!(
     r#"
   SELECT EXISTS(
@@ -45,7 +45,7 @@ pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
   exectuor: E,
   uid: &i64,
   workspace_uuid: &Uuid,
-) -> Result<AFRole, DatabaseError> {
+) -> Result<AFRole, AppError> {
   let row = sqlx::query_scalar!(
     r#"
      SELECT role_id FROM af_workspace_member
@@ -70,7 +70,7 @@ pub async fn select_user_can_edit_collab(
   user_uuid: &Uuid,
   workspace_id: &Uuid,
   object_id: &str,
-) -> Result<bool, DatabaseError> {
+) -> Result<bool, AppError> {
   let permission_check = sqlx::query_scalar!(
     r#"
     WITH workspace_check AS (
@@ -119,7 +119,7 @@ pub async fn insert_workspace_member_with_txn(
   workspace_id: &uuid::Uuid,
   member_email: &str,
   role: AFRole,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let role_id: i32 = role.into();
   sqlx::query!(
     r#"
@@ -187,7 +187,7 @@ pub async fn delete_workspace_members(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
   member_email: &str,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let is_owner = sqlx::query_scalar!(
     r#"
   SELECT EXISTS (
@@ -208,7 +208,7 @@ pub async fn delete_workspace_members(
   .unwrap_or(false);
 
   if is_owner {
-    return Err(DatabaseError::NotEnoughPermissions(
+    return Err(AppError::NotEnoughPermissions(
       "Owner cannot be deleted".to_string(),
     ));
   }
@@ -242,7 +242,7 @@ pub async fn delete_workspace_members(
 pub async fn select_workspace_member_list(
   pg_pool: &PgPool,
   workspace_id: &uuid::Uuid,
-) -> Result<Vec<AFWorkspaceMemberRow>, DatabaseError> {
+) -> Result<Vec<AFWorkspaceMemberRow>, AppError> {
   let members = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
@@ -265,7 +265,7 @@ pub async fn select_workspace_member(
   pg_pool: &PgPool,
   uid: &i64,
   workspace_id: &Uuid,
-) -> Result<AFWorkspaceMemberRow, DatabaseError> {
+) -> Result<AFWorkspaceMemberRow, AppError> {
   let member = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
@@ -287,7 +287,7 @@ pub async fn select_workspace_member(
 pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
-) -> Result<Option<AFUserProfileRow>, DatabaseError> {
+) -> Result<Option<AFUserProfileRow>, AppError> {
   let user_profile = sqlx::query_as!(
     AFUserProfileRow,
     r#"
@@ -305,7 +305,7 @@ pub async fn select_user_profile<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-) -> Result<AFWorkspaceRow, DatabaseError> {
+) -> Result<AFWorkspaceRow, AppError> {
   let workspace = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
@@ -322,7 +322,7 @@ pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postg
   executor: E,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   sqlx::query!(
     r#"
        UPDATE af_workspace_member
@@ -342,7 +342,7 @@ pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postg
 pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, DatabaseError> {
+) -> Result<Vec<AFWorkspaceRow>, AppError> {
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
@@ -364,7 +364,7 @@ pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_all_user_workspaces(
   pool: &PgPool,
   owner_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, DatabaseError> {
+) -> Result<Vec<AFWorkspaceRow>, AppError> {
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"

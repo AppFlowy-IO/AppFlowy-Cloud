@@ -1,5 +1,6 @@
 use crate::collab::{collab_db_ops, is_collab_exists};
 use anyhow::Context;
+use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab_entity::CollabType;
@@ -8,28 +9,23 @@ use database_entity::dto::{
   InsertSnapshotParams, QueryCollabParams, QueryCollabResult, QueryObjectSnapshotParams,
   QuerySnapshotParams, RawData,
 };
-use database_entity::error::DatabaseError;
 use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use validator::Validate;
 
-pub type DatabaseResult<T, E = DatabaseError> = core::result::Result<T, E>;
+pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 
 /// [CollabStorageAccessControl] is a trait that provides access control when accessing the storage
 /// of the Collab object.
 #[async_trait]
 pub trait CollabStorageAccessControl: Send + Sync + 'static {
   /// Checks if the user with the given ID can access the [Collab] with the given ID.
-  async fn get_collab_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-  ) -> Result<AFAccessLevel, DatabaseError>;
+  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
 
   /// Returns the role of the user in the workspace.
-  async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, DatabaseError>;
+  async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, AppError>;
 }
 
 /// Represents a storage mechanism for collaborations.
@@ -235,10 +231,10 @@ impl CollabStorage for CollabStoragePgImpl {
         Ok(data)
       },
       Err(e) => match e {
-        sqlx::Error::RowNotFound => Err(DatabaseError::RecordNotFound(format!(
-          "Can't find the row for query: {:?}",
-          params
-        ))),
+        sqlx::Error::RowNotFound => {
+          let msg = format!("Can't find the row for query: {:?}", params);
+          Err(AppError::RecordNotFound(msg))
+        },
         _ => Err(e.into()),
       },
     }

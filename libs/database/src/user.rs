@@ -1,4 +1,4 @@
-use database_entity::error::DatabaseError;
+use app_error::AppError;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres};
@@ -27,7 +27,7 @@ pub async fn update_user(
   name: Option<String>,
   email: Option<String>,
   metadata: Option<JsonValue>,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let mut set_clauses = Vec::new();
   let mut args = PgArguments::default();
   let mut args_num = 0;
@@ -86,7 +86,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   user_uuid: &Uuid,
   email: &str,
   name: &str,
-) -> Result<(), DatabaseError> {
+) -> Result<(), AppError> {
   let row = sqlx::query!(
     r#"
     WITH ins_user AS (
@@ -133,7 +133,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_uid_from_uuid<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
-) -> Result<i64, DatabaseError> {
+) -> Result<i64, AppError> {
   let uid = sqlx::query!(
     r#"
       SELECT uid FROM af_user WHERE uuid = $1
@@ -150,7 +150,7 @@ pub async fn select_uid_from_uuid<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_uid_from_email<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   email: &str,
-) -> Result<i64, DatabaseError> {
+) -> Result<i64, AppError> {
   let uid = sqlx::query!(
     r#"
       SELECT uid FROM af_user WHERE email = $1
@@ -167,7 +167,7 @@ pub async fn select_uid_from_email<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn is_user_exist<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,
-) -> Result<bool, DatabaseError> {
+) -> Result<bool, AppError> {
   let exists = sqlx::query_scalar!(
     r#"
     SELECT EXISTS(

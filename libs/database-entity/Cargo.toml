@@ -17,3 +17,4 @@ thiserror = "1.0.47"
 anyhow = "1.0.75"
 tracing = "0.1"
 serde_repr = "0.1.16"
+app-error = { workspace = true }

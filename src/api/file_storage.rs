@@ -9,16 +9,15 @@ use actix_web::{
   HttpRequest, Scope,
 };
 use actix_web::{HttpResponse, Result};
+use app_error::AppError;
 use chrono::DateTime;
 use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
 use database_entity::dto::AFBlobRecord;
 use database_entity::pg_row::AFBlobMetadataRow;
 use serde::Deserialize;
-use shared_entity::app_error::AppError;
-use shared_entity::data::{AppResponse, JsonAppResponse};
 use shared_entity::dto::workspace_dto::{WorkspaceBlobMetadata, WorkspaceSpaceUsage};
-use shared_entity::error_code::ErrorCode;
+use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
 use std::pin::Pin;
 use tokio::io::AsyncRead;
@@ -69,10 +68,9 @@ async fn put_blob_handler(
   // Check content length, if it's too large, return error.
   if content_length > MAX_BLOB_SIZE {
     return Ok(
-      AppResponse::new(
-        ErrorCode::PayloadTooLarge,
+      AppResponse::from(AppError::PayloadTooLarge(
         "The uploading file is too large".to_string(),
-      )
+      ))
       .into(),
     );
   }
@@ -90,7 +88,7 @@ async fn put_blob_handler(
     .bucket_storage
     .put_blob(blob_stream, workspace_id, file_type, content_length as i64)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
 
   let record = AFBlobRecord::new(file_id);
   event!(tracing::Level::TRACE, "did put blob: {:?}", record);
@@ -111,7 +109,7 @@ async fn delete_blob_handler(
     .bucket_storage
     .delete_blob(&workspace_id, &file_id)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().into())
 }
 
@@ -157,7 +155,7 @@ async fn get_blob_handler(
     .bucket_storage
     .get_blob(&file_id)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
 
   let response = HttpResponse::Ok()
     .append_header((ETAG, file_id))
@@ -185,7 +183,7 @@ async fn get_blob_metadata_handler(
     .bucket_storage
     .get_blob_metadata(&workspace_id, &file_id)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
 
   Ok(Json(AppResponse::Ok().with_data(metadata)))
 }
@@ -197,7 +195,7 @@ async fn get_workspace_usage_handler(
 ) -> Result<JsonAppResponse<WorkspaceSpaceUsage>> {
   let current = get_workspace_usage_size(&state.pg_pool, &workspace_id)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
   let usage = WorkspaceSpaceUsage {
     consumed_capacity: current,
     total_capacity: MAX_USAGE,
@@ -213,7 +211,7 @@ async fn get_all_workspace_blob_metadata_handler(
 ) -> Result<JsonAppResponse<WorkspaceBlobMetadata>> {
   let workspace_blob_metadata = get_all_workspace_blob_metadata(&state.pg_pool, &workspace_id)
     .await
-    .map_err(AppError::from)?;
+    .map_err(AppResponseError::from)?;
   Ok(
     AppResponse::Ok()
       .with_data(WorkspaceBlobMetadata(workspace_blob_metadata))

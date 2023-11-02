@@ -13,10 +13,10 @@ use database_entity::dto::{
 };
 use image::io::Reader as ImageReader;
 use serde_json::Value;
-use shared_entity::app_error::AppError;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
 };
+use shared_entity::response::AppResponseError;
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -115,7 +115,7 @@ impl TestClient {
     workspace_id: &str,
     other_client: &TestClient,
     role: AFRole,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let workspace_id = Uuid::parse_str(workspace_id).unwrap().to_string();
     let email = other_client.email().await;
     self
@@ -132,7 +132,7 @@ impl TestClient {
     workspace_id: &str,
     other_client: &TestClient,
     role: AFRole,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let email = other_client.email().await;
     self
       .api_client
@@ -144,7 +144,7 @@ impl TestClient {
     &self,
     workspace_id: &str,
     other_client: &TestClient,
-  ) -> Result<(), AppError> {
+  ) -> Result<(), AppResponseError> {
     let email = other_client.email().await;
     self
       .api_client

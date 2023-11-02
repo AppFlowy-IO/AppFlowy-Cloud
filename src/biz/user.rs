@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use gotrue::api::Client;
 use serde_json::json;
-use shared_entity::app_error::AppError;
+use shared_entity::response::AppResponseError;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -9,6 +9,7 @@ use uuid::Uuid;
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 
+use app_error::AppError;
 use database::user::{create_user, is_user_exist};
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
@@ -46,7 +47,10 @@ pub async fn verify_token(
 pub async fn get_profile(pg_pool: &PgPool, uuid: &Uuid) -> Result<AFUserProfile, AppError> {
   let row = select_user_profile(pg_pool, uuid)
     .await?
-    .ok_or(sqlx::Error::RowNotFound)?;
+    .ok_or(AppError::RecordNotFound(format!(
+      "Can't find the user profile for user: {}",
+      uuid
+    )))?;
 
   let profile = AFUserProfile::try_from(row)?;
   Ok(profile)
@@ -63,7 +67,10 @@ pub async fn get_user_workspace_info(
     .context("failed to acquire the transaction to query the user workspace info")?;
   let row = select_user_profile(txn.deref_mut(), uuid)
     .await?
-    .ok_or(sqlx::Error::RowNotFound)?;
+    .ok_or(AppError::RecordNotFound(format!(
+      "Can't find the user profile for {}",
+      uuid
+    )))?;
 
   // Get the latest workspace that the user has visited recently
   // TODO(nathan): the visiting_workspace might be None if the user get deleted from the workspace
@@ -97,7 +104,7 @@ pub async fn update_user(
   pg_pool: &PgPool,
   user_uuid: Uuid,
   params: UpdateUserParams,
-) -> Result<(), AppError> {
+) -> Result<(), AppResponseError> {
   let metadata = params.metadata.map(|m| json!(m.into_inner()));
   Ok(database::user::update_user(pg_pool, &user_uuid, params.name, params.email, metadata).await?)
 }

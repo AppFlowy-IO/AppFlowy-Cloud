@@ -1,5 +1,4 @@
 use collab::error::CollabError;
-use database_entity::error::DatabaseError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RealtimeError {
@@ -26,9 +25,6 @@ pub enum RealtimeError {
 
   #[error(transparent)]
   CollabError(#[from] CollabError),
-
-  #[error(transparent)]
-  StorageError(#[from] DatabaseError),
 
   #[error("Received message from client:{0}, but the client does not have sufficient permissions to write")]
   NotEnoughPermissionToWrite(i64),

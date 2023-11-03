@@ -79,9 +79,9 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub fn restore_token(&self, token: &str) -> Result<(), AppError> {
+  pub fn restore_token(&self, token: &str) -> Result<(), AppResponseError> {
     if token.is_empty() {
-      return Err(AppError::OAuthError("Empty token".to_string()));
+      return Err(AppError::OAuthError("Empty token".to_string()).into());
     }
     let token = serde_json::from_str::<AccessTokenResponse>(token)?;
     self.token.write().set(token);
@@ -95,12 +95,12 @@ impl Client {
   /// string representation of the access token. If the lock cannot be acquired or
   /// the token is not present, an error is returned.
   #[instrument(level = "debug", skip_all, err)]
-  pub fn get_token(&self) -> Result<String, AppError> {
+  pub fn get_token(&self) -> Result<String, AppResponseError> {
     let token_str = self
       .token
       .read()
       .try_get()
-      .map_err(|err| AppError::OAuthError(err.to_string()))?;
+      .map_err(|err| AppResponseError::from(AppError::OAuthError(err.to_string())))?;
     Ok(token_str)
   }
 
@@ -174,7 +174,7 @@ impl Client {
   ///
   /// # Returns
   /// - `Ok(String)`: A `String` containing the constructed authorization URL if the specified provider is available.
-  /// - `Err(AppError)`: An `AppError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
+  /// - `Err(AppResponseError)`: An `AppResponseError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
   ///
   #[instrument(level = "debug", skip_all, err)]
   pub async fn generate_oauth_url_with_provider(
@@ -340,13 +340,15 @@ impl Client {
   /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
   ///
   #[inline]
-  pub fn token_expires_at(&self) -> Result<i64, AppError> {
+  pub fn token_expires_at(&self) -> Result<i64, AppResponseError> {
     match &self.token.try_read() {
-      None => Err(AppError::Unhandled("Failed to read token".to_string())),
+      None => Err(AppError::Unhandled("Failed to read token".to_string()).into()),
       Some(token) => Ok(
         token
           .as_ref()
-          .ok_or(AppError::NotLoggedIn("fail to get expires_at".to_string()))?
+          .ok_or(AppResponseError::from(AppError::NotLoggedIn(
+            "fail to get expires_at".to_string(),
+          )))?
           .expires_at,
       ),
     }
@@ -358,17 +360,17 @@ impl Client {
   ///
   /// # Returns
   /// - `Ok(String)`: A `String` containing the access token.
-  /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
+  /// - `Err(AppResponseError)`: An `AppResponseError` indicating either an inability to read the token or that the user is not logged in.
   ///
-  pub fn access_token(&self) -> Result<String, AppError> {
+  pub fn access_token(&self) -> Result<String, AppResponseError> {
     match &self.token.try_read_for(Duration::from_secs(2)) {
-      None => Err(AppError::Unhandled("Failed to read token".to_string())),
+      None => Err(AppError::Unhandled("Failed to read token".to_string()).into()),
       Some(token) => Ok(
         token
           .as_ref()
-          .ok_or(AppError::NotLoggedIn(
+          .ok_or(AppResponseError::from(AppError::NotLoggedIn(
             "fail to get access token. Token is empty".to_string(),
-          ))?
+          )))?
           .access_token
           .clone(),
       ),
@@ -562,7 +564,6 @@ impl Client {
       },
       Err(err) => {
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
-        self.token.write().unset();
         Err(AppResponseError::from(err))
       },
     }

@@ -50,7 +50,7 @@ pub trait HttpAccessControlService: Send + Sync {
     oid: &str,
     user_uuid: &Uuid,
     method: Method,
-    path: Path<Url>,
+    path: &Path<Url>,
   ) -> Result<(), AppError> {
     Ok(())
   }
@@ -82,7 +82,7 @@ where
     oid: &str,
     user_uuid: &Uuid,
     method: Method,
-    path: Path<Url>,
+    path: &Path<Url>,
   ) -> Result<(), AppError> {
     self
       .as_ref()
@@ -211,7 +211,11 @@ where
                   .check_workspace_permission(&workspace_id, &user_uuid, method.clone())
                   .await
                 {
-                  error!("workspace access control: {:?}", err);
+                  error!(
+                    "workspace access control: {}, with path:{}",
+                    err,
+                    path.as_str()
+                  );
                   return Err(Error::from(err));
                 }
               };
@@ -221,10 +225,14 @@ where
             if let Some(collab_object_id) = collab_object_id {
               if let Some(acs) = services.get(&AccessResource::Collab) {
                 if let Err(err) = acs
-                  .check_collab_permission(&collab_object_id, &user_uuid, method, path)
+                  .check_collab_permission(&collab_object_id, &user_uuid, method, &path)
                   .await
                 {
-                  error!("collab access control: {:?}", err);
+                  error!(
+                    "collab access control: {:?}, with path:{}",
+                    err,
+                    path.as_str()
+                  );
                   return Err(Error::from(err));
                 }
               };

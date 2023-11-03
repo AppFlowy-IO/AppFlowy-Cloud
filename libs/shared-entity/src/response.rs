@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
-use app_error::{AppError, ErrorCode};
+use app_error::AppError;
+pub use app_error::ErrorCode;
 use std::fmt::{Debug, Display};
 
 #[cfg(feature = "cloud")]

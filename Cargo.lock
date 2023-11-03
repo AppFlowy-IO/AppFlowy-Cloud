@@ -545,6 +545,7 @@ dependencies = [
  "token",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tokio-util",
  "tracing",
  "tracing-actix-web",

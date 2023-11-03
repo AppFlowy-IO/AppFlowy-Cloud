@@ -13,7 +13,7 @@ use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 use tokio::spawn;
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, event, trace, warn};
 
 #[derive(Clone, Debug)]
 pub enum SinkState {
@@ -251,6 +251,12 @@ where
         while let Some(pending_msg) = pending_msg_queue.pop() {
           if !sending_msg.merge(pending_msg, &self.config.maximum_payload_size) {
             break;
+          } else {
+            event!(
+              tracing::Level::TRACE,
+              "Did merge message: {}",
+              sending_msg.get_msg()
+            );
           }
         }
       }

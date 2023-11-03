@@ -1,3 +1,4 @@
+use anyhow::Error;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Display;
@@ -122,8 +123,8 @@ impl<Msg> PendingMessage<Msg>
 where
   Msg: CollabSinkMessage,
 {
-  pub fn can_merge(&self, maximum_payload_size: &usize) -> bool {
-    self.msg.can_merge(maximum_payload_size)
+  pub fn can_merge(&self) -> bool {
+    self.msg.can_merge()
   }
 
   #[allow(dead_code)]
@@ -131,7 +132,7 @@ where
     self.msg.is_init_msg()
   }
 
-  pub fn merge(&mut self, other: Self, max_size: &usize) -> bool {
+  pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
     self.msg.merge(other.into_msg(), max_size)
   }
 }

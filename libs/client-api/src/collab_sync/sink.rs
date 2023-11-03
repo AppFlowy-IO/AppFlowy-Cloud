@@ -1,5 +1,6 @@
 use collab::core::origin::CollabOrigin;
 
+use anyhow::Error;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
@@ -114,6 +115,18 @@ where
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> Msg) {
+    {
+      let mut pending_msg_queue = self.pending_msg_queue.lock();
+      let msg_id = self.msg_id_counter.next();
+      let msg = f(msg_id);
+      pending_msg_queue.push_msg(msg_id, msg);
+      drop(pending_msg_queue);
+    }
+
+    self.notify();
+  }
+
+  pub fn queue_update_msg(&self, f: impl FnOnce(MsgId) -> Msg) {
     {
       let mut pending_msg_queue = self.pending_msg_queue.lock();
       let msg_id = self.msg_id_counter.next();
@@ -247,22 +260,32 @@ where
 
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
-      if sending_msg.can_merge(&self.config.maximum_payload_size) {
+      if sending_msg.can_merge() {
         while let Some(pending_msg) = pending_msg_queue.pop() {
           event!(
             tracing::Level::TRACE,
-            "next message len: {}",
-            pending_msg.get_msg().length()
+            "next message: {}",
+            pending_msg.get_msg()
           );
 
-          if !sending_msg.merge(pending_msg, &self.config.maximum_payload_size) {
-            break;
-          } else {
-            event!(
-              tracing::Level::TRACE,
-              "Did merge message: {}",
-              sending_msg.get_msg()
-            );
+          // If the message is not mergeable, push the message back to the queue and break the loop.
+          match sending_msg.merge(&pending_msg, &self.config.maximum_payload_size) {
+            Ok(continue_merge) => {
+              if !continue_merge {
+                break;
+              } else {
+                event!(
+                  tracing::Level::TRACE,
+                  "merged message: {}",
+                  sending_msg.get_msg()
+                );
+              }
+            },
+            Err(err) => {
+              pending_msg_queue.push(pending_msg);
+              error!("Failed to merge message: {}", err);
+              break;
+            },
           }
         }
       }

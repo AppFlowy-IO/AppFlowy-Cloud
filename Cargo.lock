@@ -3423,6 +3423,7 @@ dependencies = [
 name = "realtime-entity"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bytes",
  "collab",
  "collab-entity",

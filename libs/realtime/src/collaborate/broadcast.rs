@@ -253,10 +253,13 @@ impl Subscription {
   }
 }
 
+/// Generates a message: Message::Sync::(SyncMessage::Update(update))
 #[inline]
 fn gen_update_message(update: &[u8]) -> Vec<u8> {
   let mut encoder = EncoderV1::new();
+  // Message::Sync
   encoder.write_var(MSG_SYNC);
+  // SyncMessage::Update
   encoder.write_var(MSG_SYNC_UPDATE);
   encoder.write_buf(update);
   encoder.to_vec()

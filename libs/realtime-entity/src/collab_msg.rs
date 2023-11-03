@@ -157,11 +157,11 @@ impl Display for CollabMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
       CollabMessage::ClientInit(value) => f.write_fmt(format_args!(
-        "client init: [{}|oid:{}|payload_len:{}|msg_id:{}]",
+        "client init: [{}|oid:{}|msg_id:{}|payload_len:{}]",
         value.origin,
         value.object_id,
-        value.payload.len(),
         value.msg_id,
+        value.payload.len(),
       )),
       CollabMessage::ClientUpdateSync(value) => f.write_fmt(format_args!(
         "client update send: [oid:{}|msg_id:{:?}|payload_len:{}]",

@@ -1,8 +1,9 @@
 use config::{Config as InnerConfig, FileFormat};
 use secrecy::Secret;
+use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::path::PathBuf;
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -106,14 +107,9 @@ impl DatabaseSetting {
   }
 }
 
-pub fn get_configuration() -> Result<Config, config::ConfigError> {
+pub fn get_configuration(app_env: &Environment) -> Result<Config, config::ConfigError> {
   let base_path = std::env::current_dir().expect("Failed to determine the current directory");
   let configuration_dir = base_path.join("configuration");
-
-  let environment: Environment = std::env::var("APP_ENVIRONMENT")
-    .unwrap_or_else(|_| "local".to_string())
-    .try_into()
-    .expect("Failed to parse APP_ENVIRONMENT.");
 
   let builder = InnerConfig::builder()
         .set_default("default", "1")?
@@ -123,7 +119,7 @@ pub fn get_configuration() -> Result<Config, config::ConfigError> {
                 .format(FileFormat::Yaml),
         )
         .add_source(
-            config::File::from(configuration_dir.join(environment.as_str()))
+            config::File::from(configuration_dir.join(app_env.as_str()))
                 .required(true)
                 .format(FileFormat::Yaml),
         )
@@ -137,6 +133,7 @@ pub fn get_configuration() -> Result<Config, config::ConfigError> {
 }
 
 /// The possible runtime environment for our application.
+#[derive(Clone, Debug, Deserialize)]
 pub enum Environment {
   Local,
   Production,

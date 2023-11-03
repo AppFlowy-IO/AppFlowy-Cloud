@@ -66,10 +66,10 @@ async fn max_frame_size() {
     .await
     .unwrap();
 
-  for i in 0..10 {
+  for _ in 0..10 {
     let sender = ws_client.sender();
     tokio::spawn(async move {
-      sender.send(Message::Binary(vec![0; 4098])).unwrap();
+      sender.send(Message::Binary(vec![0; 65536])).unwrap();
     });
   }
 

@@ -249,6 +249,12 @@ where
       // message is not mergeable.
       if sending_msg.can_merge(&self.config.maximum_payload_size) {
         while let Some(pending_msg) = pending_msg_queue.pop() {
+          event!(
+            tracing::Level::TRACE,
+            "next message len: {}",
+            pending_msg.get_msg().length()
+          );
+
           if !sending_msg.merge(pending_msg, &self.config.maximum_payload_size) {
             break;
           } else {

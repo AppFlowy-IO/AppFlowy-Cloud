@@ -113,10 +113,6 @@ where
   pub fn msg_id(&self) -> MsgId {
     self.msg_id
   }
-
-  pub fn into_msg(self) -> Msg {
-    self.msg
-  }
 }
 
 impl<Msg> PendingMessage<Msg>
@@ -133,7 +129,7 @@ where
   }
 
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
-    self.msg.merge(other.into_msg(), max_size)
+    self.msg.merge(other.get_msg(), max_size)
   }
 }
 

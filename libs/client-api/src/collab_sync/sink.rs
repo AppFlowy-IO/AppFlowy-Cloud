@@ -1,6 +1,5 @@
 use collab::core::origin::CollabOrigin;
 
-use anyhow::Error;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Weak};

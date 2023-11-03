@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   /// Returns the length of the message in bytes.
-  fn len(&self) -> usize;
+  fn length(&self) -> usize;
+
   /// Returns true if the message can be merged with other messages.
   fn can_merge(&self) -> bool;
 
@@ -37,7 +38,7 @@ pub enum CollabMessage {
 }
 
 impl CollabSinkMessage for CollabMessage {
-  fn len(&self) -> usize {
+  fn length(&self) -> usize {
     self.payload().len()
   }
 
@@ -357,6 +358,7 @@ impl UpdateSync {
   }
 
   pub fn merge_payload(&mut self, other: Bytes) -> Result<bool, Error> {
+    // TODO(nathan): optimize the merge process
     let mut encoder = EncoderV1::new();
     for buf in [self.payload.as_ref(), other.as_ref()] {
       let mut decoder = DecoderV1::from(buf);

@@ -4,7 +4,8 @@ use std::pin::Pin;
 use crate::ws::WSError;
 use tokio::net::TcpStream;
 use tokio_retry::Action;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
 use tracing::{error, info};
 
 pub(crate) struct ConnectAction {
@@ -26,7 +27,17 @@ impl Action for ConnectAction {
     let cloned_addr = self.addr.clone();
     Box::pin(async move {
       info!("🔵websocket start connecting: {}", cloned_addr);
-      match connect_async(&cloned_addr).await {
+      match connect_async_with_config(
+        &cloned_addr,
+        Some(WebSocketConfig {
+          max_message_size: Some(65_536), // 64KB
+          max_frame_size: Some(65_536),   // 64KB
+          ..WebSocketConfig::default()
+        }),
+        false,
+      )
+      .await
+      {
         Ok((stream, _response)) => {
           info!("🟢websocket connect success");
           Ok(stream)

@@ -564,7 +564,6 @@ impl Client {
       },
       Err(err) => {
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
-        self.token.write().unset();
         Err(AppResponseError::from(err))
       },
     }

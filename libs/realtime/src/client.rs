@@ -84,7 +84,7 @@ where
         Ok(())
       },
       Err(err) => {
-        error!("Parse realtime message failed: {:?}", err);
+        error!("Unknown realtime message format: {:?}", err);
         Ok(())
       },
     }

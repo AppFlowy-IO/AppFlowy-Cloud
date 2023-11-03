@@ -10,6 +10,22 @@ A simple guide to deploy the logging infrastructure for AppFlowy Cloud
 ```
 docker compose --file docker-compose-logging.yml up -d
 ```
+- Quick check: `docker ps -a`
+
+## Common deployment problems
+### Filebeat did not start successfully
+```
+$ docker logs appflowy-cloud-filebeat-1
+Exiting: error loading config file: config file ("filebeat.yml") can only be writable by the owner but the permissions are "-rw-rw-r--" (to fix the permissions use: 'chmod go-w /usr/share/filebeat/filebeat.yml')
+```
+- Solution: remove write permission on the file: `chmod -w docker/filebeat/filebeat.yml`
+
+### No Logs
+```
+$ docker logs appflowy-cloud-filebeat-1
+...Non-zero metrics in the last 30s...
+```
+- Solution: give read permission to docker logs: `chmod -R a+r /var/lib/docker/containers`
 
 ## Credentials
 - After deployment, when you go to localhost:5601, both username and password will be `admin`

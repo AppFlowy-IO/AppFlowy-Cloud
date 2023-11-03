@@ -24,7 +24,6 @@ use tokio::io::AsyncRead;
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
 use tracing::{event, instrument};
-use tracing_actix_web::RequestId;
 
 use crate::state::AppState;
 
@@ -62,7 +61,6 @@ async fn put_blob_handler(
   content_type: web::Header<ContentType>,
   content_length: web::Header<ContentLength>,
   workspace_id: web::Path<Uuid>,
-  request_id: RequestId,
 ) -> Result<JsonAppResponse<AFBlobRecord>> {
   let content_length = content_length.into_inner().into_inner();
   // Check content length, if it's too large, return error.
@@ -117,7 +115,6 @@ async fn delete_blob_handler(
 async fn get_blob_handler(
   state: Data<AppState>,
   path: web::Path<PathInfo>,
-  request_id: RequestId,
   req: HttpRequest,
 ) -> Result<HttpResponse<BoxBody>> {
   let PathInfo {

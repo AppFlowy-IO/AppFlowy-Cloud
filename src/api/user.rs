@@ -20,7 +20,6 @@ use actix_web::{web, HttpResponse, Scope};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
 
 use shared_entity::response::AppResponseError;
-use tracing_actix_web::RequestId;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -41,7 +40,6 @@ pub fn user_scope() -> Scope {
 async fn verify_user_handler(
   path: web::Path<String>,
   state: Data<AppState>,
-  request_id: RequestId,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
   let is_new = biz::user::verify_token(
@@ -60,7 +58,6 @@ async fn verify_user_handler(
 async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-  request_id: RequestId,
 ) -> Result<JsonAppResponse<AFUserProfile>> {
   let profile = biz::user::get_profile(&state.pg_pool, &uuid)
     .await
@@ -72,7 +69,6 @@ async fn get_user_profile_handler(
 async fn get_user_workspace_info_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-  request_id: RequestId,
 ) -> Result<JsonAppResponse<AFUserWorkspaceInfo>> {
   let info = biz::user::get_user_workspace_info(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(info).into())
@@ -83,7 +79,6 @@ async fn update_user_handler(
   auth: Authorization,
   payload: Json<UpdateUserParams>,
   state: Data<AppState>,
-  request_id: RequestId,
 ) -> Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
   biz::user::update_user(&state.pg_pool, auth.uuid()?, params).await?;

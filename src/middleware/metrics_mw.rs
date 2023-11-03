@@ -1,4 +1,3 @@
-use actix_http::header::HeaderName;
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::web::Data;
@@ -7,6 +6,7 @@ use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use std::sync::Arc;
 
+use super::request_id::get_request_id;
 use crate::api::metrics::AppFlowyCloudMetrics;
 
 pub struct MetricsMiddleware;
@@ -75,18 +75,5 @@ where
       }
       Ok(res)
     })
-  }
-}
-
-fn get_request_id(req: &ServiceRequest) -> Option<String> {
-  match req.headers().get(HeaderName::from_static("x-request-id")) {
-    Some(h) => match h.to_str() {
-      Ok(s) => Some(s.to_owned()),
-      Err(e) => {
-        tracing::error!("Failed to get request id from header: {}", e);
-        None
-      },
-    },
-    None => None,
   }
 }

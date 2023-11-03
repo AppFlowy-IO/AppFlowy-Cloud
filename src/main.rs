@@ -1,6 +1,6 @@
 use appflowy_cloud::application::{init_state, Application};
-use appflowy_cloud::config::config::get_configuration;
-use appflowy_cloud::telemetry::{get_subscriber, init_subscriber};
+use appflowy_cloud::config::config::{get_configuration, Environment};
+use appflowy_cloud::telemetry::init_subscriber;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -17,14 +17,13 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("database={}", level));
   filters.push(format!("storage={}", level));
 
-  let subscriber = get_subscriber(
-    "appflowy_cloud".to_string(),
-    Some(filters.join(",")),
-    std::io::stdout,
-  );
-  init_subscriber(subscriber);
+  let app_env: Environment = std::env::var("APP_ENVIRONMENT")
+    .unwrap_or_else(|_| "local".to_string())
+    .try_into()
+    .expect("Failed to parse APP_ENVIRONMENT.");
 
-  let configuration = get_configuration().expect("The configuration should be configured.");
+  init_subscriber(&app_env, filters);
+  let configuration = get_configuration(&app_env).expect("The configuration should be configured.");
   let state = init_state(&configuration)
     .await
     .expect("The AppState should be initialized");

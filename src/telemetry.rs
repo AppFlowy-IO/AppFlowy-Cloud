@@ -1,21 +1,20 @@
 use actix_web::rt::task::JoinHandle;
 use tracing::subscriber::set_global_default;
-use tracing::Subscriber;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
 
-use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
-/// Compose multiple layers into a `tracing`'s subscriber.
-pub fn get_subscriber<Sink>(
-  name: String,
-  env_filter: Option<String>,
-  sink: Sink,
-) -> impl Subscriber + Sync + Send
-where
-  Sink: for<'a> MakeWriter<'a> + Send + Sync + 'static,
-{
+use crate::config::config::Environment;
+
+/// Register a subscriber as global default to process span data.
+///
+/// It should only be called once!
+pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
+  let name = "appflowy_cloud".to_string();
+  let env_filter = Some(filters.join(","));
+  let sink = std::io::stdout;
+
   let env_filter = match env_filter {
     None => {
       dbg!("Using default env filter");
@@ -25,25 +24,35 @@ where
   };
 
   let formatting_layer = BunyanFormattingLayer::new(name, sink);
-  tracing_subscriber::fmt()
-    .with_ansi(true)
+  let builder = tracing_subscriber::fmt()
+    .json()
     .with_target(true)
     .with_max_level(tracing::Level::TRACE)
     .with_thread_ids(false)
-    .with_file(false)
-    .pretty()
-    .finish()
-    .with(env_filter)
-    .with(JsonStorageLayer)
-    .with(formatting_layer)
-}
+    .with_file(false);
 
-/// Register a subscriber as global default to process span data.
-///
-/// It should only be called once!
-pub fn init_subscriber(subscriber: impl Subscriber + Sync + Send) {
-  LogTracer::init().expect("Failed to set logger");
-  set_global_default(subscriber).expect("Failed to set subscriber");
+  match app_env {
+    Environment::Local => {
+      let subscriber = builder
+        .pretty()
+        .with_ansi(true)
+        .finish()
+        .with(env_filter)
+        .with(JsonStorageLayer)
+        .with(formatting_layer);
+      LogTracer::init().unwrap();
+      set_global_default(subscriber).unwrap();
+    },
+    Environment::Production => {
+      let subscriber = builder
+        .finish()
+        .with(env_filter)
+        .with(JsonStorageLayer)
+        .with(formatting_layer);
+      LogTracer::init().unwrap();
+      set_global_default(subscriber).unwrap();
+    },
+  }
 }
 
 pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>

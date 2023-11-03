@@ -10,6 +10,7 @@ pub use http::*;
 
 pub mod error {
   pub use shared_entity::response::AppResponseError;
+  pub use shared_entity::response::ErrorCode;
 }
 
 // Export all dto entities that will be used in the frontend application

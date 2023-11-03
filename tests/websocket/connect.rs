@@ -1,6 +1,5 @@
-use client_api::ws::{ConnectState, WSClient, WSClientConfig};
-
 use crate::user::utils::generate_unique_registered_user_client;
+use client_api::ws::{ConnectState, WSClient, WSClientConfig};
 
 #[tokio::test]
 async fn realtime_connect_test() {

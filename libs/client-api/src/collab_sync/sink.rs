@@ -272,12 +272,6 @@ where
             Ok(continue_merge) => {
               if !continue_merge {
                 break;
-              } else {
-                event!(
-                  tracing::Level::TRACE,
-                  "merged message: {}",
-                  sending_msg.get_msg()
-                );
               }
             },
             Err(err) => {

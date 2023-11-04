@@ -125,7 +125,7 @@ where
               .entry(self.client_msg.user.clone())
             {
               trace!(
-                "[💭Server]: {} subscribe group:{}",
+                "[realtime]: {} subscribe group:{}",
                 self.client_msg.user,
                 self.client_msg.content.object_id()
               );

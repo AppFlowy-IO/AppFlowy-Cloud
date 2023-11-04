@@ -16,7 +16,7 @@ impl ConnectStateNotify {
 
   pub(crate) fn set_state(&mut self, state: ConnectState) {
     if self.state != state {
-      tracing::trace!("[WS]: {:?}", state);
+      tracing::trace!("[websocket]: {:?}", state);
       self.state = state.clone();
       let _ = self.sender.send(state);
     }

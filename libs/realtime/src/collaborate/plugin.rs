@@ -132,7 +132,7 @@ where
     );
 
     tracing::debug!(
-      "[💭Server] start flushing {}:{} with len: {}",
+      "[realtime] start flushing {}:{} with len: {}",
       object_id,
       params.collab_type,
       params.raw_data.len()
@@ -142,7 +142,7 @@ where
     tokio::spawn(async move {
       let object_id = params.object_id.clone();
       match storage.insert_collab(&uid, params).await {
-        Ok(_) => tracing::debug!("[💭Server] end flushing collab: {}", object_id),
+        Ok(_) => tracing::debug!("[realtime] end flushing collab: {}", object_id),
         Err(err) => tracing::error!("save collab failed: {:?}", err),
       }
     });

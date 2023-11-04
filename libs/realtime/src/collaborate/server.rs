@@ -101,7 +101,7 @@ where
     let editing_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
-      trace!("[💭Server]: new connection => {} ", new_conn.user);
+      trace!("[realtime]: new connection => {} ", new_conn.user);
       remove_user(
         &groups,
         &client_stream_by_user,
@@ -127,7 +127,7 @@ where
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    trace!("[💭Server]: disconnect => {}", msg.user);
+    trace!("[realtime]: disconnect => {}", msg.user);
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
@@ -184,7 +184,7 @@ async fn broadcast_message<U>(
 {
   if let Some(client_stream) = client_streams.read().await.get(&client_msg.user) {
     trace!(
-      "[💭Server]: receives client message: {}",
+      "[realtime]: receives client message: {}",
       client_msg.content,
     );
     match client_stream

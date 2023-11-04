@@ -254,26 +254,24 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
+    if match msg.msg_id() {
+      None => true,
+      Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
+    } && !msg.payload().is_empty()
     {
-      if match msg.msg_id() {
-        None => true,
-        Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
-      } && !msg.payload().is_empty()
-      {
-        trace!("💬process messages");
-        SyncStream::<Sink, Stream>::process_payload(
-          origin,
-          msg.payload(),
-          object_id,
-          protocol,
-          collab,
-          sink,
-        )
-        .await?;
-        trace!("💬");
-      }
-      Ok(())
+      trace!("💬process messages");
+      SyncStream::<Sink, Stream>::process_payload(
+        origin,
+        msg.payload(),
+        object_id,
+        protocol,
+        collab,
+        sink,
+      )
+      .await?;
+      trace!("💬");
     }
+    Ok(())
   }
 
   async fn process_payload<P>(

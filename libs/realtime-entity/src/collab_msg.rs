@@ -164,7 +164,7 @@ impl Display for CollabMessage {
         value.payload.len(),
       )),
       CollabMessage::ClientUpdateSync(value) => f.write_fmt(format_args!(
-        "client update send: [oid:{}|msg_id:{:?}|payload_len:{}]",
+        "client update: [oid:{}|msg_id:{:?}|payload_len:{}]",
         value.object_id,
         value.msg_id,
         value.payload.len(),

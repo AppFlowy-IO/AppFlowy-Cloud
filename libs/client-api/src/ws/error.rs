@@ -27,7 +27,7 @@ impl From<Error> for WSError {
   fn from(value: Error) -> Self {
     if let Error::Http(resp) = &value {
       if resp.status() == StatusCode::UNAUTHORIZED {
-        return WSError::AuthError("Unauthorized ws connection".to_string());
+        return WSError::AuthError("Unauthorized websocket connection".to_string());
       }
     }
     WSError::TungsteniteError(value)

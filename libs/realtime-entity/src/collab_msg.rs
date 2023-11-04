@@ -1,21 +1,26 @@
+use anyhow::Error;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::merge_updates_v1;
+use collab::preclude::updates::decoder::DecoderV1;
+use collab::preclude::updates::encoder::{Encode, Encoder, EncoderV1};
+use collab::sync_protocol::message::MessageReader;
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   /// Returns the length of the message in bytes.
   fn length(&self) -> usize;
-  /// Returns true if the message can be merged with other messages.
-  fn can_merge(&self, maximum_payload_size: &usize) -> bool;
 
-  fn merge(&mut self, other: Self, maximum_payload_size: &usize) -> bool;
+  /// Returns true if the message can be merged with other messages.
+  fn can_merge(&self) -> bool;
+
+  fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error>;
 
   fn is_init_msg(&self) -> bool;
+  fn is_update_msg(&self) -> bool;
 
   /// Determine if the message can be deferred base on the current state of the sink.
   fn deferrable(&self) -> bool;
@@ -37,33 +42,34 @@ impl CollabSinkMessage for CollabMessage {
     self.payload().len()
   }
 
-  fn can_merge(&self, maximum_payload_size: &usize) -> bool {
-    match self {
-      CollabMessage::ClientUpdateSync(sync) => &sync.payload.len() < maximum_payload_size,
-      _ => false,
-    }
+  fn can_merge(&self) -> bool {
+    self.is_update_msg()
   }
 
-  fn merge(&mut self, other: Self, maximum_payload_size: &usize) -> bool {
+  fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error> {
     match (self, other) {
       (CollabMessage::ClientUpdateSync(value), CollabMessage::ClientUpdateSync(other)) => {
         if &value.payload.len() > maximum_payload_size {
-          false
+          Ok(false)
         } else {
-          value.merge_payload(other.payload)
+          value.merge_payload(other.payload.clone())
         }
       },
-      _ => false,
+      _ => Ok(false),
     }
   }
 
   fn is_init_msg(&self) -> bool {
-    self.is_init()
+    matches!(self, CollabMessage::ClientInit(_))
+  }
+
+  fn is_update_msg(&self) -> bool {
+    matches!(self, CollabMessage::ClientUpdateSync(_))
   }
 
   fn deferrable(&self) -> bool {
     // If the message is not init, it can be pending.
-    !self.is_init()
+    !matches!(self, CollabMessage::ClientInit(_))
   }
 }
 
@@ -151,14 +157,14 @@ impl Display for CollabMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
       CollabMessage::ClientInit(value) => f.write_fmt(format_args!(
-        "client init: [{}|oid:{}|payload_len:{}|msg_id:{}]",
+        "client init: [{}|oid:{}|msg_id:{}|payload_len:{}]",
         value.origin,
         value.object_id,
-        value.payload.len(),
         value.msg_id,
+        value.payload.len(),
       )),
       CollabMessage::ClientUpdateSync(value) => f.write_fmt(format_args!(
-        "client update send: [oid:{}|msg_id:{:?}|payload_len:{}]",
+        "client update: [oid:{}|msg_id:{:?}|payload_len:{}]",
         value.object_id,
         value.msg_id,
         value.payload.len(),
@@ -280,6 +286,15 @@ pub struct ServerCollabInit {
   pub origin: CollabOrigin,
   pub object_id: String,
   pub msg_id: MsgId,
+  /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
+  /// To decode the message, use the `MessageReader`."
+  /// ```text
+  ///   let mut decoder = DecoderV1::new(Cursor::new(payload));
+  ///   let reader = MessageReader::new(&mut decoder);
+  ///   for message in reader {
+  ///    ...
+  ///   }
+  /// ```
   pub payload: Bytes,
 }
 
@@ -317,6 +332,18 @@ pub struct UpdateSync {
   pub origin: CollabOrigin,
   pub object_id: String,
   pub msg_id: MsgId,
+  /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
+  /// Message::Sync(SyncMessage::Update(update)).encode_v1()
+  ///
+  /// we can using the `MessageReader` to decode the payload
+  /// ```text
+  ///   let mut decoder = DecoderV1::new(Cursor::new(payload));
+  ///   let reader = MessageReader::new(&mut decoder);
+  ///   for message in reader {
+  ///    ...
+  ///   }
+  /// ```
+  ///  
   pub payload: Bytes,
 }
 
@@ -330,14 +357,18 @@ impl UpdateSync {
     }
   }
 
-  pub fn merge_payload(&mut self, other: Bytes) -> bool {
-    match merge_updates_v1(&[self.payload.as_ref(), other.as_ref()]) {
-      Ok(payload) => {
-        self.payload = Bytes::from(payload);
-        true
-      },
-      Err(_) => false,
+  pub fn merge_payload(&mut self, other: Bytes) -> Result<bool, Error> {
+    // TODO(nathan): optimize the merge process
+    let mut encoder = EncoderV1::new();
+    for buf in [self.payload.as_ref(), other.as_ref()] {
+      let mut decoder = DecoderV1::from(buf);
+      let reader = MessageReader::new(&mut decoder);
+      for msg in reader {
+        msg?.encode(&mut encoder);
+      }
     }
+    self.payload = Bytes::from(encoder.to_vec());
+    Ok(true)
   }
 }
 
@@ -400,6 +431,8 @@ impl Display for UpdateAck {
 pub struct CollabBroadcastData {
   origin: CollabOrigin,
   object_id: String,
+  /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
+  /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))
   payload: Bytes,
 }
 

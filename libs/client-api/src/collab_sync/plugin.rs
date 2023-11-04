@@ -40,6 +40,7 @@ where
     sink_config: SinkConfig,
     stream: Stream,
     channel: Option<Arc<C>>,
+    pause: bool,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
     let weak_local_collab = collab.clone();
@@ -50,6 +51,7 @@ where
       stream,
       collab.clone(),
       sink_config,
+      pause,
     );
 
     let mut sync_state_stream = WatchStream::new(sync_queue.subscribe_sync_state());
@@ -68,14 +70,25 @@ where
     let weak_sync_queue = Arc::downgrade(&sync_queue);
     tokio::spawn(async move {
       while let Ok(connect_state) = ws_connect_state.recv().await {
-        if connect_state == ConnectState::Connected {
-          if let (Some(local_collab), Some(sync_queue)) =
-            (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
-          {
-            if let Some(local_collab) = local_collab.try_lock() {
-              sync_queue.init_sync(local_collab.get_awareness());
+        match connect_state {
+          ConnectState::Connected => {
+            // If the websocket is connected, initialize a new init sync
+            if let (Some(local_collab), Some(sync_queue)) =
+              (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
+            {
+              if let Some(local_collab) = local_collab.try_lock() {
+                sync_queue.resume();
+                sync_queue.init_sync(local_collab.get_awareness());
+              }
             }
-          }
+          },
+          ConnectState::Unauthorized | ConnectState::Disconnected => {
+            if let Some(sync_queue) = weak_sync_queue.upgrade() {
+              // Stop sync if the websocket is unauthorized or disconnected
+              sync_queue.pause();
+            }
+          },
+          _ => {},
         }
       }
     });

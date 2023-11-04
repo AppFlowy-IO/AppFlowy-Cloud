@@ -31,11 +31,14 @@ pub async fn verify_token(
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
 
-  let mut txn = pg_pool.begin().await?;
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to verify token")?;
   let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
   if is_new {
     let new_uid = id_gen.write().await.next_id();
-    create_user(pg_pool, new_uid, &user_uuid, &user.email, &name).await?;
+    create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
   }
   txn
     .commit()

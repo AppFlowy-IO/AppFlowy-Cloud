@@ -85,6 +85,7 @@ pub struct DatabaseSetting {
   pub host: String,
   pub database_name: String,
   pub require_ssl: bool,
+  pub max_connections: u32,
 }
 
 impl DatabaseSetting {

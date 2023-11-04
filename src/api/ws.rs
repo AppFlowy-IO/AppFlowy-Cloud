@@ -51,7 +51,7 @@ pub async fn establish_ws_connection(
   );
 
   match ws::WsResponseBuilder::new(client, &request, payload)
-    .frame_size(MAX_FRAME_SIZE * 10)
+    .frame_size(MAX_FRAME_SIZE * 2)
     .start()
   {
     Ok(response) => Ok(response),

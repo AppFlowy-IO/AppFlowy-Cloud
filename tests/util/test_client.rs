@@ -310,6 +310,7 @@ impl TestClient {
       SinkConfig::default(),
       stream,
       Some(handler),
+      !self.ws_client.is_connected(),
       ws_connect_state,
     );
 
@@ -356,6 +357,7 @@ impl TestClient {
       SinkConfig::default(),
       stream,
       Some(handler),
+      !self.ws_client.is_connected(),
       ws_connect_state,
     );
 

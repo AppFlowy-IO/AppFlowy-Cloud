@@ -37,7 +37,7 @@ impl Default for WSClientConfig {
     Self {
       buffer_capacity: 1000,
       ping_per_secs: 8,
-      retry_connect_per_pings: 20,
+      retry_connect_per_pings: 10,
     }
   }
 }
@@ -89,6 +89,7 @@ impl WSClient {
     let cond = RetryCondition {
       connecting_addr: addr,
       addr: Arc::downgrade(&self.addr),
+      state_notify: Arc::downgrade(&self.state_notify),
     };
     let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
     let addr = match stream.get_ref() {
@@ -156,14 +157,14 @@ impl WSClient {
       }
     });
 
-    let mut sink_rx = self.sender.subscribe();
+    let mut sender_msg_rx = self.sender.subscribe();
 
     let weak_state_notify = Arc::downgrade(&self.state_notify);
     let handle_ws_error = move |error: &Error| {
       error!("websocket error: {:?}", error);
       match weak_state_notify.upgrade() {
         None => {
-          error!("ws state_notify is dropped");
+          error!("websocket state_notify is dropped");
         },
         Some(state_notify) => match &error {
           Error::ConnectionClosed | Error::AlreadyClosed => {
@@ -178,10 +179,9 @@ impl WSClient {
       loop {
         tokio::select! {
           _ = &mut stop_rx => {
-            info!("Client stop sending message using websocket");
             break;
           },
-         Ok(msg) = sink_rx.recv() => {
+         Ok(msg) = sender_msg_rx.recv() => {
            if let Err(err) = sink.send(msg).await {
               handle_ws_error(&err);
               break;
@@ -251,11 +251,17 @@ impl WSClient {
 struct RetryCondition {
   connecting_addr: String,
   addr: Weak<parking_lot::Mutex<Option<String>>>,
+  state_notify: Weak<parking_lot::Mutex<ConnectStateNotify>>,
 }
 impl Condition<WSError> for RetryCondition {
   fn should_retry(&mut self, error: &WSError) -> bool {
     if let WSError::AuthError(err) = error {
-      debug!("WSClient auth error: {}, stop retry connect", err);
+      debug!("{}, stop retry connect", err);
+
+      if let Some(state_notify) = self.state_notify.upgrade() {
+        state_notify.lock().set_state(ConnectState::Unauthorized);
+      }
+
       return false;
     }
 

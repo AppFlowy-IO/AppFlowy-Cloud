@@ -7,6 +7,7 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_tungstenite::tungstenite::Message;
+use tracing::warn;
 
 pub struct WebSocketChannel {
   business_id: BusinessID,
@@ -29,7 +30,9 @@ impl WebSocketChannel {
   }
 
   pub(crate) fn recv_msg(&self, msg: &ClientRealtimeMessage) {
-    let _ = self.receiver.send(msg.clone());
+    if let Err(err) = self.receiver.send(msg.clone()) {
+      warn!("Failed to send message to channel: {}", err);
+    }
   }
 
   pub fn sink<T>(&self) -> BroadcastSink<T>

@@ -42,11 +42,7 @@ where
   forward_ready!(service);
 
   fn call(&self, req: ServiceRequest) -> Self::Future {
-    let request_id = get_request_id(&req).unwrap_or({
-      let new_id = uuid::Uuid::new_v4().to_string();
-      tracing::warn!("No request id found in header, generating one: {}", new_id);
-      new_id
-    });
+    let request_id = get_request_id(&req).unwrap_or(uuid::Uuid::new_v4().to_string());
 
     // Call the next service
     let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);

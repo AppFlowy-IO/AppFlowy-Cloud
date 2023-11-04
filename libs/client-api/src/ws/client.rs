@@ -37,7 +37,7 @@ impl Default for WSClientConfig {
     Self {
       buffer_capacity: 1000,
       ping_per_secs: 8,
-      retry_connect_per_pings: 20,
+      retry_connect_per_pings: 10,
     }
   }
 }
@@ -156,14 +156,14 @@ impl WSClient {
       }
     });
 
-    let mut sink_rx = self.sender.subscribe();
+    let mut sender_msg_rx = self.sender.subscribe();
 
     let weak_state_notify = Arc::downgrade(&self.state_notify);
     let handle_ws_error = move |error: &Error| {
       error!("websocket error: {:?}", error);
       match weak_state_notify.upgrade() {
         None => {
-          error!("ws state_notify is dropped");
+          error!("websocket state_notify is dropped");
         },
         Some(state_notify) => match &error {
           Error::ConnectionClosed | Error::AlreadyClosed => {
@@ -178,10 +178,10 @@ impl WSClient {
       loop {
         tokio::select! {
           _ = &mut stop_rx => {
-            info!("Client stop sending message using websocket");
+            info!("Client disconnect websocket");
             break;
           },
-         Ok(msg) = sink_rx.recv() => {
+         Ok(msg) = sender_msg_rx.recv() => {
            if let Err(err) = sink.send(msg).await {
               handle_ws_error(&err);
               break;

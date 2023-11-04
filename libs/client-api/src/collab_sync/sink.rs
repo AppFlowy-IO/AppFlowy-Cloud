@@ -59,6 +59,12 @@ pub struct CollabSink<Sink, Msg> {
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
   fn drop(&mut self) {
+    let stop_tx = self.interval_runner_stop_tx.take();
+    spawn(async move {
+      if let Some(stop_tx) = stop_tx {
+        let _ = stop_tx.send(()).await;
+      }
+    });
     let _ = self.notifier.send(true);
   }
 }
@@ -160,7 +166,7 @@ where
   pub async fn ack_msg(
     &self,
     _origin: Option<&CollabOrigin>,
-    object_id: &str,
+    _object_id: &str,
     msg_id: MsgId,
   ) -> bool {
     match self.pending_msg_queue.lock().peek_mut() {
@@ -175,12 +181,6 @@ where
 
         let is_done = pending_msg.set_state(self.uid, MessageState::Done);
         if is_done {
-          trace!(
-            "[Client {}]: did send oid:{}|msg_id{} ",
-            self.uid,
-            object_id,
-            msg_id
-          );
           self.notify();
         }
         is_done
@@ -207,6 +207,17 @@ where
       return Ok(());
     }
 
+    let is_prev_msg_done = self
+      .pending_msg_queue
+      .try_lock()
+      .and_then(|queue| queue.peek().map(|msg| msg.state().is_done()))
+      .unwrap_or(false);
+
+    if is_prev_msg_done {
+      self.try_send_msg_immediately().await;
+      return Ok(());
+    }
+
     // Check the elapsed time from the last message. Return if the elapsed time is less than
     // the fix interval.
     if let SinkStrategy::FixInterval(duration) = &self.config.strategy {
@@ -218,7 +229,7 @@ where
       }
 
       if elapsed < self.config.send_timeout {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
         self.notify();
         return Ok(());
       }

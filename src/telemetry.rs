@@ -1,8 +1,6 @@
 use actix_web::rt::task::JoinHandle;
 use tracing::subscriber::set_global_default;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-use tracing_log::LogTracer;
-
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 use crate::config::config::Environment;
@@ -25,7 +23,6 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
 
   let formatting_layer = BunyanFormattingLayer::new(name, sink);
   let builder = tracing_subscriber::fmt()
-    .json()
     .with_target(true)
     .with_max_level(tracing::Level::TRACE)
     .with_thread_ids(false)
@@ -34,22 +31,23 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
   match app_env {
     Environment::Local => {
       let subscriber = builder
-        .pretty()
         .with_ansi(true)
+        .with_target(false)
+        .with_file(false)
+        .pretty()
         .finish()
         .with(env_filter)
         .with(JsonStorageLayer)
         .with(formatting_layer);
-      LogTracer::init().unwrap();
       set_global_default(subscriber).unwrap();
     },
     Environment::Production => {
       let subscriber = builder
+        .json()
         .finish()
         .with(env_filter)
         .with(JsonStorageLayer)
         .with(formatting_layer);
-      LogTracer::init().unwrap();
       set_global_default(subscriber).unwrap();
     },
   }

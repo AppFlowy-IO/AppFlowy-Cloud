@@ -5,6 +5,7 @@ database:
   host: "postgres"
   port: 5432
   require_ssl: false
+  max_connections: 20
 redis_uri: "redis://redis:6379"
 gotrue:
   base_url: "http://gotrue:9999"

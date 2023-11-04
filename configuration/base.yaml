@@ -10,6 +10,7 @@ database:
   username: "postgres"
   password: "password"
   database_name: "postgres"
+  max_connections: 10
 websocket:
   heartbeat_interval: 8
   client_timeout: 10

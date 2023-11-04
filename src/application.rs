@@ -20,8 +20,10 @@ use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::RwLock;
+use tracing::info;
 
 use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
@@ -283,8 +285,13 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
+  info!(
+    "Connecting to postgres database with setting: {:?}",
+    setting
+  );
   PgPoolOptions::new()
-    .acquire_timeout(std::time::Duration::from_secs(5))
+    .max_connections(setting.max_connections)
+    .acquire_timeout(Duration::from_secs(10))
     .connect_with(setting.with_db())
     .await
     .context("failed to connect to postgres database")

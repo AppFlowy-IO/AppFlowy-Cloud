@@ -53,6 +53,7 @@ where
     stream: Stream,
     collab: Weak<MutexCollab>,
     config: SinkConfig,
+    pause: bool,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(false);
@@ -67,6 +68,7 @@ where
       sync_state_tx,
       DefaultMsgIdCounter::new(),
       config,
+      pause,
     ));
 
     spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
@@ -97,6 +99,7 @@ where
             SinkState::Init => {
               let _ = sync_state.send(SyncState::SyncInitStart);
             },
+            SinkState::Pause => {},
           }
         }
       }
@@ -110,6 +113,14 @@ where
       protocol: cloned_protocol,
       sync_state,
     }
+  }
+
+  pub fn pause(&self) {
+    self.sink.pause();
+  }
+
+  pub fn resume(&self) {
+    self.sink.resume();
   }
 
   pub fn subscribe_sync_state(&self) -> watch::Receiver<SyncState> {

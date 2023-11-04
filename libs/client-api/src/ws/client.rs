@@ -89,6 +89,7 @@ impl WSClient {
     let cond = RetryCondition {
       connecting_addr: addr,
       addr: Arc::downgrade(&self.addr),
+      state_notify: Arc::downgrade(&self.state_notify),
     };
     let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
     let addr = match stream.get_ref() {
@@ -251,11 +252,17 @@ impl WSClient {
 struct RetryCondition {
   connecting_addr: String,
   addr: Weak<parking_lot::Mutex<Option<String>>>,
+  state_notify: Weak<parking_lot::Mutex<ConnectStateNotify>>,
 }
 impl Condition<WSError> for RetryCondition {
   fn should_retry(&mut self, error: &WSError) -> bool {
     if let WSError::AuthError(err) = error {
-      debug!("WSClient auth error: {}, stop retry connect", err);
+      debug!("{}, stop retry connect", err);
+
+      if let Some(state_notify) = self.state_notify.upgrade() {
+        state_notify.lock().set_state(ConnectState::Unauthorized);
+      }
+
       return false;
     }
 

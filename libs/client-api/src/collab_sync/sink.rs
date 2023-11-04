@@ -1,7 +1,7 @@
 use collab::core::origin::CollabOrigin;
 
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
@@ -22,6 +22,7 @@ pub enum SinkState {
   Syncing,
   /// All the messages are synced to the remote.
   Finished,
+  Pause,
 }
 
 impl SinkState {
@@ -55,6 +56,7 @@ pub struct CollabSink<Sink, Msg> {
   /// is [SinkStrategy::FixInterval].
   instant: Mutex<Instant>,
   state_notifier: Arc<watch::Sender<SinkState>>,
+  pause: AtomicBool,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
@@ -82,6 +84,7 @@ where
     sync_state_tx: watch::Sender<SinkState>,
     msg_id_counter: C,
     config: SinkConfig,
+    pause: bool,
   ) -> Self
   where
     C: MsgIdCounter,
@@ -111,6 +114,7 @@ where
       config,
       instant,
       interval_runner_stop_tx,
+      pause: AtomicBool::new(pause),
     }
   }
 
@@ -131,6 +135,8 @@ where
     self.notify();
   }
 
+  /// When queue the init message, the sink will clear all the pending messages and send the init
+  /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> Msg) {
     // When the client is connected, remove all pending messages and send the init message.
     {
@@ -148,6 +154,16 @@ where
 
   pub fn clear(&self) {
     self.pending_msg_queue.lock().clear();
+  }
+
+  pub fn pause(&self) {
+    self.pause.store(true, Ordering::SeqCst);
+    let _ = self.state_notifier.send(SinkState::Pause);
+  }
+
+  pub fn resume(&self) {
+    self.pause.store(false, Ordering::SeqCst);
+    self.notify();
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
@@ -177,6 +193,10 @@ where
   }
 
   async fn process_next_msg(&self) -> Result<(), SyncError> {
+    if self.pause.load(Ordering::SeqCst) {
+      return Ok(());
+    }
+
     // Check if the next message can be deferred. If not, try to send the message immediately. The
     // default value is true.
     let deferrable = self

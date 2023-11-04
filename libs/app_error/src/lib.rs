@@ -78,7 +78,7 @@ pub enum AppError {
   IOError(#[from] std::io::Error),
 
   #[cfg(feature = "sqlx_error")]
-  #[error("postgres db error: {0}")]
+  #[error("{0}")]
   SqlxError(String),
 
   #[cfg(feature = "validation_error")]
@@ -140,15 +140,12 @@ impl AppError {
 #[cfg(feature = "sqlx_error")]
 impl From<sqlx::Error> for AppError {
   fn from(value: sqlx::Error) -> Self {
-    let msg = value
-      .as_database_error()
-      .map(|err| err.message())
-      .unwrap_or("");
+    let msg = value.to_string();
     match value {
       sqlx::Error::RowNotFound => {
         AppError::RecordNotFound(format!("Record not exist in db. {})", msg))
       },
-      _ => AppError::SqlxError(msg.to_owned()),
+      _ => AppError::SqlxError(msg),
     }
   }
 }

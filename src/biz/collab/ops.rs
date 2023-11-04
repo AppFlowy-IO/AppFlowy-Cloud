@@ -1,4 +1,6 @@
+use anyhow::Context;
 use database::user;
+use std::ops::DerefMut;
 
 use app_error::AppError;
 use database_entity::dto::{
@@ -33,10 +35,15 @@ pub async fn upsert_collab(
 ) -> Result<(), AppError> {
   params.validate()?;
 
-  let owner_uid = user::select_uid_from_uuid(pg_pool, user_uuid).await?;
-  let mut tx = pg_pool.begin().await?;
+  let mut tx = pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to upsert collab")?;
+  let owner_uid = user::select_uid_from_uuid(tx.deref_mut(), user_uuid).await?;
   database::collab::insert_into_af_collab(&mut tx, &owner_uid, params).await?;
-  tx.commit().await?;
+  tx.commit()
+    .await
+    .context("fail to commit the transaction to upsert collab")?;
   Ok(())
 }
 

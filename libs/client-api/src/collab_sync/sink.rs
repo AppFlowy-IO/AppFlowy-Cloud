@@ -1,7 +1,7 @@
 use collab::core::origin::CollabOrigin;
 
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
@@ -22,6 +22,7 @@ pub enum SinkState {
   Syncing,
   /// All the messages are synced to the remote.
   Finished,
+  Pause,
 }
 
 impl SinkState {
@@ -55,6 +56,7 @@ pub struct CollabSink<Sink, Msg> {
   /// is [SinkStrategy::FixInterval].
   instant: Mutex<Instant>,
   state_notifier: Arc<watch::Sender<SinkState>>,
+  pause: AtomicBool,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
@@ -76,6 +78,7 @@ where
     sync_state_tx: watch::Sender<SinkState>,
     msg_id_counter: C,
     config: SinkConfig,
+    pause: bool,
   ) -> Self
   where
     C: MsgIdCounter,
@@ -105,6 +108,7 @@ where
       config,
       instant,
       interval_runner_stop_tx,
+      pause: AtomicBool::new(pause),
     }
   }
 
@@ -125,6 +129,8 @@ where
     self.notify();
   }
 
+  /// When queue the init message, the sink will clear all the pending messages and send the init
+  /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> Msg) {
     // When the client is connected, remove all pending messages and send the init message.
     {
@@ -144,11 +150,21 @@ where
     self.pending_msg_queue.lock().clear();
   }
 
+  pub fn pause(&self) {
+    self.pause.store(true, Ordering::SeqCst);
+    let _ = self.state_notifier.send(SinkState::Pause);
+  }
+
+  pub fn resume(&self) {
+    self.pause.store(false, Ordering::SeqCst);
+    self.notify();
+  }
+
   /// Notify the sink to process the next message and mark the current message as done.
   pub async fn ack_msg(
     &self,
     _origin: Option<&CollabOrigin>,
-    object_id: &str,
+    _object_id: &str,
     msg_id: MsgId,
   ) -> bool {
     match self.pending_msg_queue.lock().peek_mut() {
@@ -163,12 +179,6 @@ where
 
         let is_done = pending_msg.set_state(self.uid, MessageState::Done);
         if is_done {
-          trace!(
-            "[Client {}]: did send oid:{}|msg_id{} ",
-            self.uid,
-            object_id,
-            msg_id
-          );
           self.notify();
         }
         is_done
@@ -177,6 +187,10 @@ where
   }
 
   async fn process_next_msg(&self) -> Result<(), SyncError> {
+    if self.pause.load(Ordering::SeqCst) {
+      return Ok(());
+    }
+
     // Check if the next message can be deferred. If not, try to send the message immediately. The
     // default value is true.
     let deferrable = self
@@ -195,6 +209,17 @@ where
       return Ok(());
     }
 
+    let is_prev_msg_done = self
+      .pending_msg_queue
+      .try_lock()
+      .and_then(|queue| queue.peek().map(|msg| msg.state().is_done()))
+      .unwrap_or(false);
+
+    if is_prev_msg_done {
+      self.try_send_msg_immediately().await;
+      return Ok(());
+    }
+
     // Check the elapsed time from the last message. Return if the elapsed time is less than
     // the fix interval.
     if let SinkStrategy::FixInterval(duration) = &self.config.strategy {
@@ -206,7 +231,7 @@ where
       }
 
       if elapsed < self.config.send_timeout {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(300)).await;
         self.notify();
         return Ok(());
       }
@@ -247,16 +272,26 @@ where
 
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
-      if sending_msg.can_merge(&self.config.maximum_payload_size) {
+      if sending_msg.can_merge() {
         while let Some(pending_msg) = pending_msg_queue.pop() {
-          if !sending_msg.merge(pending_msg, &self.config.maximum_payload_size) {
-            break;
-          } else {
-            event!(
-              tracing::Level::TRACE,
-              "Did merge message: {}",
-              sending_msg.get_msg()
-            );
+          // If the message is not mergeable, push the message back to the queue and break the loop.
+          match sending_msg.merge(&pending_msg, &self.config.maximum_payload_size) {
+            Ok(continue_merge) => {
+              event!(
+                tracing::Level::TRACE,
+                "merge message: {}",
+                pending_msg.get_msg()
+              );
+              if !continue_merge {
+                event!(tracing::Level::TRACE, "merge finish",);
+                break;
+              }
+            },
+            Err(err) => {
+              pending_msg_queue.push(pending_msg);
+              error!("Failed to merge message: {}", err);
+              break;
+            },
           }
         }
       }

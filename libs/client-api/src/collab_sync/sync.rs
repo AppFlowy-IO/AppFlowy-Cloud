@@ -53,6 +53,7 @@ where
     stream: Stream,
     collab: Weak<MutexCollab>,
     config: SinkConfig,
+    pause: bool,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(false);
@@ -67,6 +68,7 @@ where
       sync_state_tx,
       DefaultMsgIdCounter::new(),
       config,
+      pause,
     ));
 
     spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
@@ -97,6 +99,7 @@ where
             SinkState::Init => {
               let _ = sync_state.send(SyncState::SyncInitStart);
             },
+            SinkState::Pause => {},
           }
         }
       }
@@ -110,6 +113,14 @@ where
       protocol: cloned_protocol,
       sync_state,
     }
+  }
+
+  pub fn pause(&self) {
+    self.sink.pause();
+  }
+
+  pub fn resume(&self) {
+    self.sink.resume();
   }
 
   pub fn subscribe_sync_state(&self) -> watch::Receiver<SyncState> {
@@ -254,26 +265,24 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
+    if match msg.msg_id() {
+      None => true,
+      Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
+    } && !msg.payload().is_empty()
     {
-      if match msg.msg_id() {
-        None => true,
-        Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
-      } && !msg.payload().is_empty()
-      {
-        trace!("💬process messages");
-        SyncStream::<Sink, Stream>::process_payload(
-          origin,
-          msg.payload(),
-          object_id,
-          protocol,
-          collab,
-          sink,
-        )
-        .await?;
-        trace!("💬");
-      }
-      Ok(())
+      trace!("💬process messages");
+      SyncStream::<Sink, Stream>::process_payload(
+        origin,
+        msg.payload(),
+        object_id,
+        protocol,
+        collab,
+        sink,
+      )
+      .await?;
+      trace!("💬");
     }
+    Ok(())
   }
 
   async fn process_payload<P>(

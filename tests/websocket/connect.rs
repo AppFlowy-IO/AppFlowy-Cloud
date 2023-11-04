@@ -50,3 +50,26 @@ async fn realtime_disconnect_test() {
     }
   }
 }
+
+// #[tokio::test]
+// async fn max_frame_size() {
+//   let (c, _user) = generate_unique_registered_user_client().await;
+//   let ws_client = WSClient::new(WSClientConfig {
+//     buffer_capacity: 100,
+//     ping_per_secs: 6,
+//     retry_connect_per_pings: 5,
+//   });
+//   ws_client
+//     .connect(c.ws_url("fake_device_id").unwrap())
+//     .await
+//     .unwrap();
+//
+//   for _ in 0..10 {
+//     let sender = ws_client.sender();
+//     tokio::spawn(async move {
+//       sender.send(Message::Binary(vec![0; 65536])).unwrap();
+//     });
+//   }
+//
+//   tokio::time::sleep(Duration::from_secs(5)).await;
+// }

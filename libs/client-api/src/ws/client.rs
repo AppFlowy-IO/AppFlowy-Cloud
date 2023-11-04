@@ -179,7 +179,6 @@ impl WSClient {
       loop {
         tokio::select! {
           _ = &mut stop_rx => {
-            info!("Client disconnect websocket");
             break;
           },
          Ok(msg) = sender_msg_rx.recv() => {

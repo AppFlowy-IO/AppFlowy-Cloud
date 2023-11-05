@@ -1,3 +1,5 @@
+use tracing::warn;
+
 pub enum Grant {
   Password(PasswordGrant),
   RefreshToken(RefreshTokenGrant),
@@ -37,8 +39,12 @@ impl Grant {
             "refresh_token": r.refresh_token,
         })
       },
-      Grant::IdToken => todo!(),
-      Grant::PKCE => todo!(),
+      Grant::IdToken => {
+        warn!("id_token grant is not supported");
+      },
+      Grant::PKCE => {
+        warn!("id_token grant is not supported");
+      },
     }
   }
 }

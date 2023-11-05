@@ -72,11 +72,16 @@ pub struct Factor {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AccessTokenResponse {
+pub struct GotrueTokenResponse {
+  /// the token that clients use to make authenticated requests to the server or API. It is a bearer token that provides temporary, secure access to server resources.
   pub access_token: String,
   pub token_type: String,
+  /// the access_token will remain valid before it expires and needs to be refreshed.
   pub expires_in: i64,
+  /// a timestamp indicating the exact time at which the access_token will expire.
   pub expires_at: i64,
+  /// The refresh token is used to obtain a new access_token once the current access_token expires.
+  /// Refresh tokens are usually long-lived and are stored securely by the client.
   pub refresh_token: String,
   pub user: User,
   pub provider_access_token: Option<String>,
@@ -195,7 +200,7 @@ pub struct OAuthURL {
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SignUpResponse {
-  Authenticated(AccessTokenResponse),
+  Authenticated(GotrueTokenResponse),
   NotAuthenticated(User),
 }
 #[derive(Default, Serialize, Deserialize)]

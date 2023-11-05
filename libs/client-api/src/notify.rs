@@ -1,5 +1,5 @@
 use anyhow::Error;
-use gotrue_entity::dto::AccessTokenResponse;
+use gotrue_entity::dto::GotrueTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
@@ -13,7 +13,7 @@ pub enum TokenState {
 
 pub struct ClientToken {
   sender: Sender<TokenState>,
-  token: Option<AccessTokenResponse>,
+  token: Option<GotrueTokenResponse>,
 }
 
 impl ClientToken {
@@ -40,7 +40,7 @@ impl ClientToken {
   /// # Parameters
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
-  pub(crate) fn set(&mut self, new_token: AccessTokenResponse) {
+  pub(crate) fn set(&mut self, new_token: GotrueTokenResponse) {
     let is_new = match &self.token {
       None => true,
       Some(old_token) => old_token.access_token != new_token.access_token,
@@ -74,7 +74,7 @@ impl ClientToken {
 }
 
 impl Deref for ClientToken {
-  type Target = Option<AccessTokenResponse>;
+  type Target = Option<GotrueTokenResponse>;
 
   fn deref(&self) -> &Self::Target {
     &self.token

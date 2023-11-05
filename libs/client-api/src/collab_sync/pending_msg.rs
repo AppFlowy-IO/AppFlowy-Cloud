@@ -1,7 +1,6 @@
 use anyhow::Error;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
@@ -15,7 +14,7 @@ pub(crate) struct PendingMsgQueue<Msg> {
 
 impl<Msg> PendingMsgQueue<Msg>
 where
-  Msg: Ord + Clone + Display,
+  Msg: CollabSinkMessage,
 {
   pub(crate) fn new(uid: i64) -> Self {
     Self {
@@ -32,7 +31,7 @@ where
 
 impl<Msg> Deref for PendingMsgQueue<Msg>
 where
-  Msg: Ord,
+  Msg: CollabSinkMessage,
 {
   type Target = BinaryHeap<PendingMessage<Msg>>;
 
@@ -43,7 +42,7 @@ where
 
 impl<Msg> DerefMut for PendingMsgQueue<Msg>
 where
-  Msg: Ord,
+  Msg: CollabSinkMessage,
 {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.queue
@@ -60,7 +59,7 @@ pub(crate) struct PendingMessage<Msg> {
 
 impl<Msg> PendingMessage<Msg>
 where
-  Msg: Clone + Display,
+  Msg: CollabSinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
     Self {
@@ -69,6 +68,10 @@ where
       state: MessageState::Pending,
       tx: None,
     }
+  }
+
+  pub fn object_id(&self) -> &str {
+    self.msg.collab_object_id()
   }
 
   pub fn get_msg(&self) -> &Msg {
@@ -82,27 +85,29 @@ where
   pub fn set_state(&mut self, uid: i64, new_state: MessageState) -> bool {
     self.state = new_state;
     trace!(
-      "[Client {}] : msg_id: {}, state: {:?}",
+      "[Client {}] : oid:{}|msg_id:{},state:{:?}",
       uid,
+      self.msg.collab_object_id(),
       self.msg_id,
       self.state
     );
-    if !self.state.is_done() {
-      return false;
-    }
 
-    match self.tx.take() {
-      None => false,
-      Some(tx) => {
-        // Notify that the message with given id was received
-        match tx.send(self.msg_id) {
-          Ok(_) => true,
-          Err(err) => {
-            warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
-            false
-          },
-        }
-      },
+    if self.state.is_done() {
+      match self.tx.take() {
+        None => false,
+        Some(tx) => {
+          // Notify that the message with given id was received
+          match tx.send(self.msg_id) {
+            Ok(_) => true,
+            Err(err) => {
+              warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
+              false
+            },
+          }
+        },
+      }
+    } else {
+      false
     }
   }
 

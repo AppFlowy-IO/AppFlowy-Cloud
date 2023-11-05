@@ -11,6 +11,7 @@ use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
+  fn collab_object_id(&self) -> &str;
   /// Returns the length of the message in bytes.
   fn length(&self) -> usize;
 
@@ -38,6 +39,10 @@ pub enum CollabMessage {
 }
 
 impl CollabSinkMessage for CollabMessage {
+  fn collab_object_id(&self) -> &str {
+    self.object_id()
+  }
+
   fn length(&self) -> usize {
     self.payload().len()
   }

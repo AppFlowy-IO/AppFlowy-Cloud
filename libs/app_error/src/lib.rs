@@ -28,7 +28,7 @@ pub enum AppError {
   #[error("Invalid password:{0}")]
   InvalidPassword(String),
 
-  #[error("OAuth error:{0}")]
+  #[error("{0}")]
   OAuthError(String),
 
   #[error("Missing Payload:{0}")]

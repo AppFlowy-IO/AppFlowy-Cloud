@@ -10,8 +10,8 @@ async fn edit_workspace_without_permission() {
   let mut client_2 = TestClient::new_user().await;
 
   let workspace_id = client_1.workspace_id().await;
-  client_1.edit_workspace_collab(&workspace_id).await;
-  client_2.edit_workspace_collab(&workspace_id).await;
+  client_1.open_workspace_collab(&workspace_id).await;
+  client_2.open_workspace_collab(&workspace_id).await;
 
   client_1
     .collab_by_object_id
@@ -31,13 +31,13 @@ async fn init_sync_workspace_with_guest_permission() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
-  client_1.edit_workspace_collab(&workspace_id).await;
+  client_1.open_workspace_collab(&workspace_id).await;
 
   // add client 2 as the member of the workspace then the client 2 will receive the update.
   client_1
     .add_workspace_member(&workspace_id, &client_2, AFRole::Guest)
     .await;
-  client_2.edit_workspace_collab(&workspace_id).await;
+  client_2.open_workspace_collab(&workspace_id).await;
 
   client_1
     .collab_by_object_id
@@ -57,7 +57,7 @@ async fn edit_workspace_with_guest_permission() {
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
-  client_1.edit_workspace_collab(&workspace_id).await;
+  client_1.open_workspace_collab(&workspace_id).await;
 
   // add client 2 as the member of the workspace then the client 2 will receive the update.
   client_1
@@ -73,7 +73,7 @@ async fn edit_workspace_with_guest_permission() {
     .insert("name", "zack");
   client_1.wait_object_sync_complete(&workspace_id).await;
 
-  client_2.edit_workspace_collab(&workspace_id).await;
+  client_2.open_workspace_collab(&workspace_id).await;
   // make sure the client 2 has received the remote updates before the client 2 edits the collab
   client_2
     .wait_object_sync_complete_with_secs(&workspace_id, 10)

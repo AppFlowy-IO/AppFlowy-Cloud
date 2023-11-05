@@ -324,8 +324,12 @@ where
           Ok(_) => match self.pending_msg_queue.try_lock() {
             None => warn!("Failed to acquire the lock of the pending_msg_queue"),
             Some(mut pending_msg_queue) => {
-              let _ = pending_msg_queue.pop();
-              trace!("Pending messages: {}", pending_msg_queue.len());
+              let msg = pending_msg_queue.pop();
+              trace!(
+                "{:?}: Pending messages: {}",
+                msg.map(|msg| msg.object_id().to_owned()),
+                pending_msg_queue.len()
+              );
               if pending_msg_queue.is_empty() {
                 if let Err(e) = self.state_notifier.send(SinkState::Finished) {
                   error!("send sink state failed: {}", e);

@@ -325,7 +325,7 @@ impl TestClient {
     object_id
   }
 
-  pub(crate) async fn edit_workspace_collab(&mut self, workspace_id: &str) {
+  pub(crate) async fn open_workspace_collab(&mut self, workspace_id: &str) {
     self
       .open_collab(workspace_id, workspace_id, CollabType::Folder)
       .await;

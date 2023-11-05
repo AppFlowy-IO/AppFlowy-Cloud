@@ -6,7 +6,7 @@ use database_entity::dto::{
   AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
   BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams, InsertCollabMemberParams,
-  InsertCollabParams, QueryCollabMembers, QueryCollabParams, RawData, UpdateCollabMemberParams,
+  InsertCollabParams, QueryCollabMembers, QueryCollabParams, UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -16,6 +16,7 @@ use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
+use realtime_entity::EncodedCollabV1;
 use reqwest::header;
 use reqwest::Method;
 use reqwest::RequestBuilder;
@@ -35,7 +36,7 @@ use tracing::{event, instrument};
 use url::Url;
 
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
-use gotrue_entity::dto::{AccessTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -83,12 +84,12 @@ impl Client {
     if token.is_empty() {
       return Err(AppError::OAuthError("Empty token".to_string()).into());
     }
-    let token = serde_json::from_str::<AccessTokenResponse>(token)?;
+    let token = serde_json::from_str::<GotrueTokenResponse>(token)?;
     self.token.write().set(token);
     Ok(())
   }
 
-  /// Retrieves the string representation of the [AccessTokenResponse]. The returned value can be
+  /// Retrieves the string representation of the [GotrueTokenResponse]. The returned value can be
   /// saved to the client application's local storage and used to restore the client's authentication
   ///
   /// This function attempts to acquire a read lock on `self.token` and retrieves the
@@ -142,7 +143,7 @@ impl Client {
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
     let (user, new) = self.verify_token(&access_token).await?;
 
-    self.token.write().set(AccessTokenResponse {
+    self.token.write().set(GotrueTokenResponse {
       access_token,
       token_type: token_type.ok_or(url_missing_param("token_type"))?,
       expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
@@ -646,7 +647,10 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppResponseError> {
+  pub async fn get_collab(
+    &self,
+    params: QueryCollabParams,
+  ) -> Result<EncodedCollabV1, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -657,7 +661,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    AppResponse::<RawData>::from_response(resp)
+    AppResponse::<EncodedCollabV1>::from_response(resp)
       .await?
       .into_data()
   }

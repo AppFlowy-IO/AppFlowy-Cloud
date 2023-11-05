@@ -1,6 +1,6 @@
 // Data Transfer Objects (DTO)
 
-use gotrue_entity::dto::AccessTokenResponse;
+use gotrue_entity::dto::GotrueTokenResponse;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -57,7 +57,7 @@ impl UpdateUserParams {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub struct SignInPasswordResponse {
-  pub access_token_resp: AccessTokenResponse,
+  pub access_token_resp: GotrueTokenResponse,
   pub is_new: bool,
 }
 

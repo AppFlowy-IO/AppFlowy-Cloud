@@ -24,45 +24,50 @@ use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 
 #[derive(Clone)]
-pub struct CollabServer<S, U, P> {
+pub struct CollabServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
-  groups: Arc<CollabGroupCache<S, U>>,
+  groups: Arc<CollabGroupCache<S, U, AC>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
-  access_control: Arc<P>,
+  access_control: Arc<AC>,
 }
 
-impl<S, U, P> CollabServer<S, U, P>
+impl<S, U, AC> CollabServer<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
-  P: CollabAccessControl,
+  AC: CollabAccessControl,
 {
-  pub fn new(storage: Arc<S>, access_control: P) -> Result<Self, RealtimeError> {
-    let groups = Arc::new(CollabGroupCache::new(storage.clone()));
+  pub fn new(storage: Arc<S>, access_control: AC) -> Result<Self, RealtimeError> {
+    let access_control = Arc::new(access_control);
+    let groups = Arc::new(CollabGroupCache::new(
+      storage.clone(),
+      access_control.clone(),
+    ));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
     Ok(Self {
       storage,
       groups,
       editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
-      access_control: Arc::new(access_control),
+      access_control,
     })
   }
 }
 
-async fn remove_user<S, U>(
-  groups: &Arc<CollabGroupCache<S, U>>,
+async fn remove_user<S, U, AC>(
+  groups: &Arc<CollabGroupCache<S, U, AC>>,
   client_stream_by_user: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
   editing_collab_by_user: &Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   user: &U,
 ) where
   S: CollabStorage,
   U: RealtimeUser,
+  AC: CollabAccessControl,
 {
   if client_stream_by_user.write().await.remove(user).is_some() {
     info!("Remove user stream: {}", user);
@@ -77,20 +82,20 @@ async fn remove_user<S, U>(
   }
 }
 
-impl<S, U, P> Actor for CollabServer<S, U, P>
+impl<S, U, AC> Actor for CollabServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Context = Context<Self>;
 }
 
-impl<S, U, P> Handler<Connect<U>> for CollabServer<S, U, P>
+impl<S, U, AC> Handler<Connect<U>> for CollabServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -119,11 +124,11 @@ where
   }
 }
 
-impl<S, U, P> Handler<Disconnect<U>> for CollabServer<S, U, P>
+impl<S, U, AC> Handler<Disconnect<U>> for CollabServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
@@ -144,11 +149,11 @@ where
   }
 }
 
-impl<S, U, P> Handler<ClientMessage<U>> for CollabServer<S, U, P>
+impl<S, U, AC> Handler<ClientMessage<U>> for CollabServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -198,13 +203,14 @@ async fn broadcast_message<U>(
 }
 
 /// Remove the user from the group and remove the group from the cache if the group is empty.
-async fn remove_user_from_group<S, U>(
+async fn remove_user_from_group<S, U, AC>(
   user: &U,
-  groups: &Arc<CollabGroupCache<S, U>>,
+  groups: &Arc<CollabGroupCache<S, U, AC>>,
   editing: &Editing,
 ) where
   S: CollabStorage,
   U: RealtimeUser,
+  AC: CollabAccessControl,
 {
   if let Some(group) = groups.get_group(&editing.object_id).await {
     info!("Remove subscriber: {}", editing.origin);
@@ -219,13 +225,13 @@ async fn remove_user_from_group<S, U>(
   }
 }
 
-impl<S, U, P> actix::Supervised for CollabServer<S, U, P>
+impl<S, U, AC> actix::Supervised for CollabServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, P>>) {
+  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, AC>>) {
     tracing::warn!("restarting");
   }
 }

@@ -4,7 +4,7 @@ use crate::params::{
 };
 use anyhow::Context;
 use gotrue_entity::dto::{
-  AccessTokenResponse, AdminListUsersResponse, GoTrueSettings, OAuthProvider, SignUpResponse,
+  AdminListUsersResponse, GoTrueSettings, GotrueTokenResponse, OAuthProvider, SignUpResponse,
   UpdateGotrueUserParams, User,
 };
 use gotrue_entity::error::{GoTrueError, OAuthError};
@@ -62,12 +62,12 @@ impl Client {
   }
 
   #[tracing::instrument(skip_all, err)]
-  pub async fn token(&self, grant: &Grant) -> Result<AccessTokenResponse, GoTrueError> {
+  pub async fn token(&self, grant: &Grant) -> Result<GotrueTokenResponse, GoTrueError> {
     let url = format!("{}/token?grant_type={}", self.base_url, grant.type_as_str());
     let payload = grant.json_value();
     let resp = self.client.post(url).json(&payload).send().await?;
     if resp.status().is_success() {
-      let token: AccessTokenResponse = from_body(resp).await?;
+      let token: GotrueTokenResponse = from_body(resp).await?;
       Ok(token)
     } else if resp.status().is_client_error() {
       Err(from_body::<OAuthError>(resp).await?.into())

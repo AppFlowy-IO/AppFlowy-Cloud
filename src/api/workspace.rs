@@ -6,6 +6,7 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
+use collab::core::collab_plugin::EncodedCollabV1;
 use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
@@ -13,7 +14,7 @@ use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use tracing::{debug, event, instrument};
+use tracing::{event, instrument};
 use uuid::Uuid;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
@@ -208,17 +209,16 @@ async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<RawData>>> {
+) -> Result<Json<AppResponse<EncodedCollabV1>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let data = state
     .collab_storage
-    .get_collab(&uid, payload.into_inner())
+    .get_collab_encoded_v1(&uid, payload.into_inner())
     .await
     .map_err(AppResponseError::from)?;
 
-  debug!("Returned data length: {}", data.len());
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 

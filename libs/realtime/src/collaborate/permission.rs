@@ -32,6 +32,13 @@ pub trait CollabAccessControl: Sync + Send + 'static {
     oid: &str,
   ) -> Result<AFAccessLevel, AppError>;
 
+  async fn cache_collab_access_level(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError>;
+
   /// Return true if the user from the HTTP request is allowed to access the collab object.
   /// This function will be called very frequently, so it should be very fast.
   ///  
@@ -69,6 +76,18 @@ where
     oid: &str,
   ) -> Result<AFAccessLevel, AppError> {
     self.as_ref().get_collab_access_level(user, oid).await
+  }
+
+  async fn cache_collab_access_level(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError> {
+    self
+      .as_ref()
+      .cache_collab_access_level(user, oid, level)
+      .await
   }
 
   async fn can_access_http_method(

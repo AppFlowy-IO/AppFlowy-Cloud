@@ -2,14 +2,15 @@ use crate::util::test_client::{assert_server_collab, TestClient};
 use collab_entity::CollabType;
 
 use serde_json::json;
-use sqlx::types::uuid;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
-  let object_id = uuid::Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
+  let object_id = test_client
+    .create_collab(&workspace_id, collab_type.clone())
+    .await;
   test_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
@@ -52,8 +53,12 @@ async fn realtime_write_multiple_collab_test() {
   let workspace_id = test_client.workspace_id().await;
   let mut object_ids = vec![];
   for _ in 0..5 {
-    let object_id = uuid::Uuid::new_v4().to_string();
     let collab_type = CollabType::Document;
+
+    let object_id = test_client
+      .create_collab(&workspace_id, collab_type.clone())
+      .await;
+
     test_client
       .open_collab(&workspace_id, &object_id, collab_type.clone())
       .await;
@@ -220,16 +225,20 @@ async fn realtime_write_multiple_collab_test() {
 #[tokio::test]
 async fn multiple_collab_edit_test() {
   let collab_type = CollabType::Document;
-  let object_id_1 = uuid::Uuid::new_v4().to_string();
   let mut client_1 = TestClient::new_user().await;
   let workspace_id_1 = client_1.workspace_id().await;
+  let object_id_1 = client_1
+    .create_collab(&workspace_id_1, collab_type.clone())
+    .await;
   client_1
     .open_collab(&workspace_id_1, &object_id_1, collab_type.clone())
     .await;
 
-  let object_id_2 = uuid::Uuid::new_v4().to_string();
   let mut client_2 = TestClient::new_user().await;
   let workspace_id_2 = client_2.workspace_id().await;
+  let object_id_2 = client_2
+    .create_collab(&workspace_id_2, collab_type.clone())
+    .await;
   client_2
     .open_collab(&workspace_id_2, &object_id_2, collab_type.clone())
     .await;

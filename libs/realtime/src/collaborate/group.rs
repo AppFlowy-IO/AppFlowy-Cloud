@@ -1,4 +1,4 @@
-use crate::collaborate::{CollabBroadcast, CollabStoragePlugin, Subscription};
+use crate::collaborate::{CollabAccessControl, CollabBroadcast, CollabStoragePlugin, Subscription};
 use crate::entities::RealtimeUser;
 use anyhow::Error;
 use collab::core::collab::MutexCollab;
@@ -13,20 +13,23 @@ use tokio::task::spawn_blocking;
 
 use tracing::{error, event, warn};
 
-pub struct CollabGroupCache<S, U> {
+pub struct CollabGroupCache<S, U, AC> {
   group_by_object_id: Arc<RwLock<HashMap<String, Arc<CollabGroup<U>>>>>,
   storage: Arc<S>,
+  access_control: Arc<AC>,
 }
 
-impl<S, U> CollabGroupCache<S, U>
+impl<S, U, AC> CollabGroupCache<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
+  AC: CollabAccessControl,
 {
-  pub fn new(storage: Arc<S>) -> Self {
+  pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Self {
     Self {
       group_by_object_id: Arc::new(RwLock::new(HashMap::new())),
       storage,
+      access_control,
     }
   }
 
@@ -110,6 +113,7 @@ where
       collab_type,
       self.storage.clone(),
       Arc::downgrade(&group),
+      self.access_control.clone(),
     );
     collab.lock().add_plugin(Arc::new(plugin));
     collab.lock_arc().initialize().await;

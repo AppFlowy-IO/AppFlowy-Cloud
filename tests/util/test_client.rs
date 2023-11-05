@@ -9,7 +9,7 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, AFBlobMetadata, AFRole, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember,
-  InsertCollabMemberParams, QueryCollabParams, UpdateCollabMemberParams,
+  InsertCollabMemberParams, InsertCollabParams, QueryCollabParams, UpdateCollabMemberParams,
 };
 use image::io::Reader as ImageReader;
 use serde_json::Value;
@@ -291,14 +291,28 @@ impl TestClient {
     collab_type: CollabType,
   ) -> String {
     let object_id = Uuid::new_v4().to_string();
+
     // Subscribe to object
     let handler = self
       .ws_client
       .subscribe(BusinessID::CollabId, object_id.clone())
       .unwrap();
+
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![]));
+
+    let encoded_collab_v1 = collab.encode_collab_v1().encode_to_bytes().unwrap();
+    self
+      .api_client
+      .create_collab(InsertCollabParams::new(
+        &object_id,
+        CollabType::Document,
+        encoded_collab_v1,
+        workspace_id.to_string(),
+      ))
+      .await
+      .unwrap();
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();
     let object = SyncObject::new(&object_id, workspace_id, collab_type, &self.device_id);
@@ -407,7 +421,7 @@ pub async fn assert_server_collab(
         retry_count += 1;
         match &result {
           Ok(data) => {
-            let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.to_vec()], vec![]).unwrap().to_json_value();
+            let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.doc_state.to_vec()], vec![]).unwrap().to_json_value();
             if retry_count > 10 {
               dbg!(workspace_id, object_id);
               assert_json_eq!(json, expected);
@@ -485,9 +499,14 @@ pub async fn get_collab_json_from_server(
     .await
     .unwrap();
 
-  Collab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![bytes.to_vec()], vec![])
-    .unwrap()
-    .to_json_value()
+  Collab::new_with_raw_data(
+    CollabOrigin::Empty,
+    object_id,
+    vec![bytes.doc_state.to_vec()],
+    vec![],
+  )
+  .unwrap()
+  .to_json_value()
 }
 
 pub fn generate_temp_file_path<T: AsRef<Path>>(file_name: T) -> TestTempFile {

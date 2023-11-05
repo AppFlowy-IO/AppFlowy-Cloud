@@ -304,6 +304,11 @@ where
       trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
       if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg).await? {
+        if is_sync_step_1 {
+          // flush
+          collab.lock().flush()
+        }
+
         let object_id = object_id.to_string();
         sink.queue_msg(|msg_id| {
           if is_sync_step_1 {

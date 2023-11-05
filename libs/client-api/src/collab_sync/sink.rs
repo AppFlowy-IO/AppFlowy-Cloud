@@ -327,7 +327,7 @@ where
               let msg = pending_msg_queue.pop();
               trace!(
                 "{:?}: Pending messages: {}",
-                msg.map(|msg| msg.get_msg().collab_object_id()),
+                msg.map(|msg| msg.object_id().to_owned()),
                 pending_msg_queue.len()
               );
               if pending_msg_queue.is_empty() {

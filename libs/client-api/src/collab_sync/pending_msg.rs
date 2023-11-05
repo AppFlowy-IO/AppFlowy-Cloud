@@ -70,6 +70,10 @@ where
     }
   }
 
+  pub fn object_id(&self) -> &str {
+    self.msg.collab_object_id()
+  }
+
   pub fn get_msg(&self) -> &Msg {
     &self.msg
   }

@@ -65,6 +65,9 @@ fn init_collab_with_raw_data(
     return Err(RealtimeError::UnexpectedData("raw data is empty"));
   }
   let mut txn = doc.transact_mut();
+  if encoded_collab.doc_state.is_empty() {
+    return Err(RealtimeError::UnexpectedData("Document state is empty"));
+  }
   let update = Update::decode_v1(&encoded_collab.doc_state)?;
   txn.try_apply_update(update)?;
   Ok(())

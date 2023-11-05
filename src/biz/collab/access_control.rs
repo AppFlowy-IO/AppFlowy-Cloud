@@ -3,14 +3,12 @@ use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
 use actix_router::{Path, Url};
 use actix_web::http::Method;
-use anyhow::Context;
 use app_error::AppError;
 use async_trait::async_trait;
 use database::collab::CollabStorageAccessControl;
 use database::user::select_uid_from_uuid;
 use database_entity::dto::{AFAccessLevel, AFRole};
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
-
 use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -318,15 +316,10 @@ where
 {
   #[instrument(level = "trace", skip_all, err)]
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    let level = self
+    self
       .collab_access_control
       .get_collab_access_level(uid.into(), oid)
       .await
-      .context(format!(
-        "fail to get the collab access level of user:{} for object:{}",
-        uid, oid
-      ))?;
-    Ok(level)
   }
 
   async fn cache_collab_access_level(

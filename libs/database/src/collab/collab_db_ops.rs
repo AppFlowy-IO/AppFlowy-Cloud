@@ -7,7 +7,7 @@ use database_entity::dto::{
 
 use app_error::AppError;
 use sqlx::postgres::PgRow;
-use sqlx::{Error, PgPool, Row, Transaction};
+use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
@@ -361,25 +361,15 @@ pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   Ok(())
 }
 
-#[instrument(skip(pg_pool), err)]
+#[instrument(skip(txn), err)]
 #[inline]
 pub async fn insert_collab_member(
   uid: i64,
   oid: &str,
   access_level: &AFAccessLevel,
-  pg_pool: &PgPool,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
-  let mut txn = pg_pool
-    .begin()
-    .await
-    .context("failed to acquire a transaction to insert collab member")?;
-
-  upsert_collab_member_with_txn(uid, oid, access_level, &mut txn).await?;
-
-  txn
-    .commit()
-    .await
-    .context("failed to commit the transaction to insert collab member")?;
+  upsert_collab_member_with_txn(uid, oid, access_level, txn).await?;
   Ok(())
 }
 
@@ -452,10 +442,10 @@ fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error>
 }
 
 #[inline]
-pub async fn is_collab_member_exists(
+pub async fn is_collab_member_exists<'a, E: Executor<'a, Database = Postgres>>(
   uid: i64,
   oid: &str,
-  pg_pool: &PgPool,
+  executor: E,
 ) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
     r#"
@@ -464,7 +454,7 @@ pub async fn is_collab_member_exists(
     &oid,
     &uid,
   )
-  .fetch_one(pg_pool)
+  .fetch_one(executor)
   .await;
   transform_record_not_found_error(result)
 }
@@ -486,14 +476,17 @@ fn transform_record_not_found_error(
 }
 
 #[inline]
-pub async fn is_collab_exists(oid: &str, pg_pool: &PgPool) -> Result<bool, sqlx::Error> {
+pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
+  oid: &str,
+  executor: E,
+) -> Result<bool, sqlx::Error> {
   let result = sqlx::query_scalar!(
     r#"
         SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
         "#,
     &oid,
   )
-  .fetch_one(pg_pool)
+  .fetch_one(executor)
   .await;
   transform_record_not_found_error(result)
 }

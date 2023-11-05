@@ -52,11 +52,11 @@ where
   }
 }
 
-impl<'a, U, S, P> Action for SubscribeGroupIfNeed<'a, U, S, P>
+impl<'a, U, S, AC> Action for SubscribeGroupIfNeed<'a, U, S, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  P: CollabAccessControl,
+  AC: CollabAccessControl,
 {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + 'a>>;
   type Item = ();

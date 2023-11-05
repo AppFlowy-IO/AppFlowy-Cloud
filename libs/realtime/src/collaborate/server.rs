@@ -42,7 +42,8 @@ where
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Result<Self, RealtimeError> {
+  pub fn new(storage: Arc<S>, access_control: AC) -> Result<Self, RealtimeError> {
+    let access_control = Arc::new(access_control);
     let groups = Arc::new(CollabGroupCache::new(
       storage.clone(),
       access_control.clone(),
@@ -81,20 +82,20 @@ async fn remove_user<S, U, AC>(
   }
 }
 
-impl<S, U, P> Actor for CollabServer<S, U, P>
+impl<S, U, AC> Actor for CollabServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Context = Context<Self>;
 }
 
-impl<S, U, P> Handler<Connect<U>> for CollabServer<S, U, P>
+impl<S, U, AC> Handler<Connect<U>> for CollabServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -123,11 +124,11 @@ where
   }
 }
 
-impl<S, U, P> Handler<Disconnect<U>> for CollabServer<S, U, P>
+impl<S, U, AC> Handler<Disconnect<U>> for CollabServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
@@ -148,11 +149,11 @@ where
   }
 }
 
-impl<S, U, P> Handler<ClientMessage<U>> for CollabServer<S, U, P>
+impl<S, U, AC> Handler<ClientMessage<U>> for CollabServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -224,13 +225,13 @@ async fn remove_user_from_group<S, U, AC>(
   }
 }
 
-impl<S, U, P> actix::Supervised for CollabServer<S, U, P>
+impl<S, U, AC> actix::Supervised for CollabServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, P>>) {
+  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, AC>>) {
     tracing::warn!("restarting");
   }
 }

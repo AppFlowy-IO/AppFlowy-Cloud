@@ -16,7 +16,7 @@ pub struct InsertCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
-  pub encoded_doc_v1: Vec<u8>,
+  pub encoded_collab_v1: Vec<u8>,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   pub collab_type: CollabType,
@@ -26,21 +26,21 @@ impl InsertCollabParams {
   pub fn new<T: ToString>(
     object_id: T,
     collab_type: CollabType,
-    encoded_doc_v1: Vec<u8>,
+    encoded_collab_v1: Vec<u8>,
     workspace_id: String,
   ) -> Self {
     let object_id = object_id.to_string();
     Self {
       object_id,
       collab_type,
-      encoded_doc_v1,
+      encoded_collab_v1,
       workspace_id,
     }
   }
   pub fn from_raw_data(
     object_id: &str,
     collab_type: CollabType,
-    encoded_doc_v1: Vec<u8>,
+    encoded_collab_v1: Vec<u8>,
     workspace_id: &str,
   ) -> Self {
     let object_id = object_id.to_string();
@@ -48,7 +48,7 @@ impl InsertCollabParams {
     Self {
       object_id,
       collab_type,
-      encoded_doc_v1,
+      encoded_collab_v1,
       workspace_id,
     }
   }

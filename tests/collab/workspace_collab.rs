@@ -1,5 +1,6 @@
 use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
 use collab_entity::CollabType;
+use std::time::Duration;
 
 use database_entity::dto::AFRole;
 use serde_json::json;
@@ -21,6 +22,8 @@ async fn edit_workspace_without_permission() {
     .lock()
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&workspace_id).await;
+
+  tokio::time::sleep(Duration::from_secs(4)).await;
 
   assert_client_collab(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}), 3).await;
   assert_client_collab(&mut client_2, &workspace_id, json!({}), 3).await;

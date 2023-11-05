@@ -1,6 +1,7 @@
 use crate::{
   collab::workspace_id_from_client, user::utils::generate_unique_registered_user_client,
 };
+use collab::core::collab_plugin::EncodedCollabV1;
 use std::collections::HashMap;
 
 use app_error::ErrorCode;
@@ -15,12 +16,15 @@ use sqlx::types::Uuid;
 async fn success_insert_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let raw_data = "hello world".to_string().as_bytes().to_vec();
+  let encoded_collab_v1 = EncodedCollabV1::new(vec![], raw_data.clone())
+    .encode_to_bytes()
+    .unwrap();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(InsertCollabParams::new(
     &object_id,
     CollabType::Document,
-    raw_data.clone(),
+    encoded_collab_v1,
     workspace_id.clone(),
   ))
   .await

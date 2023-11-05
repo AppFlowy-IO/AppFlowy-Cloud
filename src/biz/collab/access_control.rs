@@ -70,7 +70,7 @@ impl CollabAccessControlImpl {
   /// where these notifications aren't received promptly, leading to potential inconsistencies in the user's access level.
   /// Therefore, it's essential to update the user's access level in the cache whenever there's a change.
   pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
-    update_collab_member_status(uid, oid, access_level, &self.member_status_by_uid).await;
+    cache_collab_member_status(uid, oid, access_level, &self.member_status_by_uid).await;
   }
 
   pub async fn remove_member(&self, uid: &i64, oid: &str) {
@@ -159,7 +159,7 @@ fn spawn_listen_on_collab_member_change(
 }
 
 #[inline]
-async fn update_collab_member_status(
+async fn cache_collab_member_status(
   uid: &i64,
   oid: &str,
   access_level: AFAccessLevel,
@@ -179,7 +179,7 @@ async fn reload_collab_member_status_from_db(
 ) -> Result<MemberStatus, AppError> {
   let member = database::collab::select_collab_member(uid, oid, pg_pool).await?;
   let status = MemberStatus::Valid(member.permission.access_level.clone());
-  update_collab_member_status(
+  cache_collab_member_status(
     uid,
     oid,
     member.permission.access_level,

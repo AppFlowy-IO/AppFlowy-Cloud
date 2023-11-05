@@ -16,6 +16,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tracing::{error, trace};
 use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
 pub struct CollabStoragePlugin<S, U> {
@@ -85,20 +86,30 @@ where
       },
       Err(err) => match &err {
         AppError::RecordNotFound(_) => {
-          let raw_data = {
+          let result = {
             let txn = doc.transact();
-            txn.encode_state_as_update_v1(&StateVector::default())
+            let doc_state = txn.encode_diff_v1(&StateVector::default());
+            let state_vector = txn.state_vector().encode_v1();
+            EncodedCollabV1::new(doc_state, state_vector).encode_to_bytes()
           };
-          let params = InsertCollabParams::from_raw_data(
-            object_id,
-            self.collab_type.clone(),
-            raw_data,
-            &self.workspace_id,
-          );
 
-          trace!("Collab not found, create new one");
-          if let Err(err) = self.storage.insert_collab(&self.uid, params).await {
-            error!("fail to create new collab in plugin: {:?}", err);
+          match result.encode_to_bytes() {
+            Ok(encoded_collab_v1) => {
+              let params = InsertCollabParams::from_raw_data(
+                object_id,
+                self.collab_type.clone(),
+                encoded_collab_v1,
+                &self.workspace_id,
+              );
+
+              trace!("Collab not found, create new one");
+              if let Err(err) = self.storage.insert_collab(&self.uid, params).await {
+                error!("fail to create new collab in plugin: {:?}", err);
+              }
+            },
+            Err(err) => {
+              error!("fail to encode EncodedCollabV1 to bytes: {:?}", err);
+            },
           }
         },
         _ => error!("{:?}", err),
@@ -129,11 +140,11 @@ where
   fn flush(&self, object_id: &str, data: &EncodedCollabV1) {
     let storage = self.storage.clone();
     match data.encode_to_bytes() {
-      Ok(data) => {
+      Ok(encoded_collab_v1) => {
         let params = InsertCollabParams::from_raw_data(
           object_id,
           self.collab_type.clone(),
-          data,
+          encoded_collab_v1,
           &self.workspace_id,
         );
 

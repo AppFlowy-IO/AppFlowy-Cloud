@@ -52,7 +52,10 @@ impl<S, U> CollabStoragePlugin<S, U> {
   }
 }
 
-fn init_collab_with_raw_data(encoded_collab: EncodedCollabV1, doc: &Doc) -> Result<(), RealtimeError> {
+fn init_collab_with_raw_data(
+  encoded_collab: EncodedCollabV1,
+  doc: &Doc,
+) -> Result<(), RealtimeError> {
   if encoded_collab.doc_state.is_empty() {
     return Err(RealtimeError::UnexpectedData("raw data is empty"));
   }

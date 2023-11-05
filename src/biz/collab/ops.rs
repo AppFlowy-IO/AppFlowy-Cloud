@@ -82,7 +82,22 @@ pub async fn create_collab_member(
   params: &InsertCollabMemberParams,
 ) -> Result<(), AppError> {
   params.validate()?;
-  if database::collab::is_collab_member_exists(params.uid, &params.object_id, pg_pool).await? {
+
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to insert collab member")?;
+
+  if !database::collab::is_collab_exists(&params.object_id, txn.deref_mut()).await? {
+    return Err(AppError::RecordNotFound(format!(
+      "Fail to insert collab member. The Collab with object_id {} does not exist",
+      params.object_id
+    )));
+  }
+
+  if database::collab::is_collab_member_exists(params.uid, &params.object_id, txn.deref_mut())
+    .await?
+  {
     return Err(AppError::RecordAlreadyExists(format!(
       "Collab member with uid {} and object_id {} already exists",
       params.uid, params.object_id
@@ -94,9 +109,14 @@ pub async fn create_collab_member(
     params.uid,
     &params.object_id,
     &params.access_level,
-    pg_pool,
+    &mut txn,
   )
   .await?;
+
+  txn
+    .commit()
+    .await
+    .context("fail to commit the transaction to insert collab member")?;
   Ok(())
 }
 
@@ -106,14 +126,30 @@ pub async fn upsert_collab_member(
   params: &UpdateCollabMemberParams,
 ) -> Result<(), AppError> {
   params.validate()?;
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to upsert collab member")?;
+
+  if !database::collab::is_collab_exists(&params.object_id, txn.deref_mut()).await? {
+    return Err(AppError::RecordNotFound(format!(
+      "Fail to upsert collab member. The Collab with object_id {} does not exist",
+      params.object_id
+    )));
+  }
 
   database::collab::insert_collab_member(
     params.uid,
     &params.object_id,
     &params.access_level,
-    pg_pool,
+    &mut txn,
   )
   .await?;
+
+  txn
+    .commit()
+    .await
+    .context("fail to commit the transaction to upsert collab member")?;
   Ok(())
 }
 

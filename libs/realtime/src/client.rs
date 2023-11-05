@@ -21,24 +21,24 @@ use tracing::{error, warn};
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
   S: Unpin + 'static,
-  P: Unpin + CollabAccessControl,
+  AC: Unpin + CollabAccessControl,
 > {
   user: U,
   hb: Instant,
-  pub server: Addr<CollabServer<S, U, P>>,
+  pub server: Addr<CollabServer<S, U, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
 }
 
-impl<U, S, P> ClientSession<U, S, P>
+impl<U, S, AC> ClientSession<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   pub fn new(
     user: U,
-    server: Addr<CollabServer<S, U, P>>,
+    server: Addr<CollabServer<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
   ) -> Self {
@@ -133,11 +133,11 @@ where
   }
 }
 
-impl<U, S, P> Handler<RealtimeMessage> for ClientSession<U, S, P>
+impl<U, S, AC> Handler<RealtimeMessage> for ClientSession<U, S, AC>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   type Result = ();
 
@@ -147,11 +147,11 @@ where
 }
 
 /// WebSocket message handler
-impl<U, S, P> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S, P>
+impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
-  P: CollabAccessControl + Unpin,
+  AC: CollabAccessControl + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let msg = match msg {

@@ -24,23 +24,23 @@ use crate::collaborate::permission::CollabAccessControl;
 use crate::error::RealtimeError;
 use tracing::{error, trace, warn};
 
-pub(crate) struct SubscribeGroupIfNeed<'a, U, S, P> {
+pub(crate) struct SubscribeGroupIfNeed<'a, U, S, AC> {
   pub(crate) client_msg: &'a ClientMessage<U>,
-  pub(crate) groups: &'a Arc<CollabGroupCache<S, U>>,
+  pub(crate) groups: &'a Arc<CollabGroupCache<S, U, AC>>,
   pub(crate) edit_collab_by_user: &'a Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   pub(crate) client_stream_by_user: &'a Arc<RwLock<HashMap<U, CollabClientStream>>>,
-  pub(crate) access_control: &'a Arc<P>,
+  pub(crate) access_control: &'a Arc<AC>,
 }
 
-impl<'a, U, S, P> SubscribeGroupIfNeed<'a, U, S, P>
+impl<'a, U, S, AC> SubscribeGroupIfNeed<'a, U, S, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  P: CollabAccessControl,
+  AC: CollabAccessControl,
 {
   pub(crate) fn run(
     self,
-  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S, P>, SubscribeGroupCondition<U>>
+  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S, AC>, SubscribeGroupCondition<U>>
   {
     let weak_client_stream = Arc::downgrade(self.client_stream_by_user);
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
@@ -52,11 +52,11 @@ where
   }
 }
 
-impl<'a, U, S, P> Action for SubscribeGroupIfNeed<'a, U, S, P>
+impl<'a, U, S, AC> Action for SubscribeGroupIfNeed<'a, U, S, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  P: CollabAccessControl,
+  AC: CollabAccessControl,
 {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + 'a>>;
   type Item = ();

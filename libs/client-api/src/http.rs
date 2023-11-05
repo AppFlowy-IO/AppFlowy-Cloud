@@ -2,7 +2,6 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use bytes::Bytes;
-use collab::core::collab_plugin::EncodedCollabV1;
 use database_entity::dto::{
   AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
@@ -17,6 +16,7 @@ use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
+use realtime_entity::EncodedCollabV1;
 use reqwest::header;
 use reqwest::Method;
 use reqwest::RequestBuilder;

@@ -1,7 +1,6 @@
 use anyhow::Error;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
-use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
@@ -15,7 +14,7 @@ pub(crate) struct PendingMsgQueue<Msg> {
 
 impl<Msg> PendingMsgQueue<Msg>
 where
-  Msg: Ord + Clone + Display,
+  Msg: CollabSinkMessage,
 {
   pub(crate) fn new(uid: i64) -> Self {
     Self {
@@ -32,7 +31,7 @@ where
 
 impl<Msg> Deref for PendingMsgQueue<Msg>
 where
-  Msg: Ord,
+  Msg: CollabSinkMessage,
 {
   type Target = BinaryHeap<PendingMessage<Msg>>;
 
@@ -43,7 +42,7 @@ where
 
 impl<Msg> DerefMut for PendingMsgQueue<Msg>
 where
-  Msg: Ord,
+  Msg: CollabSinkMessage,
 {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.queue

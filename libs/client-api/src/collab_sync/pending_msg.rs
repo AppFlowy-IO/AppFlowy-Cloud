@@ -60,7 +60,7 @@ pub(crate) struct PendingMessage<Msg> {
 
 impl<Msg> PendingMessage<Msg>
 where
-  Msg: Clone + Display,
+  Msg: CollabSinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
     Self {
@@ -82,27 +82,29 @@ where
   pub fn set_state(&mut self, uid: i64, new_state: MessageState) -> bool {
     self.state = new_state;
     trace!(
-      "[Client {}] : msg_id: {}, state: {:?}",
+      "[Client {}] : oid:{}|msg_id:{},state:{:?}",
       uid,
+      self.msg.collab_object_id(),
       self.msg_id,
       self.state
     );
-    if !self.state.is_done() {
-      return false;
-    }
 
-    match self.tx.take() {
-      None => false,
-      Some(tx) => {
-        // Notify that the message with given id was received
-        match tx.send(self.msg_id) {
-          Ok(_) => true,
-          Err(err) => {
-            warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
-            false
-          },
-        }
-      },
+    if self.state.is_done() {
+      match self.tx.take() {
+        None => false,
+        Some(tx) => {
+          // Notify that the message with given id was received
+          match tx.send(self.msg_id) {
+            Ok(_) => true,
+            Err(err) => {
+              warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
+              false
+            },
+          }
+        },
+      }
+    } else {
+      false
     }
   }
 

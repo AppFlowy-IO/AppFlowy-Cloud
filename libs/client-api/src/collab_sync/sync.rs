@@ -266,11 +266,12 @@ where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     if match msg.msg_id() {
+      // The msg_id is None if the message is [ServerBroadcast] or [ServerAwareness]
       None => true,
       Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
     } && !msg.payload().is_empty()
     {
-      trace!("💬process messages");
+      trace!("start process message: {:?}", msg.msg_id());
       SyncStream::<Sink, Stream>::process_payload(
         origin,
         msg.payload(),
@@ -280,7 +281,7 @@ where
         sink,
       )
       .await?;
-      trace!("💬");
+      trace!("end process message: {:?}", msg.msg_id());
     }
     Ok(())
   }

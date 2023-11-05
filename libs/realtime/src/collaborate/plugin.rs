@@ -3,14 +3,15 @@ use crate::entities::RealtimeUser;
 use crate::error::RealtimeError;
 use app_error::AppError;
 use async_trait::async_trait;
-use bytes::Bytes;
+
 use collab::core::collab::TransactionMutExt;
+use collab::core::collab_plugin::EncodedCollabV1;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use database_entity::dto::{InsertCollabParams, QueryCollabParams, RawData};
+use database_entity::dto::{InsertCollabParams, QueryCollabParams};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tracing::{error, trace};
@@ -51,12 +52,12 @@ impl<S, U> CollabStoragePlugin<S, U> {
   }
 }
 
-fn init_collab_with_raw_data(raw_data: RawData, doc: &Doc) -> Result<(), RealtimeError> {
-  if raw_data.is_empty() {
+fn init_collab_with_raw_data(encoded_collab: EncodedCollabV1, doc: &Doc) -> Result<(), RealtimeError> {
+  if encoded_collab.doc_state.is_empty() {
     return Err(RealtimeError::UnexpectedData("raw data is empty"));
   }
   let mut txn = doc.transact_mut();
-  let update = Update::decode_v1(&raw_data)?;
+  let update = Update::decode_v1(&encoded_collab.doc_state)?;
   txn.try_apply_update(update)?;
   Ok(())
 }
@@ -74,7 +75,7 @@ where
       collab_type: self.collab_type.clone(),
     };
 
-    match self.storage.get_collab(&self.uid, params).await {
+    match self.storage.get_collab_encoded_v1(&self.uid, params).await {
       Ok(raw_data) => match init_collab_with_raw_data(raw_data, doc) {
         Ok(_) => {},
         Err(e) => error!("🔴Init collab failed: {:?}", e),
@@ -122,29 +123,36 @@ where
     }
   }
 
-  fn flush(&self, object_id: &str, update: &Bytes) {
+  fn flush(&self, object_id: &str, data: &EncodedCollabV1) {
     let storage = self.storage.clone();
-    let params = InsertCollabParams::from_raw_data(
-      object_id,
-      self.collab_type.clone(),
-      update.to_vec(),
-      &self.workspace_id,
-    );
+    match data.encode_to_bytes() {
+      Ok(data) => {
+        let params = InsertCollabParams::from_raw_data(
+          object_id,
+          self.collab_type.clone(),
+          data,
+          &self.workspace_id,
+        );
 
-    tracing::debug!(
-      "[realtime] start flushing {}:{} with len: {}",
-      object_id,
-      params.collab_type,
-      params.raw_data.len()
-    );
+        tracing::debug!(
+          "[realtime] start flushing {}:{} with len: {}",
+          object_id,
+          params.collab_type,
+          params.encoded_doc_v1.len()
+        );
 
-    let uid = self.uid;
-    tokio::spawn(async move {
-      let object_id = params.object_id.clone();
-      match storage.insert_collab(&uid, params).await {
-        Ok(_) => tracing::debug!("[realtime] end flushing collab: {}", object_id),
-        Err(err) => tracing::error!("save collab failed: {:?}", err),
-      }
-    });
+        let uid = self.uid;
+        tokio::spawn(async move {
+          let object_id = params.object_id.clone();
+          match storage.insert_collab(&uid, params).await {
+            Ok(_) => tracing::debug!("[realtime] end flushing collab: {}", object_id),
+            Err(err) => tracing::error!("save collab failed: {:?}", err),
+          }
+        });
+      },
+      Err(err) => {
+        error!("fail to encode EncodedDocV1 to bytes: {:?}", err);
+      },
+    }
   }
 }

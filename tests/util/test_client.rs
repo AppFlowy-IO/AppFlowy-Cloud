@@ -407,7 +407,7 @@ pub async fn assert_server_collab(
         retry_count += 1;
         match &result {
           Ok(data) => {
-            let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.to_vec()], vec![]).unwrap().to_json_value();
+            let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.doc_state.to_vec()], vec![]).unwrap().to_json_value();
             if retry_count > 10 {
               dbg!(workspace_id, object_id);
               assert_json_eq!(json, expected);
@@ -485,9 +485,14 @@ pub async fn get_collab_json_from_server(
     .await
     .unwrap();
 
-  Collab::new_with_raw_data(CollabOrigin::Empty, object_id, vec![bytes.to_vec()], vec![])
-    .unwrap()
-    .to_json_value()
+  Collab::new_with_raw_data(
+    CollabOrigin::Empty,
+    object_id,
+    vec![bytes.doc_state.to_vec()],
+    vec![],
+  )
+  .unwrap()
+  .to_json_value()
 }
 
 pub fn generate_temp_file_path<T: AsRef<Path>>(file_name: T) -> TestTempFile {

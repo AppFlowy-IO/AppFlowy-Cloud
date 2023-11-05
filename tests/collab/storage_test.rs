@@ -33,7 +33,8 @@ async fn success_insert_collab_test() {
       collab_type: CollabType::Document,
     })
     .await
-    .unwrap();
+    .unwrap()
+    .doc_state;
 
   assert_eq!(bytes, raw_data);
 }
@@ -66,7 +67,7 @@ async fn success_batch_get_collab_test() {
     expected_results.insert(
       object_id.clone(),
       QueryCollabResult::Success {
-        blob: raw_data.clone(),
+        encode_collab_v1: raw_data.clone(),
       },
     );
 
@@ -121,7 +122,7 @@ async fn success_part_batch_get_collab_test() {
       expected_results.insert(
         object_id.clone(),
         QueryCollabResult::Success {
-          blob: raw_data.clone(),
+          encode_collab_v1: raw_data.clone(),
         },
       );
       c.create_collab(InsertCollabParams::new(

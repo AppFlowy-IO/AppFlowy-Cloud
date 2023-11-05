@@ -2,11 +2,12 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use bytes::Bytes;
+use collab::core::collab_plugin::EncodedCollabV1;
 use database_entity::dto::{
   AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
   BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams, InsertCollabMemberParams,
-  InsertCollabParams, QueryCollabMembers, QueryCollabParams, RawData, UpdateCollabMemberParams,
+  InsertCollabParams, QueryCollabMembers, QueryCollabParams, UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -646,7 +647,10 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn get_collab(&self, params: QueryCollabParams) -> Result<RawData, AppResponseError> {
+  pub async fn get_collab(
+    &self,
+    params: QueryCollabParams,
+  ) -> Result<EncodedCollabV1, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -657,7 +661,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
-    AppResponse::<RawData>::from_response(resp)
+    AppResponse::<EncodedCollabV1>::from_response(resp)
       .await?
       .into_data()
   }

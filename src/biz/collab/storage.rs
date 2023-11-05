@@ -13,6 +13,7 @@ use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabStorageA
 use crate::biz::workspace::access_control::WorkspaceAccessControlImpl;
 use anyhow::Context;
 use app_error::AppError;
+use collab::core::collab_plugin::EncodedCollabV1;
 use sqlx::PgPool;
 use std::{
   collections::HashMap,
@@ -136,7 +137,11 @@ where
     self.inner.insert_collab(uid, params).await
   }
 
-  async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData> {
+  async fn get_collab_encoded_v1(
+    &self,
+    uid: &i64,
+    params: QueryCollabParams,
+  ) -> DatabaseResult<EncodedCollabV1> {
     params.validate()?;
     self
       .access_control
@@ -151,10 +156,10 @@ where
       .and_then(|collab| collab.upgrade());
 
     match collab {
-      None => self.inner.get_collab(uid, params).await,
+      None => self.inner.get_collab_encoded_v1(uid, params).await,
       Some(collab) => {
         info!("Get collab data:{} from memory", params.object_id);
-        let data = collab.encode_as_update_v1().0;
+        let data = collab.encode_collab_v1();
         Ok(data)
       },
     }
@@ -185,12 +190,15 @@ where
           .get(&params.object_id)
           .and_then(|collab| collab.upgrade())
         {
-          Some(collab) => Either::Left((
-            params.object_id,
-            QueryCollabResult::Success {
-              blob: collab.encode_as_update_v1().0,
-            },
-          )),
+          Some(collab) => match collab.encode_collab_v1().encode_to_bytes() {
+            Ok(bytes) => Either::Left((
+              params.object_id,
+              QueryCollabResult::Success {
+                encode_collab_v1: bytes,
+              },
+            )),
+            Err(_) => Either::Right(params),
+          },
           None => Either::Right(params),
         }
       });

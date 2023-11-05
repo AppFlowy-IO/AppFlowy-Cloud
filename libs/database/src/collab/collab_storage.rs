@@ -1,8 +1,9 @@
 use crate::collab::{collab_db_ops, is_collab_exists};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
+use collab::core::collab_plugin::EncodedCollabV1;
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, AFCollabSnapshots, AFRole, BatchQueryCollab, InsertCollabParams,
@@ -70,7 +71,11 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
-  async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData>;
+  async fn get_collab_encoded_v1(
+    &self,
+    uid: &i64,
+    params: QueryCollabParams,
+  ) -> DatabaseResult<EncodedCollabV1>;
 
   async fn batch_get_collab(
     &self,
@@ -124,8 +129,12 @@ where
     self.as_ref().insert_collab(uid, params).await
   }
 
-  async fn get_collab(&self, uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData> {
-    self.as_ref().get_collab(uid, params).await
+  async fn get_collab_encoded_v1(
+    &self,
+    uid: &i64,
+    params: QueryCollabParams,
+  ) -> DatabaseResult<EncodedCollabV1> {
+    self.as_ref().get_collab_encoded_v1(uid, params).await
   }
 
   async fn batch_get_collab(
@@ -218,7 +227,11 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(())
   }
 
-  async fn get_collab(&self, _uid: &i64, params: QueryCollabParams) -> DatabaseResult<RawData> {
+  async fn get_collab_encoded_v1(
+    &self,
+    _uid: &i64,
+    params: QueryCollabParams,
+  ) -> DatabaseResult<EncodedCollabV1> {
     match collab_db_ops::select_blob_from_af_collab(
       &self.pg_pool,
       &params.collab_type,
@@ -226,10 +239,9 @@ impl CollabStorage for CollabStoragePgImpl {
     )
     .await
     {
-      Ok(data) => {
-        debug_assert!(!data.is_empty());
-        Ok(data)
-      },
+      Ok(data) => EncodedCollabV1::decode_from_bytes(&data).map_err(|err| {
+        AppError::Internal(anyhow!("fail to decode data to EncodedDocV1: {:?}", err))
+      }),
       Err(e) => match e {
         sqlx::Error::RowNotFound => {
           let msg = format!("Can't find the row for query: {:?}", params);

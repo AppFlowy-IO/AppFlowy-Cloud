@@ -4,6 +4,7 @@ use crate::error::RealtimeError;
 use app_error::AppError;
 use async_trait::async_trait;
 
+use crate::collaborate::{CollabAccessControl, CollabUserId};
 use collab::core::collab::TransactionMutExt;
 use collab::core::collab_plugin::EncodedCollabV1;
 use collab::core::origin::CollabOrigin;
@@ -11,7 +12,7 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use database_entity::dto::{InsertCollabParams, QueryCollabParams};
+use database_entity::dto::{AFAccessLevel, InsertCollabParams, QueryCollabParams};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use tracing::{error, trace};
@@ -19,7 +20,7 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
-pub struct CollabStoragePlugin<S, U> {
+pub struct CollabStoragePlugin<S, U, AC> {
   uid: i64,
   workspace_id: String,
   storage: Arc<S>,
@@ -27,15 +28,17 @@ pub struct CollabStoragePlugin<S, U> {
   update_count: AtomicU32,
   group: Weak<CollabGroup<U>>,
   collab_type: CollabType,
+  access_control: Arc<AC>,
 }
 
-impl<S, U> CollabStoragePlugin<S, U> {
+impl<S, U, AC> CollabStoragePlugin<S, U, AC> {
   pub fn new(
     uid: i64,
     workspace_id: &str,
     collab_type: CollabType,
     storage: S,
     group: Weak<CollabGroup<U>>,
+    access_control: Arc<AC>,
   ) -> Self {
     let storage = Arc::new(storage);
     let workspace_id = workspace_id.to_string();
@@ -49,6 +52,7 @@ impl<S, U> CollabStoragePlugin<S, U> {
       update_count,
       group,
       collab_type,
+      access_control,
     }
   }
 }
@@ -67,10 +71,11 @@ fn init_collab_with_raw_data(
 }
 
 #[async_trait]
-impl<S, U> CollabPlugin for CollabStoragePlugin<S, U>
+impl<S, U, AC> CollabPlugin for CollabStoragePlugin<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
+  AC: CollabAccessControl,
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams {
@@ -80,12 +85,21 @@ where
     };
 
     match self.storage.get_collab_encoded_v1(&self.uid, params).await {
-      Ok(raw_data) => match init_collab_with_raw_data(raw_data, doc) {
+      Ok(encoded_collab) => match init_collab_with_raw_data(encoded_collab, doc) {
         Ok(_) => {},
         Err(e) => error!("🔴Init collab failed: {:?}", e),
       },
       Err(err) => match &err {
         AppError::RecordNotFound(_) => {
+          let _ = self
+            .access_control
+            .cache_collab_access_level(
+              CollabUserId::from(&self.uid),
+              object_id,
+              AFAccessLevel::FullAccess,
+            )
+            .await;
+
           let result = {
             let txn = doc.transact();
             let doc_state = txn.encode_diff_v1(&StateVector::default());
@@ -93,7 +107,7 @@ where
             EncodedCollabV1::new(doc_state, state_vector).encode_to_bytes()
           };
 
-          match result.encode_to_bytes() {
+          match result {
             Ok(encoded_collab_v1) => {
               let params = InsertCollabParams::from_raw_data(
                 object_id,
@@ -152,7 +166,7 @@ where
           "[realtime] start flushing {}:{} with len: {}",
           object_id,
           params.collab_type,
-          params.encoded_doc_v1.len()
+          params.encoded_collab_v1.len()
         );
 
         let uid = self.uid;

@@ -96,18 +96,8 @@ impl CollabAccessControlImpl {
 
     let member_status = match member_status {
       None => {
-        let result =
-          reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
-            .await;
-
-        // If the collab object is not found which means the collab object is created by the user.
-        if let Err(err) = result.as_ref() {
-          if err.is_record_not_found() {
-            return Ok(AFAccessLevel::FullAccess);
-          }
-        }
-
-        result?
+        reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
+          .await?
       },
       Some(status) => status,
     };
@@ -207,6 +197,21 @@ impl CollabAccessControl for CollabAccessControlImpl {
     Ok(level)
   }
 
+  async fn cache_collab_access_level(
+    &self,
+    user: CollabUserId<'_>,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError> {
+    let uid = match user {
+      CollabUserId::UserId(uid) => *uid,
+      CollabUserId::UserUuid(uuid) => select_uid_from_uuid(&self.pg_pool, uuid).await?,
+    };
+
+    self.update_member(&uid, oid, level).await;
+    Ok(())
+  }
+
   async fn can_access_http_method(
     &self,
     user: CollabUserId<'_>,
@@ -243,12 +248,11 @@ impl CollabAccessControl for CollabAccessControlImpl {
         AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => Ok(true),
       },
       Err(err) => {
-        // If the collab object with given oid is not found which means the collab object is created
-        // by the user. So the user is allowed to send the message
-        if err.is_record_not_found() {
-          return Ok(true);
-        }
-
+        // // If the collab object with given oid is not found which means the collab object is created
+        // // by the user. So the user is allowed to send the message
+        // if err.is_record_not_found() {
+        //   return Ok(true);
+        // }
         return Err(err);
       },
     }
@@ -323,6 +327,18 @@ where
         uid, oid
       ))?;
     Ok(level)
+  }
+
+  async fn cache_collab_access_level(
+    &self,
+    uid: &i64,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError> {
+    self
+      .collab_access_control
+      .cache_collab_access_level(uid.into(), oid, level)
+      .await
   }
 
   async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, AppError> {

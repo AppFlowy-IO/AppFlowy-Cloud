@@ -25,6 +25,14 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   /// Checks if the user with the given ID can access the [Collab] with the given ID.
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
 
+  /// Updates the cache of the access level of the user for given collab object.
+  async fn cache_collab_access_level(
+    &self,
+    uid: &i64,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError>;
+
   /// Returns the role of the user in the workspace.
   async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, AppError>;
 }

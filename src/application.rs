@@ -213,26 +213,38 @@ async fn setup_admin_account(
 ) -> Result<(), Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
-  gotrue_client
-    .sign_up(admin_email, password)
-    .await
-    .context("failed to sign-up for admin user")?;
+  let res_resp = gotrue_client.sign_up(admin_email, password).await;
 
-  // Unable to use query! macro here instead
-  // because of the auth is a not default schema
-  // hopefully this will be fixed in the future
-  sqlx::query(
-    r#"
-      UPDATE auth.users
-      SET role = 'supabase_admin', email_confirmed_at = NOW()
-      WHERE email = $1
-        "#,
-  )
-  .bind(admin_email)
-  .execute(pg_pool)
-  .await
-  .context("failed to update the admin user")?;
-  Ok(())
+  match res_resp {
+    Ok(resp) => match resp {
+      gotrue_entity::dto::SignUpResponse::Authenticated(_) => {
+        tracing::info!("Admin user already authenticated");
+        Ok(())
+      },
+      gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => {
+        let user_id = user.id.parse::<uuid::Uuid>().unwrap();
+        sqlx::query!(
+          r#"
+            UPDATE auth.users
+            SET role = 'supabase_admin', email_confirmed_at = NOW()
+            WHERE id = $1
+        "#, user_id
+        )
+        // .bind(user.id)
+        .execute(pg_pool)
+        .await
+        .context("failed to update the admin user")?;
+        Ok(())
+      },
+    },
+    Err(err) => match (err.code, err.msg.as_str()) {
+      (400, "User already registered") => {
+        tracing::info!("Admin user already registered");
+        Ok(())
+      },
+      _ => Err(err.into()),
+    },
+  }
 }
 
 async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {

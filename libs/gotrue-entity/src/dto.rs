@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Identity {
   pub id: String,
   pub user_id: String,
@@ -61,7 +61,7 @@ pub struct User {
   pub deleted_at: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Factor {
   pub id: String,
   pub created_at: String,

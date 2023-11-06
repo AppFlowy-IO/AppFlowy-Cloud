@@ -4,6 +4,7 @@ mod http;
 pub mod collab_sync;
 
 pub mod notify;
+mod retry;
 pub mod ws;
 
 pub use http::*;

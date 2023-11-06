@@ -8,6 +8,7 @@ use tokio::sync::oneshot;
 use tracing::{trace, warn};
 
 pub(crate) struct PendingMsgQueue<Msg> {
+  #[allow(dead_code)]
   uid: i64,
   queue: BinaryHeap<PendingMessage<Msg>>,
 }
@@ -24,7 +25,6 @@ where
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
-    trace!("[Client {}]: queue message: {}", self.uid, msg);
     self.queue.push(PendingMessage::new(msg, msg_id));
   }
 }
@@ -83,14 +83,17 @@ where
   }
 
   pub fn set_state(&mut self, uid: i64, new_state: MessageState) -> bool {
-    self.state = new_state;
-    trace!(
-      "[Client {}] : oid:{}|msg_id:{},state:{:?}",
-      uid,
-      self.msg.collab_object_id(),
-      self.msg_id,
-      self.state
-    );
+    if self.state != new_state {
+      self.state = new_state;
+
+      trace!(
+        "[Client {}] : oid:{}|msg_id:{},state:{:?}",
+        uid,
+        self.msg.collab_object_id(),
+        self.msg_id,
+        self.state
+      );
+    }
 
     if self.state.is_done() {
       match self.tx.take() {

@@ -1,69 +1,88 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GoTrueError {
-  pub code: i64,
-  pub msg: String,
-  pub error_id: Option<String>,
+#[derive(Debug, Error)]
+pub enum GoTrueError {
+  #[error("connect error:{0}")]
+  Connect(String),
+
+  #[error("request timeout:{0}")]
+  RequestTimeout(String),
+
+  #[error("invalid request:{0}")]
+  InvalidRequest(String),
+
+  #[error(transparent)]
+  ClientError(#[from] GotrueClientError),
+
+  #[error(transparent)]
+  Internal(#[from] GoTrueErrorSerde),
+
+  #[error("{0}")]
+  NotLoggedIn(String),
+
+  #[error(transparent)]
+  Unhandled(#[from] anyhow::Error),
 }
 
-impl std::error::Error for GoTrueError {}
-
-impl Display for GoTrueError {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "gotrue error: {} code: {}, error_id: {:?}",
-      self.msg, self.code, self.error_id
-    ))
-  }
-}
-
-impl From<anyhow::Error> for GoTrueError {
-  fn from(value: anyhow::Error) -> Self {
-    GoTrueError {
-      code: -1,
-      msg: format!("gotrue unhandled error: {}", value),
-      error_id: None,
-    }
+impl GoTrueError {
+  pub fn is_network_error(&self) -> bool {
+    matches!(
+      self,
+      GoTrueError::Connect(_) | GoTrueError::RequestTimeout(_)
+    )
   }
 }
 
 impl From<reqwest::Error> for GoTrueError {
   fn from(value: reqwest::Error) -> Self {
-    GoTrueError {
-      code: -1,
-      msg: format!("gotrue reqwest error: {}", value),
-      error_id: None,
+    if value.is_connect() {
+      return GoTrueError::Connect(value.to_string());
     }
+
+    if value.is_timeout() {
+      return GoTrueError::RequestTimeout(value.to_string());
+    }
+
+    if value.is_request() {
+      return GoTrueError::InvalidRequest(value.to_string());
+    }
+
+    GoTrueError::Unhandled(value.into())
   }
 }
 
-impl From<OAuthError> for GoTrueError {
-  fn from(value: OAuthError) -> Self {
-    GoTrueError {
-      code: 400,
-      msg: format!(
-        "oauth error: {}, description: {}",
-        value.error,
-        value.error_description.unwrap_or_default(),
-      ),
-      error_id: None,
-    }
+#[derive(Serialize, Deserialize, Debug, Error)]
+pub struct GoTrueErrorSerde {
+  pub code: i64,
+  pub msg: String,
+  pub error_id: Option<String>,
+}
+
+impl Display for GoTrueErrorSerde {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "code: {}, msg:{}, error_id: {:?}",
+      self.code, self.msg, self.error_id
+    ))
   }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct OAuthError {
+/// The gotrue error definition:
+/// https://github.com/supabase/gotrue/blob/cc07b4aa2ace75d9c8e46ae5107dbabadf944e87/internal/models/errors.go#L65
+/// Used to deserialize the response from the gotrue server
+#[derive(Serialize, Deserialize, Debug, Error)]
+pub struct GotrueClientError {
   pub error: String,
   pub error_description: Option<String>,
 }
 
-impl Display for OAuthError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self.error_description {
-      Some(ref desc) => write!(f, "{}: {}", self.error, desc),
-      None => write!(f, "{}", self.error),
-    }
+impl Display for GotrueClientError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "error: {}, description: {:?}",
+      self.error, self.error_description
+    ))
   }
 }

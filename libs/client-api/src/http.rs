@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
+
 use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
@@ -11,7 +12,7 @@ use database_entity::dto::{
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
-use gotrue::grant::RefreshTokenGrant;
+
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
@@ -28,13 +29,17 @@ use shared_entity::dto::workspace_dto::{
   WorkspaceSpaceUsage,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+use tokio_retry::strategy::FixedInterval;
+use tokio_retry::RetryIf;
 use tracing::{event, instrument};
 use url::Url;
 
+use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
 
@@ -50,13 +55,19 @@ use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserPar
 /// - `ws_addr`: The WebSocket address for real-time communication.
 /// - `token`: An `Arc<RwLock<ClientToken>>` managing the client's authentication token.
 ///
+#[derive(Clone)]
 pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   base_url: String,
   ws_addr: String,
   token: Arc<RwLock<ClientToken>>,
+  is_refreshing_token: Arc<AtomicBool>,
+  refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
 }
+
+type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
+type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
 
 /// Hardcoded schema in the frontend application. Do not change this value.
 const DESKTOP_CALLBACK_URL: &str = "appflowy-flutter://login-callback";
@@ -76,6 +87,8 @@ impl Client {
       cloud_client: reqwest_client.clone(),
       gotrue_client: gotrue::api::Client::new(reqwest_client, gotrue_url),
       token: Arc::new(RwLock::new(ClientToken::new())),
+      is_refreshing_token: Default::default(),
+      refresh_ret_txs: Default::default(),
     }
   }
 
@@ -184,9 +197,7 @@ impl Client {
   ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
-      return Err(AppResponseError::from(AppError::InvalidOAuthProvider(
-        provider.as_str().to_owned(),
-      )));
+      return Err(AppError::InvalidOAuthProvider(provider.as_str().to_owned()).into());
     }
 
     let url = format!("{}/authorize", self.gotrue_client.base_url,);
@@ -543,29 +554,39 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh(&self) -> Result<(), AppResponseError> {
-    let refresh_token = self
-      .token
-      .read()
-      .as_ref()
-      .ok_or(AppResponseError::from(AppError::NotLoggedIn(
-        "fail to refresh user token".to_owned(),
-      )))?
-      .refresh_token
-      .as_str()
-      .to_owned();
-    match self
-      .gotrue_client
-      .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
-      .await
-    {
-      Ok(access_token_resp) => {
-        self.token.write().set(access_token_resp);
+  pub async fn refresh_token(&self) -> Result<RefreshTokenRet, AppResponseError> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    self.refresh_ret_txs.write().push(tx);
+
+    if !self.is_refreshing_token.load(Ordering::SeqCst) {
+      self.is_refreshing_token.store(true, Ordering::SeqCst);
+      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
+      let result = self.inner_refresh_token().await;
+      for tx in txs {
+        let _ = tx.send(result.clone());
+      }
+      self.is_refreshing_token.store(false, Ordering::SeqCst);
+    }
+    Ok(rx)
+  }
+
+  async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
+    let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
+    match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
+      Ok(_) => {
+        event!(tracing::Level::INFO, "refresh token success");
         Ok(())
       },
       Err(err) => {
+        let err = AppError::from(err);
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
-        Err(AppResponseError::from(err))
+
+        // If the error is an OAuth error, unset the token.
+        if err.is_oauth_error() {
+          self.token.write().unset();
+        }
+        Err(err.into())
       },
     }
   }
@@ -833,7 +854,7 @@ impl Client {
     file_path: &str,
   ) -> Result<String, AppResponseError> {
     if file_path.is_empty() {
-      return Err(AppError::InvalidRequestParams("path is empty".to_owned()).into());
+      return Err(AppError::InvalidRequest("path is empty".to_owned()).into());
     }
 
     let mut file = File::open(&file_path).await?;
@@ -967,7 +988,7 @@ impl Client {
       .as_secs() as i64;
     if time_now_sec + 60 > expires_at {
       // Add 60 seconds buffer
-      self.refresh().await?;
+      self.refresh_token().await?;
     }
 
     let access_token = self.access_token()?;
@@ -977,33 +998,6 @@ impl Client {
       .bearer_auth(access_token);
     Ok(request_builder)
   }
-
-  // pub async fn change_password(
-  //   &self,
-  //   current_password: &str,
-  //   new_password: &str,
-  //   new_password_confirm: &str,
-  // ) -> Result<(), Error> {
-  //   let auth_token = match &self.token_old {
-  //     Some(t) => t.to_string(),
-  //     None => anyhow::bail!("no token found, are you logged in?"),
-  //   };
-
-  //   let url = format!("{}/api/user/password", self.base_url);
-  //   let payload = serde_json::json!({
-  //       "current_password": current_password,
-  //       "new_password": new_password,
-  //       "new_password_confirm": new_password_confirm,
-  //   });
-  //   let resp = self
-  //     .http_client
-  //     .post(&url)
-  //     .header(HEADER_TOKEN, auth_token)
-  //     .json(&payload)
-  //     .send()
-  //     .await?;
-  //   check_response(resp).await
-  // }
 }
 
 pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
@@ -1021,5 +1015,5 @@ pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
 }
 
 pub fn url_missing_param(param: &str) -> AppResponseError {
-  AppError::UrlMissingParameter(param.to_string()).into()
+  AppError::InvalidRequest(format!("Url Missing Parameter:{}", param)).into()
 }

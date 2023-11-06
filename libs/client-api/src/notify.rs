@@ -7,7 +7,8 @@ pub type TokenStateReceiver = Receiver<TokenState>;
 
 #[derive(Debug, Clone)]
 pub enum TokenState {
-  Refresh,
+  Revoked,
+  DidRefresh,
   Invalid,
 }
 
@@ -46,9 +47,11 @@ impl ClientToken {
       Some(old_token) => old_token.access_token != new_token.access_token,
     };
     self.token = Some(new_token);
+    let _ = self.sender.send(TokenState::DidRefresh);
+
     if is_new {
       tracing::trace!("Set new access token: {:?}", self.token);
-      let _ = self.sender.send(TokenState::Refresh);
+      let _ = self.sender.send(TokenState::Revoked);
     }
   }
 

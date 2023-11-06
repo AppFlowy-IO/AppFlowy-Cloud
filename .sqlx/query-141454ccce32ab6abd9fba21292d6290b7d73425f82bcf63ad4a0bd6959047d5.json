@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE auth.users\n            SET role = 'supabase_admin', email_confirmed_at = NOW()\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "141454ccce32ab6abd9fba21292d6290b7d73425f82bcf63ad4a0bd6959047d5"
+}

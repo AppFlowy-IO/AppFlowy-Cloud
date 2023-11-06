@@ -228,9 +228,9 @@ async fn setup_admin_account(
             UPDATE auth.users
             SET role = 'supabase_admin', email_confirmed_at = NOW()
             WHERE id = $1
-        "#, user_id
+        "#,
+          user_id
         )
-        // .bind(user.id)
         .execute(pg_pool)
         .await
         .context("failed to update the admin user")?;

@@ -19,8 +19,20 @@ pub enum GoTrueError {
   #[error(transparent)]
   Internal(#[from] GoTrueErrorSerde),
 
+  #[error("{0}")]
+  NotLoggedIn(String),
+
   #[error(transparent)]
   Unhandled(#[from] anyhow::Error),
+}
+
+impl GoTrueError {
+  pub fn is_network_error(&self) -> bool {
+    matches!(
+      self,
+      GoTrueError::Connect(_) | GoTrueError::RequestTimeout(_)
+    )
+  }
 }
 
 impl From<reqwest::Error> for GoTrueError {

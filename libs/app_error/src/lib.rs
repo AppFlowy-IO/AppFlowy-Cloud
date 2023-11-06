@@ -188,6 +188,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
         (422, _) => AppError::InvalidRequest(err.msg),
         _ => AppError::OAuthError(err.to_string()),
       },
+      GoTrueError::NotLoggedIn(msg) => AppError::NotLoggedIn(msg),
     }
   }
 }

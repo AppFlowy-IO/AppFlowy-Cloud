@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
+
 use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
@@ -11,7 +12,7 @@ use database_entity::dto::{
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
-use gotrue::grant::RefreshTokenGrant;
+
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
@@ -33,9 +34,12 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
+use tokio_retry::strategy::FixedInterval;
+use tokio_retry::RetryIf;
 use tracing::{event, instrument};
 use url::Url;
 
+use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
 
@@ -556,37 +560,29 @@ impl Client {
 
     if !self.is_refreshing_token.load(Ordering::SeqCst) {
       self.is_refreshing_token.store(true, Ordering::SeqCst);
-      let refresh_token = self
-        .token
-        .read()
-        .as_ref()
-        .ok_or(AppResponseError::from(AppError::NotLoggedIn(
-          "fail to refresh user token".to_owned(),
-        )))?
-        .refresh_token
-        .as_str()
-        .to_owned();
-      let result = self
-        .gotrue_client
-        .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
-        .await;
       let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
-      let result = match result {
-        Ok(access_token_resp) => {
-          self.token.write().set(access_token_resp);
-          Ok(())
-        },
-        Err(err) => {
-          event!(tracing::Level::ERROR, "refresh token failed: {}", err);
-          Err(AppResponseError::from(err))
-        },
-      };
+      let result = self.inner_refresh_token().await;
       for tx in txs {
         let _ = tx.send(result.clone());
       }
       self.is_refreshing_token.store(false, Ordering::SeqCst);
     }
     Ok(rx)
+  }
+
+  async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
+    let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
+    match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
+      Ok(_) => {
+        event!(tracing::Level::INFO, "refresh token success");
+        Ok(())
+      },
+      Err(err) => {
+        event!(tracing::Level::ERROR, "refresh token failed: {}", err);
+        Err(AppResponseError::from(err))
+      },
+    }
   }
 
   #[instrument(level = "debug", skip_all, err)]

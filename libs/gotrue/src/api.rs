@@ -7,7 +7,7 @@ use gotrue_entity::dto::{
   AdminListUsersResponse, GoTrueSettings, GotrueTokenResponse, OAuthProvider, SignUpResponse,
   UpdateGotrueUserParams, User,
 };
-use gotrue_entity::error::{GoTrueError, OAuthError};
+use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
 use infra::reqwest::{check_response, from_body, from_response};
 
 #[derive(Clone)]
@@ -63,6 +63,7 @@ impl Client {
 
   #[tracing::instrument(skip_all, err)]
   pub async fn token(&self, grant: &Grant) -> Result<GotrueTokenResponse, GoTrueError> {
+    // https://github.com/supabase/gotrue/blob/master/internal/api/verify.go#L219
     let url = format!("{}/token?grant_type={}", self.base_url, grant.type_as_str());
     let payload = grant.json_value();
     let resp = self.client.post(url).json(&payload).send().await?;
@@ -70,7 +71,7 @@ impl Client {
       let token: GotrueTokenResponse = from_body(resp).await?;
       Ok(token)
     } else if resp.status().is_client_error() {
-      Err(from_body::<OAuthError>(resp).await?.into())
+      Err(from_body::<GotrueClientError>(resp).await?.into())
     } else {
       Err(anyhow::anyhow!("unexpected response status: {}", resp.status()).into())
     }
@@ -228,8 +229,8 @@ where
     let t: T = from_body(resp).await?;
     Ok(t)
   } else {
-    let err: GoTrueError = from_body(resp).await?;
-    Err(err)
+    let err: GoTrueErrorSerde = from_body(resp).await?;
+    Err(GoTrueError::Internal(err))
   }
 }
 
@@ -237,7 +238,7 @@ async fn check_gotrue_result(resp: reqwest::Response) -> Result<(), GoTrueError>
   if resp.status().is_success() {
     Ok(())
   } else {
-    let err: GoTrueError = from_body(resp).await?;
-    Err(err)
+    let err: GoTrueErrorSerde = from_body(resp).await?;
+    Err(GoTrueError::Internal(err))
   }
 }

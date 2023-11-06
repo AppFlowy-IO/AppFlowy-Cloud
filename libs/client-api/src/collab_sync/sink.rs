@@ -270,6 +270,7 @@ where
         return None;
       }
 
+      let mut merged_msg = vec![];
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
       if sending_msg.can_merge() {
@@ -277,13 +278,8 @@ where
           // If the message is not mergeable, push the message back to the queue and break the loop.
           match sending_msg.merge(&pending_msg, &self.config.maximum_payload_size) {
             Ok(continue_merge) => {
-              event!(
-                tracing::Level::TRACE,
-                "merge message: {}",
-                pending_msg.get_msg()
-              );
+              merged_msg.push(pending_msg.msg_id());
               if !continue_merge {
-                event!(tracing::Level::TRACE, "merge finish",);
                 break;
               }
             },
@@ -298,9 +294,19 @@ where
 
       sending_msg.set_ret(tx);
       sending_msg.set_state(self.uid, MessageState::Processing);
+
       let _ = self.state_notifier.send(SinkState::Syncing);
       let collab_msg = sending_msg.get_msg().clone();
       pending_msg_queue.push(sending_msg);
+
+      if !merged_msg.is_empty() {
+        event!(
+          tracing::Level::DEBUG,
+          "merge: {:?}, len: {}",
+          merged_msg,
+          collab_msg.length()
+        );
+      }
       collab_msg
     };
 
@@ -454,7 +460,7 @@ impl Default for SinkConfig {
   fn default() -> Self {
     Self {
       send_timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
-      maximum_payload_size: 4096,
+      maximum_payload_size: 1024 * 64,
       strategy: SinkStrategy::ASAP,
     }
   }

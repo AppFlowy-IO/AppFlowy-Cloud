@@ -1,6 +1,7 @@
 #[cfg(feature = "gotrue_error")]
 pub mod gotrue;
 
+use crate::gotrue::GoTrueError;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -40,14 +41,8 @@ pub enum AppError {
   #[error("Open Error:{0}")]
   OpenError(String),
 
-  #[error("Invalid Url:{0}")]
-  InvalidUrl(String),
-
-  #[error("Invalid parameters:{0}")]
-  InvalidRequestParams(String),
-
-  #[error("Url Missing Parameter:{0}")]
-  UrlMissingParameter(String),
+  #[error("Invalid request:{0}")]
+  InvalidRequest(String),
 
   #[error("Invalid OAuth Provider:{0}")]
   InvalidOAuthProvider(String),
@@ -91,13 +86,24 @@ pub enum AppError {
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
 
-  #[error(transparent)]
-  ReqwestError(#[from] reqwest::Error),
+  #[error("connect error:{0}")]
+  Connect(String),
+
+  #[error("request timeout:{0}")]
+  RequestTimeout(String),
 }
 
 impl AppError {
   pub fn is_record_not_found(&self) -> bool {
     matches!(self, AppError::RecordNotFound(_))
+  }
+
+  pub fn is_network_error(&self) -> bool {
+    matches!(self, AppError::Connect(_) | AppError::RequestTimeout(_))
+  }
+
+  pub fn is_oauth_error(&self) -> bool {
+    matches!(self, AppError::OAuthError(_))
   }
 
   pub fn code(&self) -> ErrorCode {
@@ -112,10 +118,8 @@ impl AppError {
       AppError::MissingPayload(_) => ErrorCode::MissingPayload,
       AppError::DBError(_) => ErrorCode::DBError,
       AppError::OpenError(_) => ErrorCode::OpenError,
-      AppError::InvalidUrl(_) => ErrorCode::InvalidUrl,
-      AppError::InvalidRequestParams(_) => ErrorCode::InvalidRequestParams,
-      AppError::UrlMissingParameter(_) => ErrorCode::UrlMissingParameter,
       AppError::InvalidOAuthProvider(_) => ErrorCode::InvalidOAuthProvider,
+      AppError::InvalidRequest(_) => ErrorCode::InvalidRequest,
       AppError::NotLoggedIn(_) => ErrorCode::NotLoggedIn,
       AppError::NotEnoughPermissions(_) => ErrorCode::NotEnoughPermissions,
       #[cfg(feature = "s3_error")]
@@ -128,12 +132,30 @@ impl AppError {
       #[cfg(feature = "sqlx_error")]
       AppError::SqlxError(_) => ErrorCode::SqlxError,
       #[cfg(feature = "validation_error")]
-      AppError::ValidatorError(_) => ErrorCode::InvalidRequestParams,
+      AppError::ValidatorError(_) => ErrorCode::InvalidRequest,
       AppError::S3ResponseError(_) => ErrorCode::S3ResponseError,
       AppError::UrlError(_) => ErrorCode::InvalidUrl,
       AppError::SerdeError(_) => ErrorCode::SerdeError,
-      AppError::ReqwestError(_) => ErrorCode::Unhandled,
+      AppError::Connect(_) => ErrorCode::NetworkError,
+      AppError::RequestTimeout(_) => ErrorCode::NetworkError,
     }
+  }
+}
+
+impl From<reqwest::Error> for AppError {
+  fn from(value: reqwest::Error) -> Self {
+    if value.is_connect() {
+      return AppError::Connect(value.to_string());
+    }
+
+    if value.is_timeout() {
+      return AppError::RequestTimeout(value.to_string());
+    }
+
+    if value.is_request() {
+      return AppError::InvalidRequest(value.to_string());
+    }
+    AppError::Unhandled(value.to_string())
   }
 }
 
@@ -153,15 +175,20 @@ impl From<sqlx::Error> for AppError {
 #[cfg(feature = "gotrue_error")]
 impl From<crate::gotrue::GoTrueError> for AppError {
   fn from(err: crate::gotrue::GoTrueError) -> Self {
-    match (err.code, err.msg.as_str()) {
-      (400, m) if m.starts_with("oauth error") => AppError::OAuthError(err.msg),
-      (400, m) if m.starts_with("User already registered") => AppError::OAuthError(err.msg),
-      (401, _) => AppError::OAuthError(err.msg),
-      (422, _) => AppError::InvalidRequestParams(err.msg),
-      _ => AppError::Unhandled(format!(
-        "gotrue error: {}, message: {}, id: {:?}",
-        err.code, err.msg, err.error_id,
-      )),
+    match err {
+      GoTrueError::Connect(msg) => AppError::Connect(msg),
+      GoTrueError::RequestTimeout(msg) => AppError::RequestTimeout(msg),
+      GoTrueError::InvalidRequest(msg) => AppError::InvalidRequest(msg),
+      GoTrueError::ClientError(err) => AppError::OAuthError(err.to_string()),
+      GoTrueError::Unhandled(err) => AppError::Internal(err),
+      GoTrueError::Internal(err) => match (err.code, err.msg.as_str()) {
+        (400, m) if m.starts_with("oauth error") => AppError::OAuthError(err.msg),
+        (400, m) if m.starts_with("User already registered") => AppError::OAuthError(err.msg),
+        (401, _) => AppError::OAuthError(err.msg),
+        (422, _) => AppError::InvalidRequest(err.msg),
+        _ => AppError::OAuthError(err.to_string()),
+      },
+      GoTrueError::NotLoggedIn(msg) => AppError::NotLoggedIn(msg),
     }
   }
 }
@@ -190,9 +217,8 @@ pub enum ErrorCode {
   DBError = 1005,
   OpenError = 1006,
   InvalidUrl = 1007,
-  InvalidRequestParams = 1008,
-  UrlMissingParameter = 1009,
-  InvalidOAuthProvider = 1010,
+  InvalidRequest = 1008,
+  InvalidOAuthProvider = 1009,
   NotLoggedIn = 1011,
   NotEnoughPermissions = 1012,
   #[cfg(feature = "s3_error")]
@@ -206,6 +232,7 @@ pub enum ErrorCode {
   SqlxError = 1020,
   S3ResponseError = 1021,
   SerdeError = 1022,
+  NetworkError = 1023,
 }
 
 impl ErrorCode {

@@ -215,33 +215,9 @@ async fn setup_admin_account(
   let password = gotrue_setting.admin_password.as_str();
   let res_resp = gotrue_client.sign_up(admin_email, password).await;
 
-  match res_resp {
-    Ok(resp) => match resp {
-      gotrue_entity::dto::SignUpResponse::Authenticated(resp) => {
-        tracing::info!(
-          "Admin user already created and authenticated at {:?}",
-          resp.user.email_confirmed_at
-        );
-        Ok(())
-      },
-      gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => {
-        let user_id = user.id.parse::<uuid::Uuid>().unwrap();
-        let result = sqlx::query(
-          r#"
-            UPDATE auth.users
-            SET role = 'supabase_admin', email_confirmed_at = NOW()
-            WHERE id = $1
-        "#,
-        )
-        .bind(user_id)
-        .execute(pg_pool)
-        .await
-        .context("failed to update the admin user")?;
+  println!("res_resp: {:?}", &res_resp);
 
-        assert_eq!(result.rows_affected(), 1);
-        Ok(())
-      },
-    },
+  match res_resp {
     Err(err) => {
       if let app_error::gotrue::GoTrueError::Internal(err) = err {
         match (err.code, err.msg.as_str()) {
@@ -254,6 +230,40 @@ async fn setup_admin_account(
       } else {
         Err(err.into())
       }
+    },
+    Ok(resp) => match resp {
+      gotrue_entity::dto::SignUpResponse::Authenticated(resp) => {
+        tracing::info!(
+          "Admin user already created and authenticated at {:?}",
+          resp.user.email_confirmed_at
+        );
+        Ok(())
+      },
+      gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => match user.role.as_str() {
+        "supabase_admin" => {
+          tracing::info!("Admin user already created and set role to supabase_admin");
+          Ok(())
+        },
+        _ => {
+          let user_id = user.id.parse::<uuid::Uuid>().unwrap();
+          let result = sqlx::query(
+            r#"
+            UPDATE auth.users
+            SET role = 'supabase_admin', email_confirmed_at = NOW()
+            WHERE id = $1
+            "#,
+          )
+          .bind(user_id)
+          .execute(pg_pool)
+          .await
+          .context("failed to update the admin user")?;
+
+          assert_eq!(result.rows_affected(), 1);
+          tracing::info!("Admin user created and set role to supabase_admin");
+
+          Ok(())
+        },
+      },
     },
   }
 }

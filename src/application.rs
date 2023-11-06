@@ -217,32 +217,43 @@ async fn setup_admin_account(
 
   match res_resp {
     Ok(resp) => match resp {
-      gotrue_entity::dto::SignUpResponse::Authenticated(_) => {
-        tracing::info!("Admin user already authenticated");
+      gotrue_entity::dto::SignUpResponse::Authenticated(resp) => {
+        tracing::info!(
+          "Admin user already created and authenticated at {:?}",
+          resp.user.email_confirmed_at
+        );
         Ok(())
       },
       gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => {
         let user_id = user.id.parse::<uuid::Uuid>().unwrap();
-        sqlx::query!(
+        let result = sqlx::query(
           r#"
             UPDATE auth.users
             SET role = 'supabase_admin', email_confirmed_at = NOW()
             WHERE id = $1
         "#,
-          user_id
         )
+        .bind(user_id)
         .execute(pg_pool)
         .await
         .context("failed to update the admin user")?;
+
+        assert_eq!(result.rows_affected(), 1);
         Ok(())
       },
     },
-    Err(err) => match (err.code, err.msg.as_str()) {
-      (400, "User already registered") => {
-        tracing::info!("Admin user already registered");
-        Ok(())
-      },
-      _ => Err(err.into()),
+    Err(err) => {
+      if let app_error::gotrue::GoTrueError::Internal(err) = err {
+        match (err.code, err.msg.as_str()) {
+          (400, "User already registered") => {
+            tracing::info!("Admin user already registered");
+            Ok(())
+          },
+          _ => Err(err.into()),
+        }
+      } else {
+        Err(err.into())
+      }
     },
   }
 }

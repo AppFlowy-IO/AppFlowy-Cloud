@@ -273,17 +273,19 @@ where
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
       if sending_msg.can_merge() {
+        let mut merged_msg = vec![];
         while let Some(pending_msg) = pending_msg_queue.pop() {
           // If the message is not mergeable, push the message back to the queue and break the loop.
           match sending_msg.merge(&pending_msg, &self.config.maximum_payload_size) {
             Ok(continue_merge) => {
-              event!(
-                tracing::Level::TRACE,
-                "merge message: {}",
-                pending_msg.get_msg()
-              );
+              merged_msg.push(pending_msg.msg_id());
               if !continue_merge {
-                event!(tracing::Level::TRACE, "merge finish",);
+                event!(
+                  tracing::Level::TRACE,
+                  "merge: {:?}, len: {}",
+                  merged_msg,
+                  sending_msg.get_msg().length()
+                );
                 break;
               }
             },

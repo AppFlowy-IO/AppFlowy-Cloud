@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
+/// The gotrue error definition:
+/// https://github.com/supabase/gotrue/blob/cc07b4aa2ace75d9c8e46ae5107dbabadf944e87/internal/models/errors.go#L65
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GoTrueError {
   pub code: i64,

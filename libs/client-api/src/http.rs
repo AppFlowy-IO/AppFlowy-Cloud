@@ -28,6 +28,7 @@ use shared_entity::dto::workspace_dto::{
   WorkspaceSpaceUsage,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs::File;
@@ -50,13 +51,19 @@ use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserPar
 /// - `ws_addr`: The WebSocket address for real-time communication.
 /// - `token`: An `Arc<RwLock<ClientToken>>` managing the client's authentication token.
 ///
+#[derive(Clone)]
 pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   base_url: String,
   ws_addr: String,
   token: Arc<RwLock<ClientToken>>,
+  is_refreshing_token: Arc<AtomicBool>,
+  refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
 }
+
+type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
+type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
 
 /// Hardcoded schema in the frontend application. Do not change this value.
 const DESKTOP_CALLBACK_URL: &str = "appflowy-flutter://login-callback";
@@ -76,6 +83,8 @@ impl Client {
       cloud_client: reqwest_client.clone(),
       gotrue_client: gotrue::api::Client::new(reqwest_client, gotrue_url),
       token: Arc::new(RwLock::new(ClientToken::new())),
+      is_refreshing_token: Default::default(),
+      refresh_ret_txs: Default::default(),
     }
   }
 
@@ -541,32 +550,43 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
-    let refresh_token = self
-      .token
-      .read()
-      .as_ref()
-      .ok_or(AppResponseError::from(AppError::NotLoggedIn(
-        "fail to refresh user token".to_owned(),
-      )))?
-      .refresh_token
-      .as_str()
-      .to_owned();
-    match self
-      .gotrue_client
-      .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
-      .await
-    {
-      Ok(access_token_resp) => {
-        self.token.write().set(access_token_resp);
-        Ok(())
-      },
-      Err(err) => {
-        event!(tracing::Level::ERROR, "refresh token failed: {}", err);
+  pub async fn refresh_token(&self) -> Result<RefreshTokenRet, AppResponseError> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    self.refresh_ret_txs.write().push(tx);
 
-        Err(AppResponseError::from(err))
-      },
+    if !self.is_refreshing_token.load(Ordering::SeqCst) {
+      self.is_refreshing_token.store(true, Ordering::SeqCst);
+      let refresh_token = self
+        .token
+        .read()
+        .as_ref()
+        .ok_or(AppResponseError::from(AppError::NotLoggedIn(
+          "fail to refresh user token".to_owned(),
+        )))?
+        .refresh_token
+        .as_str()
+        .to_owned();
+      let result = self
+        .gotrue_client
+        .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
+        .await;
+      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
+      let result = match result {
+        Ok(access_token_resp) => {
+          self.token.write().set(access_token_resp);
+          Ok(())
+        },
+        Err(err) => {
+          event!(tracing::Level::ERROR, "refresh token failed: {}", err);
+          Err(AppResponseError::from(err))
+        },
+      };
+      for tx in txs {
+        let _ = tx.send(result.clone());
+      }
+      self.is_refreshing_token.store(false, Ordering::SeqCst);
     }
+    Ok(rx)
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -976,33 +996,6 @@ impl Client {
       .bearer_auth(access_token);
     Ok(request_builder)
   }
-
-  // pub async fn change_password(
-  //   &self,
-  //   current_password: &str,
-  //   new_password: &str,
-  //   new_password_confirm: &str,
-  // ) -> Result<(), Error> {
-  //   let auth_token = match &self.token_old {
-  //     Some(t) => t.to_string(),
-  //     None => anyhow::bail!("no token found, are you logged in?"),
-  //   };
-
-  //   let url = format!("{}/api/user/password", self.base_url);
-  //   let payload = serde_json::json!({
-  //       "current_password": current_password,
-  //       "new_password": new_password,
-  //       "new_password_confirm": new_password_confirm,
-  //   });
-  //   let resp = self
-  //     .http_client
-  //     .post(&url)
-  //     .header(HEADER_TOKEN, auth_token)
-  //     .json(&payload)
-  //     .send()
-  //     .await?;
-  //   check_response(resp).await
-  // }
 }
 
 pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {

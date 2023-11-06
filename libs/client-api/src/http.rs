@@ -579,8 +579,14 @@ impl Client {
         Ok(())
       },
       Err(err) => {
+        let err = AppError::from(err);
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
-        Err(AppResponseError::from(err))
+
+        // If the error is an OAuth error, unset the token.
+        if err.is_oauth_error() {
+          self.token.write().unset();
+        }
+        Err(err.into())
       },
     }
   }

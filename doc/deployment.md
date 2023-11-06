@@ -13,6 +13,7 @@ we recommend using cloud compute services (as your host server) such as
 ## Software Requirements
 - [docker compose](https://docs.docker.com/compose)
 This is needed be installed in your host server
+- We recommend using approach as proposed by offical docker website: [Install Docker Engine](https://docs.docker.com/engine/install/)
 
 ## Steps
 

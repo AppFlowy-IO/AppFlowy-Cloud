@@ -231,21 +231,20 @@ async fn setup_admin_account(
         Err(err.into())
       }
     },
-    Ok(resp) => match resp {
-      gotrue_entity::dto::SignUpResponse::Authenticated(resp) => {
-        tracing::info!(
-          "Admin user already created and authenticated at {:?}",
-          resp.user.email_confirmed_at
-        );
-        Ok(())
-      },
-      gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => match user.role.as_str() {
+    Ok(resp) => {
+      let admin_user = {
+        match resp {
+          gotrue_entity::dto::SignUpResponse::Authenticated(resp) => resp.user,
+          gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => user,
+        }
+      };
+      match admin_user.role.as_str() {
         "supabase_admin" => {
           tracing::info!("Admin user already created and set role to supabase_admin");
           Ok(())
         },
         _ => {
-          let user_id = user.id.parse::<uuid::Uuid>().unwrap();
+          let user_id = admin_user.id.parse::<uuid::Uuid>().unwrap();
           let result = sqlx::query(
             r#"
             UPDATE auth.users
@@ -263,7 +262,7 @@ async fn setup_admin_account(
 
           Ok(())
         },
-      },
+      }
     },
   }
 }

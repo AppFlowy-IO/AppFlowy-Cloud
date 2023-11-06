@@ -29,7 +29,7 @@ async fn update_password_same_password() {
     )
     .await
     .unwrap_err();
-  assert_eq!(err.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(err.code, ErrorCode::InvalidRequest);
   assert_eq!(
     err.message,
     "Invalid parameters:New password should be different from the old password."

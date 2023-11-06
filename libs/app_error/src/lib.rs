@@ -1,6 +1,7 @@
 #[cfg(feature = "gotrue_error")]
 pub mod gotrue;
 
+use crate::gotrue::GoTrueError;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -40,14 +41,8 @@ pub enum AppError {
   #[error("Open Error:{0}")]
   OpenError(String),
 
-  #[error("Invalid Url:{0}")]
-  InvalidUrl(String),
-
-  #[error("Invalid parameters:{0}")]
-  InvalidRequestParams(String),
-
-  #[error("Url Missing Parameter:{0}")]
-  UrlMissingParameter(String),
+  #[error("Invalid request:{0}")]
+  InvalidRequest(String),
 
   #[error("Invalid OAuth Provider:{0}")]
   InvalidOAuthProvider(String),
@@ -93,6 +88,9 @@ pub enum AppError {
 
   #[error(transparent)]
   ReqwestError(#[from] reqwest::Error),
+
+  #[error(transparent)]
+  GotrueInternal(GoTrueError),
 }
 
 impl AppError {
@@ -112,10 +110,8 @@ impl AppError {
       AppError::MissingPayload(_) => ErrorCode::MissingPayload,
       AppError::DBError(_) => ErrorCode::DBError,
       AppError::OpenError(_) => ErrorCode::OpenError,
-      AppError::InvalidUrl(_) => ErrorCode::InvalidUrl,
-      AppError::InvalidRequestParams(_) => ErrorCode::InvalidRequestParams,
-      AppError::UrlMissingParameter(_) => ErrorCode::UrlMissingParameter,
       AppError::InvalidOAuthProvider(_) => ErrorCode::InvalidOAuthProvider,
+      AppError::InvalidRequest(_) => ErrorCode::InvalidRequest,
       AppError::NotLoggedIn(_) => ErrorCode::NotLoggedIn,
       AppError::NotEnoughPermissions(_) => ErrorCode::NotEnoughPermissions,
       #[cfg(feature = "s3_error")]
@@ -128,11 +124,12 @@ impl AppError {
       #[cfg(feature = "sqlx_error")]
       AppError::SqlxError(_) => ErrorCode::SqlxError,
       #[cfg(feature = "validation_error")]
-      AppError::ValidatorError(_) => ErrorCode::InvalidRequestParams,
+      AppError::ValidatorError(_) => ErrorCode::InvalidRequest,
       AppError::S3ResponseError(_) => ErrorCode::S3ResponseError,
       AppError::UrlError(_) => ErrorCode::InvalidUrl,
       AppError::SerdeError(_) => ErrorCode::SerdeError,
       AppError::ReqwestError(_) => ErrorCode::Unhandled,
+      AppError::GotrueInternal(_) => ErrorCode::Unhandled,
     }
   }
 }
@@ -157,11 +154,8 @@ impl From<crate::gotrue::GoTrueError> for AppError {
       (400, m) if m.starts_with("oauth error") => AppError::OAuthError(err.msg),
       (400, m) if m.starts_with("User already registered") => AppError::OAuthError(err.msg),
       (401, _) => AppError::OAuthError(err.msg),
-      (422, _) => AppError::InvalidRequestParams(err.msg),
-      _ => AppError::Unhandled(format!(
-        "gotrue error: {}, message: {}, id: {:?}",
-        err.code, err.msg, err.error_id,
-      )),
+      (422, _) => AppError::InvalidRequest(err.msg),
+      _ => AppError::GotrueInternal(err),
     }
   }
 }
@@ -190,9 +184,8 @@ pub enum ErrorCode {
   DBError = 1005,
   OpenError = 1006,
   InvalidUrl = 1007,
-  InvalidRequestParams = 1008,
-  UrlMissingParameter = 1009,
-  InvalidOAuthProvider = 1010,
+  InvalidRequest = 1008,
+  InvalidOAuthProvider = 1009,
   NotLoggedIn = 1011,
   NotEnoughPermissions = 1012,
   #[cfg(feature = "s3_error")]

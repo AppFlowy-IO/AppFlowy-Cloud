@@ -7,7 +7,7 @@ async fn refresh_success() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let old_token = c.access_token().unwrap();
   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-  c.refresh().await.unwrap();
+  c.refresh_token().await.unwrap();
   let new_token = c.access_token().unwrap();
   assert_ne!(old_token, new_token);
 }

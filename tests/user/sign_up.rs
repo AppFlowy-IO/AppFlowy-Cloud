@@ -22,7 +22,7 @@ async fn sign_up_invalid_email() {
     .sign_up(invalid_email, password)
     .await
     .unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(error.code, ErrorCode::InvalidRequest);
   assert_eq!(
     error.message,
     "Invalid parameters:Unable to validate email address: invalid format"
@@ -35,7 +35,7 @@ async fn sign_up_invalid_password() {
   let password = "3";
   let c = localhost_client();
   let error = c.sign_up(&email, password).await.unwrap_err();
-  assert_eq!(error.code, ErrorCode::InvalidRequestParams);
+  assert_eq!(error.code, ErrorCode::InvalidRequest);
   assert_eq!(
     error.message,
     "Invalid parameters:Password should be at least 6 characters"

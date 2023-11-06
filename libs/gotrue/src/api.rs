@@ -7,7 +7,7 @@ use gotrue_entity::dto::{
   AdminListUsersResponse, GoTrueSettings, GotrueTokenResponse, OAuthProvider, SignUpResponse,
   UpdateGotrueUserParams, User,
 };
-use gotrue_entity::error::{GoTrueError, OAuthError};
+use gotrue_entity::error::{GoTrueError, GotrueClientError};
 use infra::reqwest::{check_response, from_body, from_response};
 
 #[derive(Clone)]
@@ -70,7 +70,7 @@ impl Client {
       let token: GotrueTokenResponse = from_body(resp).await?;
       Ok(token)
     } else if resp.status().is_client_error() {
-      Err(from_body::<OAuthError>(resp).await?.into())
+      Err(from_body::<GotrueClientError>(resp).await?.into())
     } else {
       Err(anyhow::anyhow!("unexpected response status: {}", resp.status()).into())
     }

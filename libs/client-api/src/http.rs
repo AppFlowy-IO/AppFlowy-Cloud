@@ -184,9 +184,7 @@ impl Client {
   ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
-      return Err(AppResponseError::from(AppError::InvalidOAuthProvider(
-        provider.as_str().to_owned(),
-      )));
+      return Err(AppError::InvalidOAuthProvider(provider.as_str().to_owned()).into());
     }
 
     let url = format!("{}/authorize", self.gotrue_client.base_url,);
@@ -543,7 +541,7 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh(&self) -> Result<(), AppResponseError> {
+  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
     let refresh_token = self
       .token
       .read()
@@ -565,6 +563,7 @@ impl Client {
       },
       Err(err) => {
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
+
         Err(AppResponseError::from(err))
       },
     }
@@ -833,7 +832,7 @@ impl Client {
     file_path: &str,
   ) -> Result<String, AppResponseError> {
     if file_path.is_empty() {
-      return Err(AppError::InvalidRequestParams("path is empty".to_owned()).into());
+      return Err(AppError::InvalidRequest("path is empty".to_owned()).into());
     }
 
     let mut file = File::open(&file_path).await?;
@@ -967,7 +966,7 @@ impl Client {
       .as_secs() as i64;
     if time_now_sec + 60 > expires_at {
       // Add 60 seconds buffer
-      self.refresh().await?;
+      self.refresh_token().await?;
     }
 
     let access_token = self.access_token()?;
@@ -1021,5 +1020,5 @@ pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
 }
 
 pub fn url_missing_param(param: &str) -> AppResponseError {
-  AppError::UrlMissingParameter(param.to_string()).into()
+  AppError::InvalidRequest(format!("Url Missing Parameter:{}", param)).into()
 }

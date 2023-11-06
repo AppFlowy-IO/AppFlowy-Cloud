@@ -13,8 +13,8 @@ impl std::error::Error for GoTrueError {}
 impl Display for GoTrueError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "gotrue error: {} code: {}, error_id: {:?}",
-      self.msg, self.code, self.error_id
+      "code: {}, msg:{}, error_id: {:?}",
+      self.code, self.msg, self.error_id
     ))
   }
 }
@@ -39,12 +39,12 @@ impl From<reqwest::Error> for GoTrueError {
   }
 }
 
-impl From<OAuthError> for GoTrueError {
-  fn from(value: OAuthError) -> Self {
+impl From<GotrueClientError> for GoTrueError {
+  fn from(value: GotrueClientError) -> Self {
     GoTrueError {
       code: 400,
       msg: format!(
-        "oauth error: {}, description: {}",
+        "gotrue client error: {}, description: {}",
         value.error,
         value.error_description.unwrap_or_default(),
       ),
@@ -53,17 +53,9 @@ impl From<OAuthError> for GoTrueError {
   }
 }
 
+/// Used to deserialize the response from the gotrue server
 #[derive(Serialize, Deserialize, Debug)]
-pub struct OAuthError {
+pub struct GotrueClientError {
   pub error: String,
   pub error_description: Option<String>,
-}
-
-impl Display for OAuthError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    match self.error_description {
-      Some(ref desc) => write!(f, "{}: {}", self.error, desc),
-      None => write!(f, "{}", self.error),
-    }
-  }
 }

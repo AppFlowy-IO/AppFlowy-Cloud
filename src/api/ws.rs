@@ -19,7 +19,6 @@ use tracing::instrument;
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
 }
-
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 type CollabServerData = Data<

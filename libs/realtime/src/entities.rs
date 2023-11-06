@@ -38,6 +38,9 @@ pub struct Disconnect<U> {
   pub user: U,
 }
 
+#[derive(Debug, Message, Clone)]
+#[rtype(result = "Result<(), RealtimeError>")]
+pub struct DisconnectByServer;
 #[derive(Debug, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum BusinessID {
@@ -57,7 +60,6 @@ pub struct ClientMessage<U> {
 pub struct RealtimeMessage {
   pub business_id: BusinessID,
   pub uid: Option<i64>,
-  pub object_id: String,
   pub payload: Bytes,
 }
 
@@ -79,7 +81,6 @@ impl From<CollabMessage> for RealtimeMessage {
     Self {
       business_id: BusinessID::CollabId,
       uid: msg.uid(),
-      object_id: msg.object_id().to_string(),
       payload: Bytes::from(msg.to_vec()),
     }
   }
@@ -93,7 +94,6 @@ where
     Self {
       business_id: client_msg.business_id,
       uid: Some(client_msg.user.uid()),
-      object_id: client_msg.content.object_id().to_string(),
       payload: Bytes::from(client_msg.content.to_vec()),
     }
   }

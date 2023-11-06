@@ -1,5 +1,4 @@
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
-use std::fmt::{Display, Formatter};
 
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
@@ -15,6 +14,7 @@ use crate::error::RealtimeError;
 use actix_web_actors::ws::ProtocolError;
 use database::collab::CollabStorage;
 use realtime_entity::collab_msg::CollabMessage;
+pub use realtime_entity::user::RealtimeUserImpl;
 use std::time::{Duration, Instant};
 use tracing::{error, warn};
 
@@ -146,6 +146,20 @@ where
   }
 }
 
+// impl<U, S, AC> Handler<DisconnectByServer> for ClientSession<U, S, AC>
+// where
+//   U: Unpin + RealtimeUser,
+//   S: Unpin + CollabStorage,
+//   AC: CollabAccessControl + Unpin,
+// {
+//   type Result = ();
+//
+//   fn handle(&self, msg: DisconnectByServer, ctx: &mut Self::Context) {
+//     info!("{} was disconnected by the server", self.user);
+//     ctx.stop();
+//   }
+// }
+
 /// WebSocket message handler
 impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S, AC>
 where
@@ -191,32 +205,6 @@ impl Deref for ClientWSSink {
   type Target = Recipient<RealtimeMessage>;
   fn deref(&self) -> &Self::Target {
     &self.0
-  }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct RealtimeUserImpl {
-  pub uid: i64,
-  pub uuid: String,
-  pub device_id: String,
-}
-
-impl RealtimeUserImpl {
-  pub fn new(uid: i64, uuid: String, device_id: String) -> Self {
-    Self {
-      uid,
-      uuid,
-      device_id,
-    }
-  }
-}
-
-impl Display for RealtimeUserImpl {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "uuid:{}|device_id:{}",
-      self.uuid, self.device_id,
-    ))
   }
 }
 

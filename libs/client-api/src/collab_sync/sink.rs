@@ -440,8 +440,8 @@ impl SinkConfig {
   }
 
   /// `max_zip_size` is the maximum size of the messages to be merged.
-  pub fn with_max_merge_size(mut self, max_merge_size: usize) -> Self {
-    self.maximum_payload_size = max_merge_size;
+  pub fn with_max_payload_size(mut self, max_size: usize) -> Self {
+    self.maximum_payload_size = max_size;
     self
   }
 

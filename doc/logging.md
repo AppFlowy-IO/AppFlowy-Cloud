@@ -21,11 +21,17 @@ Exiting: error loading config file: config file ("filebeat.yml") can only be wri
 - Solution: remove write permission on the file: `chmod -w docker/filebeat/filebeat.yml`
 
 ### No Logs
+- Observation: There are no logs in OpenSearch Dashboard
+- Possibe Diagnostic: No read permission for `*.log` files in `/var/lib/docker/containers`
+
+- One Time Solution: give read permission to docker logs
 ```
-$ docker logs appflowy-cloud-filebeat-1
-...Non-zero metrics in the last 30s...
+chmod -R a+r /var/lib/docker/containers
 ```
-- Solution: give read permission to docker logs: `chmod -R a+r /var/lib/docker/containers`
+- Permanent Solution: give read permission to docker logs every time there's a modification
+In the project root directory: `sudo ./docker/filebeat/grant_container_logs_permissions.sh`
+  - Caveat: Only work on unix like operating system, requires `inotifywait`(`inotify-tools`) to be installed.
+  MacOS alternative: `fswatch`
 
 ## Credentials
 - After deployment, when you go to localhost:5601, both username and password will be `admin`

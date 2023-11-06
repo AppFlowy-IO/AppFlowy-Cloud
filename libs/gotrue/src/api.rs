@@ -7,7 +7,7 @@ use gotrue_entity::dto::{
   AdminListUsersResponse, GoTrueSettings, GotrueTokenResponse, OAuthProvider, SignUpResponse,
   UpdateGotrueUserParams, User,
 };
-use gotrue_entity::error::{GoTrueError, GotrueClientError};
+use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
 use infra::reqwest::{check_response, from_body, from_response};
 
 #[derive(Clone)]
@@ -229,8 +229,8 @@ where
     let t: T = from_body(resp).await?;
     Ok(t)
   } else {
-    let err: GoTrueError = from_body(resp).await?;
-    Err(err)
+    let err: GoTrueErrorSerde = from_body(resp).await?;
+    Err(GoTrueError::Internal(err))
   }
 }
 
@@ -238,7 +238,7 @@ async fn check_gotrue_result(resp: reqwest::Response) -> Result<(), GoTrueError>
   if resp.status().is_success() {
     Ok(())
   } else {
-    let err: GoTrueError = from_body(resp).await?;
-    Err(err)
+    let err: GoTrueErrorSerde = from_body(resp).await?;
+    Err(GoTrueError::Internal(err))
   }
 }

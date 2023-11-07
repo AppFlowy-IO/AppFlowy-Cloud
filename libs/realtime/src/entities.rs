@@ -1,4 +1,4 @@
-use crate::error::RealtimeError;
+use crate::error::{RealtimeError, StreamError};
 use actix::{Message, Recipient};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
@@ -50,51 +50,45 @@ pub enum BusinessID {
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct ClientMessage<U> {
-  pub business_id: BusinessID,
   pub user: U,
-  pub content: CollabMessage,
+  pub message: RealtimeMessage,
 }
 
 #[derive(Debug, Clone, Message, Serialize, Deserialize)]
 #[rtype(result = "()")]
-pub struct RealtimeMessage {
-  pub business_id: BusinessID,
-  pub uid: Option<i64>,
-  pub payload: Bytes,
-}
-
-impl RealtimeMessage {
-  pub fn from_vec(bytes: Vec<u8>) -> Result<Self, serde_json::Error> {
-    serde_json::from_slice(&bytes)
-  }
+pub enum RealtimeMessage {
+  Collab(CollabMessage),
+  CloseClient,
 }
 
 impl From<RealtimeMessage> for Bytes {
   fn from(msg: RealtimeMessage) -> Self {
-    let bytes = serde_json::to_vec(&msg).unwrap_or_default();
+    let bytes = bincode::serialize(&msg).unwrap_or_default();
     Bytes::from(bytes)
+  }
+}
+
+impl TryFrom<Bytes> for RealtimeMessage {
+  type Error = bincode::Error;
+
+  fn try_from(value: Bytes) -> Result<Self, Self::Error> {
+    bincode::deserialize(&value)
   }
 }
 
 impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
-    Self {
-      business_id: BusinessID::CollabId,
-      uid: msg.uid(),
-      payload: Bytes::from(msg.to_vec()),
-    }
+    Self::Collab(msg)
   }
 }
 
-impl<U> From<ClientMessage<U>> for RealtimeMessage
-where
-  U: RealtimeUser,
-{
-  fn from(client_msg: ClientMessage<U>) -> Self {
-    Self {
-      business_id: client_msg.business_id,
-      uid: Some(client_msg.user.uid()),
-      payload: Bytes::from(client_msg.content.to_vec()),
+impl TryFrom<RealtimeMessage> for CollabMessage {
+  type Error = StreamError;
+
+  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
+    match value {
+      RealtimeMessage::Collab(msg) => Ok(msg),
+      _ => Err(StreamError::Internal("Invalid message type".to_string())),
     }
   }
 }

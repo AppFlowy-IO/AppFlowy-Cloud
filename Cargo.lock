@@ -3399,6 +3399,7 @@ dependencies = [
  "app-error",
  "assert-json-diff",
  "async-trait",
+ "bincode",
  "bytes",
  "chrono",
  "collab",

@@ -19,7 +19,7 @@ use tracing::{error, info, trace};
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
-use crate::collaborate::retry::SubscribeGroupIfNeed;
+use crate::collaborate::retry::{CollabUserMessage, SubscribeGroupIfNeed};
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 
@@ -104,12 +104,12 @@ where
     Box::pin(async move {
       trace!("[realtime]: new connection => {} ", new_conn.user);
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
-      if let Some(_old_stream) = client_stream_by_user
+      if let Some(old_stream) = client_stream_by_user
         .write()
         .await
         .insert(new_conn.user, stream)
       {
-        // old_stream.disconnect();
+        old_stream.disconnect();
       }
 
       Ok(())
@@ -154,43 +154,51 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    let client_stream_by_user = self.client_stream_by_user.clone();
-    let groups = self.groups.clone();
-    let edit_collab_by_user = self.editing_collab_by_user.clone();
-    let permission_service = self.access_control.clone();
+    let ClientMessage { user, message } = client_msg;
+    match message {
+      RealtimeMessage::Collab(collab_message) => {
+        let client_stream_by_user = self.client_stream_by_user.clone();
+        let groups = self.groups.clone();
+        let edit_collab_by_user = self.editing_collab_by_user.clone();
+        let permission_service = self.access_control.clone();
 
-    Box::pin(async move {
-      SubscribeGroupIfNeed {
-        client_msg: &client_msg,
-        groups: &groups,
-        edit_collab_by_user: &edit_collab_by_user,
-        client_stream_by_user: &client_stream_by_user,
-        access_control: &permission_service,
-      }
-      .run()
-      .await?;
+        Box::pin(async move {
+          let msg = CollabUserMessage {
+            user: &user,
+            collab_message: &collab_message,
+          };
+          SubscribeGroupIfNeed {
+            collab_user_message: &msg,
+            groups: &groups,
+            edit_collab_by_user: &edit_collab_by_user,
+            client_stream_by_user: &client_stream_by_user,
+            access_control: &permission_service,
+          }
+          .run()
+          .await?;
 
-      broadcast_message(&client_msg, &client_stream_by_user).await;
-      Ok(())
-    })
+          broadcast_message(&user, &collab_message, &client_stream_by_user).await;
+          Ok(())
+        })
+      },
+      _ => Box::pin(async { Ok(()) }),
+    }
   }
 }
 
 #[inline]
 async fn broadcast_message<U>(
-  client_msg: &ClientMessage<U>,
+  user: &U,
+  collab_message: &CollabMessage,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
 ) where
   U: RealtimeUser,
 {
-  if let Some(client_stream) = client_streams.read().await.get(&client_msg.user) {
-    trace!(
-      "[realtime]: receives client message: {}",
-      client_msg.content,
-    );
+  if let Some(client_stream) = client_streams.read().await.get(user) {
+    trace!("[realtime]: receives collab message: {}", collab_message);
     match client_stream
       .stream_tx
-      .send(Ok(RealtimeMessage::from(client_msg.clone())))
+      .send(Ok(RealtimeMessage::Collab(collab_message.clone())))
     {
       Ok(_) => {},
       Err(e) => error!("send error: {}", e),
@@ -230,14 +238,6 @@ where
 {
   fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, AC>>) {
     tracing::warn!("restarting");
-  }
-}
-
-impl TryFrom<RealtimeMessage> for CollabMessage {
-  type Error = StreamError;
-
-  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
-    CollabMessage::from_vec(&value.payload).map_err(|e| StreamError::Internal(e.to_string()))
   }
 }
 
@@ -320,12 +320,7 @@ impl CollabClientStream {
     (client_forward_sink, client_forward_stream)
   }
 
-  pub fn disconnect(&self, _uid: i64) {
-    // self.sink.send(RealtimeMessage {
-    //   business_id: BusinessID::CollabId,
-    //   uid,
-    //   object_id: "".to_string(),
-    //   payload: Default::default(),
-    // });
+  pub fn disconnect(&self) {
+    self.sink.do_send(RealtimeMessage::CloseClient);
   }
 }

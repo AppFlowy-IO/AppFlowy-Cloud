@@ -1,22 +1,18 @@
+use crate::collaborate::{CollabAccessControl, CollabServer};
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
-
+use crate::error::RealtimeError;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
-use bytes::Bytes;
-use std::ops::Deref;
-
-use crate::collaborate::{CollabAccessControl, CollabServer};
-use crate::error::RealtimeError;
-
 use actix_web_actors::ws::ProtocolError;
+use bytes::Bytes;
 use database::collab::CollabStorage;
-use realtime_entity::collab_msg::CollabMessage;
 pub use realtime_entity::user::RealtimeUserImpl;
+use std::ops::Deref;
 use std::time::{Duration, Instant};
-use tracing::{error, warn};
+use tracing::error;
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -66,28 +62,19 @@ where
   }
 
   fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
-    tracing::debug!("Receive binary message with len: {}", bytes.len());
-    match RealtimeMessage::from_vec(bytes.to_vec()) {
+    tracing::debug!("Receive message with len: {}", bytes.len());
+    match RealtimeMessage::try_from(bytes) {
       Ok(message) => {
-        match CollabMessage::from_vec(&message.payload) {
-          Ok(collab_msg) => {
-            self.server.do_send(ClientMessage {
-              business_id: message.business_id,
-              user: self.user.clone(),
-              content: collab_msg,
-            });
-          },
-          Err(e) => {
-            warn!("Parser realtime payload failed: {:?}", e);
-          },
-        }
-        Ok(())
+        self.server.do_send(ClientMessage {
+          user: self.user.clone(),
+          message,
+        });
       },
       Err(err) => {
-        error!("Unknown realtime message format: {:?}", err);
-        Ok(())
+        error!("Deserialize message error: {:?}", err);
       },
     }
+    Ok(())
   }
 }
 
@@ -142,7 +129,10 @@ where
   type Result = ();
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
-    ctx.binary(msg);
+    match &msg {
+      RealtimeMessage::Collab(_) => ctx.binary(msg),
+      RealtimeMessage::CloseClient => ctx.stop(),
+    }
   }
 }
 

@@ -3399,7 +3399,6 @@ dependencies = [
  "app-error",
  "assert-json-diff",
  "async-trait",
- "bincode",
  "bytes",
  "chrono",
  "collab",
@@ -3434,12 +3433,15 @@ dependencies = [
 name = "realtime-entity"
 version = "0.1.0"
 dependencies = [
+ "actix",
  "anyhow",
+ "bincode",
  "bytes",
  "collab",
  "collab-entity",
  "serde",
  "serde_json",
+ "tokio-tungstenite",
 ]
 
 [[package]]

@@ -267,13 +267,12 @@ impl CollabClientStream {
     stream_filter: StreamFilter,
   ) -> (
     UnboundedSenderSink<T>,
-    ReceiverStream<Result<T, StreamError>>,
+    ReceiverStream<Result<CollabMessage, StreamError>>,
   )
   where
-    T:
-      TryFrom<RealtimeMessage, Error = StreamError> + Into<RealtimeMessage> + Send + Sync + 'static,
+    T: Into<RealtimeMessage> + Send + Sync + 'static,
     SinkFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
-    StreamFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
+    StreamFilter: Fn(&str, &CollabMessage) -> BoxFuture<'static, bool> + Sync + Send + 'static,
   {
     let client_ws_sink = self.sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
@@ -297,16 +296,9 @@ impl CollabClientStream {
     let cloned_object_id = object_id.to_string();
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
-      while let Some(Ok(Ok(msg))) = stream_rx.next().await {
-        match T::try_from(msg) {
-          Ok(msg) => {
-            if stream_filter(&cloned_object_id, &msg).await {
-              let _ = tx.send(Ok(msg)).await;
-            }
-          },
-          Err(err) => {
-            error!("Failed to convert realtime message: {}", err);
-          },
+      while let Some(Ok(Ok(RealtimeMessage::Collab(msg)))) = stream_rx.next().await {
+        if stream_filter(&cloned_object_id, &msg).await {
+          let _ = tx.send(Ok(msg)).await;
         }
       }
     });

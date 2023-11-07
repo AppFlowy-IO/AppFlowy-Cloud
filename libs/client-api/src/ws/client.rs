@@ -10,9 +10,11 @@ use std::time::Duration;
 use crate::ws::ping::ServerFixIntervalPing;
 use crate::ws::retry::ConnectAction;
 use crate::ws::state::{ConnectState, ConnectStateNotify};
-use crate::ws::{BusinessID, ClientRealtimeMessage, WSError, WebSocketChannel};
+use crate::ws::{BusinessID, WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
+use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::message::RealtimeMessage;
 use tokio::sync::{oneshot, Mutex};
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
@@ -42,7 +44,7 @@ impl Default for WSClientConfig {
   }
 }
 
-type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel>>;
+type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel<CollabMessage>>>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub struct WSClient {
@@ -51,7 +53,7 @@ pub struct WSClient {
   state_notify: Arc<parking_lot::Mutex<ConnectStateNotify>>,
   /// Sender used to send messages to the websocket.
   sender: Sender<Message>,
-  channels: Arc<RwLock<HashMap<BusinessID, ChannelByObjectId>>>,
+  channels: Arc<RwLock<ChannelByObjectId>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
   stop_tx: Mutex<Option<oneshot::Sender<()>>>,
 }
@@ -115,31 +117,32 @@ impl WSClient {
     tokio::spawn(async move {
       while let Some(Ok(msg)) = stream.next().await {
         match msg {
-          Message::Text(_) => {},
           Message::Binary(_) => {
-            if let Ok(msg) = ClientRealtimeMessage::try_from(&msg) {
-              if let Some(channels) = weak_channels.upgrade() {
-                if let Some(channel) = channels
-                  .read()
-                  .get(&msg.business_id)
-                  .and_then(|map| map.get(&msg.object_id))
-                {
-                  match channel.upgrade() {
-                    None => {
-                      // when calling [WSClient::subscribe], the caller is responsible for keeping
-                      // the channel alive as long as it wants to receive messages from the websocket.
-                      trace!("channel is dropped");
-                    },
-                    Some(channel) => {
-                      channel.recv_msg(&msg);
-                    },
+            if let Ok(msg) = RealtimeMessage::try_from(&msg) {
+              match msg {
+                RealtimeMessage::Collab(collab_msg) => {
+                  if let Some(channels) = weak_channels.upgrade() {
+                    info!("subscribe get: {}", collab_msg.object_id());
+                    if let Some(channel) = channels.read().get(collab_msg.object_id()) {
+                      match channel.upgrade() {
+                        None => {
+                          // when calling [WSClient::subscribe], the caller is responsible for keeping
+                          // the channel alive as long as it wants to receive messages from the websocket.
+                          trace!("channel is dropped");
+                        },
+                        Some(channel) => {
+                          channel.recv_msg(collab_msg);
+                        },
+                      }
+                    }
+                  } else {
+                    warn!("channels are closed");
                   }
-                }
-              } else {
-                warn!("channels are closed");
+                },
+                RealtimeMessage::CloseClient => {},
               }
             } else {
-              error!("🔴Parser ClientRealtimeMessage failed");
+              error!("🔴Parser RealtimeMessage failed");
             }
           },
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
@@ -148,17 +151,15 @@ impl WSClient {
               error!("🔴Failed to send pong message to websocket: {:?}", e);
             },
           },
-          Message::Pong(_) => {},
           Message::Close(close) => {
             info!("{:?}", close);
           },
-          Message::Frame(_) => {},
+          _ => {},
         }
       }
     });
 
     let mut sender_msg_rx = self.sender.subscribe();
-
     let weak_state_notify = Arc::downgrade(&self.state_notify);
     let handle_ws_error = move |error: &Error| {
       error!("websocket error: {:?}", error);
@@ -200,13 +201,11 @@ impl WSClient {
     &self,
     business_id: BusinessID,
     object_id: String,
-  ) -> Result<Arc<WebSocketChannel>, WSError> {
+  ) -> Result<Arc<WebSocketChannel<CollabMessage>>, WSError> {
     let channel = Arc::new(WebSocketChannel::new(business_id, self.sender.clone()));
     self
       .channels
       .write()
-      .entry(business_id)
-      .or_default()
       .insert(object_id, Arc::downgrade(&channel));
     Ok(channel)
   }

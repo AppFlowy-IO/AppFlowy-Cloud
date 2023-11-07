@@ -24,7 +24,6 @@ serde_repr = "0.1.6"
 tokio-retry = "0.3.0"
 reqwest = "0.11.18"
 app-error = { workspace = true }
-bincode = "1.3.3"
 
 collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }
@@ -33,7 +32,7 @@ database-entity = { path = "../database-entity" }
 yrs = "0.16.5"
 lib0 = "0.16.3"
 chrono = "0.4.30"
-realtime-entity = { workspace = true }
+realtime-entity = { workspace = true, features = ["actix_message"] }
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

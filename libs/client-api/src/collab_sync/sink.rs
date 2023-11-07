@@ -67,7 +67,7 @@ impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
 
 impl<E, Sink, Msg> CollabSink<Sink, Msg>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
   Msg: CollabSinkMessage,
 {
@@ -387,7 +387,7 @@ impl<Msg> CollabSinkRunner<Msg> {
     weak_sink: Weak<CollabSink<Sink, Msg>>,
     mut notifier: watch::Receiver<bool>,
   ) where
-    E: std::error::Error + Send + Sync + 'static,
+    E: Into<anyhow::Error> + Send + Sync + 'static,
     Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
     Msg: CollabSinkMessage,
   {

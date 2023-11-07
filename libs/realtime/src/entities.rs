@@ -1,14 +1,12 @@
-use crate::error::{RealtimeError, StreamError};
+use crate::error::RealtimeError;
 use actix::{Message, Recipient};
-use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-
-use realtime_entity::collab_msg::CollabMessage;
-use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::Arc;
+
+pub use realtime_entity::message::RealtimeMessage;
 
 pub trait RealtimeUser:
   Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
@@ -52,45 +50,6 @@ pub enum BusinessID {
 pub struct ClientMessage<U> {
   pub user: U,
   pub message: RealtimeMessage,
-}
-
-#[derive(Debug, Clone, Message, Serialize, Deserialize)]
-#[rtype(result = "()")]
-pub enum RealtimeMessage {
-  Collab(CollabMessage),
-  CloseClient,
-}
-
-impl From<RealtimeMessage> for Bytes {
-  fn from(msg: RealtimeMessage) -> Self {
-    let bytes = bincode::serialize(&msg).unwrap_or_default();
-    Bytes::from(bytes)
-  }
-}
-
-impl TryFrom<Bytes> for RealtimeMessage {
-  type Error = bincode::Error;
-
-  fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-    bincode::deserialize(&value)
-  }
-}
-
-impl From<CollabMessage> for RealtimeMessage {
-  fn from(msg: CollabMessage) -> Self {
-    Self::Collab(msg)
-  }
-}
-
-impl TryFrom<RealtimeMessage> for CollabMessage {
-  type Error = StreamError;
-
-  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
-    match value {
-      RealtimeMessage::Collab(msg) => Ok(msg),
-      _ => Err(StreamError::Internal("Invalid message type".to_string())),
-    }
-  }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]

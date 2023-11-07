@@ -25,6 +25,7 @@ use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
+use tracing::info;
 
 use crate::localhost_client;
 use crate::user::utils::{generate_unique_registered_user, User};
@@ -41,6 +42,12 @@ pub(crate) struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
   pub collab: Arc<MutexCollab>,
+}
+
+impl Drop for TestCollab {
+  fn drop(&mut self) {
+    info!("drop collab");
+  }
 }
 
 impl TestClient {

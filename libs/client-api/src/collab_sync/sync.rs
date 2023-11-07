@@ -19,7 +19,7 @@ use tokio::spawn;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, trace, warn};
+use tracing::{trace, warn};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -42,7 +42,7 @@ pub struct SyncQueue<Sink, Stream> {
 
 impl<E, Sink, Stream> SyncQueue<Sink, Stream>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
@@ -183,7 +183,7 @@ struct SyncStream<Sink, Stream> {
 
 impl<E, Sink, Stream> SyncStream<Sink, Stream>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
@@ -243,10 +243,9 @@ where
           },
         },
         Err(e) => {
-          error!("Spawn doc stream failed: {}", e);
           // If the client has disconnected, the stream will return an error, So stop receiving
           // messages if the client has disconnected.
-          return Err(SyncError::Internal(Box::new(e)));
+          return Err(SyncError::Internal(e.into()));
         },
       }
     }

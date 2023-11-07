@@ -214,9 +214,6 @@ async fn setup_admin_account(
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
   let res_resp = gotrue_client.sign_up(admin_email, password).await;
-
-  println!("res_resp: {:?}", &res_resp);
-
   match res_resp {
     Err(err) => {
       if let app_error::gotrue::GoTrueError::Internal(err) = err {

@@ -42,6 +42,7 @@ use url::Url;
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
+use realtime_entity::message::{HttpRealtimeMessage, RealtimeMessage};
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -335,6 +336,27 @@ impl Client {
         )
         .await?,
     )
+  }
+
+  pub async fn post_realtime_msg(
+    &self,
+    uid: i64,
+    device_id: &str,
+    msg: RealtimeMessage,
+  ) -> Result<(), AppResponseError> {
+    let msg = HttpRealtimeMessage {
+      uid,
+      device_id: device_id.to_string(),
+      payload: msg.into(),
+    };
+    let url = format!("{}/api/realtime/", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&msg)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   /// Only expose this method for testing

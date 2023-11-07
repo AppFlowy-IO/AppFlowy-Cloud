@@ -27,7 +27,7 @@ use tracing::info;
 
 use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
-use crate::api::workspace::workspace_scope;
+use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabHttpAccessControl};
 use crate::biz::collab::storage::init_collab_storage;
@@ -121,6 +121,7 @@ pub async fn run(
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())
       .service(workspace_scope())
+      .service(collab_scope())
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())

@@ -529,6 +529,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "realtime",
+ "realtime-entity",
  "redis",
  "reqwest",
  "rust-s3",

@@ -1,6 +1,7 @@
 use crate::collab_msg::CollabMessage;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -13,10 +14,25 @@ pub enum RealtimeMessage {
   CloseClient,
 }
 
+impl Display for RealtimeMessage {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      RealtimeMessage::Collab(_msg) => f.write_fmt(format_args!("CollabMessage")),
+      RealtimeMessage::CloseClient => f.write_fmt(format_args!("CloseClient")),
+    }
+  }
+}
+
 impl From<RealtimeMessage> for Bytes {
   fn from(msg: RealtimeMessage) -> Self {
     let bytes = bincode::serialize(&msg).unwrap_or_default();
     Bytes::from(bytes)
+  }
+}
+
+impl From<RealtimeMessage> for Vec<u8> {
+  fn from(msg: RealtimeMessage) -> Self {
+    bincode::serialize(&msg).unwrap_or_default()
   }
 }
 
@@ -85,4 +101,11 @@ impl From<RealtimeMessage> for Message {
     let bytes = bincode::serialize(&msg).unwrap_or_default();
     Message::Binary(bytes)
   }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpRealtimeMessage {
+  pub uid: i64,
+  pub device_id: String,
+  pub payload: Bytes,
 }

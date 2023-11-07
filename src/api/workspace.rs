@@ -1,19 +1,25 @@
+use crate::api::ws::CollabServerImpl;
 use crate::biz;
-
 use crate::biz::workspace;
 use crate::component::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
+use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollabV1;
 use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
+use realtime::client::RealtimeUserImpl;
+use realtime::collaborate::CollabAccessControl;
+use realtime::entities::{ClientMessage, RealtimeMessage};
+use realtime_entity::message::HttpRealtimeMessage;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
+use std::sync::Arc;
 use tracing::{event, instrument};
 use uuid::Uuid;
 
@@ -54,6 +60,11 @@ pub fn workspace_scope() -> Scope {
     )
     .service(web::resource("snapshot").route(web::get().to(retrieve_snapshot_data_handler)))
     .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
+}
+
+pub fn collab_scope() -> Scope {
+  web::scope("/api/realtime")
+    .service(web::resource("/").route(web::post().to(post_realtime_message_handler)))
 }
 
 #[instrument(skip_all, err)]
@@ -204,7 +215,7 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(payload, state), err)]
+#[instrument(level = "debug", skip(payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
@@ -222,7 +233,7 @@ async fn get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip(payload, state), err)]
+#[instrument(level = "debug", skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
@@ -313,9 +324,8 @@ async fn update_collab_member_handler(
 
   Ok(Json(AppResponse::Ok()))
 }
-#[instrument(skip(state, payload), err)]
+#[instrument(level = "debug", skip(state, payload), err)]
 async fn get_collab_member_handler(
-  user_uuid: UserUuid,
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMember>>> {
@@ -326,7 +336,6 @@ async fn get_collab_member_handler(
 
 #[instrument(skip(state, payload), err)]
 async fn remove_collab_member_handler(
-  user_uuid: UserUuid,
   payload: Json<CollabMemberIdentify>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
@@ -340,13 +349,63 @@ async fn remove_collab_member_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(state, payload), err)]
+#[instrument(level = "debug", skip(state, payload), err)]
 async fn get_collab_member_list_handler(
-  user_uuid: UserUuid,
   payload: Json<QueryCollabMembers>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<AFCollabMembers>>> {
   let members =
     biz::collab::ops::get_collab_member_list(&state.pg_pool, &payload.into_inner()).await?;
   Ok(Json(AppResponse::Ok().with_data(AFCollabMembers(members))))
+}
+
+#[instrument(level = "debug", skip(payload, server, state), err)]
+async fn post_realtime_message_handler(
+  payload: Json<HttpRealtimeMessage>,
+  server: Data<CollabServerImpl>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let HttpRealtimeMessage {
+    uid,
+    device_id,
+    payload,
+  } = payload.into_inner();
+
+  let realtime_msg = RealtimeMessage::try_from(payload)
+    .map_err(|err| AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err)))?;
+
+  match &realtime_msg {
+    RealtimeMessage::Collab(msg) => {
+      if !state
+        .collab_access_control
+        .can_send_collab_update(&uid, msg.object_id())
+        .await?
+      {
+        return Err(
+          AppError::NotEnoughPermissions(format!(
+            "User {} is not allowed to edit: {}",
+            uid,
+            msg.object_id()
+          ))
+          .into(),
+        );
+      }
+    },
+    _ => {
+      return Err(
+        AppError::InvalidRequest(format!("Unsupported realtime message: {}", realtime_msg)).into(),
+      );
+    },
+  }
+
+  let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
+  server
+    .send(ClientMessage {
+      user: realtime_user,
+      message: realtime_msg,
+    })
+    .await
+    .map_err(|err| AppError::Unhandled(err.to_string()))?
+    .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+  Ok(Json(AppResponse::Ok()))
 }

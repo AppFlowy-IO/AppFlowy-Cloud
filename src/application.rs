@@ -241,7 +241,7 @@ async fn setup_admin_account(
           Ok(())
         },
         _ => {
-          let user_id = admin_user.id.parse::<uuid::Uuid>().unwrap();
+          let user_id = admin_user.id.parse::<uuid::Uuid>()?;
           let result = sqlx::query(
             r#"
             UPDATE auth.users

@@ -28,9 +28,6 @@ jobs:
       - name: Copy and rename dev.env to .env
         run: cp dev.env .env
 
-      - name: Install protobuf compiler
-        run: sudo apt-get install -y protobuf-compiler
-
       - name: Code Gen
         working-directory: ./build
         run: ./code_gen.sh

@@ -103,7 +103,7 @@ where
             tracing::trace!("Send connect message to server success")
           },
           _ => {
-            tracing::error!("🔴Send connect message to server failed");
+            error!("🔴Send connect message to server failed");
             ctx.stop();
           },
         }

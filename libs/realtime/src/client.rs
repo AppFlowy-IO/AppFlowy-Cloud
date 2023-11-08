@@ -136,20 +136,6 @@ where
   }
 }
 
-// impl<U, S, AC> Handler<DisconnectByServer> for ClientSession<U, S, AC>
-// where
-//   U: Unpin + RealtimeUser,
-//   S: Unpin + CollabStorage,
-//   AC: CollabAccessControl + Unpin,
-// {
-//   type Result = ();
-//
-//   fn handle(&self, msg: DisconnectByServer, ctx: &mut Self::Context) {
-//     info!("{} was disconnected by the server", self.user);
-//     ctx.stop();
-//   }
-// }
-
 /// WebSocket message handler
 impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S, AC>
 where

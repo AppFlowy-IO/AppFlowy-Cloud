@@ -3,7 +3,8 @@ use crate::biz;
 use crate::biz::workspace;
 use crate::component::auth::jwt::UserUuid;
 use crate::state::AppState;
-use actix_web::web::{Data, Json};
+use actix_web::web::Bytes;
+use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use app_error::AppError;
@@ -11,18 +12,19 @@ use collab::core::collab_plugin::EncodedCollabV1;
 use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
+use prost::Message as ProstMessage;
 use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabAccessControl;
 use realtime::entities::{ClientMessage, RealtimeMessage};
-use realtime_entity::message::HttpRealtimeMessage;
+use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
 use std::sync::Arc;
+use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
 use uuid::Uuid;
-
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
@@ -63,8 +65,13 @@ pub fn workspace_scope() -> Scope {
 }
 
 pub fn collab_scope() -> Scope {
-  web::scope("/api/realtime")
-    .service(web::resource("/").route(web::post().to(post_realtime_message_handler)))
+  web::scope("/api/realtime").service(
+    web::resource("post")
+      .app_data(
+        PayloadConfig::new(10 * 1024 * 1024), // 10 MB
+      )
+      .route(web::post().to(post_realtime_message_handler)),
+  )
 }
 
 #[instrument(skip_all, err)]
@@ -361,51 +368,60 @@ async fn get_collab_member_list_handler(
 
 #[instrument(level = "debug", skip(payload, server, state), err)]
 async fn post_realtime_message_handler(
-  payload: Json<HttpRealtimeMessage>,
+  user_uuid: UserUuid,
+  payload: Bytes,
   server: Data<CollabServerImpl>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let HttpRealtimeMessage {
-    uid,
-    device_id,
-    payload,
-  } = payload.into_inner();
-
-  let realtime_msg = RealtimeMessage::try_from(payload)
-    .map_err(|err| AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err)))?;
-
-  match &realtime_msg {
-    RealtimeMessage::Collab(msg) => {
-      if !state
-        .collab_access_control
-        .can_send_collab_update(&uid, msg.object_id())
-        .await?
-      {
-        return Err(
-          AppError::NotEnoughPermissions(format!(
-            "User {} is not allowed to edit: {}",
-            uid,
-            msg.object_id()
-          ))
-          .into(),
-        );
-      }
-    },
-    _ => {
-      return Err(
-        AppError::InvalidRequest(format!("Unsupported realtime message: {}", realtime_msg)).into(),
-      );
-    },
-  }
-
-  let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
-  server
-    .send(ClientMessage {
-      user: realtime_user,
-      message: realtime_msg,
-    })
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
-    .map_err(|err| AppError::Unhandled(err.to_string()))?
-    .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
-  Ok(Json(AppResponse::Ok()))
+    .map_err(AppResponseError::from)?;
+  let HttpRealtimeMessage { device_id, payload } =
+    HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
+
+  let message = Message::from(payload);
+  match message {
+    Message::Binary(bytes) => {
+      let realtime_msg = RealtimeMessage::try_from(bytes).map_err(|err| {
+        AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
+      })?;
+
+      match &realtime_msg {
+        RealtimeMessage::Collab(msg) => {
+          if !state
+            .collab_access_control
+            .can_send_collab_update(&uid, msg.object_id())
+            .await?
+          {
+            return Err(
+              AppError::NotEnoughPermissions(format!(
+                "User {} is not allowed to edit: {}",
+                uid,
+                msg.object_id()
+              ))
+              .into(),
+            );
+          }
+        },
+        _ => {
+          return Err(
+            AppError::InvalidRequest(format!("Unsupported realtime message: {}", realtime_msg))
+              .into(),
+          );
+        },
+      }
+
+      let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
+      server
+        .send(ClientMessage {
+          user: realtime_user,
+          message: realtime_msg,
+        })
+        .await
+        .map_err(|err| AppError::Unhandled(err.to_string()))?
+        .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+      Ok(Json(AppResponse::Ok()))
+    },
+    _ => Err(AppError::InvalidRequest(format!("Unsupported message type: {:?}", message)).into()),
+  }
 }

@@ -1,4 +1,3 @@
-use crate::ws::BusinessID;
 use futures_util::Sink;
 use realtime_entity::message::RealtimeMessage;
 use std::fmt::Debug;
@@ -11,7 +10,6 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::warn;
 
 pub struct WebSocketChannel<T> {
-  business_id: BusinessID,
   sender: Sender<Message>,
   receiver: Sender<T>,
 }
@@ -20,17 +18,9 @@ impl<T> WebSocketChannel<T>
 where
   T: Into<RealtimeMessage> + Clone + Send + Sync + 'static,
 {
-  pub fn new(business_id: BusinessID, sender: Sender<Message>) -> Self {
+  pub fn new(sender: Sender<Message>) -> Self {
     let (receiver, _) = channel(1000);
-    Self {
-      business_id,
-      sender,
-      receiver,
-    }
-  }
-
-  pub fn business_id(&self) -> &BusinessID {
-    &self.business_id
+    Self { sender, receiver }
   }
 
   pub(crate) fn recv_msg(&self, msg: T) {

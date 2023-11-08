@@ -1,7 +1,7 @@
 mod client;
 mod error;
 mod handler;
-mod msg;
+// mod msg;
 pub(crate) mod ping;
 mod retry;
 mod state;
@@ -9,5 +9,5 @@ mod state;
 pub use client::*;
 pub use error::*;
 pub use handler::*;
-pub use msg::*;
+// pub use msg::*;
 pub use state::*;

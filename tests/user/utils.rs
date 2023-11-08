@@ -5,6 +5,7 @@ use sqlx::types::Uuid;
 use lazy_static::lazy_static;
 
 use crate::localhost_client;
+use crate::util::setup_log;
 
 lazy_static! {
   pub static ref ADMIN_USER: User = {
@@ -49,6 +50,7 @@ pub async fn generate_unique_registered_user() -> User {
 }
 
 pub async fn generate_unique_registered_user_client() -> (Client, User) {
+  setup_log();
   let registered_user = generate_unique_registered_user().await;
   let registered_user_client = localhost_client();
   registered_user_client

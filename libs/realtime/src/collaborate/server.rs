@@ -155,6 +155,12 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
+
+    trace!(
+      "Receive message from client:{} message:{}",
+      user.uid(),
+      message
+    );
     match message {
       RealtimeMessage::Collab(collab_message) => {
         let client_stream_by_user = self.client_stream_by_user.clone();

@@ -102,10 +102,3 @@ impl From<RealtimeMessage> for Message {
     Message::Binary(bytes)
   }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HttpRealtimeMessage {
-  pub uid: i64,
-  pub device_id: String,
-  pub payload: Bytes,
-}

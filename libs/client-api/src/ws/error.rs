@@ -1,4 +1,3 @@
-use crate::ws::ClientRealtimeMessage;
 use reqwest::StatusCode;
 use tokio_tungstenite::tungstenite::Error;
 
@@ -17,10 +16,7 @@ pub enum WSError {
   SerdeError(#[from] serde_json::Error),
 
   #[error(transparent)]
-  SenderError(#[from] tokio::sync::broadcast::error::SendError<ClientRealtimeMessage>),
-
-  #[error("Internal failure: {0}")]
-  Internal(#[from] Box<dyn std::error::Error + Send + Sync>),
+  Internal(#[from] anyhow::Error),
 }
 
 impl From<Error> for WSError {

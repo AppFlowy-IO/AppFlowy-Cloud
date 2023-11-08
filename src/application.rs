@@ -213,26 +213,55 @@ async fn setup_admin_account(
 ) -> Result<(), Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
-  gotrue_client
-    .sign_up(admin_email, password)
-    .await
-    .context("failed to sign-up for admin user")?;
+  let res_resp = gotrue_client.sign_up(admin_email, password).await;
+  match res_resp {
+    Err(err) => {
+      if let app_error::gotrue::GoTrueError::Internal(err) = err {
+        match (err.code, err.msg.as_str()) {
+          (400, "User already registered") => {
+            tracing::info!("Admin user already registered");
+            Ok(())
+          },
+          _ => Err(err.into()),
+        }
+      } else {
+        Err(err.into())
+      }
+    },
+    Ok(resp) => {
+      let admin_user = {
+        match resp {
+          gotrue_entity::dto::SignUpResponse::Authenticated(resp) => resp.user,
+          gotrue_entity::dto::SignUpResponse::NotAuthenticated(user) => user,
+        }
+      };
+      match admin_user.role.as_str() {
+        "supabase_admin" => {
+          tracing::info!("Admin user already created and set role to supabase_admin");
+          Ok(())
+        },
+        _ => {
+          let user_id = admin_user.id.parse::<uuid::Uuid>()?;
+          let result = sqlx::query(
+            r#"
+            UPDATE auth.users
+            SET role = 'supabase_admin', email_confirmed_at = NOW()
+            WHERE id = $1
+            "#,
+          )
+          .bind(user_id)
+          .execute(pg_pool)
+          .await
+          .context("failed to update the admin user")?;
 
-  // Unable to use query! macro here instead
-  // because of the auth is a not default schema
-  // hopefully this will be fixed in the future
-  sqlx::query(
-    r#"
-      UPDATE auth.users
-      SET role = 'supabase_admin', email_confirmed_at = NOW()
-      WHERE email = $1
-        "#,
-  )
-  .bind(admin_email)
-  .execute(pg_pool)
-  .await
-  .context("failed to update the admin user")?;
-  Ok(())
+          assert_eq!(result.rows_affected(), 1);
+          tracing::info!("Admin user created and set role to supabase_admin");
+
+          Ok(())
+        },
+      }
+    },
+  }
 }
 
 async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {

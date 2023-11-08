@@ -1,4 +1,5 @@
 use crate::collaborate::CollabClientStream;
+
 use anyhow::{anyhow, Error};
 use collab::core::origin::CollabOrigin;
 use database::collab::CollabStorage;
@@ -15,7 +16,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-use crate::entities::{ClientMessage, Editing, RealtimeUser};
+use crate::entities::{Editing, RealtimeUser};
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, Retry, RetryIf};
 
@@ -24,8 +25,13 @@ use crate::collaborate::permission::CollabAccessControl;
 use crate::error::RealtimeError;
 use tracing::{error, trace, warn};
 
+pub(crate) struct CollabUserMessage<'a, U> {
+  pub(crate) user: &'a U,
+  pub(crate) collab_message: &'a CollabMessage,
+}
+
 pub(crate) struct SubscribeGroupIfNeed<'a, U, S, AC> {
-  pub(crate) client_msg: &'a ClientMessage<U>,
+  pub(crate) collab_user_message: &'a CollabUserMessage<'a, U>,
   pub(crate) groups: &'a Arc<CollabGroupCache<S, U, AC>>,
   pub(crate) edit_collab_by_user: &'a Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   pub(crate) client_stream_by_user: &'a Arc<RwLock<HashMap<U, CollabClientStream>>>,
@@ -64,10 +70,15 @@ where
 
   fn run(&mut self) -> Self::Future {
     Box::pin(async {
-      let object_id = self.client_msg.content.object_id();
+      let CollabUserMessage {
+        user,
+        collab_message,
+      } = self.collab_user_message;
+
+      let object_id = collab_message.object_id();
       if !self.groups.contains_group(object_id).await? {
         // When create a group, the message must be the init sync message.
-        match &self.client_msg.content {
+        match collab_message {
           CollabMessage::ClientInit(client_init) => {
             let uid = client_init
               .origin
@@ -95,26 +106,21 @@ where
       // If the client's stream is already subscribe to the collab, return.
       if self
         .groups
-        .contains_user(object_id, &self.client_msg.user)
+        .contains_user(object_id, user)
         .await
         .unwrap_or(false)
       {
         return Ok(());
       }
 
-      let origin = match self.client_msg.content.origin() {
+      let origin = match collab_message.origin() {
         None => {
           error!("🔴The origin from client message is empty");
           &CollabOrigin::Empty
         },
         Some(client) => client,
       };
-      match self
-        .client_stream_by_user
-        .write()
-        .await
-        .get_mut(&self.client_msg.user)
-      {
+      match self.client_stream_by_user.write().await.get_mut(user) {
         None => warn!("The client stream is not found"),
         Some(client_stream) => {
           if let Some(collab_group) = self.groups.get_group(object_id).await {
@@ -122,19 +128,19 @@ where
               .subscribers
               .write()
               .await
-              .entry(self.client_msg.user.clone())
+              .entry((*user).clone())
             {
               trace!(
                 "[realtime]: {} subscribe group:{}",
-                self.client_msg.user,
-                self.client_msg.content.object_id()
+                user,
+                collab_message.object_id()
               );
 
-              let client_uid = self.client_msg.user.uid();
+              let client_uid = user.uid();
               self
                 .edit_collab_by_user
                 .lock()
-                .entry(self.client_msg.user.clone())
+                .entry((*user).clone())
                 .or_default()
                 .insert(Editing {
                   object_id: object_id.to_string(),

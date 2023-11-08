@@ -1,6 +1,7 @@
 #[cfg(feature = "gotrue_error")]
 pub mod gotrue;
 
+#[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
 use serde::Serialize;
 use thiserror::Error;

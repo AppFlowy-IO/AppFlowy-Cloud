@@ -1,7 +1,7 @@
 use assert_json_diff::assert_json_eq;
 use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
-use client_api::ws::{BusinessID, WSClient, WSClientConfig};
+use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -36,13 +36,11 @@ pub(crate) struct TestClient {
   pub collab_by_object_id: HashMap<String, TestCollab>,
   device_id: String,
 }
-
 pub(crate) struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
   pub collab: Arc<MutexCollab>,
 }
-
 impl TestClient {
   pub(crate) async fn new(device_id: String, registered_user: User, invoke_ws_conn: bool) -> Self {
     setup_log();
@@ -53,15 +51,18 @@ impl TestClient {
       .unwrap();
 
     // Connect to server via websocket
-    let ws_client = WSClient::new(WSClientConfig {
-      buffer_capacity: 100,
-      ping_per_secs: 6,
-      retry_connect_per_pings: 5,
-    });
+    let ws_client = WSClient::new(
+      WSClientConfig {
+        buffer_capacity: 100,
+        ping_per_secs: 6,
+        retry_connect_per_pings: 5,
+      },
+      api_client.clone(),
+    );
 
     if invoke_ws_conn {
       ws_client
-        .connect(api_client.ws_url(&device_id).unwrap())
+        .connect(api_client.ws_url(&device_id).unwrap(), &device_id)
         .await
         .unwrap();
     }
@@ -293,10 +294,7 @@ impl TestClient {
     let object_id = Uuid::new_v4().to_string();
 
     // Subscribe to object
-    let handler = self
-      .ws_client
-      .subscribe(BusinessID::CollabId, object_id.clone())
-      .unwrap();
+    let handler = self.ws_client.subscribe(object_id.clone()).unwrap();
 
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
@@ -353,10 +351,7 @@ impl TestClient {
     collab_type: CollabType,
   ) {
     // Subscribe to object
-    let handler = self
-      .ws_client
-      .subscribe(BusinessID::CollabId, object_id.to_string())
-      .unwrap();
+    let handler = self.ws_client.subscribe(object_id.to_string()).unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
@@ -390,7 +385,10 @@ impl TestClient {
   pub(crate) async fn reconnect(&self) {
     self
       .ws_client
-      .connect(self.api_client.ws_url(&self.device_id).unwrap())
+      .connect(
+        self.api_client.ws_url(&self.device_id).unwrap(),
+        &self.device_id,
+      )
       .await
       .unwrap();
   }

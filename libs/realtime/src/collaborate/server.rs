@@ -19,7 +19,7 @@ use tracing::{error, info, trace};
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
-use crate::collaborate::retry::SubscribeGroupIfNeed;
+use crate::collaborate::retry::{CollabUserMessage, SubscribeGroupIfNeed};
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 
@@ -61,7 +61,6 @@ where
 
 async fn remove_user<S, U, AC>(
   groups: &Arc<CollabGroupCache<S, U, AC>>,
-  client_stream_by_user: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
   editing_collab_by_user: &Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   user: &U,
 ) where
@@ -69,10 +68,6 @@ async fn remove_user<S, U, AC>(
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  if client_stream_by_user.write().await.remove(user).is_some() {
-    info!("Remove user stream: {}", user);
-  }
-
   let editing_set = editing_collab_by_user.lock().remove(user);
   if let Some(editing_set) = editing_set {
     info!("Remove user from group: {}", user);
@@ -100,6 +95,7 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
+    // User with the same id and same device will be replaced with the new connection [CollabClientStream]
     let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
@@ -107,18 +103,15 @@ where
 
     Box::pin(async move {
       trace!("[realtime]: new connection => {} ", new_conn.user);
-      remove_user(
-        &groups,
-        &client_stream_by_user,
-        &editing_collab_by_user,
-        &new_conn.user,
-      )
-      .await;
-
-      client_stream_by_user
+      remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
+      if let Some(old_stream) = client_stream_by_user
         .write()
         .await
-        .insert(new_conn.user, stream);
+        .insert(new_conn.user, stream)
+      {
+        old_stream.disconnect();
+      }
+
       Ok(())
     })
   }
@@ -137,13 +130,16 @@ where
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     Box::pin(async move {
-      remove_user(
-        &groups,
-        &client_stream_by_user,
-        &editing_collab_by_user,
-        &msg.user,
-      )
-      .await;
+      remove_user(&groups, &editing_collab_by_user, &msg.user).await;
+
+      if client_stream_by_user
+        .write()
+        .await
+        .remove(&msg.user)
+        .is_some()
+      {
+        info!("Remove user stream: {}", &msg.user);
+      }
       Ok(())
     })
   }
@@ -158,43 +154,57 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    let client_stream_by_user = self.client_stream_by_user.clone();
-    let groups = self.groups.clone();
-    let edit_collab_by_user = self.editing_collab_by_user.clone();
-    let permission_service = self.access_control.clone();
+    let ClientMessage { user, message } = client_msg;
 
-    Box::pin(async move {
-      SubscribeGroupIfNeed {
-        client_msg: &client_msg,
-        groups: &groups,
-        edit_collab_by_user: &edit_collab_by_user,
-        client_stream_by_user: &client_stream_by_user,
-        access_control: &permission_service,
-      }
-      .run()
-      .await?;
+    trace!(
+      "Receive message from client:{} message:{}",
+      user.uid(),
+      message
+    );
+    match message {
+      RealtimeMessage::Collab(collab_message) => {
+        let client_stream_by_user = self.client_stream_by_user.clone();
+        let groups = self.groups.clone();
+        let edit_collab_by_user = self.editing_collab_by_user.clone();
+        let permission_service = self.access_control.clone();
 
-      broadcast_message(&client_msg, &client_stream_by_user).await;
-      Ok(())
-    })
+        Box::pin(async move {
+          let msg = CollabUserMessage {
+            user: &user,
+            collab_message: &collab_message,
+          };
+          SubscribeGroupIfNeed {
+            collab_user_message: &msg,
+            groups: &groups,
+            edit_collab_by_user: &edit_collab_by_user,
+            client_stream_by_user: &client_stream_by_user,
+            access_control: &permission_service,
+          }
+          .run()
+          .await?;
+
+          broadcast_message(&user, &collab_message, &client_stream_by_user).await;
+          Ok(())
+        })
+      },
+      _ => Box::pin(async { Ok(()) }),
+    }
   }
 }
 
 #[inline]
 async fn broadcast_message<U>(
-  client_msg: &ClientMessage<U>,
+  user: &U,
+  collab_message: &CollabMessage,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
 ) where
   U: RealtimeUser,
 {
-  if let Some(client_stream) = client_streams.read().await.get(&client_msg.user) {
-    trace!(
-      "[realtime]: receives client message: {}",
-      client_msg.content,
-    );
+  if let Some(client_stream) = client_streams.read().await.get(user) {
+    trace!("[realtime]: receives collab message: {}", collab_message);
     match client_stream
       .stream_tx
-      .send(Ok(RealtimeMessage::from(client_msg.clone())))
+      .send(Ok(RealtimeMessage::Collab(collab_message.clone())))
     {
       Ok(_) => {},
       Err(e) => error!("send error: {}", e),
@@ -215,11 +225,12 @@ async fn remove_user_from_group<S, U, AC>(
   if let Some(group) = groups.get_group(&editing.object_id).await {
     info!("Remove subscriber: {}", editing.origin);
     group.subscribers.write().await.remove(user);
+
+    // Destroy the group if the group is empty
     let should_remove = group.is_empty().await;
     if should_remove {
       group.save_collab();
-
-      tracing::debug!("Remove group: {}", editing.object_id);
+      info!("Remove group: {}", editing.object_id);
       groups.remove_group(&editing.object_id).await;
     }
   }
@@ -236,16 +247,8 @@ where
   }
 }
 
-impl TryFrom<RealtimeMessage> for CollabMessage {
-  type Error = StreamError;
-
-  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
-    CollabMessage::from_vec(&value.payload).map_err(|e| StreamError::Internal(e.to_string()))
-  }
-}
-
 pub struct CollabClientStream {
-  ws_sink: ClientWSSink,
+  sink: ClientWSSink,
   /// Used to receive messages from the collab server. The message will forward to the [CollabBroadcast] which
   /// will broadcast the message to all connected clients.
   ///
@@ -258,10 +261,7 @@ impl CollabClientStream {
   pub fn new(sink: ClientWSSink) -> Self {
     // When receive a new connection, create a new [ClientStream] that holds the connection's websocket
     let (stream_tx, _) = tokio::sync::broadcast::channel(1000);
-    Self {
-      ws_sink: sink,
-      stream_tx,
-    }
+    Self { sink, stream_tx }
   }
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.
@@ -273,15 +273,14 @@ impl CollabClientStream {
     stream_filter: StreamFilter,
   ) -> (
     UnboundedSenderSink<T>,
-    ReceiverStream<Result<T, StreamError>>,
+    ReceiverStream<Result<CollabMessage, StreamError>>,
   )
   where
-    T:
-      TryFrom<RealtimeMessage, Error = StreamError> + Into<RealtimeMessage> + Send + Sync + 'static,
+    T: Into<RealtimeMessage> + Send + Sync + 'static,
     SinkFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
-    StreamFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
+    StreamFilter: Fn(&str, &CollabMessage) -> BoxFuture<'static, bool> + Sync + Send + 'static,
   {
-    let client_ws_sink = self.ws_sink.clone();
+    let client_ws_sink = self.sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
     let cloned_object_id = object_id.to_string();
 
@@ -303,16 +302,9 @@ impl CollabClientStream {
     let cloned_object_id = object_id.to_string();
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
-      while let Some(Ok(Ok(msg))) = stream_rx.next().await {
-        match T::try_from(msg) {
-          Ok(msg) => {
-            if stream_filter(&cloned_object_id, &msg).await {
-              let _ = tx.send(Ok(msg)).await;
-            }
-          },
-          Err(err) => {
-            error!("Failed to convert realtime message: {}", err);
-          },
+      while let Some(Ok(Ok(RealtimeMessage::Collab(msg)))) = stream_rx.next().await {
+        if stream_filter(&cloned_object_id, &msg).await {
+          let _ = tx.send(Ok(msg)).await;
         }
       }
     });
@@ -324,5 +316,9 @@ impl CollabClientStream {
     // When receiving a message from the client_forward_stream, it will send the message to the broadcast
     // group. The message will be broadcast to all connected clients.
     (client_forward_sink, client_forward_stream)
+  }
+
+  pub fn disconnect(&self) {
+    self.sink.do_send(RealtimeMessage::ServerKickedOff);
   }
 }

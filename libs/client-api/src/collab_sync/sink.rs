@@ -67,7 +67,7 @@ impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
 
 impl<E, Sink, Msg> CollabSink<Sink, Msg>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
   Msg: CollabSinkMessage,
 {
@@ -387,7 +387,7 @@ impl<Msg> CollabSinkRunner<Msg> {
     weak_sink: Weak<CollabSink<Sink, Msg>>,
     mut notifier: watch::Receiver<bool>,
   ) where
-    E: std::error::Error + Send + Sync + 'static,
+    E: Into<anyhow::Error> + Send + Sync + 'static,
     Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
     Msg: CollabSinkMessage,
   {
@@ -440,8 +440,8 @@ impl SinkConfig {
   }
 
   /// `max_zip_size` is the maximum size of the messages to be merged.
-  pub fn with_max_merge_size(mut self, max_merge_size: usize) -> Self {
-    self.maximum_payload_size = max_merge_size;
+  pub fn with_max_payload_size(mut self, max_size: usize) -> Self {
+    self.maximum_payload_size = max_size;
     self
   }
 

@@ -14,6 +14,7 @@ use tokio_stream::StreamExt;
 use crate::collab_sync::{SinkConfig, SyncQueue};
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use tokio_stream::wrappers::WatchStream;
+
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {
@@ -26,7 +27,7 @@ pub struct SyncPlugin<Sink, Stream, C> {
 
 impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
@@ -108,7 +109,7 @@ where
 
 impl<E, Sink, Stream, C> CollabPlugin for SyncPlugin<Sink, Stream, C>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,

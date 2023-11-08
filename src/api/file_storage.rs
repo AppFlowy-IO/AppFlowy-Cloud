@@ -111,7 +111,7 @@ async fn delete_blob_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(skip(state), err)]
+#[instrument(level = "debug", skip(state), err)]
 async fn get_blob_handler(
   state: Data<AppState>,
   path: web::Path<PathInfo>,
@@ -165,7 +165,7 @@ async fn get_blob_handler(
   Ok(response)
 }
 
-#[instrument(skip(state), err)]
+#[instrument(level = "debug", skip(state), err)]
 async fn get_blob_metadata_handler(
   state: Data<AppState>,
   path: web::Path<PathInfo>,

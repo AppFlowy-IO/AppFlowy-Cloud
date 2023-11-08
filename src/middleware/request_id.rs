@@ -1,6 +1,6 @@
 use actix_http::header::HeaderName;
 use std::future::{ready, Ready};
-use tracing::{Instrument, Level};
+use tracing::{debug, Instrument, Level};
 
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
@@ -43,6 +43,7 @@ where
 
   fn call(&self, req: ServiceRequest) -> Self::Future {
     let request_id = get_request_id(&req).unwrap_or(uuid::Uuid::new_v4().to_string());
+    debug!("generated request id for: {}", req.path());
 
     // Call the next service
     let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);

@@ -17,7 +17,7 @@ use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
 use crate::collaborate::retry::SinkCollabMessageAction;
-use crate::error::{internal_error, RealtimeError};
+use crate::error::RealtimeError;
 use realtime_entity::collab_msg::{
   CollabAwarenessData, CollabBroadcastData, CollabMessage, UpdateAck,
 };
@@ -124,7 +124,7 @@ impl CollabBroadcast {
     Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
-    E: std::error::Error + Send + Sync + 'static,
+    E: Into<anyhow::Error> + Send + Sync + 'static,
   {
     trace!("[realtime]: new subscriber: {}", origin);
     let sink = Arc::new(Mutex::new(sink));
@@ -165,7 +165,7 @@ impl CollabBroadcast {
       let object_id = self.object_id.clone();
       tokio::spawn(async move {
         while let Some(res) = stream.next().await {
-          let collab_msg = res.map_err(internal_error)?;
+          let collab_msg = res.map_err(|err| err.into())?;
           // Continue if the message is empty
           if collab_msg.is_empty() {
             warn!("Unexpected empty payload of collab message");

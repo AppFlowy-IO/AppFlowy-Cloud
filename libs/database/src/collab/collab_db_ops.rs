@@ -318,7 +318,7 @@ pub async fn get_all_snapshots(
 }
 
 #[inline]
-#[instrument(skip(txn), err)]
+#[instrument(level = "debug", skip(txn), err)]
 pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   uid: i64,
   oid: T,

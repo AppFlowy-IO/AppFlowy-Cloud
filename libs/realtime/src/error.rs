@@ -36,13 +36,6 @@ pub enum RealtimeError {
   Internal(#[from] anyhow::Error),
 }
 
-pub fn internal_error<T>(e: T) -> anyhow::Error
-where
-  T: std::error::Error + Send + Sync + 'static,
-{
-  anyhow::Error::from(e)
-}
-
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum StreamError {
   #[error("Internal error:{0}")]

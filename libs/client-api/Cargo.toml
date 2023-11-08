@@ -38,8 +38,10 @@ collab = { version = "0.1.0", optional = true }
 collab-entity = { version = "0.1.0" }
 yrs = { version = "0.16.5", optional = true }
 lib0 = { version = "0.16.3", features = ["lib0-serde"], optional = true }
-realtime-entity = { workspace = true }
+realtime-entity = { workspace = true, features = ["tungstenite"] }
 mime_guess = "2.0.4"
+async-trait = { version = "0.1.73" }
+prost = "0.12.1"
 
 
 [features]

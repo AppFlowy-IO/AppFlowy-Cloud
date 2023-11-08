@@ -59,7 +59,7 @@ pub async fn get_profile(pg_pool: &PgPool, uuid: &Uuid) -> Result<AFUserProfile,
   Ok(profile)
 }
 
-#[instrument(skip(pg_pool), err)]
+#[instrument(level = "debug", skip(pg_pool), err)]
 pub async fn get_user_workspace_info(
   pg_pool: &PgPool,
   uuid: &Uuid,

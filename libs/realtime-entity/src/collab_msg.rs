@@ -1,7 +1,8 @@
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
+use crate::message::RealtimeMessage;
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::DecoderV1;
@@ -454,5 +455,22 @@ impl CollabBroadcastData {
 impl From<CollabBroadcastData> for CollabMessage {
   fn from(value: CollabBroadcastData) -> Self {
     CollabMessage::ServerBroadcast(value)
+  }
+}
+
+impl TryFrom<RealtimeMessage> for CollabMessage {
+  type Error = anyhow::Error;
+
+  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
+    match value {
+      RealtimeMessage::Collab(msg) => Ok(msg),
+      _ => Err(anyhow!("Invalid message type.")),
+    }
+  }
+}
+
+impl From<CollabMessage> for RealtimeMessage {
+  fn from(msg: CollabMessage) -> Self {
+    Self::Collab(msg)
   }
 }

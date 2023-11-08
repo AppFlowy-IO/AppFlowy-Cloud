@@ -19,9 +19,6 @@ jobs:
           workspaces: |
             AppFlowy-Cloud
 
-      - name: Install protobuf compiler
-        run: sudo apt-get install -y protobuf-compiler
-
       - name: Check
         working-directory: ./libs/client-api
         run: cargo build

@@ -22,4 +22,5 @@ actix_message = ["actix"]
 tungstenite = ["tokio-tungstenite"]
 
 [build-dependencies]
+protoc-bin-vendored = { version = "3.0" }
 prost-build = "0.12.1"

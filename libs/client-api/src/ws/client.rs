@@ -154,7 +154,7 @@ impl WSClient {
                     warn!("channels are closed");
                   }
                 },
-                RealtimeMessage::CloseClient => {},
+                RealtimeMessage::ServerKickedOff => {},
               }
             } else {
               error!("🔴Parser RealtimeMessage failed");

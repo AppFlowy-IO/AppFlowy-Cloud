@@ -11,14 +11,14 @@ use std::fmt::Display;
 )]
 pub enum RealtimeMessage {
   Collab(CollabMessage),
-  CloseClient,
+  ServerKickedOff,
 }
 
 impl Display for RealtimeMessage {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       RealtimeMessage::Collab(_msg) => f.write_fmt(format_args!("CollabMessage")),
-      RealtimeMessage::CloseClient => f.write_fmt(format_args!("CloseClient")),
+      RealtimeMessage::ServerKickedOff => f.write_fmt(format_args!("ServerKickedOff")),
     }
   }
 }

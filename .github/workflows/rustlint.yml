@@ -36,7 +36,9 @@ jobs:
         run: ./code_gen.sh
 
       - name: Rustfmt
-        run: cargo fmt --check
+        run:
+          cargo fmt --all
+          cargo fmt --check
 
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings

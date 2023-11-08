@@ -104,12 +104,12 @@ where
     Box::pin(async move {
       trace!("[realtime]: new connection => {} ", new_conn.user);
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
-      if let Some(_old_stream) = client_stream_by_user
+      if let Some(old_stream) = client_stream_by_user
         .write()
         .await
         .insert(new_conn.user, stream)
       {
-        // old_stream.disconnect();
+        old_stream.disconnect();
       }
 
       Ok(())
@@ -319,6 +319,6 @@ impl CollabClientStream {
   }
 
   pub fn disconnect(&self) {
-    self.sink.do_send(RealtimeMessage::CloseClient);
+    self.sink.do_send(RealtimeMessage::ServerKickedOff);
   }
 }

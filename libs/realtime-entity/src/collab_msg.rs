@@ -163,38 +163,38 @@ impl Display for CollabMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
       CollabMessage::ClientInit(value) => f.write_fmt(format_args!(
-        "client init: [{}|oid:{}|msg_id:{}|payload_len:{}]",
+        "client init: [{}|oid:{}|msg_id:{}|len:{}]",
         value.origin,
         value.object_id,
         value.msg_id,
         value.payload.len(),
       )),
       CollabMessage::ClientUpdateSync(value) => f.write_fmt(format_args!(
-        "client update: [oid:{}|msg_id:{:?}|payload_len:{}]",
+        "client update: [oid:{}|msg_id:{:?}|len:{}]",
         value.object_id,
         value.msg_id,
         value.payload.len(),
       )),
       CollabMessage::ClientUpdateAck(value) => f.write_fmt(format_args!(
-        "ack: [oid:{}|msg_id:{:?}|payload_len:{}]",
+        "ack: [oid:{}|msg_id:{:?}|len:{}]",
         value.object_id,
         value.msg_id,
         value.payload.len(),
       )),
       CollabMessage::ServerInit(value) => f.write_fmt(format_args!(
-        "server init: [oid:{}|msg_id:{:?}|payload_len:{}]",
+        "server init: [oid:{}|msg_id:{:?}|len:{}]",
         value.object_id,
         value.msg_id,
         value.payload.len(),
       )),
       CollabMessage::ServerBroadcast(value) => f.write_fmt(format_args!(
-        "server broadcast: [{}|oid:{}|payload_len:{}]",
+        "server broadcast: [{}|oid:{}|len:{}]",
         value.origin,
         value.object_id,
         value.payload.len(),
       )),
       CollabMessage::ServerAwareness(value) => f.write_fmt(format_args!(
-        "awareness: [oid:{}|payload_len:{}]",
+        "awareness: [oid:{}|len:{}]",
         value.object_id,
         value.payload.len(),
       )),
@@ -324,7 +324,7 @@ impl From<ServerCollabInit> for CollabMessage {
 impl Display for ServerCollabInit {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "server init: [uid:{:?}|oid:{}|msg_id:{:?}|payload_len:{}]",
+      "server init: [uid:{:?}|oid:{}|msg_id:{:?}|len:{}]",
       self.origin.client_user_id(),
       self.object_id,
       self.msg_id,
@@ -387,7 +387,7 @@ impl From<UpdateSync> for CollabMessage {
 impl Display for UpdateSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update sync: [uid:{:?}|oid:{}|msg_id:{:?}|payload_len:{}]",
+      "client update sync: [uid:{:?}|oid:{}|msg_id:{:?}|len:{}]",
       self.origin.client_user_id(),
       self.object_id,
       self.msg_id,
@@ -424,7 +424,7 @@ impl From<UpdateAck> for CollabMessage {
 impl Display for UpdateAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update ack: [uid:{:?}|oid:{}|msg_id:{:?}|payload_len:{}]",
+      "client update ack: [uid:{:?}|oid:{}|msg_id:{:?}|len:{}]",
       self.origin.client_user_id(),
       self.object_id,
       self.msg_id,

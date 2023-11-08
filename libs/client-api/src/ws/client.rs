@@ -137,7 +137,6 @@ impl WSClient {
               match msg {
                 RealtimeMessage::Collab(collab_msg) => {
                   if let Some(channels) = weak_channels.upgrade() {
-                    info!("subscribe get: {}", collab_msg.object_id());
                     if let Some(channel) = channels.read().get(collab_msg.object_id()) {
                       match channel.upgrade() {
                         None => {
@@ -198,13 +197,14 @@ impl WSClient {
         tokio::select! {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
-            trace!("[websocket]: send message with size:{}", msg.len());
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
             if  msg.is_binary() && msg.len() > 40960 {
+              let len = msg.len();
+              trace!("[websocket]: send message with size:{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {
-                  Ok(_) => debug!("WebSocket message sent via HTTP."),
+                  Ok(_) => debug!("WebSocket message sent via HTTP. len: {}", len),
                   Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
                 }
               } else {

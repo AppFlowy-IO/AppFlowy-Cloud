@@ -148,7 +148,7 @@ impl CollabBroadcast {
             message,
           };
           if let Err(err) = action.run().await {
-            error!("Fail to broadcast message:{}", err);
+            error!("fail to broadcast message:{}", err);
           }
         }
         Ok(())

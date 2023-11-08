@@ -22,7 +22,7 @@ pub enum WSError {
 impl From<Error> for WSError {
   fn from(value: Error) -> Self {
     if let Error::Http(resp) = &value {
-      if resp.status() == StatusCode::UNAUTHORIZED {
+      if resp.status() == StatusCode::UNAUTHORIZED || resp.status() == StatusCode::NOT_FOUND {
         return WSError::AuthError("Unauthorized websocket connection".to_string());
       }
     }

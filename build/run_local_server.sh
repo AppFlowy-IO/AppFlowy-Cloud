@@ -43,7 +43,7 @@ pkill -f appflowy_cloud || true
 
 # Generate protobuf files for realtime-entity crate.
 # To run sqlx prepare, we need to build the realtime-entity crate first
-./build/run_gen_proto.sh
+./build/code_gen.sh
 
 # Require if there are any changes to the database schema
 # To build AppFlowy-Cloud binary, we requires the .sqlx files

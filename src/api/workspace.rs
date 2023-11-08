@@ -376,6 +376,13 @@ async fn post_realtime_message_handler(
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppResponseError::from)?;
+
+  event!(
+    tracing::Level::DEBUG,
+    "Receive realtime message with len: {}",
+    payload.len()
+  );
+
   let HttpRealtimeMessage { device_id, payload } =
     HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
 

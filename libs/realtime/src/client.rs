@@ -1,29 +1,25 @@
+use crate::collaborate::{CollabAccessControl, CollabServer};
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
-use std::fmt::{Display, Formatter};
-
+use crate::error::RealtimeError;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
-use bytes::Bytes;
-use std::ops::Deref;
-
-use crate::collaborate::{CollabAccessControl, CollabServer};
-use crate::error::RealtimeError;
-
 use actix_web_actors::ws::ProtocolError;
+use bytes::Bytes;
 use database::collab::CollabStorage;
-use realtime_entity::collab_msg::CollabMessage;
+pub use realtime_entity::user::RealtimeUserImpl;
+use std::ops::Deref;
 use std::time::{Duration, Instant};
-use tracing::{error, warn};
+use tracing::error;
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
   S: Unpin + 'static,
   AC: Unpin + CollabAccessControl,
 > {
-  user: U,
+  user: Option<U>,
   hb: Instant,
   pub server: Addr<CollabServer<S, U, AC>>,
   heartbeat_interval: Duration,
@@ -43,7 +39,7 @@ where
     client_timeout: Duration,
   ) -> Self {
     Self {
-      user,
+      user: Some(user),
       hb: Instant::now(),
       server,
       heartbeat_interval,
@@ -54,9 +50,9 @@ where
   fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
     ctx.run_interval(self.heartbeat_interval, |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
-        act.server.do_send(Disconnect {
-          user: act.user.clone(),
-        });
+        if let Some(user) = act.user.clone() {
+          act.server.do_send(Disconnect { user });
+        }
         ctx.stop();
         return;
       }
@@ -66,28 +62,18 @@ where
   }
 
   fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
-    tracing::debug!("Receive binary message with len: {}", bytes.len());
-    match RealtimeMessage::from_vec(bytes.to_vec()) {
-      Ok(message) => {
-        match CollabMessage::from_vec(&message.payload) {
-          Ok(collab_msg) => {
-            self.server.do_send(ClientMessage {
-              business_id: message.business_id,
-              user: self.user.clone(),
-              content: collab_msg,
-            });
-          },
-          Err(e) => {
-            warn!("Parser realtime payload failed: {:?}", e);
-          },
-        }
-        Ok(())
-      },
-      Err(err) => {
-        error!("Unknown realtime message format: {:?}", err);
-        Ok(())
-      },
+    tracing::debug!("Receive message with len: {}", bytes.len());
+    if let Some(user) = self.user.clone() {
+      match RealtimeMessage::try_from(bytes) {
+        Ok(message) => {
+          self.server.do_send(ClientMessage { user, message });
+        },
+        Err(err) => {
+          error!("Deserialize message error: {:?}", err);
+        },
+      }
     }
+    Ok(())
   }
 }
 
@@ -103,32 +89,36 @@ where
     // start heartbeats otherwise server disconnects in 10 seconds
     self.hb(ctx);
 
-    self
-      .server
-      .send(Connect {
-        socket: ctx.address().recipient(),
-        user: self.user.clone(),
-      })
-      .into_actor(self)
-      .then(|res, _session, ctx| {
-        match res {
-          Ok(Ok(_)) => {
-            tracing::trace!("Send connect message to server success")
-          },
-          _ => {
-            tracing::error!("🔴Send connect message to server failed");
-            ctx.stop();
-          },
-        }
-        fut::ready(())
-      })
-      .wait(ctx);
+    if let Some(user) = self.user.clone() {
+      self
+        .server
+        .send(Connect {
+          socket: ctx.address().recipient(),
+          user,
+        })
+        .into_actor(self)
+        .then(|res, _session, ctx| {
+          match res {
+            Ok(Ok(_)) => {
+              tracing::trace!("Send connect message to server success")
+            },
+            _ => {
+              error!("🔴Send connect message to server failed");
+              ctx.stop();
+            },
+          }
+          fut::ready(())
+        })
+        .wait(ctx);
+    }
   }
 
   fn stopping(&mut self, _: &mut Self::Context) -> Running {
-    self.server.do_send(Disconnect {
-      user: self.user.clone(),
-    });
+    // When the user is None which means the user is kicked off by the server, do not send
+    // disconnect message to the server.
+    if let Some(user) = self.user.clone() {
+      self.server.do_send(Disconnect { user });
+    }
     Running::Stop
   }
 }
@@ -142,7 +132,15 @@ where
   type Result = ();
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
-    ctx.binary(msg);
+    match &msg {
+      RealtimeMessage::Collab(_) => ctx.binary(msg),
+      RealtimeMessage::ServerKickedOff => {
+        // The server will send this message to the client when the client is kicked out. So
+        // set the current user to None and stop the session.
+        self.user.take();
+        ctx.stop()
+      },
+    }
   }
 }
 
@@ -191,32 +189,6 @@ impl Deref for ClientWSSink {
   type Target = Recipient<RealtimeMessage>;
   fn deref(&self) -> &Self::Target {
     &self.0
-  }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct RealtimeUserImpl {
-  pub uid: i64,
-  pub uuid: String,
-  pub device_id: String,
-}
-
-impl RealtimeUserImpl {
-  pub fn new(uid: i64, uuid: String, device_id: String) -> Self {
-    Self {
-      uid,
-      uuid,
-      device_id,
-    }
-  }
-}
-
-impl Display for RealtimeUserImpl {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "uuid:{}|device_id:{}",
-      self.uuid, self.device_id,
-    ))
   }
 }
 

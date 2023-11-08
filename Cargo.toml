@@ -78,9 +78,12 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error"] }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
+realtime-entity = { workspace = true }
 itertools = "0.11"
 axum_session = "0.7.0"
 uuid = "1.4.1"
+tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
+prost = "0.12.1"
 
 
 [dev-dependencies]
@@ -93,7 +96,6 @@ scraper = "0.17.1"
 client-api = { path = "libs/client-api", features = ["collab-sync"] }
 opener = "0.6.1"
 image = "0.23.14"
-tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 
 [[bin]]
 name = "appflowy_cloud"

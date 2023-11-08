@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::{anyhow, Context};
+use prost::Message as ProstMessage;
 
 use app_error::AppError;
 use bytes::Bytes;
@@ -13,6 +14,7 @@ use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 
+use async_trait::async_trait;
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
@@ -36,12 +38,15 @@ use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
+use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
 use url::Url;
 
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
+use crate::ws::{WSClientHttpSender, WSError};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
+use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -335,6 +340,27 @@ impl Client {
         )
         .await?,
     )
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn post_realtime_msg(
+    &self,
+    device_id: &str,
+    msg: Message,
+  ) -> Result<(), AppResponseError> {
+    let msg = HttpRealtimeMessage {
+      device_id: device_id.to_string(),
+      payload: msg.into_data(),
+    }
+    .encode_to_vec();
+    let url = format!("{}/api/realtime/post", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .body(msg)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   /// Only expose this method for testing
@@ -1016,4 +1042,14 @@ pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
 
 pub fn url_missing_param(param: &str) -> AppResponseError {
   AppError::InvalidRequest(format!("Url Missing Parameter:{}", param)).into()
+}
+
+#[async_trait]
+impl WSClientHttpSender for Client {
+  async fn send_ws_msg(&self, device_id: &str, message: Message) -> Result<(), WSError> {
+    self
+      .post_realtime_msg(device_id, message)
+      .await
+      .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
+  }
 }

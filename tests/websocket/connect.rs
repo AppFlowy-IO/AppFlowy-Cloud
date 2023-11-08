@@ -4,16 +4,12 @@ use client_api::ws::{ConnectState, WSClient, WSClientConfig};
 #[tokio::test]
 async fn realtime_connect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let ws_client = WSClient::new(WSClientConfig {
-    buffer_capacity: 100,
-    ping_per_secs: 6,
-    retry_connect_per_pings: 5,
-  });
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
-
+  let device_id = "fake_device_id";
   loop {
     tokio::select! {
-        _ = ws_client.connect(c.ws_url("fake_device_id").unwrap()) => {},
+        _ = ws_client.connect(c.ws_url(device_id).unwrap(), device_id) => {},
        value = state.recv() => {
         let new_state = value.unwrap();
         if new_state == ConnectState::Connected {
@@ -27,13 +23,10 @@ async fn realtime_connect_test() {
 #[tokio::test]
 async fn realtime_disconnect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let ws_client = WSClient::new(WSClientConfig {
-    buffer_capacity: 100,
-    ping_per_secs: 6,
-    retry_connect_per_pings: 5,
-  });
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+  let device_id = "fake_device_id";
   ws_client
-    .connect(c.ws_url("fake_device_id").unwrap())
+    .connect(c.ws_url(device_id).unwrap(), device_id)
     .await
     .unwrap();
 
@@ -51,25 +44,18 @@ async fn realtime_disconnect_test() {
   }
 }
 
+// use std::time::Duration;
+// use tokio_tungstenite::tungstenite::Message;
 // #[tokio::test]
 // async fn max_frame_size() {
 //   let (c, _user) = generate_unique_registered_user_client().await;
-//   let ws_client = WSClient::new(WSClientConfig {
-//     buffer_capacity: 100,
-//     ping_per_secs: 6,
-//     retry_connect_per_pings: 5,
-//   });
+//   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+//   let device_id = "fake_device_id";
 //   ws_client
-//     .connect(c.ws_url("fake_device_id").unwrap())
+//     .connect(c.ws_url(device_id).unwrap(), device_id)
 //     .await
 //     .unwrap();
 //
-//   for _ in 0..10 {
-//     let sender = ws_client.sender();
-//     tokio::spawn(async move {
-//       sender.send(Message::Binary(vec![0; 65536])).unwrap();
-//     });
-//   }
-//
+//   ws_client.send(Message::Binary(vec![0; 65536])).unwrap();
 //   tokio::time::sleep(Duration::from_secs(5)).await;
 // }

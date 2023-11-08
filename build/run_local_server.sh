@@ -41,12 +41,15 @@ done
 # Kill any existing instances
 pkill -f appflowy_cloud || true
 
+# Generate protobuf files for realtime-entity crate.
+# To run sqlx prepare, we need to build the realtime-entity crate first
+./build/code_gen.sh
+
 # Require if there are any changes to the database schema
 # To build AppFlowy-Cloud binary, we requires the .sqlx files
 # To generate the .sqlx files, we need to run the following command
 # After the .sqlx files are generated, we build in SQLX_OFFLINE=true
 # where we don't need to connect to the database
-
 cargo sqlx database create && cargo sqlx migrate run
 if [[ -z "${SKIP_SQLX_PREPARE+x}" ]]
 then

@@ -12,8 +12,8 @@ database:
   database_name: "postgres"
   max_connections: 10
 websocket:
-  heartbeat_interval: 8
-  client_timeout: 10
+  heartbeat_interval: 6
+  client_timeout: 30
 redis_uri: "redis://127.0.0.1:6379"
 gotrue:
   base_url: "http://127.0.0.1:9999"

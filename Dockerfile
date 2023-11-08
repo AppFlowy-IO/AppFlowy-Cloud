@@ -21,10 +21,10 @@ FROM debian:bullseye-slim AS runtime
 WORKDIR /app
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl \
+    && apt-get install -y protobuf-compiler \
     # Clean up
     && apt-get autoremove -y \
     && apt-get clean -y \
-    && apt-get protobuf-compiler -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud

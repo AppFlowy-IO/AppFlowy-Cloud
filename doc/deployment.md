@@ -13,6 +13,7 @@ we recommend using cloud compute services (as your host server) such as
 ## Software Requirements
 - [docker compose](https://docs.docker.com/compose)
 This is needed be installed in your host server
+- We recommend using approach as proposed by offical docker website: [Install Docker Engine](https://docs.docker.com/engine/install/)
 
 ## Steps
 
@@ -36,11 +37,10 @@ cp dev.env .env
 # This is the secret key for authentication, please change this and keep the key safe
 GOTRUE_JWT_SECRET=hello456
 
-# This determine if the user will be user automatically be confirmed when they sign up
-# If this is enabled, it requires a clicking a confirmation link in the email which user
-# use for sign up.
-# Pre-requisite if you enable: you need to have your SMTP Service set up,
-# which you can then fill in the details below
+# This determine if the user will be user automatically be confirmed(verified) when they sign up
+# If this is enabled, it requires a clicking a confirmation link in the email after a user signs up.
+# If you do not have SMTP service set up, or any other OAuth2 method, you should set this to true,
+# or else no user will be able to be authenticated
 GOTRUE_MAILER_AUTOCONFIRM=true
 
 # if you enable mail confirmation, you need to set the SMTP configuration below

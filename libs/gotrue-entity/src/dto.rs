@@ -197,7 +197,7 @@ impl OAuthProvider {
 pub struct OAuthURL {
   pub url: String,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum SignUpResponse {
   Authenticated(GotrueTokenResponse),

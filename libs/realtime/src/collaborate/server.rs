@@ -131,7 +131,6 @@ where
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     Box::pin(async move {
       remove_user(&groups, &editing_collab_by_user, &msg.user).await;
-
       if client_stream_by_user
         .write()
         .await
@@ -290,7 +289,7 @@ impl CollabClientStream {
       while let Some(msg) = rx.recv().await {
         let can_sink = sink_filter(&cloned_object_id, &msg).await;
         if can_sink {
-          // Send the message to websocket server actor
+          // Send the message to websocket client actor
           client_ws_sink.do_send(msg.into());
         }
       }

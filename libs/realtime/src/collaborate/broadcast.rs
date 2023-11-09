@@ -46,13 +46,14 @@ impl CollabBroadcast {
   /// provided `buffer_capacity` size.
   pub fn new(object_id: &str, collab: MutexCollab, buffer_capacity: usize) -> Self {
     let object_id = object_id.to_owned();
+    // broadcast channel
     let (sender, _) = channel(buffer_capacity);
     let (doc_sub, awareness_sub) = {
       let mut mutex_collab = collab.lock();
 
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = object_id.clone();
-      let sink = sender.clone();
+      let broadcast_sink = sender.clone();
       let doc_sub = mutex_collab
         .get_mut_awareness()
         .doc_mut()
@@ -60,13 +61,13 @@ impl CollabBroadcast {
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
           let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
-          if let Err(_e) = sink.send(msg.into()) {
-            trace!("Broadcast group is closed");
+          if let Err(e) = broadcast_sink.send(msg.into()) {
+            error!("broadcast sink fail: {}", e);
           }
         })
         .unwrap();
 
-      let sink = sender.clone();
+      let broadcast_sink = sender.clone();
       let cloned_oid = object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
@@ -76,7 +77,7 @@ impl CollabBroadcast {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
             let msg = CollabAwarenessData::new(cloned_oid.clone(), payload);
-            if let Err(_e) = sink.send(msg.into()) {
+            if let Err(_e) = broadcast_sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
           }
@@ -116,7 +117,7 @@ impl CollabBroadcast {
   /// an internal connection error or closed connection).
   pub fn subscribe<Sink, Stream, E>(
     &self,
-    origin: CollabOrigin,
+    subscriber_origin: CollabOrigin,
     sink: Sink,
     mut stream: Stream,
   ) -> Subscription
@@ -126,7 +127,8 @@ impl CollabBroadcast {
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<anyhow::Error> + Send + Sync + 'static,
   {
-    trace!("[realtime]: new subscriber: {}", origin);
+    let cloned_origin = subscriber_origin.clone();
+    trace!("[realtime]: new subscriber: {}", subscriber_origin);
     let sink = Arc::new(Mutex::new(sink));
     // Receive a update from the document observer and forward the  update to all
     // connected subscribers using its Sink.
@@ -137,18 +139,18 @@ impl CollabBroadcast {
         while let Ok(message) = receiver.recv().await {
           // No need to broadcast the message back to the origin.
           if let Some(msg_origin) = message.origin() {
-            if msg_origin == &origin {
+            if msg_origin == &subscriber_origin {
               continue;
             }
           }
 
-          trace!("[realtime]: {}", message);
+          trace!("[realtime]: broadcast collab message: {}", message);
           let action = SinkCollabMessageAction {
             sink: &sink,
             message,
           };
           if let Err(err) = action.run().await {
-            error!("Fail to broadcast message:{}", err);
+            error!("fail to broadcast message:{}", err);
           }
         }
         Ok(())
@@ -172,25 +174,32 @@ impl CollabBroadcast {
             continue;
           }
 
-          let origin = collab_msg.origin();
+          let collab_msg_origin = collab_msg.origin();
           if object_id != collab_msg.object_id() {
             error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
             continue;
           }
-          let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
+
+          let payload = collab_msg.payload();
+          if payload.is_none() {
+            continue;
+          }
+
+          let mut decoder = DecoderV1::from(payload.unwrap().as_ref());
           match sink.try_lock() {
             Ok(mut sink) => {
               let reader = MessageReader::new(&mut decoder);
               for msg in reader {
                 match msg {
                   Ok(msg) => {
-                    let payload = handle_msg(&origin, &ServerSyncProtocol, &collab, msg).await?;
-                    match origin {
+                    let payload =
+                      handle_msg(&collab_msg_origin, &ServerSyncProtocol, &collab, msg).await?;
+                    match collab_msg_origin {
                       None => warn!("Client message does not have a origin"),
-                      Some(origin) => {
+                      Some(collab_msg_origin) => {
                         if let Some(msg_id) = collab_msg.msg_id() {
                           let resp = UpdateAck::new(
-                            origin.clone(),
+                            collab_msg_origin.clone(),
                             object_id.clone(),
                             payload.unwrap_or_default(),
                             msg_id,
@@ -223,6 +232,7 @@ impl CollabBroadcast {
     };
 
     Subscription {
+      origin: cloned_origin,
       sink_task,
       stream_task,
     }
@@ -235,6 +245,7 @@ impl CollabBroadcast {
 /// connection error or closed connection).
 #[derive(Debug)]
 pub struct Subscription {
+  pub origin: CollabOrigin,
   sink_task: JoinHandle<Result<(), RealtimeError>>,
   stream_task: JoinHandle<Result<(), RealtimeError>>,
 }

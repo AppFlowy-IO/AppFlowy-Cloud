@@ -1,3 +1,4 @@
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
@@ -21,6 +22,9 @@ pub enum GoTrueError {
 
   #[error("{0}")]
   NotLoggedIn(String),
+
+  #[error("{0}")]
+  Auth(String),
 
   #[error(transparent)]
   Unhandled(#[from] anyhow::Error),
@@ -47,6 +51,12 @@ impl From<reqwest::Error> for GoTrueError {
 
     if value.is_request() {
       return GoTrueError::InvalidRequest(value.to_string());
+    }
+
+    if let Some(status) = value.status() {
+      if status == StatusCode::UNAUTHORIZED {
+        return GoTrueError::Auth(value.to_string());
+      }
     }
 
     GoTrueError::Unhandled(value.into())

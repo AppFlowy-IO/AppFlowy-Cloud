@@ -106,7 +106,6 @@ services:
       - GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE=/gotrue/verify
       - GOTRUE_SMTP_ADMIN_EMAIL=${GOTRUE_SMTP_ADMIN_EMAIL}            # email with admin privileges e.g. internal@appflowy.io
       - GOTRUE_SMTP_MAX_FREQUENCY=${GOTRUE_SMTP_MAX_FREQUENCY:-1ns}   # set to 1ns for running tests
-      - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/verify
       - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false} # change this to true to skip email confirmation
       # Google OAuth config
       - GOTRUE_EXTERNAL_GOOGLE_ENABLED=${GOTRUE_EXTERNAL_GOOGLE_ENABLED}

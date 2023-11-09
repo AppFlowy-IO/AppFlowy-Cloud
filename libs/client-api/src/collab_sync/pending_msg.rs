@@ -82,13 +82,12 @@ where
     &self.state
   }
 
-  pub fn set_state(&mut self, uid: i64, new_state: MessageState) -> bool {
+  pub fn set_state(&mut self, _uid: i64, new_state: MessageState) -> bool {
     if self.state != new_state {
       self.state = new_state;
 
       trace!(
-        "[Client {}] : oid:{}|msg_id:{},state:{:?}",
-        uid,
+        "oid:{}|msg_id:{},state:{:?}",
         self.msg.collab_object_id(),
         self.msg_id,
         self.state

@@ -181,7 +181,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
       GoTrueError::RequestTimeout(msg) => AppError::RequestTimeout(msg),
       GoTrueError::InvalidRequest(msg) => AppError::InvalidRequest(msg),
       GoTrueError::ClientError(err) => AppError::OAuthError(err.to_string()),
-      GoTrueError::Unhandled(err) => AppError::Internal(err),
+      GoTrueError::Auth(err) => AppError::OAuthError(err),
       GoTrueError::Internal(err) => match (err.code, err.msg.as_str()) {
         (400, m) if m.starts_with("oauth error") => AppError::OAuthError(err.msg),
         (400, m) if m.starts_with("User already registered") => AppError::OAuthError(err.msg),
@@ -189,6 +189,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
         (422, _) => AppError::InvalidRequest(err.msg),
         _ => AppError::OAuthError(err.to_string()),
       },
+      GoTrueError::Unhandled(err) => AppError::Internal(err),
       GoTrueError::NotLoggedIn(msg) => AppError::NotLoggedIn(msg),
     }
   }

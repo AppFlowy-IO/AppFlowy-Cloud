@@ -131,7 +131,6 @@ where
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     Box::pin(async move {
       remove_user(&groups, &editing_collab_by_user, &msg.user).await;
-
       if client_stream_by_user
         .write()
         .await

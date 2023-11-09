@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
 
-use tracing::{error, event, warn};
+use tracing::{error, event, trace, warn};
 
 pub struct CollabGroupCache<S, U, AC> {
   group_by_object_id: Arc<RwLock<HashMap<String, Arc<CollabGroup<U>>>>>,
@@ -40,6 +40,15 @@ where
       Ok(group.subscribers.read().await.get(user).is_some())
     } else {
       Ok(false)
+    }
+  }
+
+  pub async fn remove_user(&self, object_id: &str, user: &U) {
+    let group_by_object_id = self.group_by_object_id.read().await;
+    if let Some(group) = group_by_object_id.get(object_id) {
+      if let Some(subscriber) = group.subscribers.write().await.remove(user) {
+        trace!("Remove subscriber: {}", subscriber.origin);
+      }
     }
   }
 

@@ -374,7 +374,7 @@ impl Client {
   /// This function attempts to read the current token and, if successful, returns the expiration timestamp.
   ///
   /// # Returns
-  /// - `Ok(i64)`: An `i64` representing the expiration timestamp of the token.
+  /// - `Ok(i64)`: An `i64` representing the expiration timestamp of the token in seconds.
   /// - `Err(AppError)`: An `AppError` indicating either an inability to read the token or that the user is not logged in.
   ///
   #[inline]

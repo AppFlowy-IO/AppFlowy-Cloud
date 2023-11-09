@@ -160,22 +160,32 @@ impl WSClient {
               match msg {
                 RealtimeMessage::Collab(collab_msg) => {
                   if let Some(channels) = weak_channels.upgrade() {
-                    if let Some(channel) = channels.read().get(collab_msg.object_id()) {
+                    let object_id = collab_msg.object_id().to_owned();
+                    let is_channel_dropped = if let Some(channel) = channels.read().get(&object_id)
+                    {
                       match channel.upgrade() {
                         None => {
                           // when calling [WSClient::subscribe], the caller is responsible for keeping
                           // the channel alive as long as it wants to receive messages from the websocket.
                           warn!("channel is dropped");
+                          true
                         },
                         Some(channel) => {
                           channel.forward_to_stream(collab_msg);
+                          false
                         },
                       }
                     } else {
-                      warn!(
-                        "can't find channel by object_id: {}",
-                        collab_msg.object_id()
-                      );
+                      warn!("can't find channel of object_id: {}", object_id);
+                      false
+                    };
+
+                    // Try to remove the channel if it is dropped. If failed, will try again next time.
+                    if is_channel_dropped {
+                      if let Some(mut w) = channels.try_write() {
+                        trace!("remove channel: {}", object_id);
+                        w.remove(&object_id);
+                      }
                     }
                   } else {
                     warn!("channels are closed");

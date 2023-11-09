@@ -37,6 +37,7 @@ pub enum CollabMessage {
   ServerInit(ServerCollabInit),
   ServerAwareness(CollabAwarenessData),
   ServerBroadcast(CollabBroadcastData),
+  CloseCollab(CloseCollabData),
 }
 
 impl CollabSinkMessage for CollabMessage {
@@ -45,7 +46,7 @@ impl CollabSinkMessage for CollabMessage {
   }
 
   fn length(&self) -> usize {
-    self.payload().len()
+    self.payload().map(|payload| payload.len()).unwrap_or(0)
   }
 
   fn can_merge(&self) -> bool {
@@ -125,11 +126,15 @@ impl CollabMessage {
       CollabMessage::ServerInit(value) => Some(value.msg_id),
       CollabMessage::ServerBroadcast(_) => None,
       CollabMessage::ServerAwareness(_) => None,
+      CollabMessage::CloseCollab(_) => None,
     }
   }
 
   pub fn is_empty(&self) -> bool {
-    self.payload().is_empty()
+    self
+      .payload()
+      .map(|payload| payload.is_empty())
+      .unwrap_or(true)
   }
 
   pub fn origin(&self) -> Option<&CollabOrigin> {
@@ -140,6 +145,7 @@ impl CollabMessage {
       CollabMessage::ServerInit(value) => Some(&value.origin),
       CollabMessage::ServerBroadcast(value) => Some(&value.origin),
       CollabMessage::ServerAwareness(_) => None,
+      CollabMessage::CloseCollab(value) => Some(&value.origin),
     }
   }
 
@@ -155,6 +161,7 @@ impl CollabMessage {
       CollabMessage::ServerInit(value) => &value.object_id,
       CollabMessage::ServerBroadcast(value) => &value.object_id,
       CollabMessage::ServerAwareness(value) => &value.object_id,
+      CollabMessage::CloseCollab(value) => &value.object_id,
     }
   }
 }
@@ -198,6 +205,9 @@ impl Display for CollabMessage {
         value.object_id,
         value.payload.len(),
       )),
+      CollabMessage::CloseCollab(value) => {
+        f.write_fmt(format_args!("close collab: [oid:{}]", value.object_id,))
+      },
     }
   }
 }
@@ -217,14 +227,15 @@ impl CollabMessage {
     serde_json::from_slice(data)
   }
 
-  pub fn payload(&self) -> &Bytes {
+  pub fn payload(&self) -> Option<&Bytes> {
     match self {
-      CollabMessage::ClientInit(value) => &value.payload,
-      CollabMessage::ClientUpdateSync(value) => &value.payload,
-      CollabMessage::ClientUpdateAck(value) => &value.payload,
-      CollabMessage::ServerInit(value) => &value.payload,
-      CollabMessage::ServerBroadcast(value) => &value.payload,
-      CollabMessage::ServerAwareness(value) => &value.payload,
+      CollabMessage::ClientInit(value) => Some(&value.payload),
+      CollabMessage::ClientUpdateSync(value) => Some(&value.payload),
+      CollabMessage::ClientUpdateAck(value) => Some(&value.payload),
+      CollabMessage::ServerInit(value) => Some(&value.payload),
+      CollabMessage::ServerBroadcast(value) => Some(&value.payload),
+      CollabMessage::ServerAwareness(value) => Some(&value.payload),
+      CollabMessage::CloseCollab(_) => None,
     }
   }
 }
@@ -469,6 +480,17 @@ impl TryFrom<RealtimeMessage> for CollabMessage {
   }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct CloseCollabData {
+  origin: CollabOrigin,
+  object_id: String,
+}
+
+impl From<CloseCollabData> for CollabMessage {
+  fn from(value: CloseCollabData) -> Self {
+    CollabMessage::CloseCollab(value)
+  }
+}
 impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
     Self::Collab(msg)

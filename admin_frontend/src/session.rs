@@ -8,6 +8,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use gotrue::grant::{Grant, RefreshTokenGrant};
+use gotrue_entity::dto::GotrueTokenResponse;
 use jwt::{Claims, Header};
 use redis::{aio::ConnectionManager, AsyncCommands, FromRedisValue, ToRedisArgs};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -66,17 +67,12 @@ impl SessionStorage {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserSession {
   pub session_id: String,
-  pub access_token: String,
-  pub refresh_token: String,
+  pub token: GotrueTokenResponse,
 }
 
 impl UserSession {
-  pub fn new(session_id: String, access_token: String, refresh_token: String) -> Self {
-    Self {
-      session_id,
-      access_token,
-      refresh_token,
-    }
+  pub fn new(session_id: String, token: GotrueTokenResponse) -> Self {
+    Self { session_id, token }
   }
 }
 
@@ -103,9 +99,9 @@ impl FromRequestParts<AppState> for UserSession {
       .await
       .ok_or(SessionRejection::SessionNotFound)?;
 
-    if has_expired(session.access_token.as_str()) {
+    if has_expired(session.token.access_token.as_str()) {
       // Get new pair of access token and refresh token
-      let refresh_token = session.refresh_token;
+      let refresh_token = session.token.refresh_token;
       let new_token = state
         .gotrue_client
         .clone()
@@ -113,8 +109,8 @@ impl FromRequestParts<AppState> for UserSession {
         .await
         .map_err(|err| SessionRejection::RefreshTokenError(err.to_string()))?;
 
-      session.access_token = new_token.access_token;
-      session.refresh_token = new_token.refresh_token;
+      session.token.access_token = new_token.access_token;
+      session.token.refresh_token = new_token.refresh_token;
 
       // Update session in redis
       let _ = state

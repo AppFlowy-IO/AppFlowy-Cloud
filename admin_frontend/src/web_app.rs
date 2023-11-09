@@ -57,7 +57,10 @@ pub async fn user_user_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  let user = state.gotrue_client.user_info(&session.access_token).await?;
+  let user = state
+    .gotrue_client
+    .user_info(&session.token.access_token)
+    .await?;
   render_template(templates::UserDetails { user: &user })
 }
 
@@ -73,7 +76,10 @@ pub async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  let user = state.gotrue_client.user_info(&session.access_token).await?;
+  let user = state
+    .gotrue_client
+    .user_info(&session.token.access_token)
+    .await?;
   render_template(templates::Home {
     user: &user,
     is_admin: is_admin(&user),
@@ -84,7 +90,10 @@ pub async fn admin_home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  let user = state.gotrue_client.user_info(&session.access_token).await?;
+  let user = state
+    .gotrue_client
+    .user_info(&session.token.access_token)
+    .await?;
   render_template(templates::AdminHome { user: &user })
 }
 
@@ -94,7 +103,7 @@ pub async fn admin_users_handler(
 ) -> Result<Html<String>, WebAppError> {
   let users = state
     .gotrue_client
-    .admin_list_user(&session.access_token)
+    .admin_list_user(&session.token.access_token)
     .await
     .map_or_else(
       |err| {
@@ -117,7 +126,7 @@ pub async fn admin_user_details_handler(
 ) -> Result<Html<String>, WebAppError> {
   let user = state
     .gotrue_client
-    .admin_user_details(&session.access_token, &user_id)
+    .admin_user_details(&session.token.access_token, &user_id)
     .await
     .unwrap(); // TODO: handle error
 

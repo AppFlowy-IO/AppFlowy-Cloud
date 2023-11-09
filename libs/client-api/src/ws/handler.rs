@@ -7,7 +7,7 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::warn;
+use tracing::{trace, warn};
 
 pub struct WebSocketChannel<T> {
   sender: Sender<Message>,
@@ -23,7 +23,8 @@ where
     Self { sender, receiver }
   }
 
-  pub(crate) fn recv_msg(&self, msg: T) {
+  /// Forward message to the stream returned by [WebSocketChannel::stream] method.
+  pub(crate) fn forward_to_stream(&self, msg: T) {
     if let Err(err) = self.receiver.send(msg) {
       warn!("Failed to send message to channel: {}", err);
     }
@@ -46,7 +47,9 @@ where
     let mut recv = self.receiver.subscribe();
     tokio::spawn(async move {
       while let Ok(msg) = recv.recv().await {
-        let _ = tx.send(Ok(msg));
+        if let Err(err) = tx.send(Ok(msg)) {
+          trace!("Failed to send message to channel stream: {}", err);
+        }
       }
     });
     UnboundedReceiverStream::new(rx)

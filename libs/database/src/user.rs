@@ -130,6 +130,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
 }
 
 #[inline]
+#[instrument(level = "trace", skip(executor), err)]
 pub async fn select_uid_from_uuid<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   user_uuid: &Uuid,

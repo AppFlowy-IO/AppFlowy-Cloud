@@ -30,7 +30,7 @@
       const xhr = detail.xhr;
       displayHttpFail(xhr.status, xhr.statusText, xhr.responseText);
     } else if (detail.target.id === "none") {
-      displaySuccess("Success");
+      displaySuccess(JSON.parse(detail.xhr.responseText).message);
     }
   });
 </script>

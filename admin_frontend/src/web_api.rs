@@ -228,7 +228,7 @@ pub async fn login_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
-) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
   // Attempt to sign in with email and password
   let token_res = state
     .gotrue_client
@@ -246,7 +246,7 @@ pub async fn login_handler(
       GoTrueError::ClientError(client_err) => {
         match (
           client_err.error.as_str(),
-          client_err.error_description.as_ref().map(|s| s.as_str()),
+          client_err.error_description.as_deref(),
         ) {
           // Email not exist or wrong password
           ("invalid_grant", Some("Invalid login credentials")) => {
@@ -261,10 +261,16 @@ pub async fn login_handler(
                 SignUpResponse::Authenticated(token) => {
                   session_login(State(state), token, jar).await
                 },
-
                 SignUpResponse::NotAuthenticated(user) => match user.identities {
-                  Some(_identities) => todo!(), // new user
-                  None => Err(err.into()),      // user exists but sign in password not correct
+                  Some(_identities) => {
+                    // new user, awaiting email verification
+                    Ok((
+                      jar,
+                      HeaderMap::new(),
+                      WebApiResponse::<()>::from_str("Email Verification Sent".into()),
+                    ))
+                  },
+                  None => Err(err.into()), // user exists but sign in password not correct
                 },
               },
               Err(err) => Err(err.into()),
@@ -313,7 +319,7 @@ async fn session_login(
   State(state): State<AppState>,
   token: GotrueTokenResponse,
   jar: CookieJar,
-) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
@@ -321,5 +327,6 @@ async fn session_login(
   Ok((
     jar.add(new_session_cookie(new_session_id)),
     htmx_redirect("/web/home"),
+    ().into(),
   ))
 }

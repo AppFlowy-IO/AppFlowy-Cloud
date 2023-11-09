@@ -128,14 +128,14 @@ impl WSClient {
       handle_ws_error(err);
     }
 
-    let stream = conn_result?;
-    let addr = match stream.get_ref() {
+    let ws_stream = conn_result?;
+    let addr = match ws_stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),
       _ => None,
     };
 
     self.set_state(ConnectState::Connected).await;
-    let (mut sink, mut stream) = stream.split();
+    let (mut sink, mut stream) = ws_stream.split();
     let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
 
@@ -162,12 +162,17 @@ impl WSClient {
                         None => {
                           // when calling [WSClient::subscribe], the caller is responsible for keeping
                           // the channel alive as long as it wants to receive messages from the websocket.
-                          trace!("channel is dropped");
+                          warn!("channel is dropped");
                         },
                         Some(channel) => {
                           channel.recv_msg(collab_msg);
                         },
                       }
+                    } else {
+                      warn!(
+                        "can't find channel by object_id: {}",
+                        collab_msg.object_id()
+                      );
                     }
                   } else {
                     warn!("channels are closed");
@@ -176,19 +181,19 @@ impl WSClient {
                 RealtimeMessage::ServerKickedOff => {},
               }
             } else {
-              error!("🔴Parser RealtimeMessage failed");
+              error!("parser RealtimeMessage failed");
             }
           },
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
             Err(e) => {
-              error!("🔴Failed to send pong message to websocket: {:?}", e);
+              error!("failed to send pong message to websocket: {:?}", e);
             },
           },
           Message::Close(close) => {
-            info!("{:?}", close);
+            info!("websocket close: {:?}", close);
           },
-          _ => {},
+          _ => warn!("received unexpected message from websocket: {:?}", msg),
         }
       }
     });
@@ -208,15 +213,15 @@ impl WSClient {
               trace!("[websocket]: send message with size:{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {
-                  Ok(_) => debug!("WebSocket message sent via HTTP. len: {}", len),
+                  Ok(_) => debug!("webSocket message sent via HTTP. len: {}", len),
                   Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
                 }
               } else {
                  error!("The HTTP sender has been dropped, unable to send message.");
                  break;
               }
-            } else if let Err(err) = sink.send(msg).await {
-              handle_ws_error(&WSError::from(err));
+            } else if let Err(err) = sink.send(msg).await.map_err(WSError::from){
+              handle_ws_error(&err);
               break;
             }
           }

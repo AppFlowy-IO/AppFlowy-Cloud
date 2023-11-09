@@ -1,4 +1,3 @@
-use client_api::extract_sign_in_url;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
@@ -7,7 +6,7 @@ use gotrue::{
 
 use crate::{
   localhost_client,
-  user::utils::{generate_unique_email, ADMIN_USER},
+  user::utils::{extract_sign_in_url, generate_unique_email, ADMIN_USER},
   LOCALHOST_GOTRUE,
 };
 
@@ -152,7 +151,7 @@ async fn admin_generate_link_and_user_sign_in_and_invite() {
       .await
       .unwrap();
     let resp_text = resp.text().await.unwrap();
-    let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
+    let appflowy_sign_in_url = extract_sign_in_url(&resp_text);
 
     let client = localhost_client();
     let is_new = client

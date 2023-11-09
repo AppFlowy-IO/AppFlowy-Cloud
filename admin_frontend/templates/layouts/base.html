@@ -24,13 +24,23 @@
 </html>
 
 <script>
+  document.body.addEventListener('htmx:beforeRequest', function(event) {
+    const closeButton = event.target.querySelector('.button');
+    closeButton.classList.add('loading-button');
+    closeButton.disabled = true;
+  });
+
   document.body.addEventListener("htmx:afterRequest", function (evt) {
+    const closeButton = event.target.querySelector('.button');
+    closeButton.classList.remove('loading-button');
+    closeButton.disabled = false;
+
     const detail = evt.detail;
     if (detail.failed) {
       const xhr = detail.xhr;
       displayHttpFail(xhr.status, xhr.statusText, xhr.responseText);
     } else if (detail.target.id === "none") {
-      displaySuccess("Success");
+      displaySuccess(JSON.parse(detail.xhr.responseText).message);
     }
   });
 </script>

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use axum::{response::IntoResponse, Json};
 
 #[derive(serde::Serialize)]
@@ -6,7 +8,7 @@ where
   T: serde::Serialize,
 {
   pub code: i16,
-  pub message: String,
+  pub message: Cow<'static, str>,
   pub data: T,
 }
 
@@ -14,10 +16,10 @@ impl<T> WebApiResponse<T>
 where
   T: serde::Serialize,
 {
-  pub fn new(data: T) -> Self {
+  pub fn new(message: Cow<'static, str>, data: T) -> Self {
     Self {
       code: 0,
-      message: "success".to_owned(),
+      message,
       data,
     }
   }
@@ -37,6 +39,12 @@ where
   T: serde::Serialize,
 {
   fn from(data: T) -> Self {
-    Self::new(data)
+    Self::new("success".into(), data)
+  }
+}
+
+impl WebApiResponse<()> {
+  pub fn from_str(message: Cow<'static, str>) -> Self {
+    Self::new(message, ())
   }
 }

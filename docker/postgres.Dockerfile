@@ -2,7 +2,7 @@ FROM postgres:latest
 
 # Install dependencies required for pgjwt and locales
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install --fix-missing -y \
         build-essential \
         postgresql-server-dev-all \
         git \

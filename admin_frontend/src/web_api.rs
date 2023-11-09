@@ -14,7 +14,6 @@ use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
-use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, MagicLinkParams};
 use gotrue_entity::dto::{UpdateGotrueUserParams, User};
 
@@ -43,27 +42,14 @@ pub fn router() -> Router<AppState> {
 }
 
 // provide a link which when open in browser, opens the appflowy app
-pub async fn open_app_handler(
-  State(state): State<AppState>,
-  session: UserSession,
-) -> Result<HeaderMap, WebApiError<'static>> {
-  let access_token_resp = state
-    .gotrue_client
-    .token(&Grant::RefreshToken(RefreshTokenGrant {
-      refresh_token: session.refresh_token.to_owned(),
-    }))
-    .await?;
-
-  // appflowy-flutter:// -> scheme that opens the Appflowy app
-  // login-callback -> agreed upon convention that frontend recognizes
-  // The rest are params that are passed to the app needed for login
+pub async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
-        access_token_resp.access_token,
-        access_token_resp.expires_at,
-        access_token_resp.expires_in,
-        access_token_resp.refresh_token,
-        access_token_resp.token_type,
+        session.token.access_token,
+        session.token.expires_at,
+        session.token.expires_in,
+        session.token.refresh_token,
+        session.token.token_type,
   );
   Ok(htmx_redirect(&app_sign_in_url))
 }
@@ -78,7 +64,7 @@ pub async fn invite_handler(
   state
     .gotrue_client
     .magic_link(
-      &session.access_token,
+      &session.token.access_token,
       &MagicLinkParams {
         email: param.email,
         ..Default::default()
@@ -102,7 +88,7 @@ pub async fn change_password_handler(
   let res = state
     .gotrue_client
     .update_user(
-      &session.access_token,
+      &session.token.access_token,
       &UpdateGotrueUserParams {
         password: Some(param.new_password),
         ..Default::default()
@@ -147,7 +133,7 @@ pub async fn admin_update_user_handler(
   let res = state
     .gotrue_client
     .admin_update_user(
-      &session.access_token,
+      &session.token.access_token,
       &user_uuid,
       &AdminUserParams {
         password: Some(param.password.to_owned()),
@@ -167,7 +153,7 @@ pub async fn post_user_generate_link_handler(
   let res = state
     .gotrue_client
     .admin_generate_link(
-      &session.access_token,
+      &session.token.access_token,
       &GenerateLinkParams {
         email,
         ..Default::default()
@@ -185,7 +171,7 @@ pub async fn admin_delete_user_handler(
   state
     .gotrue_client
     .admin_delete_user(
-      &session.access_token,
+      &session.token.access_token,
       &user_uuid,
       &AdminDeleteUserParams {
         should_soft_delete: true,
@@ -208,7 +194,7 @@ pub async fn admin_add_user_handler(
   };
   let user = state
     .gotrue_client
-    .admin_add_user(&session.access_token, &add_user_params)
+    .admin_add_user(&session.token.access_token, &add_user_params)
     .await?;
   Ok(user.into())
 }
@@ -226,11 +212,7 @@ pub async fn login_refresh_handler(
     .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(
-    new_session_id.to_string(),
-    token.access_token.to_string(),
-    token.refresh_token.to_owned(),
-  );
+  let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
 
   let mut cookie = Cookie::new("session_id", new_session_id.to_string());
@@ -257,11 +239,7 @@ pub async fn login_handler(
     .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(
-    new_session_id.to_string(),
-    token.access_token.to_string(),
-    token.refresh_token.to_owned(),
-  );
+  let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
 
   Ok((

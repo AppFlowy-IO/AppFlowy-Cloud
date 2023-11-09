@@ -198,7 +198,7 @@ impl WSClient {
             info!("websocket close: {:?}", close);
           },
           Message::Pong(_) => {
-            pong_tx.send(()).await;
+            let _ = pong_tx.send(()).await;
           },
           _ => warn!("received unexpected message from websocket: {:?}", msg),
         }

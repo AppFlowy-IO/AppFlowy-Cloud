@@ -47,7 +47,7 @@ impl ServerFixIntervalPing {
     let mut stop_rx = self.stop_rx.take().expect("Only take once");
     let mut interval = tokio::time::interval(self.duration);
     let ping_sender = self.ping_sender.take().expect("Only take once");
-    let pong_recv = self.pong_recv.take().expect("Only take once");
+    let mut pong_recv = self.pong_recv.take().expect("Only take once");
     let weak_ping_count = Arc::downgrade(&self.ping_count);
     let weak_state = Arc::downgrade(&self.state);
     let reconnect_per_ping = self.maximum_ping_count;
@@ -69,7 +69,7 @@ impl ServerFixIntervalPing {
             }
           },
           // pong from server
-          msg = pong_recv.recv() => {
+          _ = pong_recv.recv() => {
             if let Some(ping_count) = weak_ping_count.upgrade() {
               let mut lock = ping_count.lock().await;
               *lock = 0;

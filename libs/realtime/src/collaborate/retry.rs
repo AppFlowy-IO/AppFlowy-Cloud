@@ -23,7 +23,7 @@ use tokio_retry::{Action, Condition, Retry, RetryIf};
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::error::RealtimeError;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) user: &'a U,
@@ -232,6 +232,23 @@ where
                   .subscribe(origin.clone(), sink, stream),
               );
             }
+
+            debug!(
+              "Group: {} has {} members",
+              object_id,
+              collab_group.subscribers.read().await.len()
+            );
+            trace!(
+              "Group: {} members: {:?}",
+              object_id,
+              collab_group
+                .subscribers
+                .read()
+                .await
+                .values()
+                .map(|value| &value.origin)
+                .collect::<Vec<_>>()
+            );
           }
         },
       }

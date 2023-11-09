@@ -62,7 +62,7 @@ where
   }
 
   fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
-    tracing::debug!("Receive message with len: {}", bytes.len());
+    tracing::debug!("Receive binary: {}", bytes.len());
     if let Some(user) = self.user.clone() {
       match RealtimeMessage::try_from(bytes) {
         Ok(message) => {

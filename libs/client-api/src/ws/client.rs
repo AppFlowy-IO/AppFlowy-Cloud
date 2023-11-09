@@ -37,7 +37,7 @@ pub struct WSClientConfig {
 impl Default for WSClientConfig {
   fn default() -> Self {
     Self {
-      buffer_capacity: 1000,
+      buffer_capacity: 2000,
       ping_per_secs: 6,
       retry_connect_per_pings: 10,
     }
@@ -139,10 +139,13 @@ impl WSClient {
     let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
 
+    let ping_sender = sender.clone();
+    let (pong_tx, pong_recv) = tokio::sync::mpsc::channel(1);
     let mut ping = ServerFixIntervalPing::new(
       Duration::from_secs(self.config.ping_per_secs),
       self.state_notify.clone(),
-      sender.clone(),
+      ping_sender,
+      pong_recv,
       self.config.retry_connect_per_pings,
     );
     ping.run();
@@ -184,6 +187,7 @@ impl WSClient {
               error!("parser RealtimeMessage failed");
             }
           },
+          // ping from server
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
             Err(e) => {
@@ -192,6 +196,9 @@ impl WSClient {
           },
           Message::Close(close) => {
             info!("websocket close: {:?}", close);
+          },
+          Message::Pong(_) => {
+            pong_tx.send(()).await;
           },
           _ => warn!("received unexpected message from websocket: {:?}", msg),
         }
@@ -206,10 +213,10 @@ impl WSClient {
         tokio::select! {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
+            let len = msg.len();
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
-            if  msg.is_binary() && msg.len() > 40960 {
-              let len = msg.len();
+            if  msg.is_binary() && len > 40960 {
               trace!("[websocket]: send message with size:{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {

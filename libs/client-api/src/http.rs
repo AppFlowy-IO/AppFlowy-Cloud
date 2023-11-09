@@ -1,5 +1,5 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use prost::Message as ProstMessage;
 
 use app_error::AppError;
@@ -23,7 +23,6 @@ use realtime_entity::EncodedCollabV1;
 use reqwest::header;
 use reqwest::Method;
 use reqwest::RequestBuilder;
-use scraper::{Html, Selector};
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
@@ -231,39 +230,24 @@ impl Client {
     Ok(url.to_string())
   }
 
-  /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
-  /// The URL looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
-  ///
+  /// This is only applicable if user token is with admin privilege.
+  /// This is typically used to generate a sign in url for another user, given the user's email.
+  /// User then click on the link in the browser, which calls gotrue authentication server, which
+  /// then redirects to the appflowy-flutter://
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn generate_sign_in_url_with_email(
-    &self,
-    admin_user_email: &str,
-    admin_user_password: &str,
-    user_email: &str,
-  ) -> Result<String, AppResponseError> {
-    let admin_token = self
-      .gotrue_client
-      .token(&Grant::Password(PasswordGrant {
-        email: admin_user_email.to_string(),
-        password: admin_user_password.to_string(),
-      }))
-      .await?;
-
+  pub async fn generate_sign_in_url(&self, email: &str) -> Result<String, AppResponseError> {
     let admin_user_params: GenerateLinkParams = GenerateLinkParams {
-      email: user_email.to_string(),
+      email: email.to_string(),
       ..Default::default()
     };
 
     let link_resp = self
       .gotrue_client
-      .admin_generate_link(&admin_token.access_token, &admin_user_params)
+      .admin_generate_link(&self.access_token()?, &admin_user_params)
       .await?;
-    assert_eq!(link_resp.email, user_email);
+    assert_eq!(link_resp.email, email);
 
-    let action_link = link_resp.action_link;
-    let resp = reqwest::Client::new().get(action_link).send().await?;
-    let resp_text = resp.text().await?;
-    Ok(extract_sign_in_url(&resp_text)?)
+    Ok(link_resp.action_link)
   }
 
   #[inline]
@@ -1026,21 +1010,7 @@ impl Client {
   }
 }
 
-pub fn extract_sign_in_url(html_str: &str) -> Result<String, anyhow::Error> {
-  let fragment = Html::parse_fragment(html_str);
-  let selector = Selector::parse("a").unwrap();
-  let url = fragment
-    .select(&selector)
-    .next()
-    .ok_or(anyhow!("no a tag found in html: {}", html_str))?
-    .value()
-    .attr("href")
-    .ok_or(anyhow!("no href found in html: {}", html_str))?
-    .to_string();
-  Ok(url)
-}
-
-pub fn url_missing_param(param: &str) -> AppResponseError {
+fn url_missing_param(param: &str) -> AppResponseError {
   AppError::InvalidRequest(format!("Url Missing Parameter:{}", param)).into()
 }
 

@@ -20,7 +20,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::tungstenite::{Error, Message};
+use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
 use tracing::{debug, error, info, trace, warn};
 
@@ -100,7 +100,6 @@ impl WSClient {
       old_ping.stop().await;
     }
 
-    // let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(10 * 60));
     let retry_strategy = FixedInterval::new(Duration::from_secs(6));
     let action = ConnectAction::new(addr.clone());
     let cond = RetryCondition {
@@ -108,7 +107,28 @@ impl WSClient {
       addr: Arc::downgrade(&self.addr),
       state_notify: Arc::downgrade(&self.state_notify),
     };
-    let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
+
+    // handle websocket error when connecting or sending message
+    let weak_state_notify = Arc::downgrade(&self.state_notify);
+    let handle_ws_error = move |error: &WSError| {
+      error!("websocket error: {:?}", error);
+      match weak_state_notify.upgrade() {
+        None => error!("websocket state_notify is dropped"),
+        Some(state_notify) => match &error {
+          WSError::TungsteniteError(_) => {},
+          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Disconnected),
+          WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
+          WSError::Internal(_) => {},
+        },
+      }
+    };
+
+    let conn_result = RetryIf::spawn(retry_strategy, action, cond).await;
+    if let Err(err) = &conn_result {
+      handle_ws_error(err);
+    }
+
+    let stream = conn_result?;
     let addr = match stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),
       _ => None,
@@ -174,22 +194,6 @@ impl WSClient {
     });
 
     let mut rx = self.sender.subscribe();
-    let weak_state_notify = Arc::downgrade(&self.state_notify);
-    let handle_ws_error = move |error: &Error| {
-      error!("websocket error: {:?}", error);
-      match weak_state_notify.upgrade() {
-        None => {
-          error!("websocket state_notify is dropped");
-        },
-        Some(state_notify) => match &error {
-          Error::ConnectionClosed | Error::AlreadyClosed => {
-            state_notify.lock().set_state(ConnectState::Disconnected);
-          },
-          _ => {},
-        },
-      }
-    };
-
     let weak_http_sender = Arc::downgrade(&self.http_sender);
     let device_id = device_id.to_string();
     tokio::spawn(async move {
@@ -212,7 +216,7 @@ impl WSClient {
                  break;
               }
             } else if let Err(err) = sink.send(msg).await {
-              handle_ws_error(&err);
+              handle_ws_error(&WSError::from(err));
               break;
             }
           }

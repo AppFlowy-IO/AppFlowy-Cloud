@@ -290,12 +290,7 @@ where
         if !payload.is_empty() {
           trace!("start process message: {:?}", msg.msg_id());
           SyncStream::<Sink, Stream>::process_payload(
-            origin,
-            payload.unwrap(),
-            object_id,
-            protocol,
-            collab,
-            sink,
+            origin, payload, object_id, protocol, collab, sink,
           )
           .await?;
           trace!("end process message: {:?}", msg.msg_id());

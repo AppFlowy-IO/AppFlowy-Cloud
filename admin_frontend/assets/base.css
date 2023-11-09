@@ -78,3 +78,7 @@ body {
 .input:focus {
   border-color: var(--af-cyan);
 }
+
+.loading-button {
+  filter: brightness(0.7);
+}

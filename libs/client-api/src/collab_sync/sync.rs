@@ -40,6 +40,12 @@ pub struct SyncQueue<Sink, Stream> {
   sync_state: Arc<watch::Sender<SyncState>>,
 }
 
+impl<Sink, Stream> Drop for SyncQueue<Sink, Stream> {
+  fn drop(&mut self) {
+    trace!("Drop SyncQueue {}", self.object.object_id);
+  }
+}
+
 impl<E, Sink, Stream> SyncQueue<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
@@ -80,7 +86,7 @@ where
       stream,
       protocol,
       collab,
-      sink.clone(),
+      Arc::downgrade(&sink),
     );
 
     let weak_sync_state = Arc::downgrade(&sync_state);
@@ -145,6 +151,7 @@ where
     }
   }
 
+  /// Remove all the messages in the sink queue
   pub fn clear(&self) {
     self.sink.clear();
   }
@@ -173,10 +180,17 @@ impl<Sink, Stream> Deref for SyncQueue<Sink, Stream> {
 
 /// Use to continuously receive updates from remote.
 struct SyncStream<Sink, Stream> {
+  object_id: String,
   #[allow(dead_code)]
   weak_collab: Weak<MutexCollab>,
   phantom_sink: PhantomData<Sink>,
   phantom_stream: PhantomData<Stream>,
+}
+
+impl<Sink, Stream> Drop for SyncStream<Sink, Stream> {
+  fn drop(&mut self) {
+    trace!("Drop SyncStream {}", self.object_id);
+  }
 }
 
 impl<E, Sink, Stream> SyncStream<Sink, Stream>
@@ -191,22 +205,22 @@ where
     stream: Stream,
     protocol: P,
     weak_collab: Weak<MutexCollab>,
-    sink: Arc<CollabSink<Sink, CollabMessage>>,
+    sink: Weak<CollabSink<Sink, CollabMessage>>,
   ) -> Self
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     let cloned_weak_collab = weak_collab.clone();
-    let weak_sink = Arc::downgrade(&sink);
     spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
       origin,
-      object_id,
+      object_id.clone(),
       stream,
       cloned_weak_collab,
-      weak_sink,
+      sink,
       protocol,
     ));
     Self {
+      object_id,
       weak_collab,
       phantom_sink: Default::default(),
       phantom_stream: Default::default(),
@@ -239,12 +253,12 @@ where
               }
             },
             _ => {
-              warn!("ClientSync is dropped. Stopping receive incoming changes.");
+              warn!("Stop receive doc incoming changes.");
               break;
             },
           },
           Err(e) => {
-            warn!("Stop receive incoming changes: {}", e.into());
+            warn!("Can't receive incoming changes: {}", e.into());
             break;
           },
         }

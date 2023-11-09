@@ -171,7 +171,7 @@ impl WSClient {
                           true
                         },
                         Some(channel) => {
-                          trace!("receive remote message: {:?}", collab_msg);
+                          trace!("receive remote message: {}", collab_msg);
                           channel.forward_to_stream(collab_msg);
                           false
                         },

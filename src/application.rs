@@ -220,7 +220,7 @@ async fn setup_admin_account(
       if let app_error::gotrue::GoTrueError::Internal(err) = err {
         match (err.code, err.msg.as_str()) {
           (400, "User already registered") => {
-            tracing::info!("Admin user already registered");
+            info!("Admin user already registered");
             Ok(())
           },
           _ => Err(err.into()),
@@ -238,7 +238,7 @@ async fn setup_admin_account(
       };
       match admin_user.role.as_str() {
         "supabase_admin" => {
-          tracing::info!("Admin user already created and set role to supabase_admin");
+          info!("Admin user already created and set role to supabase_admin");
           Ok(())
         },
         _ => {
@@ -256,7 +256,7 @@ async fn setup_admin_account(
           .context("failed to update the admin user")?;
 
           assert_eq!(result.rows_affected(), 1);
-          tracing::info!("Admin user created and set role to supabase_admin");
+          info!("Admin user created and set role to supabase_admin");
 
           Ok(())
         },

@@ -285,18 +285,22 @@ where
       Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
     };
 
-    if should_process && payload.is_some() {
-      trace!("start process message: {:?}", msg.msg_id());
-      SyncStream::<Sink, Stream>::process_payload(
-        origin,
-        payload.unwrap(),
-        object_id,
-        protocol,
-        collab,
-        sink,
-      )
-      .await?;
-      trace!("end process message: {:?}", msg.msg_id());
+    if should_process {
+      if let Some(payload) = payload {
+        if !payload.is_empty() {
+          trace!("start process message: {:?}", msg.msg_id());
+          SyncStream::<Sink, Stream>::process_payload(
+            origin,
+            payload.unwrap(),
+            object_id,
+            protocol,
+            collab,
+            sink,
+          )
+          .await?;
+          trace!("end process message: {:?}", msg.msg_id());
+        }
+      }
     }
     Ok(())
   }

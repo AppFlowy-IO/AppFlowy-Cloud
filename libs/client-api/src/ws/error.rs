@@ -3,17 +3,14 @@ use tokio_tungstenite::tungstenite::Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WSError {
-  #[error("Unsupported ws message type")]
-  UnsupportedMsgType,
-
   #[error(transparent)]
   TungsteniteError(Error),
 
+  #[error("{0}")]
+  LostConnection(String),
+
   #[error("Auth error: {0}")]
   AuthError(String),
-
-  #[error(transparent)]
-  SerdeError(#[from] serde_json::Error),
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
@@ -21,11 +18,17 @@ pub enum WSError {
 
 impl From<Error> for WSError {
   fn from(value: Error) -> Self {
-    if let Error::Http(resp) = &value {
-      if resp.status() == StatusCode::UNAUTHORIZED {
-        return WSError::AuthError("Unauthorized websocket connection".to_string());
-      }
+    match &value {
+      Error::ConnectionClosed | Error::AlreadyClosed => WSError::LostConnection(value.to_string()),
+      Error::Http(resp) => {
+        let status = resp.status();
+        if status == StatusCode::UNAUTHORIZED || status == StatusCode::NOT_FOUND {
+          WSError::AuthError("Unauthorized websocket connection".to_string())
+        } else {
+          WSError::TungsteniteError(value)
+        }
+      },
+      _ => WSError::TungsteniteError(value),
     }
-    WSError::TungsteniteError(value)
   }
 }

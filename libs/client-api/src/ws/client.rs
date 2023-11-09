@@ -20,7 +20,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::tungstenite::{Error, Message};
+use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
 use tracing::{debug, error, info, trace, warn};
 
@@ -37,7 +37,7 @@ pub struct WSClientConfig {
 impl Default for WSClientConfig {
   fn default() -> Self {
     Self {
-      buffer_capacity: 1000,
+      buffer_capacity: 2000,
       ping_per_secs: 6,
       retry_connect_per_pings: 10,
     }
@@ -100,7 +100,6 @@ impl WSClient {
       old_ping.stop().await;
     }
 
-    // let retry_strategy = FibonacciBackoff::from_millis(2000).max_delay(Duration::from_secs(10 * 60));
     let retry_strategy = FixedInterval::new(Duration::from_secs(6));
     let action = ConnectAction::new(addr.clone());
     let cond = RetryCondition {
@@ -108,21 +107,45 @@ impl WSClient {
       addr: Arc::downgrade(&self.addr),
       state_notify: Arc::downgrade(&self.state_notify),
     };
-    let stream = RetryIf::spawn(retry_strategy, action, cond).await?;
-    let addr = match stream.get_ref() {
+
+    // handle websocket error when connecting or sending message
+    let weak_state_notify = Arc::downgrade(&self.state_notify);
+    let handle_ws_error = move |error: &WSError| {
+      error!("websocket error: {:?}", error);
+      match weak_state_notify.upgrade() {
+        None => error!("websocket state_notify is dropped"),
+        Some(state_notify) => match &error {
+          WSError::TungsteniteError(_) => {},
+          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Disconnected),
+          WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
+          WSError::Internal(_) => {},
+        },
+      }
+    };
+
+    let conn_result = RetryIf::spawn(retry_strategy, action, cond).await;
+    if let Err(err) = &conn_result {
+      handle_ws_error(err);
+    }
+
+    let ws_stream = conn_result?;
+    let addr = match ws_stream.get_ref() {
       MaybeTlsStream::Plain(s) => s.local_addr().ok(),
       _ => None,
     };
 
     self.set_state(ConnectState::Connected).await;
-    let (mut sink, mut stream) = stream.split();
+    let (mut sink, mut stream) = ws_stream.split();
     let weak_channels = Arc::downgrade(&self.channels);
     let sender = self.sender.clone();
 
+    let ping_sender = sender.clone();
+    let (pong_tx, pong_recv) = tokio::sync::mpsc::channel(1);
     let mut ping = ServerFixIntervalPing::new(
       Duration::from_secs(self.config.ping_per_secs),
       self.state_notify.clone(),
-      sender.clone(),
+      ping_sender,
+      pong_recv,
       self.config.retry_connect_per_pings,
     );
     ping.run();
@@ -142,12 +165,17 @@ impl WSClient {
                         None => {
                           // when calling [WSClient::subscribe], the caller is responsible for keeping
                           // the channel alive as long as it wants to receive messages from the websocket.
-                          trace!("channel is dropped");
+                          warn!("channel is dropped");
                         },
                         Some(channel) => {
-                          channel.recv_msg(collab_msg);
+                          channel.forward_to_stream(collab_msg);
                         },
                       }
+                    } else {
+                      warn!(
+                        "can't find channel by object_id: {}",
+                        collab_msg.object_id()
+                      );
                     }
                   } else {
                     warn!("channels are closed");
@@ -156,40 +184,28 @@ impl WSClient {
                 RealtimeMessage::ServerKickedOff => {},
               }
             } else {
-              error!("🔴Parser RealtimeMessage failed");
+              error!("parser RealtimeMessage failed");
             }
           },
+          // ping from server
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
             Err(e) => {
-              error!("🔴Failed to send pong message to websocket: {:?}", e);
+              error!("failed to send pong message to websocket: {:?}", e);
             },
           },
           Message::Close(close) => {
-            info!("{:?}", close);
+            info!("websocket close: {:?}", close);
           },
-          _ => {},
+          Message::Pong(_) => {
+            let _ = pong_tx.send(()).await;
+          },
+          _ => warn!("received unexpected message from websocket: {:?}", msg),
         }
       }
     });
 
     let mut rx = self.sender.subscribe();
-    let weak_state_notify = Arc::downgrade(&self.state_notify);
-    let handle_ws_error = move |error: &Error| {
-      error!("websocket error: {:?}", error);
-      match weak_state_notify.upgrade() {
-        None => {
-          error!("websocket state_notify is dropped");
-        },
-        Some(state_notify) => match &error {
-          Error::ConnectionClosed | Error::AlreadyClosed => {
-            state_notify.lock().set_state(ConnectState::Disconnected);
-          },
-          _ => {},
-        },
-      }
-    };
-
     let weak_http_sender = Arc::downgrade(&self.http_sender);
     let device_id = device_id.to_string();
     tokio::spawn(async move {
@@ -197,21 +213,21 @@ impl WSClient {
         tokio::select! {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
+            let len = msg.len();
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
-            if  msg.is_binary() && msg.len() > 40960 {
-              let len = msg.len();
+            if  msg.is_binary() && len > 40960 {
               trace!("[websocket]: send message with size:{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {
-                  Ok(_) => debug!("WebSocket message sent via HTTP. len: {}", len),
+                  Ok(_) => debug!("webSocket message sent via HTTP. len: {}", len),
                   Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
                 }
               } else {
                  error!("The HTTP sender has been dropped, unable to send message.");
                  break;
               }
-            } else if let Err(err) = sink.send(msg).await {
+            } else if let Err(err) = sink.send(msg).await.map_err(WSError::from){
               handle_ws_error(&err);
               break;
             }

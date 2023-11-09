@@ -290,7 +290,7 @@ impl CollabClientStream {
       while let Some(msg) = rx.recv().await {
         let can_sink = sink_filter(&cloned_object_id, &msg).await;
         if can_sink {
-          // Send the message to websocket server actor
+          // Send the message to websocket client actor
           client_ws_sink.do_send(msg.into());
         }
       }

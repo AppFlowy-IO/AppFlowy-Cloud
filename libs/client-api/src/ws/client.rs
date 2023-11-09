@@ -116,7 +116,7 @@ impl WSClient {
         None => error!("websocket state_notify is dropped"),
         Some(state_notify) => match &error {
           WSError::TungsteniteError(_) => {},
-          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Disconnected),
+          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Closed),
           WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
           WSError::Internal(_) => {},
         },
@@ -282,7 +282,7 @@ impl WSClient {
       })));
 
       *self.addr.lock() = None;
-      self.set_state(ConnectState::Disconnected).await;
+      self.set_state(ConnectState::Closed).await;
     }
   }
 

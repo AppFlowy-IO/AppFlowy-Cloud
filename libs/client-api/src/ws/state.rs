@@ -10,7 +10,7 @@ impl ConnectStateNotify {
   pub(crate) fn new() -> Self {
     let (sender, _) = channel(100);
     Self {
-      state: ConnectState::Disconnected,
+      state: ConnectState::Closed,
       sender,
     }
   }
@@ -34,7 +34,7 @@ pub enum ConnectState {
   Connecting,
   Connected,
   Unauthorized,
-  Disconnected,
+  Closed,
 }
 
 impl ConnectState {
@@ -53,7 +53,7 @@ impl ConnectState {
   }
 
   #[allow(dead_code)]
-  pub fn is_disconnected(&self) -> bool {
-    matches!(self, ConnectState::Disconnected)
+  pub fn is_closed(&self) -> bool {
+    matches!(self, ConnectState::Closed)
   }
 }

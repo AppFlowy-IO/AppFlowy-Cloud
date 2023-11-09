@@ -90,7 +90,7 @@ where
               }
             }
           },
-          ConnectState::Unauthorized | ConnectState::Disconnected => {
+          ConnectState::Unauthorized | ConnectState::Closed => {
             if let Some(sync_queue) = weak_sync_queue.upgrade() {
               // Stop sync if the websocket is unauthorized or disconnected
               sync_queue.pause();

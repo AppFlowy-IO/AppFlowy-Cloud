@@ -64,7 +64,9 @@ impl ServerFixIntervalPing {
                   state.lock().set_state(ConnectState::PingTimeout);
                 }
               } else {
-                tracing::trace!("ping count: {}", *lock);
+                if *lock > 1 {
+                 tracing::trace!("ping count: {}", *lock);
+                }
                 *lock +=1;
               }
             }

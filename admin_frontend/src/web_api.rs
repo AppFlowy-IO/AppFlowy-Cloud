@@ -72,21 +72,21 @@ pub async fn invite_handler(
       },
     )
     .await?;
-  Ok(WebApiResponse::from(()))
+  Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
 }
 
 pub async fn change_password_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiChangePasswordRequest>,
-) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   if param.new_password != param.confirm_password {
     return Err(WebApiError::new(
       status::StatusCode::BAD_REQUEST,
       "passwords do not match",
     ));
   }
-  let res = state
+  let _user = state
     .gotrue_client
     .update_user(
       &session.token.access_token,
@@ -96,7 +96,7 @@ pub async fn change_password_handler(
       },
     )
     .await?;
-  Ok(res.into())
+  Ok(WebApiResponse::<()>::from_str("Password changed".into()))
 }
 
 static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
@@ -186,18 +186,18 @@ pub async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiAdminCreateUserRequest>,
-) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
     email: param.email,
     password: Some(param.password),
     email_confirm: !param.require_email_verification,
     ..Default::default()
   };
-  let user = state
+  let _user = state
     .gotrue_client
     .admin_add_user(&session.token.access_token, &add_user_params)
     .await?;
-  Ok(user.into())
+  Ok(WebApiResponse::<()>::from_str("User created".into()))
 }
 
 pub async fn login_refresh_handler(

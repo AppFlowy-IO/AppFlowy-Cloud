@@ -312,7 +312,7 @@ where
 
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        debug!("[Client {}] sending {}", self.uid, collab_msg);
+        debug!("ending {}", collab_msg);
         sender.send(collab_msg).await.ok()?;
       },
       Err(_) => {

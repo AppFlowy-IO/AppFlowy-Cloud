@@ -264,16 +264,17 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
+    let payload = msg.payload();
     if match msg.msg_id() {
       // The msg_id is None if the message is [ServerBroadcast] or [ServerAwareness]
       None => true,
       Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
-    } && !msg.payload().is_empty()
+    } && payload.is_some()
     {
       trace!("start process message: {:?}", msg.msg_id());
       SyncStream::<Sink, Stream>::process_payload(
         origin,
-        msg.payload(),
+        payload.unwrap(),
         object_id,
         protocol,
         collab,

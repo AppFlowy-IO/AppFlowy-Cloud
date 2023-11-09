@@ -5,7 +5,7 @@ use collab::core::origin::CollabOrigin;
 use database::collab::CollabStorage;
 use futures_util::SinkExt;
 use parking_lot::Mutex;
-use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::future;
@@ -23,7 +23,7 @@ use tokio_retry::{Action, Condition, Retry, RetryIf};
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::error::RealtimeError;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) user: &'a U,
@@ -103,14 +103,20 @@ where
         }
       }
 
-      // If the client's stream is already subscribe to the collab, return.
-      if self
-        .groups
-        .contains_user(object_id, user)
-        .await
-        .unwrap_or(false)
-      {
-        return Ok(());
+      // If the message is init sync message, which means the client just open the collab again. So
+      // remove the user from the group first and then subscribe the client's stream to the group.
+      if collab_message.is_init_msg() {
+        self.groups.remove_user(object_id, user).await;
+      } else {
+        // If the client's stream is already subscribe to the collab, return.
+        if self
+          .groups
+          .contains_user(object_id, user)
+          .await
+          .unwrap_or(false)
+        {
+          return Ok(());
+        }
       }
 
       let origin = match collab_message.origin() {
@@ -118,7 +124,7 @@ where
           error!("🔴The origin from client message is empty");
           &CollabOrigin::Empty
         },
-        Some(client) => client,
+        Some(origin) => origin,
       };
       match self.client_stream_by_user.write().await.get_mut(user) {
         None => warn!("The client stream is not found"),
@@ -232,6 +238,19 @@ where
                   .subscribe(origin.clone(), sink, stream),
               );
             }
+
+            debug!(
+              "{}: Group member: {}. member ids: {:?}",
+              object_id,
+              collab_group.subscribers.read().await.len(),
+              collab_group
+                .subscribers
+                .read()
+                .await
+                .values()
+                .map(|value| value.origin.client_user_id())
+                .collect::<Vec<_>>(),
+            );
           }
         },
       }

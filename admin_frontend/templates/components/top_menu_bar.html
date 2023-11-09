@@ -25,7 +25,8 @@
     </script>
     {% endif %}
 
-    <!-- prettier-ignore -->
-    {% include "components/logout.html" %}
+    <div class="button yellow" id="logoutBtn" hx-post="/web-api/logout">
+      Logout
+    </div>
   </div>
 </div>

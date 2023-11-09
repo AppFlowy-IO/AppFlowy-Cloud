@@ -1,5 +1,6 @@
 use client_api::Client;
 use dotenv::dotenv;
+use scraper::{Html, Selector};
 use sqlx::types::Uuid;
 
 use lazy_static::lazy_static;
@@ -27,13 +28,17 @@ pub fn generate_unique_email() -> String {
   format!("user_{}@appflowy.io", Uuid::new_v4())
 }
 
-pub async fn generate_unique_registered_user() -> User {
-  // log in as admin
+pub async fn admin_user_client() -> Client {
   let admin_client = localhost_client();
   admin_client
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await
     .unwrap();
+  admin_client
+}
+
+pub async fn generate_unique_registered_user() -> User {
+  let admin_client = admin_user_client().await;
 
   // create new user
   let email = generate_unique_email();
@@ -58,4 +63,23 @@ pub async fn generate_unique_registered_user_client() -> (Client, User) {
     .await
     .unwrap();
   (registered_user_client, registered_user)
+}
+
+pub async fn generate_sign_in_url_for_email(email: &str) -> String {
+  setup_log();
+  let admin_client = admin_user_client().await;
+  admin_client.generate_sign_in_url(email).await.unwrap()
+}
+
+pub fn extract_sign_in_url(html_str: &str) -> String {
+  let fragment = Html::parse_fragment(html_str);
+  let selector = Selector::parse("a").unwrap();
+  fragment
+    .select(&selector)
+    .next()
+    .unwrap()
+    .value()
+    .attr("href")
+    .unwrap()
+    .to_string()
 }

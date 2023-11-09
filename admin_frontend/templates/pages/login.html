@@ -20,7 +20,7 @@
     </div>
 
     <h3>Email Login</h3>
-    <form hx-post="/web-api/login">
+    <form hx-post="/web-api/login" hx-target="#none">
       <table style="width: 100%">
         <tr>
           <td>Email:</td>
@@ -49,14 +49,13 @@
           </td>
         </tr>
       </table>
-      <br />
       <button
         class="button cyan"
         type="submit"
-        style="width: 100%; padding: 8px 8px"
+        style="width: 100%; margin: 16px auto 0; padding: 8px 8px"
         id="submitBtn"
       >
-        Sign In
+        Sign In / Sign Up
       </button>
     </form>
     <br />

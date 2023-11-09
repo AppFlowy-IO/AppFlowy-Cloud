@@ -17,7 +17,7 @@ body {
 .button {
   border: none;
   border-radius: 4px;
-  margin: 4px 4px;
+  margin: 4px;
   padding: 4px 8px;
   font-size: 16px;
   cursor: pointer;
@@ -77,4 +77,8 @@ body {
 
 .input:focus {
   border-color: var(--af-cyan);
+}
+
+.loading-button {
+  filter: brightness(0.7);
 }

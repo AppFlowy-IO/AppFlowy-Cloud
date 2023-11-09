@@ -14,9 +14,9 @@ use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
-use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, MagicLinkParams};
-use gotrue_entity::dto::{UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
+use gotrue_entity::error::GoTrueError;
 
 pub fn router() -> Router<AppState> {
   Router::new()
@@ -43,27 +43,14 @@ pub fn router() -> Router<AppState> {
 }
 
 // provide a link which when open in browser, opens the appflowy app
-pub async fn open_app_handler(
-  State(state): State<AppState>,
-  session: UserSession,
-) -> Result<HeaderMap, WebApiError<'static>> {
-  let access_token_resp = state
-    .gotrue_client
-    .token(&Grant::RefreshToken(RefreshTokenGrant {
-      refresh_token: session.refresh_token.to_owned(),
-    }))
-    .await?;
-
-  // appflowy-flutter:// -> scheme that opens the Appflowy app
-  // login-callback -> agreed upon convention that frontend recognizes
-  // The rest are params that are passed to the app needed for login
+pub async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
-        access_token_resp.access_token,
-        access_token_resp.expires_at,
-        access_token_resp.expires_in,
-        access_token_resp.refresh_token,
-        access_token_resp.token_type,
+        session.token.access_token,
+        session.token.expires_at,
+        session.token.expires_in,
+        session.token.refresh_token,
+        session.token.token_type,
   );
   Ok(htmx_redirect(&app_sign_in_url))
 }
@@ -78,38 +65,38 @@ pub async fn invite_handler(
   state
     .gotrue_client
     .magic_link(
-      &session.access_token,
+      &session.token.access_token,
       &MagicLinkParams {
         email: param.email,
         ..Default::default()
       },
     )
     .await?;
-  Ok(WebApiResponse::from(()))
+  Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
 }
 
 pub async fn change_password_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiChangePasswordRequest>,
-) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   if param.new_password != param.confirm_password {
     return Err(WebApiError::new(
       status::StatusCode::BAD_REQUEST,
       "passwords do not match",
     ));
   }
-  let res = state
+  let _user = state
     .gotrue_client
     .update_user(
-      &session.access_token,
+      &session.token.access_token,
       &UpdateGotrueUserParams {
         password: Some(param.new_password),
         ..Default::default()
       },
     )
     .await?;
-  Ok(res.into())
+  Ok(WebApiResponse::<()>::from_str("Password changed".into()))
 }
 
 static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
@@ -147,7 +134,7 @@ pub async fn admin_update_user_handler(
   let res = state
     .gotrue_client
     .admin_update_user(
-      &session.access_token,
+      &session.token.access_token,
       &user_uuid,
       &AdminUserParams {
         password: Some(param.password.to_owned()),
@@ -167,7 +154,7 @@ pub async fn post_user_generate_link_handler(
   let res = state
     .gotrue_client
     .admin_generate_link(
-      &session.access_token,
+      &session.token.access_token,
       &GenerateLinkParams {
         email,
         ..Default::default()
@@ -185,7 +172,7 @@ pub async fn admin_delete_user_handler(
   state
     .gotrue_client
     .admin_delete_user(
-      &session.access_token,
+      &session.token.access_token,
       &user_uuid,
       &AdminDeleteUserParams {
         should_soft_delete: true,
@@ -199,18 +186,18 @@ pub async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiAdminCreateUserRequest>,
-) -> Result<WebApiResponse<User>, WebApiError<'static>> {
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   let add_user_params = AdminUserParams {
     email: param.email,
     password: Some(param.password),
     email_confirm: !param.require_email_verification,
     ..Default::default()
   };
-  let user = state
+  let _user = state
     .gotrue_client
-    .admin_add_user(&session.access_token, &add_user_params)
+    .admin_add_user(&session.token.access_token, &add_user_params)
     .await?;
-  Ok(user.into())
+  Ok(WebApiResponse::<()>::from_str("User created".into()))
 }
 
 pub async fn login_refresh_handler(
@@ -226,11 +213,7 @@ pub async fn login_refresh_handler(
     .await?;
 
   let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(
-    new_session_id.to_string(),
-    token.access_token.to_string(),
-    token.refresh_token.to_owned(),
-  );
+  let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
 
   let mut cookie = Cookie::new("session_id", new_session_id.to_string());
@@ -239,14 +222,15 @@ pub async fn login_refresh_handler(
   Ok(jar.add(cookie))
 }
 
-// TODO: Support OAuth2 login
 // login and set the cookie
+// sign up if not exist
 pub async fn login_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
-) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
-  let token = state
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  // Attempt to sign in with email and password
+  let token_res = state
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
       gotrue::grant::PasswordGrant {
@@ -254,20 +238,50 @@ pub async fn login_handler(
         password: param.password.to_owned(),
       },
     ))
-    .await?;
+    .await;
 
-  let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(
-    new_session_id.to_string(),
-    token.access_token.to_string(),
-    token.refresh_token.to_owned(),
-  );
-  state.session_store.put_user_session(&new_session).await?;
+  match token_res {
+    Ok(token) => session_login(State(state), token, jar).await, // login success
+    Err(err) => match &err {
+      GoTrueError::ClientError(client_err) => {
+        match (
+          client_err.error.as_str(),
+          client_err.error_description.as_deref(),
+        ) {
+          // Email not exist or wrong password
+          ("invalid_grant", Some("Invalid login credentials")) => {
+            let sign_up_res = state
+              .gotrue_client
+              .sign_up(&param.email, &param.password)
+              .await;
 
-  Ok((
-    jar.add(new_session_cookie(new_session_id)),
-    htmx_redirect("/web/home"),
-  ))
+            match sign_up_res {
+              Ok(resp) => match resp {
+                // when GOTRUE_MAILER_AUTOCONFIRM=true, auto sign in
+                SignUpResponse::Authenticated(token) => {
+                  session_login(State(state), token, jar).await
+                },
+                SignUpResponse::NotAuthenticated(user) => match user.identities {
+                  Some(_identities) => {
+                    // new user, awaiting email verification
+                    Ok((
+                      jar,
+                      HeaderMap::new(),
+                      WebApiResponse::<()>::from_str("Email Verification Sent".into()),
+                    ))
+                  },
+                  None => Err(err.into()), // user exists but sign in password not correct
+                },
+              },
+              Err(err) => Err(err.into()),
+            }
+          },
+          _ => Err(err.into()),
+        }
+      },
+      _ => Err(err.into()),
+    },
+  }
 }
 
 pub async fn logout_handler(
@@ -299,4 +313,20 @@ fn new_session_cookie(id: uuid::Uuid) -> Cookie<'static> {
   let mut cookie = Cookie::new("session_id", id.to_string());
   cookie.set_path("/");
   cookie
+}
+
+async fn session_login(
+  State(state): State<AppState>,
+  token: GotrueTokenResponse,
+  jar: CookieJar,
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  let new_session_id = uuid::Uuid::new_v4();
+  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  state.session_store.put_user_session(&new_session).await?;
+
+  Ok((
+    jar.add(new_session_cookie(new_session_id)),
+    htmx_redirect("/web/home"),
+    ().into(),
+  ))
 }

@@ -14,6 +14,7 @@ use tokio_stream::StreamExt;
 use crate::collab_sync::{SinkConfig, SyncQueue};
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use tokio_stream::wrappers::WatchStream;
+use tracing::trace;
 
 use yrs::updates::encoder::Encode;
 
@@ -23,6 +24,12 @@ pub struct SyncPlugin<Sink, Stream, C> {
   // Used to keep the lifetime of the channel
   #[allow(dead_code)]
   channel: Option<Arc<C>>,
+}
+
+impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
+  fn drop(&mut self) {
+    trace!("Drop sync plugin: {}", self.object.object_id);
+  }
 }
 
 impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>

@@ -21,6 +21,7 @@ body {
   padding: 4px 8px;
   font-size: 16px;
   cursor: pointer;
+  margin: auto;
 }
 
 .purple:hover {

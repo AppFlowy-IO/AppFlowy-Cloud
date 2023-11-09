@@ -15,7 +15,8 @@ use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use gotrue::params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, MagicLinkParams};
-use gotrue_entity::dto::{UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
+use gotrue_entity::error::GoTrueError;
 
 pub fn router() -> Router<AppState> {
   Router::new()
@@ -221,14 +222,15 @@ pub async fn login_refresh_handler(
   Ok(jar.add(cookie))
 }
 
-// TODO: Support OAuth2 login
 // login and set the cookie
+// sign up if not exist
 pub async fn login_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
 ) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
-  let token = state
+  // Attempt to sign in with email and password
+  let token_res = state
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
       gotrue::grant::PasswordGrant {
@@ -236,16 +238,44 @@ pub async fn login_handler(
         password: param.password.to_owned(),
       },
     ))
-    .await?;
+    .await;
 
-  let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
-  state.session_store.put_user_session(&new_session).await?;
+  match token_res {
+    Ok(token) => session_login(State(state), token, jar).await, // login success
+    Err(err) => match &err {
+      GoTrueError::ClientError(client_err) => {
+        match (
+          client_err.error.as_str(),
+          client_err.error_description.as_ref().map(|s| s.as_str()),
+        ) {
+          // Email not exist or wrong password
+          ("invalid_grant", Some("Invalid login credentials")) => {
+            let sign_up_res = state
+              .gotrue_client
+              .sign_up(&param.email, &param.password)
+              .await;
 
-  Ok((
-    jar.add(new_session_cookie(new_session_id)),
-    htmx_redirect("/web/home"),
-  ))
+            match sign_up_res {
+              Ok(resp) => match resp {
+                // when GOTRUE_MAILER_AUTOCONFIRM=true, auto sign in
+                SignUpResponse::Authenticated(token) => {
+                  session_login(State(state), token, jar).await
+                },
+
+                SignUpResponse::NotAuthenticated(user) => match user.identities {
+                  Some(_identities) => todo!(), // new user
+                  None => Err(err.into()),      // user exists but sign in password not correct
+                },
+              },
+              Err(err) => Err(err.into()),
+            }
+          },
+          _ => Err(err.into()),
+        }
+      },
+      _ => Err(err.into()),
+    },
+  }
 }
 
 pub async fn logout_handler(
@@ -277,4 +307,19 @@ fn new_session_cookie(id: uuid::Uuid) -> Cookie<'static> {
   let mut cookie = Cookie::new("session_id", id.to_string());
   cookie.set_path("/");
   cookie
+}
+
+async fn session_login(
+  State(state): State<AppState>,
+  token: GotrueTokenResponse,
+  jar: CookieJar,
+) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
+  let new_session_id = uuid::Uuid::new_v4();
+  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  state.session_store.put_user_session(&new_session).await?;
+
+  Ok((
+    jar.add(new_session_cookie(new_session_id)),
+    htmx_redirect("/web/home"),
+  ))
 }

@@ -139,7 +139,7 @@ async fn admin_generate_link_and_user_sign_in_and_invite() {
       .unwrap();
 
     assert_eq!(link_resp.email, user_email);
-    link_resp.action_link
+    link_resp.action_link.replacen("/gotrue", "", 1)
   };
 
   // new user sign in with link,

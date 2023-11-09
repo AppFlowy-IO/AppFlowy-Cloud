@@ -46,13 +46,14 @@ impl CollabBroadcast {
   /// provided `buffer_capacity` size.
   pub fn new(object_id: &str, collab: MutexCollab, buffer_capacity: usize) -> Self {
     let object_id = object_id.to_owned();
+    // broadcast channel
     let (sender, _) = channel(buffer_capacity);
     let (doc_sub, awareness_sub) = {
       let mut mutex_collab = collab.lock();
 
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = object_id.clone();
-      let sink = sender.clone();
+      let broadcast_sink = sender.clone();
       let doc_sub = mutex_collab
         .get_mut_awareness()
         .doc_mut()
@@ -60,13 +61,13 @@ impl CollabBroadcast {
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
           let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
-          if let Err(_e) = sink.send(msg.into()) {
-            trace!("Broadcast group is closed");
+          if let Err(e) = broadcast_sink.send(msg.into()) {
+            error!("broadcast sink fail: {}", e);
           }
         })
         .unwrap();
 
-      let sink = sender.clone();
+      let broadcast_sink = sender.clone();
       let cloned_oid = object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
@@ -76,7 +77,7 @@ impl CollabBroadcast {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
             let msg = CollabAwarenessData::new(cloned_oid.clone(), payload);
-            if let Err(_e) = sink.send(msg.into()) {
+            if let Err(_e) = broadcast_sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
           }
@@ -178,7 +179,13 @@ impl CollabBroadcast {
             error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
             continue;
           }
-          let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
+
+          let payload = collab_msg.payload();
+          if payload.is_none() {
+            continue;
+          }
+
+          let mut decoder = DecoderV1::from(payload.unwrap().as_ref());
           match sink.try_lock() {
             Ok(mut sink) => {
               let reader = MessageReader::new(&mut decoder);

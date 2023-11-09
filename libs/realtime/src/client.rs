@@ -12,7 +12,7 @@ use database::collab::CollabStorage;
 pub use realtime_entity::user::RealtimeUserImpl;
 use std::ops::Deref;
 use std::time::{Duration, Instant};
-use tracing::{error, trace};
+use tracing::error;
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -133,10 +133,7 @@ where
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
     match &msg {
-      RealtimeMessage::Collab(collab_msg) => {
-        trace!("{:?}: receives collab message: {:?}", self.user, collab_msg);
-        ctx.binary(msg)
-      },
+      RealtimeMessage::Collab(_collab_msg) => ctx.binary(msg),
       RealtimeMessage::ServerKickedOff => {
         // The server will send this message to the client when the client is kicked out. So
         // set the current user to None and stop the session.

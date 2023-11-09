@@ -69,7 +69,10 @@ impl ServerFixIntervalPing {
             }
           },
           // pong from server
-          _ = pong_recv.recv() => {
+          result = pong_recv.recv() => {
+            if result.is_none() {
+              continue;
+            }
             if let Some(ping_count) = weak_ping_count.upgrade() {
               let mut lock = ping_count.lock().await;
               tracing::trace!("pong from server, ping count: {}", *lock);

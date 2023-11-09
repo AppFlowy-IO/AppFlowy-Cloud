@@ -165,7 +165,7 @@ impl WSClient {
                           warn!("channel is dropped");
                         },
                         Some(channel) => {
-                          channel.recv_msg(collab_msg);
+                          channel.forward_to_stream(collab_msg);
                         },
                       }
                     } else {

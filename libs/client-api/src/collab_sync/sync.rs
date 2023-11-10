@@ -278,7 +278,6 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    let payload = msg.payload();
     let should_process = match msg.msg_id() {
       // The msg_id is None if the message is [ServerBroadcast] or [ServerAwareness]
       None => true,
@@ -286,7 +285,7 @@ where
     };
 
     if should_process {
-      if let Some(payload) = payload {
+      if let Some(payload) = msg.payload() {
         if !payload.is_empty() {
           trace!("start process message: {:?}", msg.msg_id());
           SyncStream::<Sink, Stream>::process_payload(

@@ -10,20 +10,33 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{trace, warn};
 
 pub struct WebSocketChannel<T> {
+  object_id: String,
   sender: Sender<Message>,
   receiver: Sender<T>,
+}
+
+impl<T> Drop for WebSocketChannel<T> {
+  fn drop(&mut self) {
+    trace!("Drop WebSocketChannel {}", self.object_id);
+  }
 }
 
 impl<T> WebSocketChannel<T>
 where
   T: Into<RealtimeMessage> + Clone + Send + Sync + 'static,
 {
-  pub fn new(sender: Sender<Message>) -> Self {
+  pub fn new(object_id: &str, sender: Sender<Message>) -> Self {
+    let object_id = object_id.to_string();
     let (receiver, _) = channel(1000);
-    Self { sender, receiver }
+    Self {
+      object_id,
+      sender,
+      receiver,
+    }
   }
 
   /// Forward message to the stream returned by [WebSocketChannel::stream] method.
+  /// Calling this method to forward the server message to the receiver stream.
   pub(crate) fn forward_to_stream(&self, msg: T) {
     if let Err(err) = self.receiver.send(msg) {
       warn!("Failed to send message to channel: {}", err);

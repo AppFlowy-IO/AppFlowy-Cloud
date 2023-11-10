@@ -63,7 +63,7 @@ where
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(false);
-    let sync_state = Arc::new(watch::channel(SyncState::SyncInitStart).0);
+    let sync_state = Arc::new(watch::channel(SyncState::InitSyncBegin).0);
     let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
     debug_assert!(origin.client_user_id().is_some());
 
@@ -97,13 +97,13 @@ where
         if let Some(sync_state) = weak_sync_state.upgrade() {
           match collab_state {
             SinkState::Syncing => {
-              let _ = sync_state.send(SyncState::SyncUpdate);
+              let _ = sync_state.send(SyncState::Syncing);
             },
             SinkState::Finished => {
               let _ = sync_state.send(SyncState::SyncFinished);
             },
             SinkState::Init => {
-              let _ = sync_state.send(SyncState::SyncInitStart);
+              let _ = sync_state.send(SyncState::InitSyncBegin);
             },
             SinkState::Pause => {},
           }
@@ -248,7 +248,10 @@ where
               )
               .await
               {
-                error!("Failed to process message: {}", error);
+                error!(
+                  "Stop receive incoming changes. Failed to process message: {}",
+                  error
+                );
                 break;
               }
             },
@@ -258,7 +261,7 @@ where
             },
           },
           Err(e) => {
-            warn!("Can't receive incoming changes: {}", e.into());
+            warn!("Stream error: {},stop receive incoming changes", e.into());
             break;
           },
         }

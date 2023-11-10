@@ -184,7 +184,7 @@ impl WSClient {
                     if is_channel_dropped {
                       if let Some(mut w) = channels.try_write() {
                         trace!("remove channel: {}", object_id);
-                        w.remove(&object_id);
+                        let _ = w.remove(&object_id);
                       }
                     }
                   } else {

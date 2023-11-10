@@ -255,7 +255,7 @@ impl WSClient {
     &self,
     object_id: String,
   ) -> Result<Arc<WebSocketChannel<CollabMessage>>, WSError> {
-    let channel = Arc::new(WebSocketChannel::new(self.sender.clone()));
+    let channel = Arc::new(WebSocketChannel::new(&object_id, self.sender.clone()));
     self
       .channels
       .write()

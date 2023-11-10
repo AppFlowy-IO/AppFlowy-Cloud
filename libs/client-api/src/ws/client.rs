@@ -116,7 +116,7 @@ impl WSClient {
         None => error!("websocket state_notify is dropped"),
         Some(state_notify) => match &error {
           WSError::TungsteniteError(_) => {},
-          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Disconnected),
+          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Closed),
           WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
           WSError::Internal(_) => {},
         },
@@ -171,12 +171,12 @@ impl WSClient {
                           true
                         },
                         Some(channel) => {
+                          trace!("receive remote message: {}", collab_msg);
                           channel.forward_to_stream(collab_msg);
                           false
                         },
                       }
                     } else {
-                      warn!("can't find channel of object_id: {}", object_id);
                       false
                     };
 
@@ -184,7 +184,7 @@ impl WSClient {
                     if is_channel_dropped {
                       if let Some(mut w) = channels.try_write() {
                         trace!("remove channel: {}", object_id);
-                        w.remove(&object_id);
+                        let _ = w.remove(&object_id);
                       }
                     }
                   } else {
@@ -255,7 +255,7 @@ impl WSClient {
     &self,
     object_id: String,
   ) -> Result<Arc<WebSocketChannel<CollabMessage>>, WSError> {
-    let channel = Arc::new(WebSocketChannel::new(self.sender.clone()));
+    let channel = Arc::new(WebSocketChannel::new(&object_id, self.sender.clone()));
     self
       .channels
       .write()
@@ -282,7 +282,7 @@ impl WSClient {
       })));
 
       *self.addr.lock() = None;
-      self.set_state(ConnectState::Disconnected).await;
+      self.set_state(ConnectState::Closed).await;
     }
   }
 

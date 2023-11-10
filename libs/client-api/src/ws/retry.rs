@@ -25,7 +25,7 @@ impl Action for ConnectAction {
   fn run(&mut self) -> Self::Future {
     let cloned_addr = self.addr.clone();
     Box::pin(async move {
-      info!("🔵websocket start connecting: {}", cloned_addr);
+      info!("🔵websocket start connecting");
       match connect_async(&cloned_addr).await {
         Ok((stream, _response)) => {
           info!("🟢websocket connect success");

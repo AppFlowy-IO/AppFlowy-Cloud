@@ -17,9 +17,9 @@ use lib0::decoding::Cursor;
 use realtime_entity::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
 use tokio::spawn;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
+
 use tokio_stream::wrappers::WatchStream;
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -40,6 +40,12 @@ pub struct SyncQueue<Sink, Stream> {
   sync_state: Arc<watch::Sender<SyncState>>,
 }
 
+impl<Sink, Stream> Drop for SyncQueue<Sink, Stream> {
+  fn drop(&mut self) {
+    trace!("Drop SyncQueue {}", self.object.object_id);
+  }
+}
+
 impl<E, Sink, Stream> SyncQueue<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
@@ -57,7 +63,7 @@ where
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(false);
-    let sync_state = Arc::new(watch::channel(SyncState::SyncInitStart).0);
+    let sync_state = Arc::new(watch::channel(SyncState::InitSyncBegin).0);
     let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
     debug_assert!(origin.client_user_id().is_some());
 
@@ -80,7 +86,7 @@ where
       stream,
       protocol,
       collab,
-      sink.clone(),
+      Arc::downgrade(&sink),
     );
 
     let weak_sync_state = Arc::downgrade(&sync_state);
@@ -91,13 +97,13 @@ where
         if let Some(sync_state) = weak_sync_state.upgrade() {
           match collab_state {
             SinkState::Syncing => {
-              let _ = sync_state.send(SyncState::SyncUpdate);
+              let _ = sync_state.send(SyncState::Syncing);
             },
             SinkState::Finished => {
               let _ = sync_state.send(SyncState::SyncFinished);
             },
             SinkState::Init => {
-              let _ = sync_state.send(SyncState::SyncInitStart);
+              let _ = sync_state.send(SyncState::InitSyncBegin);
             },
             SinkState::Pause => {},
           }
@@ -145,6 +151,7 @@ where
     }
   }
 
+  /// Remove all the messages in the sink queue
   pub fn clear(&self) {
     self.sink.clear();
   }
@@ -173,12 +180,17 @@ impl<Sink, Stream> Deref for SyncQueue<Sink, Stream> {
 
 /// Use to continuously receive updates from remote.
 struct SyncStream<Sink, Stream> {
+  object_id: String,
   #[allow(dead_code)]
   weak_collab: Weak<MutexCollab>,
-  #[allow(dead_code)]
-  runner: JoinHandle<Result<(), SyncError>>,
   phantom_sink: PhantomData<Sink>,
   phantom_stream: PhantomData<Stream>,
+}
+
+impl<Sink, Stream> Drop for SyncStream<Sink, Stream> {
+  fn drop(&mut self) {
+    trace!("Drop SyncStream {}", self.object_id);
+  }
 }
 
 impl<E, Sink, Stream> SyncStream<Sink, Stream>
@@ -193,24 +205,23 @@ where
     stream: Stream,
     protocol: P,
     weak_collab: Weak<MutexCollab>,
-    sink: Arc<CollabSink<Sink, CollabMessage>>,
+    sink: Weak<CollabSink<Sink, CollabMessage>>,
   ) -> Self
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     let cloned_weak_collab = weak_collab.clone();
-    let weak_sink = Arc::downgrade(&sink);
-    let runner = spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
+    spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
       origin,
-      object_id,
+      object_id.clone(),
       stream,
       cloned_weak_collab,
-      weak_sink,
+      sink,
       protocol,
     ));
     Self {
+      object_id,
       weak_collab,
-      runner,
       phantom_sink: Default::default(),
       phantom_stream: Default::default(),
     }
@@ -224,32 +235,38 @@ where
     weak_collab: Weak<MutexCollab>,
     weak_sink: Weak<CollabSink<Sink, CollabMessage>>,
     protocol: P,
-  ) -> Result<(), SyncError>
-  where
+  ) where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    while let Some(input) = stream.next().await {
-      match input {
-        Ok(msg) => match (weak_collab.upgrade(), weak_sink.upgrade()) {
-          (Some(awareness), Some(sink)) => {
-            SyncStream::<Sink, Stream>::process_message::<P>(
-              &origin, &object_id, &protocol, &awareness, &sink, msg,
-            )
-            .await?
+    loop {
+      while let Some(collab_message) = stream.next().await {
+        match collab_message {
+          Ok(msg) => match (weak_collab.upgrade(), weak_sink.upgrade()) {
+            (Some(awareness), Some(sink)) => {
+              if let Err(error) = SyncStream::<Sink, Stream>::process_message::<P>(
+                &origin, &object_id, &protocol, &awareness, &sink, msg,
+              )
+              .await
+              {
+                error!(
+                  "Stop receive incoming changes. Failed to process message: {}",
+                  error
+                );
+                break;
+              }
+            },
+            _ => {
+              warn!("Stop receive doc incoming changes.");
+              break;
+            },
           },
-          _ => {
-            warn!("ClientSync is dropped. Stopping receive incoming changes.");
-            return Ok(());
+          Err(e) => {
+            warn!("Stream error: {},stop receive incoming changes", e.into());
+            break;
           },
-        },
-        Err(e) => {
-          // If the client has disconnected, the stream will return an error, So stop receiving
-          // messages if the client has disconnected.
-          return Err(SyncError::Internal(e.into()));
-        },
+        }
       }
     }
-    Ok(())
   }
 
   /// Continuously handle messages from the remote doc
@@ -264,24 +281,23 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    let payload = msg.payload();
-    if match msg.msg_id() {
+    let should_process = match msg.msg_id() {
       // The msg_id is None if the message is [ServerBroadcast] or [ServerAwareness]
       None => true,
       Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
-    } && payload.is_some()
-    {
-      trace!("start process message: {:?}", msg.msg_id());
-      SyncStream::<Sink, Stream>::process_payload(
-        origin,
-        payload.unwrap(),
-        object_id,
-        protocol,
-        collab,
-        sink,
-      )
-      .await?;
-      trace!("end process message: {:?}", msg.msg_id());
+    };
+
+    if should_process {
+      if let Some(payload) = msg.payload() {
+        if !payload.is_empty() {
+          trace!("start process message: {:?}", msg.msg_id());
+          SyncStream::<Sink, Stream>::process_payload(
+            origin, payload, object_id, protocol, collab, sink,
+          )
+          .await?;
+          trace!("end process message: {:?}", msg.msg_id());
+        }
+      }
     }
     Ok(())
   }

@@ -48,6 +48,7 @@ where
     if let Some(group) = group_by_object_id.get(object_id) {
       if let Some(subscriber) = group.subscribers.write().await.remove(user) {
         trace!("Remove subscriber: {}", subscriber.origin);
+        subscriber.stop().await;
       }
     }
   }

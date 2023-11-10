@@ -5,9 +5,10 @@ use std::fmt::{Display, Formatter};
 use crate::message::RealtimeMessage;
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
+use collab::preclude::merge_updates_v1;
 use collab::preclude::updates::decoder::DecoderV1;
 use collab::preclude::updates::encoder::{Encode, Encoder, EncoderV1};
-use collab::sync_protocol::message::MessageReader;
+use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +47,7 @@ impl CollabSinkMessage for CollabMessage {
   }
 
   fn length(&self) -> usize {
-    self.payload().map(|payload| payload.len()).unwrap_or(0)
+    self.len()
   }
 
   fn can_merge(&self) -> bool {
@@ -59,7 +60,7 @@ impl CollabSinkMessage for CollabMessage {
         if &value.payload.len() > maximum_payload_size {
           Ok(false)
         } else {
-          value.merge_payload(other.payload.clone())
+          value.merge_payload(other)
         }
       },
       _ => Ok(false),
@@ -130,11 +131,35 @@ impl CollabMessage {
     }
   }
 
-  pub fn is_empty(&self) -> bool {
+  pub fn to_vec(&self) -> Vec<u8> {
+    serde_json::to_vec(self).unwrap_or_default()
+  }
+
+  pub fn from_vec(data: &[u8]) -> Result<Self, serde_json::Error> {
+    serde_json::from_slice(data)
+  }
+
+  pub fn len(&self) -> usize {
     self
       .payload()
-      .map(|payload| payload.is_empty())
-      .unwrap_or(true)
+      .map(|payload| payload.len())
+      .unwrap_or_default()
+  }
+
+  pub fn payload(&self) -> Option<&Bytes> {
+    match self {
+      CollabMessage::ClientInit(value) => Some(&value.payload),
+      CollabMessage::ClientUpdateSync(value) => Some(&value.payload),
+      CollabMessage::ClientUpdateAck(value) => Some(&value.payload),
+      CollabMessage::ServerInit(value) => Some(&value.payload),
+      CollabMessage::ServerBroadcast(value) => Some(&value.payload),
+      CollabMessage::ServerAwareness(value) => Some(&value.payload),
+      CollabMessage::CloseCollab(_) => None,
+    }
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
   }
 
   pub fn origin(&self) -> Option<&CollabOrigin> {
@@ -215,28 +240,6 @@ impl Display for CollabMessage {
 impl From<CollabMessage> for Bytes {
   fn from(msg: CollabMessage) -> Self {
     Bytes::from(msg.to_vec())
-  }
-}
-
-impl CollabMessage {
-  pub fn to_vec(&self) -> Vec<u8> {
-    serde_json::to_vec(self).unwrap_or_default()
-  }
-
-  pub fn from_vec(data: &[u8]) -> Result<Self, serde_json::Error> {
-    serde_json::from_slice(data)
-  }
-
-  pub fn payload(&self) -> Option<&Bytes> {
-    match self {
-      CollabMessage::ClientInit(value) => Some(&value.payload),
-      CollabMessage::ClientUpdateSync(value) => Some(&value.payload),
-      CollabMessage::ClientUpdateAck(value) => Some(&value.payload),
-      CollabMessage::ServerInit(value) => Some(&value.payload),
-      CollabMessage::ServerBroadcast(value) => Some(&value.payload),
-      CollabMessage::ServerAwareness(value) => Some(&value.payload),
-      CollabMessage::CloseCollab(_) => None,
-    }
   }
 }
 
@@ -374,18 +377,28 @@ impl UpdateSync {
     }
   }
 
-  pub fn merge_payload(&mut self, other: Bytes) -> Result<bool, Error> {
+  pub fn merge_payload(&mut self, other: &Self) -> Result<bool, Error> {
     // TODO(nathan): optimize the merge process
-    let mut encoder = EncoderV1::new();
-    for buf in [self.payload.as_ref(), other.as_ref()] {
-      let mut decoder = DecoderV1::from(buf);
-      let reader = MessageReader::new(&mut decoder);
-      for msg in reader {
-        msg?.encode(&mut encoder);
-      }
+    if let (
+      Some(Message::Sync(SyncMessage::Update(left))),
+      Some(Message::Sync(SyncMessage::Update(right))),
+    ) = (self.as_update(), other.as_update())
+    {
+      let mut encoder = EncoderV1::new();
+      let update = merge_updates_v1(&[&left, &right])?;
+      let msg = Message::Sync(SyncMessage::Update(update));
+      msg.encode(&mut encoder);
+      self.payload = Bytes::from(encoder.to_vec());
+      Ok(true)
+    } else {
+      Ok(false)
     }
-    self.payload = Bytes::from(encoder.to_vec());
-    Ok(true)
+  }
+
+  fn as_update(&self) -> Option<Message> {
+    let mut decoder = DecoderV1::from(self.payload.as_ref());
+    let mut reader = MessageReader::new(&mut decoder);
+    reader.next()?.ok()
   }
 }
 

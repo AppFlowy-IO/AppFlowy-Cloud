@@ -160,7 +160,6 @@ impl WSClient {
               match msg {
                 RealtimeMessage::Collab(collab_msg) => {
                   if let Some(channels) = weak_channels.upgrade() {
-                    trace!("channels: {:?}", &*channels.read());
                     let object_id = collab_msg.object_id().to_owned();
                     let is_channel_dropped = if let Some(channel) = channels.read().get(&object_id)
                     {

@@ -19,8 +19,8 @@ actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
 openssl = "0.10.45"
 
 # serde
-serde_json = "1.0.108"
-serde = { version = "1.0", features = ["derive"] }
+serde_json.workspace = true
+serde.workspace = true
 serde-aux = "4.1.2"
 
 tokio = { version = "1.26.0", features = [
@@ -124,6 +124,8 @@ members = [
 [workspace.dependencies]
 realtime-entity = { path = "libs/realtime-entity" }
 app-error = { path = "libs/app_error" }
+serde_json = "1.0.108"
+serde = { version = "1.0.108", features = ["derive"] }
 
 [profile.release]
 lto = true
@@ -140,8 +142,8 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "508dd160a" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "508dd160a" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2644fba6" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2644fba6" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

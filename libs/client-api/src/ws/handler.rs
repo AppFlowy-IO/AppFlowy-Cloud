@@ -65,6 +65,7 @@ where
       while let Ok(msg) = recv.recv().await {
         if let Err(err) = tx.send(Ok(msg)) {
           trace!("Failed to send message to channel stream: {}", err);
+          break;
         }
       }
       trace!("WebSocketChannel {} stream closed", object_id);

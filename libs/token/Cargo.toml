@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
+serde.workspace = true
 chrono = { version = "0.4.23", features = ["serde", "clock"], default-features = false }
 jwt = "0.16.0"
 thiserror = "1.0.30"

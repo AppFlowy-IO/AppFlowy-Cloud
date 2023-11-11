@@ -1,29 +1,23 @@
-use bytes::Bytes;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
-
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, DefaultMsgIdCounter, SinkConfig, SinkState, SyncError, SyncObject,
 };
+use bytes::Bytes;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
 use collab::sync_protocol::awareness::Awareness;
 use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
-use parking_lot::lock_api::MutexGuard;
-use parking_lot::RawMutex;
 use realtime_entity::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::{Arc, Weak};
 use tokio::spawn;
 use tokio::sync::watch;
-
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, event, trace, warn, Level};
+use tracing::{error, trace, warn, Level};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 

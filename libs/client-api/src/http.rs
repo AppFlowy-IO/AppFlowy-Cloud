@@ -369,7 +369,7 @@ impl Client {
         token
           .as_ref()
           .ok_or(AppResponseError::from(AppError::NotLoggedIn(
-            "fail to get expires_at".to_string(),
+            "token is empty".to_string(),
           )))?
           .expires_at,
       ),
@@ -996,8 +996,8 @@ impl Client {
       .duration_since(SystemTime::UNIX_EPOCH)
       .unwrap()
       .as_secs() as i64;
-    if time_now_sec + 60 > expires_at {
-      // Add 60 seconds buffer
+    if time_now_sec + 10 > expires_at {
+      // Add 10 seconds buffer
       self.refresh_token().await?;
     }
 

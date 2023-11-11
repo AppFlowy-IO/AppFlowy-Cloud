@@ -200,7 +200,7 @@ impl CollabBroadcast {
                     match msg {
                       Ok(msg) => {
                         if let Ok(payload) =
-                          handle_msg(&collab_msg_origin, &ServerSyncProtocol, &collab, msg).await {
+                          handle_msg(&collab_msg_origin, &ServerSyncProtocol, &collab, msg) {
                             // Send the response to the corresponding client
                             match collab_msg_origin {
                               None => warn!("Client message does not have a origin"),

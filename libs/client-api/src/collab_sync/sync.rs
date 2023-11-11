@@ -1,11 +1,7 @@
-use bytes::Bytes;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::sync::{Arc, Weak};
-
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, DefaultMsgIdCounter, SinkConfig, SinkState, SyncError, SyncObject,
 };
+use bytes::Bytes;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
@@ -15,11 +11,13 @@ use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
 use realtime_entity::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::{Arc, Weak};
 use tokio::spawn;
 use tokio::sync::watch;
-
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, trace, warn};
+use tracing::{error, trace, warn, Level};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -238,33 +236,30 @@ where
   ) where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    loop {
-      while let Some(collab_message) = stream.next().await {
-        match collab_message {
-          Ok(msg) => match (weak_collab.upgrade(), weak_sink.upgrade()) {
-            (Some(awareness), Some(sink)) => {
-              if let Err(error) = SyncStream::<Sink, Stream>::process_message::<P>(
-                &origin, &object_id, &protocol, &awareness, &sink, msg,
-              )
-              .await
-              {
-                error!(
-                  "Stop receive incoming changes. Failed to process message: {}",
-                  error
-                );
-                break;
-              }
-            },
-            _ => {
-              warn!("Stop receive doc incoming changes.");
-              break;
-            },
+    while let Some(collab_message) = stream.next().await {
+      match collab_message {
+        Ok(msg) => match (weak_collab.upgrade(), weak_sink.upgrade()) {
+          (Some(collab), Some(sink)) => {
+            let span = tracing::span!(Level::TRACE, "doc_stream", object_id = %msg.object_id());
+            let _enter = span.enter();
+            if let Err(error) = SyncStream::<Sink, Stream>::process_message::<P>(
+              &origin, &object_id, &protocol, &collab, &sink, msg,
+            )
+            .await
+            {
+              error!("Error while processing message: {}", error);
+            }
           },
-          Err(e) => {
-            warn!("Stream error: {},stop receive incoming changes", e.into());
+          _ => {
+            // The collab or sink is dropped, stop the stream.
+            warn!("Stop receive doc incoming changes.");
             break;
           },
-        }
+        },
+        Err(e) => {
+          warn!("Stream error: {},stop receive incoming changes", e.into());
+          break;
+        },
       }
     }
   }
@@ -290,7 +285,7 @@ where
     if should_process {
       if let Some(payload) = msg.payload() {
         if !payload.is_empty() {
-          trace!("start process message: {:?}", msg.msg_id());
+          trace!("start process message:{:?}", msg.msg_id());
           SyncStream::<Sink, Stream>::process_payload(
             origin, payload, object_id, protocol, collab, sink,
           )
@@ -319,10 +314,13 @@ where
       let msg = msg?;
       trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg).await? {
+      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg)? {
         if is_sync_step_1 {
           // flush
-          collab.lock().flush()
+          match collab.try_lock() {
+            None => warn!("Failed to acquire lock for flushing collab"),
+            Some(collab_guard) => collab_guard.flush(),
+          }
         }
 
         let object_id = object_id.to_string();

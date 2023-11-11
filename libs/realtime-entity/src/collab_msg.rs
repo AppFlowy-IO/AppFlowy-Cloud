@@ -110,15 +110,9 @@ impl Ord for CollabMessage {
 }
 
 impl CollabMessage {
-  /// Currently, only have one business id. So just return 1.
-  pub fn business_id(&self) -> u8 {
-    1
-  }
-
   pub fn is_init(&self) -> bool {
     matches!(self, CollabMessage::ClientInit(_))
   }
-
   pub fn msg_id(&self) -> Option<MsgId> {
     match self {
       CollabMessage::ClientInit(value) => Some(value.msg_id),
@@ -130,22 +124,18 @@ impl CollabMessage {
       CollabMessage::CloseCollab(_) => None,
     }
   }
-
   pub fn to_vec(&self) -> Vec<u8> {
     serde_json::to_vec(self).unwrap_or_default()
   }
-
   pub fn from_vec(data: &[u8]) -> Result<Self, serde_json::Error> {
     serde_json::from_slice(data)
   }
-
   pub fn len(&self) -> usize {
     self
       .payload()
       .map(|payload| payload.len())
       .unwrap_or_default()
   }
-
   pub fn payload(&self) -> Option<&Bytes> {
     match self {
       CollabMessage::ClientInit(value) => Some(&value.payload),
@@ -157,11 +147,9 @@ impl CollabMessage {
       CollabMessage::CloseCollab(_) => None,
     }
   }
-
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
-
   pub fn origin(&self) -> Option<&CollabOrigin> {
     match self {
       CollabMessage::ClientInit(value) => Some(&value.origin),

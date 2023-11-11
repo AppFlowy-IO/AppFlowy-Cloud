@@ -15,8 +15,8 @@ axum = {version = "0.6.20", features = ["json"]}
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
 askama = "0.12.1"
 axum-extra = { version = "0.8.0", features = ["cookie"] }
-serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.108"
+serde.workspace = true
+serde_json.workspace = true
 redis = { version = "0.23.3", features = [ "aio", "tokio-comp", "connection-manager"] }
 uuid = { version = "1.4.1", features = ["v4"] }
 dotenv = "0.15.0"

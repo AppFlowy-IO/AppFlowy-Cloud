@@ -78,7 +78,7 @@ pub struct GotrueTokenResponse {
   pub token_type: String,
   /// the access_token will remain valid before it expires and needs to be refreshed.
   pub expires_in: i64,
-  /// a timestamp indicating the exact time at which the access_token will expire.
+  /// a timestamp in seconds indicating the exact time at which the access_token will expire.
   pub expires_at: i64,
   /// The refresh token is used to obtain a new access_token once the current access_token expires.
   /// Refresh tokens are usually long-lived and are stored securely by the client.

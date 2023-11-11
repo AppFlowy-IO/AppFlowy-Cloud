@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
-use crate::collab_sync::{SyncError, DEFAULT_SYNC_TIMEOUT};
+use crate::collab_sync::{SyncError, SyncObject, DEFAULT_SYNC_TIMEOUT};
 use futures_util::SinkExt;
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
@@ -41,7 +41,7 @@ pub struct CollabSink<Sink, Msg> {
   /// The [PendingMsgQueue] is used to queue the messages that are waiting to be sent to the
   /// remote. It will merge the messages if possible.
   pending_msg_queue: Arc<parking_lot::Mutex<PendingMsgQueue<Msg>>>,
-  msg_id_counter: Arc<dyn MsgIdCounter>,
+  msg_id_counter: Arc<DefaultMsgIdCounter>,
 
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
@@ -49,7 +49,6 @@ pub struct CollabSink<Sink, Msg> {
   config: SinkConfig,
 
   /// Stop the [IntervalRunner] if the sink strategy is [SinkStrategy::FixInterval].
-  #[allow(dead_code)]
   interval_runner_stop_tx: Option<mpsc::Sender<()>>,
 
   /// Used to calculate the time interval between two messages. Only used when the sink strategy
@@ -57,10 +56,17 @@ pub struct CollabSink<Sink, Msg> {
   instant: Mutex<Instant>,
   state_notifier: Arc<watch::Sender<SinkState>>,
   pause: AtomicBool,
+  object: SyncObject,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
   fn drop(&mut self) {
+    trace!("Drop CollabSink {}", self.object.object_id);
+    if let Some(stop_tx) = self.interval_runner_stop_tx.take() {
+      spawn(async move {
+        let _ = stop_tx.send(()).await;
+      });
+    }
     let _ = self.notifier.send(true);
   }
 }
@@ -71,18 +77,16 @@ where
   Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
   Msg: CollabSinkMessage,
 {
-  pub fn new<C>(
+  pub fn new(
     uid: i64,
+    object: SyncObject,
     sink: Sink,
     notifier: watch::Sender<bool>,
     sync_state_tx: watch::Sender<SinkState>,
-    msg_id_counter: C,
     config: SinkConfig,
     pause: bool,
-  ) -> Self
-  where
-    C: MsgIdCounter,
-  {
+  ) -> Self {
+    let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);
     let sender = Arc::new(Mutex::new(sink));
@@ -109,6 +113,7 @@ where
       instant,
       interval_runner_stop_tx,
       pause: AtomicBool::new(pause),
+      object,
     }
   }
 
@@ -312,7 +317,7 @@ where
 
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        debug!("ending {}", collab_msg);
+        debug!("Sending {}", collab_msg);
         sender.send(collab_msg).await.ok()?;
       },
       Err(_) => {
@@ -361,12 +366,6 @@ where
   /// Notify the sink to process the next message.
   pub(crate) fn notify(&self) {
     let _ = self.notifier.send(false);
-  }
-
-  /// Stop the sink.
-  #[allow(dead_code)]
-  fn stop(&self) {
-    let _ = self.notifier.send(true);
   }
 }
 
@@ -491,9 +490,6 @@ impl DefaultMsgIdCounter {
   pub fn new() -> Self {
     Self::default()
   }
-}
-
-impl MsgIdCounter for DefaultMsgIdCounter {
   fn next(&self) -> MsgId {
     self.0.fetch_add(1, Ordering::SeqCst)
   }

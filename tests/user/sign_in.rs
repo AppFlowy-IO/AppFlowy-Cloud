@@ -1,7 +1,6 @@
 use crate::localhost_client;
 use crate::user::utils::{
-  extract_sign_in_url, generate_sign_in_url_for_email, generate_unique_email,
-  generate_unique_registered_user,
+  generate_sign_in_action_link, generate_unique_email, generate_unique_registered_user,
 };
 use app_error::ErrorCode;
 
@@ -105,16 +104,8 @@ async fn sign_in_with_invalid_url() {
 async fn sign_in_with_url() {
   let c = localhost_client();
   let email = generate_unique_email();
-  let gotrue_url = generate_sign_in_url_for_email(&email)
-    .await
-    .replacen("/gotrue", "", 1); // compabilitiy with local testing
-  println!("url: {}", gotrue_url);
+  let redirect_url = generate_sign_in_action_link(&email).await;
 
-  // simulating url click
-  let resp = reqwest::Client::new().get(gotrue_url).send().await.unwrap();
-  let resp_text = resp.text().await.unwrap();
-  let sign_in_url = extract_sign_in_url(&resp_text);
-
-  // simulating back to the app with url
-  let _ = c.sign_in_with_url(&sign_in_url).await.unwrap();
+  let sign_in_url = c.extract_sign_in_url(redirect_url.as_str()).await.unwrap();
+  println!("url: {}", sign_in_url);
 }

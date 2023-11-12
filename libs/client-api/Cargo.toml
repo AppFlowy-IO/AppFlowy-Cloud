@@ -31,7 +31,7 @@ futures-core = "0.3.26"
 tokio-retry = "0.3"
 bytes = "1.0"
 uuid = "1.4.1"
-scraper = "0.17.1"
+scraper = { version = "0.17.1", optional = true }
 
 # collab sync
 collab = { version = "0.1.0", optional = true }
@@ -46,5 +46,6 @@ prost = "0.12.1"
 
 [features]
 collab-sync = ["collab", "yrs", "lib0"]
+test_util = ["scraper"]
 
 

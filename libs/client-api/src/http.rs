@@ -242,12 +242,18 @@ impl Client {
     Ok(url.to_string())
   }
 
+  /// Generates a sign action link for the specified email address.
   /// This is only applicable if user token is with admin privilege.
-  /// This is typically used to generate a sign in url for another user, given the user's email.
-  /// User then click on the link in the browser, which calls gotrue authentication server, which
-  /// then redirects to the appflowy-flutter://
+  /// This action link is used on web browser to sign in. When user then click the action link in the browser,
+  /// which calls gotrue authentication server, which then redirects to the appflowy-flutter:// with the authentication token.
+  ///
+  /// [Self::extract_sign_in_url] simulates the browser behavior to extract the sign in url.
+  ///
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn generate_sign_in_url(&self, email: &str) -> Result<String, AppResponseError> {
+  pub async fn generate_sign_in_action_link(
+    &self,
+    email: &str,
+  ) -> Result<String, AppResponseError> {
     let admin_user_params: GenerateLinkParams = GenerateLinkParams {
       email: email.to_string(),
       ..Default::default()
@@ -260,6 +266,27 @@ impl Client {
     assert_eq!(link_resp.email, email);
 
     Ok(link_resp.action_link)
+  }
+
+  #[cfg(feature = "test_util")]
+  /// Used to extract the sign in url from the action link
+  /// Only expose this method for testing
+  pub async fn extract_sign_in_url(&self, action_link: &str) -> Result<String, AppResponseError> {
+    let resp = reqwest::Client::new().get(action_link).send().await?;
+    let html = resp.text().await.unwrap();
+
+    let fragment = scraper::Html::parse_fragment(&html);
+    let selector = scraper::Selector::parse("a").unwrap();
+    let sign_in_url = fragment
+      .select(&selector)
+      .next()
+      .unwrap()
+      .value()
+      .attr("href")
+      .unwrap()
+      .to_string();
+
+    Ok(sign_in_url)
   }
 
   #[inline]

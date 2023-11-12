@@ -93,7 +93,7 @@ tempfile = "3.4.0"
 assert-json-diff = "2.0.2"
 dotenv = "0.15.0"
 scraper = "0.17.1"
-client-api = { path = "libs/client-api", features = ["collab-sync"] }
+client-api = { path = "libs/client-api", features = ["collab-sync", "test_util"] }
 opener = "0.6.1"
 image = "0.23.14"
 

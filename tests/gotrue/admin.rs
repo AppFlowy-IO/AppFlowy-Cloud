@@ -6,7 +6,7 @@ use gotrue::{
 
 use crate::{
   localhost_client,
-  user::utils::{extract_sign_in_url, generate_unique_email, ADMIN_USER},
+  user::utils::{generate_unique_email, ADMIN_USER},
   LOCALHOST_GOTRUE,
 };
 
@@ -144,16 +144,12 @@ async fn admin_generate_link_and_user_sign_in_and_invite() {
   // new user sign in with link,
   // invite another user through magic link
   {
-    let reqwest_client = reqwest::Client::new();
-    let resp = reqwest_client
-      .get(new_user_sign_in_link)
-      .send()
+    let client = localhost_client();
+    let appflowy_sign_in_url = client
+      .extract_sign_in_url(&new_user_sign_in_link)
       .await
       .unwrap();
-    let resp_text = resp.text().await.unwrap();
-    let appflowy_sign_in_url = extract_sign_in_url(&resp_text);
 
-    let client = localhost_client();
     let is_new = client
       .sign_in_with_url(&appflowy_sign_in_url)
       .await

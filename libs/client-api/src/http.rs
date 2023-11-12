@@ -141,6 +141,7 @@ impl Client {
   /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
   /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
+  /// return a bool indicating if the user is new
   pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppResponseError> {
     let mut access_token: Option<String> = None;
     let mut token_type: Option<String> = None;

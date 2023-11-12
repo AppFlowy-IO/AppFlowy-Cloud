@@ -1,5 +1,5 @@
 use crate::collab_sync::{
-  CollabSink, CollabSinkRunner, DefaultMsgIdCounter, SinkConfig, SinkState, SyncError, SyncObject,
+  CollabSink, CollabSinkRunner, SinkConfig, SinkState, SyncError, SyncObject,
 };
 use bytes::Bytes;
 use collab::core::collab::MutexCollab;
@@ -67,10 +67,10 @@ where
 
     let sink = Arc::new(CollabSink::new(
       origin.client_user_id().unwrap_or(0),
+      object.clone(),
       sink,
       notifier,
       sync_state_tx,
-      DefaultMsgIdCounter::new(),
       config,
       pause,
     ));

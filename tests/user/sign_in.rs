@@ -106,7 +106,7 @@ async fn sign_in_with_url() {
   let email = generate_unique_email();
   let action_link = generate_sign_in_action_link(&email)
     .await
-    .replacen("/gotrue", "", 1);
+    .replacen("/gotrue", "", 1); // compatibility with local testing
 
   let sign_in_url = c.extract_sign_in_url(action_link.as_str()).await.unwrap();
   println!("url: {}", sign_in_url);

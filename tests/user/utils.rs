@@ -1,6 +1,6 @@
 use client_api::Client;
 use dotenv::dotenv;
-use scraper::{Html, Selector};
+
 use sqlx::types::Uuid;
 
 use lazy_static::lazy_static;
@@ -65,21 +65,11 @@ pub async fn generate_unique_registered_user_client() -> (Client, User) {
   (registered_user_client, registered_user)
 }
 
-pub async fn generate_sign_in_url_for_email(email: &str) -> String {
+pub async fn generate_sign_in_action_link(email: &str) -> String {
   setup_log();
   let admin_client = admin_user_client().await;
-  admin_client.generate_sign_in_url(email).await.unwrap()
-}
-
-pub fn extract_sign_in_url(html_str: &str) -> String {
-  let fragment = Html::parse_fragment(html_str);
-  let selector = Selector::parse("a").unwrap();
-  fragment
-    .select(&selector)
-    .next()
+  admin_client
+    .generate_sign_in_action_link(email)
+    .await
     .unwrap()
-    .value()
-    .attr("href")
-    .unwrap()
-    .to_string()
 }

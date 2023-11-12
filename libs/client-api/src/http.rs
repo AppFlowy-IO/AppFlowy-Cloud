@@ -96,6 +96,18 @@ impl Client {
     }
   }
 
+  pub fn base_url(&self) -> &str {
+    &self.base_url
+  }
+
+  pub fn ws_addr(&self) -> &str {
+    &self.ws_addr
+  }
+
+  pub fn gotrue_url(&self) -> &str {
+    &self.gotrue_client.base_url
+  }
+
   #[instrument(level = "debug", skip_all, err)]
   pub fn restore_token(&self, token: &str) -> Result<(), AppResponseError> {
     if token.is_empty() {

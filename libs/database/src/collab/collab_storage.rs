@@ -4,7 +4,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollabV1;
-use collab_entity::CollabType;
+
 use database_entity::dto::{
   AFAccessLevel, AFCollabSnapshots, AFRole, BatchQueryCollab, InsertCollabParams,
   InsertSnapshotParams, QueryCollabParams, QueryCollabResult, QueryObjectSnapshotParams,
@@ -298,5 +298,3 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(s)
   }
 }
-
-const AF_COLLAB_TABLE: &str = "af_collab";

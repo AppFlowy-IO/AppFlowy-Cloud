@@ -49,6 +49,7 @@ pub struct CollabSink<Sink, Msg> {
   config: SinkConfig,
 
   /// Stop the [IntervalRunner] if the sink strategy is [SinkStrategy::FixInterval].
+  #[allow(dead_code)]
   interval_runner_stop_tx: Option<mpsc::Sender<()>>,
 
   /// Used to calculate the time interval between two messages. Only used when the sink strategy

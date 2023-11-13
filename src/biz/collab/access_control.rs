@@ -1,4 +1,4 @@
-use crate::biz::collab::member_listener::{CollabMemberAction, CollabMemberChange};
+use crate::biz::collab::member_listener::{CollabMemberAction, CollabMemberNotification};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
 use actix_router::{Path, Url};
@@ -53,7 +53,7 @@ enum MemberStatus {
 }
 
 impl CollabAccessControlImpl {
-  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<CollabMemberChange>) -> Self {
+  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<CollabMemberNotification>) -> Self {
     let member_status_by_uid = Arc::new(RwLock::new(HashMap::new()));
 
     // Listen to the changes of the collab member and update the memory cache
@@ -111,7 +111,7 @@ impl CollabAccessControlImpl {
 }
 
 fn spawn_listen_on_collab_member_change(
-  mut listener: broadcast::Receiver<CollabMemberChange>,
+  mut listener: broadcast::Receiver<CollabMemberNotification>,
   pg_pool: PgPool,
   member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
 ) {

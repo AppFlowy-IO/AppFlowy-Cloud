@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use gotrue::api::Client;
+
 use serde_json::json;
 use shared_entity::response::AppResponseError;
+use std::fmt::{Display, Formatter};
 use std::ops::DerefMut;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -11,6 +13,8 @@ use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 
 use app_error::AppError;
 use database::user::{create_user, is_user_exist};
+use database_entity::pg_row::AFUserNotification;
+use realtime::entities::RealtimeUser;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool};
@@ -121,4 +125,32 @@ fn name_from_user_metadata(value: &serde_json::Value) -> String {
     .and_then(serde_json::Value::as_str)
     .map(str::to_string)
     .unwrap_or_default()
+}
+
+pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotification>;
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct RealtimeUserImpl {
+  pub uid: i64,
+  pub device_id: String,
+}
+
+impl RealtimeUserImpl {
+  pub fn new(uid: i64, device_id: String) -> Self {
+    Self { uid, device_id }
+  }
+}
+
+impl Display for RealtimeUserImpl {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "uid:{}|device_id:{}",
+      self.uid, self.device_id,
+    ))
+  }
+}
+
+impl RealtimeUser for RealtimeUserImpl {
+  fn uid(&self) -> i64 {
+    self.uid
+  }
 }

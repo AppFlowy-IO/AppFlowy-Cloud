@@ -32,15 +32,13 @@ use crate::api::ws::ws_scope;
 use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabHttpAccessControl};
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
+use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::{
   WorkspaceAccessControlImpl, WorkspaceHttpAccessControl,
 };
-
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
 use crate::middleware::metrics_mw::MetricsMiddleware;
-
 use database::file::bucket_s3_impl::S3BucketStorage;
-use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabServer;
 
 pub struct Application {

@@ -108,11 +108,11 @@ impl CollabMessage {
   pub fn type_str(&self) -> String {
     match self {
       CollabMessage::ClientInitSync(_) => "ClientInitSync".to_string(),
-      CollabMessage::ClientUpdateSync(_) => "ClientUpdateSync".to_string(),
+      CollabMessage::ClientUpdateSync(_) => "UpdateSync".to_string(),
       CollabMessage::ClientAck(_) => "ClientAck".to_string(),
       CollabMessage::ServerInitSync(_) => "ServerInitSync".to_string(),
-      CollabMessage::ServerBroadcast(_) => "ServerBroadcast".to_string(),
-      CollabMessage::AwarenessSync(_) => "AwarenessSync".to_string(),
+      CollabMessage::ServerBroadcast(_) => "Broadcast".to_string(),
+      CollabMessage::AwarenessSync(_) => "Awareness".to_string(),
     }
   }
 
@@ -424,7 +424,7 @@ impl From<CollabAck> for CollabMessage {
 impl Display for CollabAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "ack: [uid:{:?}|oid:{}|msg_id:{:?}|verbose:{}|len:{}]",
+      "ack: [uid:{:?}|oid:{}|msg_id:{:?}|{}|len:{}]",
       self.origin.client_user_id(),
       self.object_id,
       self.source.msg_id,

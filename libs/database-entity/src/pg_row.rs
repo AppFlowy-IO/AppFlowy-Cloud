@@ -69,3 +69,8 @@ pub struct AFBlobMetadataRow {
   pub file_size: i64,
   pub modified_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AFUserNotification {
+  pub payload: Option<AFUserRow>,
+}

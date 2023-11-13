@@ -14,9 +14,9 @@ use std::ops::Deref;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Receiver;
 
-use database_entity::pg_row::AFUserRow;
+use database_entity::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
-use tracing::error;
+use tracing::{error, trace};
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -28,7 +28,7 @@ pub struct ClientSession<
   pub server: Addr<CollabServer<S, U, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
-  user_change_recv: Option<Receiver<AFUserRow>>,
+  user_change_recv: Option<Receiver<AFUserNotification>>,
 }
 
 impl<U, S, AC> ClientSession<U, S, AC>
@@ -39,7 +39,7 @@ where
 {
   pub fn new(
     user: U,
-    user_change_recv: Receiver<AFUserRow>,
+    user_change_recv: Receiver<AFUserNotification>,
     server: Addr<CollabServer<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
@@ -93,19 +93,26 @@ where
   type Context = ws::WebsocketContext<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    // start heartbeats otherwise server disconnects in 10 seconds
     self.hb(ctx);
-
     let recipient = ctx.address().recipient();
     if let Some(mut recv) = self.user_change_recv.take() {
       actix::spawn(async move {
-        while let Ok(user) = recv.recv().await {
-          let msg = UserMessage::ProfileChange(AFUserChange {
-            name: user.name,
-            email: user.email,
-            metadata: user.metadata,
-          });
-          recipient.do_send(RealtimeMessage::User(msg));
+        while let Ok(notification) = recv.recv().await {
+          if let Some(user) = notification.payload {
+            trace!("Receive user change: {:?}", user);
+
+            // The RealtimeMessage uses bincode to do serde. But bincode doesn't support the Serde
+            // deserialize_any method. So it needs to serialize the metadata to json string.
+            let metadata = serde_json::to_string(&user.metadata).ok();
+            let msg = UserMessage::ProfileChange(AFUserChange {
+              name: user.name,
+              email: user.email,
+              metadata,
+            });
+            if let Err(err) = recipient.send(RealtimeMessage::User(msg)).await {
+              error!("Send user change message error: {:?}", err);
+            }
+          }
         }
       });
     }
@@ -154,19 +161,19 @@ where
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
     match &msg {
-      RealtimeMessage::Collab(_collab_msg) => ctx.binary(msg),
+      RealtimeMessage::Collab(_) => ctx.binary(msg),
+      RealtimeMessage::User(_) => ctx.binary(msg),
       RealtimeMessage::ServerKickedOff => {
         // The server will send this message to the client when the client is kicked out. So
         // set the current user to None and stop the session.
         self.user.take();
         ctx.stop()
       },
-      RealtimeMessage::User(_) => {},
     }
   }
 }
 
-/// WebSocket message handler
+/// Handle the messages sent from the client
 impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,

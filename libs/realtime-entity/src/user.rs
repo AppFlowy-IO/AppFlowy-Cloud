@@ -9,5 +9,5 @@ pub enum UserMessage {
 pub struct AFUserChange {
   pub name: Option<String>,
   pub email: Option<String>,
-  pub metadata: Option<serde_json::Value>,
+  pub metadata: Option<String>,
 }

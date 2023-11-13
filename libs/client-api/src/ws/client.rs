@@ -158,51 +158,54 @@ impl WSClient {
     let user_message_tx = self.user_channel.as_ref().clone();
     // Receive messages from the websocket, and send them to the channels.
     tokio::spawn(async move {
-      while let Some(Ok(msg)) = stream.next().await {
-        match msg {
+      while let Some(Ok(ws_msg)) = stream.next().await {
+        match ws_msg {
           Message::Binary(_) => {
-            if let Ok(msg) = RealtimeMessage::try_from(&msg) {
-              match msg {
-                RealtimeMessage::Collab(collab_msg) => {
-                  if let Some(collab_channels) = weak_collab_channels.upgrade() {
-                    let object_id = collab_msg.object_id().to_owned();
-                    let is_channel_dropped =
-                      if let Some(channel) = collab_channels.read().get(&object_id) {
-                        match channel.upgrade() {
-                          None => {
-                            // when calling [WSClient::subscribe], the caller is responsible for keeping
-                            // the channel alive as long as it wants to receive messages from the websocket.
-                            warn!("channel is dropped");
-                            true
-                          },
-                          Some(channel) => {
-                            trace!("receive remote message: {}", collab_msg);
-                            channel.forward_to_stream(collab_msg);
-                            false
-                          },
-                        }
-                      } else {
-                        false
-                      };
+            match RealtimeMessage::try_from(&ws_msg) {
+              Ok(msg) => {
+                match msg {
+                  RealtimeMessage::Collab(collab_msg) => {
+                    if let Some(collab_channels) = weak_collab_channels.upgrade() {
+                      let object_id = collab_msg.object_id().to_owned();
+                      let is_channel_dropped =
+                        if let Some(channel) = collab_channels.read().get(&object_id) {
+                          match channel.upgrade() {
+                            None => {
+                              // when calling [WSClient::subscribe], the caller is responsible for keeping
+                              // the channel alive as long as it wants to receive messages from the websocket.
+                              warn!("channel is dropped");
+                              true
+                            },
+                            Some(channel) => {
+                              trace!("receive remote message: {}", collab_msg);
+                              channel.forward_to_stream(collab_msg);
+                              false
+                            },
+                          }
+                        } else {
+                          false
+                        };
 
-                    // Try to remove the channel if it is dropped. If failed, will try again next time.
-                    if is_channel_dropped {
-                      if let Some(mut w) = collab_channels.try_write() {
-                        trace!("remove channel: {}", object_id);
-                        let _ = w.remove(&object_id);
+                      // Try to remove the channel if it is dropped. If failed, will try again next time.
+                      if is_channel_dropped {
+                        if let Some(mut w) = collab_channels.try_write() {
+                          trace!("remove channel: {}", object_id);
+                          let _ = w.remove(&object_id);
+                        }
                       }
+                    } else {
+                      warn!("channels are closed");
                     }
-                  } else {
-                    warn!("channels are closed");
-                  }
-                },
-                RealtimeMessage::User(user_message) => {
-                  let _ = user_message_tx.send(user_message);
-                },
-                RealtimeMessage::ServerKickedOff => {},
-              }
-            } else {
-              error!("parser RealtimeMessage failed");
+                  },
+                  RealtimeMessage::User(user_message) => {
+                    let _ = user_message_tx.send(user_message);
+                  },
+                  RealtimeMessage::ServerKickedOff => {},
+                }
+              },
+              Err(err) => {
+                error!("parser RealtimeMessage failed: {:?}", err);
+              },
             }
           },
           // ping from server
@@ -218,7 +221,7 @@ impl WSClient {
           Message::Pong(_) => {
             let _ = pong_tx.send(()).await;
           },
-          _ => warn!("received unexpected message from websocket: {:?}", msg),
+          _ => warn!("received unexpected message from websocket: {:?}", ws_msg),
         }
       }
     });

@@ -1,4 +1,8 @@
 -- Add migration script here
+-- Drop the existing trigger if it exists
+DROP TRIGGER IF EXISTS af_user_change_trigger ON af_user;
+
+-- Create or replace the function
 CREATE OR REPLACE FUNCTION notify_af_user_change() RETURNS TRIGGER AS $$
 DECLARE
     payload TEXT;
@@ -8,13 +12,14 @@ BEGIN
             'action_type', TG_OP
             )::text;
 
-    PERFORM pg_notify('af_profile_channel', payload);
-RETURN NEW;
+    PERFORM pg_notify('af_user_channel', payload);
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS af_user_change_trigger ON af_user;
+-- Create the trigger
 CREATE TRIGGER af_user_change_trigger
     AFTER UPDATE ON af_user
     FOR EACH ROW
-    EXECUTE FUNCTION notify_af_user_change();
+EXECUTE FUNCTION notify_af_user_change();
+

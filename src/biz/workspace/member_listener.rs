@@ -11,7 +11,7 @@ pub enum WorkspaceMemberAction {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct WorkspaceMemberChange {
+pub struct WorkspaceMemberNotification {
   pub old: Option<WorkspaceMemberRow>,
   pub new: Option<WorkspaceMemberRow>,
   pub action_type: WorkspaceMemberAction,
@@ -24,4 +24,4 @@ pub struct WorkspaceMemberRow {
   pub workspace_id: Uuid,
 }
 
-pub type WorkspaceMemberListener = PostgresDBListener<WorkspaceMemberChange>;
+pub type WorkspaceMemberListener = PostgresDBListener<WorkspaceMemberNotification>;

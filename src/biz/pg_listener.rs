@@ -1,13 +1,15 @@
-use crate::biz::collab::member_listener::{CollabMemberChange, CollabMemberListener};
+use crate::biz::collab::member_listener::{CollabMemberListener, CollabMemberNotification};
 use crate::biz::user::UserListener;
-use crate::biz::workspace::member_listener::{WorkspaceMemberChange, WorkspaceMemberListener};
+use crate::biz::workspace::member_listener::{
+  WorkspaceMemberListener, WorkspaceMemberNotification,
+};
 use anyhow::Error;
+use database_entity::pg_row::AFUserNotification;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgListener;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
-use tracing::error;
-use database_entity::pg_row::AFUserRow;
+use tracing::{error, trace};
 
 pub struct PgListeners {
   user_listener: UserListener,
@@ -32,15 +34,17 @@ impl PgListeners {
     })
   }
 
-  pub fn subscribe_workspace_member_change(&self) -> broadcast::Receiver<WorkspaceMemberChange> {
+  pub fn subscribe_workspace_member_change(
+    &self,
+  ) -> broadcast::Receiver<WorkspaceMemberNotification> {
     self.workspace_member_listener.notify.subscribe()
   }
 
-  pub fn subscribe_collab_member_change(&self) -> broadcast::Receiver<CollabMemberChange> {
+  pub fn subscribe_collab_member_change(&self) -> broadcast::Receiver<CollabMemberNotification> {
     self.collab_member_listener.notify.subscribe()
   }
-  
-  pub fn subscribe_user_change(&self) -> broadcast::Receiver<AFUserRow> {
+
+  pub fn subscribe_user_change(&self) -> broadcast::Receiver<AFUserNotification> {
     self.user_listener.notify.subscribe()
   }
 }
@@ -62,6 +66,7 @@ where
     let notify = tx.clone();
     tokio::spawn(async move {
       while let Ok(notification) = listener.recv().await {
+        trace!("Received notification: {}", notification.payload());
         match serde_json::from_str::<T>(notification.payload()) {
           Ok(change) => {
             let _ = tx.send(change);

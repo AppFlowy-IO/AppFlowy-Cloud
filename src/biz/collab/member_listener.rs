@@ -11,7 +11,7 @@ pub enum CollabMemberAction {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct CollabMemberChange {
+pub struct CollabMemberNotification {
   /// The old will be None if the row does not exist before
   pub old: Option<AFCollabMemberRow>,
   /// The new will be None if the row is deleted
@@ -20,7 +20,7 @@ pub struct CollabMemberChange {
   pub action_type: CollabMemberAction,
 }
 
-impl CollabMemberChange {
+impl CollabMemberNotification {
   pub fn old_uid(&self) -> Option<&i64> {
     self.old.as_ref().map(|o| &o.uid)
   }
@@ -36,4 +36,4 @@ impl CollabMemberChange {
   }
 }
 
-pub type CollabMemberListener = PostgresDBListener<CollabMemberChange>;
+pub type CollabMemberListener = PostgresDBListener<CollabMemberNotification>;

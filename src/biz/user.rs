@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use gotrue::api::Client;
+
 use serde_json::json;
 use shared_entity::response::AppResponseError;
 use std::fmt::{Display, Formatter};
@@ -12,7 +13,7 @@ use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 
 use app_error::AppError;
 use database::user::{create_user, is_user_exist};
-use database_entity::pg_row::AFUserRow;
+use database_entity::pg_row::AFUserNotification;
 use realtime::entities::RealtimeUser;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
@@ -126,8 +127,7 @@ fn name_from_user_metadata(value: &serde_json::Value) -> String {
     .unwrap_or_default()
 }
 
-pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserRow>;
-
+pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotification>;
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RealtimeUserImpl {
   pub uid: i64,

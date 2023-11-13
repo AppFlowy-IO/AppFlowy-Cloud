@@ -79,7 +79,7 @@ where
       if !self.groups.contains_group(object_id).await? {
         // When create a group, the message must be the init sync message.
         match collab_message {
-          CollabMessage::ClientInit(client_init) => {
+          CollabMessage::ClientInitSync(client_init) => {
             let uid = client_init
               .origin
               .client_user_id()

@@ -1,8 +1,10 @@
 use crate::localhost_client;
 use crate::user::utils::generate_unique_registered_user_client;
 use app_error::ErrorCode;
+use client_api::ws::{WSClient, WSClientConfig};
 use serde_json::json;
 use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
+use std::time::Duration;
 
 #[tokio::test]
 async fn update_but_not_logged_in() {
@@ -138,4 +140,38 @@ async fn user_empty_metadata_override() {
 
   let profile = c.get_profile().await.unwrap();
   assert_eq!(profile.metadata.unwrap(), json!(metadata_1));
+}
+
+#[tokio::test]
+async fn user_change_notify_test() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+  let mut user_change_recv = ws_client.subscribe_user_changed();
+
+  let device_id = "fake_device_id";
+  let _ = ws_client
+    .connect(c.ws_url(device_id).unwrap(), device_id)
+    .await
+    .unwrap();
+
+  // After update user, the user_change_recv should receive a user change message via the websocket
+  let fut = Box::pin(async move {
+    c.update_user(UpdateUserParams::new().with_name("lucas"))
+      .await
+      .unwrap();
+    let profile = c.get_profile().await.unwrap();
+    assert_eq!(profile.name.unwrap().as_str(), "lucas");
+    tokio::time::sleep(Duration::from_secs(5)).await;
+  });
+
+  tokio::select! {
+    result = tokio::time::timeout(Duration::from_secs(5), async {
+      println!("user_change: {:?}", user_change_recv.recv().await.unwrap());
+    }) => {
+      result.unwrap();
+    },
+    _ = fut => {
+      panic!("update user timeout");
+    },
+  }
 }

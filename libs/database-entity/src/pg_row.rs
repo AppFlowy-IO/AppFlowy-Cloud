@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+/// Represent the row of the af_workspace table
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceRow {
   pub workspace_id: Uuid,
@@ -15,6 +16,22 @@ pub struct AFWorkspaceRow {
   pub workspace_name: Option<String>,
 }
 
+/// Represent the row of the af_user table
+#[derive(Debug, FromRow, Deserialize, Serialize, Clone)]
+pub struct AFUserRow {
+  pub uid: Option<i64>,
+  pub uuid: Option<Uuid>,
+  pub email: Option<String>,
+  pub password: Option<String>,
+  pub name: Option<String>,
+  pub metadata: Option<serde_json::Value>,
+  pub encryption_sign: Option<String>,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub updated_at: Option<DateTime<Utc>>,
+  pub created_at: Option<DateTime<Utc>>,
+}
+
+/// Represent the row of the af_user_profile_view
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct AFUserProfileRow {
   pub uid: Option<i64>,
@@ -51,4 +68,9 @@ pub struct AFBlobMetadataRow {
   pub file_type: String,
   pub file_size: i64,
   pub modified_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct AFUserNotification {
+  pub payload: Option<AFUserRow>,
 }

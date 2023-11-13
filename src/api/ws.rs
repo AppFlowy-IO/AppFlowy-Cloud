@@ -5,11 +5,12 @@ use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use std::sync::Arc;
 
-use realtime::client::{ClientSession, RealtimeUserImpl};
+use realtime::client::ClientSession;
 use realtime::collaborate::CollabServer;
 
 use crate::biz::collab::access_control::CollabAccessControlImpl;
 use crate::biz::collab::storage::CollabPostgresDBStorage;
+use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 use database::user::select_uid_from_uuid;
 use shared_entity::response::AppResponseError;
@@ -41,9 +42,11 @@ pub async fn establish_ws_connection(
 
   match result {
     Ok(uid) => {
+      let user_change_recv = state.pg_listeners.subscribe_user_change();
       let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
       let client = ClientSession::new(
         realtime_user,
+        user_change_recv,
         server.get_ref().clone(),
         Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
         Duration::from_secs(state.config.websocket.client_timeout as u64),

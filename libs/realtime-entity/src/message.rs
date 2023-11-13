@@ -11,14 +11,16 @@ use std::fmt::Display;
 )]
 pub enum RealtimeMessage {
   Collab(CollabMessage),
+  User(UserMessage),
   ServerKickedOff,
 }
 
 impl Display for RealtimeMessage {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      RealtimeMessage::Collab(_msg) => f.write_fmt(format_args!("CollabMessage")),
+      RealtimeMessage::Collab(_msg) => f.write_fmt(format_args!("Collab")),
       RealtimeMessage::ServerKickedOff => f.write_fmt(format_args!("ServerKickedOff")),
+      RealtimeMessage::User(_) => f.write_fmt(format_args!("User")),
     }
   }
 }
@@ -68,6 +70,7 @@ impl TryFrom<Vec<u8>> for RealtimeMessage {
   }
 }
 
+use crate::user::UserMessage;
 #[cfg(feature = "tungstenite")]
 use tokio_tungstenite::tungstenite::Message;
 

@@ -1,4 +1,4 @@
-use crate::biz::workspace::member_listener::{WorkspaceMemberAction, WorkspaceMemberChange};
+use crate::biz::workspace::member_listener::{WorkspaceMemberAction, WorkspaceMemberNotification};
 use crate::component::auth::jwt::UserUuid;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
 use actix_http::Method;
@@ -52,7 +52,7 @@ pub struct WorkspaceAccessControlImpl {
 }
 
 impl WorkspaceAccessControlImpl {
-  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<WorkspaceMemberChange>) -> Self {
+  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<WorkspaceMemberNotification>) -> Self {
     let member_status_by_uid = Arc::new(RwLock::new(HashMap::new()));
     spawn_listen_on_workspace_member_change(
       listener,
@@ -140,7 +140,7 @@ async fn reload_workspace_member_status_from_db(
 }
 
 fn spawn_listen_on_workspace_member_change(
-  mut listener: broadcast::Receiver<WorkspaceMemberChange>,
+  mut listener: broadcast::Receiver<WorkspaceMemberNotification>,
   pg_pool: PgPool,
   member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
 ) {

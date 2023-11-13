@@ -1,5 +1,6 @@
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
+use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace;
 use crate::component::auth::jwt::UserUuid;
 use crate::state::AppState;
@@ -13,7 +14,6 @@ use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
-use realtime::client::RealtimeUserImpl;
 use realtime::collaborate::CollabAccessControl;
 use realtime::entities::{ClientMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
@@ -25,6 +25,7 @@ use std::sync::Arc;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
 use uuid::Uuid;
+
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 

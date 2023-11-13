@@ -9,9 +9,13 @@ use actix_web_actors::ws;
 use actix_web_actors::ws::ProtocolError;
 use bytes::Bytes;
 use database::collab::CollabStorage;
-pub use realtime_entity::user::RealtimeUserImpl;
+
 use std::ops::Deref;
 use std::time::{Duration, Instant};
+use tokio::sync::broadcast::Receiver;
+
+use database_entity::pg_row::AFUserRow;
+use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::error;
 
 pub struct ClientSession<
@@ -24,6 +28,7 @@ pub struct ClientSession<
   pub server: Addr<CollabServer<S, U, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
+  user_change_recv: Option<Receiver<AFUserRow>>,
 }
 
 impl<U, S, AC> ClientSession<U, S, AC>
@@ -34,6 +39,7 @@ where
 {
   pub fn new(
     user: U,
+    user_change_recv: Receiver<AFUserRow>,
     server: Addr<CollabServer<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
@@ -44,6 +50,7 @@ where
       server,
       heartbeat_interval,
       client_timeout,
+      user_change_recv: Some(user_change_recv),
     }
   }
 
@@ -88,6 +95,20 @@ where
   fn started(&mut self, ctx: &mut Self::Context) {
     // start heartbeats otherwise server disconnects in 10 seconds
     self.hb(ctx);
+
+    let recipient = ctx.address().recipient();
+    if let Some(mut recv) = self.user_change_recv.take() {
+      actix::spawn(async move {
+        while let Ok(user) = recv.recv().await {
+          let msg = UserMessage::ProfileChange(AFUserChange {
+            name: user.name,
+            email: user.email,
+            metadata: user.metadata,
+          });
+          recipient.do_send(RealtimeMessage::User(msg));
+        }
+      });
+    }
 
     if let Some(user) = self.user.clone() {
       self
@@ -140,6 +161,7 @@ where
         self.user.take();
         ctx.stop()
       },
+      RealtimeMessage::User(_) => {},
     }
   }
 }
@@ -189,11 +211,5 @@ impl Deref for ClientWSSink {
   type Target = Recipient<RealtimeMessage>;
   fn deref(&self) -> &Self::Target {
     &self.0
-  }
-}
-
-impl RealtimeUser for RealtimeUserImpl {
-  fn uid(&self) -> i64 {
-    self.uid
   }
 }

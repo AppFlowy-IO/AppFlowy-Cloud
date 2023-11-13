@@ -294,7 +294,7 @@ impl TestClient {
     let object_id = Uuid::new_v4().to_string();
 
     // Subscribe to object
-    let handler = self.ws_client.subscribe(object_id.clone()).unwrap();
+    let handler = self.ws_client.subscribe_collab(object_id.clone()).unwrap();
 
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
@@ -351,7 +351,10 @@ impl TestClient {
     collab_type: CollabType,
   ) {
     // Subscribe to object
-    let handler = self.ws_client.subscribe(object_id.to_string()).unwrap();
+    let handler = self
+      .ws_client
+      .subscribe_collab(object_id.to_string())
+      .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
@@ -483,7 +486,7 @@ pub(crate) async fn assert_client_collab(
 
 #[allow(dead_code)]
 pub async fn get_collab_json_from_server(
-  client: &mut client_api::Client,
+  client: &client_api::Client,
   workspace_id: &str,
   object_id: &str,
   collab_type: CollabType,

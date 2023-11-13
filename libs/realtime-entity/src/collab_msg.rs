@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn collab_object_id(&self) -> &str;
   /// Returns the length of the message in bytes.
-  fn length(&self) -> usize;
+  fn payload_len(&self) -> usize;
 
   /// Returns true if the message can be merged with other messages.
   fn can_merge(&self) -> bool;
@@ -23,10 +23,6 @@ pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error>;
 
   fn is_init_msg(&self) -> bool;
-  fn is_update_msg(&self) -> bool;
-
-  /// Determine if the message can be deferred base on the current state of the sink.
-  fn deferrable(&self) -> bool;
 }
 
 pub type MsgId = u64;
@@ -45,12 +41,12 @@ impl CollabSinkMessage for CollabMessage {
     self.object_id()
   }
 
-  fn length(&self) -> usize {
+  fn payload_len(&self) -> usize {
     self.len()
   }
 
   fn can_merge(&self) -> bool {
-    self.is_update_msg()
+    matches!(self, CollabMessage::ClientUpdateSync(_))
   }
 
   fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error> {
@@ -68,15 +64,6 @@ impl CollabSinkMessage for CollabMessage {
 
   fn is_init_msg(&self) -> bool {
     matches!(self, CollabMessage::ClientInitSync(_))
-  }
-
-  fn is_update_msg(&self) -> bool {
-    matches!(self, CollabMessage::ClientUpdateSync(_))
-  }
-
-  fn deferrable(&self) -> bool {
-    // If the message is not init, it can be pending.
-    !matches!(self, CollabMessage::ClientInitSync(_))
   }
 }
 
@@ -111,9 +98,13 @@ impl Ord for CollabMessage {
 }
 
 impl CollabMessage {
-  pub fn is_init(&self) -> bool {
+  pub fn is_client_init(&self) -> bool {
     matches!(self, CollabMessage::ClientInitSync(_))
   }
+  pub fn is_server_init(&self) -> bool {
+    matches!(self, CollabMessage::ServerInitSync(_))
+  }
+
   pub fn msg_id(&self) -> Option<MsgId> {
     match self {
       CollabMessage::ClientInitSync(value) => Some(value.msg_id),
@@ -124,17 +115,8 @@ impl CollabMessage {
       CollabMessage::AwarenessSync(_) => None,
     }
   }
-  pub fn to_vec(&self) -> Vec<u8> {
-    serde_json::to_vec(self).unwrap_or_default()
-  }
-  pub fn from_vec(data: &[u8]) -> Result<Self, serde_json::Error> {
-    serde_json::from_slice(data)
-  }
   pub fn len(&self) -> usize {
-    self
-      .payload()
-      .map(|payload| payload.len())
-      .unwrap_or_default()
+    self.payload().map(|payload| payload.len()).unwrap_or(0)
   }
   pub fn payload(&self) -> Option<&Bytes> {
     match self {
@@ -216,12 +198,6 @@ impl Display for CollabMessage {
         value.payload.len(),
       )),
     }
-  }
-}
-
-impl From<CollabMessage> for Bytes {
-  fn from(msg: CollabMessage) -> Self {
-    Bytes::from(msg.to_vec())
   }
 }
 

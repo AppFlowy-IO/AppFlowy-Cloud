@@ -172,8 +172,9 @@ impl CollabBroadcast {
              _ = stop_rx.recv() => break,
             Some(Ok(collab_msg)) = stream.next() => {
               // Continue if the message is empty
-              if collab_msg.is_empty() {
-                warn!("Unexpected empty payload of collab message");
+              let payload = collab_msg.payload();
+              if payload.is_none() {
+                warn!("Unexpected empty payload of collab message:{}", collab_msg);
                 continue;
               }
 
@@ -183,11 +184,7 @@ impl CollabBroadcast {
                 continue;
               }
 
-              let payload = collab_msg.payload();
-              if payload.is_none() {
-                continue;
-              }
-
+              // safety: payload is not none
               let mut decoder = DecoderV1::from(payload.unwrap().as_ref());
               match sink.try_lock() {
                 Ok(mut sink) => {

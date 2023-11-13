@@ -196,7 +196,7 @@ where
                     return Box::pin(future::ready(false));
                   }
 
-                  let is_init = msg.is_init();
+                  let is_init = msg.is_client_init();
                   let object_id = object_id.to_string();
                   let cloned_stream_permission_service = stream_permission_service.clone();
 

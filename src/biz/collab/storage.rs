@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use database::collab::{
-    CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, WriteConfig, DatabaseResult,
+  CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
   AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,

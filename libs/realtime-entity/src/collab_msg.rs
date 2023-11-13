@@ -172,21 +172,12 @@ impl CollabMessage {
 impl Display for CollabMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      CollabMessage::ClientInitSync(value) => value.fmt(f),
-      CollabMessage::ClientUpdateSync(value) => value.fmt(f),
-      CollabMessage::ClientAck(value) => value.fmt(f),
-      CollabMessage::ServerInitSync(value) => value.fmt(f),
-      CollabMessage::ServerBroadcast(value) => f.write_fmt(format_args!(
-        "server broadcast: [{}|oid:{}|len:{}]",
-        value.origin,
-        value.object_id,
-        value.payload.len(),
-      )),
-      CollabMessage::AwarenessSync(value) => f.write_fmt(format_args!(
-        "awareness: [oid:{}|len:{}]",
-        value.object_id,
-        value.payload.len(),
-      )),
+      CollabMessage::ClientInitSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientUpdateSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientAck(value) => Display::fmt(&value, f),
+      CollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+      CollabMessage::ServerBroadcast(value) => Display::fmt(&value, f),
+      CollabMessage::AwarenessSync(value) => Display::fmt(&value, f),
     }
   }
 }
@@ -209,6 +200,16 @@ impl CollabAwareness {
 impl From<CollabAwareness> for CollabMessage {
   fn from(value: CollabAwareness) -> Self {
     CollabMessage::AwarenessSync(value)
+  }
+}
+
+impl Display for CollabAwareness {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "awareness: [oid:{}|len:{}]",
+      self.object_id,
+      self.payload.len(),
+    ))
   }
 }
 
@@ -449,6 +450,17 @@ impl CollabBroadcastData {
       object_id,
       payload: Bytes::from(payload),
     }
+  }
+}
+
+impl Display for CollabBroadcastData {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "server broadcast: [{}|oid:{}|len:{}]",
+      self.origin,
+      self.object_id,
+      self.payload.len(),
+    ))
   }
 }
 

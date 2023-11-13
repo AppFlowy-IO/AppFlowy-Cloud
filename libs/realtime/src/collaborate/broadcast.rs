@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
+use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::sync_protocol::awareness::{Awareness, AwarenessUpdate};
 use collab::sync_protocol::message::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use collab::sync_protocol::{awareness, handle_msg, ServerSyncProtocol};
+use collab::sync_protocol::{awareness, handle_msg};
 use futures_util::{SinkExt, StreamExt};
 use lib0::encoding::Write;
 use tokio::select;
@@ -17,9 +18,7 @@ use yrs::UpdateSubscription;
 
 use crate::collaborate::retry::SinkCollabMessageAction;
 use crate::error::RealtimeError;
-use realtime_entity::collab_msg::{
-  CollabAwarenessData, CollabBroadcastData, CollabMessage, UpdateAck,
-};
+use realtime_entity::collab_msg::{CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage};
 use tracing::{error, trace, warn};
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -57,6 +56,7 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
+          trace!("broadcast doc update with len:{}", event.update.len());
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
           let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
@@ -75,7 +75,7 @@ impl CollabBroadcast {
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = CollabAwarenessData::new(cloned_oid.clone(), payload);
+            let msg = CollabAwareness::new(cloned_oid.clone(), payload);
             if let Err(_e) = broadcast_sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
@@ -100,10 +100,7 @@ impl CollabBroadcast {
   /// Broadcasts user message to all active subscribers. Returns error if message could not have
   /// been broadcast.
   #[allow(clippy::result_large_err)]
-  pub fn broadcast_awareness(
-    &self,
-    msg: CollabAwarenessData,
-  ) -> Result<(), SendError<CollabMessage>> {
+  pub fn broadcast_awareness(&self, msg: CollabAwareness) -> Result<(), SendError<CollabMessage>> {
     self.sender.send(msg.into())?;
     Ok(())
   }
@@ -176,8 +173,9 @@ impl CollabBroadcast {
              _ = stop_rx.recv() => break,
             Some(Ok(collab_msg)) = stream.next() => {
               // Continue if the message is empty
-              if collab_msg.is_empty() {
-                warn!("Unexpected empty payload of collab message");
+              let payload = collab_msg.payload();
+              if payload.is_none() {
+                warn!("Unexpected empty payload of collab message:{}", collab_msg);
                 continue;
               }
 
@@ -187,11 +185,7 @@ impl CollabBroadcast {
                 continue;
               }
 
-              let payload = collab_msg.payload();
-              if payload.is_none() {
-                continue;
-              }
-
+              // safety: payload is not none
               let mut decoder = DecoderV1::from(payload.unwrap().as_ref());
               match sink.try_lock() {
                 Ok(mut sink) => {
@@ -206,11 +200,12 @@ impl CollabBroadcast {
                               None => warn!("Client message does not have a origin"),
                               Some(collab_msg_origin) => {
                                 if let Some(msg_id) = collab_msg.msg_id() {
-                                  let resp = UpdateAck::new(
+                                  let resp = CollabAck::new(
                                     collab_msg_origin.clone(),
                                     object_id.clone(),
                                     payload.unwrap_or_default(),
                                     msg_id,
+                                    collab_msg.type_str()
                                   );
 
                                   trace!("Send response to client: {}", resp);
@@ -248,7 +243,7 @@ impl CollabBroadcast {
   }
 }
 
-/// A subscription structure returned from [CollabBroadcastData::subscribe], which represents a
+/// A subscription structure returned from [CollabBroadcast::subscribe], which represents a
 /// subscribed connection. It can be dropped in order to unsubscribe or awaited via
 /// [Subscription::stop] method in order to complete of its own volition (due to an internal
 /// connection error or closed connection).

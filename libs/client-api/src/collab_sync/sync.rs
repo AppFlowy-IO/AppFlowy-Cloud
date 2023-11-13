@@ -10,7 +10,7 @@ use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use lib0::decoding::Cursor;
-use realtime_entity::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
+use realtime_entity::collab_msg::{CollabMessage, InitSync, ServerInit, UpdateSync};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
@@ -131,10 +131,10 @@ where
     self.sync_state.subscribe()
   }
 
-  pub fn init_sync(&self, awareness: &Awareness) {
+  pub fn init_sync(&self, awareness: &Awareness, _last_sync_at: i64) {
     if let Some(payload) = doc_init_state(awareness, &self.protocol) {
       self.sink.queue_init_sync(|msg_id| {
-        ClientCollabInit::new(
+        InitSync::new(
           self.origin.clone(),
           self.object.object_id.clone(),
           self.object.collab_type.clone(),
@@ -326,7 +326,7 @@ where
         let object_id = object_id.to_string();
         sink.queue_msg(|msg_id| {
           if is_sync_step_1 {
-            ServerCollabInit::new(origin.clone(), object_id, payload, msg_id).into()
+            ServerInit::new(origin.clone(), object_id, payload, msg_id).into()
           } else {
             UpdateSync::new(origin.clone(), object_id, payload, msg_id).into()
           }

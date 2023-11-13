@@ -34,6 +34,13 @@ where
     }
   }
 
+  /// Performs a periodic check to remove groups based on the following conditions:
+  /// 1. Groups without any subscribers.
+  /// 2. Groups that have been inactive for a specified period of time.
+  pub async fn tick(&self) {
+    // TODO(nathan): Implement this.
+  }
+
   pub async fn contains_user(&self, object_id: &str, user: &U) -> Result<bool, Error> {
     let group_by_object_id = self.group_by_object_id.read().await;
     if let Some(group) = group_by_object_id.get(object_id) {
@@ -169,7 +176,7 @@ where
 
   /// Flush the [Collab] to the storage.
   /// When there is no subscriber, perform the flush in a blocking task.
-  pub fn save_collab(&self) {
+  pub fn flush_collab(&self) {
     let collab = self.collab.clone();
     spawn_blocking(move || {
       collab.lock().flush();

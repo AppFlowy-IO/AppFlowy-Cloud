@@ -79,7 +79,7 @@ where
       if !self.groups.contains_group(object_id).await? {
         // When create a group, the message must be the init sync message.
         match collab_message {
-          CollabMessage::ClientInit(client_init) => {
+          CollabMessage::ClientInitSync(client_init) => {
             let uid = client_init
               .origin
               .client_user_id()
@@ -196,7 +196,7 @@ where
                     return Box::pin(future::ready(false));
                   }
 
-                  let is_init = msg.is_init();
+                  let is_init = msg.is_client_init();
                   let object_id = object_id.to_string();
                   let cloned_stream_permission_service = stream_permission_service.clone();
 

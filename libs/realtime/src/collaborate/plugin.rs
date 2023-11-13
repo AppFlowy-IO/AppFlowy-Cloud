@@ -110,6 +110,7 @@ where
             EncodedCollabV1::new(doc_state, state_vector).encode_to_bytes()
           };
 
+          //
           match result {
             Ok(encoded_collab_v1) => {
               let params = InsertCollabParams::from_raw_data(

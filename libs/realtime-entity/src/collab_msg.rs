@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Error};
 use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use crate::message::RealtimeMessage;
 use bytes::Bytes;
@@ -172,26 +172,10 @@ impl CollabMessage {
 impl Display for CollabMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      CollabMessage::ClientInitSync(value) => f.write_fmt(format_args!(
-        "client init: [{}|oid:{}|msg_id:{}|len:{}]",
-        value.origin,
-        value.object_id,
-        value.msg_id,
-        value.payload.len(),
-      )),
+      CollabMessage::ClientInitSync(value) => value.fmt(f),
       CollabMessage::ClientUpdateSync(value) => value.fmt(f),
-      CollabMessage::ClientAck(value) => f.write_fmt(format_args!(
-        "ack: [oid:{}|msg_id:{:?}|len:{}]",
-        value.object_id,
-        value.source.msg_id,
-        value.payload.len(),
-      )),
-      CollabMessage::ServerInitSync(value) => f.write_fmt(format_args!(
-        "server init: [oid:{}|msg_id:{:?}|len:{}]",
-        value.object_id,
-        value.msg_id,
-        value.payload.len(),
-      )),
+      CollabMessage::ClientAck(value) => value.fmt(f),
+      CollabMessage::ServerInitSync(value) => value.fmt(f),
       CollabMessage::ServerBroadcast(value) => f.write_fmt(format_args!(
         "server broadcast: [{}|oid:{}|len:{}]",
         value.origin,
@@ -256,6 +240,18 @@ impl InitSync {
       msg_id,
       payload,
     }
+  }
+}
+
+impl Display for InitSync {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "client init: [{}|oid:{}|msg_id:{}|len:{}]",
+      self.origin,
+      self.object_id,
+      self.msg_id,
+      self.payload.len(),
+    ))
   }
 }
 

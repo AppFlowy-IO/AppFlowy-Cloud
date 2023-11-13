@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use database::collab::{
-  CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, StorageConfig,
+  CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
   AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
@@ -66,7 +66,7 @@ impl<AC> CollabStorage for CollabStorageWrapper<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  fn config(&self) -> &StorageConfig {
+  fn config(&self) -> &WriteConfig {
     self.inner.config()
   }
 

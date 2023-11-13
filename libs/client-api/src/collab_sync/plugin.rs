@@ -85,8 +85,9 @@ where
               (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
             {
               if let Some(local_collab) = local_collab.try_lock() {
+                let last_sync_at = local_collab.get_last_sync_at();
                 sync_queue.resume();
-                sync_queue.init_sync(local_collab.get_awareness());
+                sync_queue.init_sync(local_collab.get_awareness(), last_sync_at);
               }
             }
           },
@@ -121,8 +122,8 @@ where
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
-  fn did_init(&self, _awareness: &Awareness, _object_id: &str) {
-    self.sync_queue.init_sync(_awareness);
+  fn did_init(&self, _awareness: &Awareness, _object_id: &str, last_sync_at: i64) {
+    self.sync_queue.init_sync(_awareness, last_sync_at);
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {

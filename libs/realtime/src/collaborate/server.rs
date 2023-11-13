@@ -9,8 +9,10 @@ use realtime_entity::collab_msg::CollabMessage;
 use std::collections::{HashMap, HashSet};
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::RwLock;
+use tokio::time::interval;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
@@ -49,6 +51,20 @@ where
       access_control.clone(),
     ));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
+
+    // Periodically check the collab groups
+    let weak_group = Arc::downgrade(&groups);
+    tokio::spawn(async move {
+      let mut interval = interval(Duration::from_secs(60));
+      loop {
+        interval.tick().await;
+        match weak_group.upgrade() {
+          Some(groups) => groups.tick().await,
+          None => break,
+        }
+      }
+    });
+
     Ok(Self {
       storage,
       groups,
@@ -228,7 +244,7 @@ async fn remove_user_from_group<S, U, AC>(
     // Destroy the group if the group is empty
     let should_remove = group.is_empty().await;
     if should_remove {
-      group.save_collab();
+      group.flush_collab();
       info!("Remove group: {}", editing.object_id);
       groups.remove_group(&editing.object_id).await;
     }

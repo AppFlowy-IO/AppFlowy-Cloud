@@ -129,12 +129,6 @@ where
   pub fn can_merge(&self) -> bool {
     self.msg.can_merge()
   }
-
-  #[allow(dead_code)]
-  pub fn is_init(&self) -> bool {
-    self.msg.is_init_msg()
-  }
-
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
     self.msg.merge(other.get_msg(), max_size)
   }

@@ -49,6 +49,7 @@ pub struct CollabSink<Sink, Msg> {
   config: SinkConfig,
 
   /// Stop the [IntervalRunner] if the sink strategy is [SinkStrategy::FixInterval].
+  #[allow(dead_code)]
   interval_runner_stop_tx: Option<mpsc::Sender<()>>,
 
   /// Used to calculate the time interval between two messages. Only used when the sink strategy
@@ -62,11 +63,6 @@ pub struct CollabSink<Sink, Msg> {
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
   fn drop(&mut self) {
     trace!("Drop CollabSink {}", self.object.object_id);
-    if let Some(stop_tx) = self.interval_runner_stop_tx.take() {
-      spawn(async move {
-        let _ = stop_tx.send(()).await;
-      });
-    }
     let _ = self.notifier.send(true);
   }
 }
@@ -196,15 +192,15 @@ where
       return Ok(());
     }
 
-    // Check if the next message can be deferred. If not, try to send the message immediately. The
-    // default value is true.
+    // If the message is not an init sync, it implies that it can be deferred for sending.
+    // Consequently, multiple deferred messages can be merged into a single message.
     let deferrable = self
       .pending_msg_queue
       .try_lock()
       .map(|pending_msgs| {
         pending_msgs
           .peek()
-          .map(|msg| msg.get_msg().deferrable())
+          .map(|msg| !msg.get_msg().is_init_msg())
           .unwrap_or(true)
       })
       .unwrap_or(true);
@@ -309,7 +305,7 @@ where
           tracing::Level::DEBUG,
           "merge: {:?}, len: {}",
           merged_msg,
-          collab_msg.length()
+          collab_msg.payload_len()
         );
       }
       collab_msg

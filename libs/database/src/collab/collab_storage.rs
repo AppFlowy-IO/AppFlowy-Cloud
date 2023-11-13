@@ -4,7 +4,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollabV1;
-use collab_entity::CollabType;
+
 use database_entity::dto::{
   AFAccessLevel, AFCollabSnapshots, AFRole, BatchQueryCollab, InsertCollabParams,
   InsertSnapshotParams, QueryCollabParams, QueryCollabResult, QueryObjectSnapshotParams,
@@ -43,7 +43,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  fn config(&self) -> &StorageConfig;
+  fn config(&self) -> &WriteConfig;
   /// Checks if a collaboration with the given object ID exists in the storage.
   ///
   /// # Arguments
@@ -117,7 +117,7 @@ impl<T> CollabStorage for Arc<T>
 where
   T: CollabStorage,
 {
-  fn config(&self) -> &StorageConfig {
+  fn config(&self) -> &WriteConfig {
     self.as_ref().config()
   }
 
@@ -174,14 +174,16 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct StorageConfig {
+pub struct WriteConfig {
   pub flush_per_update: u32,
+  pub flush_per_seconds: u32,
 }
 
-impl Default for StorageConfig {
+impl Default for WriteConfig {
   fn default() -> Self {
     Self {
-      flush_per_update: FLUSH_PER_UPDATE,
+      flush_per_update: 100,
+      flush_per_seconds: 3 * 60,
     }
   }
 }
@@ -189,22 +191,19 @@ impl Default for StorageConfig {
 #[derive(Clone)]
 pub struct CollabStoragePgImpl {
   pg_pool: PgPool,
-  config: StorageConfig,
+  config: WriteConfig,
 }
 
-pub const FLUSH_PER_UPDATE: u32 = 100;
 impl CollabStoragePgImpl {
   pub fn new(pg_pool: PgPool) -> Self {
-    let config = StorageConfig {
-      flush_per_update: FLUSH_PER_UPDATE,
-    };
+    let config = WriteConfig::default();
     Self { pg_pool, config }
   }
 }
 
 #[async_trait]
 impl CollabStorage for CollabStoragePgImpl {
-  fn config(&self) -> &StorageConfig {
+  fn config(&self) -> &WriteConfig {
     &self.config
   }
 
@@ -297,19 +296,5 @@ impl CollabStorage for CollabStoragePgImpl {
   ) -> DatabaseResult<AFCollabSnapshots> {
     let s = collab_db_ops::get_all_snapshots(&self.pg_pool, &params.object_id).await?;
     Ok(s)
-  }
-}
-
-const AF_COLLAB_TABLE: &str = "af_collab";
-
-#[allow(dead_code)]
-fn table_name(ty: &CollabType) -> String {
-  match ty {
-    CollabType::DatabaseRow => format!("{}_database_row", AF_COLLAB_TABLE),
-    CollabType::Document => format!("{}_document", AF_COLLAB_TABLE),
-    CollabType::Database => format!("{}_database", AF_COLLAB_TABLE),
-    CollabType::WorkspaceDatabase => format!("{}_w_database", AF_COLLAB_TABLE),
-    CollabType::Folder => format!("{}_folder", AF_COLLAB_TABLE),
-    CollabType::UserAwareness => format!("{}_user_awareness", AF_COLLAB_TABLE),
   }
 }

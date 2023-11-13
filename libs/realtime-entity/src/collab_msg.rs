@@ -105,11 +105,22 @@ impl CollabMessage {
     matches!(self, CollabMessage::ServerInitSync(_))
   }
 
+  pub fn type_str(&self) -> String {
+    match self {
+      CollabMessage::ClientInitSync(_) => "ClientInitSync".to_string(),
+      CollabMessage::ClientUpdateSync(_) => "ClientUpdateSync".to_string(),
+      CollabMessage::ClientAck(_) => "ClientAck".to_string(),
+      CollabMessage::ServerInitSync(_) => "ServerInitSync".to_string(),
+      CollabMessage::ServerBroadcast(_) => "ServerBroadcast".to_string(),
+      CollabMessage::AwarenessSync(_) => "AwarenessSync".to_string(),
+    }
+  }
+
   pub fn msg_id(&self) -> Option<MsgId> {
     match self {
       CollabMessage::ClientInitSync(value) => Some(value.msg_id),
       CollabMessage::ClientUpdateSync(value) => Some(value.msg_id),
-      CollabMessage::ClientAck(value) => Some(value.msg_id),
+      CollabMessage::ClientAck(value) => Some(value.source.msg_id),
       CollabMessage::ServerInitSync(value) => Some(value.msg_id),
       CollabMessage::ServerBroadcast(_) => None,
       CollabMessage::AwarenessSync(_) => None,
@@ -168,16 +179,11 @@ impl Display for CollabMessage {
         value.msg_id,
         value.payload.len(),
       )),
-      CollabMessage::ClientUpdateSync(value) => f.write_fmt(format_args!(
-        "client update: [oid:{}|msg_id:{:?}|len:{}]",
-        value.object_id,
-        value.msg_id,
-        value.payload.len(),
-      )),
+      CollabMessage::ClientUpdateSync(value) => value.fmt(f),
       CollabMessage::ClientAck(value) => f.write_fmt(format_args!(
         "ack: [oid:{}|msg_id:{:?}|len:{}]",
         value.object_id,
-        value.msg_id,
+        value.source.msg_id,
         value.payload.len(),
       )),
       CollabMessage::ServerInitSync(value) => f.write_fmt(format_args!(
@@ -382,17 +388,32 @@ impl Display for UpdateSync {
 pub struct CollabAck {
   pub origin: CollabOrigin,
   pub object_id: String,
-  pub msg_id: MsgId,
+  pub source: AckSource,
   pub payload: Bytes,
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+pub struct AckSource {
+  pub sync_verbose: String,
+  pub msg_id: MsgId,
+}
+
 impl CollabAck {
-  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, msg_id: MsgId) -> Self {
+  pub fn new(
+    origin: CollabOrigin,
+    object_id: String,
+    payload: Vec<u8>,
+    msg_id: MsgId,
+    sync_verbose: String,
+  ) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
-      msg_id,
+      source: AckSource {
+        sync_verbose,
+        msg_id,
+      },
     }
   }
 }
@@ -406,10 +427,11 @@ impl From<CollabAck> for CollabMessage {
 impl Display for CollabAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update ack: [uid:{:?}|oid:{}|msg_id:{:?}|len:{}]",
+      "ack: [uid:{:?}|oid:{}|msg_id:{:?}|verbose:{}|len:{}]",
       self.origin.client_user_id(),
       self.object_id,
-      self.msg_id,
+      self.source.msg_id,
+      self.source.sync_verbose,
       self.payload.len(),
     ))
   }

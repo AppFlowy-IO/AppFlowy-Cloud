@@ -56,6 +56,7 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
+          trace!("broadcast doc update with len:{}", event.update.len());
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
           let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
@@ -204,6 +205,7 @@ impl CollabBroadcast {
                                     object_id.clone(),
                                     payload.unwrap_or_default(),
                                     msg_id,
+                                    collab_msg.type_str()
                                   );
 
                                   trace!("Send response to client: {}", resp);

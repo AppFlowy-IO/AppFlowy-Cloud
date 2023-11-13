@@ -139,16 +139,16 @@ where
 
   fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
     let count = self.update_count.fetch_add(1, Ordering::SeqCst);
-    tracing::trace!("receive_update, count: {}", count);
+    trace!("receive_update, count: {}", count);
     if !self.did_load.load(Ordering::SeqCst) {
       return;
     }
 
     if count >= self.storage.config().flush_per_update {
       self.update_count.store(0, Ordering::SeqCst);
-      tracing::trace!("number of updates reach flush_per_update, start flushing");
+      trace!("number of updates reach flush_per_update, start flushing");
       match self.group.upgrade() {
-        None => tracing::error!("🔴Group is dropped, skip flush collab"),
+        None => error!("🔴Group is dropped, skip flush collab"),
         Some(group) => group.save_collab(),
       }
     }
@@ -177,7 +177,7 @@ where
           let object_id = params.object_id.clone();
           match storage.insert_collab(&uid, params).await {
             Ok(_) => tracing::debug!("[realtime] end flushing collab: {}", object_id),
-            Err(err) => tracing::error!("save collab failed: {:?}", err),
+            Err(err) => error!("save collab failed: {:?}", err),
           }
         });
       },

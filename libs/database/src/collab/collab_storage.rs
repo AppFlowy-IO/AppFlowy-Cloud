@@ -300,15 +300,3 @@ impl CollabStorage for CollabStoragePgImpl {
 }
 
 const AF_COLLAB_TABLE: &str = "af_collab";
-
-#[allow(dead_code)]
-fn table_name(ty: &CollabType) -> String {
-  match ty {
-    CollabType::DatabaseRow => format!("{}_database_row", AF_COLLAB_TABLE),
-    CollabType::Document => format!("{}_document", AF_COLLAB_TABLE),
-    CollabType::Database => format!("{}_database", AF_COLLAB_TABLE),
-    CollabType::WorkspaceDatabase => format!("{}_w_database", AF_COLLAB_TABLE),
-    CollabType::Folder => format!("{}_folder", AF_COLLAB_TABLE),
-    CollabType::UserAwareness => format!("{}_user_awareness", AF_COLLAB_TABLE),
-  }
-}

@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{error, trace};
+use tracing::{error, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -206,7 +206,7 @@ where
           &self.workspace_id,
         );
 
-        tracing::debug!(
+        info!(
           "[realtime] start flushing {}:{} with len: {}",
           object_id,
           params.collab_type,
@@ -217,7 +217,7 @@ where
         tokio::spawn(async move {
           let object_id = params.object_id.clone();
           match storage.insert_collab(&uid, params).await {
-            Ok(_) => tracing::debug!("[realtime] end flushing collab: {}", object_id),
+            Ok(_) => info!("[realtime] end flushing collab: {}", object_id),
             Err(err) => error!("save collab failed: {:?}", err),
           }
         });

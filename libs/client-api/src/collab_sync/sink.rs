@@ -62,11 +62,6 @@ pub struct CollabSink<Sink, Msg> {
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
   fn drop(&mut self) {
     trace!("Drop CollabSink {}", self.object.object_id);
-    if let Some(stop_tx) = self.interval_runner_stop_tx.take() {
-      spawn(async move {
-        let _ = stop_tx.send(()).await;
-      });
-    }
     let _ = self.notifier.send(true);
   }
 }

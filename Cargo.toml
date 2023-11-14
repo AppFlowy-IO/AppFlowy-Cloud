@@ -18,6 +18,10 @@ actix-router = "0.5.1"
 actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
 openssl = "0.10.45"
 
+[target.'cfg(windows)'.dependencies.openssl]
+version = "0.10.45"
+features = ["vendored"]
+
 # serde
 serde_json.workspace = true
 serde.workspace = true

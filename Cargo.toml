@@ -72,7 +72,7 @@ token = { path = "libs/token" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 database = { path = "libs/database" }
-database-entity = { path = "libs/database-entity" }
+database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
@@ -123,6 +123,7 @@ members = [
 
 [workspace.dependencies]
 realtime-entity = { path = "libs/realtime-entity" }
+database-entity = { path = "libs/database-entity" }
 app-error = { path = "libs/app_error" }
 serde_json = "1.0.108"
 serde = { version = "1.0.108", features = ["derive"] }

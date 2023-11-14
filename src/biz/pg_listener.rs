@@ -44,8 +44,19 @@ impl PgListeners {
     self.collab_member_listener.notify.subscribe()
   }
 
-  pub fn subscribe_user_change(&self) -> broadcast::Receiver<AFUserNotification> {
-    self.user_listener.notify.subscribe()
+  pub fn subscribe_user_change(&self, uid: i64) -> tokio::sync::mpsc::Receiver<AFUserNotification> {
+    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    let mut user_notify = self.user_listener.notify.subscribe();
+    tokio::spawn(async move {
+      while let Ok(notification) = user_notify.recv().await {
+        if let Some(notify_uid) = notification.payload.as_ref().and_then(|user| user.uid) {
+          if notify_uid == uid {
+            let _ = tx.send(notification).await;
+          }
+        }
+      }
+    });
+    rx
   }
 }
 

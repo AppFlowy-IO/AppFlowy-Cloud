@@ -28,7 +28,7 @@ app-error = { workspace = true }
 collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }
 database = { path = "../database" }
-database-entity = { path = "../database-entity" }
+database-entity.workspace = true
 yrs = "0.16.5"
 lib0 = "0.16.3"
 chrono = "0.4.30"

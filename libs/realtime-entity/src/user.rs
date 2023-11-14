@@ -9,6 +9,7 @@ pub enum UserMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AFUserChange {
+  pub uid: i64,
   pub name: Option<String>,
   pub email: Option<String>,
   pub metadata: Option<String>,

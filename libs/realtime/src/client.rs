@@ -104,6 +104,7 @@ where
             // deserialize_any method. So it needs to serialize the metadata to json string.
             let metadata = serde_json::to_string(&user.metadata).ok();
             let msg = UserMessage::ProfileChange(AFUserChange {
+              uid: user.uid,
               name: user.name,
               email: user.email,
               metadata,

@@ -49,8 +49,8 @@ impl PgListeners {
     let mut user_notify = self.user_listener.notify.subscribe();
     tokio::spawn(async move {
       while let Ok(notification) = user_notify.recv().await {
-        if let Some(notify_uid) = notification.payload.as_ref().and_then(|user| user.uid) {
-          if notify_uid == uid {
+        if let Some(row) = notification.payload.as_ref() {
+          if row.uid == uid {
             let _ = tx.send(notification).await;
           }
         }

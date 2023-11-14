@@ -3579,6 +3579,7 @@ dependencies = [
  "bytes",
  "collab",
  "collab-entity",
+ "database-entity",
  "prost",
  "prost-build",
  "protoc-bin-vendored",

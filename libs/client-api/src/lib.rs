@@ -18,5 +18,6 @@ pub mod error {
 pub mod entity {
   pub use database_entity::dto::*;
   pub use gotrue_entity::dto::*;
+  pub use realtime_entity::user::*;
   pub use shared_entity::dto::*;
 }

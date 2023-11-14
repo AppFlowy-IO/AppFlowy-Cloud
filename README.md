@@ -17,31 +17,40 @@ You'll need to install:
 - copy the configurations from `dev.env` to `.env`
 - edit the `.env` as required (such as SMTP configurations)
 
-### Run the dependency servers
+### Run with all dependencies
+```bash
+./build/run_local_server.sh
+```
+
+This process will execute all the dependencies and start the AppFlowy-Cloud server. Alternatively, 
+you have the option to run the AppFlowy-Cloud server independently### Run the AppFlowy-Cloud
+
+1. Run the dependency servers
 ```bash
 docker compose --file docker-compose-dev.yml up -d
 ```
 
-### Install sqlx-cli
+2. Install sqlx-cli
 ```bash
 cargo install sqlx-cli
 ```
 
-### Run sqlx migration
+3. Run sqlx migration
 ```bash
 sqlx database create
 sqlx migrate run
 cargo sqlx prepare --workspace
 ```
 
-### Run the AppFlowy-Cloud server
+4. Run the server
 ```bash
 cargo run
 ```
 
 ### Run the tests
 
-#### Test
+After the server is running, you can run the tests with:
+
 ```bash
 cargo test
 ```

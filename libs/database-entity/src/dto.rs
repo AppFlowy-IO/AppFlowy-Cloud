@@ -395,7 +395,7 @@ pub struct AFUserWorkspaceInfo {
   pub workspaces: Vec<AFWorkspace>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AFWorkspaceMember {
   pub name: String,
   pub email: String,

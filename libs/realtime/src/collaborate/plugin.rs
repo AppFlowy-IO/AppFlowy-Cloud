@@ -98,17 +98,17 @@ where
   });
 }
 
-fn init_collab_with_raw_data(
+async fn init_collab_with_raw_data(
   encoded_collab: EncodedCollabV1,
   doc: &Doc,
 ) -> Result<(), RealtimeError> {
   if encoded_collab.doc_state.is_empty() {
     return Err(RealtimeError::UnexpectedData("raw data is empty"));
   }
-  let mut txn = doc.transact_mut();
   if encoded_collab.doc_state.is_empty() {
     return Err(RealtimeError::UnexpectedData("Document state is empty"));
   }
+  let mut txn = doc.transact_mut();
   let update = Update::decode_v1(&encoded_collab.doc_state)?;
   txn.try_apply_update(update)?;
   Ok(())
@@ -129,7 +129,7 @@ where
     };
 
     match self.storage.get_collab_encoded_v1(&self.uid, params).await {
-      Ok(encoded_collab) => match init_collab_with_raw_data(encoded_collab, doc) {
+      Ok(encoded_collab) => match init_collab_with_raw_data(encoded_collab, doc).await {
         Ok(_) => {},
         Err(e) => error!("🔴Init collab failed: {:?}", e),
       },

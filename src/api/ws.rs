@@ -42,7 +42,7 @@ pub async fn establish_ws_connection(
 
   match result {
     Ok(uid) => {
-      let user_change_recv = state.pg_listeners.subscribe_user_change();
+      let user_change_recv = state.pg_listeners.subscribe_user_change(uid);
       let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
       let client = ClientSession::new(
         realtime_user,

@@ -19,7 +19,7 @@ pub struct AFWorkspaceRow {
 /// Represent the row of the af_user table
 #[derive(Debug, FromRow, Deserialize, Serialize, Clone)]
 pub struct AFUserRow {
-  pub uid: Option<i64>,
+  pub uid: i64,
   pub uuid: Option<Uuid>,
   pub email: Option<String>,
   pub password: Option<String>,

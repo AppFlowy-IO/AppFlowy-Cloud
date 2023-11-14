@@ -13,7 +13,7 @@ serde_repr = "0.1.16"
 gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
 shared_entity = { path = "../shared-entity" }
-database-entity = { path = "../database-entity" }
+database-entity.workspace = true
 url = "2.4.1"
 tokio-stream = { version = "0.1.14" }
 parking_lot = "0.12.1"

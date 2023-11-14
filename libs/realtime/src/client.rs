@@ -12,7 +12,6 @@ use database::collab::CollabStorage;
 
 use std::ops::Deref;
 use std::time::{Duration, Instant};
-use tokio::sync::broadcast::Receiver;
 
 use database_entity::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
@@ -28,7 +27,7 @@ pub struct ClientSession<
   pub server: Addr<CollabServer<S, U, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
-  user_change_recv: Option<Receiver<AFUserNotification>>,
+  user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
 }
 
 impl<U, S, AC> ClientSession<U, S, AC>
@@ -39,7 +38,7 @@ where
 {
   pub fn new(
     user: U,
-    user_change_recv: Receiver<AFUserNotification>,
+    user_change_recv: tokio::sync::mpsc::Receiver<AFUserNotification>,
     server: Addr<CollabServer<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
@@ -97,7 +96,7 @@ where
     let recipient = ctx.address().recipient();
     if let Some(mut recv) = self.user_change_recv.take() {
       actix::spawn(async move {
-        while let Ok(notification) = recv.recv().await {
+        while let Some(notification) = recv.recv().await {
           if let Some(user) = notification.payload {
             trace!("Receive user change: {:?}", user);
 
@@ -105,6 +104,7 @@ where
             // deserialize_any method. So it needs to serialize the metadata to json string.
             let metadata = serde_json::to_string(&user.metadata).ok();
             let msg = UserMessage::ProfileChange(AFUserChange {
+              uid: user.uid,
               name: user.name,
               email: user.email,
               metadata,

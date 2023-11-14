@@ -16,7 +16,7 @@ actix-identity = "0.6.0"
 actix-cors = "0.6.4"
 actix-router = "0.5.1"
 actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
-openssl = "0.10.45"
+openssl = { version = "0.10.45" }
 
 # serde
 serde_json.workspace = true

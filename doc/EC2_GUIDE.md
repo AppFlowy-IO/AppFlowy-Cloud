@@ -22,6 +22,11 @@ To create a default EC2 instance on AWS, you can follow these steps:
 
 To install Docker on an Ubuntu server hosted on AWS, you typically follow these steps:
 
+Add your user to the Docker group**: This lets your user run Docker commands without `sudo`. Run the following command to add your user to the Docker group:
+   ```bash
+   sudo usermod -aG docker ${USER}
+   ```
+
 1. Update your existing list of packages:
    ```bash
    sudo apt update
@@ -62,60 +67,71 @@ To install Docker on an Ubuntu server hosted on AWS, you typically follow these 
    sudo systemctl status docker
    ```
 
-Remember to run these commands with `sudo` if you are not logged in as the root user.
+Add your user to the Docker group, which will allow you to run Docker commands without `sudo`:
+   ```bash
+   sudo usermod -aG docker ${USER}
+   ```
 
+## Install AppFlowy-Cloud on EC2 Ubuntu
 
+To set up AppFlowy-Cloud on your Ubuntu server on EC2, follow these simple steps:
+
+1. **Get the Code**:
+   Clone the AppFlowy-Cloud repository.
+   ```bash
+   git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud
+   cd AppFlowy-Cloud
+   ```
+
+2. **Set Up Configuration**:
+   Copy the development environment file to create your own configuration.
+   ```bash
+   cp dev.env .env
+   ```
+
+3. **Customize Settings**:
+   Modify the `.env` file to include your EC2 instance's public IP or hostname.
+   ```bash
+   vim .env
+   ```
+
+4. **Set Up Authentication**:
+   Please refer to [Authentication](./AUTHENTICATION.md)
+
+5. **Launch AppFlowy**:
+   Deploy your services using Docker.
+   ```bash
+   docker-compose up -d
+   ```
+
+6. **Verify the Deployment**:
+   Ensure that all services are up and running.
+   ```bash
+   docker ps -a
+   ```
+
+For detailed authentication setup, please review the provided authentication guide. Make sure to adjust any necessary settings in your `.env` file according to your environment.
 
 
 ## Helpful Docker Commands
 
 Be careful when running these commands. They can be destructive.
 
-1. **Add your user to the Docker group**: This lets your user run Docker commands without `sudo`. Run the following command to add your user to the Docker group:
+1. **Remove all containers in Docker**: 
    ```bash
-   sudo usermod -aG docker ${USER}
-   ```
-2. **Remove all containers in Docker**: 
-   ```bash
-   docker rm -f $(sudo docker ps -aq)
+   docker rm -f $(sudo docker ps -a)
    ```
 
-3. **Restart the Docker service**: Sometimes, the Docker daemon might be in a state that prevents access. Restarting it can resolve the issue:
+2. **Restart the Docker service**: Sometimes, the Docker daemon might be in a state that prevents access. Restarting it can resolve the issue:
    ```bash
    sudo systemctl restart docker
    ```
-4. **Clean up everything except volumes**: 
+3. **Clean up everything except volumes**: 
    ```bash
    docker system prune -af
    ```
-5. **Remove volumes**:
+4. **Remove volumes**:
    ```bash
    docker system prune -af --volumes
    ```
 
-
-## To build a multi-architecture Docker image
-
-Docker's buildx tool, which is a part of Docker BuildKit. This tool allows you to create images for different platforms from a single build command. Here's a basic rundown of the steps:
-
-1. **Enable experimental features** by setting `"experimental": "enabled"` in your Docker configuration file (`~/.docker/config.json`).
-
-2. **Install QEMU** on your macOS to emulate different architectures:
-   ```sh
-   brew install qemu
-   ```
-
-3. **Create a new builder** that enables buildx and specify the platforms you want to target:
-   ```sh
-   docker buildx create --name mybuilder --use
-   ```
-
-4. **Inspect the builder** to ensure it's correctly configured and can build for the target platforms:
-   ```sh
-   docker buildx inspect mybuilder --bootstrap
-   ```
-
-5. **Build and push the image** to Docker Hub (or another registry) for the desired platforms using the `--platform` flag:
-   ```sh
-   docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 -t <username>/myimage:latest --push .
-   ```

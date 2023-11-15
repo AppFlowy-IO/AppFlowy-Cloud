@@ -10,18 +10,25 @@ we recommend using cloud compute services (as your host server) such as
 - Minimum 2GB Ram (4GB Recommended)
 - Ports 80/443 available
 
+
 ## Software Requirements
-- [docker compose](https://docs.docker.com/compose)
-This is needed be installed in your host server
-- We recommend using approach as proposed by offical docker website: [Install Docker Engine](https://docs.docker.com/engine/install/)
+
+Ensure you have Docker Compose installed on your host server. Follow the official guidelines for a reliable setup:
+
+- **Docker Compose:** Install it as per the [official documentation](https://docs.docker.com/compose/install/).
+
+- **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
+
+
+> **Note for AWS Users:** Here is a step by step guide to self host AppFlowy Cloud on AWS EC2 instance: [EC2 Guide](./EC2_GUIDE.md)
 
 ## Steps
 
 ### 1. Getting source files
 - Clone this repository into your host server and `cd` into it
 ```bash
-git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud`
-cd AppFlowy-Cloud`
+git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud
+cd AppFlowy-Cloud
 ```
 
 ### 2. Preparing the configuration
@@ -80,9 +87,12 @@ AWS_S3_BUCKET=appflowy
 AWS_REGION=us-east-1              # This option only applicable for AWS S3
 ```
 
-For authentication, please read the [Authentication](./AUTHENTICATION.md) for more details.
+For authentication details, refer to the [Authentication](./AUTHENTICATION.md) documentation. You will need to update the
+redirect URI to match your host server's public IP or hostname, such as `http://<your-host-server-public-ip-or-hostname>/callback`.
+If using localhost, then just keep the default value.
+
 ```bash
-GOTRUE_EXTERNAL_GOOGLE_ENABLED=false
+GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
 GOTRUE_EXTERNAL_GOOGLE_SECRET=
 GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
@@ -103,7 +113,8 @@ GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://localhost:9998/callback
 ### 3. Running the services
 
 ### Start and run AppFlowy-Cloud
-- The following command will build and start the AppFlowy-Cloud
+- The following command will build and start the AppFlowy-Cloud. 
+
 ```bash
 docker compose up -d
 ```
@@ -111,6 +122,11 @@ docker compose up -d
 ```bash
 docker ps -a
 ```
+
+> When using the `docker compose up -d` command without specifying a tag, Docker Compose will pull the `latest`
+tag for the `appflowy_cloud` and `admin_frontend` images from Docker Hub by default. If you've set the `BACKEND_VERSION`
+environment variable, it will pull the specified version instead. If `BACKEND_VERSION` is not set, Docker Compose 
+defaults to using the `latest` tag.
 
 ### 4. Reconfiguring and redeployment
 - It is very common to reconfigure and restart. To do so, simply edit the `.env` and do `docker compose up -d` again

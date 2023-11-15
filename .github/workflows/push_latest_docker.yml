@@ -8,7 +8,15 @@ on: [pull_request, push]
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { name: "amd64",   docker_platform: "linux/amd64" }
+          - { name: "arm64v8", docker_platform: "linux/arm64" }
+          - { name: "armv7",   docker_platform: "linux/arm/v7" }
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v2
@@ -28,16 +36,16 @@ jobs:
       - name: Build and push appflowy-cloud
         uses: docker/build-push-action@v5
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.job.docker_platform }}
           push: true
-          tags: appflowyinc/appflowy_cloud:latest
+          tags: appflowyinc/appflowy_cloud:latest-${{ matrix.job.name }}
 
       - name: Build and push admin frontend
         uses: docker/build-push-action@v5
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.job.docker_platform }}
           push: true
-          tags: appflowyinc/admin_frontend:latest
+          tags: appflowyinc/admin_frontend:latest-${{ matrix.job.name }}
 
       - name: Logout from Docker Hub
         if: always()

@@ -101,7 +101,8 @@ AWS_REGION=us-east-1              # This option only applicable for AWS S3
 ### 3. Running the services
 
 ### Start and run AppFlowy-Cloud
-- The following command will build and start the AppFlowy-Cloud
+- The following command will build and start the AppFlowy-Cloud. 
+
 ```bash
 docker compose up -d
 ```
@@ -109,6 +110,11 @@ docker compose up -d
 ```bash
 docker ps -a
 ```
+
+> When using the `docker compose up -d` command without specifying a tag, Docker Compose will pull the `latest`
+tag for the `appflowy_cloud` and `admin_frontend` images from Docker Hub by default. If you've set the `BACKEND_VERSION`
+environment variable, it will pull the specified version instead. If `BACKEND_VERSION` is not set, Docker Compose 
+defaults to using the `latest` tag.
 
 ### 4. Reconfiguring and redeployment
 - It is very common to reconfigure and restart. To do so, simply edit the `.env` and do `docker compose up -d` again

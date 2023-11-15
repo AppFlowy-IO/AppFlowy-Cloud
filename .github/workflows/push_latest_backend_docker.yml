@@ -1,9 +1,10 @@
 name: Build and Push latest docker image
 
-on:
-  push:
-    branches:
-      - 'main'
+on: [pull_request, push]
+#on:
+#  push:
+#    branches:
+#      - 'main'
 
 jobs:
   build-and-push:

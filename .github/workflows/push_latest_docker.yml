@@ -41,7 +41,7 @@ jobs:
           platforms: ${{ matrix.include.docker_platform }}
 
       - name: Build and push Docker manifest
-        if: startsWith(github.ref, 'refs/tags/')
+#        if: startsWith(github.ref, 'refs/tags/')
         run: |
           DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create appflowyinc/appflowy_cloud:latest \
             appflowyinc/appflowy_cloud:latest-amd64 \

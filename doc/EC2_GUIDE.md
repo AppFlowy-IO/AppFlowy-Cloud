@@ -73,45 +73,50 @@ Add your user to the Docker group, which will allow you to run Docker commands w
    ```
 
 ## Install AppFlowy-Cloud on EC2 Ubuntu
+To install AppFlowy-Cloud on an EC2 Ubuntu instance, here's a streamlined guide:
 
-To set up AppFlowy-Cloud on your Ubuntu server on EC2, follow these simple steps:
-
-1. **Get the Code**:
-   Clone the AppFlowy-Cloud repository.
+1. **Clone the AppFlowy-Cloud Repository**:
+   Access your EC2 instance via SSH and execute the following commands to clone the AppFlowy-Cloud repository and navigate into the directory:
    ```bash
    git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud
    cd AppFlowy-Cloud
    ```
 
-2. **Set Up Configuration**:
-   Copy the development environment file to create your own configuration.
+2. **Prepare the Configuration File**:
+   Create a `.env` file from the provided template:
    ```bash
    cp dev.env .env
    ```
 
-3. **Customize Settings**:
-   Modify the `.env` file to include your EC2 instance's public IP or hostname.
+3. **Configure Gotrue Mailer**:
+   Edit the `.env` file to set up the mailer for auto-confirmation:
+   ```bash
+   echo "GOTRUE_MAILER_AUTOCONFIRM=true" >> .env
+   ```
+
+4. **Customize `.env` Settings**:
+   Open the `.env` file to replace placeholders with your instance details:
    ```bash
    vim .env
    ```
+   (Here, replace placeholders with the actual IP or hostname of your EC2 instance.)
 
-4. **Set Up Authentication**:
-   Please refer to [Authentication](./AUTHENTICATION.md)
+5. **Authentication Setup**:
+   Consult the [Authentication documentation](./AUTHENTICATION.md) for instructions on setting up the authentication service.
 
-5. **Launch AppFlowy**:
-   Deploy your services using Docker.
+6. **Start AppFlowy**:
+   Use Docker to launch the AppFlowy services:
    ```bash
    docker-compose up -d
    ```
 
-6. **Verify the Deployment**:
-   Ensure that all services are up and running.
+7. **Check Service Status**:
+   Confirm that the services have started successfully:
    ```bash
    docker ps -a
    ```
 
-For detailed authentication setup, please review the provided authentication guide. Make sure to adjust any necessary settings in your `.env` file according to your environment.
-
+Make sure to review and follow the authentication guide closely, adjusting the `.env` file as necessary for your specific setup.
 
 ## Helpful Docker Commands
 

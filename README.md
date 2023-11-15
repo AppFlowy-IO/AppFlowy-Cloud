@@ -20,6 +20,13 @@
 AppFlowy Cloud is the backbone of the AppFlowy ecosystem, offering secure user authentication, robust file storage, 
 and real-time WebSocket communication for an efficient and collaborative user experience.
 
+## Table of Contents
+- [🚀 Deployment](#-deployment)
+- [💻 Development](#-development)
+- [🐞 Debugging](#-debugging)
+- [⚙️ Contributing](#-contributing)
+
+
 ## 🚀 Deployment
 - See [deployment guide](./doc/deployment.md)
 
@@ -104,3 +111,9 @@ Minio provides a Web UI for easy management of your files and buckets. Access it
 ### Portainer
 For managing Docker containers, Portainer's Web UI is an excellent tool. Access it at Web UI to easily manage Docker 
 environments, including container deployment, networking, volume management, and more. Access it at [Web UI](http://localhost:9442)
+
+
+## ⚙️ Contributing
+
+Any new contribution is more than welcome in this project!
+If you want to know more about the development workflow or want to contribute, please visit our [contributing guidelines](./doc/CONTRIBUTING.md) for detailed instructions!

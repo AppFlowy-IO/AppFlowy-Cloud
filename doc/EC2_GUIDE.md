@@ -73,6 +73,7 @@ Add your user to the Docker group, which will allow you to run Docker commands w
    ```
 
 ## Install AppFlowy-Cloud on EC2 Ubuntu
+
 To install AppFlowy-Cloud on an EC2 Ubuntu instance, here's a streamlined guide:
 
 1. **Clone the AppFlowy-Cloud Repository**:
@@ -99,10 +100,13 @@ To install AppFlowy-Cloud on an EC2 Ubuntu instance, here's a streamlined guide:
    ```bash
    vim .env
    ```
-   (Here, replace placeholders with the actual IP or hostname of your EC2 instance.)
+   (Here, replace placeholders with the actual Public IPv4 DNS or hostname of your EC2 instance.)
 
 5. **Authentication Setup**:
-   Consult the [Authentication documentation](./AUTHENTICATION.md) for instructions on setting up the authentication service.
+   Please read the [Authentication documentation](./AUTHENTICATION.md) for instructions on setting up the authentication service.
+   For example, replacing the Google OAuth2 credentials in the `.env` file with the EC2 Public IPv4 DNS:
+
+   ![img.png](../assets/images/google_ec2_public_ip.png)
 
 6. **Start AppFlowy**:
    Use Docker to launch the AppFlowy services:
@@ -120,7 +124,7 @@ Make sure to review and follow the authentication guide closely, adjusting the `
 
 ## Helpful Docker Commands
 
-Be careful when running these commands. They can be destructive.
+Skip this section if you are already familiar with Docker. Be careful when running these commands. They can be destructive.
 
 1. **Remove all containers in Docker**: 
    ```bash

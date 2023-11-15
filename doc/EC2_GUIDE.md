@@ -65,7 +65,6 @@ To install Docker on an Ubuntu server hosted on AWS, you typically follow these 
 Remember to run these commands with `sudo` if you are not logged in as the root user.
 
 
-## Install Docker Compose on EC2 Ubuntu
 
 
 ## Helpful Docker Commands

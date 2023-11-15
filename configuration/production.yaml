@@ -2,7 +2,7 @@ application:
   host: 0.0.0.0
   tls_config: "no_tls"
 database:
-  host: "postgres"
+  host: "0.0.0.0"
   port: 5432
   require_ssl: false
   max_connections: 20

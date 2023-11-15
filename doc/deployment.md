@@ -10,10 +10,17 @@ we recommend using cloud compute services (as your host server) such as
 - Minimum 2GB Ram (4GB Recommended)
 - Ports 80/443 available
 
+
 ## Software Requirements
-- [docker compose](https://docs.docker.com/compose)
-This is needed be installed in your host server
-- We recommend using approach as proposed by offical docker website: [Install Docker Engine](https://docs.docker.com/engine/install/)
+
+Ensure you have Docker Compose installed on your host server. Follow the official guidelines for a reliable setup:
+
+- **Docker Compose:** Install it as per the [official documentation](https://docs.docker.com/compose/install/).
+
+- **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
+
+
+> **Note for AWS Users:** If you're deploying on an AWS instance with Ubuntu, you might find this tailored [setup guide for EC2 Ubuntu](./EC2_UBUNTU_SETUP.md) helpful.
 
 ## Steps
 

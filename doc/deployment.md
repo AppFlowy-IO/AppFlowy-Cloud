@@ -27,8 +27,8 @@ Ensure you have Docker Compose installed on your host server. Follow the officia
 ### 1. Getting source files
 - Clone this repository into your host server and `cd` into it
 ```bash
-git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud`
-cd AppFlowy-Cloud`
+git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud
+cd AppFlowy-Cloud
 ```
 
 ### 2. Preparing the configuration

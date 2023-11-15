@@ -1,0 +1,43 @@
+name: Build and Push Docker Image with version tag
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Extract tag name
+        id: get_version
+        run: echo "##[set-output name=tag;]$(echo ${GITHUB_REF#refs/tags/})"
+        shell: bash
+
+      - name: Build the Docker image using docker-compose
+        run: |
+         docker-compose build appflowy_cloud
+        env:
+         BACKEND_VERSION: ${{ steps.get_version.outputs.tag }}
+
+      - name: Push the Docker image using docker-compose
+        run: |
+          docker-compose push appflowy_cloud
+        env:
+          BACKEND_VERSION: ${{ steps.get_version.outputs.tag }}
+
+      - name: Logout from Docker Hub
+        if: always()
+        run: docker logout

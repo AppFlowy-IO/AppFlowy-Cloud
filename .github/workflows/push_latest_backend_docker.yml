@@ -1,0 +1,34 @@
+name: Build and Push latest docker image
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build the Docker image using docker-compose
+        run: |
+          docker-compose build appflowy_cloud
+
+      - name: Push the Docker image using docker-compose
+        run: |
+          docker-compose push appflowy_cloud
+
+      - name: Logout from Docker Hub
+        if: always()
+        run: docker logout

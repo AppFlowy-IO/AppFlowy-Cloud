@@ -162,6 +162,7 @@ services:
     build:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
+    image: appflowyinc/appflowy_cloud_admin_frontend:${BACKEND_VERSION:-latest}
     depends_on:
       - gotrue
     ports:

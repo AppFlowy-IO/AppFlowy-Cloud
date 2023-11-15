@@ -21,13 +21,21 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Build the Docker image using docker-compose
+      - name: Build appflowy-cloud
         run: |
           docker-compose build appflowy_cloud
 
-      - name: Push the Docker image using docker-compose
+      - name: Push appflowy-cloud
         run: |
           docker-compose push appflowy_cloud
+
+      - name: Build appflowy-cloud admin frontend
+        run: |
+          docker-compose build admin_frontend
+
+      - name: Push appflowy-cloud admin frontend
+        run: |
+          docker-compose push admin_frontend
 
       - name: Logout from Docker Hub
         if: always()

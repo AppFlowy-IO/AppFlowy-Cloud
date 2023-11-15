@@ -1,10 +1,29 @@
-# AppFlowy Cloud
-- Cloud Server for AppFlowy
+<p align="center">
+  <img src="assets/logos/appflowy_logo.svg"  width="500" height="200" />
+</p>
 
-## Deployment
+<h4 align="center">
+   <a href="https://discord.gg/9Q2xaN37tV"><img src="https://img.shields.io/badge/AppFlowy.IO-discord-orange"></a>
+    <a href="https://opensource.org/licenses/AGPL-3.0"><img src="https://img.shields.io/badge/license-AGPL-purple.svg" alt="License: AGPL"></a>
+</h4>
+
+
+<p align="center">
+    <a href="https://www.appflowy.io"><b>Website</b></a> •
+    <a href="https://twitter.com/appflowy"><b>Twitter</b></a>
+</p>
+
+<p align="center">⚡ The AppFlowy Cloud written with Rust 🦀</p>
+
+# AppFlowy Cloud
+
+AppFlowy Cloud is the backbone of the AppFlowy ecosystem, offering secure user authentication, robust file storage, 
+and real-time WebSocket communication for an efficient and collaborative user experience.
+
+## 🚀 Deployment
 - See [deployment guide](./doc/deployment.md)
 
-## Development
+## 💻 Development
 
 ### Pre-requisites
 
@@ -55,9 +74,15 @@ After the server is running, you can run the tests with:
 cargo test
 ```
 
-### Debugging
-#### Postgres
-- [PgAdmin](http://localhost:5400)
+## 🐞Debugging
+
+Effective debugging is essential for maintaining a healthy application. Here are some tools and commands to help you 
+troubleshoot issues in various components of the AppFlowy cloud server:
+
+### Postgres
+
+A web-based administration tool for PostgreSQL. Access it at [PgAdmin](http://localhost:5400)
+
 - OR command line:
 ```bash
     export PGPASSWORD=password
@@ -65,12 +90,17 @@ cargo test
 ```
 
 - Redis
+
+Redis offers a powerful command line interface for managing your Redis instance. Connect using the following command:
+
 ```bash
     redis-cli -p 6380
 ```
 
-#### Minio
-- [Web UI](http://localhost:9001)
+### Minio
 
-#### Portainer
-- [Web UI](http://localhost:9442)
+Minio provides a Web UI for easy management of your files and buckets. Access it at [Web UI](http://localhost:9001)
+
+### Portainer
+For managing Docker containers, Portainer's Web UI is an excellent tool. Access it at Web UI to easily manage Docker 
+environments, including container deployment, networking, volume management, and more. Access it at [Web UI](http://localhost:9442)

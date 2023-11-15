@@ -17,7 +17,7 @@
 
 # AppFlowy Cloud
 
-AppFlowy Cloud is the backbone of the AppFlowy ecosystem, offering secure user authentication, robust file storage, 
+AppFlowy Cloud is part of the AppFlowy ecosystem, offering secure user authentication, file storage, 
 and real-time WebSocket communication for an efficient and collaborative user experience.
 
 ## Table of Contents

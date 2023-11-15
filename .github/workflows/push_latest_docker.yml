@@ -7,7 +7,7 @@ on: [pull_request, push]
 #      - 'main'
 
 jobs:
-  build-and-push:
+  push_latest_docker:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -46,6 +46,31 @@ jobs:
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: appflowyinc/admin_frontend:latest-${{ matrix.job.name }}
+
+      # Add a new job for creating the manifest after the build job
+      - name: Create and push manifest
+        if: success() # Only run this step if the previous steps were successful
+        run: |
+          # Create a manifest for the appflowy_cloud image
+          docker manifest create appflowyinc/appflowy_cloud:latest \
+            appflowyinc/appflowy_cloud:latest-amd64 \
+            appflowyinc/appflowy_cloud:latest-arm64v8 \
+            appflowyinc/appflowy_cloud:latest-armv7
+          # Annotate the manifest for each architecture (optional)
+          docker manifest annotate appflowyinc/appflowy_cloud:latest appflowyinc/appflowy_cloud:latest-amd64 --arch amd64
+          docker manifest annotate appflowyinc/appflowy_cloud:latest appflowyinc/appflowy_cloud:latest-arm64v8 --arch arm64
+          docker manifest annotate appflowyinc/appflowy_cloud:latest appflowyinc/appflowy_cloud:latest-armv7 --arch armv7
+          # Push the manifest to Docker Hub
+          docker manifest push appflowyinc/appflowy_cloud:latest
+
+          docker manifest create appflowyinc/admin_frontend:latest \
+            appflowyinc/admin_frontend:latest-amd64 \
+            appflowyinc/admin_frontend:latest-arm64v8 \
+            appflowyinc/admin_frontend:latest-armv7
+          docker manifest annotate appflowyinc/admin_frontend:latest appflowyinc/admin_frontend:latest-amd64 --arch amd64
+          docker manifest annotate appflowyinc/admin_frontend:latest appflowyinc/admin_frontend:latest-arm64v8 --arch arm64
+          docker manifest annotate appflowyinc/admin_frontend:latest appflowyinc/admin_frontend:latest-armv7 --arch armv7
+          docker manifest push appflowyinc/admin_frontend:latest
 
       - name: Logout from Docker Hub
         if: always()

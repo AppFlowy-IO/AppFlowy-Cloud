@@ -87,9 +87,12 @@ AWS_S3_BUCKET=appflowy
 AWS_REGION=us-east-1              # This option only applicable for AWS S3
 ```
 
-For authentication, please read the [Authentication](./AUTHENTICATION.md) for more details.
+For authentication details, refer to the [Authentication](./AUTHENTICATION.md) documentation. You will need to update the
+redirect URI to match your host server's public IP or hostname, such as `http://<your-host-server-public-ip-or-hostname>/callback`.
+If using localhost, then just keep the default value.
+
 ```bash
-GOTRUE_EXTERNAL_GOOGLE_ENABLED=false
+GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
 GOTRUE_EXTERNAL_GOOGLE_SECRET=
 GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback

@@ -68,17 +68,6 @@ API_EXTERNAL_URL=http://localhost:9998
 DATABASE_URL=postgres://postgres:password@localhost:5433/postgres
 SQLX_OFFLINE=false
 
-# Google OAuth2
-# This enables login using user's google account
-# To set up, you need to go the following sites:
-# https://console.cloud.google.com/apis/credentials/consent
-# https://console.cloud.google.com/apis/credentials -> create credentials -> create oauth client ID
-# in the field `Authorised redirect URIs`, you should put `<your host server public ip/hostname>/callback`
-GOTRUE_EXTERNAL_GOOGLE_ENABLED=false
-GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
-GOTRUE_EXTERNAL_GOOGLE_SECRET=
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
-
 # File Storage
 # This affects where the files will be uploaded.
 # By default, Minio will be deployed as file storage server # and it will use the host server's disk storage.
@@ -89,6 +78,26 @@ AWS_ACCESS_KEY_ID=minioadmin
 AWS_SECRET_ACCESS_KEY=minioadmin
 AWS_S3_BUCKET=appflowy
 AWS_REGION=us-east-1              # This option only applicable for AWS S3
+```
+
+For authentication, please read the [Authentication](./AUTHENTICATION.md) for more details.
+```bash
+GOTRUE_EXTERNAL_GOOGLE_ENABLED=false
+GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
+GOTRUE_EXTERNAL_GOOGLE_SECRET=
+GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
+
+# GitHub OAuth2
+GOTRUE_EXTERNAL_GITHUB_ENABLED=true
+GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=your-github-client-id
+GOTRUE_EXTERNAL_GITHUB_SECRET=your-github-secret
+GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://localhost:9998/callback
+
+# Discord OAuth2
+GOTRUE_EXTERNAL_DISCORD_ENABLED=true
+GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=your-discord-client-id
+GOTRUE_EXTERNAL_DISCORD_SECRET=your-discord-secret
+GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://localhost:9998/callback
 ```
 
 ### 3. Running the services

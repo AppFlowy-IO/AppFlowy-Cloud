@@ -1,4 +1,23 @@
 
+## Create an EC2 Instance
+
+To create a default EC2 instance on AWS, you can follow these steps:
+
+1. Open the Amazon EC2 console at [https://console.aws.amazon.com/ec2/](https://console.aws.amazon.com/ec2/).
+
+2. In the navigation bar at the top of the screen, the current AWS Region is displayed. Select a Region in which to launch the instance. This is important because some Amazon EC2 resources can be shared between Regions, while others cannot.
+
+3. From the Amazon EC2 console dashboard, choose "Launch instance."
+
+4. (Optional) Under "Name and tags," for Name, enter a descriptive name for your instance.
+
+5. Under "Application and OS Images (Amazon Machine Image)," choose "Quick Start," and then choose the ubuntu.
+
+6. Under "Key pair (login)," for "Key pair name," choose an existing key pair or create a new one.
+
+7. In the Summary panel, choose "Launch instance"
+
+
 ## Install Docker on EC2 Ubuntu
 
 To install Docker on an Ubuntu server hosted on AWS, you typically follow these steps:
@@ -44,6 +63,9 @@ To install Docker on an Ubuntu server hosted on AWS, you typically follow these 
    ```
 
 Remember to run these commands with `sudo` if you are not logged in as the root user.
+
+
+## Install Docker Compose on EC2 Ubuntu
 
 
 ## Helpful Docker Commands

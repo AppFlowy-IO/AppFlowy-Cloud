@@ -1,6 +1,6 @@
 name: Build and Push latest docker image
 
-on: [pull_request, push]
+on: [push]
 #on:
 #  push:
 #    branches:

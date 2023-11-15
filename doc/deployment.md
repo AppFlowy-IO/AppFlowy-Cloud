@@ -20,7 +20,7 @@ Ensure you have Docker Compose installed on your host server. Follow the officia
 - **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
 
 
-> **Note for AWS Users:** If you're deploying on an AWS instance with Ubuntu, you might find this tailored [setup guide for EC2 Ubuntu](./EC2_UBUNTU_SETUP.md) helpful.
+> **Note for AWS Users:** Here is a step by step guide to self host AppFlowy Cloud on AWS EC2 instance: [EC2 Guide](./EC2_GUIDE.md)
 
 ## Steps
 

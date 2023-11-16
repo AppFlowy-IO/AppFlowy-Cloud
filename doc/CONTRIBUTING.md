@@ -27,44 +27,53 @@ Contributions are welcome! Here's how you can help improve AppFlowy Cloud:
 
 ## Development Workflow 
 
-> Please check out this [guide](./GUIDE.md) before you start coding. 
+Before diving into development, familiarize yourself with the codebase and project standards by reviewing the [Development Guide](./GUIDE.md).
 
-To get the server running locally, execute:
+### Setting Up the Local Server
+
+To start the server on your local machine, run the following script:
 
 ```bash
 ./build/run_local_server.sh
 ```
 
-Ensure functionality by executing the test suite:
+### Testing
+
+Verify that your changes work as expected by running the test suite:
 
 ```bash
 cargo test
 ```
 
-For a pull request (PR) to be considered, it must:
+### Pull Request (PR) Requirements
 
-- Pass all tests.
-- Adhere to [`clippy`](https://github.com/rust-lang/rust-clippy) linting standards:
+For a pull request to be accepted, it must satisfy the following criteria:
 
-  ```bash
-  cargo clippy -- -D warnings
-  ```
+1. **Pass All Tests**: Your PR should not break any existing functionality and must pass all the automated tests.
 
-  If `clippy` is not installed:
+2. **Linting with Clippy**: Your code must adhere to the linting standards enforced by [`clippy`](https://github.com/rust-lang/rust-clippy). You can check for linting issues using:
 
-  ```bash
-  rustup update
-  rustup component add clippy
-  ```
+   ```bash
+   cargo clippy -- -D warnings
+   ```
 
-- Comply with the code formatting rules. To format your code:
+   If `clippy` isn't already installed:
 
-  ```bash
-  cargo fmt
-  ```
+   ```bash
+   rustup update
+   rustup component add clippy
+   ```
 
-  To check formatting:
+3. **Code Formatting**: The code must comply with established formatting rules. Use the following commands for formatting and checking your code:
 
-  ```bash
-  cargo fmt --all -- --check
-  ```
+   To format your code:
+
+   ```bash
+   cargo fmt
+   ```
+
+   To validate formatting:
+
+   ```bash
+   cargo fmt --all -- --check
+   ```

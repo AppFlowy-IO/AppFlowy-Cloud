@@ -27,6 +27,8 @@ Contributions are welcome! Here's how you can help improve AppFlowy Cloud:
 
 ## Development Workflow 
 
+> Please check out this [guide](./GUIDE.md) before you start coding. 
+
 To get the server running locally, execute:
 
 ```bash

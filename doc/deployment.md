@@ -143,4 +143,4 @@ defaults to using the `latest` tag.
 with your own in `nginx/ssl/` directory
 
 ## Usage of AppFlowy Application with AppFlowy Cloud
-- [AppFlowy with AppFlowyCloud](./integration.md)
+- [AppFlowy with AppFlowyCloud](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy)

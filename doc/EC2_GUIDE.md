@@ -1,146 +1,139 @@
+# Guide to Installing AppFlowy-Cloud on an AWS EC2 Ubuntu Instance
 
-## Create an EC2 Instance
+This guide provides a step-by-step process for setting up an EC2 instance, installing Docker on Ubuntu, and deploying AppFlowy-Cloud, along with some optional Docker maintenance commands.
 
-To create a default EC2 instance on AWS, you can follow these steps:
+Only for demonstration purposes, we will be using a free-tier EC2 instance. However, we recommend using a paid instance for production deployments.
+If you have any questions, please feel free to reach out to us on [Discord](https://discord.gg/9Q2xaN37tV).
 
-1. Open the Amazon EC2 console at [https://console.aws.amazon.com/ec2/](https://console.aws.amazon.com/ec2/).
+## Setting Up an EC2 Instance
 
-2. In the navigation bar at the top of the screen, the current AWS Region is displayed. Select a Region in which to launch the instance. This is important because some Amazon EC2 resources can be shared between Regions, while others cannot.
+1. **Launch an EC2 Instance**:
+   - Visit the [Amazon EC2 console](https://console.aws.amazon.com/ec2/).
+   - Select your preferred AWS Region.
+   - Choose "Launch instance" from the EC2 dashboard.
+   - Optionally, under "Name and tags," provide a name for your instance.
+   - For "Application and OS Images (Amazon Machine Image)," select "Quick Start" and choose Ubuntu.
+   - In "Key pair (login)," select an existing key pair or create a new one.
+   - Review and launch the instance from the Summary panel.
 
-3. From the Amazon EC2 console dashboard, choose "Launch instance."
+## Installing Docker on Your EC2 Ubuntu Instance
 
-4. (Optional) Under "Name and tags," for Name, enter a descriptive name for your instance.
-
-5. Under "Application and OS Images (Amazon Machine Image)," choose "Quick Start," and then choose the ubuntu.
-
-6. Under "Key pair (login)," for "Key pair name," choose an existing key pair or create a new one.
-
-7. In the Summary panel, choose "Launch instance"
-
-
-## Install Docker on EC2 Ubuntu
-
-To install Docker on an Ubuntu server hosted on AWS, you typically follow these steps:
-
-Add your user to the Docker group**: This lets your user run Docker commands without `sudo`. Run the following command to add your user to the Docker group:
-   ```bash
-   sudo usermod -aG docker ${USER}
-   ```
-
-1. Update your existing list of packages:
+1. **Update Packages**:
    ```bash
    sudo apt update
    ```
 
-2. Install prerequisite packages which let `apt` use packages over HTTPS:
+2. **Install Prerequisites**:
    ```bash
    sudo apt install apt-transport-https ca-certificates curl software-properties-common
    ```
 
-3. Add the GPG key for the official Docker repository to your system:
+3. **Add Docker's Official GPG Key**:
    ```bash
    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
    ```
 
-4. Add the Docker repository to APT sources:
+4. **Add Docker Repository**:
    ```bash
    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
    ```
 
-5. Update the package database with the Docker packages from the newly added repo:
+5. **Update Package Database with Docker Packages**:
    ```bash
    sudo apt update
    ```
 
-6. Make sure you are about to install from the Docker repo instead of the default Ubuntu repo:
-   ```bash
-   apt-cache policy docker-ce
-   ```
-
-7. Finally, install Docker:
+6. **Install Docker**:
    ```bash
    sudo apt install docker-ce
    ```
 
-8. Check that Docker is running:
+7. **Check Docker Status**:
    ```bash
    sudo systemctl status docker
    ```
 
-Add your user to the Docker group, which will allow you to run Docker commands without `sudo`:
+8. **Add User to Docker Group** (optional, to run Docker commands without `sudo`):
    ```bash
    sudo usermod -aG docker ${USER}
    ```
 
-## Install AppFlowy-Cloud on EC2 Ubuntu
+## Installing AppFlowy-Cloud
 
-To install AppFlowy-Cloud on an EC2 Ubuntu instance, here's a streamlined guide:
-
-1. **Clone the AppFlowy-Cloud Repository**:
-   Access your EC2 instance via SSH and execute the following commands to clone the AppFlowy-Cloud repository and navigate into the directory:
+1. **Clone Repository**:
+   Access your EC2 instance and clone the AppFlowy-Cloud repository:
    ```bash
    git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud
    cd AppFlowy-Cloud
    ```
 
-2. **Prepare the Configuration File**:
-   Create a `.env` file from the provided template:
+2. **Configuration Setup**:
+   Create a `.env` file from the template. There will be values in the `.env` that needs to be change according to 
+   your needs Kindly read the comments in `.env` file. 
    ```bash
    cp dev.env .env
    ```
 
-3. **Configure Gotrue Mailer**:
-   Edit the `.env` file to set up the mailer for auto-confirmation:
+3. **Mailer Configuration**:
+   Set up auto-confirmation for the Gotrue mailer in the `.env` file:
    ```bash
    echo "GOTRUE_MAILER_AUTOCONFIRM=true" >> .env
    ```
 
-4. **Customize `.env` Settings**:
-   Open the `.env` file to replace placeholders with your instance details:
-   ```bash
-   vim .env
-   ```
-   (Here, replace placeholders with the actual Public IPv4 DNS or hostname of your EC2 instance.)
+4. **Authentication Setup**:
+   Update OAuth redirect URIs in `.env` with your EC2 Public IPv4 DNS, e.g., `http:ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/callback`. Refer to the [Authentication documentation](./AUTHENTICATION.md) for detailed setup instructions.
 
-5. **Authentication Setup**:
-   Please read the [Authentication documentation](./AUTHENTICATION.md) for instructions on setting up the authentication service.
-   For example, replacing the Google OAuth2 credentials in the `.env` file with the EC2 Public IPv4 DNS:
-
-   ![img.png](../assets/images/google_ec2_public_ip.png)
-
-6. **Start AppFlowy**:
-   Use Docker to launch the AppFlowy services:
+5. **Start AppFlowy Services**:
+   Launch the services using Docker Compose:
    ```bash
    docker-compose up -d
    ```
 
-7. **Check Service Status**:
-   Confirm that the services have started successfully:
+6. **Verify Service Status**:
+   Check that all services are running:
    ```bash
    docker ps -a
    ```
 
-Make sure to review and follow the authentication guide closely, adjusting the `.env` file as necessary for your specific setup.
+## Configuring Environment Secrets for AppFlowy-Cloud Client
 
-## Helpful Docker Commands
+Once you've successfully set up AppFlowy Cloud on your server, the next step is to configure the environment secrets for the AppFlowy-Cloud client. These settings are crucial for the client to communicate with your self-hosted server.
 
-Skip this section if you are already familiar with Docker. Be careful when running these commands. They can be destructive.
+1. **Verify Server Functionality**:
+   - Ensure that your AppFlowy Cloud server is up and running without any issues.
 
-1. **Remove all containers in Docker**: 
+2. **Copy Configuration URLs**:
+   - Use the following URLs as your environment secrets. These URLs correspond to the services running on your EC2 instance:
+      - `APPFLOWY_CLOUD_BASE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com:8000`
+      - `APPFLOWY_CLOUD_WS_BASE_URL`: `ws://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com:8000/ws`
+      - `APPFLOWY_CLOUD_GOTRUE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com:9998`
+
+3. **Configure the Client**:
+   - Return to the [Building AppFlowy with a Self-hosted Server guide](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy#step-2-building-appflowy-with-a-self-hosted-server).
+   - Follow the instructions to input these URLs into the appropriate fields in your AppFlowy-Cloud client's environment settings.
+
+## Additional Docker Commands (Optional)
+
+These commands are helpful for Docker maintenance but use them with caution as they can affect your Docker setup.
+
+1. **Remove All Docker Containers**:
    ```bash
    docker rm -f $(sudo docker ps -a)
    ```
 
-2. **Restart the Docker service**: Sometimes, the Docker daemon might be in a state that prevents access. Restarting it can resolve the issue:
+2. **Restart Docker Service**:
    ```bash
    sudo systemctl restart docker
    ```
-3. **Clean up everything except volumes**: 
+
+3. **Clean Up Docker (excluding volumes)**:
    ```bash
    docker system prune -af
    ```
-4. **Remove volumes**:
+
+4. **Remove Docker Volumes**:
    ```bash
    docker system prune -af --volumes
    ```
 
+---

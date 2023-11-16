@@ -2,8 +2,8 @@ name: Build and Push latest docker image
 
 on:
   push:
-    branches:
-      - 'main'
+    tags:
+      - "*"
 
 jobs:
   build-and-push:

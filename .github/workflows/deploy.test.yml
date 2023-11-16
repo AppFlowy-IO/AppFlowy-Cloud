@@ -49,7 +49,11 @@ jobs:
           # SSL
           echo "${{ secrets.APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
           echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
-          
+
+      - name: Disable appflowyinc images
+        run: |
+          sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
+          sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml 
 
       - name: Deploy docker-compose
         run: |

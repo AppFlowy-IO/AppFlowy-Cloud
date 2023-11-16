@@ -37,7 +37,7 @@ jobs:
           sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
           sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
 
-      - name: Disable pull docker image
+      - name: Disable appflowyinc images
         run: |
           sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
           sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml

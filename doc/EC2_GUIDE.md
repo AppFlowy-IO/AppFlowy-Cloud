@@ -1,4 +1,4 @@
-# Guide to Installing AppFlowy-Cloud on an AWS EC2 Ubuntu Instance
+# Installing AppFlowy-Cloud on an AWS EC2 Ubuntu Instance
 
 This guide provides a step-by-step process for setting up an EC2 instance, installing Docker on Ubuntu, and deploying AppFlowy-Cloud, along with some optional Docker maintenance commands.
 

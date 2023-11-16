@@ -20,9 +20,10 @@ Ensure you have Docker Compose installed on your host server. Follow the officia
 - **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
 
 
-> **Note for AWS Users:** Here is a step by step guide to self host AppFlowy Cloud on AWS EC2 instance: [EC2 Guide](./EC2_GUIDE.md)
-
 ## Steps
+
+> **🚀Note for AWS Users:** [Here](./EC2_GUIDE.md) is a step by step guide to self host AppFlowy Cloud on AWS EC2. Skip it if you are not using AWS.
+
 
 ### 1. Getting source files
 - Clone this repository into your host server and `cd` into it

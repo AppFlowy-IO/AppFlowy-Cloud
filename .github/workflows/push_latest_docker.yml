@@ -1,13 +1,19 @@
 name: Build and Push latest docker image
 
-on: [pull_request]
-#on:
-#  push:                # Trigger the workflow on code pushes
-#    tags:              # Apply the trigger only to specific Git tags
-#      - 'v[0-9]+.[0-9]+.[0-9]+'          # Trigger for tags like v1.2.3
-#      - '[0-9]+.[0-9]+.[0-9]+'           # Trigger for tags like 1.2.3 (without 'v')
-#      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'   # Trigger for tags like v1.2.3-rc1
-#      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'    # Trigger for tags like 1.2.3-rc1 (without 'v')
+#`DOCKER_HUB_USERNAME` is the username you use to log in to Docker Hub at https://hub.docker.com/. It's your Docker Hub
+# account username.
+
+#`DOCKER_HUB_ACCESS_TOKEN` is a security token that you should create in your Docker Hub account settings, specifically
+# under "account settings / security." This token should be generated with read and write access permissions to Docker
+# Hub repositories. It allows you to authenticate and interact with Docker Hub programmatically, such as pushing and pulling Docker images or making API requests.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'          # Trigger for tags like v1.2.3
+      - '[0-9]+.[0-9]+.[0-9]+'           # Trigger for tags like 1.2.3 (without 'v')
+      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'   # Trigger for tags like v1.2.3-rc1
+      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'    # Trigger for tags like 1.2.3-rc1 (without 'v')
 env:
   CARGO_TERM_COLOR: always
   LATEST_TAG: latest-test
@@ -42,15 +48,13 @@ jobs:
         id: vars
         run: |
           T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
-          M=${T%%.*}               # Extract the major version from the tag
-          echo "GIT_TAG=$T" >> $GITHUB_ENV  # Set GIT_TAG environment variable
-          echo "MAJOR_TAG=$M" >> $GITHUB_ENV  # Set MAJOR_TAG environment variable
+          echo "GIT_TAG=$T" >> $GITHUB_ENV 
 
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: registry.hub.docker.com/appflowyinc
+          images: registry.hub.docker.com/${{ env.DOCKER_USER_NAME }}
 
       - name: Build and push AppFlowy Cloud
         uses: docker/build-push-action@v5
@@ -58,9 +62,8 @@ jobs:
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: |
-            appflowyinc/appflowy_cloud:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            appflowyinc/appflowy_cloud:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-            appflowyinc/appflowy_cloud:${{ env.MAJOR_TAG }}-${{ matrix.job.name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ env.GIT_TAG }}-${{ matrix.job.name }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Build and push Admin frontend
@@ -69,9 +72,8 @@ jobs:
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: |
-            appflowyinc/admin_frontend:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            appflowyinc/admin_frontend:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-            appflowyinc/admin_frontend:${{ env.MAJOR_TAG }}-${{ matrix.job.name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ env.GIT_TAG }}-${{ matrix.job.name }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Logout from Docker Hub

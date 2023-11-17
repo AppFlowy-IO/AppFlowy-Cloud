@@ -38,7 +38,7 @@ use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{event, instrument};
+use tracing::{event, instrument, trace};
 use url::Url;
 
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
@@ -1024,6 +1024,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   async fn http_client_with_auth(
     &self,
     method: Method,
@@ -1042,6 +1043,7 @@ impl Client {
     }
 
     let access_token = self.access_token()?;
+    trace!("start request: {}, method: {}", url, method);
     let request_builder = self
       .cloud_client
       .request(method, url)

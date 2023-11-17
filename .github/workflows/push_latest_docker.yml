@@ -1,13 +1,27 @@
 name: Build and Push latest docker image
 
-on:
-  push:
-    tags:
-      - "*"
+on: [pull_request]
+#on:
+#  push:                # Trigger the workflow on code pushes
+#    tags:              # Apply the trigger only to specific Git tags
+#      - 'v[0-9]+.[0-9]+.[0-9]+'          # Trigger for tags like v1.2.3
+#      - '[0-9]+.[0-9]+.[0-9]+'           # Trigger for tags like 1.2.3 (without 'v')
+#      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'   # Trigger for tags like v1.2.3-rc1
+#      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'    # Trigger for tags like 1.2.3-rc1 (without 'v')
+env:
+  CARGO_TERM_COLOR: always
+  LATEST_TAG: latest-test
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { name: "amd64",   docker_platform: "linux/amd64" }
+          - { name: "arm64v8", docker_platform: "linux/arm64" }
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v2
@@ -24,19 +38,41 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
-      - name: Build and push appflowy-cloud
-        uses: docker/build-push-action@v5
-        with:
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: appflowyinc/appflowy_cloud:latest
+      - name: Get git tag
+        id: vars
+        run: |
+          T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
+          M=${T%%.*}               # Extract the major version from the tag
+          echo "GIT_TAG=$T" >> $GITHUB_ENV  # Set GIT_TAG environment variable
+          echo "MAJOR_TAG=$M" >> $GITHUB_ENV  # Set MAJOR_TAG environment variable
 
-      - name: Build and push admin frontend
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: registry.hub.docker.com/appflowyinc
+
+      - name: Build and push AppFlowy Cloud
         uses: docker/build-push-action@v5
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.job.docker_platform }}
           push: true
-          tags: appflowyinc/admin_frontend:latest
+          tags: |
+            appflowyinc/appflowy_cloud:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            appflowyinc/appflowy_cloud:${{ env.GIT_TAG }}-${{ matrix.job.name }}
+            appflowyinc/appflowy_cloud:${{ env.MAJOR_TAG }}-${{ matrix.job.name }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Build and push Admin frontend
+        uses: docker/build-push-action@v5
+        with:
+          platforms: ${{ matrix.job.docker_platform }}
+          push: true
+          tags: |
+            appflowyinc/admin_frontend:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            appflowyinc/admin_frontend:${{ env.GIT_TAG }}-${{ matrix.job.name }}
+            appflowyinc/admin_frontend:${{ env.MAJOR_TAG }}-${{ matrix.job.name }}
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Logout from Docker Hub
         if: always()

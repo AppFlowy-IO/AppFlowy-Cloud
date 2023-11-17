@@ -1,4 +1,4 @@
-name: Build and Push latest docker image
+name: DockerHub Build and Push
 
 #`DOCKER_HUB_USERNAME` is the username you use to log in to Docker Hub at https://hub.docker.com/. It's your Docker Hub
 # account username.

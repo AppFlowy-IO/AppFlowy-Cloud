@@ -84,7 +84,7 @@ async fn update_user_email() {
     .await
     .unwrap();
 
-  let new_email = format!("{}@appflowy.io", Uuid::new_v4().to_string());
+  let new_email = format!("{}@appflowy.io", Uuid::new_v4());
   c.update_user(UpdateUserParams::new().with_email(new_email.clone()))
     .await
     .unwrap();

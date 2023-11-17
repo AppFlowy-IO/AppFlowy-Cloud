@@ -5,6 +5,7 @@ use client_api::ws::{WSClient, WSClientConfig};
 use serde_json::json;
 use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
 use std::time::Duration;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn update_but_not_logged_in() {
@@ -76,6 +77,21 @@ async fn update_user_name() {
   assert_eq!(profile.name.unwrap().as_str(), "lucas");
 }
 
+#[tokio::test]
+async fn update_user_email() {
+  let (c, user) = generate_unique_registered_user_client().await;
+  c.sign_in_password(&user.email, &user.password)
+    .await
+    .unwrap();
+
+  let new_email = format!("{}@appflowy.io", Uuid::new_v4().to_string());
+  c.update_user(UpdateUserParams::new().with_email(new_email.clone()))
+    .await
+    .unwrap();
+
+  let profile = c.get_profile().await.unwrap();
+  assert_eq!(profile.email.unwrap().as_str(), &new_email);
+}
 #[tokio::test]
 async fn update_user_metadata() {
   let (c, user) = generate_unique_registered_user_client().await;

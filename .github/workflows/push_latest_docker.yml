@@ -73,14 +73,14 @@ jobs:
         uses: Noelware/docker-manifest-action@master
         with:
           inputs: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}
-          images: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-amd64,${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-arm64v8
+          images: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-amd64
           push: true
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
         uses: Noelware/docker-manifest-action@master
         with:
           inputs: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}
-          images: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-amd64,${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-arm64v8
+          images: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-amd64
           push: true
 
       - name: Logout from Docker Hub

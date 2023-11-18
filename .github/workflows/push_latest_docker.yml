@@ -68,6 +68,7 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
             ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-${{ matrix.job.name }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
         uses: Noelware/docker-manifest-action@master
@@ -135,6 +136,7 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
             ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-${{ matrix.job.name }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
         uses: Noelware/docker-manifest-action@master

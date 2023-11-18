@@ -15,7 +15,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  LATEST_TAG: latest-rc
+  LATEST_TAG: latest
 
 jobs:
   appflowy_cloud_image:

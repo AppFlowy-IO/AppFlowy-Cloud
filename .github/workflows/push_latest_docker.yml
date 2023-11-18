@@ -19,8 +19,11 @@ env:
   LATEST_TAG: latest-test
 
 jobs:
-  docker:
+  appflowy_cloud_image:
     runs-on: ubuntu-22.04
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud
+      ADMIN_FRONTEND_IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend
     strategy:
       fail-fast: false
       matrix:
@@ -50,54 +53,61 @@ jobs:
           T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
           echo "GIT_TAG=$T" >> $GITHUB_ENV 
 
-      - name: Extract metadata for Docker
-        id: appflowy_cloud_meta
+      - name: Extract metadata
+        id: meta
         uses: docker/metadata-action@v4
         with:
-          images: registry.hub.docker.com/${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud
+          images: registry.hub.docker.com/${{ env.IMAGE_NAME }}
 
-      - name: Build and push AppFlowy Cloud
+      - name: Build and push ${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
         uses: docker/build-push-action@v5
         with:
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-          labels: ${{ steps.appflowy_cloud_meta.outputs.labels }}
+            ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-${{ matrix.job.name }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Extract metadata for Docker
-        id: admin_frontend_meta
-        uses: docker/metadata-action@v4
+      - name: Create and push manifest for ${{ matrix.job.image_name }}:version
+        uses: Noelware/docker-manifest-action@master
         with:
-          images: registry.hub.docker.com/${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend
-
-      - name: Build and push Admin frontend
-        uses: docker/build-push-action@v5
-        with:
-          platforms: ${{ matrix.job.docker_platform }}
+          inputs: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}
+          images: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-amd64,${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-arm64v8
           push: true
-          tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-          labels: ${{ steps.admin_frontend_meta.outputs.labels }}
+
+      - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
+        uses: Noelware/docker-manifest-action@master
+        with:
+          inputs: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}
+          images: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-amd64,${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-arm64v8
+          push: true
 
       - name: Logout from Docker Hub
         if: always()
         run: docker logout
 
-  docker-manifest:
-    name: Docker manifest
-    needs: docker
+  admin_frontend_image:
     runs-on: ubuntu-22.04
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { image_name: "appflowy_cloud" }
-          - { image_name: "admin_frontend" }
+          - { name: "amd64",   docker_platform: "linux/amd64" }
+    #          - { name: "arm64v8", docker_platform: "linux/arm64" }
 
     steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -107,23 +117,40 @@ jobs:
       - name: Get git tag
         id: vars
         run: |
-          T=${GITHUB_REF#refs/*/}
-          echo "GIT_TAG=$T" >> $GITHUB_ENV
+          T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
+          echo "GIT_TAG=$T" >> $GITHUB_ENV 
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: registry.hub.docker.com/${{ env.IMAGE_NAME }}
+
+      - name: Build and push ${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
+        uses: docker/build-push-action@v5
+        with:
+          platforms: ${{ matrix.job.docker_platform }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-${{ matrix.job.name }}
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
         uses: Noelware/docker-manifest-action@master
         with:
-          inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
-          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
+          inputs: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}
+          images: ${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-amd64,${{ env.IMAGE_NAME }}:${{ env.GIT_TAG }}-arm64v8
           push: true
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
         uses: Noelware/docker-manifest-action@master
         with:
-          inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}
-          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
+          inputs: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}
+          images: ${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-amd64,${{ env.IMAGE_NAME }}:${{ env.LATEST_TAG }}-arm64v8
           push: true
 
       - name: Logout from Docker Hub
         if: always()
         run: docker logout
+ 

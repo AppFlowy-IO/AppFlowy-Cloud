@@ -54,7 +54,7 @@ jobs:
         id: appflowy_cloud_meta
         uses: docker/metadata-action@v4
         with:
-          images: registry.hub.docker.com/${{ env.DOCKER_HUB_USERNAME }}/appflowy_cloud
+          images: registry.hub.docker.com/${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud
 
       - name: Build and push AppFlowy Cloud
         uses: docker/build-push-action@v5
@@ -70,7 +70,7 @@ jobs:
         id: admin_frontend_meta
         uses: docker/metadata-action@v4
         with:
-          images: registry.hub.docker.com/${{ env.DOCKER_HUB_USERNAME }}/admin_frontend
+          images: registry.hub.docker.com/${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend
 
       - name: Build and push Admin frontend
         uses: docker/build-push-action@v5

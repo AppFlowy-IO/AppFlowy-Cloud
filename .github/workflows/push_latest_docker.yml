@@ -51,10 +51,10 @@ jobs:
           echo "GIT_TAG=$T" >> $GITHUB_ENV 
 
       - name: Extract metadata for Docker
-        id: meta
+        id: appflowy_cloud_meta
         uses: docker/metadata-action@v4
         with:
-          images: registry.hub.docker.com/${{ env.DOCKER_HUB_USERNAME }}
+          images: registry.hub.docker.com/${{ env.DOCKER_HUB_USERNAME }}/appflowy_cloud
 
       - name: Build and push AppFlowy Cloud
         uses: docker/build-push-action@v5
@@ -62,9 +62,15 @@ jobs:
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: |
-            appflowy_cloud:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            appflowy_cloud:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-          labels: ${{ steps.meta.outputs.labels }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/appflowy_cloud:${{ env.GIT_TAG }}-${{ matrix.job.name }}
+          labels: ${{ steps.appflowy_cloud_meta.outputs.labels }}
+
+      - name: Extract metadata for Docker
+        id: admin_frontend_meta
+        uses: docker/metadata-action@v4
+        with:
+          images: registry.hub.docker.com/${{ env.DOCKER_HUB_USERNAME }}/admin_frontend
 
       - name: Build and push Admin frontend
         uses: docker/build-push-action@v5
@@ -72,9 +78,9 @@ jobs:
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: |
-            admin_frontend:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
-            admin_frontend:${{ env.GIT_TAG }}-${{ matrix.job.name }}
-          labels: ${{ steps.meta.outputs.labels }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ env.LATEST_TAG }}-${{ matrix.job.name }}
+            ${{ secrets.DOCKER_HUB_USERNAME }}/admin_frontend:${{ env.GIT_TAG }}-${{ matrix.job.name }}
+          labels: ${{ steps.admin_frontend_meta.outputs.labels }}
 
       - name: Logout from Docker Hub
         if: always()
@@ -107,15 +113,15 @@ jobs:
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
         uses: Noelware/docker-manifest-action@master
         with:
-          inputs: ${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
-          images: ${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
+          inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.GIT_TAG }}-arm64v8
           push: true
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:latest
         uses: Noelware/docker-manifest-action@master
         with:
-          inputs: ${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}
-          images: ${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
+          inputs: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-amd64,${{ secrets.DOCKER_HUB_USERNAME }}/${{ matrix.job.image_name }}:${{ env.LATEST_TAG }}-arm64v8
           push: true
 
       - name: Logout from Docker Hub

@@ -154,6 +154,7 @@ jobs:
       - name: Build and push ${{ matrix.job.image_name }}:${{ env.GIT_TAG }}
         uses: docker/build-push-action@v5
         with:
+          context: ./admin_frontend
           platforms: ${{ matrix.job.docker_platform }}
           push: true
           tags: |

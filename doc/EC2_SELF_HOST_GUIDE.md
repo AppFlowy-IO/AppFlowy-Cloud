@@ -137,3 +137,51 @@ These commands are helpful for Docker maintenance but use them with caution as t
    ```
 
 ---
+
+## Q & A
+
+### Resolving the 'No Space Left on Device' Error when using free-tier EC2 instance
+
+Encountering a 'No space left on device' error indicates that your device's storage is full. Here's how to resolve this:
+
+#### 1. Check Disk Usage
+Start by checking your disk usage. This can be done with the following command in the terminal:
+
+```bash
+df -h
+```
+
+This command will display a summary of the disk space usage on your device, as shown below:
+
+![Disk Usage Check](../assets/images/check_disk_usage.png)
+
+#### 2. Clean Up Docker System
+If your disk is indeed full, a quick way to free up space is by cleaning up your Docker system. Use the command:
+
+```bash
+docker system prune -af
+```
+
+**Caution:** This command removes all unused Docker images, containers, volumes, and networks. Be sure to backup any important data before proceeding.
+
+#### 3. Modify Docker Compose Configuration
+Alternatively, you can selectively reduce Docker's disk usage:
+
+- **Disable the Tunnel Server**: Temporarily comment out or remove the tunnel server service in the `docker-compose.yml` file.
+
+  ![Commenting Out Tunnel Server](../assets/images/comment_out_tunnel.png)
+
+- **Disable Admin Frontend**: Similarly, you can disable the `admin_frontend` service in the `docker-compose.yml` file. This involves commenting out the relevant sections.
+
+  ![Commenting Out Admin Frontend](../assets/images/comment_out_admin_frontend.png)
+
+  Additionally, ensure that dependencies on the `admin_frontend` service are also commented out as needed.
+
+  ![Commenting Out Dependencies on Admin Frontend](../assets/images/comment_out_deps_on_admin_frontend.png)
+
+
+
+
+
+
+

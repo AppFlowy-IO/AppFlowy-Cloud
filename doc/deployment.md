@@ -15,9 +15,11 @@ we recommend using cloud compute services (as your host server) such as
 
 Ensure you have Docker Compose installed on your host server. Follow the official guidelines for a reliable setup:
 
-- **Docker Compose:** Install it as per the [official documentation](https://docs.docker.com/compose/install/).
-
+Docker Compose is included with Docker Engine:
 - **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
+
+For older versions of Docker Engine that do not include Docker Compose:
+- **Docker Compose:** Install it as per the [official documentation](https://docs.docker.com/compose/install/).
 
 
 ## Steps
@@ -128,6 +130,11 @@ docker ps -a
 tag for the `appflowy_cloud` and `admin_frontend` images from Docker Hub by default. If you've set the `BACKEND_VERSION`
 environment variable, it will pull the specified version instead. If `BACKEND_VERSION` is not set, Docker Compose 
 defaults to using the `latest` tag.
+
+- The metrics endpoint can also be used to verify that the AppFlowy-Cloud server is running. It should return a status of 200 OK.
+```bash
+curl -v localhost:8000/metrics
+```
 
 ### 4. Reconfiguring and redeployment
 - It is very common to reconfigure and restart. To do so, simply edit the `.env` and do `docker compose up -d` again

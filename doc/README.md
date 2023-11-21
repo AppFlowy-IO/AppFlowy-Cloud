@@ -1,4 +1,4 @@
 # Docs
 - Directory to contain information about usage and development.
-- [Appflowy Cloud Deployment](./deployment.md)
-- [Appflowy with Cloud](./integration.md)
+- [Appflowy Cloud Deployment](./DEPLOYMENT.md)
+- [Appflowy with Cloud](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy)

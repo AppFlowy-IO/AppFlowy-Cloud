@@ -68,8 +68,8 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    ```
 
 2. **Configuration Setup**:
-   Create a `.env` file from the template. There will be values in the `.env` that needs to be change according to 
-   your needs Kindly read the comments in `.env` file. 
+   Create a `.env` file from the template. There will be values in the `.env` that needs to be change according to
+   your needs Kindly read the comments in `.env` file.
    ```bash
    cp dev.env .env
    ```
@@ -94,6 +94,22 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    ```bash
    docker ps -a
    ```
+
+## Post Install
+### Exposing your AppFlowy-Cloud
+
+After installing AppFlowy-Cloud, the server will be serving at port 80 (http) and 443 (http).
+You might need to add Inbound Rule to expose the port.
+- To do so, go to EC2 -> Instances -> your instance id -> Security -> Click on the Security Group
+
+![Security Group Select](../assets/images/security_group.png)
+
+- Under Inbound Rules, Click "Edit inbound rules"
+- Click "Add Rule", select either http or https(if you have configured SSL Cert)
+- Once done, you should be able to see the AppFlowy-Cloud admin page at `http://<your_ec2_host>/web/login`
+
+Note: There are certain risk involved in exposing ports in your EC2 Instances, this guide is for demonstration purposes and should not be used for production.
+You might want to limit IP to only trusted IP address, or use other strategies to mitigate risk.
 
 ## Configuring Environment Secrets for AppFlowy-Cloud Client
 
@@ -152,7 +168,7 @@ If you're encountering difficulties redirecting to the AppFlowy application afte
 
 2. **Apply Similar Checks for Other OAuth Providers**:
    - Follow the same verification process for other OAuth providers like GitHub and Discord. Make sure their respective configurations are correctly set.
-   
+
    ![img.png](../assets/images/env_self_host.png)
 
    The provided image illustrates the correct configuration settings.

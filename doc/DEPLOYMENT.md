@@ -44,7 +44,7 @@ cd AppFlowy-Cloud
 - It is required that that is a `.env` file in the root directory of the repository.
 - To get started, copy the template `dev.env` as `.env` using the following shell commands:
 ```bash
-cp dev.env .env
+cp deploy.env .env
 ```
 - There will be values in the `.env` that needs to be change according to your needs
 - Kindly read the following comments for each set of settings
@@ -77,7 +77,7 @@ GOTRUE_ADMIN_PASSWORD=password
 # which is the same as the public IP/hostname of your host server
 # when an email confirmation link is click, this is the host that user's devices
 # will try to connect to
-API_EXTERNAL_URL=http://localhost:9998
+API_EXTERNAL_URL=http://<host>
 
 # 2 fields below are only relevant for development, can ignore
 DATABASE_URL=postgres://postgres:password@localhost:5433/postgres
@@ -103,25 +103,25 @@ If using localhost, then just keep the default value.
 GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
 GOTRUE_EXTERNAL_GOOGLE_SECRET=
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
+GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://<host>/gotrue/callback
 
 # GitHub OAuth2
 GOTRUE_EXTERNAL_GITHUB_ENABLED=true
 GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=your-github-client-id
 GOTRUE_EXTERNAL_GITHUB_SECRET=your-github-secret
-GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://localhost:9998/callback
+GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://<host>/gotrue/callback
 
 # Discord OAuth2
 GOTRUE_EXTERNAL_DISCORD_ENABLED=true
 GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=your-discord-client-id
 GOTRUE_EXTERNAL_DISCORD_SECRET=your-discord-secret
-GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://localhost:9998/callback
+GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://<host>/gotrue/callback
 ```
 
 ### 3. Running the services
 
 ### Start and run AppFlowy-Cloud
-- The following command will build and start the AppFlowy-Cloud. 
+- The following command will build and start the AppFlowy-Cloud.
 
 ```bash
 docker compose up -d
@@ -133,10 +133,11 @@ docker ps -a
 
 > When using the `docker compose up -d` command without specifying a tag, Docker Compose will pull the `latest`
 tag for the `appflowy_cloud` and `admin_frontend` images from Docker Hub by default. If you've set the `BACKEND_VERSION`
-environment variable, it will pull the specified version instead. If `BACKEND_VERSION` is not set, Docker Compose 
+environment variable, it will pull the specified version instead. If `BACKEND_VERSION` is not set, Docker Compose
 defaults to using the `latest` tag.
 
 - The metrics endpoint can also be used to verify that the AppFlowy-Cloud server is running. It should return a status of 200 OK.
+- This command should only be run in the host machine as port 8000 should not be exposed
 ```bash
 curl -v localhost:8000/metrics
 ```

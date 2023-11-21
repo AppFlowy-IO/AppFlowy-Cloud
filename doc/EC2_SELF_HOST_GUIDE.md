@@ -71,25 +71,19 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    Create a `.env` file from the template. There will be values in the `.env` that needs to be change according to
    your needs Kindly read the comments in `.env` file.
    ```bash
-   cp dev.env .env
+   cp deploy.env .env
    ```
 
-3. **Mailer Configuration**:
-   Set up auto-confirmation for the Gotrue mailer in the `.env` file:
-   ```bash
-   echo "GOTRUE_MAILER_AUTOCONFIRM=true" >> .env
-   ```
+3. **Authentication Setup**:
+   Update OAuth redirect URIs in `.env` with your EC2 Public IPv4 DNS, e.g., `http:ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue/callback`. Refer to the [Authentication documentation](./AUTHENTICATION.md) for detailed setup instructions.
 
-4. **Authentication Setup**:
-   Update OAuth redirect URIs in `.env` with your EC2 Public IPv4 DNS, e.g., `http:ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/callback`. Refer to the [Authentication documentation](./AUTHENTICATION.md) for detailed setup instructions.
-
-5. **Start AppFlowy Services**:
+4. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
    ```bash
    docker-compose up -d
    ```
 
-6. **Verify Service Status**:
+5. **Verify Service Status**:
    Check that all services are running:
    ```bash
    docker ps -a
@@ -120,9 +114,9 @@ Once you've successfully set up AppFlowy Cloud on your server, the next step is 
 
 2. **Copy Configuration URLs**:
    - Use the following URLs as your environment secrets. These URLs correspond to the services running on your EC2 instance:
-      - `APPFLOWY_CLOUD_BASE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com:8000`
-      - `APPFLOWY_CLOUD_WS_BASE_URL`: `ws://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com:8000/ws`
-      - `APPFLOWY_CLOUD_GOTRUE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com:9998`
+      - `APPFLOWY_CLOUD_BASE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com`
+      - `APPFLOWY_CLOUD_WS_BASE_URL`: `ws://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/ws`
+      - `APPFLOWY_CLOUD_GOTRUE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue`
 
 3. **Configure the Client**:
    - Return to the [Building AppFlowy with a Self-hosted Server guide](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy#step-2-building-appflowy-with-a-self-hosted-server).
@@ -213,10 +207,3 @@ Alternatively, you can selectively reduce Docker's disk usage:
   Additionally, ensure that dependencies on the `admin_frontend` service are also commented out as needed.
 
   ![Commenting Out Dependencies on Admin Frontend](../assets/images/comment_out_deps_on_admin_frontend.png)
-
-
-
-
-
-
-

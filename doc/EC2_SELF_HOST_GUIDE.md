@@ -75,7 +75,12 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    ```
 
 3. **Authentication Setup**:
-   Update OAuth redirect URIs in `.env` with your EC2 Public IPv4 DNS, e.g., `http:ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue/callback`. Refer to the [Authentication documentation](./AUTHENTICATION.md) for detailed setup instructions.
+    Open your .env file and update the OAuth redirect URIs with the Public IPv4 DNS of your EC2 instance. It should look something like this: http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue/callback.
+   As an example, when configuring OAuth credentials in Google, it should resemble the image shown below:
+   ![img.png](../assets/images/google_callback_url.png)
+
+   For detailed setup instructions, refer to the Authentication documentation.
+   
 
 4. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
@@ -95,11 +100,10 @@ If you have any questions, please feel free to reach out to us on [Discord](http
 After installing AppFlowy-Cloud, the server will be serving at port 80 (http) and 443 (http).
 You might need to add Inbound Rule to expose the port.
 - To do so, go to EC2 -> Instances -> your instance id -> Security -> Click on the Security Group
-
-![Security Group Select](../assets/images/security_group.png)
-
 - Under Inbound Rules, Click "Edit inbound rules"
 - Click "Add Rule", select either http or https(if you have configured SSL Cert)
+  For example:
+  ![img_1.png](../assets/images/security_group.png)
 - Once done, you should be able to see the AppFlowy-Cloud admin page at `http://<your_ec2_host>/web/login`
 
 Note: There are certain risk involved in exposing ports in your EC2 Instances, this guide is for demonstration purposes and should not be used for production.
@@ -116,7 +120,6 @@ Once you've successfully set up AppFlowy Cloud on your server, the next step is 
    - Use the following URLs as your environment secrets. These URLs correspond to the services running on your EC2 instance:
       - `APPFLOWY_CLOUD_BASE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com`
       - `APPFLOWY_CLOUD_WS_BASE_URL`: `ws://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/ws`
-      - `APPFLOWY_CLOUD_GOTRUE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue`
 
 3. **Configure the Client**:
    - Return to the [Building AppFlowy with a Self-hosted Server guide](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy#step-2-building-appflowy-with-a-self-hosted-server).
@@ -163,9 +166,8 @@ If you're encountering difficulties redirecting to the AppFlowy application afte
 2. **Apply Similar Checks for Other OAuth Providers**:
    - Follow the same verification process for other OAuth providers like GitHub and Discord. Make sure their respective configurations are correctly set.
 
-   ![img.png](../assets/images/env_self_host.png)
-
    The provided image illustrates the correct configuration settings.
+   ![img.png](../assets/images/env_self_host.png)
 
 
 

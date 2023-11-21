@@ -42,7 +42,7 @@ cd AppFlowy-Cloud
 ### 2. Preparing the configuration
 - This is perhaps the most important part of the deployment process, please read carefully.
 - It is required that that is a `.env` file in the root directory of the repository.
-- To get started, copy the template `dev.env` as `.env` using the following shell commands:
+- To get started, copy the template `deploy.env` as `.env` using the following shell commands:
 ```bash
 cp deploy.env .env
 ```

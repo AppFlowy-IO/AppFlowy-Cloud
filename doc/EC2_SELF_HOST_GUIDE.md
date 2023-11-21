@@ -140,7 +140,26 @@ These commands are helpful for Docker maintenance but use them with caution as t
 
 ## Q & A
 
-### Resolving the 'No Space Left on Device' Error when using free-tier EC2 instance
+### 1.Troubleshooting Redirect Issues After OAuth Login in AppFlowy
+
+#### Issue: Inability to Redirect to AppFlowy Application After Login with Google/GitHub/Discord
+
+If you're encountering difficulties redirecting to the AppFlowy application after attempting to log in using Google, GitHub, or Discord OAuth, follow these steps for troubleshooting:
+
+1. **Check OAuth Configuration for Google**:
+   - Ensure `GOTRUE_EXTERNAL_GOOGLE_ENABLED` is set to `true`.
+   - Verify that all other necessary Google OAuth credentials are correctly configured.
+
+2. **Apply Similar Checks for Other OAuth Providers**:
+   - Follow the same verification process for other OAuth providers like GitHub and Discord. Make sure their respective configurations are correctly set.
+   
+   ![img.png](../assets/images/env_self_host.png)
+
+   The provided image illustrates the correct configuration settings.
+
+
+
+### 2. Resolving the 'No Space Left on Device' Error when using free-tier EC2 instance
 
 Encountering a 'No space left on device' error indicates that your device's storage is full. Here's how to resolve this:
 

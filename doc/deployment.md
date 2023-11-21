@@ -24,7 +24,12 @@ For older versions of Docker Engine that do not include Docker Compose:
 
 ## Steps
 
-> **🚀Note for AWS Users:** [Here](./EC2_SELF_HOST_GUIDE.md) is a step by step guide to self host AppFlowy Cloud on AWS EC2. Skip it if you are not using AWS.
+> **🚀🚀🚀 Quick Try: Step-by-Step Guide**
+>
+> For an in-depth, step-by-step guide on self-hosting AppFlowy Cloud on AWS EC2, particularly for demonstration purposes, please consult our detailed documentation:
+> [Self-Hosting AppFlowy Cloud on AWS EC2 - Step by Step Guide](./EC2_SELF_HOST_GUIDE.md)
+>
+> **Note:** This guide is tailored for demonstration purposes using the AWS EC2 free tier. For more customized deployment options, please follow the subsequent steps outlined below.
 
 
 ### 1. Getting source files

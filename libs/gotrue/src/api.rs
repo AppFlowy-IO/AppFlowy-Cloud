@@ -4,7 +4,7 @@ use crate::params::{
 };
 use anyhow::Context;
 use gotrue_entity::dto::{
-  AdminListUsersResponse, GoTrueSettings, GotrueTokenResponse, OAuthProvider, SignUpResponse,
+  AdminListUsersResponse, AuthProvider, GoTrueSettings, GotrueTokenResponse, SignUpResponse,
   UpdateGotrueUserParams, User,
 };
 use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
@@ -24,7 +24,7 @@ impl Client {
     }
   }
 
-  pub fn oauth_url(&self, provider: &OAuthProvider) -> String {
+  pub fn oauth_url(&self, provider: &AuthProvider) -> String {
     format!("{}/authorize?provider={}", self.base_url, provider.as_str())
   }
 

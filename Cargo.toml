@@ -68,6 +68,7 @@ axum_session = "0.7.0"
 uuid = "1.4.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 prost = "0.12.1"
+casbin = "2.0.9"
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }

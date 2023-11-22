@@ -326,7 +326,7 @@ pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
   let oid = oid.as_ref();
-  let access_level: i32 = access_level.clone().into();
+  let access_level: i32 = (*access_level).into();
   let permission_id = sqlx::query_scalar!(
     r#"
      SELECT id
@@ -380,6 +380,26 @@ pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Resu
     .execute(pg_pool)
     .await?;
   Ok(())
+}
+
+#[inline]
+pub async fn select_all_collab_members(
+  pg_pool: &PgPool,
+) -> Result<Vec<(String, Vec<AFCollabMember>)>, AppError> {
+  let collabs: Vec<_> = sqlx::query!("SELECT DISTINCT af_collab_member.oid FROM af_collab_member")
+    .fetch_all(pg_pool)
+    .await?
+    .into_iter()
+    .map(|r| r.oid)
+    .collect();
+
+  let mut collab_members = Vec::with_capacity(collabs.len());
+  for oid in collabs {
+    let members = select_collab_members(&oid, pg_pool).await?;
+    collab_members.push((oid, members));
+  }
+
+  Ok(collab_members)
 }
 
 #[inline]

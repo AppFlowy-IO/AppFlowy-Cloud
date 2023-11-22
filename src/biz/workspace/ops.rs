@@ -1,4 +1,3 @@
-use crate::component::auth::jwt::UserUuid;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -103,7 +102,7 @@ pub async fn add_workspace_members(
 }
 
 pub async fn remove_workspace_members(
-  user_uuid: &UserUuid,
+  user_uuid: &Uuid,
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   member_emails: &[String],

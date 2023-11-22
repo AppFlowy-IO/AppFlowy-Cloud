@@ -166,7 +166,7 @@ async fn reload_collab_member_status_from_db(
   member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
 ) -> Result<MemberStatus, AppError> {
   let member = database::collab::select_collab_member(uid, oid, pg_pool).await?;
-  let status = MemberStatus::Valid(member.permission.access_level.clone());
+  let status = MemberStatus::Valid(member.permission.access_level);
   cache_collab_member_status(
     uid,
     oid,

@@ -27,3 +27,5 @@ s3:
   secret_key: minioadmin
   bucket: appflowy
   region: us-east-1
+casbin:
+  pool_size: 8

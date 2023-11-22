@@ -14,6 +14,12 @@ pub struct Config {
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
+  pub casbin: CasbinSetting,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct CasbinSetting {
+  pub pool_size: u32,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -105,6 +111,21 @@ impl DatabaseSetting {
 
   pub fn with_db(&self) -> PgConnectOptions {
     self.without_db().database(&self.database_name)
+  }
+}
+
+impl ToString for DatabaseSetting {
+  /// Converts [DatabaseSetting] into its postgres connection URL.
+  fn to_string(&self) -> String {
+    let ssl_mode = if self.require_ssl {
+      "require"
+    } else {
+      "prefer"
+    };
+    format!(
+      "postgres://{}:{}@{}:{}/{}?sslmode={}",
+      self.username, self.password, self.host, self.port, self.database_name, ssl_mode
+    )
   }
 }
 

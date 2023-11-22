@@ -1,7 +1,8 @@
-use crate::biz::collab::access_control::CollabAccessControlImpl;
+use crate::biz::casbin::access_control::{
+  CasbinAccessControl, CasbinCollabAccessControl, CasbinWorkspaceAccessControl,
+};
 use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::biz::pg_listener::PgListeners;
-use crate::biz::workspace::access_control::WorkspaceAccessControlImpl;
 use crate::component::auth::LoggedUser;
 use crate::config::config::Config;
 use chrono::{DateTime, Utc};
@@ -21,10 +22,11 @@ pub struct AppState {
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: redis::aio::ConnectionManager,
   pub collab_storage: Arc<CollabPostgresDBStorage>,
-  pub collab_access_control: Arc<CollabAccessControlImpl>,
-  pub workspace_access_control: Arc<WorkspaceAccessControlImpl>,
+  pub collab_access_control: CasbinCollabAccessControl,
+  pub workspace_access_control: CasbinWorkspaceAccessControl,
   pub bucket_storage: Arc<S3BucketStorage>,
   pub pg_listeners: Arc<PgListeners>,
+  pub casbin_access_control: CasbinAccessControl,
 }
 
 impl AppState {

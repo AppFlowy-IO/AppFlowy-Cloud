@@ -244,7 +244,11 @@ pub async fn login_handler(
               .sign_up_with_referrer(
                 &param.email,
                 &param.password,
-                Some(&get_base_url(&header_map)),
+                Some(&get_header_value_or_default(
+                  &header_map,
+                  "host",
+                  "localhost",
+                )),
               )
               .await;
 

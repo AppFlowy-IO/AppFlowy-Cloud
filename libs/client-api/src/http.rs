@@ -44,7 +44,7 @@ use url::Url;
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::{WSClientHttpSender, WSError};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
-use gotrue_entity::dto::{GotrueTokenResponse, AuthProvider, UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{AuthProvider, GotrueTokenResponse, UpdateGotrueUserParams, User};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.

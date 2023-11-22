@@ -7,7 +7,9 @@ pub struct ChangePassword;
 
 #[derive(Template)]
 #[template(path = "pages/login.html")]
-pub struct Login;
+pub struct Login<'a> {
+  pub oauth_providers: Vec<&'a str>,
+}
 
 // #[derive(Template)]
 // #[template(path = "login.html")]

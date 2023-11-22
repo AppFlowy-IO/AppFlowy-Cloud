@@ -103,10 +103,7 @@ pub async fn post_oauth_login_handler(
   header_map: HeaderMap,
   Path(provider): Path<String>,
 ) -> Result<WebApiResponse<String>, WebApiError<'static>> {
-  let scheme = get_header_value_or_default(&header_map, "x-scheme", "http");
-  let host = get_header_value_or_default(&header_map, "host", "localhost");
-
-  let base_url = format!("{}://{}", scheme, host);
+  let base_url = get_base_url(&header_map);
   let redirect_uri = format!("{}/web/oauth_login_redirect", base_url);
 
   let oauth_url = format!(
@@ -114,23 +111,6 @@ pub async fn post_oauth_login_handler(
     base_url, &provider, redirect_uri
   );
   Ok(oauth_url.into())
-}
-
-fn get_header_value_or_default<'a>(
-  header_map: &'a HeaderMap,
-  header_name: &str,
-  default: &'a str,
-) -> &'a str {
-  match header_map.get(header_name) {
-    Some(v) => match v.to_str() {
-      Ok(v) => v,
-      Err(e) => {
-        tracing::error!("failed to get header value {}: {}, {:?}", header_name, e, v);
-        default
-      },
-    },
-    None => default,
-  }
 }
 
 pub async fn admin_update_user_handler(
@@ -264,11 +244,7 @@ pub async fn login_handler(
               .sign_up_with_referrer(
                 &param.email,
                 &param.password,
-                Some(get_header_value_or_default(
-                  &header_map,
-                  "host",
-                  "localhost",
-                )),
+                Some(&get_base_url(&header_map)),
               )
               .await;
 
@@ -346,4 +322,28 @@ async fn session_login(
     htmx_redirect("/web/home"),
     ().into(),
   ))
+}
+
+fn get_base_url(header_map: &HeaderMap) -> String {
+  let scheme = get_header_value_or_default(header_map, "x-scheme", "http");
+  let host = get_header_value_or_default(header_map, "host", "localhost");
+
+  format!("{}://{}", scheme, host)
+}
+
+fn get_header_value_or_default<'a>(
+  header_map: &'a HeaderMap,
+  header_name: &str,
+  default: &'a str,
+) -> &'a str {
+  match header_map.get(header_name) {
+    Some(v) => match v.to_str() {
+      Ok(v) => v,
+      Err(e) => {
+        tracing::error!("failed to get header value {}: {}, {:?}", header_name, e, v);
+        default
+      },
+    },
+    None => default,
+  }
 }

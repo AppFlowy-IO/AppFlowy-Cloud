@@ -77,16 +77,12 @@ GOTRUE_ADMIN_PASSWORD=password
 # which is the same as the public IP/hostname of your host server
 # when an email confirmation link is click, this is the host that user's devices
 # will try to connect to
-API_EXTERNAL_URL=http://<host>
-
-# 2 fields below are only relevant for development, can ignore
-DATABASE_URL=postgres://postgres:password@localhost:5433/postgres
-SQLX_OFFLINE=false
+API_EXTERNAL_URL=http://your-host
 
 # File Storage
 # This affects where the files will be uploaded.
-# By default, Minio will be deployed as file storage server # and it will use the host server's disk storage.
-# You can also AWS S3 by setting USE_MINIO as false
+# By default, Minio will be deployed as file storage server which will use the host's disk storage.
+# You can also AWS S3 by setting USE_MINIO as false and configure the AWS related fields.
 USE_MINIO=true                    # determine if minio-server is used
 # MINIO_URL=http://localhost:9000 # change this to use minio from a different host (e.g. maybe you self host Minio somewhere)
 AWS_ACCESS_KEY_ID=minioadmin
@@ -103,19 +99,19 @@ If using localhost, then just keep the default value.
 GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=
 GOTRUE_EXTERNAL_GOOGLE_SECRET=
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://<host>/gotrue/callback
+GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://your-host/gotrue/callback
 
 # GitHub OAuth2
 GOTRUE_EXTERNAL_GITHUB_ENABLED=true
 GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=your-github-client-id
 GOTRUE_EXTERNAL_GITHUB_SECRET=your-github-secret
-GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://<host>/gotrue/callback
+GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://your-host/gotrue/callback
 
 # Discord OAuth2
 GOTRUE_EXTERNAL_DISCORD_ENABLED=true
 GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=your-discord-client-id
 GOTRUE_EXTERNAL_DISCORD_SECRET=your-discord-secret
-GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://<host>/gotrue/callback
+GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://your-host/gotrue/callback
 ```
 
 ### 3. Running the services

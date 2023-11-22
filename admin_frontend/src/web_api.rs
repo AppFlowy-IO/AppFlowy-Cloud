@@ -7,7 +7,7 @@ use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
-use axum::http::{status, HeaderMap, HeaderValue};
+use axum::http::{status, HeaderMap};
 use axum::response::Result;
 use axum::routing::delete;
 use axum::Form;
@@ -99,22 +99,13 @@ pub async fn change_password_handler(
   Ok(WebApiResponse::<()>::from_str("Password changed".into()))
 }
 
-static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
-static DEFAULT_SCHEME: HeaderValue = HeaderValue::from_static("http");
 pub async fn post_oauth_login_handler(
   header_map: HeaderMap,
   Path(provider): Path<String>,
 ) -> Result<WebApiResponse<String>, WebApiError<'static>> {
-  let host = header_map
-    .get("host")
-    .unwrap_or(&DEFAULT_HOST)
-    .to_str()
-    .unwrap();
-  let scheme = header_map
-    .get("x-scheme")
-    .unwrap_or(&DEFAULT_SCHEME)
-    .to_str()
-    .unwrap();
+  let scheme = get_header_value_or_default(&header_map, "x-scheme", "http");
+  let host = get_header_value_or_default(&header_map, "host", "localhost");
+
   let base_url = format!("{}://{}", scheme, host);
   let redirect_uri = format!("{}/web/oauth_login_redirect", base_url);
 
@@ -123,6 +114,23 @@ pub async fn post_oauth_login_handler(
     base_url, &provider, redirect_uri
   );
   Ok(oauth_url.into())
+}
+
+fn get_header_value_or_default<'a>(
+  header_map: &'a HeaderMap,
+  header_name: &str,
+  default: &'a str,
+) -> &'a str {
+  match header_map.get(header_name) {
+    Some(v) => match v.to_str() {
+      Ok(v) => v,
+      Err(e) => {
+        tracing::error!("failed to get header value {}: {}, {:?}", header_name, e, v);
+        default
+      },
+    },
+    None => default,
+  }
 }
 
 pub async fn admin_update_user_handler(
@@ -226,6 +234,7 @@ pub async fn login_refresh_handler(
 // sign up if not exist
 pub async fn login_handler(
   State(state): State<AppState>,
+  header_map: HeaderMap,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
@@ -252,7 +261,15 @@ pub async fn login_handler(
           ("invalid_grant", Some("Invalid login credentials")) => {
             let sign_up_res = state
               .gotrue_client
-              .sign_up(&param.email, &param.password)
+              .sign_up_with_referrer(
+                &param.email,
+                &param.password,
+                Some(get_header_value_or_default(
+                  &header_map,
+                  "host",
+                  "localhost",
+                )),
+              )
               .await;
 
             match sign_up_res {

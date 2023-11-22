@@ -52,12 +52,28 @@ impl Client {
 
   #[tracing::instrument(skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<SignUpResponse, GoTrueError> {
+    self.sign_up_with_referrer(email, password, None).await
+  }
+
+  #[tracing::instrument(skip_all, err)]
+  pub async fn sign_up_with_referrer(
+    &self,
+    email: &str,
+    password: &str,
+    redirect_to: Option<&str>,
+  ) -> Result<SignUpResponse, GoTrueError> {
     let payload = serde_json::json!({
         "email": email,
         "password": password,
     });
     let url: String = format!("{}/signup", self.base_url);
-    let resp = self.client.post(&url).json(&payload).send().await?;
+
+    let mut req_builder = self.client.post(&url).json(&payload);
+    if let Some(redirect_to) = redirect_to {
+      req_builder = req_builder.header("redirect_to", redirect_to);
+    }
+
+    let resp = req_builder.send().await?;
     to_gotrue_result(resp).await
   }
 

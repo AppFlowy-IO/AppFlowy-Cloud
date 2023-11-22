@@ -214,7 +214,6 @@ pub async fn login_refresh_handler(
 // sign up if not exist
 pub async fn login_handler(
   State(state): State<AppState>,
-  header_map: HeaderMap,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
@@ -241,15 +240,7 @@ pub async fn login_handler(
           ("invalid_grant", Some("Invalid login credentials")) => {
             let sign_up_res = state
               .gotrue_client
-              .sign_up_with_referrer(
-                &param.email,
-                &param.password,
-                Some(&get_header_value_or_default(
-                  &header_map,
-                  "host",
-                  "localhost",
-                )),
-              )
+              .sign_up_with_referrer(&param.email, &param.password, Some("/"))
               .await;
 
             match sign_up_res {

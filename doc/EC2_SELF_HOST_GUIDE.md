@@ -71,29 +71,24 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    Create a `.env` file from the template. There will be values in the `.env` that needs to be change according to
    your needs Kindly read the comments in `.env` file.
    ```bash
-   cp dev.env .env
+   cp deploy.env .env
    ```
 
-3. **Mailer Configuration**:
-   Set up auto-confirmation for the Gotrue mailer in the `.env` file:
-   ```bash
-   echo "GOTRUE_MAILER_AUTOCONFIRM=true" >> .env
-   ```
-
-4. **Authentication Setup**:
-   Open your .env file and update the OAuth redirect URIs with the Public IPv4 DNS of your EC2 instance. It should look something like this: http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue/callback.
+3. **Authentication Setup**:
+    Open your .env file and update the OAuth redirect URIs with the Public IPv4 DNS of your EC2 instance. It should look something like this: http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/gotrue/callback.
    As an example, when configuring OAuth credentials in Google, it should resemble the image shown below:
    ![img.png](../assets/images/google_callback_url.png)
 
    For detailed setup instructions, refer to the Authentication documentation.
+   
 
-5. **Start AppFlowy Services**:
+4. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
    ```bash
    docker-compose up -d
    ```
 
-6. **Verify Service Status**:
+5. **Verify Service Status**:
    Check that all services are running:
    ```bash
    docker ps -a
@@ -214,10 +209,3 @@ Alternatively, you can selectively reduce Docker's disk usage:
   Additionally, ensure that dependencies on the `admin_frontend` service are also commented out as needed.
 
   ![Commenting Out Dependencies on Admin Frontend](../assets/images/comment_out_deps_on_admin_frontend.png)
-
-
-
-
-
-
-

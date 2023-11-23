@@ -1,5 +1,5 @@
 use app_error::ErrorCode;
-use gotrue_entity::dto::OAuthProvider;
+use gotrue_entity::dto::AuthProvider;
 
 use crate::{
   localhost_client, test_appflowy_cloud_client,
@@ -52,7 +52,7 @@ async fn sign_up_but_existing_user() {
 async fn sign_up_oauth_not_available() {
   let c = localhost_client();
   let err = c
-    .generate_oauth_url_with_provider(&OAuthProvider::Zoom)
+    .generate_oauth_url_with_provider(&AuthProvider::Zoom)
     .await
     .err()
     .unwrap();
@@ -68,14 +68,14 @@ async fn sign_up_oauth_not_available() {
 async fn sign_up_with_google_oauth() {
   let c = localhost_client();
   let url = c
-    .generate_oauth_url_with_provider(&OAuthProvider::Google)
+    .generate_oauth_url_with_provider(&AuthProvider::Google)
     .await
     .unwrap();
   assert!(!url.is_empty());
 
   let c = test_appflowy_cloud_client();
   let url = c
-    .generate_oauth_url_with_provider(&OAuthProvider::Google)
+    .generate_oauth_url_with_provider(&AuthProvider::Google)
     .await
     .unwrap();
   assert!(!url.is_empty());

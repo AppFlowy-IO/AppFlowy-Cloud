@@ -7,7 +7,7 @@ use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
-use axum::http::{status, HeaderMap, HeaderValue};
+use axum::http::{status, HeaderMap};
 use axum::response::Result;
 use axum::routing::delete;
 use axum::Form;
@@ -99,23 +99,11 @@ pub async fn change_password_handler(
   Ok(WebApiResponse::<()>::from_str("Password changed".into()))
 }
 
-static DEFAULT_HOST: HeaderValue = HeaderValue::from_static("localhost");
-static DEFAULT_SCHEME: HeaderValue = HeaderValue::from_static("http");
 pub async fn post_oauth_login_handler(
   header_map: HeaderMap,
   Path(provider): Path<String>,
 ) -> Result<WebApiResponse<String>, WebApiError<'static>> {
-  let host = header_map
-    .get("host")
-    .unwrap_or(&DEFAULT_HOST)
-    .to_str()
-    .unwrap();
-  let scheme = header_map
-    .get("x-scheme")
-    .unwrap_or(&DEFAULT_SCHEME)
-    .to_str()
-    .unwrap();
-  let base_url = format!("{}://{}", scheme, host);
+  let base_url = get_base_url(&header_map);
   let redirect_uri = format!("{}/web/oauth_login_redirect", base_url);
 
   let oauth_url = format!(
@@ -252,7 +240,7 @@ pub async fn login_handler(
           ("invalid_grant", Some("Invalid login credentials")) => {
             let sign_up_res = state
               .gotrue_client
-              .sign_up(&param.email, &param.password)
+              .sign_up_with_referrer(&param.email, &param.password, Some("/"))
               .await;
 
             match sign_up_res {
@@ -329,4 +317,28 @@ async fn session_login(
     htmx_redirect("/web/home"),
     ().into(),
   ))
+}
+
+fn get_base_url(header_map: &HeaderMap) -> String {
+  let scheme = get_header_value_or_default(header_map, "x-scheme", "http");
+  let host = get_header_value_or_default(header_map, "host", "localhost");
+
+  format!("{}://{}", scheme, host)
+}
+
+fn get_header_value_or_default<'a>(
+  header_map: &'a HeaderMap,
+  header_name: &str,
+  default: &'a str,
+) -> &'a str {
+  match header_map.get(header_name) {
+    Some(v) => match v.to_str() {
+      Ok(v) => v,
+      Err(e) => {
+        tracing::error!("failed to get header value {}: {}, {:?}", header_name, e, v);
+        default
+      },
+    },
+    None => default,
+  }
 }

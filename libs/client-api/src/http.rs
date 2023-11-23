@@ -1,6 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
-use gotrue_entity::dto::OAuthProvider;
+use gotrue_entity::dto::AuthProvider;
 use prost::Message as ProstMessage;
 
 use app_error::AppError;
@@ -211,7 +211,7 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn generate_oauth_url_with_provider(
     &self,
-    provider: &OAuthProvider,
+    provider: &AuthProvider,
   ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
@@ -226,7 +226,7 @@ impl Client {
       .append_pair("provider", provider.as_str())
       .append_pair("redirect_to", DESKTOP_CALLBACK_URL);
 
-    if let OAuthProvider::Google = provider {
+    if let AuthProvider::Google = provider {
       url
         .query_pairs_mut()
           // In many cases, especially for server-side applications or mobile apps that might need to

@@ -64,8 +64,10 @@ pub async fn user_user_handler(
   render_template(templates::UserDetails { user: &user })
 }
 
-pub async fn login_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::Login {})
+pub async fn login_handler(State(state): State<AppState>) -> Result<Html<String>, WebAppError> {
+  let external = state.gotrue_client.settings().await?.external;
+  let oauth_providers = external.oauth_providers();
+  render_template(templates::Login { oauth_providers })
 }
 
 pub async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {

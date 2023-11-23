@@ -25,7 +25,7 @@ For example, I create a project that used for localhost development. After creat
 
 ![create_credentials.png](../assets/images/create_google_credentials.png)
 
-The redirect URI should be `<your host server public ip/hostname>/callback`. For example, my host server is `localhost`, so the redirect URI is `http://localhost:9998/callback`. 
+The redirect URI should be `<your host server public ip/hostname>/gotrue/callback`. For example, my host server is `localhost`, so the redirect URI is `http://localhost/gotrue/callback`.
 
 ![create_client.png](../assets/images/create_google_oauth_client_id.png)
 
@@ -53,8 +53,8 @@ Begin by accessing your [GitHub Developer Settings](https://github.com/settings/
 1. In the 'OAuth Apps' section, click 'New OAuth App'.
 2. Fill in the 'Application name' with your app's name.
 3. For 'Homepage URL', provide the full URL to your app's homepage.
-4. Specify your app's 'Authorization callback URL' where users will be redirected post-authorization. The redirect URI should be 
-`<your host server public ip/hostname>/callback`. For example, my host server is `localhost`, so the redirect URI is `http://localhost:9998/callback`..
+4. Specify your app's 'Authorization callback URL' where users will be redirected post-authorization. The redirect URI should be
+`<your host server public ip/hostname>/gotrue/callback`. For example, my host server is `localhost`, so the redirect URI is `http://localhost/gotrue/callback`..
 5. Click 'Register Application' at the bottom.
 6. Once registered, securely store the generated OAuth credentials.
 7. Copy and save your Client ID.
@@ -73,8 +73,8 @@ Update the `.env` file with the Client ID and Client Secret.
 2. Click 'New Application' in the top right.
 3. Name your application and select 'Create'.
 4. In the settings menu, choose 'OAuth2'.
-5. Under 'Redirects', select 'Add Redirect' and input your callback URL. The redirect URI should be `<your host server public ip/hostname>/callback`.
-For example, my host server is `localhost`, so the redirect URI is `http://localhost:9998/callback`.
+5. Under 'Redirects', select 'Add Redirect' and input your callback URL. The redirect URI should be `<your host server public ip/hostname>/gotrue/callback`.
+For example, my host server is `localhost`, so the redirect URI is `http://localhost/gotrue/callback`.
 6. Remember to 'Save Changes' at the bottom.
 7. Under 'Client Information', note down your 'Client ID' and 'Client Secret' for later use.
 

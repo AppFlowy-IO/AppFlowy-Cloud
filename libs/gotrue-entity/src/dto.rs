@@ -103,16 +103,30 @@ pub struct GoTrueSettings {
 pub struct GoTrueOAuthProviderSettings(BTreeMap<String, bool>);
 
 impl GoTrueOAuthProviderSettings {
-  pub fn has_provider(&self, p: &OAuthProvider) -> bool {
+  pub fn has_provider(&self, p: &AuthProvider) -> bool {
     let a = self.0.get(p.as_str());
     match a {
       Some(v) => *v,
       None => false,
     }
   }
+
+  pub fn oauth_providers(&self) -> Vec<&str> {
+    self
+      .0
+      .iter()
+      .filter(|&(key, &value)| value && key != "email" && key != "phone")
+      .map(|(key, _value)| key.as_str())
+      .collect()
+  }
 }
 
-pub enum OAuthProvider {
+pub enum AuthProvider {
+  // Non-OAuth providers
+  Email,
+  Phone,
+
+  // OAuth providers
   Apple,
   Azure,
   Bitbucket,
@@ -131,63 +145,61 @@ pub enum OAuthProvider {
   Workos,
   Twitch,
   Twitter,
-  Email,
-  Phone,
   Zoom,
 }
 
-impl OAuthProvider {
+impl AuthProvider {
   pub fn as_str(&self) -> &str {
     match self {
-      OAuthProvider::Apple => "apple",
-      OAuthProvider::Azure => "azure",
-      OAuthProvider::Bitbucket => "bitbucket",
-      OAuthProvider::Discord => "discord",
-      OAuthProvider::Facebook => "facebook",
-      OAuthProvider::Figma => "figma",
-      OAuthProvider::Github => "github",
-      OAuthProvider::Gitlab => "gitlab",
-      OAuthProvider::Google => "google",
-      OAuthProvider::Keycloak => "keycloak",
-      OAuthProvider::Kakao => "kakao",
-      OAuthProvider::Linkedin => "linkedin",
-      OAuthProvider::Notion => "notion",
-      OAuthProvider::Spotify => "spotify",
-      OAuthProvider::Slack => "slack",
-      OAuthProvider::Workos => "workos",
-      OAuthProvider::Twitch => "twitch",
-      OAuthProvider::Twitter => "twitter",
-      OAuthProvider::Email => "email",
-      OAuthProvider::Phone => "phone",
-      OAuthProvider::Zoom => "zoom",
+      AuthProvider::Apple => "apple",
+      AuthProvider::Azure => "azure",
+      AuthProvider::Bitbucket => "bitbucket",
+      AuthProvider::Discord => "discord",
+      AuthProvider::Facebook => "facebook",
+      AuthProvider::Figma => "figma",
+      AuthProvider::Github => "github",
+      AuthProvider::Gitlab => "gitlab",
+      AuthProvider::Google => "google",
+      AuthProvider::Keycloak => "keycloak",
+      AuthProvider::Kakao => "kakao",
+      AuthProvider::Linkedin => "linkedin",
+      AuthProvider::Notion => "notion",
+      AuthProvider::Spotify => "spotify",
+      AuthProvider::Slack => "slack",
+      AuthProvider::Workos => "workos",
+      AuthProvider::Twitch => "twitch",
+      AuthProvider::Twitter => "twitter",
+      AuthProvider::Email => "email",
+      AuthProvider::Phone => "phone",
+      AuthProvider::Zoom => "zoom",
     }
   }
 }
 
-impl OAuthProvider {
-  pub fn from<A: AsRef<str>>(value: A) -> Option<OAuthProvider> {
+impl AuthProvider {
+  pub fn from<A: AsRef<str>>(value: A) -> Option<AuthProvider> {
     match value.as_ref() {
-      "apple" => Some(OAuthProvider::Apple),
-      "azure" => Some(OAuthProvider::Azure),
-      "bitbucket" => Some(OAuthProvider::Bitbucket),
-      "discord" => Some(OAuthProvider::Discord),
-      "facebook" => Some(OAuthProvider::Facebook),
-      "figma" => Some(OAuthProvider::Figma),
-      "github" => Some(OAuthProvider::Github),
-      "gitlab" => Some(OAuthProvider::Gitlab),
-      "google" => Some(OAuthProvider::Google),
-      "keycloak" => Some(OAuthProvider::Keycloak),
-      "kakao" => Some(OAuthProvider::Kakao),
-      "linkedin" => Some(OAuthProvider::Linkedin),
-      "notion" => Some(OAuthProvider::Notion),
-      "spotify" => Some(OAuthProvider::Spotify),
-      "slack" => Some(OAuthProvider::Slack),
-      "workos" => Some(OAuthProvider::Workos),
-      "twitch" => Some(OAuthProvider::Twitch),
-      "twitter" => Some(OAuthProvider::Twitter),
-      "email" => Some(OAuthProvider::Email),
-      "phone" => Some(OAuthProvider::Phone),
-      "zoom" => Some(OAuthProvider::Zoom),
+      "apple" => Some(AuthProvider::Apple),
+      "azure" => Some(AuthProvider::Azure),
+      "bitbucket" => Some(AuthProvider::Bitbucket),
+      "discord" => Some(AuthProvider::Discord),
+      "facebook" => Some(AuthProvider::Facebook),
+      "figma" => Some(AuthProvider::Figma),
+      "github" => Some(AuthProvider::Github),
+      "gitlab" => Some(AuthProvider::Gitlab),
+      "google" => Some(AuthProvider::Google),
+      "keycloak" => Some(AuthProvider::Keycloak),
+      "kakao" => Some(AuthProvider::Kakao),
+      "linkedin" => Some(AuthProvider::Linkedin),
+      "notion" => Some(AuthProvider::Notion),
+      "spotify" => Some(AuthProvider::Spotify),
+      "slack" => Some(AuthProvider::Slack),
+      "workos" => Some(AuthProvider::Workos),
+      "twitch" => Some(AuthProvider::Twitch),
+      "twitter" => Some(AuthProvider::Twitter),
+      "email" => Some(AuthProvider::Email),
+      "phone" => Some(AuthProvider::Phone),
+      "zoom" => Some(AuthProvider::Zoom),
       _ => None,
     }
   }

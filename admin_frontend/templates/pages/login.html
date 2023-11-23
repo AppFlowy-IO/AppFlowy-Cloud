@@ -58,8 +58,10 @@
         Sign In / Sign Up
       </button>
     </form>
-    <br />
 
+    <!-- Load OAuth Providers if configured -->
+    {% if oauth_providers.len() > 0 %}
+    <br />
     <table style="width: 100%">
       <tr style="display: flex">
         <td style="width: 100%; margin: auto"><hr /></td>
@@ -70,42 +72,40 @@
 
     <h3>OAuth Login</h3>
     <div id="oauth-container">
+      {% for provider in oauth_providers %}
       <div class="oauth-icon">
-        <a href="/gotrue/authorize?provider=google&redirect_to=/web/login">
-          {% include "../assets/google/logo.html" %}
+        <a
+          href="/gotrue/authorize?provider={{ provider }}&redirect_to=/web/login"
+        >
+          <div
+            hx-get="../assets/{{ provider }}/logo.html"
+            hx-trigger="load"
+            hx-swap="outerHTML"
+          ></div>
         </a>
       </div>
-      <div class="oauth-icon">
-        <a href="/gotrue/authorize?provider=discord&redirect_to=/web/login">
-          {% include "../assets/discord/logo.html" %}
-        </a>
-      </div>
-      <div class="oauth-icon">
-        <a href="/gotrue/authorize?provider=github&redirect_to=/web/login">
-          {% include "../assets/github/logo.html" %}
-        </a>
-      </div>
+      {% endfor %} {% endif %}
     </div>
   </div>
-</div>
 
-<script>
-  // OAuthLogin
-  if (window.location.hash) {
-    // Extract data from the URL fragment
-    const fragmentData = window.location.hash.substring(1); // Remove the leading #
-    const fragmentParams = new URLSearchParams(fragmentData); // Parse the fragment data as a URLSearchParams object
-    const refreshToken = fragmentParams.get("refresh_token"); // Extract the refresh_token
-    fetch(`/web-api/login_refresh/${refreshToken}`, {
-      // Login in via refresh_token
-      method: "POST",
-    }).then((response) => {
-      if (!response.ok) {
-        displayHttpStatusAndPayload(response);
-      } else {
-        window.location.href = "/web/home";
-      }
-    });
-  }
-</script>
-{% endblock %}
+  <script>
+    // OAuthLogin
+    if (window.location.hash) {
+      // Extract data from the URL fragment
+      const fragmentData = window.location.hash.substring(1); // Remove the leading #
+      const fragmentParams = new URLSearchParams(fragmentData); // Parse the fragment data as a URLSearchParams object
+      const refreshToken = fragmentParams.get("refresh_token"); // Extract the refresh_token
+      fetch(`/web-api/login_refresh/${refreshToken}`, {
+        // Login in via refresh_token
+        method: "POST",
+      }).then((response) => {
+        if (!response.ok) {
+          displayHttpStatusAndPayload(response);
+        } else {
+          window.location.href = "/web/home";
+        }
+      });
+    }
+  </script>
+  {% endblock %}
+</div>

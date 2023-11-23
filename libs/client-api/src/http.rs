@@ -44,7 +44,7 @@ use url::Url;
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::{WSClientHttpSender, WSError};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
-use gotrue_entity::dto::{GotrueTokenResponse, OAuthProvider, UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{AuthProvider, GotrueTokenResponse, UpdateGotrueUserParams, User};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
@@ -210,7 +210,7 @@ impl Client {
   #[instrument(level = "debug", skip_all, err)]
   pub async fn generate_oauth_url_with_provider(
     &self,
-    provider: &OAuthProvider,
+    provider: &AuthProvider,
   ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
@@ -225,7 +225,7 @@ impl Client {
       .append_pair("provider", provider.as_str())
       .append_pair("redirect_to", DESKTOP_CALLBACK_URL);
 
-    if let OAuthProvider::Google = provider {
+    if let AuthProvider::Google = provider {
       url
         .query_pairs_mut()
           // In many cases, especially for server-side applications or mobile apps that might need to

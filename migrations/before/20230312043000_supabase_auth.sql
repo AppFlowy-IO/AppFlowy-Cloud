@@ -26,7 +26,7 @@ DO $$ BEGIN IF NOT EXISTS (
     SELECT
     FROM pg_catalog.pg_roles
     WHERE rolname = 'supabase_auth_admin'
-) THEN CREATE USER supabase_auth_admin NOINHERIT CREATEROLE LOGIN NOREPLICATION PASSWORD 'root';
+) THEN CREATE USER supabase_auth_admin BYPASSRLS NOINHERIT CREATEROLE LOGIN NOREPLICATION PASSWORD 'root';
 END IF;
 END $$;
 -- Create auth schema if it does not exist

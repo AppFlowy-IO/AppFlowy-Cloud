@@ -5,8 +5,8 @@ use sqlx::types::Uuid;
 
 use lazy_static::lazy_static;
 
-use crate::localhost_client;
 use crate::util::setup_log;
+use crate::{localhost_client, LOCALHOST_GOTRUE};
 
 lazy_static! {
   pub static ref ADMIN_USER: User = {
@@ -72,4 +72,9 @@ pub async fn generate_sign_in_action_link(email: &str) -> String {
     .generate_sign_in_action_link(email)
     .await
     .unwrap()
+}
+
+pub fn localhost_gotrue_client() -> gotrue::api::Client {
+  let reqwest_client = reqwest::Client::new();
+  gotrue::api::Client::new(reqwest_client, LOCALHOST_GOTRUE)
 }

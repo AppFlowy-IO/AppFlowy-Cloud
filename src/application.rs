@@ -241,14 +241,14 @@ async fn setup_admin_account(
         },
         _ => {
           let user_id = admin_user.id.parse::<uuid::Uuid>()?;
-          let result = sqlx::query(
+          let result = sqlx::query!(
             r#"
             UPDATE auth.users
             SET role = 'supabase_admin', email_confirmed_at = NOW()
             WHERE id = $1
             "#,
+            user_id,
           )
-          .bind(user_id)
           .execute(pg_pool)
           .await
           .context("failed to update the admin user")?;

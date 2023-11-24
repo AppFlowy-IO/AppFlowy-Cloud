@@ -1,3 +1,5 @@
+-- This will be run before appflowy-cloud or gotrue does its migration
+
 -- Add migration script here
 -- Create the anon and authenticated roles if they don't exist
 CREATE OR REPLACE FUNCTION create_roles(roles text []) RETURNS void LANGUAGE plpgsql AS $$

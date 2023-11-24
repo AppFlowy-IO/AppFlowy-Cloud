@@ -136,7 +136,6 @@ services:
       # Prometheus Metrics
       - GOTRUE_METRICS_ENABLED=true
       - GOTRUE_METRICS_EXPORTER=prometheus
-      - GOTRUE_EXTERNAL_SAML_ENABLED=true
     ports:
       - 9998:9999
 

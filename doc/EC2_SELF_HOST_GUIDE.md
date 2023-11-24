@@ -117,13 +117,13 @@ Once you've successfully set up AppFlowy Cloud on your server, the next step is 
    - Ensure that your AppFlowy Cloud server is up and running without any issues.
 
 2. **Copy Configuration URLs**:
-   - Use the following URLs as your environment secrets. These URLs correspond to the services running on your EC2 instance:
-      - `APPFLOWY_CLOUD_BASE_URL`: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com`
-      - `APPFLOWY_CLOUD_WS_BASE_URL`: `ws://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com/ws`
 
-3. **Configure the Client**:
-   - Return to the [Building AppFlowy with a Self-hosted Server guide](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy#step-2-building-appflowy-with-a-self-hosted-server).
-   - Follow the instructions to input these URLs into the appropriate fields in your AppFlowy-Cloud client's environment settings.
+   - Obtain Public IPv4 DNS: Retrieve the Public IPv4 DNS address of your EC2 instance.
+     ![IPv4 EC2](../assets/images/ipv4_ec2.png)
+   
+   - Paste in Guide: Return to the [Building AppFlowy with a Self-hosted Server guide](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy#step-2-building-appflowy-with-a-self-hosted-server) and paste this URL where required.
+     For example, the URL might look like: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com`
+
 
 ## Additional Docker Commands (Optional)
 

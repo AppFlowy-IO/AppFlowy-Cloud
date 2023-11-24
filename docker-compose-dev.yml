@@ -52,7 +52,9 @@ services:
 
   gotrue:
     restart: on-failure
-    image: supabase/gotrue:v2.117.0
+    build:
+      context: .
+      dockerfile: docker/gotrue.Dockerfile
     depends_on:
       - postgres
     environment:
@@ -90,5 +92,6 @@ services:
       # Prometheus Metrics
       - GOTRUE_METRICS_ENABLED=true
       - GOTRUE_METRICS_EXPORTER=prometheus
+      - GOTRUE_EXTERNAL_SAML_ENABLED=true
     ports:
       - 9998:9999

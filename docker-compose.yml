@@ -93,9 +93,7 @@ services:
 
   gotrue:
     restart: on-failure
-    build:
-      context: .
-      dockerfile: docker/gotrue.Dockerfile
+    image: supabase/gotrue:v2.117.0
     depends_on:
       - postgres
     environment:

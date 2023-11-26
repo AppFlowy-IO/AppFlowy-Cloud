@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
+use gotrue_entity::dto::AuthProvider;
 use prost::Message as ProstMessage;
 
 use app_error::AppError;
@@ -44,7 +45,7 @@ use url::Url;
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::{WSClientHttpSender, WSError};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
-use gotrue_entity::dto::{AuthProvider, GotrueTokenResponse, UpdateGotrueUserParams, User};
+use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.

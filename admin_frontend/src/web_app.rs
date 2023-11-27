@@ -35,6 +35,12 @@ pub fn component_router() -> Router<AppState> {
     .route("/admin/users", get(admin_users_handler))
     .route("/admin/users/:user_id", get(admin_user_details_handler))
     .route("/admin/users/create", get(admin_users_create_handler))
+    // SSO
+    .route("/admin/sso", get(admin_sso_handler))
+}
+
+pub async fn admin_sso_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::SsoList {})
 }
 
 pub async fn user_navigate_handler() -> Result<Html<String>, WebAppError> {

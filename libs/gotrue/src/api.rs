@@ -1,6 +1,7 @@
 use super::grant::Grant;
 use crate::params::{
-  AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, GenerateLinkResponse, MagicLinkParams,
+  AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
+  GenerateLinkResponse, MagicLinkParams,
 };
 use anyhow::Context;
 use gotrue_entity::dto::{
@@ -8,6 +9,7 @@ use gotrue_entity::dto::{
   UpdateGotrueUserParams, User,
 };
 use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
+use gotrue_entity::sso::{SSOProvider, SSOProviders};
 use infra::reqwest::{check_response, from_body, from_response};
 
 #[derive(Clone)]
@@ -234,6 +236,78 @@ impl Client {
       .send()
       .await?;
     check_gotrue_result(resp).await
+  }
+
+  pub async fn admin_list_sso_providers(
+    &self,
+    access_token: &str,
+  ) -> Result<SSOProviders, GoTrueError> {
+    let resp = self
+      .client
+      .get(format!("{}/admin/sso/providers", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
+  pub async fn admin_create_sso_providers(
+    &self,
+    access_token: &str,
+    create_sso_provider_params: &CreateSSOProviderParams,
+  ) -> Result<SSOProvider, GoTrueError> {
+    let resp = self
+      .client
+      .post(format!("{}/admin/sso/providers", self.base_url))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(create_sso_provider_params)
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
+  pub async fn admin_get_sso_provider(
+    &self,
+    access_token: &str,
+    idp_id: &str,
+  ) -> Result<SSOProvider, GoTrueError> {
+    let resp = self
+      .client
+      .get(format!("{}/admin/sso/providers/{}", self.base_url, idp_id))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
+  pub async fn admin_update_sso_provider(
+    &self,
+    access_token: &str,
+    idp_id: &str,
+    create_sso_provider_params: &CreateSSOProviderParams,
+  ) -> Result<SSOProvider, GoTrueError> {
+    let resp = self
+      .client
+      .put(format!("{}/admin/sso/providers/{}", self.base_url, idp_id))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .json(create_sso_provider_params)
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
+  }
+
+  pub async fn admin_delete_sso_provider(
+    &self,
+    access_token: &str,
+    idp_id: &str,
+  ) -> Result<SSOProvider, GoTrueError> {
+    let resp = self
+      .client
+      .delete(format!("{}/admin/sso/providers/{}", self.base_url, idp_id))
+      .header("Authorization", format!("Bearer {}", access_token))
+      .send()
+      .await?;
+    to_gotrue_result(resp).await
   }
 }
 

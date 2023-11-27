@@ -163,7 +163,7 @@ pub async fn admin_delete_user_handler(
       &session.token.access_token,
       &user_uuid,
       &AdminDeleteUserParams {
-        should_soft_delete: true,
+        should_soft_delete: false,
       },
     )
     .await?;

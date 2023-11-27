@@ -22,6 +22,8 @@ async fn edit_workspace_without_permission() {
   client_1.wait_object_sync_complete(&workspace_id).await;
 
   assert_client_collab(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}), 3).await;
+
+  /// client 2 has not permission to read/edit the workspace
   assert_client_collab(&mut client_2, &workspace_id, json!({}), 3).await;
 }
 

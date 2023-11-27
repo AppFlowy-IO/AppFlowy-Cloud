@@ -1,3 +1,4 @@
+mod delete;
 mod refresh;
 mod sign_in;
 mod sign_out;

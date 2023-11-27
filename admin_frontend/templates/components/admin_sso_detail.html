@@ -1,0 +1,42 @@
+<div>
+  <table>
+    <tr>
+      <td style="white-space: nowrap">ID</td>
+      <td>{{ sso_provider.id|escape }}</td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap">Entity ID</td>
+      <td>{{ sso_provider.saml.entity_id|escape }}</td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap">Domains</td>
+      <td>
+        <ul>
+          {% for domain in sso_provider.domains %}
+          <li>{{ domain|escape }}</li>
+          {% endfor %}
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap">Created At</td>
+      <td>{{ sso_provider.created_at|escape }}</td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap">Updated At</td>
+      <td>{{ sso_provider.updated_at|escape }}</td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap; align">Metadata XML</td>
+      <td>
+        <code> {{ sso_provider.saml.metadata_xml|default("")|escape }} </code>
+      </td>
+    </tr>
+    <tr>
+      <td style="white-space: nowrap">Attribute Mapping</td>
+      <td>
+        <code> {{ mapping_json|escape }} </code>
+      </td>
+    </tr>
+  </table>
+</div>

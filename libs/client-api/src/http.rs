@@ -277,6 +277,7 @@ impl Client {
     let resp = reqwest::Client::new().get(action_link).send().await?;
     let html = resp.text().await.unwrap();
 
+    trace!("action_link:{}, html: {}", action_link, html);
     let fragment = scraper::Html::parse_fragment(&html);
     let selector = scraper::Selector::parse("a").unwrap();
     let sign_in_url = fragment

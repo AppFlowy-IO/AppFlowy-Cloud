@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct SSOProviders {
-  pub items: Vec<SSOProvider>,
+  pub items: Option<Vec<SSOProvider>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -24,12 +24,12 @@ pub struct SAMLProvider {
   pub attribute_mapping: SAMLAttributeMapping,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SAMLAttributeMapping {
   pub keys: Option<BTreeMap<String, SAMLAttribute>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SAMLAttribute {
   pub name: Option<String>,
   pub names: Option<Vec<String>>,

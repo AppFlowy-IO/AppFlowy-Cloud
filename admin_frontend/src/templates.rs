@@ -1,10 +1,21 @@
 use askama::Template;
-use gotrue_entity::dto::User;
+use gotrue_entity::{dto::User, sso::SSOProvider};
+
+#[derive(Template)]
+#[template(path = "components/admin_sso_detail.html")]
+pub struct SsoDetail {
+  pub sso_provider: SSOProvider,
+  pub mapping_json: String,
+}
+
+#[derive(Template)]
+#[template(path = "components/admin_sso_create.html")]
+pub struct SsoCreate;
 
 #[derive(Template)]
 #[template(path = "components/admin_sso_list.html")]
 pub struct SsoList {
-  // TODO
+  pub sso_providers: Vec<SSOProvider>,
 }
 
 #[derive(Template)]

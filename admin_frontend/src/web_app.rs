@@ -37,26 +37,61 @@ pub fn component_router() -> Router<AppState> {
     .route("/admin/users/create", get(admin_users_create_handler))
     // SSO
     .route("/admin/sso", get(admin_sso_handler))
+    .route("/admin/sso/create", get(admin_sso_create_handler))
+    .route("/admin/sso/:sso_provider_id", get(admin_sso_detail_handler))
 }
 
-pub async fn admin_sso_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::SsoList {})
+pub async fn admin_sso_detail_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(sso_provider_id): Path<String>,
+) -> Result<Html<String>, WebAppError> {
+  let sso_provider = state
+    .gotrue_client
+    .admin_get_sso_provider(&session.token.access_token, &sso_provider_id)
+    .await?;
+
+  let mapping_json =
+    serde_json::to_string_pretty(&sso_provider.saml.attribute_mapping).unwrap_or("".to_owned());
+
+  render_template(templates::SsoDetail {
+    sso_provider,
+    mapping_json,
+  })
+}
+
+pub async fn admin_sso_create_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::SsoCreate)
+}
+
+pub async fn admin_sso_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  let sso_providers = state
+    .gotrue_client
+    .admin_list_sso_providers(&session.token.access_token)
+    .await?
+    .items
+    .unwrap_or_default();
+
+  render_template(templates::SsoList { sso_providers })
 }
 
 pub async fn user_navigate_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::Navigate {})
+  render_template(templates::Navigate)
 }
 
 pub async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::AdminNavigate {})
+  render_template(templates::AdminNavigate)
 }
 
 pub async fn user_invite_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::Invite {})
+  render_template(templates::Invite)
 }
 
 pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::CreateUser {})
+  render_template(templates::CreateUser)
 }
 
 pub async fn user_user_handler(
@@ -77,7 +112,7 @@ pub async fn login_handler(State(state): State<AppState>) -> Result<Html<String>
 }
 
 pub async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::ChangePassword {})
+  render_template(templates::ChangePassword)
 }
 
 pub async fn home_handler(

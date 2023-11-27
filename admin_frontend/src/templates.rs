@@ -2,6 +2,12 @@ use askama::Template;
 use gotrue_entity::dto::User;
 
 #[derive(Template)]
+#[template(path = "components/admin_sso_list.html")]
+pub struct SsoList {
+  // TODO
+}
+
+#[derive(Template)]
 #[template(path = "components/change_password.html")]
 pub struct ChangePassword;
 

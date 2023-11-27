@@ -12,6 +12,7 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    - Select your preferred AWS Region.
    - Choose "Launch instance" from the EC2 dashboard.
    - Optionally, under "Name and tags," provide a name for your instance.
+   - Under "Configure Storage", provide at least 16GB storage.
    - For "Application and OS Images (Amazon Machine Image)," select "Quick Start" and choose Ubuntu.
    - In "Key pair (login)," select an existing key pair or create a new one.
    - Review and launch the instance from the Summary panel.
@@ -80,7 +81,6 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    ![img.png](../assets/images/google_callback_url.png)
 
    For detailed setup instructions, refer to the Authentication documentation.
-   
 
 4. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
@@ -120,7 +120,7 @@ Once you've successfully set up AppFlowy Cloud on your server, the next step is 
 
    - Obtain Public IPv4 DNS: Retrieve the Public IPv4 DNS address of your EC2 instance.
      ![IPv4 EC2](../assets/images/ipv4_ec2.png)
-   
+
    - Paste in Guide: Return to the [Building AppFlowy with a Self-hosted Server guide](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy#step-2-building-appflowy-with-a-self-hosted-server) and paste this URL where required.
      For example, the URL might look like: `http://ec2-13-228-28-244.ap-southeast-1.compute.amazonaws.com`
 

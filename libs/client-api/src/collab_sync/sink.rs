@@ -230,12 +230,6 @@ where
       if elapsed < *duration {
         return Ok(());
       }
-
-      if elapsed < self.config.send_timeout {
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        self.notify();
-        return Ok(());
-      }
     }
 
     // Reset the instant if the strategy is [SinkStrategy::FixInterval].

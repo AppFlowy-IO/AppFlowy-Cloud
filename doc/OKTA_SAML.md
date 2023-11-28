@@ -59,7 +59,7 @@ In Attribute Statements (optional)
 ![AppFlowy Create SSO](../assets/images/okta_integration/appflowy_create_sso.png)
 - In AppFlowy Admin page, Click on "Create SSO" on the left, paste the Metadata URL, then click "Create"
 
-![Check SSO](../assets/images/okta_integration/appflowy_create_sso.png)
+![Check SSO](../assets/images/okta_integration/appflowy_list_sso.png)
 - In AppFlowy Admin page, Click on "List SSO", you should see the SSO being created
 
 ## App Visibility

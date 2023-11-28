@@ -21,3 +21,8 @@ pub mod entity {
   pub use realtime_entity::user::*;
   pub use shared_entity::dto::*;
 }
+
+#[cfg(feature = "template")]
+pub mod template {
+  pub use workspace_template;
+}

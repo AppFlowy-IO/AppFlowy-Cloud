@@ -87,10 +87,10 @@ pub enum AppError {
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
 
-  #[error("connect error:{0}")]
+  #[error("{0}")]
   Connect(String),
 
-  #[error("request timeout:{0}")]
+  #[error("{0}")]
   RequestTimeout(String),
 }
 

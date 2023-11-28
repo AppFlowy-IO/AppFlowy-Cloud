@@ -1,5 +1,7 @@
 use crate::user::utils::generate_unique_registered_user;
-use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
+use crate::util::test_client::{
+  assert_client_collab, assert_client_collab_include_value, assert_server_collab, TestClient,
+};
 use std::time::Duration;
 
 use collab_entity::CollabType;
@@ -107,8 +109,8 @@ async fn edit_collab_with_different_devices_test() {
   let expected_json = json!({
     "name": "workspace"
   });
-  assert_client_collab(&mut client_1, &object_id, expected_json.clone(), 10).await;
-  assert_client_collab(&mut client_2, &object_id, expected_json.clone(), 10).await;
+  assert_client_collab(&mut client_1, &object_id, "name", expected_json.clone(), 10).await;
+  assert_client_collab(&mut client_2, &object_id, "name", expected_json.clone(), 10).await;
 }
 
 #[tokio::test]
@@ -177,6 +179,6 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     "8": "Task 8",
     "9": "Task 9"
   });
-  assert_client_collab(&mut client_1, &object_id, expected_json.clone(), 10).await;
-  assert_client_collab(&mut client_2, &object_id, expected_json.clone(), 10).await;
+  assert_client_collab_include_value(&mut client_1, &object_id, expected_json.clone()).await;
+  assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone()).await;
 }

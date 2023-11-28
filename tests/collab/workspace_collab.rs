@@ -1,4 +1,6 @@
-use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
+use crate::util::test_client::{
+  assert_client_collab, assert_client_collab_include_value, assert_server_collab, TestClient,
+};
 use collab_entity::CollabType;
 use database_entity::dto::AFRole;
 use serde_json::json;
@@ -21,10 +23,11 @@ async fn edit_workspace_without_permission() {
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&workspace_id).await;
 
-  assert_client_collab(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}), 3).await;
+  assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}))
+    .await;
 
   // client 2 has not permission to read/edit the workspace
-  assert_client_collab(&mut client_2, &workspace_id, json!({}), 3).await;
+  assert_client_collab_include_value(&mut client_2, &workspace_id, json!({})).await;
 }
 
 #[tokio::test]
@@ -49,8 +52,22 @@ async fn init_sync_workspace_with_guest_permission() {
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&workspace_id).await;
 
-  assert_client_collab(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}), 3).await;
-  assert_client_collab(&mut client_2, &workspace_id, json!({"name": "AppFlowy"}), 3).await;
+  assert_client_collab(
+    &mut client_1,
+    &workspace_id,
+    "name",
+    json!({"name": "AppFlowy"}),
+    3,
+  )
+  .await;
+  assert_client_collab(
+    &mut client_2,
+    &workspace_id,
+    "name",
+    json!({"name": "AppFlowy"}),
+    3,
+  )
+  .await;
 }
 
 #[tokio::test]
@@ -79,6 +96,8 @@ async fn edit_workspace_with_guest_permission() {
   client_2
     .wait_object_sync_complete_with_secs(&workspace_id, 10)
     .await;
+
+  // client_2 only has the guest permission, so it can not edit the collab
   client_2
     .collab_by_object_id
     .get_mut(&workspace_id)
@@ -90,8 +109,8 @@ async fn edit_workspace_with_guest_permission() {
     .wait_object_sync_complete_with_secs(&workspace_id, 5)
     .await;
 
-  assert_client_collab(&mut client_1, &workspace_id, json!({"name": "zack"}), 3).await;
-  assert_client_collab(&mut client_2, &workspace_id, json!({"name": "nathan"}), 3).await;
+  assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "zack"})).await;
+  assert_client_collab_include_value(&mut client_2, &workspace_id, json!({"name": "nathan"})).await;
 
   assert_server_collab(
     &workspace_id,

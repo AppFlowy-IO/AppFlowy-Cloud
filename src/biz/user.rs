@@ -9,9 +9,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
-use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
+use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, InsertCollabParams};
 
 use app_error::AppError;
+use database::collab::insert_into_af_collab;
 use database::user::{create_user, is_user_exist};
 use database_entity::pg_row::AFUserNotification;
 use realtime::entities::RealtimeUser;
@@ -19,7 +20,8 @@ use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool};
 use tokio::sync::RwLock;
-use tracing::instrument;
+use tracing::{debug, instrument};
+use workspace_template::WorkspaceTemplateBuilder;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
 /// Return true if the user is a new user
@@ -42,7 +44,32 @@ pub async fn verify_token(
   let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
   if is_new {
     let new_uid = id_gen.write().await.next_id();
-    create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
+    let workspace_id =
+      create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
+
+    // Create the default workspace for the user. A default workspace might contain multiple
+    // templates, e.g. a document template, a database template, etc.
+    let templates = WorkspaceTemplateBuilder::new(new_uid, &workspace_id)
+      .default_workspace()
+      .await?;
+
+    debug!("create {} templates for user:{}", templates.len(), new_uid);
+    for template in templates {
+      insert_into_af_collab(
+        &mut txn,
+        &new_uid,
+        &InsertCollabParams {
+          object_id: template.object_id,
+          encoded_collab_v1: template
+            .object_data
+            .encode_to_bytes()
+            .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?,
+          workspace_id: workspace_id.clone(),
+          collab_type: template.object_type,
+        },
+      )
+      .await?;
+    }
   }
   txn
     .commit()

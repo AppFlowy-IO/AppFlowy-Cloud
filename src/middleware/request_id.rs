@@ -44,6 +44,7 @@ where
   fn call(&self, req: ServiceRequest) -> Self::Future {
     let request_id = get_request_id(&req).unwrap_or(uuid::Uuid::new_v4().to_string());
 
+    // Skip generate request id for metrics requests
     if req.path() == "/metrics" {
       let fut = self.service.call(req);
       Box::pin(fut)

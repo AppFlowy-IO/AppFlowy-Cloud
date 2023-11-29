@@ -4310,6 +4310,7 @@ dependencies = [
  "collab-entity",
  "database-entity",
  "gotrue-entity",
+ "log",
  "opener",
  "reqwest",
  "rust-s3",

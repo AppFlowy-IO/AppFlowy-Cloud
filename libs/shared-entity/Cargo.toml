@@ -24,6 +24,7 @@ validator = { version = "0.16", features = ["validator_derive", "derive"], optio
 opener = "0.6.1"
 url = "2.4.1"
 rust-s3 = "0.33.0"
+log = "0.4.20"
 
 [features]
 cloud = ["actix-web", "sqlx", "validator"]

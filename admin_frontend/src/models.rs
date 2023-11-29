@@ -28,3 +28,10 @@ pub struct WebApiAdminCreateUserRequest {
 pub struct WebApiInviteUserRequest {
   pub email: String,
 }
+
+#[derive(Deserialize)]
+pub struct WebApiCreateSSOProviderRequest {
+  #[serde(rename = "type")]
+  pub type_: String,
+  pub metadata_url: String,
+}

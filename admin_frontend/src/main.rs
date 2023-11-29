@@ -51,6 +51,10 @@ async fn main() {
     .allow_origin(Any);
 
   let app = Router::new()
+    .route(
+      "/favicon.ico",
+      get(|| async { Redirect::permanent("/assets/favicon.ico") }),
+    )
     .route("/", get(|| async { Redirect::permanent("/web") }))
     .layer(ServiceBuilder::new().layer(cors))
     .nest_service("/web", web_app_router)

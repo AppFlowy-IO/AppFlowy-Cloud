@@ -78,6 +78,8 @@ pub async fn update_user(
 ///   - Assign the user a role in the `af_workspace_member` table.
 ///   - Add the user to the `af_collab_member` table with the appropriate permissions.
 ///
+/// # Returns
+/// A `Result` containing the workspace_id of the user's newly created workspace
 #[instrument(skip(executor), err)]
 #[inline]
 pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
@@ -86,7 +88,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   user_uuid: &Uuid,
   email: &str,
   name: &str,
-) -> Result<(), AppError> {
+) -> Result<String, AppError> {
   let row = sqlx::query!(
     r#"
     WITH ins_user AS (
@@ -115,7 +117,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
         SELECT ins_workspace.owner_uid, owner_role.id, ins_workspace.workspace_id
         FROM ins_workspace, owner_role
     )
-    SELECT COUNT(*) FROM ins_user;
+    SELECT workspace_id FROM ins_workspace;
     "#,
     uid,
     user_uuid,
@@ -125,8 +127,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   .fetch_one(executor)
   .await?;
 
-  debug_assert!(row.count.unwrap_or(0) <= 1, "More than one user inserted");
-  Ok(())
+  Ok(row.workspace_id.to_string())
 }
 
 #[inline]

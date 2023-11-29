@@ -1,0 +1,21 @@
+[package]
+name = "workspace-template"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytes.workspace = true
+collab = { version = "0.1.0"}
+collab-folder = { version = "0.1.0"}
+collab-document = { version = "0.1.0"}
+collab-entity = { version = "0.1.0"}
+async-trait = "0.1.73"
+anyhow.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+indexmap = "2.1.0"
+serde_json.workspace = true
+nanoid = "0.4.0"
+serde = { version = "1.0.188", features = ["derive"] }

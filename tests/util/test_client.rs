@@ -1,4 +1,6 @@
-use assert_json_diff::assert_json_eq;
+use assert_json_diff::{
+  assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
+};
 use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
@@ -7,6 +9,7 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
+use collab_folder::Folder;
 use database_entity::dto::{
   AFAccessLevel, AFBlobMetadata, AFRole, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember,
   InsertCollabMemberParams, InsertCollabParams, QueryCollabParams, UpdateCollabMemberParams,
@@ -109,6 +112,29 @@ impl TestClient {
 
   pub(crate) async fn open_workspace(&self, workspace_id: &str) -> AFWorkspace {
     self.api_client.open_workspace(workspace_id).await.unwrap()
+  }
+
+  pub(crate) async fn get_user_folder(&self) -> Folder {
+    let uid = self.uid().await;
+    let workspace_id = self.workspace_id().await;
+    let data = self
+      .api_client
+      .get_collab(QueryCollabParams {
+        object_id: workspace_id.clone(),
+        workspace_id: workspace_id.clone(),
+        collab_type: CollabType::Folder,
+      })
+      .await
+      .unwrap();
+
+    Folder::from_collab_raw_data(
+      uid,
+      CollabOrigin::Empty,
+      vec![data.doc_state.to_vec()],
+      &workspace_id,
+      vec![],
+    )
+    .unwrap()
   }
 
   pub(crate) async fn try_update_workspace_member(
@@ -429,8 +455,8 @@ pub async fn assert_server_collab(
               break;
             }
 
-            if json == expected {
-              dbg!(workspace_id, object_id);
+
+            if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
               break;
             }
             tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -450,6 +476,7 @@ pub async fn assert_server_collab(
 pub(crate) async fn assert_client_collab(
   client: &mut TestClient,
   object_id: &str,
+  key: &str,
   expected: Value,
   _retry_duration: u64,
 ) {
@@ -472,10 +499,46 @@ pub(crate) async fn assert_client_collab(
       } => {
         retry_count += 1;
         if retry_count > 30 {
-            assert_eq!(json, expected, "object_id: {}", object_id);
+            assert_eq!(json[key], expected[key], "object_id: {}", object_id);
             break;
           }
-        if json == expected {
+        if json[key] == expected[key] {
+          break;
+        }
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+      }
+    }
+  }
+}
+
+pub(crate) async fn assert_client_collab_include_value(
+  client: &mut TestClient,
+  object_id: &str,
+  expected: Value,
+) {
+  let secs = 30;
+  let object_id = object_id.to_string();
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+         panic!("timeout");
+       },
+       json = async {
+        client
+          .collab_by_object_id
+          .get_mut(&object_id)
+          .unwrap()
+          .collab
+          .lock()
+          .to_json_value()
+      } => {
+        retry_count += 1;
+        if retry_count > 30 {
+          assert_json_include!(actual: json, expected: expected);
+            break;
+          }
+        if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
           break;
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;

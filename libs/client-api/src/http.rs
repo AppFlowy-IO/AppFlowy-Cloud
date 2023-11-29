@@ -22,6 +22,7 @@ use mime::Mime;
 use parking_lot::RwLock;
 use realtime_entity::EncodedCollabV1;
 use reqwest::header;
+
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
@@ -387,6 +388,7 @@ impl Client {
       .body(msg)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -450,6 +452,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFUserProfile>::from_response(resp)
       .await?
       .into_data()
@@ -463,6 +466,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFUserWorkspaceInfo>::from_response(resp)
       .await?
       .into_data()
@@ -476,6 +480,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFWorkspaces>::from_response(resp)
       .await?
       .into_data()
@@ -489,6 +494,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFWorkspace>::from_response(resp)
       .await?
       .into_data()
@@ -509,6 +515,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<Vec<AFWorkspaceMember>>::from_response(resp)
       .await?
       .into_data()
@@ -532,6 +539,7 @@ impl Client {
       .json(&members)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()?;
     Ok(())
   }
@@ -553,6 +561,7 @@ impl Client {
       .json(&changeset)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()?;
     Ok(())
   }
@@ -575,6 +584,7 @@ impl Client {
       .json(&payload)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()?;
     Ok(())
   }
@@ -685,6 +695,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -700,6 +711,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -715,6 +727,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -733,6 +746,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<EncodedCollabV1>::from_response(resp)
       .await?
       .into_data()
@@ -754,6 +768,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<BatchQueryCollabResult>::from_response(resp)
       .await?
       .into_data()
@@ -771,6 +786,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -789,6 +805,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -807,6 +824,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFCollabMember>::from_response(resp)
       .await?
       .into_data()
@@ -827,6 +845,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -845,6 +864,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -863,6 +883,7 @@ impl Client {
       .json(&params)
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFCollabMembers>::from_response(resp)
       .await?
       .into_data()
@@ -890,6 +911,7 @@ impl Client {
       .body(data)
       .send()
       .await?;
+    log_request_id(&resp);
     let record = AppResponse::<AFBlobRecord>::from_response(resp)
       .await?
       .into_data()?;
@@ -936,6 +958,7 @@ impl Client {
       .body(data.into())
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<AFBlobRecord>::from_response(resp)
       .await?
       .into_data()
@@ -950,6 +973,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
 
     match resp.status() {
       reqwest::StatusCode::OK => {
@@ -981,6 +1005,7 @@ impl Client {
       .send()
       .await?;
 
+    log_request_id(&resp);
     AppResponse::<AFBlobMetadata>::from_response(resp)
       .await?
       .into_data()
@@ -992,6 +1017,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
@@ -1005,6 +1031,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<WorkspaceSpaceUsage>::from_response(resp)
       .await?
       .into_data()
@@ -1020,6 +1047,7 @@ impl Client {
       .await?
       .send()
       .await?;
+    log_request_id(&resp);
     AppResponse::<WorkspaceBlobMetadata>::from_response(resp)
       .await?
       .into_data()
@@ -1064,5 +1092,13 @@ impl WSClientHttpSender for Client {
       .post_realtime_msg(device_id, message)
       .await
       .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
+  }
+}
+
+fn log_request_id(resp: &reqwest::Response) {
+  if let Some(request_id) = resp.headers().get("x-request-id") {
+    event!(tracing::Level::DEBUG, "request_id: {:?}", request_id);
+  } else {
+    event!(tracing::Level::DEBUG, "request_id: not found");
   }
 }

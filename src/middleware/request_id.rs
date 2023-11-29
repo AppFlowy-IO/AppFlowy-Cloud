@@ -1,6 +1,6 @@
 use actix_http::header::HeaderName;
 use std::future::{ready, Ready};
-use tracing::{debug, Instrument, Level};
+use tracing::{Instrument, Level};
 
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};

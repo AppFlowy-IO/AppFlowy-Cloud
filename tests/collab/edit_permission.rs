@@ -1,4 +1,6 @@
-use crate::util::test_client::{assert_client_collab, assert_server_collab, TestClient};
+use crate::util::test_client::{
+  assert_client_collab, assert_client_collab_include_value, assert_server_collab, TestClient,
+};
 use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;
@@ -28,7 +30,7 @@ async fn recv_updates_without_permission_test() {
     .lock()
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&object_id).await;
-  assert_client_collab(&mut client_2, &object_id, json!({}), 3).await;
+  assert_client_collab(&mut client_2, &object_id, "name", json!({}), 3).await;
 }
 
 #[tokio::test]
@@ -69,7 +71,7 @@ async fn recv_remote_updates_with_readonly_permission_test() {
   let expected = json!({
     "name": "AppFlowy"
   });
-  assert_client_collab(&mut client_2, &object_id, expected.clone(), 10).await;
+  assert_client_collab(&mut client_2, &object_id, "name", expected.clone(), 10).await;
   assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
@@ -127,7 +129,7 @@ async fn init_sync_with_readonly_permission_test() {
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  assert_client_collab(&mut client_2, &object_id, expected, 5).await;
+  assert_client_collab_include_value(&mut client_2, &object_id, expected).await;
 }
 
 #[tokio::test]
@@ -164,13 +166,12 @@ async fn edit_collab_with_readonly_permission_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  assert_client_collab(
+  assert_client_collab_include_value(
     &mut client_2,
     &object_id,
     json!({
       "name": "AppFlowy"
     }),
-    5,
   )
   .await;
 
@@ -222,7 +223,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
   let expected = json!({
     "name": "AppFlowy"
   });
-  assert_client_collab(&mut client_2, &object_id, expected.clone(), 5).await;
+  assert_client_collab_include_value(&mut client_2, &object_id, expected.clone()).await;
 
   assert_server_collab(
     &workspace_id,
@@ -272,7 +273,7 @@ async fn edit_collab_with_full_access_permission_test() {
   let expected = json!({
     "name": "AppFlowy"
   });
-  assert_client_collab(&mut client_2, &object_id, expected.clone(), 5).await;
+  assert_client_collab(&mut client_2, &object_id, "name", expected.clone(), 5).await;
 
   assert_server_collab(
     &workspace_id,
@@ -341,14 +342,13 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .insert("subtitle", "Writing Rust, fun");
   }
 
-  assert_client_collab(
+  assert_client_collab_include_value(
     &mut client_2,
     &object_id,
     json!({
       "title": "hello world",
       "subtitle": "Writing Rust, fun"
     }),
-    5,
   )
   .await;
   assert_server_collab(

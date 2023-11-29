@@ -1,5 +1,3 @@
--- This will be run before appflowy-cloud or gotrue does its migration
-
 -- Add migration script here
 -- Create the anon and authenticated roles if they don't exist
 CREATE OR REPLACE FUNCTION create_roles(roles text []) RETURNS void LANGUAGE plpgsql AS $$
@@ -15,6 +13,14 @@ END;
 $$;
 SELECT create_roles(ARRAY ['anon', 'authenticated']);
 
+-- Create supabase_admin user if it does not exist
+DO $$ BEGIN IF NOT EXISTS (
+    SELECT
+    FROM pg_catalog.pg_roles
+    WHERE rolname = 'supabase_admin'
+) THEN CREATE USER supabase_admin LOGIN CREATEROLE CREATEDB REPLICATION BYPASSRLS;
+END IF;
+END $$;
 -- Create supabase_auth_admin user if it does not exist
 DO $$ BEGIN IF NOT EXISTS (
     SELECT

@@ -43,12 +43,17 @@ where
 
   fn call(&self, req: ServiceRequest) -> Self::Future {
     let request_id = get_request_id(&req).unwrap_or(uuid::Uuid::new_v4().to_string());
-    debug!("generated request id for: {}", req.path());
 
-    // Call the next service
-    let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);
-    let res = self.service.call(req);
-    Box::pin(res.instrument(span))
+    if req.path() == "/metrics" {
+      let fut = self.service.call(req);
+      Box::pin(fut)
+    } else {
+      debug!("generated request id for: {}", req.path());
+      // Call the next service
+      let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);
+      let res = self.service.call(req);
+      Box::pin(res.instrument(span))
+    }
   }
 }
 

@@ -578,8 +578,6 @@ impl Client {
     Ok(())
   }
 
-  // pub async fn update_workspace_member(&self, workspace_uuid: Uuid, member)
-
   #[instrument(skip_all, err)]
   pub async fn sign_in_password(
     &self,

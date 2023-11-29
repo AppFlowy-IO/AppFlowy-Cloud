@@ -79,7 +79,23 @@ pub async fn admin_create_sso_handler(
   Ok(WebApiResponse::<()>::from_str("SSO Added".into()))
 }
 
-// provide a link which when open in browser, opens the appflowy app
+/// Generates a URL to facilitate login redirection to the AppFlowy app from a web browser.
+///
+/// This function creates a custom URL scheme that can be used in a web browser to open the
+/// AppFlowy app and automatically handle user login based on the provided `UserSession`.
+///
+/// # Returns
+/// A `Result` containing `HeaderMap` for HTTP redirection if successful, or `WebApiError` in case of failure.
+///
+/// # Example URL Format
+/// `appflowy-flutter://login-callback#access_token=...&expires_at=...&expires_in=...&refresh_token=...&token_type=...`
+///
+/// The URL includes access token information and other relevant session details.
+///
+/// # Usage
+/// The client application should implement handling for this URL format, typically through the
+/// `sign_in_with_url` method in the `client-api` crate. See [client_api::Client::sign_in_with_url] for more details.
+///
 pub async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",

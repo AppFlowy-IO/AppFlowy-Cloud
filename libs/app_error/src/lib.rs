@@ -144,19 +144,19 @@ impl AppError {
 }
 
 impl From<reqwest::Error> for AppError {
-  fn from(value: reqwest::Error) -> Self {
-    if value.is_connect() {
-      return AppError::Connect(value.to_string());
+  fn from(error: reqwest::Error) -> Self {
+    if error.is_connect() {
+      return AppError::Connect(error.to_string());
     }
 
-    if value.is_timeout() {
-      return AppError::RequestTimeout(value.to_string());
+    if error.is_timeout() {
+      return AppError::RequestTimeout(error.to_string());
     }
 
-    if value.is_request() {
-      return AppError::InvalidRequest(value.to_string());
+    if error.is_request() {
+      return AppError::InvalidRequest(error.to_string());
     }
-    AppError::Unhandled(value.to_string())
+    AppError::Unhandled(error.to_string())
   }
 }
 

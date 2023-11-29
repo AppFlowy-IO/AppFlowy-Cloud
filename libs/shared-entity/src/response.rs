@@ -157,13 +157,6 @@ impl AppResponseError {
     }
   }
 
-  pub fn with_message(&self, message: impl Into<Cow<'static, str>>) -> Self {
-    Self {
-      code: self.code,
-      message: message.into(),
-    }
-  }
-
   pub fn is_record_not_found(&self) -> bool {
     matches!(self.code, ErrorCode::RecordNotFound)
   }

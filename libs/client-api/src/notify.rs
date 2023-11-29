@@ -2,6 +2,7 @@ use anyhow::Error;
 use gotrue_entity::dto::GotrueTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tracing::event;
 
 pub type TokenStateReceiver = Receiver<TokenState>;
 
@@ -41,6 +42,7 @@ impl ClientToken {
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
   pub(crate) fn set(&mut self, new_token: GotrueTokenResponse) {
+    event!(tracing::Level::DEBUG, "Did set token: {:?}", new_token);
     let is_new = match &self.token {
       None => true,
       Some(old_token) => old_token.access_token != new_token.access_token,
@@ -62,6 +64,7 @@ impl ClientToken {
   pub(crate) fn unset(&mut self) {
     if self.token.is_some() {
       self.token = None;
+      event!(tracing::Level::DEBUG, "unset token");
       let _ = self.sender.send(TokenState::Invalid);
     }
   }

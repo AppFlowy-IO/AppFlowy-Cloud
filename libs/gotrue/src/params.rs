@@ -105,3 +105,13 @@ pub struct GenerateLinkResponse {
   pub verification_type: String,
   pub redirect_to: String,
 }
+
+#[derive(Debug, Serialize, Default)]
+pub struct CreateSSOProviderParams {
+  #[serde(rename = "type")]
+  pub type_: String,
+  pub metadata_url: String,
+  pub metadata_xml: String,
+  pub domains: Vec<String>,
+  pub attribute_mapping: serde_json::Value,
+}

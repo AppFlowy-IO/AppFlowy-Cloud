@@ -1,0 +1,35 @@
+<div id="sso-list">
+  <table>
+    <tr>
+      <th>Entity ID</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+
+    {% for sso_provider in sso_providers %}
+    <tr>
+      <td>{{ sso_provider.saml.entity_id|escape }}</td>
+      <td>{{ sso_provider.created_at|escape }}</td>
+
+      <td>
+        <button
+          class="button cyan"
+          hx-target="#sso-list"
+          hx-get="/web/components/admin/sso/{{ sso_provider.id }}"
+        >
+          More Info
+        </button>
+        <button
+          class="deletUserBtn button red"
+          hx-delete="/web-api/admin/sso/{{ sso_provider.id }}"
+          hx-confirm="Are you sure?"
+          hx-target="closest tr"
+          hx-swap="delete"
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>

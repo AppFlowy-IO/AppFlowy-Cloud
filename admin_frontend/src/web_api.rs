@@ -1,7 +1,7 @@
 use crate::error::WebApiError;
 use crate::models::{
-  WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiInviteUserRequest,
-  WebApiPutUserRequest,
+  WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
+  WebApiInviteUserRequest, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
 use crate::session::{self, UserSession};
@@ -14,7 +14,10 @@ use axum::Form;
 use axum::{extract::State, routing::post, Router};
 use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
-use gotrue::params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams, MagicLinkParams};
+use gotrue::params::{
+  AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
+  MagicLinkParams,
+};
 use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
 use gotrue_entity::error::GoTrueError;
 
@@ -40,6 +43,40 @@ pub fn router() -> Router<AppState> {
       "/admin/user/:email/generate-link",
       post(post_user_generate_link_handler),
     )
+    .route("/admin/sso", post(admin_create_sso_handler))
+    .route("/admin/sso/:provider_id", delete(admin_delete_sso_handler))
+}
+
+pub async fn admin_delete_sso_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(provider_id): Path<String>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  let _ = state
+    .gotrue_client
+    .admin_delete_sso_provider(&session.token.access_token, &provider_id)
+    .await?;
+
+  Ok(WebApiResponse::<()>::from_str("SSO Deleted".into()))
+}
+
+pub async fn admin_create_sso_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Form(param): Form<WebApiCreateSSOProviderRequest>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  let provider_params = CreateSSOProviderParams {
+    type_: param.type_,
+    metadata_url: param.metadata_url,
+    ..Default::default()
+  };
+
+  let _ = state
+    .gotrue_client
+    .admin_create_sso_providers(&session.token.access_token, &provider_params)
+    .await?;
+
+  Ok(WebApiResponse::<()>::from_str("SSO Added".into()))
 }
 
 // provide a link which when open in browser, opens the appflowy app

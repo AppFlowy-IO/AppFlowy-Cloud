@@ -1,11 +1,13 @@
 use actix_http::header::HeaderName;
 use std::future::{ready, Ready};
-use tracing::{debug, Instrument, Level};
+use tracing::{Instrument, Level};
 
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use futures_util::future::LocalBoxFuture;
+use reqwest::header::HeaderValue;
 
+const X_REQUEST_ID: &str = "x-request-id";
 pub struct RequestIdMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for RequestIdMiddleware
@@ -41,19 +43,45 @@ where
 
   forward_ready!(service);
 
-  fn call(&self, req: ServiceRequest) -> Self::Future {
-    let request_id = get_request_id(&req).unwrap_or(uuid::Uuid::new_v4().to_string());
-    debug!("generated request id for: {}", req.path());
+  fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    // Skip generate request id for metrics requests
+    if req.path() == "/metrics" {
+      let fut = self.service.call(req);
+      Box::pin(fut)
+    } else {
+      let request_id = match get_request_id(&req) {
+        Some(request_id) => request_id,
+        None => {
+          let request_id = uuid::Uuid::new_v4().to_string();
+          if let Ok(header_value) = HeaderValue::from_str(&request_id) {
+            req
+              .headers_mut()
+              .insert(HeaderName::from_static(X_REQUEST_ID), header_value);
+          }
+          request_id
+        },
+      };
 
-    // Call the next service
-    let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);
-    let res = self.service.call(req);
-    Box::pin(res.instrument(span))
+      let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);
+      let fut = self.service.call(req);
+
+      Box::pin(async move {
+        let mut res = fut.instrument(span).await?;
+
+        // Insert the request id to the response header
+        if let Ok(header_value) = HeaderValue::from_str(&request_id) {
+          res
+            .headers_mut()
+            .insert(HeaderName::from_static(X_REQUEST_ID), header_value);
+        }
+        Ok(res)
+      })
+    }
   }
 }
 
 pub fn get_request_id(req: &ServiceRequest) -> Option<String> {
-  match req.headers().get(HeaderName::from_static("x-request-id")) {
+  match req.headers().get(HeaderName::from_static(X_REQUEST_ID)) {
     Some(h) => match h.to_str() {
       Ok(s) => Some(s.to_owned()),
       Err(e) => {

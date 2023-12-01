@@ -16,7 +16,7 @@ use tokio::time::interval;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::{error, info, trace};
+use tracing::{error, event, info, instrument, trace};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
@@ -228,6 +228,7 @@ async fn broadcast_message<U>(
 }
 
 /// Remove the user from the group and remove the group from the cache if the group is empty.
+#[instrument(level = "debug", skip_all)]
 async fn remove_user_from_group<S, U, AC>(
   user: &U,
   groups: &Arc<CollabGroupCache<S, U, AC>>,
@@ -237,15 +238,33 @@ async fn remove_user_from_group<S, U, AC>(
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
+  groups.remove_user(&editing.object_id, user).await;
   if let Some(group) = groups.get_group(&editing.object_id).await {
-    info!("Remove subscriber: {}", editing.origin);
-    group.subscribers.write().await.remove(user);
+    event!(
+      tracing::Level::INFO,
+      "Remove group subscriber: {}",
+      editing.origin
+    );
+
+    event!(
+      tracing::Level::DEBUG,
+      "{}: Group member: {}. member ids: {:?}",
+      &editing.object_id,
+      group.subscribers.read().await.len(),
+      group
+        .subscribers
+        .read()
+        .await
+        .values()
+        .map(|value| value.origin.to_string())
+        .collect::<Vec<_>>(),
+    );
 
     // Destroy the group if the group is empty
     let should_remove = group.is_empty().await;
     if should_remove {
       group.flush_collab();
-      info!("Remove group: {}", editing.object_id);
+      event!(tracing::Level::INFO, "Remove group: {}", editing.object_id);
       groups.remove_group(&editing.object_id).await;
     }
   }

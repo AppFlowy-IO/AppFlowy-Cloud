@@ -112,11 +112,9 @@ impl DatabaseSetting {
   pub fn with_db(&self) -> PgConnectOptions {
     self.without_db().database(&self.database_name)
   }
-}
 
-impl ToString for DatabaseSetting {
-  /// Converts [DatabaseSetting] into its postgres connection URL.
-  fn to_string(&self) -> String {
+  /// Generate a postgresql connection string from the database settings.
+  pub fn to_pg_url(&self) -> String {
     let ssl_mode = if self.require_ssl {
       "require"
     } else {

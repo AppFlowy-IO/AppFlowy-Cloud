@@ -248,7 +248,7 @@ where
                 .read()
                 .await
                 .values()
-                .map(|value| value.origin.client_user_id())
+                .map(|value| value.origin.to_string())
                 .collect::<Vec<_>>(),
             );
           }

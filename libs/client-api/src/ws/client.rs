@@ -50,7 +50,8 @@ pub trait WSClientHttpSender: Send + Sync {
   async fn send_ws_msg(&self, device_id: &str, message: Message) -> Result<(), WSError>;
 }
 
-type ChannelByObjectId = HashMap<String, Weak<WebSocketChannel<CollabMessage>>>;
+type WeakChannel = Weak<WebSocketChannel<CollabMessage>>;
+type ChannelByObjectId = HashMap<String, Vec<WeakChannel>>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub struct WSClient {
@@ -167,30 +168,21 @@ impl WSClient {
                   RealtimeMessage::Collab(collab_msg) => {
                     if let Some(collab_channels) = weak_collab_channels.upgrade() {
                       let object_id = collab_msg.object_id().to_owned();
-                      let is_channel_dropped =
-                        if let Some(channel) = collab_channels.read().get(&object_id) {
+
+                      // Iterate all channels and send the message to them.
+                      if let Some(channels) = collab_channels.read().get(&object_id) {
+                        for channel in channels.iter() {
                           match channel.upgrade() {
                             None => {
                               // when calling [WSClient::subscribe], the caller is responsible for keeping
                               // the channel alive as long as it wants to receive messages from the websocket.
                               warn!("channel is dropped");
-                              true
                             },
                             Some(channel) => {
                               trace!("receive remote message: {}", collab_msg);
-                              channel.forward_to_stream(collab_msg);
-                              false
+                              channel.forward_to_stream(collab_msg.clone());
                             },
                           }
-                        } else {
-                          false
-                        };
-
-                      // Try to remove the channel if it is dropped. If failed, will try again next time.
-                      if is_channel_dropped {
-                        if let Some(mut w) = collab_channels.try_write() {
-                          trace!("remove channel: {}", object_id);
-                          let _ = w.remove(&object_id);
                         }
                       }
                     } else {
@@ -267,10 +259,18 @@ impl WSClient {
     object_id: String,
   ) -> Result<Arc<WebSocketChannel<CollabMessage>>, WSError> {
     let channel = Arc::new(WebSocketChannel::new(&object_id, self.sender.clone()));
-    self
-      .collab_channels
-      .write()
-      .insert(object_id, Arc::downgrade(&channel));
+    let mut collab_channels_guard = self.collab_channels.write();
+
+    // remove the dropped channels
+    if let Some(channels) = collab_channels_guard.get_mut(&object_id) {
+      channels.retain(|channel| channel.upgrade().is_some());
+    }
+
+    collab_channels_guard
+      .entry(object_id)
+      .or_default()
+      .push(Arc::downgrade(&channel));
+
     Ok(channel)
   }
 

@@ -79,7 +79,7 @@ impl CollabAccessControlImpl {
     }
   }
 
-  #[inline]
+  #[instrument(level = "trace", skip(self), err)]
   async fn get_user_collab_access_level(
     &self,
     uid: &i64,
@@ -314,7 +314,7 @@ where
   CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  #[instrument(level = "trace", skip_all, err)]
+  #[instrument(level = "trace", skip(self), err)]
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     self
       .collab_access_control

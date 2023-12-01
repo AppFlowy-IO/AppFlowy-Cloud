@@ -100,28 +100,21 @@ impl CasbinAccessControl {
       ))),
     }?;
 
-    let current_policy = self
-      .enforcer
-      .read()
-      .await
+    let mut enforcer = self.enforcer.write().await;
+
+    let current_policy = enforcer
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id.clone()])
       .into_iter()
       .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string());
 
     if let Some(current_policy) = current_policy {
-      self
-        .enforcer
-        .write()
-        .await
+      enforcer
         .remove_policy(current_policy)
         .await
         .map_err(|e| AppError::Internal(anyhow!("casbin error removing policy: {e:?}")))?;
     }
 
-    self
-      .enforcer
-      .write()
-      .await
+    enforcer
       .add_policy(vec![uid.to_string(), obj_id, action])
       .await
       .map_err(|e| AppError::Internal(anyhow!("casbin error adding policy: {e:?}")))
@@ -129,21 +122,16 @@ impl CasbinAccessControl {
 
   async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
     let obj_id = obj.to_string();
-    let policies = self
-      .enforcer
-      .read()
-      .await
-      .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id]);
+    let mut enforcer = self.enforcer.write().await;
+
+    let policies = enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id]);
 
     let rem = policies
       .into_iter()
       .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
       .collect();
 
-    self
-      .enforcer
-      .write()
-      .await
+    enforcer
       .remove_policies(rem)
       .await
       .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))

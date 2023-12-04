@@ -121,7 +121,8 @@ members = [
     "libs/gotrue-entity",
     "admin_frontend",
     "libs/app_error",
-    "libs/workspace-template"
+    "libs/workspace-template",
+    "libs/encrypt"
 ]
 
 [workspace.dependencies]

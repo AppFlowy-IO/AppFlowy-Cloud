@@ -137,6 +137,7 @@ workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.4.1", features = ["v4"] }
 anyhow = "1.0.75"
 tokio = { version = "1.34", features = ["sync"] }
+yrs = "0.17.1"
 
 [profile.release]
 lto = true
@@ -153,10 +154,10 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22e11ebb490039736cb2a81d9fe7dfe96782bc8b" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22e11ebb490039736cb2a81d9fe7dfe96782bc8b" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22e11ebb490039736cb2a81d9fe7dfe96782bc8b" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22e11ebb490039736cb2a81d9fe7dfe96782bc8b" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

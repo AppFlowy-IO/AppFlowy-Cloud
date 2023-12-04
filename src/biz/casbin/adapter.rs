@@ -62,7 +62,7 @@ fn create_workspace_policies(
 
 #[async_trait]
 impl Adapter for PgAdapter {
-  async fn load_policy(&self, model: &mut dyn Model) -> Result<()> {
+  async fn load_policy(&mut self, model: &mut dyn Model) -> Result<()> {
     let workspace_members = select_all_workspace_members(&self.pg_pool)
       .await
       .map_err(|err| AdapterError(Box::new(err)))?;

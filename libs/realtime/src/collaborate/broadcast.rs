@@ -7,7 +7,6 @@ use collab::sync_protocol::awareness::{Awareness, AwarenessUpdate};
 use collab::sync_protocol::message::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use collab::sync_protocol::{awareness, handle_msg};
 use futures_util::{SinkExt, StreamExt};
-use lib0::encoding::Write;
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -20,6 +19,7 @@ use crate::collaborate::retry::SinkCollabMessageAction;
 use crate::error::RealtimeError;
 use realtime_entity::collab_msg::{CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage};
 use tracing::{error, trace, warn};
+use yrs::encoding::write::Write;
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with

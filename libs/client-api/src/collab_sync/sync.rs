@@ -9,7 +9,6 @@ use collab::sync_protocol::awareness::Awareness;
 use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
-use lib0::decoding::Cursor;
 use realtime_entity::collab_msg::{CollabMessage, InitSync, ServerInit, UpdateSync};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -18,6 +17,7 @@ use tokio::spawn;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{error, trace, warn, Level};
+use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 

@@ -38,6 +38,7 @@ use crate::biz::pg_listener::PgListeners;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
+
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use casbin::CoreApi;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -110,7 +111,7 @@ pub async fn run(
 
   let mut server = HttpServer::new(move || {
     App::new()
-      .wrap(RequestIdMiddleware)
+       // Middleware is registered for each App, scope, or Resource and executed in opposite order as registration
       .wrap(MetricsMiddleware)
       .wrap(IdentityMiddleware::default())
       .wrap(
@@ -119,6 +120,8 @@ pub async fn run(
           .build(),
       )
       .wrap(default_cors())
+      // .wrap(DecryptPayloadMiddleware)
+      .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())
       .app_data(web::JsonConfig::default().limit(4096))
       .service(user_scope())

@@ -28,7 +28,7 @@ and real-time WebSocket communication for an efficient and collaborative user ex
 
 
 ## 🚀 Deployment
-- See [deployment guide](./doc/deployment.md)
+- See [deployment guide](./doc/DEPLOYMENT.md)
 
 ## 💻 Development
 

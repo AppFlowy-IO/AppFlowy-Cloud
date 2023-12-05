@@ -26,7 +26,7 @@ impl PgAdapter {
   }
 }
 
-async fn create_collab_policies(
+pub async fn create_collab_policies(
   mut stream: BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
@@ -45,7 +45,7 @@ async fn create_collab_policies(
   Ok(policies)
 }
 
-async fn create_workspace_policies(
+pub async fn create_workspace_policies(
   mut stream: BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
@@ -64,6 +64,27 @@ async fn create_workspace_policies(
   Ok(policies)
 }
 
+pub fn create_grouping_policies() -> Vec<Vec<String>> {
+  let af_access_levels = [
+    AFAccessLevel::ReadOnly,
+    AFAccessLevel::ReadAndComment,
+    AFAccessLevel::ReadAndWrite,
+    AFAccessLevel::FullAccess,
+  ];
+  let mut grouping_policies = Vec::new();
+  for level in af_access_levels {
+    // All levels can read
+    grouping_policies.push([i32::from(level).to_string(), Action::Read.to_string()].to_vec());
+    if level.can_write() {
+      grouping_policies.push([i32::from(level).to_string(), Action::Write.to_string()].to_vec());
+    }
+    if level.can_delete() {
+      grouping_policies.push([i32::from(level).to_string(), Action::Delete.to_string()].to_vec());
+    }
+  }
+  grouping_policies
+}
+
 #[async_trait]
 impl Adapter for PgAdapter {
   async fn load_policy(&mut self, model: &mut dyn Model) -> Result<()> {
@@ -80,23 +101,7 @@ impl Adapter for PgAdapter {
     model.add_policies("p", "p", collab_policies);
 
     // Grouping definition of role to action.
-    let af_access_levels = [
-      AFAccessLevel::ReadOnly,
-      AFAccessLevel::ReadAndComment,
-      AFAccessLevel::ReadAndWrite,
-      AFAccessLevel::FullAccess,
-    ];
-    let mut grouping_policies = Vec::new();
-    for level in af_access_levels {
-      // All levels can read
-      grouping_policies.push([i32::from(level).to_string(), Action::Read.to_string()].to_vec());
-      if level.can_write() {
-        grouping_policies.push([i32::from(level).to_string(), Action::Write.to_string()].to_vec());
-      }
-      if level.can_delete() {
-        grouping_policies.push([i32::from(level).to_string(), Action::Delete.to_string()].to_vec());
-      }
-    }
+    let grouping_policies = create_grouping_policies();
 
     // Grouping definition `g` of type `g`. See `model.conf`
     model.add_policies("g", "g", grouping_policies);

@@ -113,8 +113,10 @@ m = r.sub == p.sub && g2(p.obj, r.obj) && g(p.act, r.act)
   }
 
   pub async fn setup_db(pool: &PgPool) -> anyhow::Result<()> {
-    // Have to manually create schama and tables managed by gotrue but referenced by our
+    // Have to manually manage schema and tables managed by gotrue but referenced by our
     // migration scripts.
+
+    // Create schema and tables
     sqlx::query(r#"create schema auth"#).execute(pool).await?;
     sqlx::query(
       r#"create table auth.users(
@@ -128,6 +130,11 @@ CONSTRAINT users_pkey PRIMARY KEY (id)
 
     // Manually run migration after creating required objects above.
     sqlx::migrate!().run(pool).await?;
+
+    // Remove foreign key constraint
+    sqlx::query(r#"alter table public.af_user drop constraint af_user_email_foreign_key"#)
+      .execute(pool)
+      .await?;
 
     Ok(())
   }

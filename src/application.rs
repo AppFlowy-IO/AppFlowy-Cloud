@@ -9,7 +9,7 @@ use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
-use actix_web::{dev::Server, web, web::Data, App, HttpServer};
+use actix_web::{dev::Server, web::Data, App, HttpServer};
 
 use actix::Actor;
 use anyhow::{Context, Error};

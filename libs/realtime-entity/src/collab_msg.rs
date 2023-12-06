@@ -3,12 +3,12 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 
 use crate::message::RealtimeMessage;
+use crate::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::merge_updates_v1;
 use collab::preclude::updates::decoder::DecoderV1;
 use collab::preclude::updates::encoder::{Encode, Encoder, EncoderV1};
-use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 

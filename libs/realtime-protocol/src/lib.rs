@@ -1,4 +1,5 @@
-pub mod message;
+mod message;
 mod protocol;
 
+pub use message::*;
 pub use protocol::*;

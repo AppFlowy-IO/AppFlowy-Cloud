@@ -1,6 +1,6 @@
 use collab::core::awareness::Awareness;
-use realtime_entity::sync_protocol::message::{CustomMessage, Error, Message, SyncMessage};
-use realtime_entity::sync_protocol::CollabSyncProtocol;
+use realtime_protocol::CollabSyncProtocol;
+use realtime_protocol::{CustomMessage, Error, Message, SyncMessage};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Transact};
 

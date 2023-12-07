@@ -1,7 +1,7 @@
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
   #[error(transparent)]
-  YSync(#[from] realtime_entity::sync_protocol::message::Error),
+  YSync(#[from] realtime_protocol::Error),
 
   #[error(transparent)]
   YAwareness(#[from] collab::core::awareness::Error),

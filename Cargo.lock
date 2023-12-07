@@ -1235,6 +1235,7 @@ dependencies = [
  "parking_lot",
  "prost",
  "realtime-entity",
+ "realtime-protocol",
  "reqwest",
  "scraper",
  "serde",
@@ -1256,7 +1257,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f5d0ec40adf728b46ab0e49ec42b083d319a663a#f5d0ec40adf728b46ab0e49ec42b083d319a663a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=32218f1b6a9b09a9bbaa1835749e016246c092d4#32218f1b6a9b09a9bbaa1835749e016246c092d4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1275,7 +1276,7 @@ dependencies = [
 [[package]]
 name = "collab-derive"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f5d0ec40adf728b46ab0e49ec42b083d319a663a#f5d0ec40adf728b46ab0e49ec42b083d319a663a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=32218f1b6a9b09a9bbaa1835749e016246c092d4#32218f1b6a9b09a9bbaa1835749e016246c092d4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1287,7 +1288,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f5d0ec40adf728b46ab0e49ec42b083d319a663a#f5d0ec40adf728b46ab0e49ec42b083d319a663a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=32218f1b6a9b09a9bbaa1835749e016246c092d4#32218f1b6a9b09a9bbaa1835749e016246c092d4"
 dependencies = [
  "anyhow",
  "collab",
@@ -1306,7 +1307,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f5d0ec40adf728b46ab0e49ec42b083d319a663a#f5d0ec40adf728b46ab0e49ec42b083d319a663a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=32218f1b6a9b09a9bbaa1835749e016246c092d4#32218f1b6a9b09a9bbaa1835749e016246c092d4"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1320,7 +1321,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f5d0ec40adf728b46ab0e49ec42b083d319a663a#f5d0ec40adf728b46ab0e49ec42b083d319a663a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=32218f1b6a9b09a9bbaa1835749e016246c092d4#32218f1b6a9b09a9bbaa1835749e016246c092d4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1340,7 +1341,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=f5d0ec40adf728b46ab0e49ec42b083d319a663a#f5d0ec40adf728b46ab0e49ec42b083d319a663a"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=32218f1b6a9b09a9bbaa1835749e016246c092d4#32218f1b6a9b09a9bbaa1835749e016246c092d4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3860,6 +3861,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "realtime-entity",
+ "realtime-protocol",
  "reqwest",
  "serde",
  "serde-aux",
@@ -3893,10 +3895,23 @@ dependencies = [
  "prost",
  "prost-build",
  "protoc-bin-vendored",
+ "realtime-protocol",
  "serde",
  "serde_json",
  "thiserror",
  "tokio-tungstenite",
+ "yrs",
+]
+
+[[package]]
+name = "realtime-protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "collab",
+ "serde",
+ "thiserror",
  "yrs",
 ]
 

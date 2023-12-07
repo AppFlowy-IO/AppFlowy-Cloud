@@ -8,7 +8,7 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
-use crate::sync_protocol::message::{CustomMessage, Error, Message, SyncMessage, SyncMeta};
+use crate::message::{CustomMessage, Error, Message, SyncMessage, SyncMeta};
 
 // ***************************
 // Client A  Client B  Server

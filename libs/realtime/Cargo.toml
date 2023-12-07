@@ -32,6 +32,7 @@ database-entity.workspace = true
 yrs.workspace = true
 chrono = "0.4.30"
 realtime-entity = { workspace = true, features = ["actix_message"] }
+realtime-protocol.workspace = true
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

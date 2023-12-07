@@ -49,7 +49,9 @@ You'll need to install:
 ```
 
 This process will execute all the dependencies and start the AppFlowy-Cloud server. Alternatively, 
-you have the option to run the AppFlowy-Cloud server independently### Run the AppFlowy-Cloud
+you have the option to run the AppFlowy-Cloud server independently
+
+### Run the AppFlowy-Cloud
 
 1. Run the dependency servers
 ```bash

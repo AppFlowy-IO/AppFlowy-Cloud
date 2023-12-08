@@ -119,7 +119,7 @@ pub async fn run(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())
-      .app_data(web::JsonConfig::default().limit(4096))
+      .app_data(web::JsonConfig::default().limit(5 * 1024 * 1024))
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())

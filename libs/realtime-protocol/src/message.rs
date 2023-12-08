@@ -251,14 +251,6 @@ pub enum Error {
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
-
-#[cfg(feature = "net")]
-impl From<tokio::task::JoinError> for Error {
-  fn from(value: tokio::task::JoinError) -> Self {
-    Error::Internal(value.into())
-  }
-}
-
 impl From<std::io::Error> for Error {
   fn from(value: std::io::Error) -> Self {
     Error::Internal(value.into())

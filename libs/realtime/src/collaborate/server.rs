@@ -16,7 +16,7 @@ use tokio::time::interval;
 
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
-use tracing::{error, event, info, instrument, trace};
+use tracing::{error, event, info, instrument, trace, warn};
 
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
@@ -100,6 +100,10 @@ where
   AC: CollabAccessControl + Unpin,
 {
   type Context = Context<Self>;
+
+  fn started(&mut self, ctx: &mut Self::Context) {
+    ctx.set_mailbox_capacity(100);
+  }
 }
 
 impl<S, U, AC> Handler<Connect<U>> for CollabServer<S, U, AC>
@@ -119,6 +123,8 @@ where
 
     Box::pin(async move {
       trace!("[realtime]: new connection => {} ", new_conn.user);
+
+      // when a new connection is established, remove the old connection
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
       if let Some(old_stream) = client_stream_by_user
         .write()
@@ -170,19 +176,13 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
-
-    trace!(
-      "Receive message from client:{} message:{}",
-      user.uid(),
-      message
-    );
+    trace!("Receive client:{} message:{}", user.uid(), message);
     match message {
       RealtimeMessage::Collab(collab_message) => {
         let client_stream_by_user = self.client_stream_by_user.clone();
         let groups = self.groups.clone();
         let edit_collab_by_user = self.editing_collab_by_user.clone();
         let permission_service = self.access_control.clone();
-
         Box::pin(async move {
           let msg = CollabUserMessage {
             user: &user,
@@ -202,7 +202,10 @@ where
           Ok(())
         })
       },
-      _ => Box::pin(async { Ok(()) }),
+      _ => {
+        warn!("Receive unsupported message: {}", message);
+        Box::pin(async { Ok(()) })
+      },
     }
   }
 }
@@ -215,7 +218,9 @@ async fn broadcast_message<U>(
 ) where
   U: RealtimeUser,
 {
-  if let Some(client_stream) = client_streams.read().await.get(user) {
+  let client_streams = client_streams.read().await;
+  info!("Broadcast message");
+  if let Some(client_stream) = client_streams.get(user) {
     trace!("[realtime]: receives collab message: {}", collab_message);
     match client_stream
       .stream_tx
@@ -238,18 +243,13 @@ async fn remove_user_from_group<S, U, AC>(
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  groups.remove_user(&editing.object_id, user).await;
+  let _ = groups.remove_user(&editing.object_id, user).await;
   if let Some(group) = groups.get_group(&editing.object_id).await {
     event!(
-      tracing::Level::INFO,
-      "Remove group subscriber: {}",
-      editing.origin
-    );
-
-    event!(
-      tracing::Level::DEBUG,
-      "{}: Group member: {}. member ids: {:?}",
+      tracing::Level::TRACE,
+      "{}: Remove group subscriber:{}, Current group member: {}. member ids: {:?}",
       &editing.object_id,
+      editing.origin,
       group.subscribers.read().await.len(),
       group
         .subscribers

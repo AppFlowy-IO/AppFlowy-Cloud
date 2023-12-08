@@ -26,6 +26,10 @@ impl ClientToken {
     }
   }
 
+  pub fn is_empty(&self) -> bool {
+    self.token.is_none()
+  }
+
   pub fn try_get(&self) -> Result<String, Error> {
     match &self.token {
       None => Err(anyhow::anyhow!("No access token")),

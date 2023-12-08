@@ -318,7 +318,7 @@ pub async fn get_all_snapshots(
 }
 
 #[inline]
-#[instrument(level = "debug", skip(txn), err)]
+#[instrument(level = "trace", skip(txn), err)]
 pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   uid: i64,
   oid: T,
@@ -409,7 +409,7 @@ pub async fn select_collab_member(
   oid: &str,
   pg_pool: &PgPool,
 ) -> Result<AFCollabMember, AppError> {
-  let member = sqlx::query(
+  let row = sqlx::query(
   r#"
       SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
       FROM af_collab_member
@@ -419,12 +419,14 @@ pub async fn select_collab_member(
   )
   .bind(uid)
   .bind(oid)
-  .try_map(collab_member_try_from_row)
   .fetch_one(pg_pool)
   .await?;
+
+  let member = collab_member_try_from_row(row)?;
   Ok(member)
 }
 
+#[instrument(level = "debug", skip(row), err)]
 fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error> {
   let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
   let permission = AFPermission {

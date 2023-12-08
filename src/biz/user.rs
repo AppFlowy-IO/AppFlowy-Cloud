@@ -20,7 +20,7 @@ use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool};
 use tokio::sync::RwLock;
-use tracing::{debug, instrument};
+use tracing::{debug, event, instrument};
 use workspace_template::WorkspaceTemplateBuilder;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
@@ -56,6 +56,7 @@ pub async fn verify_token(
   let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
   if is_new {
     let new_uid = id_gen.write().await.next_id();
+    event!(tracing::Level::DEBUG, "create new user:{}", new_uid);
     let workspace_id =
       create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
 

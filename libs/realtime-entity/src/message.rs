@@ -18,7 +18,7 @@ pub enum RealtimeMessage {
 impl Display for RealtimeMessage {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      RealtimeMessage::Collab(_msg) => f.write_fmt(format_args!("Collab")),
+      RealtimeMessage::Collab(msg) => f.write_fmt(format_args!("Collab:{}", msg.object_id())),
       RealtimeMessage::ServerKickedOff => f.write_fmt(format_args!("ServerKickedOff")),
       RealtimeMessage::User(_) => f.write_fmt(format_args!("User")),
     }

@@ -135,6 +135,11 @@ where
       },
       Err(err) => match &err {
         AppError::RecordNotFound(_) => {
+          trace!(
+            "create new collab, cache full access of {} for user:{}",
+            object_id,
+            self.uid
+          );
           let _ = self
             .access_control
             .cache_collab_access_level(
@@ -161,7 +166,6 @@ where
                 &self.workspace_id,
               );
 
-              trace!("Collab not found, create new one");
               if let Err(err) = self.storage.insert_collab(&self.uid, params).await {
                 error!("fail to create new collab in plugin: {:?}", err);
               }

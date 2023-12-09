@@ -19,11 +19,13 @@ use tokio::sync::RwLock;
 use crate::entities::{Editing, RealtimeUser};
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, Retry, RetryIf};
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
-use crate::error::RealtimeError;
-use tracing::{debug, error, trace, warn};
+use crate::error::{RealtimeError, StreamError};
+use crate::util::channel_ext::UnboundedSenderSink;
+use tracing::{error, trace, warn};
 
 pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) user: &'a U,
@@ -77,186 +79,225 @@ where
 
       let object_id = collab_message.object_id();
       if !self.groups.contains_group(object_id).await? {
-        // When create a group, the message must be the init sync message.
-        match collab_message {
-          CollabMessage::ClientInitSync(client_init) => {
-            let uid = client_init
-              .origin
-              .client_user_id()
-              .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
-
-            self
-              .groups
-              .create_group(
-                uid,
-                &client_init.workspace_id,
-                object_id,
-                client_init.collab_type.clone(),
-              )
-              .await;
-          },
-          _ => {
-            return Err(RealtimeError::UnexpectedData(
-              "The first message must be init sync message",
-            ));
-          },
-        }
-      }
-
-      // If the message is init sync message, which means the client just open the collab again. So
-      // remove the user from the group first and then subscribe the client's stream to the group.
-      if collab_message.is_init_msg() {
-        self.groups.remove_user(object_id, user).await;
-      } else {
-        // If the client's stream is already subscribe to the collab, return.
-        if self
-          .groups
-          .contains_user(object_id, user)
-          .await
-          .unwrap_or(false)
-        {
+        if collab_message.is_init_msg() {
+          let groups = self.groups.clone();
+          Self::create_new_group(&groups, collab_message, object_id).await?;
+        } else {
+          // If the collab message is not init sync. Discard it.
           return Ok(());
         }
       }
 
-      let origin = match collab_message.origin() {
-        None => {
-          error!("🔴The origin from client message is empty");
-          &CollabOrigin::Empty
-        },
-        Some(origin) => origin,
-      };
-      match self.client_stream_by_user.write().await.get_mut(user) {
-        None => warn!("The client stream is not found"),
-        Some(client_stream) => {
-          if let Some(collab_group) = self.groups.get_group(object_id).await {
-            if let Entry::Vacant(entry) = collab_group
-              .subscribers
-              .write()
-              .await
-              .entry((*user).clone())
-            {
-              trace!(
-                "[realtime]: {} subscribe group:{}",
-                user,
-                collab_message.object_id()
-              );
-
-              let client_uid = user.uid();
-              self
-                .edit_collab_by_user
-                .lock()
-                .entry((*user).clone())
-                .or_default()
-                .insert(Editing {
-                  object_id: object_id.to_string(),
-                  origin: origin.clone(),
-                });
-
-              let sink_permission_service = self.access_control.clone();
-              let stream_permission_service = self.access_control.clone();
-
-              let (sink, stream) = client_stream.client_channel::<CollabMessage, _, _>(
-                object_id,
-                move |object_id, msg| {
-                  if msg.object_id() != object_id {
-                    return Box::pin(future::ready(false));
-                  }
-
-                  let object_id = object_id.to_string();
-                  let cloned_sink_permission_service = sink_permission_service.clone();
-                  Box::pin(async move {
-                    match cloned_sink_permission_service
-                      .can_receive_collab_update(&client_uid, &object_id)
-                      .await
-                    {
-                      Ok(is_allowed) => {
-                        if !is_allowed {
-                          warn!(
-                            "user:{} is not allowed to receive object:{} updates",
-                            client_uid, object_id,
-                          );
-                        }
-
-                        is_allowed
-                      },
-                      Err(err) => {
-                        trace!(
-                          "user:{} fail to receive updates by error: {}",
-                          client_uid,
-                          err
-                        );
-                        false
-                      },
-                    }
-                  })
-                },
-                move |object_id, msg| {
-                  if msg.object_id() != object_id {
-                    return Box::pin(future::ready(false));
-                  }
-
-                  let is_init = msg.is_client_init();
-                  let object_id = object_id.to_string();
-                  let cloned_stream_permission_service = stream_permission_service.clone();
-
-                  Box::pin(async move {
-                    // If the message is init sync, and it's allow the send to the group.
-                    if is_init {
-                      return true;
-                    }
-
-                    match cloned_stream_permission_service
-                      .can_send_collab_update(&client_uid, &object_id)
-                      .await
-                    {
-                      Ok(is_allowed) => {
-                        if !is_allowed {
-                          warn!(
-                            "client:{} is not allowed to send object:{} updates",
-                            client_uid, object_id,
-                          );
-                        }
-                        is_allowed
-                      },
-                      Err(err) => {
-                        trace!(
-                          "client:{} can't  send update with error: {}",
-                          client_uid,
-                          err
-                        );
-                        false
-                      },
-                    }
-                  })
-                },
-              );
-
-              entry.insert(
-                collab_group
-                  .broadcast
-                  .subscribe(origin.clone(), sink, stream),
-              );
-            }
-
-            debug!(
-              "{}: Group member: {}. member ids: {:?}",
-              object_id,
-              collab_group.subscribers.read().await.len(),
-              collab_group
-                .subscribers
-                .read()
-                .await
-                .values()
-                .map(|value| value.origin.to_string())
-                .collect::<Vec<_>>(),
-            );
-          }
-        },
+      // Where an "init sync message" is received, it typically indicates that the client has reopened
+      // the collaboration session. Such a situation can arise due to network issues leading to websocket reconnection.
+      // 1. The user is first removed from the group to reset their state in the session.
+      // 2. Then, the client's stream is subscribed to the group again, effectively re-establishing the user's participation in the collaborative session.
+      if collab_message.is_init_msg() {
+        self.groups.remove_user(object_id, user).await?;
+      } else if self
+        .groups
+        .contains_user(object_id, user)
+        .await
+        .unwrap_or(false)
+      {
+        // In this case, it implies that the client is already a member of the group.
+        // Therefore, no further action is required.
+        return Ok(());
       }
 
+      let origin = Self::get_origin(collab_message);
+      if let Some(client_stream) = self
+        .client_stream_by_user
+        .try_write()
+        .map_err(|err| RealtimeError::Internal(err.into()))?
+        .get_mut(user)
+      {
+        if let Some(collab_group) = self.groups.get_group(object_id).await {
+          if let Entry::Vacant(entry) = collab_group
+            .subscribers
+            .try_write()
+            .map_err(|err| RealtimeError::Internal(err.into()))?
+            .entry((*user).clone())
+          {
+            trace!(
+              "[realtime]: {} subscribe group:{}",
+              user,
+              collab_message.object_id()
+            );
+
+            let client_uid = user.uid();
+            self
+              .edit_collab_by_user
+              .try_lock()
+              .ok_or(RealtimeError::Internal(anyhow!(
+                "Failed to acquire lock to insert editing"
+              )))?
+              .entry((*user).clone())
+              .or_default()
+              .insert(Editing {
+                object_id: object_id.to_string(),
+                origin: origin.clone(),
+              });
+
+            let (sink, stream) = Self::make_channel(
+              object_id,
+              client_stream,
+              client_uid,
+              self.access_control.clone(),
+              self.access_control.clone(),
+            );
+
+            entry.insert(
+              collab_group
+                .broadcast
+                .subscribe(origin.clone(), sink, stream),
+            );
+          }
+        }
+      } else {
+        warn!("The client stream: {} is not found", user);
+      }
       Ok(())
     })
+  }
+}
+
+impl<'a, U, S, AC> SubscribeGroupIfNeed<'a, U, S, AC>
+where
+  U: RealtimeUser,
+  S: CollabStorage,
+  AC: CollabAccessControl,
+{
+  async fn create_new_group(
+    groups: &Arc<CollabGroupCache<S, U, AC>>,
+    collab_message: &CollabMessage,
+    object_id: &str,
+  ) -> Result<(), RealtimeError> {
+    match collab_message {
+      CollabMessage::ClientInitSync(client_init) => {
+        let uid = client_init
+          .origin
+          .client_user_id()
+          .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
+        groups
+          .create_group_if_need(
+            uid,
+            &client_init.workspace_id,
+            object_id,
+            client_init.collab_type.clone(),
+          )
+          .await;
+
+        Ok(())
+      },
+      _ => Err(RealtimeError::UnexpectedData(
+        "The first message must be init sync message",
+      )),
+    }
+  }
+
+  fn get_origin(collab_message: &CollabMessage) -> &CollabOrigin {
+    match collab_message.origin() {
+      None => {
+        error!("🔴The origin from client message is empty");
+        &CollabOrigin::Empty
+      },
+      Some(origin) => origin,
+    }
+  }
+
+  fn make_channel<'b>(
+    object_id: &'b str,
+    client_stream: &'b mut CollabClientStream,
+    client_uid: i64,
+    sink_permission_service: Arc<AC>,
+    stream_permission_service: Arc<AC>,
+  ) -> (
+    UnboundedSenderSink<CollabMessage>,
+    ReceiverStream<Result<CollabMessage, StreamError>>,
+  )
+  where
+    'a: 'b,
+  {
+    let (sink, stream) = client_stream.client_channel::<CollabMessage, _, _>(
+      object_id,
+      move |object_id, msg| {
+        if msg.object_id() != object_id {
+          warn!(
+            "The object id:{} from message is not matched with the object id:{} from sink",
+            msg.object_id(),
+            object_id
+          );
+          return Box::pin(future::ready(false));
+        }
+
+        let object_id = object_id.to_string();
+        let cloned_sink_permission_service = sink_permission_service.clone();
+        Box::pin(async move {
+          match cloned_sink_permission_service
+            .can_receive_collab_update(&client_uid, &object_id)
+            .await
+          {
+            Ok(is_allowed) => {
+              if !is_allowed {
+                error!(
+                  "user:{} is not allowed to receive {} updates",
+                  client_uid, object_id,
+                );
+              }
+
+              is_allowed
+            },
+            Err(err) => {
+              error!(
+                "user:{} fail to receive updates by error: {}",
+                client_uid, err
+              );
+              false
+            },
+          }
+        })
+      },
+      move |object_id, msg| {
+        if msg.object_id() != object_id {
+          return Box::pin(future::ready(false));
+        }
+
+        let is_init = msg.is_client_init();
+        let object_id = object_id.to_string();
+        let cloned_stream_permission_service = stream_permission_service.clone();
+
+        Box::pin(async move {
+          // If the message is init sync, and it's allow the send to the group.
+          if is_init {
+            return true;
+          }
+
+          match cloned_stream_permission_service
+            .can_send_collab_update(&client_uid, &object_id)
+            .await
+          {
+            Ok(is_allowed) => {
+              if !is_allowed {
+                error!(
+                  "client:{} is not allowed to send {} updates",
+                  client_uid, object_id,
+                );
+              }
+              is_allowed
+            },
+            Err(err) => {
+              error!(
+                "client:{} can't  send update with error: {}",
+                client_uid, err
+              );
+              false
+            },
+          }
+        })
+      },
+    );
+    (sink, stream)
   }
 }
 

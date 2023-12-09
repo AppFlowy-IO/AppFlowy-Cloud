@@ -9,7 +9,7 @@ use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
-use actix_web::{dev::Server, web::Data, App, HttpServer};
+use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
 use anyhow::{Context, Error};
@@ -119,6 +119,7 @@ pub async fn run(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())
+      .app_data(web::JsonConfig::default().limit(5 * 1024 * 1024))
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())

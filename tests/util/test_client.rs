@@ -37,7 +37,7 @@ pub(crate) struct TestClient {
   pub ws_client: WSClient,
   pub api_client: client_api::Client,
   pub collab_by_object_id: HashMap<String, TestCollab>,
-  device_id: String,
+  pub device_id: String,
 }
 pub(crate) struct TestCollab {
   #[allow(dead_code)]

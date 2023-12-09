@@ -4,6 +4,7 @@ use database_entity::dto::AFAccessLevel;
 use reqwest::Method;
 
 use std::sync::Arc;
+use tracing::instrument;
 
 #[derive(Debug)]
 pub enum CollabUserId<'a> {
@@ -70,6 +71,7 @@ impl<T> CollabAccessControl for Arc<T>
 where
   T: CollabAccessControl,
 {
+  #[instrument(level = "debug", skip_all, err)]
   async fn get_collab_access_level(
     &self,
     user: CollabUserId<'_>,

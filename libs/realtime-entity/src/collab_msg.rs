@@ -126,6 +126,7 @@ impl CollabMessage {
       CollabMessage::AwarenessSync(_) => None,
     }
   }
+
   pub fn len(&self) -> usize {
     self.payload().map(|payload| payload.len()).unwrap_or(0)
   }

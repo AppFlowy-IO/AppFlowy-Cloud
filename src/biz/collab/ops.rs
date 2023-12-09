@@ -10,7 +10,7 @@ use database_entity::dto::{
 };
 
 use sqlx::{types::Uuid, PgPool};
-use tracing::trace;
+use tracing::{event, trace};
 use validator::Validate;
 
 pub async fn create_collab(
@@ -168,6 +168,12 @@ pub async fn delete_collab_member(
   params: &CollabMemberIdentify,
 ) -> Result<(), AppError> {
   params.validate()?;
+  event!(
+    tracing::Level::DEBUG,
+    "Deleting member:{} from {}",
+    params.uid,
+    params.object_id
+  );
   database::collab::delete_collab_member(params.uid, &params.object_id, pg_pool).await?;
   Ok(())
 }

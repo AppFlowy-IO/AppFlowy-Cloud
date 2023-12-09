@@ -1,14 +1,14 @@
 use std::sync::{Arc, Weak};
 
+use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::CollabPlugin;
-use collab::sync_protocol::awareness::Awareness;
-use collab::sync_protocol::message::{Message, SyncMessage};
 use collab_entity::{CollabObject, CollabType};
 use futures_util::SinkExt;
 use realtime_entity::collab_msg::{CollabMessage, UpdateSync};
+use realtime_protocol::{Message, SyncMessage};
 use tokio_stream::StreamExt;
 
 use crate::collab_sync::{SinkConfig, SyncQueue};

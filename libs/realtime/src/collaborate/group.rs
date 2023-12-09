@@ -8,6 +8,7 @@ use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use std::collections::HashMap;
 
+use collab::core::collab_plugin::EncodedCollabV1;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
@@ -175,6 +176,10 @@ where
   {
     let collab = self.collab.lock();
     f(&collab);
+  }
+
+  pub fn encode_v1(&self) -> EncodedCollabV1 {
+    self.collab.lock().encode_collab_v1()
   }
 
   pub async fn is_empty(&self) -> bool {

@@ -5,11 +5,11 @@ use app_error::AppError;
 use async_trait::async_trait;
 
 use crate::collaborate::{CollabAccessControl, CollabUserId};
+use collab::core::awareness::Awareness;
 use collab::core::collab::TransactionMutExt;
 use collab::core::collab_plugin::EncodedCollabV1;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
-use collab::sync_protocol::awareness::Awareness;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{AFAccessLevel, InsertCollabParams, QueryCollabParams};
@@ -199,36 +199,38 @@ where
     }
   }
 
-  fn flush(&self, object_id: &str, data: &EncodedCollabV1) {
+  fn flush(&self, object_id: &str) {
     let storage = self.storage.clone();
-    match data.encode_to_bytes() {
-      Ok(encoded_collab_v1) => {
-        let params = InsertCollabParams::from_raw_data(
-          object_id,
-          self.collab_type.clone(),
-          encoded_collab_v1,
-          &self.workspace_id,
-        );
+    if let Some(encode_v1) = self.group.upgrade().map(|group| group.encode_v1()) {
+      match encode_v1.encode_to_bytes() {
+        Ok(encoded_collab_v1) => {
+          let params = InsertCollabParams::from_raw_data(
+            object_id,
+            self.collab_type.clone(),
+            encoded_collab_v1,
+            &self.workspace_id,
+          );
 
-        info!(
-          "[realtime] start flushing {}:{} with len: {}",
-          object_id,
-          params.collab_type,
-          params.encoded_collab_v1.len()
-        );
+          info!(
+            "[realtime] start flushing {}:{} with len: {}",
+            object_id,
+            params.collab_type,
+            params.encoded_collab_v1.len()
+          );
 
-        let uid = self.uid;
-        tokio::spawn(async move {
-          let object_id = params.object_id.clone();
-          match storage.insert_collab(&uid, params).await {
-            Ok(_) => info!("[realtime] end flushing collab: {}", object_id),
-            Err(err) => error!("save collab failed: {:?}", err),
-          }
-        });
-      },
-      Err(err) => {
-        error!("fail to encode EncodedDocV1 to bytes: {:?}", err);
-      },
+          let uid = self.uid;
+          tokio::spawn(async move {
+            let object_id = params.object_id.clone();
+            match storage.insert_collab(&uid, params).await {
+              Ok(_) => info!("[realtime] end flushing collab: {}", object_id),
+              Err(err) => error!("save collab failed: {:?}", err),
+            }
+          });
+        },
+        Err(err) => {
+          error!("fail to encode EncodedDocV1 to bytes: {:?}", err);
+        },
+      }
     }
   }
 }

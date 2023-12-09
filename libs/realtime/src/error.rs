@@ -23,6 +23,9 @@ pub enum RealtimeError {
   #[error("Unexpected data: {0}")]
   UnexpectedData(&'static str),
 
+  #[error("Expected init sync message, but received: {0}")]
+  ExpectInitSync(&'static str),
+
   #[error(transparent)]
   CollabError(#[from] CollabError),
 

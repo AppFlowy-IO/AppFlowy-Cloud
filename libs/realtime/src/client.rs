@@ -22,6 +22,7 @@ pub struct ClientSession<
   S: Unpin + 'static,
   AC: Unpin + CollabAccessControl,
 > {
+  session_id: String,
   user: U,
   hb: Instant,
   pub server: Addr<CollabServer<S, U, AC>>,
@@ -50,14 +51,19 @@ where
       heartbeat_interval,
       client_timeout,
       user_change_recv: Some(user_change_recv),
+      session_id: uuid::Uuid::new_v4().to_string(),
     }
   }
 
   fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
-    ctx.run_interval(self.heartbeat_interval, |act, ctx| {
+    let session_id = self.session_id.clone();
+    ctx.run_interval(self.heartbeat_interval, move |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
         let user = act.user.clone();
-        act.server.do_send(Disconnect { user });
+        act.server.do_send(Disconnect {
+          user,
+          session_id: session_id.clone(),
+        });
         ctx.stop();
         return;
       }
@@ -122,6 +128,7 @@ where
       .send(Connect {
         socket: ctx.address().recipient(),
         user: self.user.clone(),
+        session_id: self.session_id.clone(),
       })
       .into_actor(self)
       .then(|res, _session, ctx| {
@@ -143,11 +150,14 @@ where
       .wait(ctx);
   }
 
-  fn stopping(&mut self, _: &mut Self::Context) -> Running {
+  fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
     // When the user is None which means the user is kicked off by the server, do not send
     // disconnect message to the server.
     let user = self.user.clone();
-    self.server.do_send(Disconnect { user });
+    self.server.do_send(Disconnect {
+      user,
+      session_id: self.session_id.clone(),
+    });
     Running::Stop
   }
 }

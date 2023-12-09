@@ -51,7 +51,7 @@ where
   ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S, AC>, SubscribeGroupCondition<U>>
   {
     let weak_client_stream = Arc::downgrade(self.client_stream_by_user);
-    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(10);
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
     RetryIf::spawn(
       retry_strategy,
       self,
@@ -79,8 +79,13 @@ where
 
       let object_id = collab_message.object_id();
       if !self.groups.contains_group(object_id).await? {
-        let groups = self.groups.clone();
-        Self::create_new_group(&groups, collab_message, object_id).await?;
+        if collab_message.is_init_msg() {
+          let groups = self.groups.clone();
+          Self::create_new_group(&groups, collab_message, object_id).await?;
+        } else {
+          // If the collab message is not init sync. Discard it.
+          return Ok(());
+        }
       }
 
       // Where an "init sync message" is received, it typically indicates that the client has reopened
@@ -89,17 +94,15 @@ where
       // 2. Then, the client's stream is subscribed to the group again, effectively re-establishing the user's participation in the collaborative session.
       if collab_message.is_init_msg() {
         self.groups.remove_user(object_id, user).await?;
-      } else {
-        if self
-          .groups
-          .contains_user(object_id, user)
-          .await
-          .unwrap_or(false)
-        {
-          // In this case, it implies that the client is already a member of the group.
-          // Therefore, no further action is required.
-          return Ok(());
-        }
+      } else if self
+        .groups
+        .contains_user(object_id, user)
+        .await
+        .unwrap_or(false)
+      {
+        // In this case, it implies that the client is already a member of the group.
+        // Therefore, no further action is required.
+        return Ok(());
       }
 
       let origin = Self::get_origin(collab_message);
@@ -125,7 +128,10 @@ where
             let client_uid = user.uid();
             self
               .edit_collab_by_user
-              .lock()
+              .try_lock()
+              .ok_or(RealtimeError::Internal(anyhow!(
+                "Failed to acquire lock to insert editing"
+              )))?
               .entry((*user).clone())
               .or_default()
               .insert(Editing {
@@ -149,7 +155,7 @@ where
           }
         }
       } else {
-        warn!("The client stream is not found");
+        warn!("The client stream: {} is not found", user);
       }
       Ok(())
     })

@@ -31,6 +31,15 @@ pub struct CollabServer<S, U, AC> {
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S, U, AC>>,
+  /// This map stores the session IDs for users currently connected to the server.
+  /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
+  ///
+  /// When a user disconnects, their session ID is retrieved using their user identifier [U].
+  /// This session ID is then compared with the session ID provided in the [Disconnect] message.
+  /// If the two session IDs differ, it indicates that the user has established a new connection
+  /// to the server since the stored session ID was last updated.
+  ///
+  session_id_by_user: Arc<RwLock<HashMap<U, String>>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
   /// Keep track of all client streams
@@ -68,6 +77,7 @@ where
     Ok(Self {
       storage,
       groups,
+      session_id_by_user: Default::default(),
       editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
       access_control,
@@ -84,9 +94,11 @@ async fn remove_user<S, U, AC>(
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  let editing_set = editing_collab_by_user.lock().remove(user);
+  let editing_set = editing_collab_by_user
+    .try_lock()
+    .and_then(|mut guard| guard.remove(user));
+
   if let Some(editing_set) = editing_set {
-    info!("Remove user from group: {}", user);
     for editing in editing_set {
       remove_user_from_group(user, groups, &editing).await;
     }
@@ -120,11 +132,16 @@ where
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
+    let user_by_session_id = self.session_id_by_user.clone();
 
     Box::pin(async move {
       trace!("[realtime]: new connection => {} ", new_conn.user);
+      user_by_session_id
+        .write()
+        .await
+        .insert(new_conn.user.clone(), new_conn.session_id);
 
-      // when a new connection is established, remove the old connection
+      // when a new connection is established, remove the old connection from all groups
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
       if let Some(old_stream) = client_stream_by_user
         .write()
@@ -133,7 +150,6 @@ where
       {
         old_stream.disconnect();
       }
-
       Ok(())
     })
   }
@@ -146,21 +162,45 @@ where
   AC: CollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
+  /// Handles the disconnection of a user from the collaboration server.
+  ///
+  /// Upon receiving a `Disconnect` message, the method performs the following actions:
+  /// 1. Attempts to acquire a read lock on `session_id_by_user` to compare the stored session ID
+  ///    with the session ID in the `Disconnect` message.
+  ///    - If the session IDs match, it proceeds to remove the user from groups and client streams.
+  ///    - If the session IDs do not match, indicating the user has reconnected with a new session,
+  ///      no action is taken and the function returns.
+  /// 2. Removes the user from the collaboration groups and client streams, if applicable.
+  ///
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
     trace!("[realtime]: disconnect => {}", msg.user);
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
+
+    let session_id_by_user = self.session_id_by_user.clone();
+
     Box::pin(async move {
-      remove_user(&groups, &editing_collab_by_user, &msg.user).await;
-      if client_stream_by_user
-        .write()
-        .await
-        .remove(&msg.user)
-        .is_some()
-      {
-        info!("Remove user stream: {}", &msg.user);
+      let guard = match session_id_by_user.try_read() {
+        Ok(guard) => guard,
+        Err(_) => {
+          return Ok(());
+        },
+      };
+
+      if let Some(session_id) = guard.get(&msg.user) {
+        if session_id != &msg.session_id {
+          return Ok(());
+        }
       }
+
+      remove_user(&groups, &editing_collab_by_user, &msg.user).await;
+      if let Ok(mut client_stream_by_user) = client_stream_by_user.try_write() {
+        if client_stream_by_user.remove(&msg.user).is_some() {
+          info!("Remove client stream: {}", &msg.user);
+        }
+      }
+
       Ok(())
     })
   }
@@ -219,7 +259,6 @@ async fn broadcast_message<U>(
   U: RealtimeUser,
 {
   let client_streams = client_streams.read().await;
-  info!("Broadcast message");
   if let Some(client_stream) = client_streams.get(user) {
     trace!("[realtime]: receives collab message: {}", collab_message);
     match client_stream

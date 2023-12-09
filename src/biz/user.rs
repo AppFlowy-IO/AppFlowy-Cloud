@@ -172,11 +172,16 @@ pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotifi
 pub struct RealtimeUserImpl {
   pub uid: i64,
   pub device_id: String,
+  pub session_id: String,
 }
 
 impl RealtimeUserImpl {
   pub fn new(uid: i64, device_id: String) -> Self {
-    Self { uid, device_id }
+    Self {
+      uid,
+      device_id,
+      session_id: Uuid::new_v4().to_string(),
+    }
   }
 }
 

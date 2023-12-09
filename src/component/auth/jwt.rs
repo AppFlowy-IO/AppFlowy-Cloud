@@ -127,7 +127,7 @@ fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::
   authorization_from_token(token, state)
 }
 
-#[instrument(skip_all, err)]
+#[instrument(level = "trace", skip_all, err)]
 pub fn authorization_from_token(
   token: &str,
   state: &Data<AppState>,
@@ -139,7 +139,7 @@ pub fn authorization_from_token(
   })
 }
 
-#[instrument(skip_all, err)]
+#[instrument(level = "trace", skip_all, err)]
 fn gotrue_jwt_claims_from_token(
   token: &str,
   state: &Data<AppState>,

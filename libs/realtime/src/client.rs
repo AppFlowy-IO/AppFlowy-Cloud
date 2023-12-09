@@ -22,7 +22,8 @@ pub struct ClientSession<
   S: Unpin + 'static,
   AC: Unpin + CollabAccessControl,
 > {
-  user: Option<U>,
+  session_id: String,
+  user: U,
   hb: Instant,
   pub server: Addr<CollabServer<S, U, AC>>,
   heartbeat_interval: Duration,
@@ -44,21 +45,25 @@ where
     client_timeout: Duration,
   ) -> Self {
     Self {
-      user: Some(user),
+      user,
       hb: Instant::now(),
       server,
       heartbeat_interval,
       client_timeout,
       user_change_recv: Some(user_change_recv),
+      session_id: uuid::Uuid::new_v4().to_string(),
     }
   }
 
   fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
-    ctx.run_interval(self.heartbeat_interval, |act, ctx| {
+    let session_id = self.session_id.clone();
+    ctx.run_interval(self.heartbeat_interval, move |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
-        if let Some(user) = act.user.clone() {
-          act.server.do_send(Disconnect { user });
-        }
+        let user = act.user.clone();
+        act.server.do_send(Disconnect {
+          user,
+          session_id: session_id.clone(),
+        });
         ctx.stop();
         return;
       }
@@ -68,16 +73,17 @@ where
   }
 
   fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
-    tracing::debug!("Receive binary: {}", bytes.len());
-    if let Some(user) = self.user.clone() {
-      match RealtimeMessage::try_from(bytes) {
-        Ok(message) => {
-          self.server.do_send(ClientMessage { user, message });
-        },
-        Err(err) => {
-          error!("Deserialize message error: {:?}", err);
-        },
-      }
+    match RealtimeMessage::try_from(bytes) {
+      Ok(message) => {
+        tracing::debug!("Receive {} {}", self.user.uid(), message);
+        let user = self.user.clone();
+        if let Err(err) = self.server.try_send(ClientMessage { user, message }) {
+          error!("Send message to server error: {:?}", err);
+        }
+      },
+      Err(err) => {
+        error!("Deserialize message error: {:?}", err);
+      },
     }
     Ok(())
   }
@@ -117,36 +123,41 @@ where
       });
     }
 
-    if let Some(user) = self.user.clone() {
-      self
-        .server
-        .send(Connect {
-          socket: ctx.address().recipient(),
-          user,
-        })
-        .into_actor(self)
-        .then(|res, _session, ctx| {
-          match res {
-            Ok(Ok(_)) => {
-              tracing::trace!("Send connect message to server success")
-            },
-            _ => {
-              error!("🔴Send connect message to server failed");
-              ctx.stop();
-            },
-          }
-          fut::ready(())
-        })
-        .wait(ctx);
-    }
+    self
+      .server
+      .send(Connect {
+        socket: ctx.address().recipient(),
+        user: self.user.clone(),
+        session_id: self.session_id.clone(),
+      })
+      .into_actor(self)
+      .then(|res, _session, ctx| {
+        match res {
+          Ok(Ok(_)) => {
+            trace!("Send connect message to server success")
+          },
+          Ok(Err(err)) => {
+            error!("Send connect message to server error: {:?}", err);
+            ctx.stop();
+          },
+          Err(err) => {
+            error!("Send connect message to server error: {:?}", err);
+            ctx.stop();
+          },
+        }
+        fut::ready(())
+      })
+      .wait(ctx);
   }
 
-  fn stopping(&mut self, _: &mut Self::Context) -> Running {
+  fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
     // When the user is None which means the user is kicked off by the server, do not send
     // disconnect message to the server.
-    if let Some(user) = self.user.clone() {
-      self.server.do_send(Disconnect { user });
-    }
+    let user = self.user.clone();
+    self.server.do_send(Disconnect {
+      user,
+      session_id: self.session_id.clone(),
+    });
     Running::Stop
   }
 }
@@ -163,12 +174,7 @@ where
     match &msg {
       RealtimeMessage::Collab(_) => ctx.binary(msg),
       RealtimeMessage::User(_) => ctx.binary(msg),
-      RealtimeMessage::ServerKickedOff => {
-        // The server will send this message to the client when the client is kicked out. So
-        // set the current user to None and stop the session.
-        self.user.take();
-        ctx.stop()
-      },
+      RealtimeMessage::ServerKickedOff => ctx.stop(),
     }
   }
 }

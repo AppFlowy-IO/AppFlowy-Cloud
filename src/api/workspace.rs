@@ -182,7 +182,7 @@ async fn remove_workspace_member_handler(
   Ok(AppResponse::Ok().into())
 }
 
-#[instrument(skip_all, err)]
+#[instrument(level = "debug", skip_all, err)]
 async fn open_workspace_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
@@ -193,7 +193,7 @@ async fn open_workspace_handler(
   Ok(AppResponse::Ok().with_data(workspace).into())
 }
 
-#[instrument(skip_all, err)]
+#[instrument(level = "debug", skip_all, err)]
 async fn update_workspace_member_handler(
   payload: Json<WorkspaceMemberChangeset>,
   state: Data<AppState>,
@@ -226,7 +226,7 @@ async fn create_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(level = "debug", skip(payload, state), err)]
+#[instrument(level = "trace", skip(payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
@@ -305,7 +305,7 @@ async fn retrieve_snapshots_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-#[instrument(skip(state, payload), err)]
+#[instrument(level = "debug", skip(state, payload), err)]
 async fn add_collab_member_handler(
   payload: Json<InsertCollabMemberParams>,
   state: Data<AppState>,
@@ -319,7 +319,7 @@ async fn add_collab_member_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[instrument(skip(state, payload), err)]
+#[instrument(level = "debug", skip(state, payload), err)]
 async fn update_collab_member_handler(
   user_uuid: UserUuid,
   payload: Json<UpdateCollabMemberParams>,

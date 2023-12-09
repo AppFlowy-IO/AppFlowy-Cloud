@@ -7,6 +7,8 @@ use std::time::Duration;
 use collab_entity::CollabType;
 use serde_json::json;
 use sqlx::types::uuid;
+use tokio::time::sleep;
+use tracing::trace;
 
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 
@@ -93,8 +95,12 @@ async fn edit_collab_with_different_devices_test() {
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  tokio::time::sleep(Duration::from_millis(1000)).await;
+  sleep(Duration::from_millis(1000)).await;
+
+  trace!("client 2 disconnect: {:?}", client_2.device_id);
   client_2.disconnect().await;
+  sleep(Duration::from_millis(1000)).await;
+
   client_2
     .collab_by_object_id
     .get_mut(&object_id)

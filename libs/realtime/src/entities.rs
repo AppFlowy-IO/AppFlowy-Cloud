@@ -29,12 +29,14 @@ where
 pub struct Connect<U> {
   pub socket: Recipient<RealtimeMessage>,
   pub user: U,
+  pub session_id: String,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct Disconnect<U> {
   pub user: U,
+  pub session_id: String,
 }
 
 #[derive(Debug, Message, Clone)]

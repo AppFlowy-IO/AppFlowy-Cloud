@@ -79,7 +79,7 @@ impl CollabAccessControlImpl {
     }
   }
 
-  #[instrument(level = "trace", skip(self), err)]
+  #[instrument(level = "debug", skip(self))]
   async fn get_user_collab_access_level(
     &self,
     uid: &i64,
@@ -158,7 +158,7 @@ async fn cache_collab_member_status(
   inner_map.insert(oid.to_string(), MemberStatus::Valid(access_level));
 }
 
-#[inline]
+#[instrument(level = "debug", skip(pg_pool, member_status_by_uid))]
 async fn reload_collab_member_status_from_db(
   uid: &i64,
   oid: &str,
@@ -184,15 +184,13 @@ impl CollabAccessControl for CollabAccessControlImpl {
     user: CollabUserId<'_>,
     oid: &str,
   ) -> Result<AFAccessLevel, AppError> {
-    let level = match user {
+    match user {
       CollabUserId::UserId(uid) => self.get_user_collab_access_level(uid, oid).await,
       CollabUserId::UserUuid(uuid) => {
         let uid = select_uid_from_uuid(&self.pg_pool, uuid).await?;
         self.get_user_collab_access_level(&uid, oid).await
       },
-    }?;
-
-    Ok(level)
+    }
   }
 
   async fn cache_collab_access_level(
@@ -210,6 +208,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
     Ok(())
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   async fn can_access_http_method(
     &self,
     user: CollabUserId<'_>,
@@ -235,6 +234,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   #[inline]
+  #[instrument(level = "debug", skip_all, err)]
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     let result = self
       .get_collab_access_level(CollabUserId::UserId(uid), oid)
@@ -257,6 +257,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   #[inline]
+  #[instrument(level = "debug", skip_all, err)]
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     Ok(
       self
@@ -279,6 +280,7 @@ where
     AccessResource::Collab
   }
 
+  #[instrument(level = "debug", skip_all, err)]
   async fn check_collab_permission(
     &self,
     oid: &str,
@@ -314,7 +316,7 @@ where
   CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  #[instrument(level = "trace", skip(self), err)]
+  #[instrument(level = "debug", skip(self), err)]
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     self
       .collab_access_control

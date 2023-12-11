@@ -95,6 +95,10 @@ pub enum AppError {
 }
 
 impl AppError {
+  pub fn is_not_enough_permissions(&self) -> bool {
+    matches!(self, AppError::NotEnoughPermissions(_))
+  }
+
   pub fn is_record_not_found(&self) -> bool {
     matches!(self, AppError::RecordNotFound(_))
   }

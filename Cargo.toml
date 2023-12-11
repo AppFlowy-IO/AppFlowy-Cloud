@@ -123,11 +123,13 @@ members = [
     "admin_frontend",
     "libs/app_error",
     "libs/workspace-template",
-    "libs/encrypt"
+    "libs/encrypt",
+    "libs/realtime-protocol"
 ]
 
 [workspace.dependencies]
 realtime-entity = { path = "libs/realtime-entity" }
+realtime-protocol = { path = "libs/realtime-protocol" }
 database-entity = { path = "libs/database-entity" }
 app-error = { path = "libs/app_error" }
 serde_json = "1.0.108"
@@ -139,6 +141,7 @@ uuid = { version = "1.4.1", features = ["v4"] }
 anyhow = "1.0.75"
 tokio = { version = "1.34", features = ["sync"] }
 yrs = "0.17.1"
+bincode = "1.3.3"
 
 [profile.release]
 lto = true
@@ -155,10 +158,10 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "82b3f74a716285ec595b8140c7255402433e7c8a" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "237cc24eda1e52f6dad9126f4a4c160a449688e3" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "237cc24eda1e52f6dad9126f4a4c160a449688e3" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "237cc24eda1e52f6dad9126f4a4c160a449688e3" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "237cc24eda1e52f6dad9126f4a4c160a449688e3" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

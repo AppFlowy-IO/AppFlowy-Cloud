@@ -1,12 +1,13 @@
+use collab::core::awareness;
 use std::sync::Arc;
 
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
+use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab::sync_protocol::awareness::{Awareness, AwarenessUpdate};
-use collab::sync_protocol::message::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use collab::sync_protocol::{awareness, handle_msg};
 use futures_util::{SinkExt, StreamExt};
+use realtime_protocol::handle_msg;
+use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};

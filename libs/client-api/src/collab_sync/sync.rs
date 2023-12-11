@@ -2,14 +2,14 @@ use crate::collab_sync::{
   CollabSink, CollabSinkRunner, SinkConfig, SinkState, SyncError, SyncObject,
 };
 use bytes::Bytes;
+use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
-use collab::sync_protocol::awareness::Awareness;
-use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
-use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::{CollabMessage, InitSync, ServerInit, UpdateSync};
+use realtime_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
+use realtime_protocol::{Message, MessageReader, SyncMessage};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::{Arc, Weak};

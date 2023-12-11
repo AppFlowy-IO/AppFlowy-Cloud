@@ -38,12 +38,11 @@ impl InsertCollabParams {
     }
   }
   pub fn from_raw_data(
-    object_id: &str,
+    object_id: String,
     collab_type: CollabType,
     encoded_collab_v1: Vec<u8>,
     workspace_id: &str,
   ) -> Self {
-    let object_id = object_id.to_string();
     let workspace_id = workspace_id.to_string();
     Self {
       object_id,

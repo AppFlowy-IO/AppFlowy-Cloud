@@ -238,7 +238,7 @@ where
           .run()
           .await?;
 
-          broadcast_message(&user, &collab_message, &client_stream_by_user).await;
+          broadcast_message(&user, collab_message, &client_stream_by_user).await;
           Ok(())
         })
       },
@@ -253,7 +253,7 @@ where
 #[inline]
 async fn broadcast_message<U>(
   user: &U,
-  collab_message: &CollabMessage,
+  collab_message: CollabMessage,
   client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
 ) where
   U: RealtimeUser,
@@ -263,7 +263,7 @@ async fn broadcast_message<U>(
     trace!("[realtime]: receives collab message: {}", collab_message);
     match client_stream
       .stream_tx
-      .send(Ok(RealtimeMessage::Collab(collab_message.clone())))
+      .send(Ok(RealtimeMessage::Collab(collab_message)))
     {
       Ok(_) => {},
       Err(e) => error!("send error: {}", e),

@@ -237,6 +237,26 @@ pub async fn delete_workspace_members(
   Ok(())
 }
 
+pub async fn select_all_workspace_members(
+  pg_pool: &PgPool,
+) -> Result<Vec<(String, Vec<AFWorkspaceMemberRow>)>, AppError> {
+  let workspaces: Vec<_> =
+    sqlx::query!("SELECT DISTINCT af_workspace_member.workspace_id FROM af_workspace_member")
+      .fetch_all(pg_pool)
+      .await?
+      .into_iter()
+      .map(|r| r.workspace_id)
+      .collect();
+
+  let mut workspace_members = Vec::with_capacity(workspaces.len());
+  for id in workspaces {
+    let members = select_workspace_member_list(pg_pool, &id).await?;
+    workspace_members.push((id.to_string(), members));
+  }
+
+  Ok(workspace_members)
+}
+
 /// returns a list of workspace members, sorted by their creation time.
 #[inline]
 pub async fn select_workspace_member_list(
@@ -246,7 +266,7 @@ pub async fn select_workspace_member_list(
   let members = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
-    SELECT af_user.name, af_user.email,
+    SELECT af_user.uid, af_user.name, af_user.email,
     af_workspace_member.role_id AS role
     FROM public.af_workspace_member
         JOIN public.af_user ON af_workspace_member.uid = af_user.uid
@@ -269,7 +289,7 @@ pub async fn select_workspace_member(
   let member = sqlx::query_as!(
     AFWorkspaceMemberRow,
     r#"
-    SELECT af_user.name, af_user.email, af_workspace_member.role_id AS role
+    SELECT af_user.uid, af_user.name, af_user.email, af_workspace_member.role_id AS role
     FROM public.af_workspace_member
       JOIN public.af_user ON af_workspace_member.uid = af_user.uid
     WHERE af_workspace_member.workspace_id = $1 

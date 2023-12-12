@@ -149,10 +149,10 @@ services:
       - APP__GOTRUE__ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
       - APP__S3__USE_MINIO=${USE_MINIO}
       - APP__S3__MINIO_URL=${MINIO_URL:-http://minio:9000}
-      - APP__S3__AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - APP__S3__AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - APP__S3__AWS_S3_BUCKET=${AWS_S3_BUCKET}
-      - APP__S3__AWS_REGION=${AWS_REGION}
+      - APP__S3__ACCESS_KEY=${AWS_ACCESS_KEY_ID}
+      - APP__S3__SECRET_KEY=${AWS_SECRET_ACCESS_KEY}
+      - APP__S3__BUCKET=${AWS_S3_BUCKET}
+      - APP__S3__REGION=${AWS_REGION}
     build:
       context: .
       dockerfile: Dockerfile

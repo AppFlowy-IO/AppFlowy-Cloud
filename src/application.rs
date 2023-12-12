@@ -157,25 +157,31 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 
 pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // Postgres
+  info!("Preparng to run database migrations...");
   let pg_pool = get_connection_pool(&config.database).await?;
   migrate(&pg_pool).await?;
 
   // Bucket storage
+  info!("Setting up S3 bucket...");
   let s3_bucket = get_aws_s3_bucket(&config.s3).await?;
   let bucket_storage = Arc::new(S3BucketStorage::from_s3_bucket(s3_bucket, pg_pool.clone()));
 
   // Gotrue
+  info!("Connecting to GoTrue...");
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
 
   // Redis
+  info!("Connecting to Redis...");
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
 
   // Pg listeners
+  info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
   let collab_member_listener = pg_listeners.subscribe_collab_member_change();
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
+  info!("Setting up access controls with Casbin...");
   let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF).await?;
   let access_control_adapter = PgAdapter::new(pg_pool.clone());
   let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter).await?;

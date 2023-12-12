@@ -1,40 +1,12 @@
 version: '3'
 services:
-  tunnel:
-    image: cloudflare/cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      - nginx
-
-  portainer:
-    restart: on-failure
-    image: portainer/portainer-ce:latest
-    ports:
-      - 9442:9000
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  portainer_init:
-    depends_on:
-      - portainer
-    image: alpine/curl
-    restart: on-failure
-    environment:
-      - PORTAINER_PASSWORD=${PORTAINER_PASSWORD}
-    volumes:
-      - ./docker/portainer/setup.sh:/setup.sh
-    command: ./setup.sh
-
   nginx:
     restart: on-failure
     image: nginx
     ports:
       - 80:80
       - 443:443
-    depends_on:
+    depends_on: # If you did not deploy any of the services below, comment those out
       - minio
       - appflowy_cloud
       - gotrue
@@ -45,6 +17,7 @@ services:
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
 
+  # You do not need this if you have configured to use your own s3 file storage
   minio:
     restart: on-failure
     image: minio/minio
@@ -70,19 +43,6 @@ services:
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
-
-  pgadmin:
-    restart: on-failure
-    image: dpage/pgadmin4
-    depends_on:
-      - postgres
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-    ports:
-      - 5400:80
-    volumes:
-      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
   redis:
     restart: on-failure
@@ -164,6 +124,7 @@ services:
     ports:
       - 8000:8000
 
+  # Optional
   admin_frontend:
     restart: on-failure
     build:
@@ -174,6 +135,51 @@ services:
       - gotrue
     ports:
       - 3000:3000
+
+  # Optional
+  tunnel:
+    image: cloudflare/cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - nginx
+
+  # Optional
+  portainer:
+    restart: on-failure
+    image: portainer/portainer-ce:latest
+    ports:
+      - 9442:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Optional
+  portainer_init:
+    depends_on:
+      - portainer
+    image: alpine/curl
+    restart: on-failure
+    environment:
+      - PORTAINER_PASSWORD=${PORTAINER_PASSWORD}
+    volumes:
+      - ./docker/portainer/setup.sh:/setup.sh
+    command: ./setup.sh
+
+  # Optional
+  pgadmin:
+    restart: on-failure
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - 5400:80
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
 volumes:
   postgres_data:

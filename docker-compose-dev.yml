@@ -1,13 +1,5 @@
 version: '3'
 services:
-  portainer:
-    restart: on-failure
-    image: portainer/portainer-ce:latest
-    ports:
-      - 9442:9000
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
   minio:
     restart: on-failure
     image: minio/minio
@@ -30,19 +22,6 @@ services:
       - 5433:5432
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
-
-  pgadmin:
-    restart: on-failure
-    image: dpage/pgadmin4
-    depends_on:
-      - postgres
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-    ports:
-      - 5400:80
-    volumes:
-      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
   redis:
     restart: on-failure
@@ -94,3 +73,25 @@ services:
       - GOTRUE_METRICS_EXPORTER=prometheus
     ports:
       - 9998:9999
+
+  portainer:
+    restart: on-failure
+    image: portainer/portainer-ce:latest
+    ports:
+      - 9442:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  pgadmin:
+    restart: on-failure
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - 5400:80
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
+

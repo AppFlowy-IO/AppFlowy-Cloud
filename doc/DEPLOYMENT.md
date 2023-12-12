@@ -58,7 +58,8 @@ GOTRUE_JWT_SECRET=hello456
 # or else no user will be able to be authenticated
 GOTRUE_MAILER_AUTOCONFIRM=true
 
-# if you enable mail confirmation, you need to set the SMTP configuration below
+# If you require mail confirmation, you need to set the SMTP configuration below
+# and set `GOTRUE_MAILER_AUTOCONFIRM` to be false
 GOTRUE_SMTP_HOST=smtp.gmail.com
 GOTRUE_SMTP_PORT=465
 GOTRUE_SMTP_USER=user1@example.com
@@ -114,9 +115,19 @@ GOTRUE_EXTERNAL_DISCORD_SECRET=your-discord-secret
 GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://your-host/gotrue/callback
 ```
 
-### 3. Running the services
+### 3. Optional Services
+Some services in `docker-compose.yml` are optinal and can be commented out if you dont need them, the will be marked as `Optional`
+- `pgadmin` (Web UI configured easy view into deployed postgres database)
+- `portainer`/`portainer_init` (Web UI for providing some monitoring and ease of container management)
+- `tunnel` (cloud flare tunnel: provide secure way to connect appflowy to Cloudflare without a publicly routable IP address)
+- `admin_frontend` (admin portal to manage accounts and adding authentication method, recommended to keep)
+If you did not deploy an optional component, else the nginx server will not start properly
+1. comment out the corresponding `depends_on` in `nginx` service in file `docker-compose.yml`
+2. comment out the corresponding `location` section in file `nginx/nginx.conf`
 
-### Start and run AppFlowy-Cloud
+### 4. Running the services
+
+#### Start and run AppFlowy-Cloud
 - The following command will build and start the AppFlowy-Cloud.
 
 ```bash

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use gotrue::api::Client;
 
+use realtime::collaborate::CollabAccessControl;
 use serde_json::json;
 use shared_entity::response::AppResponseError;
 use std::fmt::{Display, Formatter};
@@ -10,7 +11,7 @@ use uuid::Uuid;
 
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
 use database_entity::dto::{
-  AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, InsertCollabParams,
+  AFAccessLevel, AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, InsertCollabParams,
 };
 
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
@@ -30,15 +31,17 @@ use workspace_template::WorkspaceTemplateBuilder;
 /// Return true if the user is a new user
 ///
 #[instrument(skip_all, err)]
-pub async fn verify_token<T>(
+pub async fn verify_token<W, C>(
   pg_pool: &PgPool,
   id_gen: &Arc<RwLock<Snowflake>>,
   gotrue_client: &Client,
   access_token: &str,
-  workspace_access_control: &T,
+  workspace_access_control: &W,
+  collab_access_control: &C,
 ) -> Result<bool, AppError>
 where
-  T: WorkspaceAccessControl,
+  W: WorkspaceAccessControl,
+  C: CollabAccessControl,
 {
   let user = gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
@@ -74,6 +77,15 @@ where
         AFRole::Owner,
       )
       .await?;
+
+    collab_access_control
+      .cache_collab_access_level(
+        realtime::collaborate::CollabUserId::UserId(&new_uid),
+        &workspace_id,
+        AFAccessLevel::FullAccess,
+      )
+      .await?;
+
     // Create the default workspace for the user. A default workspace might contain multiple
     // templates, e.g. a document template, a database template, etc.
     let templates = WorkspaceTemplateBuilder::new(new_uid, &workspace_id)

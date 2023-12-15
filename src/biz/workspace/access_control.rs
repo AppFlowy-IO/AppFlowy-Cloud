@@ -1,4 +1,3 @@
-#![allow(unused)]
 use crate::biz::workspace::member_listener::{WorkspaceMemberAction, WorkspaceMemberNotification};
 use crate::component::auth::jwt::UserUuid;
 use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};

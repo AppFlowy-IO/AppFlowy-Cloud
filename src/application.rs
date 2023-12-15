@@ -1,6 +1,4 @@
 use crate::api::metrics::{metrics_registry, metrics_scope};
-use crate::biz::casbin::adapter::PgAdapter;
-use crate::biz::casbin::MODEL_CONF;
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
 use crate::middleware::cors_mw::default_cors;
@@ -31,16 +29,16 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::casbin::access_control::CasbinAccessControl;
-use crate::biz::collab::access_control::CollabHttpAccessControl;
+use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabHttpAccessControl};
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::user::RealtimeUserImpl;
-use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
+use crate::biz::workspace::access_control::{
+  WorkspaceAccessControlImpl, WorkspaceHttpAccessControl,
+};
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
 
 use crate::middleware::metrics_mw::MetricsMiddleware;
-use casbin::CoreApi;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::collaborate::CollabServer;
 
@@ -98,11 +96,9 @@ pub async fn run(
 
   let access_control = WorkspaceAccessControl::new()
     .with_acs(WorkspaceHttpAccessControl(
-      state.workspace_access_control.clone().into(),
+      state.workspace_access_control.clone(),
     ))
-    .with_acs(CollabHttpAccessControl(
-      state.collab_access_control.clone().into(),
-    ));
+    .with_acs(CollabHttpAccessControl(state.collab_access_control.clone()));
 
   // Initialize metrics that which are registered in the registry.
   let (metrics, registry) = metrics_registry();
@@ -178,22 +174,20 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // Pg listeners
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
-  let collab_member_listener = pg_listeners.subscribe_collab_member_change();
-  let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
-  info!("Setting up access controls with Casbin...");
-  let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF).await?;
-  let access_control_adapter = PgAdapter::new(pg_pool.clone());
-  let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter).await?;
-  let casbin_access_control = CasbinAccessControl::new(
+  // Collab access control
+  let collab_member_listener = pg_listeners.subscribe_collab_member_change();
+  let collab_access_control = Arc::new(CollabAccessControlImpl::new(
     pg_pool.clone(),
     collab_member_listener,
-    workspace_member_listener,
-    enforcer,
-  );
+  ));
 
-  let collab_access_control = casbin_access_control.new_collab_access_control();
-  let workspace_access_control = casbin_access_control.new_workspace_access_control();
+  // Workspace access control
+  let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
+  let workspace_access_control = Arc::new(WorkspaceAccessControlImpl::new(
+    pg_pool.clone(),
+    workspace_member_listener,
+  ));
 
   let collab_storage = Arc::new(
     init_collab_storage(
@@ -216,7 +210,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     workspace_access_control,
     bucket_storage,
     pg_listeners,
-    casbin_access_control,
   })
 }
 

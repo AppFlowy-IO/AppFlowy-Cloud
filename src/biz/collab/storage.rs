@@ -9,8 +9,8 @@ use database_entity::dto::{
 };
 use itertools::{Either, Itertools};
 
-use crate::biz::casbin::access_control::{CasbinCollabAccessControl, CasbinWorkspaceAccessControl};
-use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
+use crate::biz::collab::access_control::{CollabAccessControlImpl, CollabStorageAccessControlImpl};
+use crate::biz::workspace::access_control::WorkspaceAccessControlImpl;
 use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollabV1;
@@ -24,17 +24,17 @@ use tracing::{event, info, instrument};
 use validator::Validate;
 
 pub type CollabPostgresDBStorage = CollabStorageWrapper<
-  CollabStorageAccessControlImpl<CasbinCollabAccessControl, CasbinWorkspaceAccessControl>,
+  CollabStorageAccessControlImpl<CollabAccessControlImpl, WorkspaceAccessControlImpl>,
 >;
 
 pub async fn init_collab_storage(
   pg_pool: PgPool,
-  collab_access_control: CasbinCollabAccessControl,
-  workspace_access_control: CasbinWorkspaceAccessControl,
+  collab_access_control: Arc<CollabAccessControlImpl>,
+  workspace_access_control: Arc<WorkspaceAccessControlImpl>,
 ) -> CollabPostgresDBStorage {
   let access_control = CollabStorageAccessControlImpl {
-    collab_access_control: collab_access_control.into(),
-    workspace_access_control: workspace_access_control.into(),
+    collab_access_control,
+    workspace_access_control,
   };
   let collab_storage_impl = CollabStoragePgImpl::new(pg_pool);
   CollabStorageWrapper::new(collab_storage_impl, access_control)

@@ -254,7 +254,7 @@ pub struct AFPermission {
   pub description: String,
 }
 
-#[derive(Deserialize_repr, Serialize_repr, Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(Deserialize_repr, Serialize_repr, Eq, PartialEq, Debug, Clone)]
 #[repr(i32)]
 pub enum AFAccessLevel {
   // Can't modify the value of the enum

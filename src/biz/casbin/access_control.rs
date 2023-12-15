@@ -19,6 +19,7 @@ use crate::biz::{
 };
 use app_error::AppError;
 use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
+
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
 
 use super::{
@@ -149,6 +150,16 @@ impl CasbinAccessControl {
   async fn get_collab_member(&self, uid: &i64, oid: &str) -> Result<AFCollabMember, AppError> {
     database::collab::select_collab_member(uid, oid, &self.pg_pool).await
   }
+
+  async fn get_workspace_member_role(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<AFRole, AppError> {
+    database::workspace::select_workspace_member(&self.pg_pool, uid, workspace_id)
+      .await
+      .map(|r| r.role)
+  }
 }
 
 fn spawn_listen_on_collab_member_change(
@@ -256,6 +267,7 @@ impl CollabAccessControl for CasbinCollabAccessControl {
       .read()
       .await
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![collab_id]);
+
     // There should only be one entry per user per object, which is enforced in [CasbinAccessControl], so just take one using next.
     let mut access_level = policies
       .into_iter()
@@ -391,25 +403,36 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
     self.get_role_from_uid(&uid, workspace_id).await
   }
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let enforcer = self.casbin_access_control.enforcer.read().await;
-    let workspace_id = workspace_id.to_string();
-    let policies = enforcer.get_filtered_policy(
-      POLICY_FIELD_INDEX_OBJECT,
-      vec![ObjectType::Workspace(&workspace_id).to_string()],
-    );
-    // There should only be one entry per user per object, which is enforced in [CasbinAccessControl], so just take one using next.
-    let role = policies
+    let policies_future = self
+      .casbin_access_control
+      .enforcer
+      .read()
+      .await
+      .get_filtered_policy(
+        POLICY_FIELD_INDEX_OBJECT,
+        vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
+      );
+
+    let role = match policies_future
       .into_iter()
       .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-      .map(|p| p[POLICY_FIELD_INDEX_ACTION].clone())
-      .and_then(|s| i32::from_str(s.as_str()).ok())
-      .map(AFRole::from)
-      .ok_or(AppError::NotEnoughPermissions(format!(
+    {
+      Some(policy) => i32::from_str(policy[POLICY_FIELD_INDEX_ACTION].as_str())
+        .ok()
+        .map(AFRole::from),
+      None => self
+        .casbin_access_control
+        .get_workspace_member_role(uid, workspace_id)
+        .await
+        .ok(),
+    };
+
+    role.ok_or_else(|| {
+      AppError::NotEnoughPermissions(format!(
         "user:{} is not a member of workspace:{}",
         uid, workspace_id
-      )));
-
-    role
+      ))
+    })
   }
 
   async fn update_member(

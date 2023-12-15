@@ -18,7 +18,7 @@ use crate::biz::{
   },
 };
 use app_error::AppError;
-use database_entity::dto::{AFAccessLevel, AFRole};
+use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
 
 use super::{
@@ -145,6 +145,10 @@ impl CasbinAccessControl {
     };
     Ok(uid)
   }
+
+  async fn get_collab_member(&self, uid: &i64, oid: &str) -> Result<AFCollabMember, AppError> {
+    database::collab::select_collab_member(uid, oid, &self.pg_pool).await
+  }
 }
 
 fn spawn_listen_on_collab_member_change(
@@ -245,22 +249,43 @@ impl CollabAccessControl for CasbinCollabAccessControl {
     oid: &str,
   ) -> Result<AFAccessLevel, AppError> {
     let uid = self.casbin_access_control.get_uid(&user).await?;
-    let enforcer = self.casbin_access_control.enforcer.read().await;
     let collab_id = ObjectType::Collab(oid).to_string();
-    let policies = enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![collab_id]);
+    let policies = self
+      .casbin_access_control
+      .enforcer
+      .read()
+      .await
+      .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![collab_id]);
     // There should only be one entry per user per object, which is enforced in [CasbinAccessControl], so just take one using next.
-    let access_level = policies
+    let mut access_level = policies
       .into_iter()
       .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
       .map(|p| p[POLICY_FIELD_INDEX_ACTION].clone())
       .and_then(|s| i32::from_str(s.as_str()).ok())
-      .map(AFAccessLevel::from)
-      .ok_or(AppError::RecordNotFound(format!(
-        "user:{} is not a member of collab:{}",
-        uid, oid
-      )));
+      .map(AFAccessLevel::from);
 
-    access_level
+    if access_level.is_none() {
+      if let Ok(member) = self
+        .casbin_access_control
+        .get_collab_member(&uid, oid)
+        .await
+      {
+        access_level = Some(member.permission.access_level);
+        self
+          .casbin_access_control
+          .update(
+            &uid,
+            &ObjectType::Collab(oid),
+            &ActionType::Level(member.permission.access_level),
+          )
+          .await?;
+      }
+    }
+
+    access_level.ok_or(AppError::RecordNotFound(format!(
+      "user:{} is not a member of collab:{}",
+      uid, oid
+    )))
   }
 
   async fn cache_collab_access_level(
@@ -352,25 +377,6 @@ pub struct CasbinWorkspaceAccessControl {
   casbin_access_control: CasbinAccessControl,
 }
 
-impl CasbinWorkspaceAccessControl {
-  pub async fn update_member(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) {
-    let _ = self
-      .casbin_access_control
-      .update(
-        uid,
-        &ObjectType::Workspace(&workspace_id.to_string()),
-        &ActionType::Role(role),
-      )
-      .await;
-  }
-  pub async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) {
-    let _ = self
-      .casbin_access_control
-      .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
-      .await;
-  }
-}
-
 #[async_trait]
 impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
   async fn get_role_from_uuid(
@@ -384,7 +390,6 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
       .await?;
     self.get_role_from_uid(&uid, workspace_id).await
   }
-
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
     let enforcer = self.casbin_access_control.enforcer.read().await;
     let workspace_id = workspace_id.to_string();
@@ -405,6 +410,31 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
       )));
 
     role
+  }
+
+  async fn update_member(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    role: AFRole,
+  ) -> Result<(), AppError> {
+    let _ = self
+      .casbin_access_control
+      .update(
+        uid,
+        &ObjectType::Workspace(&workspace_id.to_string()),
+        &ActionType::Role(role),
+      )
+      .await?;
+    Ok(())
+  }
+
+  async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
+    let _ = self
+      .casbin_access_control
+      .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
+      .await?;
+    Ok(())
   }
 }
 

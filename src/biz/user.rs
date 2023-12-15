@@ -9,8 +9,11 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
-use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, InsertCollabParams};
+use database_entity::dto::{
+  AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, InsertCollabParams,
+};
 
+use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
 use database::collab::insert_into_af_collab;
 use database::user::{create_user, is_user_exist};
@@ -27,12 +30,16 @@ use workspace_template::WorkspaceTemplateBuilder;
 /// Return true if the user is a new user
 ///
 #[instrument(skip_all, err)]
-pub async fn verify_token(
+pub async fn verify_token<T>(
   pg_pool: &PgPool,
   id_gen: &Arc<RwLock<Snowflake>>,
   gotrue_client: &Client,
   access_token: &str,
-) -> Result<bool, AppError> {
+  workspace_access_control: &T,
+) -> Result<bool, AppError>
+where
+  T: WorkspaceAccessControl,
+{
   let user = gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
@@ -60,6 +67,13 @@ pub async fn verify_token(
     let workspace_id =
       create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
 
+    workspace_access_control
+      .update_member(
+        &new_uid,
+        &Uuid::parse_str(&workspace_id).unwrap(),
+        AFRole::Owner,
+      )
+      .await?;
     // Create the default workspace for the user. A default workspace might contain multiple
     // templates, e.g. a document template, a database template, etc.
     let templates = WorkspaceTemplateBuilder::new(new_uid, &workspace_id)

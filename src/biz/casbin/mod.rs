@@ -41,7 +41,7 @@ const GROUPING_FIELD_INDEX_ACTION: usize = 1;
 
 /// Represents the object type that is stored in the access control policy.
 #[derive(Debug)]
-enum ObjectType<'id> {
+pub(crate) enum ObjectType<'id> {
   /// Stored as `workspace::<uuid>`
   Workspace(&'id str),
   /// Stored as `collab::<uuid>`
@@ -59,14 +59,14 @@ impl ToString for ObjectType<'_> {
 
 /// Represents the action type that is stored in the access control policy.
 #[derive(Debug)]
-enum ActionType {
+pub(crate) enum ActionType {
   Role(AFRole),
   Level(AFAccessLevel),
 }
 
 /// Represents the actions that can be performed on objects.
 #[derive(Debug)]
-enum Action {
+pub(crate) enum Action {
   Read,
   Write,
   Delete,

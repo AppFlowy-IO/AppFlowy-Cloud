@@ -448,16 +448,11 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
       )
       .await?
   );
-
-  assert!(
-    access_control
-      .update(
-        &uid,
-        &ObjectType::Workspace("123"),
-        &ActionType::Role(AFRole::Member)
-      )
-      .await?
-  );
+  assert!(access_control.get_enforcer().read().await.enforce((
+    uid.to_string(),
+    ObjectType::Workspace("123").to_string(),
+    i32::from(AFRole::Owner).to_string(),
+  ))?);
 
   assert!(
     access_control
@@ -465,15 +460,11 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
       .await?
   );
 
-  assert!(
-    !access_control
-      .update(
-        &uid,
-        &ObjectType::Workspace("123"),
-        &ActionType::Role(AFRole::Owner)
-      )
-      .await?
-  );
+  assert!(!access_control.get_enforcer().read().await.enforce((
+    uid.to_string(),
+    ObjectType::Workspace("123").to_string(),
+    i32::from(AFRole::Owner).to_string(),
+  ))?);
 
   Ok(())
 }

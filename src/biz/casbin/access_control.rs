@@ -80,6 +80,12 @@ impl CasbinAccessControl {
     }
   }
 
+  /// Only expose this method for testing
+  #[cfg(debug_assertions)]
+  pub fn get_enforcer(&self) -> &Arc<RwLock<casbin::Enforcer>> {
+    &self.enforcer
+  }
+
   pub async fn update(
     &self,
     uid: &i64,

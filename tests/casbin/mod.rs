@@ -1,5 +1,4 @@
 use anyhow::Context;
-
 use lazy_static::lazy_static;
 use snowflake::Snowflake;
 use sqlx::PgPool;

@@ -7,6 +7,7 @@ use casbin::{CoreApi, MgmtApi};
 use database::user::select_uid_from_uuid;
 use sqlx::PgPool;
 use tokio::sync::{broadcast, RwLock};
+use tracing::instrument;
 use tracing::log::warn;
 
 use uuid::Uuid;
@@ -96,7 +97,8 @@ impl CasbinAccessControl {
   }
 
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
-    enforcer_remove(&self.enforcer, uid, obj).await
+    let mut enforcer = self.enforcer.write().await;
+    enforcer_remove(&mut enforcer, uid, obj).await
   }
 
   /// Get uid which is used for all operations.
@@ -154,7 +156,8 @@ fn spawn_listen_on_collab_member_change(
         },
         CollabMemberAction::DELETE => {
           if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
-            if let Err(err) = enforcer_remove(&enforcer, uid, &ObjectType::Collab(oid)).await {
+            let mut enforcer = enforcer.write().await;
+            if let Err(err) = enforcer_remove(&mut enforcer, uid, &ObjectType::Collab(oid)).await {
               warn!(
                 "Failed to remove the user:{} collab{} access control, error: {}",
                 uid, oid, err
@@ -199,8 +202,9 @@ fn spawn_listen_on_workspace_member_change(
         WorkspaceMemberAction::DELETE => match change.old {
           None => warn!("The workspace member change can't be None when the action is DELETE"),
           Some(member_row) => {
+            let mut enforcer = enforcer.write().await;
             if let Err(err) = enforcer_remove(
-              &enforcer,
+              &mut enforcer,
               &member_row.uid,
               &ObjectType::Workspace(&member_row.workspace_id.to_string()),
             )
@@ -224,6 +228,7 @@ pub struct CasbinCollabAccessControl {
 }
 
 impl CasbinCollabAccessControl {
+  #[instrument(level = "trace", skip_all)]
   pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
     let _ = self
       .casbin_access_control
@@ -290,6 +295,7 @@ impl CollabAccessControl for CasbinCollabAccessControl {
     )))
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn cache_collab_access_level(
     &self,
     user: CollabUserId<'_>,
@@ -425,6 +431,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
     })
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn update_member(
     &self,
     uid: &i64,

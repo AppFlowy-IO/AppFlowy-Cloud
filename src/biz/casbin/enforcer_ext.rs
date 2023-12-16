@@ -3,7 +3,7 @@ use crate::biz::casbin::{
 };
 use anyhow::anyhow;
 use app_error::AppError;
-use casbin::MgmtApi;
+use casbin::{Enforcer, MgmtApi};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{event, instrument};
@@ -34,7 +34,8 @@ pub(crate) async fn enforcer_update(
     ))),
   }?;
 
-  enforcer_remove(enforcer, uid, obj).await?;
+  let mut enforcer = enforcer.write().await;
+  enforcer_remove(&mut enforcer, uid, obj).await?;
   event!(
     tracing::Level::INFO,
     "updating policy: object={}, user={},action={}",
@@ -42,10 +43,7 @@ pub(crate) async fn enforcer_update(
     uid,
     action
   );
-
   enforcer
-    .write()
-    .await
     .add_policy(vec![uid.to_string(), obj_id, action])
     .await
     .map_err(|e| AppError::Internal(anyhow!("casbin error adding policy: {e:?}")))
@@ -54,12 +52,11 @@ pub(crate) async fn enforcer_update(
 #[inline]
 #[instrument(level = "trace", skip(enforcer, uid, obj), err)]
 pub(crate) async fn enforcer_remove(
-  enforcer: &Arc<RwLock<casbin::Enforcer>>,
+  enforcer: &mut Enforcer,
   uid: &i64,
   obj: &ObjectType<'_>,
 ) -> Result<bool, AppError> {
   let obj_id = obj.to_string();
-  let mut enforcer = enforcer.write().await;
   let policies = enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id]);
   let rem = policies
     .into_iter()

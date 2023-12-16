@@ -31,8 +31,6 @@ where
       params.object_id
     )));
   }
-
-  upsert_collab(pg_pool, user_uuid, params).await?;
   collab_access_control
     .cache_collab_access_level(
       CollabUserId::UserUuid(user_uuid),
@@ -40,6 +38,7 @@ where
       AFAccessLevel::FullAccess,
     )
     .await?;
+  upsert_collab(pg_pool, user_uuid, params).await?;
   Ok(())
 }
 

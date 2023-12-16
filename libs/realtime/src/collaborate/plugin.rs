@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, instrument, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -63,6 +63,7 @@ where
     plugin
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn insert_new_collab(&self, doc: &Doc, object_id: &str) -> Result<(), AppError> {
     debug!(
       "create new collab, cache full access of {} for user:{}",

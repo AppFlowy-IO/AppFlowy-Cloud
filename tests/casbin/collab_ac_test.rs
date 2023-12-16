@@ -60,57 +60,29 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
       .await
       .context("adding users to workspace")?;
 
-  assert_eq!(
-    AFAccessLevel::FullAccess,
-    access_control
-      .get_collab_access_level(
-        CollabUserId::UserUuid(&user.uuid),
-        &workspace.workspace_id.to_string(),
-      )
-      .await?
-  );
-  assert_eq!(
-    AFAccessLevel::FullAccess,
-    access_control
-      .get_collab_access_level(
-        CollabUserId::UserId(&user.uid),
-        &workspace.workspace_id.to_string(),
-      )
-      .await?
-  );
+  assert_access_level(
+    &access_control,
+    &user.uid,
+    workspace.workspace_id.to_string(),
+    Some(AFAccessLevel::FullAccess),
+  )
+  .await;
 
-  assert_eq!(
-    AFAccessLevel::FullAccess,
-    access_control
-      .get_collab_access_level(
-        CollabUserId::UserId(&owner.uid),
-        &workspace.workspace_id.to_string(),
-      )
-      .await?
-  );
+  assert_access_level(
+    &access_control,
+    &member.uid,
+    workspace.workspace_id.to_string(),
+    Some(AFAccessLevel::ReadAndWrite),
+  )
+  .await;
 
-  assert_eq!(
-    AFAccessLevel::ReadAndWrite,
-    access_control
-      .get_collab_access_level(
-        CollabUserId::UserId(&member.uid),
-        &workspace.workspace_id.to_string(),
-      )
-      .await?
-  );
-
-  assert_eq!(
-    AFAccessLevel::ReadOnly,
-    access_control
-      .get_collab_access_level(
-        CollabUserId::UserId(&guest.uid),
-        &workspace.workspace_id.to_string(),
-      )
-      .await?
-  );
-
-  // wait for update message
-  let mut collab_listener = listeners.subscribe_collab_member_change();
+  assert_access_level(
+    &access_control,
+    &guest.uid,
+    workspace.workspace_id.to_string(),
+    Some(AFAccessLevel::ReadOnly),
+  )
+  .await;
 
   let mut txn = pool
     .begin()
@@ -130,38 +102,25 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
     .await
     .expect("commit transaction to update collab member");
 
-  let _ = collab_listener.recv().await;
-  sleep(Duration::from_secs(1)).await;
-
-  assert_eq!(
-    AFAccessLevel::ReadAndComment,
-    access_control
-      .get_collab_access_level(
-        CollabUserId::UserId(&guest.uid),
-        &workspace.workspace_id.to_string(),
-      )
-      .await?
-  );
-
-  // wait for delete message
-  let mut collab_listener = listeners.subscribe_collab_member_change();
+  assert_access_level(
+    &access_control,
+    &guest.uid,
+    workspace.workspace_id.to_string(),
+    Some(AFAccessLevel::ReadAndComment),
+  )
+  .await;
 
   database::collab::delete_collab_member(guest.uid, &workspace.workspace_id.to_string(), &pool)
     .await
     .context("delete collab member")?;
 
-  let _ = collab_listener.recv().await;
-  sleep(Duration::from_secs(1)).await;
-
-  assert!(access_control
-    .get_collab_access_level(
-      CollabUserId::UserId(&guest.uid),
-      &workspace.workspace_id.to_string()
-    )
-    .await
-    .expect_err("user should not be part of collab")
-    .is_record_not_found());
-
+  assert_access_level(
+    &access_control,
+    &guest.uid,
+    workspace.workspace_id.to_string(),
+    None,
+  )
+  .await;
   Ok(())
 }
 
@@ -203,45 +162,16 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   .await
   .context("adding users to workspace")?;
 
-  assert!(
-    access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&user.uid),
-        &workspace.workspace_id.to_string(),
-        &Method::GET
-      )
-      .await?
-  );
-
-  assert!(
-    access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&user.uid),
-        &workspace.workspace_id.to_string(),
-        &Method::POST
-      )
-      .await?
-  );
-
-  assert!(
-    access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&user.uid),
-        &workspace.workspace_id.to_string(),
-        &Method::PUT
-      )
-      .await?
-  );
-
-  assert!(
-    access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&user.uid),
-        &workspace.workspace_id.to_string(),
-        &Method::DELETE
-      )
-      .await?
-  );
+  for method in [Method::GET, Method::POST, Method::PUT, Method::DELETE] {
+    assert_can_access_http_method(
+      &access_control,
+      &user.uid,
+      &workspace.workspace_id.to_string(),
+      method,
+      true,
+    )
+    .await;
+  }
 
   assert!(
     access_control
@@ -254,27 +184,25 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
     "should have access to non-existent collab oid"
   );
 
-  assert!(
-    access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&guest.uid),
-        &workspace.workspace_id.to_string(),
-        &Method::GET
-      )
-      .await?,
-    "guest should have read access"
-  );
+  // guest should have read access
+  assert_can_access_http_method(
+    &access_control,
+    &guest.uid,
+    &workspace.workspace_id.to_string(),
+    Method::GET,
+    true,
+  )
+  .await;
 
-  assert!(
-    !access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&guest.uid),
-        &workspace.workspace_id.to_string(),
-        &Method::POST
-      )
-      .await?,
-    "guest should not have write access"
-  );
+  // guest should not have write access
+  assert_can_access_http_method(
+    &access_control,
+    &guest.uid,
+    &workspace.workspace_id.to_string(),
+    Method::POST,
+    false,
+  )
+  .await;
 
   assert!(
     !access_control
@@ -338,6 +266,9 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
   )
   .await
   .context("adding users to workspace")?;
+
+  // Need to wait for the listener(spawn_listen_on_workspace_member_change) to receive the event
+  //
   sleep(Duration::from_secs(1)).await;
 
   assert!(

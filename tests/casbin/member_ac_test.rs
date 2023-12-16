@@ -1,10 +1,12 @@
-use crate::casbin::{create_user, setup_db, MODEL_CONF};
+use crate::casbin::{
+  assert_workspace_role, assert_workspace_role_error, create_user, setup_db, MODEL_CONF,
+};
 use anyhow::{anyhow, Context};
+use app_error::ErrorCode;
 use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::access_control::CasbinAccessControl;
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
 use appflowy_cloud::biz::pg_listener::PgListeners;
-use appflowy_cloud::biz::workspace::access_control::WorkspaceAccessControl;
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
@@ -34,19 +36,13 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  assert_eq!(
-    AFRole::Owner,
-    access_control
-      .get_role_from_uuid(&user.uuid, &workspace.workspace_id)
-      .await?
-  );
-
-  assert_eq!(
-    AFRole::Owner,
-    access_control
-      .get_role_from_uid(&user.uid, &workspace.workspace_id)
-      .await?
-  );
+  assert_workspace_role(
+    &access_control,
+    &user.uid,
+    &workspace.workspace_id,
+    Some(AFRole::Owner),
+  )
+  .await;
 
   let member = create_user(&pool).await?;
   let _ = biz::workspace::ops::add_workspace_members(
@@ -61,23 +57,15 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   .await
   .context("adding users to workspace")?;
 
-  assert_eq!(
-    AFRole::Member,
-    access_control
-      .get_role_from_uuid(&member.uuid, &workspace.workspace_id)
-      .await?
-  );
-
-  assert_eq!(
-    AFRole::Member,
-    access_control
-      .get_role_from_uid(&member.uid, &workspace.workspace_id)
-      .await?
-  );
+  assert_workspace_role(
+    &access_control,
+    &member.uid,
+    &workspace.workspace_id,
+    Some(AFRole::Member),
+  )
+  .await;
 
   // wait for update message
-  let mut workspace_listener = listeners.subscribe_workspace_member_change();
-
   biz::workspace::ops::update_workspace_member(
     &pool,
     &workspace.workspace_id,
@@ -90,17 +78,13 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   .await
   .context("update user workspace role")?;
 
-  let _ = workspace_listener.recv().await;
-
-  assert_eq!(
-    AFRole::Guest,
-    access_control
-      .get_role_from_uid(&member.uid, &workspace.workspace_id)
-      .await?
-  );
-
-  // wait for delete message
-  let mut workspace_listener = listeners.subscribe_workspace_member_change();
+  assert_workspace_role(
+    &access_control,
+    &member.uid,
+    &workspace.workspace_id,
+    Some(AFRole::Guest),
+  )
+  .await;
 
   biz::workspace::ops::remove_workspace_members(
     &user.uuid,
@@ -111,13 +95,13 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   .await
   .context("removing users from workspace")?;
 
-  let _ = workspace_listener.recv().await;
-
-  assert!(access_control
-    .get_role_from_uid(&member.uid, &workspace.workspace_id)
-    .await
-    .expect_err("user should not be part of workspace")
-    .is_not_enough_permissions());
+  assert_workspace_role_error(
+    &access_control,
+    &member.uid,
+    &workspace.workspace_id,
+    ErrorCode::NotEnoughPermissions,
+  )
+  .await;
 
   Ok(())
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT w.* \n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      );\n    ",
+  "query": "\n      SELECT w.*\n      FROM af_workspace w\n      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id\n      WHERE wm.uid = (\n         SELECT uid FROM public.af_user WHERE uuid = $1\n      );\n    ",
   "describe": {
     "columns": [
       {
@@ -54,5 +54,5 @@
       true
     ]
   },
-  "hash": "5855567a45f990e03f9249e0c591ebb8c9949a9b7e5bec114535c99f89a2a1dd"
+  "hash": "0517066279a74e9af59645b8bb152273aa959b610ca3d5e4f8eaecf4f7785dc2"
 }

@@ -1,4 +1,5 @@
-use database_entity::dto::AFRole;
+use database_entity::{dto::AFRole, pg_row::AFWorkspaceMemberPermRow};
+use futures_util::stream::BoxStream;
 use sqlx::{
   types::{uuid, Uuid},
   Executor, PgPool, Postgres, Transaction,
@@ -49,7 +50,7 @@ pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
   let row = sqlx::query_scalar!(
     r#"
      SELECT role_id FROM af_workspace_member
-     WHERE workspace_id = $1 AND uid = $2 
+     WHERE workspace_id = $1 AND uid = $2
     "#,
     workspace_uuid,
     uid
@@ -88,16 +89,16 @@ pub async fn select_user_can_edit_collab(
             WHERE oid = $2
         ) AS "collab_exists"
     )
-    SELECT 
+    SELECT
         NOT collab_check.collab_exists OR (
-            workspace_check.workspace_exists AND 
+            workspace_check.workspace_exists AND
             EXISTS(
                 SELECT 1
                 FROM af_collab_member
                 JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
-                WHERE 
-                    af_collab_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND 
-                    af_collab_member.oid = $2 AND 
+                WHERE
+                    af_collab_member.uid = (SELECT uid FROM af_user WHERE uuid = $1) AND
+                    af_collab_member.oid = $2 AND
                     af_permissions.access_level > 20
             )
         ) AS "permission_check"
@@ -125,9 +126,9 @@ pub async fn insert_workspace_member_with_txn(
     r#"
       INSERT INTO public.af_workspace_member (workspace_id, uid, role_id)
       SELECT $1, af_user.uid, $3
-      FROM public.af_user 
-      WHERE 
-        af_user.email = $2 
+      FROM public.af_user
+      WHERE
+        af_user.email = $2
       ON CONFLICT (workspace_id, uid)
       DO NOTHING;
     "#,
@@ -165,8 +166,8 @@ pub async fn upsert_workspace_member(
   sqlx::query!(
     r#"
         UPDATE af_workspace_member
-        SET 
-            role_id = $1 
+        SET
+            role_id = $1
         WHERE workspace_id = $2 AND uid = (
             SELECT uid FROM af_user WHERE email = $3
         )
@@ -191,10 +192,10 @@ pub async fn delete_workspace_members(
   let is_owner = sqlx::query_scalar!(
     r#"
   SELECT EXISTS (
-    SELECT 1 
+    SELECT 1
     FROM public.af_workspace
-    WHERE 
-        workspace_id = $1 
+    WHERE
+        workspace_id = $1
         AND owner_uid = (
             SELECT uid FROM public.af_user WHERE email = $2
         )
@@ -216,12 +217,12 @@ pub async fn delete_workspace_members(
   sqlx::query!(
     r#"
     DELETE FROM public.af_workspace_member
-    WHERE 
-    workspace_id = $1 
+    WHERE
+    workspace_id = $1
     AND uid = (
         SELECT uid FROM public.af_user WHERE email = $2
     )
-    -- Ensure the user to be deleted is not the original owner. 
+    -- Ensure the user to be deleted is not the original owner.
     -- 1. TODO(nathan): User must transfer ownership to another user first.
     -- 2. User must have at least one workspace
     AND uid <> (
@@ -237,24 +238,15 @@ pub async fn delete_workspace_members(
   Ok(())
 }
 
-pub async fn select_all_workspace_members(
+pub fn select_workspace_member_perm_stream(
   pg_pool: &PgPool,
-) -> Result<Vec<(String, Vec<AFWorkspaceMemberRow>)>, AppError> {
-  let workspaces: Vec<_> =
-    sqlx::query!("SELECT DISTINCT af_workspace_member.workspace_id FROM af_workspace_member")
-      .fetch_all(pg_pool)
-      .await?
-      .into_iter()
-      .map(|r| r.workspace_id)
-      .collect();
-
-  let mut workspace_members = Vec::with_capacity(workspaces.len());
-  for id in workspaces {
-    let members = select_workspace_member_list(pg_pool, &id).await?;
-    workspace_members.push((id.to_string(), members));
-  }
-
-  Ok(workspace_members)
+) -> Result<BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>>, AppError> {
+  let stream = sqlx::query_as!(
+    AFWorkspaceMemberPermRow,
+    "SELECT uid, role_id as role, workspace_id FROM af_workspace_member"
+  )
+  .fetch(pg_pool);
+  Ok(stream)
 }
 
 /// returns a list of workspace members, sorted by their creation time.
@@ -292,8 +284,8 @@ pub async fn select_workspace_member(
     SELECT af_user.uid, af_user.name, af_user.email, af_workspace_member.role_id AS role
     FROM public.af_workspace_member
       JOIN public.af_user ON af_workspace_member.uid = af_user.uid
-    WHERE af_workspace_member.workspace_id = $1 
-    AND af_workspace_member.uid = $2 
+    WHERE af_workspace_member.workspace_id = $1
+    AND af_workspace_member.uid = $2
     "#,
     workspace_id,
     uid,
@@ -366,7 +358,7 @@ pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-      SELECT w.* 
+      SELECT w.*
       FROM af_workspace w
       JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
       WHERE wm.uid = (

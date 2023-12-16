@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n  SELECT EXISTS (\n    SELECT 1\n    FROM public.af_workspace\n    WHERE\n        workspace_id = $1\n        AND owner_uid = (\n            SELECT uid FROM public.af_user WHERE email = $2\n        )\n   ) AS \"is_owner\";\n  ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_owner",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2b0754f55889a20c294d2a77ba8d3fa34c8174856abfdede34797851183a177a"
+}

@@ -19,7 +19,7 @@ use crate::biz::{
   },
 };
 use app_error::AppError;
-use database::workspace::select_permission_row_by_id;
+use database::workspace::select_permission;
 use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
 
 use crate::biz::casbin::enforcer_ext::{enforcer_remove, enforcer_update};
@@ -133,9 +133,7 @@ fn spawn_listen_on_collab_member_change(
       match change.action_type {
         CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
           if let Some(member_row) = change.new {
-            if let Ok(Some(row)) =
-              select_permission_row_by_id(&pg_pool, &member_row.permission_id).await
-            {
+            if let Ok(Some(row)) = select_permission(&pg_pool, &member_row.permission_id).await {
               if let Err(err) = enforcer_update(
                 &enforcer,
                 &member_row.uid,
@@ -182,17 +180,36 @@ fn spawn_listen_on_workspace_member_change(
           None => {
             warn!("The workspace member change can't be None when the action is INSERT or UPDATE")
           },
-          Some(_) => {
-            if let Err(err) = enforcer.write().await.load_policy().await {
-              warn!("Failed to reload workspace member status from db: {}", err);
+          Some(member_row) => {
+            if let Err(err) = enforcer_update(
+              &enforcer,
+              &member_row.uid,
+              &ObjectType::Workspace(&member_row.workspace_id.to_string()),
+              &ActionType::Role(AFRole::from(member_row.role_id)),
+            )
+            .await
+            {
+              warn!(
+                "Failed to update the user:{} workspace:{} access control, error: {}",
+                member_row.uid, member_row.workspace_id, err
+              );
             }
           },
         },
         WorkspaceMemberAction::DELETE => match change.old {
           None => warn!("The workspace member change can't be None when the action is DELETE"),
-          Some(_) => {
-            if let Err(err) = enforcer.write().await.load_policy().await {
-              warn!("Failed to reload workspace member status from db: {}", err);
+          Some(member_row) => {
+            if let Err(err) = enforcer_remove(
+              &enforcer,
+              &member_row.uid,
+              &ObjectType::Workspace(&member_row.workspace_id.to_string()),
+            )
+            .await
+            {
+              warn!(
+                "Failed to remove the user:{} workspace: {} access control, error: {}",
+                member_row.uid, member_row.workspace_id, err
+              );
             }
           },
         },

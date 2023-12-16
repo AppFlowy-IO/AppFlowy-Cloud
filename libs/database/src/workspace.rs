@@ -401,7 +401,7 @@ pub async fn select_all_user_workspaces(
   Ok(workspaces)
 }
 
-pub async fn select_permission_row_by_id(
+pub async fn select_permission(
   pool: &PgPool,
   permission_id: &i64,
 ) -> Result<Option<AFPermissionRow>, AppError> {
@@ -411,6 +411,24 @@ pub async fn select_permission_row_by_id(
       SELECT * FROM public.af_permissions WHERE id = $1
     "#,
     *permission_id as i32
+  )
+  .fetch_optional(pool)
+  .await?;
+  Ok(permission)
+}
+
+pub async fn select_permission_from_role_id(
+  pool: &PgPool,
+  role_id: &i64,
+) -> Result<Option<AFPermissionRow>, AppError> {
+  let permission = sqlx::query_as!(
+    AFPermissionRow,
+    r#"
+    SELECT p.id, p.name, p.access_level, p.description FROM af_permissions p
+    JOIN af_role_permissions rp ON p.id = rp.permission_id
+    WHERE rp.role_id = $1
+    "#,
+    *role_id as i32
   )
   .fetch_optional(pool)
   .await?;

@@ -35,7 +35,6 @@ pub(crate) async fn enforcer_update(
   }?;
 
   enforcer_remove(enforcer, uid, obj).await?;
-
   event!(
     tracing::Level::INFO,
     "updating policy: object={}, user={},action={}",

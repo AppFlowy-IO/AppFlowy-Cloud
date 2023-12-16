@@ -8,6 +8,7 @@ use database::user::select_uid_from_uuid;
 use sqlx::PgPool;
 use tokio::sync::{broadcast, RwLock};
 use tracing::log::warn;
+use tracing::{event, instrument};
 use uuid::Uuid;
 
 use crate::biz::{
@@ -81,6 +82,7 @@ impl CasbinAccessControl {
   ///
   /// [`ObjectType::Workspace`] has to be paired with [`ActionType::Role`],
   /// [`ObjectType::Collab`] has to be paired with [`ActionType::Level`],
+  #[instrument(level = "trace", skip(self, obj, act), err)]
   async fn update(
     &self,
     uid: &i64,
@@ -115,6 +117,13 @@ impl CasbinAccessControl {
         .map_err(|e| AppError::Internal(anyhow!("casbin error removing policy: {e:?}")))?;
     }
 
+    event!(
+      tracing::Level::TRACE,
+      "updating policy: object={}, user={},action={}",
+      obj_id,
+      uid,
+      action
+    );
     enforcer
       .add_policy(vec![uid.to_string(), obj_id, action])
       .await
@@ -295,7 +304,7 @@ impl CollabAccessControl for CasbinCollabAccessControl {
     }
 
     access_level.ok_or(AppError::RecordNotFound(format!(
-      "user:{} is not a member of collab:{}",
+      "collab:{} does not exist or user:{} is not a member",
       uid, oid
     )))
   }

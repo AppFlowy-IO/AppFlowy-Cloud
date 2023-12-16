@@ -223,7 +223,13 @@ async fn create_collab_handler(
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::create_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  biz::collab::ops::create_collab(
+    &state.pg_pool,
+    &user_uuid,
+    &payload.into_inner(),
+    &state.collab_access_control,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

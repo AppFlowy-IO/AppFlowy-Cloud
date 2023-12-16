@@ -94,15 +94,26 @@ where
 
     debug!("create {} templates for user:{}", templates.len(), new_uid);
     for template in templates {
+      let object_id = template.object_id;
+      let encoded_collab_v1 = template
+        .object_data
+        .encode_to_bytes()
+        .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+
+      collab_access_control
+        .cache_collab_access_level(
+          realtime::collaborate::CollabUserId::UserId(&new_uid),
+          &object_id,
+          AFAccessLevel::FullAccess,
+        )
+        .await?;
+
       insert_into_af_collab(
         &mut txn,
         &new_uid,
         &InsertCollabParams {
-          object_id: template.object_id,
-          encoded_collab_v1: template
-            .object_data
-            .encode_to_bytes()
-            .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?,
+          object_id,
+          encoded_collab_v1,
           workspace_id: workspace_id.clone(),
           collab_type: template.object_type,
         },

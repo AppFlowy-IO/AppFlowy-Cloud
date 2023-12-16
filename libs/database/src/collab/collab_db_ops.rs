@@ -446,7 +446,7 @@ pub async fn select_collab_member(
   Ok(member)
 }
 
-#[instrument(level = "debug", skip(row), err)]
+#[instrument(level = "trace", skip(row), err)]
 fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error> {
   let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
   let permission = AFPermission {

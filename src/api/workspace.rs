@@ -2,6 +2,7 @@ use crate::api::ws::CollabServerImpl;
 use crate::biz;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace;
+use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::component::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::Bytes;
@@ -121,7 +122,7 @@ async fn add_workspace_members_handler(
     state
       .workspace_access_control
       .update_member(&uid, &workspace_id, role)
-      .await;
+      .await?;
   }
   Ok(AppResponse::Ok().into())
 }
@@ -175,7 +176,7 @@ async fn remove_workspace_member_handler(
       state
         .workspace_access_control
         .remove_member(&uid, &workspace_id)
-        .await;
+        .await?;
     }
   }
 
@@ -210,7 +211,7 @@ async fn update_workspace_member_handler(
     state
       .workspace_access_control
       .update_member(&uid, &workspace_id, role)
-      .await;
+      .await?;
   }
 
   Ok(AppResponse::Ok().into())
@@ -222,7 +223,13 @@ async fn create_collab_handler(
   payload: Json<InsertCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::create_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  biz::collab::ops::create_collab(
+    &state.pg_pool,
+    &user_uuid,
+    &payload.into_inner(),
+    &state.collab_access_control,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

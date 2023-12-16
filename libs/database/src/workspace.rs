@@ -249,26 +249,6 @@ pub fn select_workspace_member_perm_stream(
   Ok(stream)
 }
 
-pub async fn select_all_workspace_members(
-  pg_pool: &PgPool,
-) -> Result<Vec<(String, Vec<AFWorkspaceMemberRow>)>, AppError> {
-  let workspaces: Vec<_> =
-    sqlx::query!("SELECT DISTINCT af_workspace_member.workspace_id FROM af_workspace_member")
-      .fetch_all(pg_pool)
-      .await?
-      .into_iter()
-      .map(|r| r.workspace_id)
-      .collect();
-
-  let mut workspace_members = Vec::with_capacity(workspaces.len());
-  for id in workspaces {
-    let members = select_workspace_member_list(pg_pool, &id).await?;
-    workspace_members.push((id.to_string(), members));
-  }
-
-  Ok(workspace_members)
-}
-
 /// returns a list of workspace members, sorted by their creation time.
 #[inline]
 pub async fn select_workspace_member_list(

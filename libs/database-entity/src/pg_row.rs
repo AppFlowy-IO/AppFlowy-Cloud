@@ -62,6 +62,13 @@ pub struct AFWorkspaceMemberRow {
   pub role: AFRole,
 }
 
+#[derive(FromRow)]
+pub struct AFCollabMemerAccessLevelRow {
+  pub uid: i64,
+  pub oid: String,
+  pub access_level: AFAccessLevel,
+}
+
 #[derive(FromRow, Clone, Debug, Serialize, Deserialize)]
 pub struct AFCollabMemberRow {
   pub uid: i64,

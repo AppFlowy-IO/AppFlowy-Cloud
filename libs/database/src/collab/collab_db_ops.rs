@@ -382,7 +382,7 @@ pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Resu
   Ok(())
 }
 
-#[inline]
+#[instrument(level = "info", skip_all, err)]
 pub async fn select_all_collab_members(
   pg_pool: &PgPool,
 ) -> Result<Vec<(String, Vec<AFCollabMember>)>, AppError> {
@@ -446,7 +446,6 @@ pub async fn select_collab_member(
   Ok(member)
 }
 
-#[instrument(level = "trace", skip(row), err)]
 fn collab_member_try_from_row(row: PgRow) -> Result<AFCollabMember, sqlx::Error> {
   let access_level = AFAccessLevel::from(row.try_get::<i32, _>(4)?);
   let permission = AFPermission {

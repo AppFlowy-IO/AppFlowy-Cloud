@@ -1,4 +1,4 @@
-use crate::dto::AFRole;
+use crate::dto::{AFAccessLevel, AFRole};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -81,4 +81,12 @@ pub struct AFBlobMetadataRow {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AFUserNotification {
   pub payload: Option<AFUserRow>,
+}
+
+#[derive(FromRow, Debug, Clone)]
+pub struct AFPermissionRow {
+  pub id: i32,
+  pub name: String,
+  pub access_level: AFAccessLevel,
+  pub description: Option<String>,
 }

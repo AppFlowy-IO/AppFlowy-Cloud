@@ -222,6 +222,12 @@ impl From<i32> for AFRole {
   }
 }
 
+impl From<i64> for AFRole {
+  fn from(value: i64) -> Self {
+    Self::from(value as i32)
+  }
+}
+
 impl From<Option<i32>> for AFRole {
   fn from(value: Option<i32>) -> Self {
     match value {
@@ -291,7 +297,7 @@ impl From<i32> for AFAccessLevel {
       30 => AFAccessLevel::ReadAndWrite,
       50 => AFAccessLevel::FullAccess,
       _ => {
-        error!("Invalid role id: {}", value);
+        error!("Invalid access level: {}", value);
         AFAccessLevel::ReadOnly
       },
     }

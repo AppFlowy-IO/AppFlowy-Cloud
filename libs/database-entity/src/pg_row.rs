@@ -48,6 +48,13 @@ pub struct AFUserProfileRow {
 }
 
 #[derive(FromRow, Serialize, Deserialize)]
+pub struct AFWorkspaceMemberPermRow {
+  pub uid: i64,
+  pub role: AFRole,
+  pub workspace_id: Uuid,
+}
+
+#[derive(FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMemberRow {
   pub uid: i64,
   pub name: String,

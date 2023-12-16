@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    SELECT af_user.uid, af_user.name, af_user.email, af_workspace_member.role_id AS role\n    FROM public.af_workspace_member\n      JOIN public.af_user ON af_workspace_member.uid = af_user.uid\n    WHERE af_workspace_member.workspace_id = $1 \n    AND af_workspace_member.uid = $2 \n    ",
+  "query": "\n    SELECT af_user.uid, af_user.name, af_user.email, af_workspace_member.role_id AS role\n    FROM public.af_workspace_member\n      JOIN public.af_user ON af_workspace_member.uid = af_user.uid\n    WHERE af_workspace_member.workspace_id = $1\n    AND af_workspace_member.uid = $2\n    ",
   "describe": {
     "columns": [
       {
@@ -37,5 +37,5 @@
       false
     ]
   },
-  "hash": "75f37fa6492019be868ea7f8ffea64a3809c1232c548608c375b084440f672f1"
+  "hash": "273cb2255ae88a24dde5e35228a6cfdb5b353e52120b0fa7addf72e539f97344"
 }

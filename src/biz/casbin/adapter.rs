@@ -35,7 +35,7 @@ async fn create_collab_policies(
     let member_access_lv = result.map_err(|err| AdapterError(Box::new(err)))?;
     let policy = [
       member_access_lv.uid.to_string(),
-      ObjectType::Workspace(&member_access_lv.oid.to_string()).to_string(),
+      ObjectType::Collab(&member_access_lv.oid).to_string(),
       i32::from(member_access_lv.access_level).to_string(),
     ]
     .to_vec();

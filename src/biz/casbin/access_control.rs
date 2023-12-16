@@ -8,7 +8,7 @@ use database::user::select_uid_from_uuid;
 use sqlx::PgPool;
 use tokio::sync::{broadcast, RwLock};
 use tracing::log::warn;
-use tracing::{event, instrument};
+
 use uuid::Uuid;
 
 use crate::biz::{
@@ -19,8 +19,10 @@ use crate::biz::{
   },
 };
 use app_error::AppError;
+use database::workspace::select_permission_row_by_id;
 use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
 
+use crate::biz::casbin::enforcer_ext::{enforcer_remove, enforcer_update};
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
 
 use super::{
@@ -63,7 +65,7 @@ impl CasbinAccessControl {
   ) -> Self {
     let enforcer = Arc::new(RwLock::new(enforcer));
     spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
-    spawn_listen_on_collab_member_change(collab_listener, enforcer.clone());
+    spawn_listen_on_collab_member_change(pg_pool.clone(), collab_listener, enforcer.clone());
     Self { pg_pool, enforcer }
   }
   pub fn new_collab_access_control(&self) -> CasbinCollabAccessControl {
@@ -78,73 +80,17 @@ impl CasbinAccessControl {
     }
   }
 
-  /// Update permission for a user.
-  ///
-  /// [`ObjectType::Workspace`] has to be paired with [`ActionType::Role`],
-  /// [`ObjectType::Collab`] has to be paired with [`ActionType::Level`],
-  #[instrument(level = "trace", skip(self, obj, act), err)]
   async fn update(
     &self,
     uid: &i64,
     obj: &ObjectType<'_>,
     act: &ActionType,
   ) -> Result<bool, AppError> {
-    let (obj_id, action) = match (obj, act) {
-      (ObjectType::Workspace(_), ActionType::Role(role)) => {
-        Ok((obj.to_string(), i32::from(role.clone()).to_string()))
-      },
-      (ObjectType::Collab(_), ActionType::Level(level)) => {
-        Ok((obj.to_string(), i32::from(*level).to_string()))
-      },
-      _ => Err(AppError::Internal(anyhow!(
-        "invalid object type and action type combination: object={:?}, action={:?}",
-        obj,
-        act
-      ))),
-    }?;
-
-    let mut enforcer = self.enforcer.write().await;
-
-    let current_policy = enforcer
-      .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id.clone()])
-      .into_iter()
-      .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string());
-
-    if let Some(current_policy) = current_policy {
-      enforcer
-        .remove_policy(current_policy)
-        .await
-        .map_err(|e| AppError::Internal(anyhow!("casbin error removing policy: {e:?}")))?;
-    }
-
-    event!(
-      tracing::Level::TRACE,
-      "updating policy: object={}, user={},action={}",
-      obj_id,
-      uid,
-      action
-    );
-    enforcer
-      .add_policy(vec![uid.to_string(), obj_id, action])
-      .await
-      .map_err(|e| AppError::Internal(anyhow!("casbin error adding policy: {e:?}")))
+    enforcer_update(&self.enforcer, uid, obj, act).await
   }
 
   async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
-    let obj_id = obj.to_string();
-    let mut enforcer = self.enforcer.write().await;
-
-    let policies = enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id]);
-
-    let rem = policies
-      .into_iter()
-      .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-      .collect();
-
-    enforcer
-      .remove_policies(rem)
-      .await
-      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
+    enforcer_remove(&self.enforcer, uid, obj).await
   }
 
   /// Get uid which is used for all operations.
@@ -172,6 +118,7 @@ impl CasbinAccessControl {
 }
 
 fn spawn_listen_on_collab_member_change(
+  pg_pool: PgPool,
   mut listener: broadcast::Receiver<CollabMemberNotification>,
   enforcer: Arc<RwLock<casbin::Enforcer>>,
 ) {
@@ -179,23 +126,34 @@ fn spawn_listen_on_collab_member_change(
     while let Ok(change) = listener.recv().await {
       match change.action_type {
         CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
-          if let (Some(_), Some(_)) = (change.new_oid(), change.new_uid()) {
-            if let Err(err) = enforcer.write().await.load_policy().await {
-              warn!(
-                "Failed to reload the collab member status from db: {:?}, error: {}",
-                change, err
-              );
+          if let Some(member_row) = change.new {
+            if let Ok(Some(row)) =
+              select_permission_row_by_id(&pg_pool, &member_row.permission_id).await
+            {
+              if let Err(err) = enforcer_update(
+                &enforcer,
+                &member_row.uid,
+                &ObjectType::Collab(&member_row.oid),
+                &ActionType::Level(row.access_level),
+              )
+              .await
+              {
+                warn!(
+                  "Failed to update the user:{} collab{} access control, error: {}",
+                  member_row.uid, member_row.oid, err
+                );
+              }
             }
           } else {
-            warn!("The oid or uid is None")
+            warn!("The new collab member is None")
           }
         },
         CollabMemberAction::DELETE => {
-          if let (Some(_), Some(_)) = (change.old_oid(), change.old_uid()) {
-            if let Err(err) = enforcer.write().await.load_policy().await {
+          if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
+            if let Err(err) = enforcer_remove(&enforcer, uid, &ObjectType::Collab(oid)).await {
               warn!(
-                "Failed to reload the collab member status from db: {:?}, error: {}",
-                change, err
+                "Failed to remove the user:{} collab{} access control, error: {}",
+                uid, oid, err
               );
             }
           } else {
@@ -412,7 +370,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
     self.get_role_from_uid(&uid, workspace_id).await
   }
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let policies_future = self
+    let policies = self
       .casbin_access_control
       .enforcer
       .read()
@@ -422,7 +380,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
         vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
       );
 
-    let role = match policies_future
+    let role = match policies
       .into_iter()
       .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
     {

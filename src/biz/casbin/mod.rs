@@ -2,6 +2,7 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 
 pub mod access_control;
 pub mod adapter;
+mod enforcer_ext;
 
 pub const MODEL_CONF: &str = r###"
 [request_definition]

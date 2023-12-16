@@ -291,7 +291,7 @@ impl From<i32> for AFAccessLevel {
       30 => AFAccessLevel::ReadAndWrite,
       50 => AFAccessLevel::FullAccess,
       _ => {
-        error!("Invalid role id: {}", value);
+        error!("Invalid access level: {}", value);
         AFAccessLevel::ReadOnly
       },
     }

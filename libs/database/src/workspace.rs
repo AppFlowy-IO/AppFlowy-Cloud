@@ -8,7 +8,9 @@ use tracing::{event, instrument};
 
 use crate::user::select_uid_from_email;
 use app_error::AppError;
-use database_entity::pg_row::{AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
+use database_entity::pg_row::{
+  AFPermissionRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow,
+};
 
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.
@@ -397,4 +399,20 @@ pub async fn select_all_user_workspaces(
   .fetch_all(pool)
   .await?;
   Ok(workspaces)
+}
+
+pub async fn select_permission_row_by_id(
+  pool: &PgPool,
+  permission_id: &i64,
+) -> Result<Option<AFPermissionRow>, AppError> {
+  let permission = sqlx::query_as!(
+    AFPermissionRow,
+    r#"
+      SELECT * FROM public.af_permissions WHERE id = $1
+    "#,
+    *permission_id as i32
+  )
+  .fetch_optional(pool)
+  .await?;
+  Ok(permission)
 }

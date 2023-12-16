@@ -116,7 +116,7 @@ where
       // If the user is the owner or member of the workspace, the user can create collab.
       let role = self
         .access_control
-        .get_user_role(uid, &params.workspace_id)
+        .get_user_workspace_role(uid, &params.workspace_id)
         .await?;
       event!(
         tracing::Level::TRACE,

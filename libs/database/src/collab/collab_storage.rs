@@ -34,7 +34,11 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   ) -> Result<(), AppError>;
 
   /// Returns the role of the user in the workspace.
-  async fn get_user_role(&self, uid: &i64, workspace_id: &str) -> Result<AFRole, AppError>;
+  async fn get_user_workspace_role(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+  ) -> Result<AFRole, AppError>;
 }
 
 /// Represents a storage mechanism for collaborations.

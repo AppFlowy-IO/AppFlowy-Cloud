@@ -1,4 +1,7 @@
+extern crate core;
+
 use client_api::Client;
+mod casbin;
 mod collab;
 mod gotrue;
 mod user;

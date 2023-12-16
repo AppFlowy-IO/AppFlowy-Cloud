@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    DELETE FROM public.af_workspace_member\n    WHERE\n    workspace_id = $1\n    AND uid = (\n        SELECT uid FROM public.af_user WHERE email = $2\n    )\n    -- Ensure the user to be deleted is not the original owner.\n    -- 1. TODO(nathan): User must transfer ownership to another user first.\n    -- 2. User must have at least one workspace\n    AND uid <> (\n        SELECT owner_uid FROM public.af_workspace WHERE workspace_id = $1\n    );\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c843fb8517b1e364016b85a9e94927673bf8311bfbf723b610d59ecfef3fafce"
+}

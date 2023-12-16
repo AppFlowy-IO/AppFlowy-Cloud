@@ -316,7 +316,7 @@ where
   CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  #[instrument(level = "debug", skip(self), err)]
+  #[instrument(level = "debug", skip(self))]
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     self
       .collab_access_control

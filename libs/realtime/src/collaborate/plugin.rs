@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{error, info, trace};
+use tracing::{debug, error, info, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -135,10 +135,9 @@ where
       },
       Err(err) => match &err {
         AppError::RecordNotFound(_) => {
-          trace!(
+          debug!(
             "create new collab, cache full access of {} for user:{}",
-            object_id,
-            self.uid
+            object_id, self.uid
           );
           let _ = self
             .access_control
@@ -149,15 +148,8 @@ where
             )
             .await;
 
-          let result = {
-            let txn = doc.transact();
-            let doc_state = txn.encode_diff_v1(&StateVector::default());
-            let state_vector = txn.state_vector().encode_v1();
-            EncodedCollabV1::new(doc_state, state_vector).encode_to_bytes()
-          };
-
           //
-          match result {
+          match encoded_v1_from_doc(doc).encode_to_bytes() {
             Ok(encoded_collab_v1) => {
               let params = InsertCollabParams::from_raw_data(
                 object_id.to_string(),
@@ -205,12 +197,8 @@ where
     let workspace_id = self.workspace_id.clone();
     let collab_type = self.collab_type.clone();
     let object_id = object_id.to_string();
-    if let Ok(encoded_collab_v1) = {
-      let txn = doc.transact();
-      let doc_state = txn.encode_state_as_update_v1(&StateVector::default());
-      let state_vector = txn.state_vector().encode_v1();
-      EncodedCollabV1::new(doc_state, state_vector).encode_to_bytes()
-    } {
+
+    if let Ok(encoded_collab_v1) = encoded_v1_from_doc(doc).encode_to_bytes() {
       let params =
         InsertCollabParams::from_raw_data(object_id, collab_type, encoded_collab_v1, &workspace_id);
       let object_id = params.object_id.clone();
@@ -222,6 +210,13 @@ where
       });
     }
   }
+}
+
+fn encoded_v1_from_doc(doc: &Doc) -> EncodedCollabV1 {
+  let txn = doc.transact();
+  let doc_state = txn.encode_state_as_update_v1(&StateVector::default());
+  let state_vector = txn.state_vector().encode_v1();
+  EncodedCollabV1::new(state_vector, doc_state)
 }
 
 struct CollabEditState {

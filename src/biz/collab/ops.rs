@@ -4,28 +4,43 @@ use std::ops::DerefMut;
 
 use app_error::AppError;
 use database_entity::dto::{
-  AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
+  AFAccessLevel, AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
   InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryObjectSnapshotParams,
   QuerySnapshotParams, UpdateCollabMemberParams,
 };
 
+use realtime::collaborate::{CollabAccessControl, CollabUserId};
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;
 
-pub async fn create_collab(
+pub async fn create_collab<C>(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   params: &InsertCollabParams,
-) -> Result<(), AppError> {
+  collab_access_control: &C,
+) -> Result<(), AppError>
+where
+  C: CollabAccessControl,
+{
   params.validate()?;
   if database::collab::collab_exists(pg_pool, &params.object_id).await? {
+    // When calling this function, the caller should have already checked if the collab exists.
     return Err(AppError::RecordAlreadyExists(format!(
       "Collab with object_id {} already exists",
       params.object_id
     )));
   }
-  upsert_collab(pg_pool, user_uuid, params).await
+
+  upsert_collab(pg_pool, user_uuid, params).await?;
+  collab_access_control
+    .cache_collab_access_level(
+      CollabUserId::UserUuid(user_uuid),
+      &params.object_id,
+      AFAccessLevel::FullAccess,
+    )
+    .await?;
+  Ok(())
 }
 
 pub async fn upsert_collab(

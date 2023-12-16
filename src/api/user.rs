@@ -47,6 +47,8 @@ async fn verify_user_handler(
     &state.id_gen,
     &state.gotrue_client,
     &access_token,
+    &state.workspace_access_control,
+    &state.collab_access_control,
   )
   .await
   .map_err(AppResponseError::from)?;

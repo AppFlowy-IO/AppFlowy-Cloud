@@ -71,7 +71,7 @@ impl<T> CollabAccessControl for Arc<T>
 where
   T: CollabAccessControl,
 {
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "debug", skip_all)]
   async fn get_collab_access_level(
     &self,
     user: CollabUserId<'_>,

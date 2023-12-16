@@ -10,6 +10,7 @@ use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
+use anyhow::anyhow;
 use app_error::AppError;
 use database_entity::dto::AFRole;
 use std::sync::Arc;
@@ -25,6 +26,15 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
     workspace_id: &Uuid,
   ) -> Result<AFRole, AppError>;
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
+
+  async fn update_member(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    role: AFRole,
+  ) -> Result<(), AppError>;
+
+  async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
 }
 
 /// Represents the role of the user in the workspace by the workspace id.
@@ -193,6 +203,19 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
     let role = self.get_user_workspace_role(uid, workspace_id).await?;
     Ok(role)
+  }
+
+  async fn update_member(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    role: AFRole,
+  ) -> Result<(), AppError> {
+    Err(AppError::Internal(anyhow!("Not support")))
+  }
+
+  async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
+    Err(AppError::Internal(anyhow!("Not support")))
   }
 }
 

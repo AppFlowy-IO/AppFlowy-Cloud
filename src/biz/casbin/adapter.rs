@@ -5,10 +5,10 @@ use casbin::Adapter;
 use casbin::Filter;
 use casbin::Model;
 use casbin::Result;
-use database::collab::select_all_collab_members;
+use database::collab::select_collab_member_access_level;
 use database::workspace::select_workspace_member_perm_stream;
 use database_entity::dto::AFAccessLevel;
-use database_entity::dto::AFCollabMember;
+use database_entity::pg_row::AFCollabMemerAccessLevelRow;
 use database_entity::pg_row::AFWorkspaceMemberPermRow;
 use futures_util::stream::BoxStream;
 use sqlx::PgPool;
@@ -26,21 +26,23 @@ impl PgAdapter {
   }
 }
 
-fn create_collab_policies(collab_members: Vec<(String, Vec<AFCollabMember>)>) -> Vec<Vec<String>> {
+async fn create_collab_policies(
+  mut stream: BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>>,
+) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
-  for (oid, members) in collab_members {
-    for m in members {
-      let p = [
-        m.uid.to_string(),
-        ObjectType::Collab(&oid).to_string(),
-        i32::from(m.permission.access_level).to_string(),
-      ]
-      .to_vec();
-      policies.push(p);
-    }
+
+  while let Some(result) = stream.next().await {
+    let member_access_lv = result.map_err(|err| AdapterError(Box::new(err)))?;
+    let policy = [
+      member_access_lv.uid.to_string(),
+      ObjectType::Collab(&member_access_lv.oid).to_string(),
+      i32::from(member_access_lv.access_level).to_string(),
+    ]
+    .to_vec();
+    policies.push(policy);
   }
 
-  policies
+  Ok(policies)
 }
 
 async fn create_workspace_policies(
@@ -65,18 +67,15 @@ async fn create_workspace_policies(
 #[async_trait]
 impl Adapter for PgAdapter {
   async fn load_policy(&mut self, model: &mut dyn Model) -> Result<()> {
-    let workspace_member_perm_stream = select_workspace_member_perm_stream(&self.pg_pool)
-      .map_err(|err| AdapterError(Box::new(err)))?;
+    let workspace_member_perm_stream = select_workspace_member_perm_stream(&self.pg_pool);
     let workspace_policies = create_workspace_policies(workspace_member_perm_stream).await?;
 
     // Policy definition `p` of type `p`. See `model.conf`
     model.add_policies("p", "p", workspace_policies);
 
-    let collab_members = select_all_collab_members(&self.pg_pool)
-      .await
-      .map_err(|err| AdapterError(Box::new(err)))?;
+    let collab_member_access_lv_stream = select_collab_member_access_level(&self.pg_pool);
+    let collab_policies = create_collab_policies(collab_member_access_lv_stream).await?;
 
-    let collab_policies = create_collab_policies(collab_members);
     // Policy definition `p` of type `p`. See `model.conf`
     model.add_policies("p", "p", collab_policies);
 

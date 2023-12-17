@@ -29,11 +29,8 @@ pub struct CollabBroadcast {
   object_id: String,
   collab: MutexCollab,
   sender: Sender<CollabMessage>,
-
-  #[allow(dead_code)]
-  awareness_sub: awareness::UpdateSubscription,
-  #[allow(dead_code)]
-  doc_sub: UpdateSubscription,
+  awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
+  doc_sub: Mutex<Option<UpdateSubscription>>,
 }
 
 impl CollabBroadcast {
@@ -47,28 +44,43 @@ impl CollabBroadcast {
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
+    CollabBroadcast {
+      object_id,
+      collab,
+      sender,
+      awareness_sub: Default::default(),
+      doc_sub: Default::default(),
+    }
+  }
+
+  pub async fn observe_collab_changes(&self) {
     let (doc_sub, awareness_sub) = {
-      let mut mutex_collab = collab.lock();
+      let mut mutex_collab = self.collab.lock();
 
       // Observer the document's update and broadcast it to all subscribers.
-      let cloned_oid = object_id.clone();
-      let broadcast_sink = sender.clone();
+      let cloned_oid = self.object_id.clone();
+      let broadcast_sink = self.sender.clone();
       let doc_sub = mutex_collab
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
-          trace!("broadcast doc update with len:{}", event.update.len());
+          let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
           let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
-          if let Err(e) = broadcast_sink.send(msg.into()) {
-            error!("broadcast sink fail: {}", e);
+
+          match broadcast_sink.send(msg.into()) {
+            Ok(_) => trace!("observe doc update with len:{}", update_len),
+            Err(e) => error!(
+              "observe doc update with len:{} - broadcast sink fail: {}",
+              update_len, e
+            ),
           }
         })
         .unwrap();
 
-      let broadcast_sink = sender.clone();
-      let cloned_oid = object_id.clone();
+      let broadcast_sink = self.sender.clone();
+      let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
       let awareness_sub = mutex_collab
@@ -84,13 +96,9 @@ impl CollabBroadcast {
         });
       (doc_sub, awareness_sub)
     };
-    CollabBroadcast {
-      object_id,
-      collab,
-      sender,
-      awareness_sub,
-      doc_sub,
-    }
+
+    *self.doc_sub.lock().await = Some(doc_sub);
+    *self.awareness_sub.lock().await = Some(awareness_sub);
   }
 
   /// Returns a reference to an underlying [MutexCollab] instance.

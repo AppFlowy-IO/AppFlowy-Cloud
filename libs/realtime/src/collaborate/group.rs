@@ -80,6 +80,7 @@ where
     match self.group_by_object_id.try_write() {
       Ok(mut group_by_object_id) => {
         group_by_object_id.remove(object_id);
+        // self.storage.remove_collab_cache(object_id).await;
       },
       Err(err) => error!("Failed to acquire write lock to remove group: {:?}", err),
     }
@@ -127,12 +128,7 @@ where
     let collab = Arc::new(collab.clone());
 
     // The lifecycle of the collab is managed by the group.
-    let group = Arc::new(CollabGroup {
-      collab: collab.clone(),
-      broadcast,
-      subscribers: Default::default(),
-    });
-
+    let group = Arc::new(CollabGroup::new(collab.clone(), broadcast));
     let plugin = CollabStoragePlugin::new(
       uid,
       workspace_id,
@@ -148,6 +144,7 @@ where
       .storage
       .cache_collab(object_id, Arc::downgrade(&collab))
       .await;
+    group.observe_collab().await;
     group
   }
 }
@@ -169,6 +166,18 @@ impl<U> CollabGroup<U>
 where
   U: RealtimeUser,
 {
+  pub fn new(collab: Arc<MutexCollab>, broadcast: CollabBroadcast) -> Self {
+    Self {
+      collab,
+      broadcast,
+      subscribers: Default::default(),
+    }
+  }
+
+  pub async fn observe_collab(&self) {
+    self.broadcast.observe_collab_changes().await;
+  }
+
   /// Mutate the [Collab] by the given closure
   pub fn get_mut_collab<F>(&self, f: F)
   where

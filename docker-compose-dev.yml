@@ -22,6 +22,8 @@ services:
       - 5433:5432
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
+      # comment out the following line if you want to persist data when restarting docker
+      #- postgres_data:/var/lib/postgresql/data
 
   redis:
     restart: on-failure
@@ -95,3 +97,5 @@ services:
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
+volumes:
+  postgres_data:

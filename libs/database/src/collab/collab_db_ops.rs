@@ -5,6 +5,7 @@ use database_entity::dto::{
   InsertCollabParams, QueryCollabResult, RawData,
 };
 
+use crate::collab::SNAPSHOT_PER_HOUR;
 use app_error::AppError;
 use chrono::{Duration, Utc};
 use database_entity::pg_row::AFCollabMemerAccessLevelRow;
@@ -287,8 +288,6 @@ pub async fn create_snapshot(
   .await?;
   Ok(())
 }
-
-const SNAPSHOT_PER_HOUR: i64 = 3;
 
 /// Determines whether a new snapshot should be created for the given `oid`.
 ///

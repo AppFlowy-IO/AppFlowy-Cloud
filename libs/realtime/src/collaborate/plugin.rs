@@ -174,9 +174,11 @@ where
     };
 
     match self.storage.get_collab_encoded_v1(&self.uid, params).await {
-      Ok(encoded_collab) => match init_collab_with_raw_data(&encoded_collab, doc).await {
+      Ok(encoded_collab_v1) => match init_collab_with_raw_data(&encoded_collab_v1, doc).await {
         Ok(_) => {
-          // Try to create a snapshot for the collab object
+          // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
+          // assumed that the 'encoded_collab_v1' is already in a valid format. Therefore, there is no need
+          // to verify the outcome of the 'encode_to_bytes' operation.
           if self.storage.should_create_snapshot(object_id).await {
             let cloned_workspace_id = self.workspace_id.clone();
             let cloned_object_id = object_id.to_string();
@@ -184,23 +186,39 @@ where
             let _ = tokio::task::spawn_blocking(move || {
               let params = InsertSnapshotParams {
                 object_id: cloned_object_id,
-                encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+                encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap(),
                 workspace_id: cloned_workspace_id,
               };
 
               tokio::spawn(async move {
+                // FIXME(nathan): There is a potential issue when concurrently spawning tasks to create snapshots. A subsequent
+                // task for creating a snapshot might write to the database before a previous task completes. To address
+                // this, consider using `stream!` to queue these tasks, ensuring they are executed in the order they were
+                // spawned.
                 if let Err(err) = storage.create_snapshot(params).await {
-                  error!("Create snapshot {:?}", err);
+                  error!("create snapshot {:?}", err);
                 }
               });
             })
             .await;
           }
         },
-        Err(e) => error!("🔴Init collab failed: {:?}", e),
+        Err(err) => {
+          // When initializing a collaboration object, if the 'init_collab_with_raw_data' operation fails, attempt to
+          // restore the collaboration object from the latest snapshot.
+          if let Some(encoded_collab_v1) = get_latest_snapshot(object_id, &self.storage).await {
+            if let Err(err) = init_collab_with_raw_data(&encoded_collab_v1, doc).await {
+              error!("restore collab with snapshot failed: {:?}", err);
+              return;
+            }
+          }
+          error!("init collab failed: {:?}", err)
+        },
       },
       Err(err) => match &err {
         AppError::RecordNotFound(_) => {
+          // When attempting to retrieve collaboration data from the disk and a 'Record Not Found' error is returned,
+          // this indicates that the collaboration is new. Therefore, the current collaboration data should be saved to disk.
           if let Err(err) = self.insert_new_collab(doc, object_id).await {
             error!("Insert collab {:?}", err);
           }
@@ -223,7 +241,7 @@ where
       self.edit_state.flush_edit();
       trace!("number of updates reach flush_per_update, start flushing");
       match self.group.upgrade() {
-        None => error!("🔴Group is dropped, skip flush collab"),
+        None => error!("Group is dropped, skip flush collab"),
         Some(group) => group.flush_collab(),
       }
     }
@@ -260,9 +278,19 @@ where
 
 fn encoded_v1_from_doc(doc: &Doc) -> EncodedCollabV1 {
   let txn = doc.transact();
-  let doc_state = txn.encode_state_as_update_v1(&StateVector::default());
   let state_vector = txn.state_vector().encode_v1();
+  let doc_state = txn.encode_state_as_update_v1(&StateVector::default());
   EncodedCollabV1::new(state_vector, doc_state)
+}
+
+async fn get_latest_snapshot<S>(object_id: &str, storage: &S) -> Option<EncodedCollabV1>
+where
+  S: CollabStorage,
+{
+  let metas = storage.get_collab_snapshot_list(object_id).await.ok()?;
+  let meta = metas.0.first()?;
+  let snapshot_data = storage.get_collab_snapshot(&meta.snapshot_id).await.ok()?;
+  EncodedCollabV1::decode_from_bytes(&snapshot_data.encoded_collab_v1).ok()
 }
 
 struct CollabEditState {

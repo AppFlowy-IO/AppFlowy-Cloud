@@ -5,7 +5,10 @@ use database_entity::dto::{
   BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
 };
 
+use database_entity::pg_row::AFCollabMemerAccessLevelRow;
+
 use app_error::AppError;
+use futures_util::stream::BoxStream;
 use sqlx::postgres::PgRow;
 use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
 use std::collections::HashMap;
@@ -101,7 +104,7 @@ pub async fn insert_into_af_collab(
       // Get the permission_id of the Owner
       let permission_id: i32 = sqlx::query_scalar!(
         r#"
-          SELECT rp.permission_id 
+          SELECT rp.permission_id
           FROM af_role_permissions rp
           JOIN af_roles ON rp.role_id = af_roles.id
           WHERE af_roles.name = 'Owner';
@@ -340,7 +343,7 @@ pub async fn upsert_collab_member_with_txn<T: AsRef<str> + Debug>(
   .context("Get permission id from access level fail")?;
 
   sqlx::query!(
-    r#" 
+    r#"
     INSERT INTO af_collab_member (uid, oid, permission_id)
     VALUES ($1, $2, $3)
     ON CONFLICT (uid, oid)
@@ -382,24 +385,20 @@ pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Resu
   Ok(())
 }
 
-#[instrument(level = "info", skip_all, err)]
-pub async fn select_all_collab_members(
+pub fn select_collab_member_access_level(
   pg_pool: &PgPool,
-) -> Result<Vec<(String, Vec<AFCollabMember>)>, AppError> {
-  let collabs: Vec<_> = sqlx::query!("SELECT DISTINCT af_collab_member.oid FROM af_collab_member")
-    .fetch_all(pg_pool)
-    .await?
-    .into_iter()
-    .map(|r| r.oid)
-    .collect();
-
-  let mut collab_members = Vec::with_capacity(collabs.len());
-  for oid in collabs {
-    let members = select_collab_members(&oid, pg_pool).await?;
-    collab_members.push((oid, members));
-  }
-
-  Ok(collab_members)
+) -> BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>> {
+  sqlx::query_as!(
+    AFCollabMemerAccessLevelRow,
+    r#"
+      SELECT
+          uid, oid, access_level
+      FROM af_collab_member
+      INNER JOIN af_permissions
+          ON af_collab_member.permission_id = af_permissions.id
+    "#
+  )
+  .fetch(pg_pool)
 }
 
 #[inline]

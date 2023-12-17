@@ -242,13 +242,12 @@ pub async fn delete_workspace_members(
 
 pub fn select_workspace_member_perm_stream(
   pg_pool: &PgPool,
-) -> Result<BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>>, AppError> {
-  let stream = sqlx::query_as!(
+) -> BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>> {
+  sqlx::query_as!(
     AFWorkspaceMemberPermRow,
     "SELECT uid, role_id as role, workspace_id FROM af_workspace_member"
   )
-  .fetch(pg_pool);
-  Ok(stream)
+  .fetch(pg_pool)
 }
 
 /// returns a list of workspace members, sorted by their creation time.

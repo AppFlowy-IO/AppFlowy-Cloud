@@ -13,7 +13,9 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use database_entity::dto::{AFAccessLevel, InsertCollabParams, QueryCollabParams};
+use database_entity::dto::{
+  AFAccessLevel, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
+};
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -142,7 +144,7 @@ where
 }
 
 async fn init_collab_with_raw_data(
-  encoded_collab: EncodedCollabV1,
+  encoded_collab: &EncodedCollabV1,
   doc: &Doc,
 ) -> Result<(), RealtimeError> {
   if encoded_collab.doc_state.is_empty() {
@@ -172,8 +174,29 @@ where
     };
 
     match self.storage.get_collab_encoded_v1(&self.uid, params).await {
-      Ok(encoded_collab) => match init_collab_with_raw_data(encoded_collab, doc).await {
-        Ok(_) => {},
+      Ok(encoded_collab) => match init_collab_with_raw_data(&encoded_collab, doc).await {
+        Ok(_) => {
+          // Try to create a snapshot for the collab object
+          if self.storage.should_create_snapshot(object_id).await {
+            let cloned_workspace_id = self.workspace_id.clone();
+            let cloned_object_id = object_id.to_string();
+            let storage = self.storage.clone();
+            let _ = tokio::task::spawn_blocking(move || {
+              let params = InsertSnapshotParams {
+                object_id: cloned_object_id,
+                encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+                workspace_id: cloned_workspace_id,
+              };
+
+              tokio::spawn(async move {
+                if let Err(err) = storage.create_snapshot(params).await {
+                  error!("Create snapshot {:?}", err);
+                }
+              });
+            })
+            .await;
+          }
+        },
         Err(e) => error!("🔴Init collab failed: {:?}", e),
       },
       Err(err) => match &err {

@@ -1,13 +1,14 @@
 use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabMember, AFCollabSnapshot, AFCollabSnapshots, AFPermission,
-  BatchQueryCollab, InsertCollabParams, QueryCollabResult, RawData,
+  AFAccessLevel, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas, BatchQueryCollab,
+  InsertCollabParams, QueryCollabResult, RawData,
 };
 
-use database_entity::pg_row::AFCollabMemerAccessLevelRow;
-
 use app_error::AppError;
+use chrono::{Duration, Utc};
+use database_entity::pg_row::AFCollabMemerAccessLevelRow;
+use database_entity::pg_row::AFSnapshotRow;
 use futures_util::stream::BoxStream;
 use sqlx::postgres::PgRow;
 use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
@@ -266,7 +267,7 @@ pub async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx
 pub async fn create_snapshot(
   pg_pool: &PgPool,
   object_id: &str,
-  raw_data: &[u8],
+  encoded_collab_v1: &[u8],
   workspace_id: &Uuid,
 ) -> Result<(), sqlx::Error> {
   let encrypt = 0;
@@ -277,8 +278,8 @@ pub async fn create_snapshot(
         VALUES ($1, $2, $3, $4, $5)
         "#,
     object_id,
-    raw_data,
-    raw_data.len() as i32,
+    encoded_collab_v1,
+    encoded_collab_v1.len() as i32,
     encrypt,
     workspace_id,
   )
@@ -287,37 +288,119 @@ pub async fn create_snapshot(
   Ok(())
 }
 
+const SNAPSHOT_PER_HOUR: i64 = 3;
+
+/// Determines whether a new snapshot should be created for the given `oid`.
+///
+/// This asynchronous function checks the most recent snapshot creation time for the specified `oid`.
+/// It compares the creation time of the latest snapshot with the current time to decide whether a new
+/// snapshot should be created, based on a predefined interval (SNAPSHOT_PER_HOUR).
+///
 #[inline]
-pub async fn get_snapshot_blob(pg_pool: &PgPool, snapshot_id: i64) -> Result<Vec<u8>, sqlx::Error> {
-  let blob = sqlx::query!(
-    r#"
-        SELECT blob
-        FROM af_collab_snapshot
-        WHERE sid = $1 AND deleted_at IS NULL;
-        "#,
-    snapshot_id,
+pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
+  oid: &str,
+  executor: E,
+) -> Result<bool, sqlx::Error> {
+  let hours = Utc::now() - Duration::hours(SNAPSHOT_PER_HOUR);
+  let latest_snapshot_time: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
+    "SELECT created_at FROM af_collab_snapshot 
+         WHERE oid = $1 ORDER BY created_at DESC LIMIT 1",
   )
-  .fetch_one(pg_pool)
-  .await?
-  .blob;
-  Ok(blob)
+  .bind(oid)
+  .fetch_optional(executor)
+  .await?;
+  Ok(latest_snapshot_time.map(|t| t < hours).unwrap_or(true))
 }
 
-pub async fn get_all_snapshots(
+/// Creates a new snapshot in the `af_collab_snapshot` table and maintains the total number of snapshots
+/// within a specified limit for a given object ID (`oid`).
+///
+/// This asynchronous function inserts a new snapshot into the database and ensures that the total number
+/// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
+/// is exceeded, the oldest snapshots are deleted to maintain the limit.
+///
+pub(crate) async fn create_snapshot_and_maintain_limit(
+  pg_pool: &PgPool,
+  oid: &str,
+  encoded_collab_v1: &[u8],
+  workspace_id: &Uuid,
+  snapshot_limit: i64,
+) -> Result<AFSnapshotMeta, AppError> {
+  let mut tx = pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to insert collab snapshot")?;
+
+  let snapshot_meta = sqlx::query_as!(
+    AFSnapshotMeta,
+    r#"
+      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id) 
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING sid AS snapshot_id, oid AS object_id, created_at
+    "#,
+    oid,
+    encoded_collab_v1,
+    encoded_collab_v1.len() as i64,
+    0,
+    workspace_id,
+  )
+  .fetch_one(tx.deref_mut())
+  .await?;
+
+  // When a new snapshot is created that surpasses the preset limit, older snapshots will be deleted to maintain the limit
+  sqlx::query(
+    r#"
+       DELETE FROM af_collab_snapshot 
+       WHERE oid = $1 AND sid NOT IN ( SELECT sid FROM af_collab_snapshot WHERE oid = $1 ORDER BY created_at DESC LIMIT $2)
+      "#,
+    )
+    .bind(oid)
+    .bind(snapshot_limit)
+    .execute(tx.deref_mut())
+    .await?;
+
+  tx.commit()
+    .await
+    .context("fail to commit the transaction to insert collab snapshot")?;
+
+  Ok(snapshot_meta)
+}
+
+#[inline]
+pub async fn select_snapshot(
+  pg_pool: &PgPool,
+  snapshot_id: &i64,
+) -> Result<Option<AFSnapshotRow>, Error> {
+  let row = sqlx::query_as!(
+    AFSnapshotRow,
+    r#"
+      SELECT * FROM af_collab_snapshot
+      WHERE sid = $1 AND deleted_at IS NULL;
+    "#,
+    snapshot_id,
+  )
+  .fetch_optional(pg_pool)
+  .await?;
+  Ok(row)
+}
+
+pub async fn get_all_collab_snapshot_meta(
   pg_pool: &PgPool,
   object_id: &str,
-) -> Result<AFCollabSnapshots, sqlx::Error> {
-  let snapshots: Vec<AFCollabSnapshot> = sqlx::query_as!(
-    AFCollabSnapshot,
+) -> Result<AFSnapshotMetas, Error> {
+  let snapshots: Vec<AFSnapshotMeta> = sqlx::query_as!(
+    AFSnapshotMeta,
     r#"
-        SELECT sid as "snapshot_id", oid as "object_id", created_at
-        FROM af_collab_snapshot where oid = $1 AND deleted_at IS NULL;
-        "#,
+    SELECT sid as "snapshot_id", oid as "object_id", created_at
+    FROM af_collab_snapshot 
+    WHERE oid = $1 AND deleted_at IS NULL
+    ORDER BY created_at DESC;
+    "#,
     object_id
   )
   .fetch_all(pg_pool)
   .await?;
-  Ok(AFCollabSnapshots(snapshots))
+  Ok(AFSnapshotMetas(snapshots))
 }
 
 #[inline]

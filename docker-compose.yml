@@ -116,7 +116,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
+#    image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
     depends_on:
       - redis
       - postgres
@@ -130,7 +130,7 @@ services:
     build:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
-    image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
+#    image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
     depends_on:
       - gotrue
     ports:

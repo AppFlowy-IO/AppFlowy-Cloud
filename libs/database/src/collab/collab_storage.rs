@@ -6,16 +6,18 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollabV1;
 
 use database_entity::dto::{
-  AFAccessLevel, AFCollabSnapshots, AFRole, BatchQueryCollab, InsertCollabParams,
-  InsertSnapshotParams, QueryCollabParams, QueryCollabResult, QueryObjectSnapshotParams,
-  QuerySnapshotParams, RawData,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, BatchQueryCollab, InsertCollabParams,
+  InsertSnapshotParams, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
+
 use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
+use tracing::{debug, warn};
 use validator::Validate;
 
+pub const COLLAB_SNAPSHOT_LIMIT: i64 = 10;
 pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 
 /// [CollabStorageAccessControl] is a trait that provides access control when accessing the storage
@@ -105,15 +107,13 @@ pub trait CollabStorage: Send + Sync + 'static {
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
   async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()>;
+  async fn should_create_snapshot(&self, oid: &str) -> bool;
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()>;
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta>;
 
-  async fn get_snapshot_data(&self, params: QuerySnapshotParams) -> DatabaseResult<RawData>;
+  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData>;
 
-  async fn get_all_snapshots(
-    &self,
-    params: QueryObjectSnapshotParams,
-  ) -> DatabaseResult<AFCollabSnapshots>;
+  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas>;
 }
 
 #[async_trait]
@@ -161,19 +161,20 @@ where
     self.as_ref().delete_collab(uid, object_id).await
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()> {
+  async fn should_create_snapshot(&self, oid: &str) -> bool {
+    self.as_ref().should_create_snapshot(oid).await
+  }
+
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
     self.as_ref().create_snapshot(params).await
   }
 
-  async fn get_snapshot_data(&self, params: QuerySnapshotParams) -> DatabaseResult<RawData> {
-    self.as_ref().get_snapshot_data(params).await
+  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
+    self.as_ref().get_collab_snapshot(snapshot_id).await
   }
 
-  async fn get_all_snapshots(
-    &self,
-    params: QueryObjectSnapshotParams,
-  ) -> DatabaseResult<AFCollabSnapshots> {
-    self.as_ref().get_all_snapshots(params).await
+  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+    self.as_ref().get_collab_snapshot_list(oid).await
   }
 }
 
@@ -276,29 +277,48 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(())
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()> {
+  async fn should_create_snapshot(&self, oid: &str) -> bool {
+    if oid.is_empty() {
+      warn!("unexpected empty object id when checking should_create_snapshot");
+      return false;
+    }
+
+    collab_db_ops::should_create_snapshot(oid, &self.pg_pool)
+      .await
+      .unwrap_or(false)
+  }
+
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
     params.validate()?;
 
-    collab_db_ops::create_snapshot(
+    debug!("create snapshot for object:{}", params.object_id);
+    let meta = collab_db_ops::create_snapshot_and_maintain_limit(
       &self.pg_pool,
       &params.object_id,
-      &params.raw_data,
+      &params.encoded_collab_v1,
       &params.workspace_id.parse::<Uuid>()?,
+      COLLAB_SNAPSHOT_LIMIT,
     )
     .await?;
-    Ok(())
+    Ok(meta)
   }
 
-  async fn get_snapshot_data(&self, params: QuerySnapshotParams) -> DatabaseResult<RawData> {
-    let blob = collab_db_ops::get_snapshot_blob(&self.pg_pool, params.snapshot_id).await?;
-    Ok(blob)
+  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
+    match collab_db_ops::select_snapshot(&self.pg_pool, snapshot_id).await? {
+      None => Err(AppError::RecordNotFound(format!(
+        "Can't find the snapshot with id:{}",
+        snapshot_id
+      ))),
+      Some(row) => Ok(SnapshotData {
+        object_id: row.oid,
+        encoded_collab_v1: row.blob,
+        workspace_id: row.workspace_id.to_string(),
+      }),
+    }
   }
 
-  async fn get_all_snapshots(
-    &self,
-    params: QueryObjectSnapshotParams,
-  ) -> DatabaseResult<AFCollabSnapshots> {
-    let s = collab_db_ops::get_all_snapshots(&self.pg_pool, &params.object_id).await?;
-    Ok(s)
+  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+    let metas = collab_db_ops::get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
+    Ok(metas)
   }
 }

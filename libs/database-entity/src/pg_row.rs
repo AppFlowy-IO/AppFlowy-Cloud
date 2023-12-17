@@ -97,3 +97,15 @@ pub struct AFPermissionRow {
   pub access_level: AFAccessLevel,
   pub description: Option<String>,
 }
+
+#[derive(FromRow, Serialize, Deserialize)]
+pub struct AFSnapshotRow {
+  pub sid: i64,
+  pub oid: String,
+  pub blob: Vec<u8>,
+  pub len: Option<i32>,
+  pub encrypt: Option<i32>,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub created_at: DateTime<Utc>,
+  pub workspace_id: Uuid,
+}

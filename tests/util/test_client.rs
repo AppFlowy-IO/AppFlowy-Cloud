@@ -5,14 +5,16 @@ use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
+use collab::core::collab_plugin::EncodedCollabV1;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use database_entity::dto::{
-  AFAccessLevel, AFBlobMetadata, AFRole, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember,
-  InsertCollabMemberParams, InsertCollabParams, QueryCollabParams, UpdateCollabMemberParams,
+  AFAccessLevel, AFBlobMetadata, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo,
+  AFWorkspace, AFWorkspaceMember, InsertCollabMemberParams, InsertCollabParams, QueryCollabParams,
+  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use image::io::Reader as ImageReader;
 use serde_json::Value;
@@ -311,6 +313,47 @@ impl TestClient {
     self.api_client.get_profile().await.unwrap().uid
   }
 
+  pub(crate) async fn get_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    snapshot_id: &i64,
+  ) -> Result<SnapshotData, AppResponseError> {
+    self
+      .api_client
+      .get_snapshot(
+        workspace_id,
+        object_id,
+        QuerySnapshotParams {
+          snapshot_id: *snapshot_id,
+        },
+      )
+      .await
+  }
+
+  pub(crate) async fn create_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<AFSnapshotMeta, AppResponseError> {
+    self
+      .api_client
+      .create_snapshot(workspace_id, object_id, collab_type)
+      .await
+  }
+
+  pub(crate) async fn get_snapshot_list(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> Result<AFSnapshotMetas, AppResponseError> {
+    self
+      .api_client
+      .get_snapshot_list(workspace_id, object_id)
+      .await
+  }
+
   #[allow(clippy::await_holding_lock)]
   pub(crate) async fn create_collab(
     &mut self,
@@ -318,20 +361,43 @@ impl TestClient {
     collab_type: CollabType,
   ) -> String {
     let object_id = Uuid::new_v4().to_string();
+    self
+      .create_collab_with_data(object_id.clone(), workspace_id, collab_type, None)
+      .await;
+    object_id
+  }
 
+  #[allow(clippy::await_holding_lock)]
+  pub(crate) async fn create_collab_with_data(
+    &mut self,
+    object_id: String,
+    workspace_id: &str,
+    collab_type: CollabType,
+    encoded_collab_v1: Option<EncodedCollabV1>,
+  ) {
     // Subscribe to object
     let handler = self.ws_client.subscribe_collab(object_id.clone()).unwrap();
-
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![]));
+    let collab = match encoded_collab_v1 {
+      None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![])),
+      Some(data) => Arc::new(
+        MutexCollab::new_with_raw_data(
+          origin.clone(),
+          &object_id,
+          vec![data.doc_state.to_vec()],
+          vec![],
+        )
+        .unwrap(),
+      ),
+    };
 
     let encoded_collab_v1 = collab.encode_collab_v1().encode_to_bytes().unwrap();
     self
       .api_client
       .create_collab(InsertCollabParams::new(
         &object_id,
-        CollabType::Document,
+        collab_type.clone(),
         encoded_collab_v1,
         workspace_id.to_string(),
       ))
@@ -357,10 +423,9 @@ impl TestClient {
     let test_collab = TestCollab { origin, collab };
     self
       .collab_by_object_id
-      .insert(object_id.to_string(), test_collab);
+      .insert(object_id.clone(), test_collab);
 
     self.wait_object_sync_complete(&object_id).await;
-    object_id
   }
 
   pub(crate) async fn open_workspace_collab(&mut self, workspace_id: &str) {
@@ -420,6 +485,58 @@ impl TestClient {
       )
       .await
       .unwrap();
+  }
+}
+
+pub async fn assert_server_snapshot(
+  client: &client_api::Client,
+  workspace_id: &str,
+  object_id: &str,
+  snapshot_id: &i64,
+  expected: Value,
+) {
+  let workspace_id = workspace_id.to_string();
+  let object_id = object_id.to_string();
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(10)) => {
+         panic!("Query snapshot timeout");
+       },
+       result =client.get_snapshot(&workspace_id,&object_id,QuerySnapshotParams {snapshot_id: *snapshot_id },
+        ) => {
+        retry_count += 1;
+        match &result {
+          Ok(snapshot_data) => {
+          let encoded_collab_v1 =
+            EncodedCollabV1::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
+          let json = Collab::new_with_raw_data(
+            CollabOrigin::Empty,
+            &object_id,
+            vec![encoded_collab_v1.doc_state.to_vec()],
+            vec![],
+          )
+          .unwrap()
+          .to_json_value();
+            if retry_count > 10 {
+              assert_json_eq!(json, expected);
+              break;
+            }
+
+            if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
+              break;
+            }
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+          },
+          Err(e) => {
+            if retry_count > 10 {
+              panic!("Query snapshot failed: {}", e);
+            }
+            tokio::time::sleep(Duration::from_millis(1000)).await;
+          }
+        }
+       },
+    }
   }
 }
 

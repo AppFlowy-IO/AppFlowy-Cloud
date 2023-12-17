@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT sid as \"snapshot_id\", oid as \"object_id\", created_at\n        FROM af_collab_snapshot where oid = $1 AND deleted_at IS NULL;\n        ",
+  "query": "\n    SELECT sid as \"snapshot_id\", oid as \"object_id\", created_at\n    FROM af_collab_snapshot \n    WHERE oid = $1 AND deleted_at IS NULL\n    ORDER BY created_at DESC;\n    ",
   "describe": {
     "columns": [
       {
@@ -30,5 +30,5 @@
       false
     ]
   },
-  "hash": "47d4c0cd4cbcf016e566a80f071dcc423989f1a3fa274033852e9075b721c57f"
+  "hash": "eff32b7631cb1b715776c66749706943c7ba23eac358cae6d36537991a8f8975"
 }

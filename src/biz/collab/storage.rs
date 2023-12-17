@@ -20,7 +20,7 @@ use std::{
   sync::{Arc, Weak},
 };
 use tokio::sync::RwLock;
-use tracing::{event, info, instrument};
+use tracing::{event, instrument};
 use validator::Validate;
 
 pub type CollabPostgresDBStorage = CollabStorageWrapper<
@@ -75,12 +75,17 @@ where
   }
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    tracing::trace!("Cache collab:{} in memory", object_id);
+    tracing::trace!("cache collab:{}", object_id);
     self
       .collab_by_object_id
       .write()
       .await
       .insert(object_id.to_string(), collab);
+  }
+
+  async fn remove_collab_cache(&self, object_id: &str) {
+    tracing::trace!("remove collab:{} cache", object_id);
+    self.collab_by_object_id.write().await.remove(object_id);
   }
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
@@ -156,9 +161,20 @@ where
       .and_then(|collab| collab.upgrade());
 
     match collab {
-      None => self.inner.get_collab_encoded_v1(uid, params).await,
+      None => {
+        event!(
+          tracing::Level::DEBUG,
+          "Get collab data:{} from disk",
+          params.object_id
+        );
+        self.inner.get_collab_encoded_v1(uid, params).await
+      },
       Some(collab) => {
-        info!("Get collab data:{} from memory", params.object_id);
+        event!(
+          tracing::Level::DEBUG,
+          "Get collab data:{} from memory",
+          params.object_id
+        );
         let data = collab.encode_collab_v1();
         Ok(data)
       },

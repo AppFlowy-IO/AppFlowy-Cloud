@@ -17,7 +17,8 @@ use std::sync::{Arc, Weak};
 use tracing::{debug, warn};
 use validator::Validate;
 
-pub const COLLAB_SNAPSHOT_LIMIT: i64 = 10;
+pub const COLLAB_SNAPSHOT_LIMIT: i64 = 15;
+pub const SNAPSHOT_PER_HOUR: i64 = 6;
 pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 
 /// [CollabStorageAccessControl] is a trait that provides access control when accessing the storage
@@ -61,7 +62,9 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// * `bool` - `true` if the collaboration exists, `false` otherwise.
   async fn is_exist(&self, object_id: &str) -> bool;
 
-  async fn cache_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>);
+  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
+
+  async fn remove_collab_cache(&self, object_id: &str);
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool>;
 
@@ -129,8 +132,12 @@ where
     self.as_ref().is_exist(object_id).await
   }
 
-  async fn cache_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {
-    self.as_ref().cache_collab(_object_id, _collab).await
+  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
+    self.as_ref().cache_collab(object_id, collab).await
+  }
+
+  async fn remove_collab_cache(&self, object_id: &str) {
+    self.as_ref().remove_collab_cache(object_id).await
   }
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
@@ -219,6 +226,8 @@ impl CollabStorage for CollabStoragePgImpl {
   }
 
   async fn cache_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {}
+
+  async fn remove_collab_cache(&self, _object_id: &str) {}
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
     let is_exist = is_collab_exists(oid, &self.pg_pool).await?;

@@ -80,10 +80,21 @@ pub struct InsertSnapshotParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
-  pub raw_data: Vec<u8>,
-  pub len: i32,
+  pub encoded_collab_v1: Vec<u8>,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotData {
+  pub object_id: String,
+  pub encoded_collab_v1: Vec<u8>,
+  pub workspace_id: String,
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct QuerySnapshotParams {
+  pub snapshot_id: i64,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -118,19 +129,14 @@ impl DerefMut for BatchQueryCollabParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AFCollabSnapshot {
+pub struct AFSnapshotMeta {
   pub snapshot_id: i64,
   pub object_id: String,
   pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AFCollabSnapshots(pub Vec<AFCollabSnapshot>);
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct QuerySnapshotParams {
-  pub snapshot_id: i64,
-}
+pub struct AFSnapshotMetas(pub Vec<AFSnapshotMeta>);
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct QueryObjectSnapshotParams {

@@ -4,8 +4,8 @@ use database::collab::{
   CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
-  AFCollabSnapshots, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
-  QueryCollabResult, QueryObjectSnapshotParams, QuerySnapshotParams, RawData,
+  AFSnapshotMeta, AFSnapshotMetas, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams,
+  QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
 
@@ -227,24 +227,19 @@ where
     self.inner.delete_collab(uid, object_id).await
   }
 
-  async fn create_snapshot(
-    &self,
-    params: InsertSnapshotParams,
-  ) -> database::collab::DatabaseResult<()> {
+  async fn should_create_snapshot(&self, oid: &str) -> bool {
+    self.inner.should_create_snapshot(oid).await
+  }
+
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
     self.inner.create_snapshot(params).await
   }
 
-  async fn get_snapshot_data(
-    &self,
-    params: QuerySnapshotParams,
-  ) -> database::collab::DatabaseResult<RawData> {
-    self.inner.get_snapshot_data(params).await
+  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
+    self.inner.get_collab_snapshot(snapshot_id).await
   }
 
-  async fn get_all_snapshots(
-    &self,
-    params: QueryObjectSnapshotParams,
-  ) -> database::collab::DatabaseResult<AFCollabSnapshots> {
-    self.inner.get_all_snapshots(params).await
+  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+    self.inner.get_collab_snapshot_list(oid).await
   }
 }

@@ -6,10 +6,11 @@ use prost::Message as ProstMessage;
 use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
-  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFUserProfile,
-  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
-  BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams, InsertCollabMemberParams,
-  InsertCollabParams, QueryCollabMembers, QueryCollabParams, UpdateCollabMemberParams,
+  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas,
+  AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces,
+  BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams,
+  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryCollabParams,
+  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -23,6 +24,7 @@ use parking_lot::RwLock;
 use realtime_entity::EncodedCollabV1;
 use reqwest::header;
 
+use collab_entity::CollabType;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
@@ -713,6 +715,70 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_snapshot_list(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+  ) -> Result<AFSnapshotMetas, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/{}/snapshot/list",
+      self.base_url, workspace_id, object_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFSnapshotMetas>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    params: QuerySnapshotParams,
+  ) -> Result<SnapshotData, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/{}/snapshot",
+      self.base_url, workspace_id, object_id,
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<SnapshotData>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn create_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<AFSnapshotMeta, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/{}/snapshot",
+      self.base_url, workspace_id, object_id,
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&collab_type)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFSnapshotMeta>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   #[instrument(level = "debug", skip_all, err)]

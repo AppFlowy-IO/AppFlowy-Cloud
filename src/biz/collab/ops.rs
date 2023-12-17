@@ -4,9 +4,8 @@ use std::ops::DerefMut;
 
 use app_error::AppError;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabMember, AFCollabSnapshots, CollabMemberIdentify, DeleteCollabParams,
-  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryObjectSnapshotParams,
-  QuerySnapshotParams, UpdateCollabMemberParams,
+  AFAccessLevel, AFCollabMember, CollabMemberIdentify, DeleteCollabParams,
+  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, UpdateCollabMemberParams,
 };
 
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
@@ -61,23 +60,6 @@ pub async fn upsert_collab(
   Ok(())
 }
 
-pub async fn get_collab_snapshot(
-  pg_pool: &PgPool,
-  _user_uuid: &Uuid,
-  params: &QuerySnapshotParams,
-) -> Result<Vec<u8>, AppError> {
-  let blob = database::collab::get_snapshot_blob(pg_pool, params.snapshot_id).await?;
-  Ok(blob)
-}
-
-pub async fn get_all_collab_snapshot(
-  pg_pool: &PgPool,
-  _user_uuid: &Uuid,
-  params: &QueryObjectSnapshotParams,
-) -> Result<AFCollabSnapshots, AppError> {
-  let snapshots = database::collab::get_all_snapshots(pg_pool, &params.object_id).await?;
-  Ok(snapshots)
-}
 pub async fn delete_collab(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,

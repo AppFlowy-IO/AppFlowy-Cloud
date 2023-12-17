@@ -11,6 +11,7 @@ use actix_web::Result;
 use actix_web::{web, Scope};
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollabV1;
+use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
@@ -52,6 +53,15 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(delete_collab_handler)),
     )
     .service(
+      web::resource("{workspace_id}/{object_id}/snapshot")
+        .route(web::get().to(get_collab_snapshot_handler))
+        .route(web::post().to(create_collab_snapshot_handler)),
+    )
+    .service(
+      web::resource("{workspace_id}/{object_id}/snapshot/list")
+        .route(web::get().to(get_all_collab_snapshot_list_handler)),
+    )
+    .service(
       web::resource("{workspace_id}/collab/{object_id}/member")
         .route(web::post().to(add_collab_member_handler))
         .route(web::get().to(get_collab_member_handler))
@@ -65,8 +75,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
     )
-    .service(web::resource("snapshot").route(web::get().to(retrieve_snapshot_data_handler)))
-    .service(web::resource("snapshots").route(web::get().to(retrieve_snapshots_handler)))
 }
 
 pub fn collab_scope() -> Scope {
@@ -251,6 +259,72 @@ async fn get_collab_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
+#[instrument(level = "trace", skip_all, err)]
+async fn get_collab_snapshot_handler(
+  payload: Json<QuerySnapshotParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<SnapshotData>>> {
+  let data = state
+    .collab_storage
+    .get_collab_snapshot(&payload.snapshot_id)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
+#[instrument(level = "trace", skip_all, err)]
+async fn create_collab_snapshot_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  path: web::Path<(String, String)>,
+  payload: Json<CollabType>,
+) -> Result<Json<AppResponse<AFSnapshotMeta>>> {
+  let (workspace_id, object_id) = path.into_inner();
+  let collab_type = payload.into_inner();
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+  let encoded_collab_v1 = state
+    .collab_storage
+    .get_collab_encoded_v1(
+      &uid,
+      QueryCollabParams {
+        collab_type,
+        object_id: object_id.clone(),
+        workspace_id: workspace_id.clone(),
+      },
+    )
+    .await?
+    .encode_to_bytes()
+    .unwrap();
+
+  let meta = state
+    .collab_storage
+    .create_snapshot(InsertSnapshotParams {
+      object_id,
+      workspace_id,
+      encoded_collab_v1,
+    })
+    .await?;
+
+  Ok(Json(AppResponse::Ok().with_data(meta)))
+}
+
+#[instrument(level = "trace", skip(path, state), err)]
+async fn get_all_collab_snapshot_list_handler(
+  path: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
+  let (_, object_id) = path.into_inner();
+  let data = state
+    .collab_storage
+    .get_collab_snapshot_list(&object_id)
+    .await
+    .map_err(AppResponseError::from)?;
+  Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
 #[instrument(level = "debug", skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
@@ -287,29 +361,6 @@ async fn delete_collab_handler(
 ) -> Result<Json<AppResponse<()>>> {
   biz::collab::ops::delete_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
   Ok(AppResponse::Ok().into())
-}
-
-async fn retrieve_snapshot_data_handler(
-  user_uuid: UserUuid,
-  state: Data<AppState>,
-  payload: Json<QuerySnapshotParams>,
-) -> Result<Json<AppResponse<RawData>>> {
-  let data =
-    biz::collab::ops::get_collab_snapshot(&state.pg_pool, &user_uuid, &payload.into_inner())
-      .await?;
-  Ok(Json(AppResponse::Ok().with_data(data)))
-}
-
-#[tracing::instrument(level = "debug", skip_all)]
-async fn retrieve_snapshots_handler(
-  user_uuid: UserUuid,
-  state: Data<AppState>,
-  payload: Json<QueryObjectSnapshotParams>,
-) -> Result<Json<AppResponse<AFCollabSnapshots>>> {
-  let data =
-    biz::collab::ops::get_all_collab_snapshot(&state.pg_pool, &user_uuid, &payload.into_inner())
-      .await?;
-  Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
 #[instrument(level = "debug", skip(state, payload), err)]

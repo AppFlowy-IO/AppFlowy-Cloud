@@ -4,7 +4,7 @@ RUN git clone https://github.com/supabase/gotrue.git --depth 1 --branch v2.117.0
 WORKDIR /go/src/supabase/gotrue
 COPY docker/gotrue.patch .
 RUN git apply gotrue.patch
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /gotrue .
+RUN CGO_ENABLED=0 go build -o /gotrue .
 
 FROM scratch
 COPY --from=base /usr/share/zoneinfo /usr/share/zoneinfo

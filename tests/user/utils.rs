@@ -1,5 +1,5 @@
 use client_api::Client;
-use dotenv::dotenv;
+use dotenvy::dotenv;
 
 use sqlx::types::Uuid;
 

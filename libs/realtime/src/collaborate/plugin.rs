@@ -229,7 +229,6 @@ where
         AppError::RecordNotFound(_) => {
           // When attempting to retrieve collaboration data from the disk and a 'Record Not Found' error is returned,
           // this indicates that the collaboration is new. Therefore, the current collaboration data should be saved to disk.
-
           event!(
             tracing::Level::DEBUG,
             "New collab object, insert collab to db"

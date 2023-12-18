@@ -36,6 +36,7 @@ use crate::user::utils::{generate_unique_registered_user, User};
 use crate::util::setup_log;
 
 pub(crate) struct TestClient {
+  pub user: User,
   pub ws_client: WSClient,
   pub api_client: client_api::Client,
   pub collab_by_object_id: HashMap<String, TestCollab>,
@@ -47,7 +48,7 @@ pub(crate) struct TestCollab {
   pub collab: Arc<MutexCollab>,
 }
 impl TestClient {
-  pub(crate) async fn new(device_id: String, registered_user: User, invoke_ws_conn: bool) -> Self {
+  pub(crate) async fn new(device_id: String, registered_user: User, start_ws_conn: bool) -> Self {
     setup_log();
     let api_client = localhost_client();
     api_client
@@ -65,13 +66,14 @@ impl TestClient {
       api_client.clone(),
     );
 
-    if invoke_ws_conn {
+    if start_ws_conn {
       ws_client
         .connect(api_client.ws_url(&device_id).unwrap(), &device_id)
         .await
         .unwrap();
     }
     Self {
+      user: registered_user,
       ws_client,
       api_client,
       collab_by_object_id: Default::default(),

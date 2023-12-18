@@ -1282,7 +1282,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8e17ba3bdfdee754a5dbbb1c65d630b551e5b268#8e17ba3bdfdee754a5dbbb1c65d630b551e5b268"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0e117f568bd2465762582f6aeb8d9c11fe714e63#0e117f568bd2465762582f6aeb8d9c11fe714e63"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1301,7 +1301,7 @@ dependencies = [
 [[package]]
 name = "collab-derive"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8e17ba3bdfdee754a5dbbb1c65d630b551e5b268#8e17ba3bdfdee754a5dbbb1c65d630b551e5b268"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0e117f568bd2465762582f6aeb8d9c11fe714e63#0e117f568bd2465762582f6aeb8d9c11fe714e63"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1313,7 +1313,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8e17ba3bdfdee754a5dbbb1c65d630b551e5b268#8e17ba3bdfdee754a5dbbb1c65d630b551e5b268"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0e117f568bd2465762582f6aeb8d9c11fe714e63#0e117f568bd2465762582f6aeb8d9c11fe714e63"
 dependencies = [
  "anyhow",
  "collab",
@@ -1332,7 +1332,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8e17ba3bdfdee754a5dbbb1c65d630b551e5b268#8e17ba3bdfdee754a5dbbb1c65d630b551e5b268"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0e117f568bd2465762582f6aeb8d9c11fe714e63#0e117f568bd2465762582f6aeb8d9c11fe714e63"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1346,7 +1346,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8e17ba3bdfdee754a5dbbb1c65d630b551e5b268#8e17ba3bdfdee754a5dbbb1c65d630b551e5b268"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0e117f568bd2465762582f6aeb8d9c11fe714e63#0e117f568bd2465762582f6aeb8d9c11fe714e63"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1366,7 +1366,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=8e17ba3bdfdee754a5dbbb1c65d630b551e5b268#8e17ba3bdfdee754a5dbbb1c65d630b551e5b268"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0e117f568bd2465762582f6aeb8d9c11fe714e63#0e117f568bd2465762582f6aeb8d9c11fe714e63"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3209,9 +3209,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.57"
+version = "0.10.61"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bac25ee399abb46215765b1cb35bc0212377e58a061560d8b29b024fd0430e7c"
+checksum = "6b8419dc8cc6d866deb801274bba2e6f8f6108c1bb7fcc10ee5ab864931dbb45"
 dependencies = [
  "bitflags 2.4.0",
  "cfg-if",
@@ -3250,9 +3250,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.93"
+version = "0.9.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
+checksum = "c3eaad34cdd97d81de97964fc7f29e2d104f483840d906ef56daa1912338460b"
 dependencies = [
  "cc",
  "libc",
@@ -4390,12 +4390,12 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.5"
+version = "0.101.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45a27e3b59326c16e23d30aeb7a36a24cc0d29e71d68ff611cdfb4a01d013bed"
+checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
- "ring 0.16.20",
- "untrusted 0.7.1",
+ "ring 0.17.7",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -6171,18 +6171,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.7.26"
+version = "0.7.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e97e415490559a91254a2979b4829267a57d2fcd741a98eee8b722fb57289aa0"
+checksum = "1c4061bedbb353041c12f413700357bec76df2c7e2ca8e4df8bac24c6bf68e3d"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.7.26"
+version = "0.7.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd7e48ccf166952882ca8bd778a43502c64f33bf94c12ebe2a7f08e5a0f6689f"
+checksum = "b3c129550b3e6de3fd0ba67ba5c81818f9805e58b8d7fee80a3a59d2c9fc601a"
 dependencies = [
  "proc-macro2",
  "quote",

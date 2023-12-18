@@ -10,6 +10,7 @@ use collab::core::awareness::Awareness;
 use collab::core::collab::TransactionMutExt;
 use collab::core::collab_plugin::EncodedCollabV1;
 use collab::core::origin::CollabOrigin;
+use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
@@ -23,8 +24,7 @@ use tokio::time::interval;
 use tracing::{debug, error, event, info, instrument, trace};
 
 use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::{ReadTxn, StateVector, Transact, Update};
+use yrs::{Transact, Update};
 
 pub struct CollabStoragePlugin<S, U, AC> {
   uid: i64,
@@ -73,7 +73,7 @@ where
       object_id, self.uid
     );
 
-    match encoded_v1_from_doc(doc).encode_to_bytes() {
+    match doc.get_encoded_collab_v1().encode_to_bytes() {
       Ok(encoded_collab_v1) => {
         let _ = self
           .access_control
@@ -229,7 +229,6 @@ where
         AppError::RecordNotFound(_) => {
           // When attempting to retrieve collaboration data from the disk and a 'Record Not Found' error is returned,
           // this indicates that the collaboration is new. Therefore, the current collaboration data should be saved to disk.
-
           event!(
             tracing::Level::DEBUG,
             "New collab object, insert collab to db"
@@ -263,7 +262,7 @@ where
   }
 
   fn flush(&self, object_id: &str, doc: &Doc) {
-    let encoded_collab_v1 = match encoded_v1_from_doc(doc).encode_to_bytes() {
+    let encoded_collab_v1 = match doc.get_encoded_collab_v1().encode_to_bytes() {
       Ok(data) => data,
       Err(err) => {
         error!("Error encoding: {:?}", err);
@@ -289,13 +288,6 @@ where
       }
     });
   }
-}
-
-fn encoded_v1_from_doc(doc: &Doc) -> EncodedCollabV1 {
-  let txn = doc.transact();
-  let state_vector = txn.state_vector().encode_v1();
-  let doc_state = txn.encode_state_as_update_v1(&StateVector::default());
-  EncodedCollabV1::new(state_vector, doc_state)
 }
 
 async fn get_latest_snapshot<S>(object_id: &str, storage: &S) -> Option<EncodedCollabV1>

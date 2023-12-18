@@ -103,7 +103,9 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
+      - APPFLOWY_DATABASE_URL=postgres://postgres:password@postgres:5432/postgres
       - APPFLOWY_GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}
+      - APPFLOWY_GOTRUE_BASE_URL=http://gotrue:9999
       - APPFLOWY_GOTRUE_EXT_URL=${API_EXTERNAL_URL}
       - APPFLOWY_GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}
       - APPFLOWY_GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}

@@ -7,7 +7,7 @@ use tracing::error;
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
   // load from .env
-  dotenv::dotenv().ok();
+  dotenvy::dotenv().ok();
 
   let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
   println!("AppFlowy Cloud with RUST_LOG={}", level);

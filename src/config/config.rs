@@ -95,7 +95,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     gotrue: GoTrueSetting {
       base_url: get_env_var("APPFLOWY_GOTRUE_BASE_URL", "http://localhost:9998"),
       ext_url: get_env_var("APPFLOWY_GOTRUE_EXT_URL", "http://localhost:9998"),
-      jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "secret").into(),
+      jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
       admin_email: get_env_var("APPFLOWY_GOTRUE_ADMIN_EMAIL", "admin@example.com"),
       admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password"),
     },

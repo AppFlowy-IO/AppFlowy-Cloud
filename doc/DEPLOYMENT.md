@@ -164,3 +164,7 @@ with your own in `nginx/ssl/` directory
 
 ## Usage of AppFlowy Application with AppFlowy Cloud
 - [AppFlowy with AppFlowyCloud](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy)
+
+## 5. FAQ
+- How do I use a different `postgres`?
+> You can set `APPFLOWY_DATABASE_URL` to another postgres url. The default url is using the postgres in docker compose.

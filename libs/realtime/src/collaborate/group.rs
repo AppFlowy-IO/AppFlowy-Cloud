@@ -138,6 +138,7 @@ where
       self.access_control.clone(),
     );
     collab.lock().add_plugin(Arc::new(plugin));
+    event!(tracing::Level::INFO, "Init group collab:{}", object_id);
     collab.lock_arc().initialize().await;
 
     self

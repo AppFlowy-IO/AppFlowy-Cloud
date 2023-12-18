@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use database_entity::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -209,6 +209,11 @@ where
         let _ = self.forward_binary(bytes);
       },
       ws::Message::Close(reason) => {
+        debug!(
+          "Websocket closing for ({:?}): {:?}",
+          self.user.uid(),
+          reason
+        );
         ctx.close(reason);
         ctx.stop();
       },

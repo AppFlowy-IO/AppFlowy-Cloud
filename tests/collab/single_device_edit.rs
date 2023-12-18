@@ -1,10 +1,56 @@
 use crate::util::test_client::{
-  assert_client_collab, assert_client_collab_include_value, assert_server_collab, TestClient,
+  assert_client_collab_include_value, assert_server_collab, TestClient,
 };
 use collab_entity::CollabType;
 
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;
+use uuid::Uuid;
+
+#[tokio::test]
+async fn collab_storage_plugin_write_test() {
+  let collab_type = CollabType::Document;
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = Uuid::new_v4().to_string();
+
+  // Calling the open_collab function directly will create the collab object in the plugin.
+  // The [CollabStoragePlugin] plugin try to get the collab object from the database, but it doesn't exist.
+  // So the plugin will create the collab object.
+  test_client
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+
+  // Edit the collab
+  for i in 0..=5 {
+    test_client
+      .collab_by_object_id
+      .get_mut(&object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .insert(&i.to_string(), i.to_string());
+  }
+  test_client.wait_object_sync_complete(&object_id).await;
+  test_client.disconnect().await;
+
+  assert_server_collab(
+    &workspace_id,
+    &mut test_client.api_client,
+    &object_id,
+    &collab_type,
+    10,
+    json!( {
+      "0": "0",
+      "1": "1",
+      "2": "2",
+      "3": "3",
+      "4": "4",
+      "5": "5",
+    }),
+  )
+  .await;
+}
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {

@@ -24,8 +24,7 @@ use tokio::time::interval;
 use tracing::{debug, error, event, info, instrument, trace};
 
 use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::Encode;
-use yrs::{ReadTxn, StateVector, Transact, Update};
+use yrs::{Transact, Update};
 
 pub struct CollabStoragePlugin<S, U, AC> {
   uid: i64,

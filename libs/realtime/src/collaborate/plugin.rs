@@ -20,7 +20,8 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{debug, error, info, instrument, trace};
+use tracing::{debug, error, event, info, instrument, trace};
+
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -144,18 +145,23 @@ where
 }
 
 async fn init_collab_with_raw_data(
+  oid: &str,
   encoded_collab: &EncodedCollabV1,
   doc: &Doc,
 ) -> Result<(), RealtimeError> {
   if encoded_collab.doc_state.is_empty() {
-    return Err(RealtimeError::UnexpectedData("raw data is empty"));
+    return Err(RealtimeError::UnexpectedData("doc state is empty"));
   }
-  if encoded_collab.doc_state.is_empty() {
-    return Err(RealtimeError::UnexpectedData("Document state is empty"));
-  }
+  event!(
+    tracing::Level::DEBUG,
+    "start decoding {}: doc state with len: {}",
+    oid,
+    encoded_collab.doc_state.len()
+  );
   let mut txn = doc.transact_mut();
   let update = Update::decode_v1(&encoded_collab.doc_state)?;
   txn.try_apply_update(update)?;
+  event!(tracing::Level::DEBUG, "finish decoding {}: doc state", oid,);
   Ok(())
 }
 
@@ -174,7 +180,9 @@ where
     };
 
     match self.storage.get_collab_encoded_v1(&self.uid, params).await {
-      Ok(encoded_collab_v1) => match init_collab_with_raw_data(&encoded_collab_v1, doc).await {
+      Ok(encoded_collab_v1) => match init_collab_with_raw_data(object_id, &encoded_collab_v1, doc)
+        .await
+      {
         Ok(_) => {
           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
           // assumed that the 'encoded_collab_v1' is already in a valid format. Therefore, there is no need
@@ -183,6 +191,8 @@ where
             let cloned_workspace_id = self.workspace_id.clone();
             let cloned_object_id = object_id.to_string();
             let storage = self.storage.clone();
+
+            event!(tracing::Level::DEBUG, "Creating collab snapshot");
             let _ = tokio::task::spawn_blocking(move || {
               let params = InsertSnapshotParams {
                 object_id: cloned_object_id,
@@ -207,7 +217,7 @@ where
           // When initializing a collaboration object, if the 'init_collab_with_raw_data' operation fails, attempt to
           // restore the collaboration object from the latest snapshot.
           if let Some(encoded_collab_v1) = get_latest_snapshot(object_id, &self.storage).await {
-            if let Err(err) = init_collab_with_raw_data(&encoded_collab_v1, doc).await {
+            if let Err(err) = init_collab_with_raw_data(object_id, &encoded_collab_v1, doc).await {
               error!("restore collab with snapshot failed: {:?}", err);
               return;
             }
@@ -219,6 +229,11 @@ where
         AppError::RecordNotFound(_) => {
           // When attempting to retrieve collaboration data from the disk and a 'Record Not Found' error is returned,
           // this indicates that the collaboration is new. Therefore, the current collaboration data should be saved to disk.
+
+          event!(
+            tracing::Level::DEBUG,
+            "New collab object, insert collab to db"
+          );
           if let Err(err) = self.insert_new_collab(doc, object_id).await {
             error!("Insert collab {:?}", err);
           }

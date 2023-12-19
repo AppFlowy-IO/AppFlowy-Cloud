@@ -1,11 +1,14 @@
 use appflowy_cloud::application::{init_state, Application};
-use appflowy_cloud::config::config::{get_configuration, Environment};
+use appflowy_cloud::config::config::get_configuration;
 use appflowy_cloud::telemetry::init_subscriber;
 use std::panic;
 use tracing::error;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
+  // load from .env
+  dotenvy::dotenv().ok();
+
   let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
   println!("AppFlowy Cloud with RUST_LOG={}", level);
 
@@ -19,12 +22,15 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("database={}", level));
   filters.push(format!("storage={}", level));
 
-  let app_env: Environment = std::env::var("APP_ENVIRONMENT")
-    .unwrap_or_else(|_| "local".to_string())
-    .try_into()
-    .expect("Failed to parse APP_ENVIRONMENT.");
+  // let app_env: Environment = std::env::var("APP_ENVIRONMENT")
+  //   .unwrap_or_else(|_| "local".to_string())
+  //   .try_into()
+  //   .expect("Failed to parse APP_ENVIRONMENT.");
 
-  init_subscriber(&app_env, filters);
+  let conf =
+    get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
+
+  init_subscriber(&conf.app_env, filters);
 
   // Set panic hook
   panic::set_hook(Box::new(|panic_info| {
@@ -44,11 +50,10 @@ async fn main() -> anyhow::Result<()> {
     };
     error!("panic hook: {}\n{}", panic_message, location);
   }));
-  let configuration = get_configuration(&app_env).expect("The configuration should be configured.");
-  let state = init_state(&configuration)
+  let state = init_state(&conf)
     .await
-    .expect("The AppState should be initialized");
-  let application = Application::build(configuration, state).await?;
+    .map_err(|e| anyhow::anyhow!("Failed to initialize application state: {}", e))?;
+  let application = Application::build(conf, state).await?;
   application.run_until_stopped().await?;
 
   Ok(())

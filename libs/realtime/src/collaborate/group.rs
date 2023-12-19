@@ -80,7 +80,7 @@ where
     match self.group_by_object_id.try_write() {
       Ok(mut group_by_object_id) => {
         group_by_object_id.remove(object_id);
-        // self.storage.remove_collab_cache(object_id).await;
+        self.storage.remove_collab_cache(object_id).await;
       },
       Err(err) => error!("Failed to acquire write lock to remove group: {:?}", err),
     }

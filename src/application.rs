@@ -2,7 +2,7 @@ use crate::api::metrics::{metrics_registry, metrics_scope};
 use crate::biz::casbin::adapter::PgAdapter;
 use crate::biz::casbin::MODEL_CONF;
 use crate::component::auth::HEADER_TOKEN;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting, TlsConfig};
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::cors_mw::default_cors;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
@@ -148,17 +148,17 @@ pub async fn run(
 }
 
 fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Secret<String>)> {
-  let tls_config = config.application.tls_config.as_ref()?;
-  match tls_config {
-    TlsConfig::NoTls => None,
-    TlsConfig::SelfSigned => Some(create_self_signed_certificate().unwrap()),
+  if config.application.use_tls {
+    Some(create_self_signed_certificate().unwrap())
+  } else {
+    None
   }
 }
 
 pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // Postgres
   info!("Preparng to run database migrations...");
-  let pg_pool = get_connection_pool(&config.database).await?;
+  let pg_pool = get_connection_pool(&config.db_settings).await?;
   migrate(&pg_pool).await?;
 
   // Bucket storage
@@ -204,6 +204,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     .await,
   );
 
+  info!("Application state initialized");
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
@@ -337,22 +338,22 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
     .acquire_timeout(Duration::from_secs(10))
     .connect_with(setting.with_db())
     .await
-    .context("failed to connect to postgres database")
+    .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))
 }
 
 async fn migrate(pool: &PgPool) -> Result<(), Error> {
   sqlx::migrate!("./migrations")
     .run(pool)
     .await
-    .context("failed to run migrations")
+    .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Client, Error> {
   let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
-  gotrue_client
+  let _ = gotrue_client
     .health()
     .await
-    .context("failed to connect to GoTrue")?;
+    .map_err(|e| anyhow::anyhow!("Failed to connect to GoTrue: {}", e));
   Ok(gotrue_client)
 }
 

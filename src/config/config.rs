@@ -1,14 +1,12 @@
-use config::{Config as InnerConfig, FileFormat};
 use secrecy::Secret;
 use serde::Deserialize;
-use serde_aux::field_attributes::deserialize_number_from_string;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
-use std::convert::TryFrom;
-use std::path::PathBuf;
+use std::str::FromStr;
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Config {
-  pub database: DatabaseSetting,
+  pub app_env: Environment,
+  pub db_settings: DatabaseSetting,
   pub gotrue: GoTrueSetting,
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
@@ -49,49 +47,20 @@ pub struct GoTrueSetting {
 // any network interface. So using 127.0.0.1 for our local development and set
 // it to 0.0.0.0 in our Docker images.
 //
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct ApplicationSetting {
-  #[serde(deserialize_with = "deserialize_number_from_string")]
   pub port: u16,
   pub host: String,
-  pub data_dir: PathBuf,
   pub server_key: Secret<String>,
-  pub tls_config: Option<TlsConfig>,
+  pub use_tls: bool,
 }
 
-impl ApplicationSetting {
-  pub fn use_https(&self) -> bool {
-    match &self.tls_config {
-      None => false,
-      Some(config) => match config {
-        TlsConfig::NoTls => false,
-        TlsConfig::SelfSigned => true,
-      },
-    }
-  }
-
-  pub fn rocksdb_db_dir(&self) -> PathBuf {
-    self.data_dir.join("rocksdb")
-  }
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum TlsConfig {
-  NoTls,
-  SelfSigned,
-}
-
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct DatabaseSetting {
-  pub username: String,
-  pub password: String,
-  #[serde(deserialize_with = "deserialize_number_from_string")]
-  pub port: u16,
-  pub host: String,
-  pub database_name: String,
+  pub pg_conn_opts: PgConnectOptions,
   pub require_ssl: bool,
   pub max_connections: u32,
+  pub database_name: String,
 }
 
 impl DatabaseSetting {
@@ -101,55 +70,73 @@ impl DatabaseSetting {
     } else {
       PgSslMode::Prefer
     };
-    PgConnectOptions::new()
-      .host(&self.host)
-      .username(&self.username)
-      .password(&self.password)
-      .port(self.port)
-      .ssl_mode(ssl_mode)
+    let options = self.pg_conn_opts.clone();
+    options.ssl_mode(ssl_mode)
   }
 
   pub fn with_db(&self) -> PgConnectOptions {
     self.without_db().database(&self.database_name)
   }
-
-  /// Generate a postgresql connection string from the database settings.
-  pub fn to_pg_url(&self) -> String {
-    let ssl_mode = if self.require_ssl {
-      "require"
-    } else {
-      "prefer"
-    };
-    format!(
-      "postgres://{}:{}@{}:{}/{}?sslmode={}",
-      self.username, self.password, self.host, self.port, self.database_name, ssl_mode
-    )
-  }
 }
 
-pub fn get_configuration(app_env: &Environment) -> Result<Config, config::ConfigError> {
-  let base_path = std::env::current_dir().expect("Failed to determine the current directory");
-  let configuration_dir = base_path.join("configuration");
+// Default values favor local development.
+pub fn get_configuration() -> Result<Config, anyhow::Error> {
+  let config = Config {
+    app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local").parse()?,
+    db_settings: DatabaseSetting {
+      pg_conn_opts: PgConnectOptions::from_str(&get_env_var(
+        "APPFLOWY_DATABASE_URL",
+        "postgres://postgres:password@localhost:5433/postgres",
+      ))?,
+      require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false").parse()?,
+      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20").parse()?,
+      database_name: get_env_var("APPFLOWY_DATABASE_NAME", "postgres"),
+    },
+    gotrue: GoTrueSetting {
+      base_url: get_env_var("APPFLOWY_GOTRUE_BASE_URL", "http://localhost:9998"),
+      ext_url: get_env_var("APPFLOWY_GOTRUE_EXT_URL", "http://localhost:9998"),
+      jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
+      admin_email: get_env_var("APPFLOWY_GOTRUE_ADMIN_EMAIL", "admin@example.com"),
+      admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password"),
+    },
+    application: ApplicationSetting {
+      port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
+      host: get_env_var("APPFLOWY_APPLICATION_HOST", "0.0.0.0"),
+      use_tls: get_env_var("APPFLOWY_APPLICATION_USE_TLS", "false").parse()?,
+      server_key: get_env_var("APPFLOWY_APPLICATION_SERVER_KEY", "server_key").into(),
+    },
+    websocket: WebsocketSetting {
+      heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,
+      client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "30").parse()?,
+    },
+    redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6380").into(),
+    s3: S3Setting {
+      use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true").parse()?,
+      minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
+      access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
+      secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin"),
+      bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
+      region: get_env_var("APPFLOWY_S3_REGION", "us-east-1"),
+    },
+    casbin: CasbinSetting {
+      pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
+    },
+  };
+  Ok(config)
+}
 
-  let builder = InnerConfig::builder()
-        .set_default("default", "1")?
-        .add_source(
-            config::File::from(configuration_dir.join("base"))
-                .required(true)
-                .format(FileFormat::Yaml),
-        )
-        .add_source(
-            config::File::from(configuration_dir.join(app_env.as_str()))
-                .required(true)
-                .format(FileFormat::Yaml),
-        )
-        // Add in settings from environment variables (with a prefix of APP and '__' as
-        // separator) E.g. `APP__APPLICATION__PORT=5001 would set
-        // `Settings.application.port`
-        .add_source(config::Environment::with_prefix("app").separator("__"));
-
-  let config = builder.build()?;
-  config.try_deserialize()
+fn get_env_var(key: &str, default: &str) -> String {
+  match std::env::var(key) {
+    Ok(value) => value,
+    Err(e) => {
+      tracing::warn!(
+        "failed to read environment variable: {}, using default value: {}",
+        e,
+        default
+      );
+      default.to_owned()
+    },
+  }
 }
 
 /// The possible runtime environment for our application.
@@ -168,21 +155,22 @@ impl Environment {
   }
 }
 
-impl TryFrom<String> for Environment {
-  type Error = String;
+impl FromStr for Environment {
+  type Err = anyhow::Error;
 
-  fn try_from(s: String) -> Result<Self, Self::Error> {
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
     match s.to_lowercase().as_str() {
       "local" => Ok(Self::Local),
       "production" => Ok(Self::Production),
-      other => Err(format!(
+      other => anyhow::bail!(
         "{} is not a supported environment. Use either `local` or `production`.",
         other
-      )),
+      ),
     }
   }
 }
-#[derive(serde::Deserialize, Clone, Debug)]
+
+#[derive(Clone, Debug)]
 pub struct WebsocketSetting {
   pub heartbeat_interval: u8,
   pub client_timeout: u8,

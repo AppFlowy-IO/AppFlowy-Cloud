@@ -87,7 +87,7 @@ where
       self.state = new_state;
 
       trace!(
-        "oid:{}|msg_id:{},state:{:?}",
+        "oid:{}|msg_id:{},msg state:{:?}",
         self.msg.collab_object_id(),
         self.msg_id,
         self.state

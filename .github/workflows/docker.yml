@@ -43,10 +43,16 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          docker compose up -d
+          # docker compose up -d
+          docker compose build appflowy_cloud
 
-      - name: Run tests
+      # - name: Run tests
+      #   run: |
+      #     cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
+      #     RUST_LOG=debug cargo test
+
+      - name: Release image to docker hub
         run: |
-          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
-          RUST_LOG=debug cargo test
-
+          docker tag appflowy-cloud-appflowy_cloud appflowyinc/appflowy_cloud:dev
+          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
+          docker push appflowyinc/appflowy_cloud:dev

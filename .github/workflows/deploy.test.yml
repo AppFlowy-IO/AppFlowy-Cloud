@@ -35,3 +35,4 @@ jobs:
        run: |
          pwd
          ls
+         exit 1

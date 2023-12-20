@@ -1,4 +1,4 @@
-name: Deployment for Test Environment
+name: Deployment AppFlowy Cloud and Admin Frontend for Kube Environment
 on:
   push:
     branches:
@@ -7,55 +7,16 @@ on:
 
 jobs:
   deploy:
-    environment: test.appflowy.cloud
-    runs-on: [self-hosted, test-deploy]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up env vars
+      - name: build docker images
         run: |
-          cp dev.env .env
-
-          # log level
-          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
-
-          # jwt secret
-          sed -i 's|GOTRUE_JWT_SECRET=.*|GOTRUE_JWT_SECRET=${{ secrets.GOTRUE_JWT_SECRET_TEST }}|' .env
-          # smtp settings
-          sed -i 's|GOTRUE_SMTP_HOST=.*|GOTRUE_SMTP_HOST=smtp.gmail.com|' .env
-          sed -i 's|GOTRUE_SMTP_PORT=.*|GOTRUE_SMTP_PORT=465|' .env
-          sed -i 's|GOTRUE_SMTP_USER=.*|GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER_TEST }}|' .env
-          sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS_TEST }}|' .env
-          sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL_TEST }}|' .env
-          sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
-          # Google OAuth
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*|GOTRUE_EXTERNAL_GOOGLE_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=.*|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_SECRET=.*|GOTRUE_EXTERNAL_GOOGLE_SECRET=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_SECRET }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI }}|' .env
-          # GitHub OAuth
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_ENABLED=.*|GOTRUE_EXTERNAL_GITHUB_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=.*|GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GITHUB_CLIENT_ID }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_SECRET=.*|GOTRUE_EXTERNAL_GITHUB_SECRET=${{ secrets.GOTRUE_EXTERNAL_GITHUB_SECRET }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI }}|' .env
-          # Discord OAuth
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_ENABLED=.*|GOTRUE_EXTERNAL_DISCORD_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=.*|GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_DISCORD_CLIENT_ID }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_SECRET=.*|GOTRUE_EXTERNAL_DISCORD_SECRET=${{ secrets.GOTRUE_EXTERNAL_DISCORD_SECRET }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=.*|GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI }}|' .env
-          # Server Host
-          sed -i 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=${{ secrets.API_EXTERNAL_URL_TEST }}|' .env
-
-          # SSL
-          echo "${{ secrets.APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
-          echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
-
-      - name: Disable appflowyinc images
+          docker compose build appflowy_cloud admin_frontend
+      - name: push docker images to docker hub
         run: |
-          sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
-          sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml 
-
-      - name: Deploy docker-compose
-        run: |
-          docker compose up -d --build --force-recreate
-          docker system prune --force
+          docker tag appflowy-cloud-appflowy_cloud appflowyinc/appflowy_cloud:dev
+          docker tag appflowy-cloud-admin_frontend appflowyinc/appflowy_cloud:dev
+          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
+          docker push appflowyinc/appflowy_cloud:dev
+          docker push appflowyinc/admin_frontend:dev

@@ -6,22 +6,22 @@ on:
      - 'test_deploy_*'
 
 jobs:
- #image_build:
- #  runs-on: ubuntu-latest
- #  steps:
- #    - uses: actions/checkout@v3
- #    - name: build docker images
- #      run: |
- #        docker compose build appflowy_cloud admin_frontend
- #        docker images
- #    - name: push docker images to docker hub
- #      run: |
- #        docker images
- #        docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:dev
- #        docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:dev
- #        echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
- #        docker push appflowyinc/appflowy_cloud:dev
- #        docker push appflowyinc/admin_frontend:dev
+  image_build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: build docker images
+        run: |
+          docker compose build appflowy_cloud admin_frontend
+          docker images
+      - name: push docker images to docker hub
+        run: |
+          docker images
+          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:dev
+          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:dev
+          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
+          docker push appflowyinc/appflowy_cloud:dev
+          docker push appflowyinc/admin_frontend:dev
 
   image_deploy:
     runs-on: [test-kube-worker]

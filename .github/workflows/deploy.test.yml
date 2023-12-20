@@ -13,8 +13,10 @@ jobs:
       - name: build docker images
         run: |
           docker compose build appflowy_cloud admin_frontend
+          docker images
       - name: push docker images to docker hub
         run: |
+          docker images
           docker tag appflowy-cloud-appflowy_cloud appflowyinc/appflowy_cloud:dev
           docker tag appflowy-cloud-admin_frontend appflowyinc/appflowy_cloud:dev
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin

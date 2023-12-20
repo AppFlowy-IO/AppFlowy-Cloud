@@ -17,8 +17,8 @@ jobs:
       - name: push docker images to docker hub
         run: |
           docker images
-          docker tag appflowy-cloud-appflowy_cloud appflowyinc/appflowy_cloud:dev
-          docker tag appflowy-cloud-admin_frontend appflowyinc/appflowy_cloud:dev
+          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:dev
+          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:dev
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:dev
           docker push appflowyinc/admin_frontend:dev

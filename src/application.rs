@@ -280,6 +280,7 @@ async fn setup_admin_account(
 }
 
 async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManager, Error> {
+  info!("Connecting to redis with uri: {}", redis_uri);
   let manager = redis::Client::open(redis_uri)
     .context("failed to connect to redis")?
     .get_tokio_connection_manager()
@@ -289,6 +290,7 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
 }
 
 async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> {
+  info!("Connecting to S3 bucket with setting: {:?}", &s3_setting);
   let region = {
     match s3_setting.use_minio {
       true => s3::Region::Custom {
@@ -304,7 +306,7 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
 
   let cred = s3::creds::Credentials {
     access_key: Some(s3_setting.access_key.to_owned()),
-    secret_key: Some(s3_setting.secret_key.to_owned()),
+    secret_key: Some(s3_setting.secret_key.expose_secret().to_owned()),
     security_token: None,
     session_token: None,
     expiration: None,
@@ -349,6 +351,7 @@ async fn migrate(pool: &PgPool) -> Result<(), Error> {
 }
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Client, Error> {
+  info!("Connecting to GoTrue with setting: {:?}", setting);
   let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
   let _ = gotrue_client
     .health()

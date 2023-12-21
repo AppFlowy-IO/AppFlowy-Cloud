@@ -25,7 +25,7 @@ pub struct S3Setting {
   pub use_minio: bool,
   pub minio_url: String,
   pub access_key: String,
-  pub secret_key: String,
+  pub secret_key: Secret<String>,
   pub bucket: String,
   pub region: String,
 }
@@ -114,7 +114,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true").parse()?,
       minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
       access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
-      secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin"),
+      secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", "us-east-1"),
     },

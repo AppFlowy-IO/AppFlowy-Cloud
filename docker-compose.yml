@@ -119,7 +119,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
+    image: appflowyinc/appflowy_cloud:0.0.5
     depends_on:
       - redis
       - postgres

@@ -12,17 +12,45 @@ use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct InsertCollabParams {
+pub struct CreateCollabParams {
+  #[serde(flatten)]
+  #[validate]
+  inner: CollabParams,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+}
+
+impl CreateCollabParams {
+  pub fn split(self) -> (CollabParams, String) {
+    (self.inner, self.workspace_id)
+  }
+}
+
+impl Deref for CreateCollabParams {
+  type Target = CollabParams;
+
+  fn deref(&self) -> &Self::Target {
+    &self.inner
+  }
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
   pub encoded_collab_v1: Vec<u8>,
-  #[validate(custom = "validate_not_empty_str")]
-  pub workspace_id: String,
   pub collab_type: CollabType,
 }
 
-impl InsertCollabParams {
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct BatchCreateCollabParams {
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  pub params_list: Vec<CollabParams>,
+}
+
+impl CreateCollabParams {
   pub fn new<T: ToString>(
     object_id: T,
     collab_type: CollabType,
@@ -30,10 +58,13 @@ impl InsertCollabParams {
     workspace_id: String,
   ) -> Self {
     let object_id = object_id.to_string();
-    Self {
+    let params = CollabParams {
       object_id,
       collab_type,
       encoded_collab_v1,
+    };
+    Self {
+      inner: params,
       workspace_id,
     }
   }
@@ -44,10 +75,13 @@ impl InsertCollabParams {
     workspace_id: &str,
   ) -> Self {
     let workspace_id = workspace_id.to_string();
-    Self {
+    let params = CollabParams {
       object_id,
       collab_type,
       encoded_collab_v1,
+    };
+    Self {
+      inner: params,
       workspace_id,
     }
   }
@@ -100,22 +134,52 @@ pub struct QuerySnapshotParams {
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabParams {
   #[validate(custom = "validate_not_empty_str")]
-  pub object_id: String,
   pub workspace_id: String,
-  pub collab_type: CollabType,
+
+  #[serde(flatten)]
+  #[validate]
+  pub inner: QueryCollab,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BatchQueryCollabParams(pub Vec<BatchQueryCollab>);
+impl QueryCollabParams {
+  pub fn new<T1: ToString, T2: ToString>(
+    object_id: T1,
+    collab_type: CollabType,
+    workspace_id: T2,
+  ) -> Self {
+    let workspace_id = workspace_id.to_string();
+    let object_id = object_id.to_string();
+    let inner = QueryCollab {
+      object_id,
+      collab_type,
+    };
+    Self {
+      workspace_id,
+      inner,
+    }
+  }
+}
+
+impl Deref for QueryCollabParams {
+  type Target = QueryCollab;
+
+  fn deref(&self) -> &Self::Target {
+    &self.inner
+  }
+}
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct BatchQueryCollab {
+pub struct QueryCollab {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   pub collab_type: CollabType,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchQueryCollabParams(pub Vec<QueryCollab>);
+
 impl Deref for BatchQueryCollabParams {
-  type Target = Vec<BatchQueryCollab>;
+  type Target = Vec<QueryCollab>;
 
   fn deref(&self) -> &Self::Target {
     &self.0

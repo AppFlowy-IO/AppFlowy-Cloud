@@ -27,6 +27,7 @@ use std::sync::Arc;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
 use uuid::Uuid;
+use validator::Validate;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
@@ -51,6 +52,11 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_handler))
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
+    )
+    .service(
+      web::resource("{workspace_id}/collabs")
+        .app_data(PayloadConfig::new(10 * 1024 * 1024))
+        .route(web::post().to(batch_create_collab_handler)),
     )
     .service(
       web::resource("{workspace_id}/{object_id}/snapshot")
@@ -228,19 +234,48 @@ async fn update_workspace_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn create_collab_handler(
   user_uuid: UserUuid,
-  payload: Json<InsertCollabParams>,
+  payload: Json<CreateCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::create_collab(
+  payload.validate().map_err(AppError::from)?;
+  let (params, workspace_id) = payload.into_inner().split();
+  biz::collab::ops::create_collabs(
     &state.pg_pool,
     &user_uuid,
-    &payload.into_inner(),
+    &workspace_id,
+    vec![params],
     &state.collab_access_control,
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
+#[instrument(skip(state, payload), err)]
+async fn batch_create_collab_handler(
+  user_uuid: UserUuid,
+  payload: Json<BatchCreateCollabParams>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  payload.validate().map_err(AppError::from)?;
+  let BatchCreateCollabParams {
+    workspace_id,
+    params_list,
+  } = payload.into_inner();
+
+  if params_list.is_empty() {
+    return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
+  }
+
+  biz::collab::ops::create_collabs(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    params_list,
+    &state.collab_access_control,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
 #[instrument(level = "trace", skip(payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
@@ -289,11 +324,7 @@ async fn create_collab_snapshot_handler(
     .collab_storage
     .get_collab_encoded_v1(
       &uid,
-      QueryCollabParams {
-        collab_type,
-        object_id: object_id.clone(),
-        workspace_id: workspace_id.clone(),
-      },
+      QueryCollabParams::new(&object_id, collab_type, &workspace_id),
     )
     .await?
     .encode_to_bytes()
@@ -346,10 +377,11 @@ async fn batch_get_collab_handler(
 #[instrument(skip(state, payload), err)]
 async fn update_collab_handler(
   user_uuid: UserUuid,
-  payload: Json<InsertCollabParams>,
+  payload: Json<CreateCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::upsert_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  let (params, workspace_id) = payload.into_inner().split();
+  biz::collab::ops::upsert_collab(&state.pg_pool, &user_uuid, &workspace_id, vec![params]).await?;
   Ok(AppResponse::Ok().into())
 }
 

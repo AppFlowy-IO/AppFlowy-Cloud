@@ -15,7 +15,7 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{
-  AFAccessLevel, InsertCollabParams, InsertSnapshotParams, QueryCollabParams,
+  AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
 };
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
@@ -84,7 +84,7 @@ where
           )
           .await;
 
-        let params = InsertCollabParams::from_raw_data(
+        let params = CreateCollabParams::from_raw_data(
           object_id.to_string(),
           self.collab_type.clone(),
           encoded_collab_v1,
@@ -173,11 +173,7 @@ where
   AC: CollabAccessControl,
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
-    let params = QueryCollabParams {
-      object_id: object_id.to_string(),
-      workspace_id: self.workspace_id.clone(),
-      collab_type: self.collab_type.clone(),
-    };
+    let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
 
     match self.storage.get_collab_encoded_v1(&self.uid, params).await {
       Ok(encoded_collab_v1) => match init_collab_with_raw_data(object_id, &encoded_collab_v1, doc)
@@ -270,7 +266,7 @@ where
       },
     };
 
-    let params = InsertCollabParams::from_raw_data(
+    let params = CreateCollabParams::from_raw_data(
       object_id.to_string(),
       self.collab_type.clone(),
       encoded_collab_v1,

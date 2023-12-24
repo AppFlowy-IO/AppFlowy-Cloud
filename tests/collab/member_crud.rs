@@ -2,7 +2,7 @@ use crate::collab::workspace_id_from_client;
 use crate::user::utils::generate_unique_registered_user_client;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, CollabMemberIdentify, InsertCollabMemberParams, InsertCollabParams,
+  AFAccessLevel, CollabMemberIdentify, CreateCollabParams, InsertCollabMemberParams,
   QueryCollabMembers, UpdateCollabMemberParams,
 };
 use uuid::Uuid;
@@ -15,7 +15,7 @@ async fn collab_owner_permission_test() {
   let object_id = Uuid::new_v4().to_string();
   let uid = c.get_profile().await.unwrap().uid;
 
-  c.create_collab(InsertCollabParams::new(
+  c.create_collab(CreateCollabParams::new(
     &object_id,
     CollabType::Document,
     raw_data.clone(),
@@ -44,7 +44,7 @@ async fn update_collab_member_permission_test() {
   let object_id = Uuid::new_v4().to_string();
   let uid = c.get_profile().await.unwrap().uid;
 
-  c.create_collab(InsertCollabParams::new(
+  c.create_collab(CreateCollabParams::new(
     &object_id,
     CollabType::Document,
     raw_data.clone(),
@@ -80,7 +80,7 @@ async fn add_collab_member_test() {
   let workspace_id = workspace_id_from_client(&c_1).await;
   let object_id = Uuid::new_v4().to_string();
   c_1
-    .create_collab(InsertCollabParams::new(
+    .create_collab(CreateCollabParams::new(
       &object_id,
       CollabType::Document,
       vec![0; 10],
@@ -125,7 +125,7 @@ async fn add_collab_member_then_remove_test() {
   let workspace_id = workspace_id_from_client(&c_1).await;
   let object_id = Uuid::new_v4().to_string();
   c_1
-    .create_collab(InsertCollabParams::new(
+    .create_collab(CreateCollabParams::new(
       &object_id,
       CollabType::Document,
       vec![0; 10],

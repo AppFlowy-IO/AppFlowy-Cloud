@@ -6,8 +6,8 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollabV1;
 
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, BatchQueryCollab, InsertCollabParams,
-  InsertSnapshotParams, QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams,
+  QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
 use sqlx::types::Uuid;
@@ -77,7 +77,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> DatabaseResult<()>;
+  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
@@ -97,7 +97,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn batch_get_collab(
     &self,
     uid: &i64,
-    queries: Vec<BatchQueryCollab>,
+    queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult>;
 
   /// Deletes a collaboration from the storage.
@@ -144,7 +144,7 @@ where
     self.as_ref().is_collab_exist(oid).await
   }
 
-  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> DatabaseResult<()> {
+  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
     self.as_ref().insert_collab(uid, params).await
   }
 
@@ -159,7 +159,7 @@ where
   async fn batch_get_collab(
     &self,
     uid: &i64,
-    queries: Vec<BatchQueryCollab>,
+    queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     self.as_ref().batch_get_collab(uid, queries).await
   }
@@ -234,13 +234,14 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(is_exist)
   }
 
-  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> DatabaseResult<()> {
+  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
     let mut transaction = self
       .pg_pool
       .begin()
       .await
       .context("Failed to acquire a Postgres transaction to insert collab")?;
-    collab_db_ops::insert_into_af_collab(&mut transaction, uid, &params).await?;
+    let (params, workspace_id) = params.split();
+    collab_db_ops::insert_into_af_collab(&mut transaction, uid, &workspace_id, &params).await?;
     transaction
       .commit()
       .await
@@ -276,7 +277,7 @@ impl CollabStorage for CollabStoragePgImpl {
   async fn batch_get_collab(
     &self,
     _uid: &i64,
-    queries: Vec<BatchQueryCollab>,
+    queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     collab_db_ops::batch_select_collab_blob(&self.pg_pool, queries).await
   }

@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context};
 use collab_entity::CollabType;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas, BatchQueryCollab,
-  InsertCollabParams, QueryCollabResult, RawData,
+  AFAccessLevel, AFCollabMember, AFPermission, AFSnapshotMeta, AFSnapshotMetas, CollabParams,
+  QueryCollab, QueryCollabResult, RawData,
 };
 
 use crate::collab::SNAPSHOT_PER_HOUR;
@@ -60,11 +60,12 @@ pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Er
 pub async fn insert_into_af_collab(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   uid: &i64,
-  params: &InsertCollabParams,
+  workspace_id: &str,
+  params: &CollabParams,
 ) -> Result<(), AppError> {
   let encrypt = 0;
   let partition_key = params.collab_type.value();
-  let workspace_id = Uuid::from_str(&params.workspace_id)?;
+  let workspace_id = Uuid::from_str(workspace_id)?;
   let existing_workspace_id: Option<Uuid> = sqlx::query_scalar!(
     "SELECT workspace_id FROM af_collab WHERE oid = $1",
     &params.object_id
@@ -157,7 +158,7 @@ pub async fn insert_into_af_collab(
         "did insert new collab row: {}:{}:{}",
         uid,
         params.object_id,
-        params.workspace_id
+        workspace_id
       );
     },
   }
@@ -188,7 +189,7 @@ pub async fn select_blob_from_af_collab(
 #[inline]
 pub async fn batch_select_collab_blob(
   pg_pool: &PgPool,
-  queries: Vec<BatchQueryCollab>,
+  queries: Vec<QueryCollab>,
 ) -> HashMap<String, QueryCollabResult> {
   let mut results = HashMap::new();
   let mut object_ids_by_collab_type: HashMap<CollabType, Vec<String>> = HashMap::new();

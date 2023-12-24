@@ -13,7 +13,7 @@ async fn recv_updates_without_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   client_2
@@ -41,7 +41,7 @@ async fn recv_remote_updates_with_readonly_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -91,7 +91,7 @@ async fn init_sync_with_readonly_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
   client_1
     .collab_by_object_id
@@ -140,7 +140,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -194,7 +194,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -244,7 +244,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
@@ -294,7 +294,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.

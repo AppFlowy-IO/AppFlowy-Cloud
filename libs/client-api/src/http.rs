@@ -8,9 +8,10 @@ use bytes::Bytes;
 use database_entity::dto::{
   AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas,
   AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces,
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify, DeleteCollabParams,
-  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  BatchCreateCollabParams, BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify,
+  CollabParams, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams, QueryCollab,
+  QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -702,7 +703,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_collab(&self, params: InsertCollabParams) -> Result<(), AppResponseError> {
+  pub async fn create_collab(&self, params: CreateCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, params.workspace_id, &params.object_id
@@ -711,6 +712,27 @@ impl Client {
       .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn batch_create_collab(
+    &self,
+    workspace_id: &str,
+    params: Vec<CollabParams>,
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/collabs", self.base_url, workspace_id);
+    let payload = BatchCreateCollabParams {
+      workspace_id: workspace_id.to_string(),
+      params_list: params,
+    };
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&payload)
       .send()
       .await?;
     log_request_id(&resp);
@@ -782,7 +804,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn update_collab(&self, params: InsertCollabParams) -> Result<(), AppResponseError> {
+  pub async fn update_collab(&self, params: CreateCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -822,12 +844,13 @@ impl Client {
   pub async fn batch_get_collab(
     &self,
     workspace_id: &str,
-    params: BatchQueryCollabParams,
+    params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab_list",
       self.base_url, workspace_id
     );
+    let params = BatchQueryCollabParams(params);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?

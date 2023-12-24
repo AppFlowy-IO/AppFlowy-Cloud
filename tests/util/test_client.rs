@@ -13,8 +13,9 @@ use collab_entity::CollabType;
 use collab_folder::Folder;
 use database_entity::dto::{
   AFAccessLevel, AFBlobMetadata, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo,
-  AFWorkspace, AFWorkspaceMember, InsertCollabMemberParams, InsertCollabParams, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  AFWorkspace, AFWorkspaceMember, BatchQueryCollabResult, CollabParams, CreateCollabParams,
+  InsertCollabMemberParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  UpdateCollabMemberParams,
 };
 use image::io::Reader as ImageReader;
 use serde_json::Value;
@@ -123,11 +124,11 @@ impl TestClient {
     let workspace_id = self.workspace_id().await;
     let data = self
       .api_client
-      .get_collab(QueryCollabParams {
-        object_id: workspace_id.clone(),
-        workspace_id: workspace_id.clone(),
-        collab_type: CollabType::Folder,
-      })
+      .get_collab(QueryCollabParams::new(
+        &workspace_id,
+        CollabType::Folder,
+        &workspace_id,
+      ))
       .await
       .unwrap();
 
@@ -356,21 +357,40 @@ impl TestClient {
       .await
   }
 
+  pub(crate) async fn batch_create_collab(
+    &mut self,
+    workspace_id: &str,
+    params: Vec<CollabParams>,
+  ) -> Result<(), AppResponseError> {
+    self
+      .api_client
+      .batch_create_collab(workspace_id, params)
+      .await
+  }
+
+  pub(crate) async fn batch_get_collab(
+    &mut self,
+    workspace_id: &str,
+    params: Vec<QueryCollab>,
+  ) -> Result<BatchQueryCollabResult, AppResponseError> {
+    self.api_client.batch_get_collab(workspace_id, params).await
+  }
+
   #[allow(clippy::await_holding_lock)]
-  pub(crate) async fn create_collab(
+  pub(crate) async fn create_and_edit_collab(
     &mut self,
     workspace_id: &str,
     collab_type: CollabType,
   ) -> String {
     let object_id = Uuid::new_v4().to_string();
     self
-      .create_collab_with_data(object_id.clone(), workspace_id, collab_type, None)
+      .create_and_edit_collab_with_data(object_id.clone(), workspace_id, collab_type, None)
       .await;
     object_id
   }
 
   #[allow(clippy::await_holding_lock)]
-  pub(crate) async fn create_collab_with_data(
+  pub(crate) async fn create_and_edit_collab_with_data(
     &mut self,
     object_id: String,
     workspace_id: &str,
@@ -397,7 +417,7 @@ impl TestClient {
     let encoded_collab_v1 = collab.encode_collab_v1().encode_to_bytes().unwrap();
     self
       .api_client
-      .create_collab(InsertCollabParams::new(
+      .create_collab(CreateCollabParams::new(
         &object_id,
         collab_type.clone(),
         encoded_collab_v1,
@@ -559,11 +579,11 @@ pub async fn assert_server_collab(
        _ = tokio::time::sleep(Duration::from_secs(secs)) => {
          panic!("Query collab timeout");
        },
-       result = client.get_collab(QueryCollabParams {
-         object_id: object_id.clone(),
-        workspace_id: workspace_id.to_string(),
-         collab_type: collab_type.clone(),
-       }) => {
+       result = client.get_collab(QueryCollabParams::new(
+        &object_id,
+        collab_type.clone(),
+        workspace_id,
+       )) => {
         retry_count += 1;
         match &result {
           Ok(data) => {
@@ -674,11 +694,7 @@ pub async fn get_collab_json_from_server(
   collab_type: CollabType,
 ) -> Value {
   let bytes = client
-    .get_collab(QueryCollabParams {
-      object_id: object_id.to_string(),
-      workspace_id: workspace_id.to_string(),
-      collab_type,
-    })
+    .get_collab(QueryCollabParams::new(object_id, collab_type, workspace_id))
     .await
     .unwrap();
 

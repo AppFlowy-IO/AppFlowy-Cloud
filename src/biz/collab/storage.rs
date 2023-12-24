@@ -4,7 +4,7 @@ use database::collab::{
   CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
-  AFSnapshotMeta, AFSnapshotMetas, BatchQueryCollab, InsertCollabParams, InsertSnapshotParams,
+  AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
@@ -93,7 +93,7 @@ where
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
-  async fn insert_collab(&self, uid: &i64, params: InsertCollabParams) -> DatabaseResult<()> {
+  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
     params.validate()?;
 
     // Check if the user has enough permissions to insert collab
@@ -184,7 +184,7 @@ where
   async fn batch_get_collab(
     &self,
     uid: &i64,
-    queries: Vec<BatchQueryCollab>,
+    queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
       queries

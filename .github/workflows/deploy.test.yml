@@ -13,15 +13,13 @@ jobs:
       - name: build docker images
         run: |
           docker compose build appflowy_cloud admin_frontend
-          docker images
       - name: push docker images to docker hub
         run: |
-          docker images
-          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:dev
-          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:dev
+          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
+          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
-          docker push appflowyinc/appflowy_cloud:dev
-          docker push appflowyinc/admin_frontend:dev
+          docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
+          docker push appflowyinc/admin_frontend:${GITHUB_SHA}
 
   image_deploy:
     needs: image_build
@@ -44,8 +42,8 @@ jobs:
          export APPFLOWY_S3_SECRET_KEY=${{ secrets.TEST_APPFLOWY_S3_SECRET_KEY }}
          export APPFLOWY_GOTRUE_ADMIN_PASSWORD=${{ secrets.TEST_APPFLOWY_GOTRUE_ADMIN_PASSWORD }}
 
-         export ADMIN_FRONTEND_IMAGE=appflowyinc/admin_frontend:dev
-         export APPFLOWY_IMAGE=appflowyinc/appflowy_cloud:dev
+         export ADMIN_FRONTEND_IMAGE=appflowyinc/admin_frontend:${GITHUB_SHA}
+         export APPFLOWY_IMAGE=appflowyinc/appflowy_cloud:${GITHUB_SHA}
 
          # keep track of final env deployment files
          mkdir deployed
@@ -63,3 +61,9 @@ jobs:
          # deploy admin_frontend
          envsubst < kubernetes/templates/admin-frontend-deployment.yaml | tee deployed/admin-frontend-deployment.yaml | kubectl apply -f -
          envsubst < kubernetes/templates/admin-frontend-service.yaml | tee deployed/admin-frontend-service.yaml | kubectl apply -f -
+
+     - name: delete built images
+       run: |
+         TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
+         curl -s -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/tags/${GITHUB_SHA}/
+         curl -s -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/tags/${GITHUB_SHA}/

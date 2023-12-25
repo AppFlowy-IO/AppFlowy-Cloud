@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use app_error::ErrorCode;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  BatchQueryCollab, BatchQueryCollabParams, DeleteCollabParams, InsertCollabParams,
-  QueryCollabParams, QueryCollabResult,
+  CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
 use sqlx::types::Uuid;
 
@@ -21,21 +21,19 @@ async fn success_insert_collab_test() {
     .unwrap();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
-  c.create_collab(InsertCollabParams::new(
-    &object_id,
-    CollabType::Document,
-    encoded_collab_v1,
+  c.create_collab(CreateCollabParams::new(
     workspace_id.clone(),
+    CollabParams::new(&object_id, CollabType::Document, encoded_collab_v1),
   ))
   .await
   .unwrap();
 
   let bytes = c
-    .get_collab(QueryCollabParams {
-      object_id,
-      workspace_id,
-      collab_type: CollabType::Document,
-    })
+    .get_collab(QueryCollabParams::new(
+      &object_id,
+      CollabType::Document,
+      &workspace_id,
+    ))
     .await
     .unwrap()
     .doc_state;
@@ -47,26 +45,26 @@ async fn success_insert_collab_test() {
 async fn success_batch_get_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
-  let queries = BatchQueryCollabParams(vec![
-    BatchQueryCollab {
+  let queries = vec![
+    QueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Document,
     },
-    BatchQueryCollab {
+    QueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Folder,
     },
-    BatchQueryCollab {
+    QueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Database,
     },
-  ]);
+  ];
 
   let mut expected_results = HashMap::new();
-  for i in 0..3 {
-    let object_id = queries.0[i].object_id.clone();
-    let collab_type = queries.0[i].collab_type.clone();
-    let raw_data = format!("hello world {}", i).as_bytes().to_vec();
+  for (index, query) in queries.iter().enumerate() {
+    let object_id = query.object_id.clone();
+    let collab_type = query.collab_type.clone();
+    let raw_data = format!("hello world {}", index).as_bytes().to_vec();
 
     expected_results.insert(
       object_id.clone(),
@@ -75,11 +73,9 @@ async fn success_batch_get_collab_test() {
       },
     );
 
-    c.create_collab(InsertCollabParams::new(
-      &object_id,
-      collab_type,
-      raw_data.clone(),
+    c.create_collab(CreateCollabParams::new(
       workspace_id.clone(),
+      CollabParams::new(&object_id, collab_type, raw_data.clone()),
     ))
     .await
     .unwrap();
@@ -95,27 +91,28 @@ async fn success_batch_get_collab_test() {
 async fn success_part_batch_get_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
-  let queries = BatchQueryCollabParams(vec![
-    BatchQueryCollab {
+  let queries = vec![
+    QueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Document,
     },
-    BatchQueryCollab {
+    QueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Folder,
     },
-    BatchQueryCollab {
+    QueryCollab {
       object_id: Uuid::new_v4().to_string(),
       collab_type: CollabType::Database,
     },
-  ]);
+  ];
 
   let mut expected_results = HashMap::new();
-  for i in 0..3 {
-    let object_id = queries.0[i].object_id.clone();
-    let collab_type = queries.0[i].collab_type.clone();
-    let raw_data = format!("hello world {}", i).as_bytes().to_vec();
-    if i == 1 {
+  for (index, query) in queries.iter().enumerate() {
+    let object_id = query.object_id.clone();
+    let collab_type = query.collab_type.clone();
+    let raw_data = format!("hello world {}", index).as_bytes().to_vec();
+
+    if index == 1 {
       expected_results.insert(
         object_id.clone(),
         QueryCollabResult::Failed {
@@ -129,11 +126,9 @@ async fn success_part_batch_get_collab_test() {
           encode_collab_v1: raw_data.clone(),
         },
       );
-      c.create_collab(InsertCollabParams::new(
-        &object_id,
-        collab_type,
-        raw_data.clone(),
+      c.create_collab(CreateCollabParams::new(
         workspace_id.clone(),
+        CollabParams::new(&object_id, collab_type, raw_data.clone()),
       ))
       .await
       .unwrap();
@@ -152,11 +147,9 @@ async fn success_delete_collab_test() {
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
-  c.create_collab(InsertCollabParams::new(
-    object_id.clone(),
-    CollabType::Document,
-    raw_data.clone(),
+  c.create_collab(CreateCollabParams::new(
     workspace_id.clone(),
+    CollabParams::new(&object_id, CollabType::Document, raw_data.clone()),
   ))
   .await
   .unwrap();
@@ -169,11 +162,11 @@ async fn success_delete_collab_test() {
   .unwrap();
 
   let error = c
-    .get_collab(QueryCollabParams {
-      object_id,
-      workspace_id,
-      collab_type: CollabType::Document,
-    })
+    .get_collab(QueryCollabParams::new(
+      &object_id,
+      CollabType::Document,
+      &workspace_id,
+    ))
     .await
     .unwrap_err();
 
@@ -185,11 +178,9 @@ async fn fail_insert_collab_with_empty_payload_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
   let error = c
-    .create_collab(InsertCollabParams::new(
-      Uuid::new_v4().to_string(),
-      CollabType::Document,
-      vec![],
+    .create_collab(CreateCollabParams::new(
       workspace_id,
+      CollabParams::new(Uuid::new_v4(), CollabType::Document, vec![]),
     ))
     .await
     .unwrap_err();
@@ -203,11 +194,9 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let workspace_id = Uuid::new_v4().to_string();
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let error = c
-    .create_collab(InsertCollabParams::new(
-      Uuid::new_v4().to_string(),
-      CollabType::Document,
-      raw_data.clone(),
+    .create_collab(CreateCollabParams::new(
       workspace_id,
+      CollabParams::new(Uuid::new_v4(), CollabType::Document, raw_data.clone()),
     ))
     .await
     .unwrap_err();

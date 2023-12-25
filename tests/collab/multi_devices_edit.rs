@@ -38,11 +38,11 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
   // it will return RecordNotFound error when trying to get the collab from the server
   let err = test_client
     .api_client
-    .get_collab(QueryCollabParams {
-      object_id: object_id.clone(),
-      workspace_id: workspace_id.clone(),
-      collab_type: collab_type.clone(),
-    })
+    .get_collab(QueryCollabParams::new(
+      &object_id,
+      collab_type.clone(),
+      &workspace_id,
+    ))
     .await
     .unwrap_err();
   assert!(err.is_record_not_found());
@@ -79,7 +79,7 @@ async fn edit_collab_with_different_devices_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // client 1 edit the collab
@@ -128,7 +128,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
 
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   // add client 2 as a member of the collab

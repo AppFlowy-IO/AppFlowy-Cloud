@@ -1,5 +1,6 @@
 use client_api::Client;
 
+mod collab_curd_test;
 mod edit_permission;
 mod member_crud;
 mod multi_devices_edit;

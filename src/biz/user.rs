@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, InsertCollabParams,
+  AFAccessLevel, AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, CollabParams,
 };
 
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
@@ -111,11 +111,12 @@ where
       insert_into_af_collab(
         &mut txn,
         &new_uid,
-        &InsertCollabParams {
+        &workspace_id,
+        &CollabParams {
           object_id,
           encoded_collab_v1,
-          workspace_id: workspace_id.clone(),
           collab_type: template.object_type,
+          override_if_exist: false,
         },
       )
       .await?;

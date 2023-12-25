@@ -58,7 +58,7 @@ async fn realtime_write_single_collab_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = test_client
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
   test_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
@@ -105,7 +105,7 @@ async fn realtime_write_multiple_collab_test() {
     let collab_type = CollabType::Document;
 
     let object_id = test_client
-      .create_collab(&workspace_id, collab_type.clone())
+      .create_and_edit_collab(&workspace_id, collab_type.clone())
       .await;
 
     test_client
@@ -154,7 +154,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
   let workspace_id = old_client.workspace_id().await;
 
   let object_id = old_client
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   old_client
@@ -173,6 +173,11 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .insert("3", "c");
   old_client.wait_object_sync_complete(&object_id).await;
 
+  // The new_client will receive the old_client's edit
+  // The doc will be json!({
+  //   "1": "a",
+  //   "3": "c"
+  // })
   let mut new_client =
     TestClient::new(old_client.device_id.clone(), old_client.user.clone(), true).await;
   new_client
@@ -231,7 +236,7 @@ async fn two_direction_peer_sync_test() {
   let mut client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
   let object_id = client_1
-    .create_collab(&workspace_id, collab_type.clone())
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
   let mut client_2 = TestClient::new_user().await;
@@ -282,7 +287,7 @@ async fn multiple_collab_edit_test() {
   let mut client_1 = TestClient::new_user().await;
   let workspace_id_1 = client_1.workspace_id().await;
   let object_id_1 = client_1
-    .create_collab(&workspace_id_1, collab_type.clone())
+    .create_and_edit_collab(&workspace_id_1, collab_type.clone())
     .await;
   client_1
     .open_collab(&workspace_id_1, &object_id_1, collab_type.clone())
@@ -291,7 +296,7 @@ async fn multiple_collab_edit_test() {
   let mut client_2 = TestClient::new_user().await;
   let workspace_id_2 = client_2.workspace_id().await;
   let object_id_2 = client_2
-    .create_collab(&workspace_id_2, collab_type.clone())
+    .create_and_edit_collab(&workspace_id_2, collab_type.clone())
     .await;
   client_2
     .open_collab(&workspace_id_2, &object_id_2, collab_type.clone())

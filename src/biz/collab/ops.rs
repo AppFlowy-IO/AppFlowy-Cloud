@@ -4,8 +4,8 @@ use std::ops::DerefMut;
 
 use app_error::AppError;
 use database_entity::dto::{
-  AFAccessLevel, AFCollabMember, CollabMemberIdentify, DeleteCollabParams,
-  InsertCollabMemberParams, InsertCollabParams, QueryCollabMembers, UpdateCollabMemberParams,
+  AFAccessLevel, AFCollabMember, CollabMemberIdentify, CollabParams, DeleteCollabParams,
+  InsertCollabMemberParams, QueryCollabMembers, UpdateCollabMemberParams,
 };
 
 use realtime::collaborate::{CollabAccessControl, CollabUserId};
@@ -13,47 +13,56 @@ use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;
 
-pub async fn create_collab<C>(
+pub async fn create_collabs<C>(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-  params: &InsertCollabParams,
+  workspace_id: &str,
+  params_list: Vec<CollabParams>,
   collab_access_control: &C,
 ) -> Result<(), AppError>
 where
   C: CollabAccessControl,
 {
-  params.validate()?;
-  if database::collab::collab_exists(pg_pool, &params.object_id).await? {
-    // When calling this function, the caller should have already checked if the collab exists.
-    return Err(AppError::RecordAlreadyExists(format!(
-      "Collab with object_id {} already exists",
-      params.object_id
-    )));
+  for params in params_list {
+    if !params.override_if_exist
+      && database::collab::collab_exists(pg_pool, &params.object_id).await?
+    {
+      // When calling this function, the caller should have already checked if the collab exists.
+      return Err(AppError::RecordAlreadyExists(format!(
+        "Collab with object_id {} already exists",
+        params.object_id
+      )));
+    }
+    collab_access_control
+      .cache_collab_access_level(
+        CollabUserId::UserUuid(user_uuid),
+        &params.object_id,
+        AFAccessLevel::FullAccess,
+      )
+      .await?;
+    upsert_collab(pg_pool, user_uuid, workspace_id, vec![params]).await?;
   }
-  collab_access_control
-    .cache_collab_access_level(
-      CollabUserId::UserUuid(user_uuid),
-      &params.object_id,
-      AFAccessLevel::FullAccess,
-    )
-    .await?;
-  upsert_collab(pg_pool, user_uuid, params).await?;
   Ok(())
 }
 
+/// Upsert a collab
+/// If one of the [CollabParams] validation fails, it will rollback the transaction and return the error
 pub async fn upsert_collab(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-  params: &InsertCollabParams,
+  workspace_id: &str,
+  params: Vec<CollabParams>,
 ) -> Result<(), AppError> {
-  params.validate()?;
-
   let mut tx = pg_pool
     .begin()
     .await
     .context("acquire transaction to upsert collab")?;
   let owner_uid = user::select_uid_from_uuid(tx.deref_mut(), user_uuid).await?;
-  database::collab::insert_into_af_collab(&mut tx, &owner_uid, params).await?;
+  for params in params {
+    params.validate()?;
+    database::collab::insert_into_af_collab(&mut tx, &owner_uid, workspace_id, &params).await?;
+  }
+
   tx.commit()
     .await
     .context("fail to commit the transaction to upsert collab")?;

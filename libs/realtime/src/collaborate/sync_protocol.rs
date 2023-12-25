@@ -13,12 +13,14 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     sv: StateVector,
   ) -> Result<Option<Vec<u8>>, Error> {
     let txn = awareness.doc().transact();
-    let step2_update = txn.encode_state_as_update_v1(&sv);
-    let step1_update = txn.state_vector();
+    let client_step2_update = txn.encode_state_as_update_v1(&sv);
+
+    // Retrieve the latest document state from the client after they return online from offline editing.
+    let server_step1_update = txn.state_vector();
 
     let mut encoder = EncoderV1::new();
-    Message::Sync(SyncMessage::SyncStep2(step2_update)).encode(&mut encoder);
-    Message::Sync(SyncMessage::SyncStep1(step1_update)).encode(&mut encoder);
+    Message::Sync(SyncMessage::SyncStep2(client_step2_update)).encode(&mut encoder);
+    Message::Sync(SyncMessage::SyncStep1(server_step1_update)).encode(&mut encoder);
     Ok(Some(encoder.to_vec()))
   }
 

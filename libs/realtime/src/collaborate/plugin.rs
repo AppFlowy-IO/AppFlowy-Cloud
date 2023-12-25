@@ -15,7 +15,7 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{
-  AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
+  AFAccessLevel, CollabParams, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
 };
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
@@ -84,11 +84,9 @@ where
           )
           .await;
 
-        let params = CreateCollabParams::from_raw_data(
-          object_id.to_string(),
-          self.collab_type.clone(),
-          encoded_collab_v1,
+        let params = CreateCollabParams::new(
           &self.workspace_id,
+          CollabParams::new(object_id, self.collab_type.clone(), encoded_collab_v1),
         );
 
         self
@@ -266,11 +264,9 @@ where
       },
     };
 
-    let params = CreateCollabParams::from_raw_data(
-      object_id.to_string(),
-      self.collab_type.clone(),
-      encoded_collab_v1,
+    let params = CreateCollabParams::new(
       &self.workspace_id,
+      CollabParams::new(object_id, self.collab_type.clone(), encoded_collab_v1),
     );
 
     let storage = self.storage.clone();

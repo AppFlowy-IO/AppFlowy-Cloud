@@ -1,5 +1,6 @@
 use crate::util::test_client::TestClient;
 use app_error::ErrorCode;
+use assert_json_diff::assert_json_include;
 use collab_entity::CollabType;
 use database_entity::dto::{CollabParams, CreateCollabParams, QueryCollab};
 use serde::Serialize;
@@ -30,6 +31,7 @@ async fn batch_insert_collab_success_test() {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: vec![0, 200],
       collab_type: CollabType::Document,
+      override_if_exist: false,
     })
     .collect::<Vec<_>>();
 
@@ -68,7 +70,7 @@ async fn create_collab_params_compatibility_serde_test() {
     serde_json::from_value::<CreateCollabParams>(old_version_value.clone()).unwrap();
 
   let new_version_value = serde_json::to_value(new_version_create_params.clone()).unwrap();
-  assert_eq!(old_version_value, new_version_value);
+  assert_json_include!(actual: new_version_value.clone(), expected: old_version_value.clone());
 
   assert_eq!(new_version_create_params.object_id, "object_id".to_string());
   assert_eq!(new_version_create_params.encoded_collab_v1, vec![0, 200]);

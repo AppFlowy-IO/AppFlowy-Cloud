@@ -62,6 +62,29 @@ jobs:
          envsubst < kubernetes/templates/admin-frontend-deployment.yaml | tee deployed/admin-frontend-deployment.yaml | kubectl apply -f -
          envsubst < kubernetes/templates/admin-frontend-service.yaml | tee deployed/admin-frontend-service.yaml | kubectl apply -f -
 
+         # wait until
+         kubectl get pods --field-selector=status.phase!=Running | grep -v "STATUS" | wc -l
+
+         # wait for all pods to be ready
+         tried=0
+         while true; do
+           if [ $tried -eq 5 ]; then
+             echo "Waited too long for all pods to be ready"
+             exit 1
+           fi
+
+           non_running_pods=$(kubectl get pods --field-selector=status.phase!=Running | grep -v STATUS | wc -l)
+           if [ $non_running_pods -eq 0 ]; then
+             echo "All pods are ready."
+             exit 0
+           else
+             echo "Waiting for all pods to be ready ..."
+             kubectl get pods
+             tried=$((tried + 1))
+             sleep 5
+           fi
+         done
+
      - name: delete built images
        run: |
          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)

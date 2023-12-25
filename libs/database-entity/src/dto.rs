@@ -24,6 +24,13 @@ impl CreateCollabParams {
   pub fn split(self) -> (CollabParams, String) {
     (self.inner, self.workspace_id)
   }
+
+  pub fn new<T: ToString>(workspace_id: T, params: CollabParams) -> Self {
+    Self {
+      inner: params,
+      workspace_id: workspace_id.to_string(),
+    }
+  }
 }
 
 impl Deref for CreateCollabParams {
@@ -41,6 +48,30 @@ pub struct CollabParams {
   #[validate(custom = "validate_not_empty_payload")]
   pub encoded_collab_v1: Vec<u8>,
   pub collab_type: CollabType,
+  /// Determine whether to override the collab if it exists. Default is false.
+  #[serde(default)]
+  pub override_if_exist: bool,
+}
+
+impl CollabParams {
+  pub fn new<T: ToString>(
+    object_id: T,
+    collab_type: CollabType,
+    encoded_collab_v1: Vec<u8>,
+  ) -> Self {
+    let object_id = object_id.to_string();
+    Self {
+      object_id,
+      collab_type,
+      encoded_collab_v1,
+      override_if_exist: false,
+    }
+  }
+
+  pub fn override_collab_if_exist(mut self, override_if_exist: bool) -> Self {
+    self.override_if_exist = override_if_exist;
+    self
+  }
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -48,43 +79,6 @@ pub struct BatchCreateCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   pub params_list: Vec<CollabParams>,
-}
-
-impl CreateCollabParams {
-  pub fn new<T: ToString>(
-    object_id: T,
-    collab_type: CollabType,
-    encoded_collab_v1: Vec<u8>,
-    workspace_id: String,
-  ) -> Self {
-    let object_id = object_id.to_string();
-    let params = CollabParams {
-      object_id,
-      collab_type,
-      encoded_collab_v1,
-    };
-    Self {
-      inner: params,
-      workspace_id,
-    }
-  }
-  pub fn from_raw_data(
-    object_id: String,
-    collab_type: CollabType,
-    encoded_collab_v1: Vec<u8>,
-    workspace_id: &str,
-  ) -> Self {
-    let workspace_id = workspace_id.to_string();
-    let params = CollabParams {
-      object_id,
-      collab_type,
-      encoded_collab_v1,
-    };
-    Self {
-      inner: params,
-      workspace_id,
-    }
-  }
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

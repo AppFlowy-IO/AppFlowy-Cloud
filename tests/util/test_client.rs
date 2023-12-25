@@ -418,10 +418,8 @@ impl TestClient {
     self
       .api_client
       .create_collab(CreateCollabParams::new(
-        &object_id,
-        collab_type.clone(),
-        encoded_collab_v1,
         workspace_id.to_string(),
+        CollabParams::new(&object_id, collab_type.clone(), encoded_collab_v1),
       ))
       .await
       .unwrap();

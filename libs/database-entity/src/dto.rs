@@ -12,45 +12,73 @@ use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct InsertCollabParams {
+pub struct CreateCollabParams {
+  #[serde(flatten)]
+  #[validate]
+  inner: CollabParams,
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+}
+
+impl CreateCollabParams {
+  pub fn split(self) -> (CollabParams, String) {
+    (self.inner, self.workspace_id)
+  }
+
+  pub fn new<T: ToString>(workspace_id: T, params: CollabParams) -> Self {
+    Self {
+      inner: params,
+      workspace_id: workspace_id.to_string(),
+    }
+  }
+}
+
+impl Deref for CreateCollabParams {
+  type Target = CollabParams;
+
+  fn deref(&self) -> &Self::Target {
+    &self.inner
+  }
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   #[validate(custom = "validate_not_empty_payload")]
   pub encoded_collab_v1: Vec<u8>,
-  #[validate(custom = "validate_not_empty_str")]
-  pub workspace_id: String,
   pub collab_type: CollabType,
+  /// Determine whether to override the collab if it exists. Default is false.
+  #[serde(default)]
+  pub override_if_exist: bool,
 }
 
-impl InsertCollabParams {
+impl CollabParams {
   pub fn new<T: ToString>(
     object_id: T,
     collab_type: CollabType,
     encoded_collab_v1: Vec<u8>,
-    workspace_id: String,
   ) -> Self {
     let object_id = object_id.to_string();
     Self {
       object_id,
       collab_type,
       encoded_collab_v1,
-      workspace_id,
+      override_if_exist: false,
     }
   }
-  pub fn from_raw_data(
-    object_id: String,
-    collab_type: CollabType,
-    encoded_collab_v1: Vec<u8>,
-    workspace_id: &str,
-  ) -> Self {
-    let workspace_id = workspace_id.to_string();
-    Self {
-      object_id,
-      collab_type,
-      encoded_collab_v1,
-      workspace_id,
-    }
+
+  pub fn override_collab_if_exist(mut self, override_if_exist: bool) -> Self {
+    self.override_if_exist = override_if_exist;
+    self
   }
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct BatchCreateCollabParams {
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+  pub params_list: Vec<CollabParams>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -100,22 +128,52 @@ pub struct QuerySnapshotParams {
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabParams {
   #[validate(custom = "validate_not_empty_str")]
-  pub object_id: String,
   pub workspace_id: String,
-  pub collab_type: CollabType,
+
+  #[serde(flatten)]
+  #[validate]
+  pub inner: QueryCollab,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BatchQueryCollabParams(pub Vec<BatchQueryCollab>);
+impl QueryCollabParams {
+  pub fn new<T1: ToString, T2: ToString>(
+    object_id: T1,
+    collab_type: CollabType,
+    workspace_id: T2,
+  ) -> Self {
+    let workspace_id = workspace_id.to_string();
+    let object_id = object_id.to_string();
+    let inner = QueryCollab {
+      object_id,
+      collab_type,
+    };
+    Self {
+      workspace_id,
+      inner,
+    }
+  }
+}
+
+impl Deref for QueryCollabParams {
+  type Target = QueryCollab;
+
+  fn deref(&self) -> &Self::Target {
+    &self.inner
+  }
+}
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct BatchQueryCollab {
+pub struct QueryCollab {
   #[validate(custom = "validate_not_empty_str")]
   pub object_id: String,
   pub collab_type: CollabType,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchQueryCollabParams(pub Vec<QueryCollab>);
+
 impl Deref for BatchQueryCollabParams {
-  type Target = Vec<BatchQueryCollab>;
+  type Target = Vec<QueryCollab>;
 
   fn deref(&self) -> &Self::Target {
     &self.0

@@ -17,7 +17,7 @@ async fn create_snapshot_test() {
   let (data, expected) = test_collab_data(test_client.uid().await, &object_id);
 
   test_client
-    .create_collab_with_data(
+    .create_and_edit_collab_with_data(
       object_id.clone(),
       &workspace_id,
       collab_type.clone(),
@@ -50,7 +50,7 @@ async fn get_snapshot_list_test() {
   let (data, _) = test_collab_data(test_client.uid().await, &object_id);
 
   test_client
-    .create_collab_with_data(
+    .create_and_edit_collab_with_data(
       object_id.clone(),
       &workspace_id,
       collab_type.clone(),
@@ -94,7 +94,7 @@ async fn snapshot_limit_test() {
   let (data, _) = test_collab_data(test_client.uid().await, &object_id);
 
   test_client
-    .create_collab_with_data(
+    .create_and_edit_collab_with_data(
       object_id.clone(),
       &workspace_id,
       collab_type.clone(),

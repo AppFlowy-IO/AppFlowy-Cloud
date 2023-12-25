@@ -162,8 +162,11 @@ pub const MSG_SYNC_UPDATE: u8 = 2;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SyncMessage {
+  /// Sync step 1 message contains the [StateVector] from the remote side
   SyncStep1(StateVector),
+  /// Sync step 2 message contains the encoded [yrs::Update] from the remote side
   SyncStep2(Vec<u8>),
+  /// Update message contains the encoded [yrs::Update] from the remote side
   Update(Vec<u8>),
 }
 

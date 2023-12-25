@@ -167,4 +167,5 @@ with your own in `nginx/ssl/` directory
 
 ## 5. FAQ
 - How do I use a different `postgres`?
-> You can set `APPFLOWY_DATABASE_URL` to another postgres url. The default url is using the postgres in docker compose.
+> To do so, you need set `APPFLOWY_DATABASE_URL` to another postgres url. You also need to set `DATABASE_URL` to use the same postgres database.
+The default url is using the postgres in docker compose, in service `appflowy_cloud` and `gotrue` respectively.

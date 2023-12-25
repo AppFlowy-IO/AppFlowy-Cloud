@@ -24,12 +24,14 @@ where
   C: CollabAccessControl,
 {
   for params in params_list {
-    if database::collab::collab_exists(pg_pool, &params.object_id).await? {
-      // When calling this function, the caller should have already checked if the collab exists.
-      return Err(AppError::RecordAlreadyExists(format!(
-        "Collab with object_id {} already exists",
-        params.object_id
-      )));
+    if !params.override_if_exist {
+      if database::collab::collab_exists(pg_pool, &params.object_id).await? {
+        // When calling this function, the caller should have already checked if the collab exists.
+        return Err(AppError::RecordAlreadyExists(format!(
+          "Collab with object_id {} already exists",
+          params.object_id
+        )));
+      }
     }
     collab_access_control
       .cache_collab_access_level(

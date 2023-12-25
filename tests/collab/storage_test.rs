@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use app_error::ErrorCode;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
+  CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
 use sqlx::types::Uuid;
 
@@ -21,10 +22,8 @@ async fn success_insert_collab_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(CreateCollabParams::new(
-    &object_id,
-    CollabType::Document,
-    encoded_collab_v1,
     workspace_id.clone(),
+    CollabParams::new(&object_id, CollabType::Document, encoded_collab_v1),
   ))
   .await
   .unwrap();
@@ -75,10 +74,8 @@ async fn success_batch_get_collab_test() {
     );
 
     c.create_collab(CreateCollabParams::new(
-      &object_id,
-      collab_type,
-      raw_data.clone(),
       workspace_id.clone(),
+      CollabParams::new(&object_id, collab_type, raw_data.clone()),
     ))
     .await
     .unwrap();
@@ -130,10 +127,8 @@ async fn success_part_batch_get_collab_test() {
         },
       );
       c.create_collab(CreateCollabParams::new(
-        &object_id,
-        collab_type,
-        raw_data.clone(),
         workspace_id.clone(),
+        CollabParams::new(&object_id, collab_type, raw_data.clone()),
       ))
       .await
       .unwrap();
@@ -153,10 +148,8 @@ async fn success_delete_collab_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   c.create_collab(CreateCollabParams::new(
-    object_id.clone(),
-    CollabType::Document,
-    raw_data.clone(),
     workspace_id.clone(),
+    CollabParams::new(&object_id, CollabType::Document, raw_data.clone()),
   ))
   .await
   .unwrap();
@@ -186,10 +179,8 @@ async fn fail_insert_collab_with_empty_payload_test() {
   let workspace_id = workspace_id_from_client(&c).await;
   let error = c
     .create_collab(CreateCollabParams::new(
-      Uuid::new_v4().to_string(),
-      CollabType::Document,
-      vec![],
       workspace_id,
+      CollabParams::new(Uuid::new_v4(), CollabType::Document, vec![]),
     ))
     .await
     .unwrap_err();
@@ -204,10 +195,8 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let error = c
     .create_collab(CreateCollabParams::new(
-      Uuid::new_v4().to_string(),
-      CollabType::Document,
-      raw_data.clone(),
       workspace_id,
+      CollabParams::new(Uuid::new_v4(), CollabType::Document, raw_data.clone()),
     ))
     .await
     .unwrap_err();

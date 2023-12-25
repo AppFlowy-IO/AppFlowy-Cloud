@@ -24,6 +24,7 @@ jobs:
           docker push appflowyinc/admin_frontend:dev
 
   image_deploy:
+    needs: image_build
     runs-on: [test-kube-worker]
     steps:
      - name: Checkout Deployment

@@ -84,6 +84,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Arguments
   ///
   /// * `params` - The parameters required to query a collab object.
+  /// * `force_from_disk` - If `true`, the data will be retrieved from the disk instead of the cache.
   ///
   /// # Returns
   ///
@@ -92,6 +93,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollabV1>;
 
   async fn batch_get_collab(
@@ -152,8 +154,12 @@ where
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollabV1> {
-    self.as_ref().get_collab_encoded_v1(uid, params).await
+    self
+      .as_ref()
+      .get_collab_encoded_v1(uid, params, force_from_disk)
+      .await
   }
 
   async fn batch_get_collab(
@@ -253,6 +259,7 @@ impl CollabStorage for CollabStoragePgImpl {
     &self,
     _uid: &i64,
     params: QueryCollabParams,
+    _force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollabV1> {
     match collab_db_ops::select_blob_from_af_collab(
       &self.pg_pool,

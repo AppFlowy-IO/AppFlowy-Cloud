@@ -310,6 +310,10 @@ impl WSClient {
     self.sender.clone()
   }
 
+  pub fn get_state(&self) -> ConnectState {
+    self.state_notify.lock().state.clone()
+  }
+
   async fn set_state(&self, state: ConnectState) {
     self.state_notify.lock().set_state(state);
   }

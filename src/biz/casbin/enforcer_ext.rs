@@ -35,6 +35,7 @@ pub(crate) async fn enforcer_update(
   }?;
 
   let mut enforcer = enforcer.write().await;
+  // TODO(jireh): if the policy already exists and doesn't need to be updated, return early.
   enforcer_remove(&mut enforcer, uid, obj).await?;
   event!(
     tracing::Level::INFO,

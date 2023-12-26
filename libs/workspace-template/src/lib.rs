@@ -94,6 +94,7 @@ impl WorkspaceTemplateBuilder {
         views: FlattedViews::flatten_views(views),
         favorites: Default::default(),
         recent: Default::default(),
+        trash: Default::default(),
       };
 
       let collab = Arc::new(MutexCollab::new(CollabOrigin::Empty, &workspace_id, vec![]));

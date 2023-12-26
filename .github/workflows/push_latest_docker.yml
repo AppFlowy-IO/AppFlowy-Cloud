@@ -26,10 +26,11 @@ jobs:
 
       - name: Build and Push GoTrue
         run: |
+          export TAG=${GITHUB_REF#refs/*/}
           docker compose build gotrue
-          docker tag appflowy-cloud-gotrue appflowyinc/gotrue:${{ env.GIT_TAG }}
+          docker tag appflowy-cloud-gotrue appflowyinc/gotrue:$TAG
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
-          docker push appflowyinc/gotrue:${{ env.GIT_TAG }}
+          docker push appflowyinc/gotrue:$TAG
           docker push appflowyinc/gotrue:latest
 
   appflowy_cloud_image:

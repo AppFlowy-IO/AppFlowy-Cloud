@@ -20,11 +20,6 @@ env:
 jobs:
   gotrue_image:
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        include:
-          - arch: amd64
-          - arch: arm64
     steps:
       - name: Check out the repository
         uses: actions/checkout@v3

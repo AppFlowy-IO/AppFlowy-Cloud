@@ -17,46 +17,13 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    - In "Key pair (login)," select an existing key pair or create a new one.
    - Review and launch the instance from the Summary panel.
 
-## Installing Docker on Your EC2 Ubuntu Instance
+## Installing Docker Compose on Your EC2 Ubuntu Instance
 
-1. **Update Packages**:
+- Follow the official guide for docker installation on Ubuntu: [docker install guide](https://docs.docker.com/engine/install/ubuntu/#installation-methods)
+- After it's installed, verify the installation:
    ```bash
-   sudo apt update
-   ```
-
-2. **Install Prerequisites**:
-   ```bash
-   sudo apt install apt-transport-https ca-certificates curl software-properties-common
-   ```
-
-3. **Add Docker's Official GPG Key**:
-   ```bash
-   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-   ```
-
-4. **Add Docker Repository**:
-   ```bash
-   sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-   ```
-
-5. **Update Package Database with Docker Packages**:
-   ```bash
-   sudo apt update
-   ```
-
-6. **Install Docker**:
-   ```bash
-   sudo apt install docker-ce
-   ```
-
-7. **Check Docker Status**:
-   ```bash
-   sudo systemctl status docker
-   ```
-
-8. **Add User to Docker Group** (optional, to run Docker commands without `sudo`):
-   ```bash
-   sudo usermod -aG docker ${USER}
+   docker compose version
+   # Docker Compose version v2.21.0
    ```
 
 ## Installing AppFlowy-Cloud
@@ -81,17 +48,21 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    ![img.png](../assets/images/google_callback_url.png)
 
    For detailed setup instructions, refer to the Authentication documentation.
+   By default, no authentication is needed to sign in.
 
-4. **Start AppFlowy Services**:
+4. **Authentication Setup**:
+    Configure `docker-compose.yml` by removing unneeded services such as `tunnel` (cloudflare tunnel). More details: [here](https://github.com/AppFlowy-IO/AppFlowy-Cloud/blob/main/doc/DEPLOYMENT.md#3-optional-services)
+
+5. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
    ```bash
-   docker compose up -d
+   sudo docker compose up -d
    ```
 
-5. **Verify Service Status**:
+6. **Verify Service Status**:
    Check that all services are running:
    ```bash
-   docker ps -a
+   sudo docker ps -a
    ```
 
 ## Post Install

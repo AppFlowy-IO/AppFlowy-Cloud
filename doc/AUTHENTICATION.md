@@ -25,6 +25,7 @@ For example, I create a project that used for localhost development. After creat
 
 ![create_credentials.png](../assets/images/create_google_credentials.png)
 
+Under 'Application type*', select 'Web application'.
 The redirect URI should be `<your host server public ip/hostname>/gotrue/callback`. For example, my host server is `localhost`, so the redirect URI is `http://localhost/gotrue/callback`.
 
 ![create_client.png](../assets/images/create_google_oauth_client_id.png)

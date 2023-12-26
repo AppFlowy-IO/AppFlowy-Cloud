@@ -18,6 +18,20 @@ env:
   LATEST_TAG: latest
 
 jobs:
+  gotrue_image:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Build and Push GoTrue
+        run: |
+          docker compose build gotrue
+          docker tag appflowy-cloud-gotrue appflowyinc/gotrue:${{ env.GIT_TAG }}
+          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
+          docker push appflowyinc/gotrue:${{ env.GIT_TAG }}
+          docker push appflowyinc/gotrue:latest
+
   appflowy_cloud_image:
     runs-on: ubuntu-22.04
     env:
@@ -49,7 +63,7 @@ jobs:
         id: vars
         run: |
           T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
-          echo "GIT_TAG=$T" >> $GITHUB_ENV 
+          echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Extract metadata
         id: meta
@@ -92,7 +106,7 @@ jobs:
         id: vars
         run: |
           T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
-          echo "GIT_TAG=$T" >> $GITHUB_ENV 
+          echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
         uses: Noelware/docker-manifest-action@master
@@ -143,7 +157,7 @@ jobs:
         id: vars
         run: |
           T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
-          echo "GIT_TAG=$T" >> $GITHUB_ENV 
+          echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Extract metadata
         id: meta
@@ -187,7 +201,7 @@ jobs:
         id: vars
         run: |
           T=${GITHUB_REF#refs/*/}   # Remove "refs/*/" prefix from GITHUB_REF
-          echo "GIT_TAG=$T" >> $GITHUB_ENV 
+          echo "GIT_TAG=$T" >> $GITHUB_ENV
 
       - name: Create and push manifest for ${{ matrix.job.image_name }}:version
         uses: Noelware/docker-manifest-action@master

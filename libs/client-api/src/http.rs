@@ -819,7 +819,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "debug", skip_all)]
   pub async fn get_collab(
     &self,
     params: QueryCollabParams,

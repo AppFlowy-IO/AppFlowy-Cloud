@@ -173,7 +173,11 @@ where
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
 
-    match self.storage.get_collab_encoded_v1(&self.uid, params).await {
+    match self
+      .storage
+      .get_collab_encoded_v1(&self.uid, params, true)
+      .await
+    {
       Ok(encoded_collab_v1) => match init_collab_with_raw_data(object_id, &encoded_collab_v1, doc)
         .await
       {

@@ -291,7 +291,7 @@ impl CollabAccessControl for CasbinCollabAccessControl {
 
     access_level.ok_or(AppError::RecordNotFound(format!(
       "collab:{} does not exist or user:{} is not a member",
-      uid, oid
+      oid, uid
     )))
   }
 

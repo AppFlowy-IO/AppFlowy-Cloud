@@ -146,6 +146,7 @@ where
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollabV1> {
     params.validate()?;
     self
@@ -153,12 +154,16 @@ where
       .get_collab_access_level(uid, &params.object_id)
       .await?;
 
-    let collab = self
-      .collab_by_object_id
-      .read()
-      .await
-      .get(&params.object_id)
-      .and_then(|collab| collab.upgrade());
+    let collab = if force_from_disk {
+      None
+    } else {
+      self
+        .collab_by_object_id
+        .read()
+        .await
+        .get(&params.object_id)
+        .and_then(|collab| collab.upgrade())
+    };
 
     match collab {
       None => {
@@ -167,7 +172,7 @@ where
           "Get collab data:{} from disk",
           params.object_id
         );
-        self.inner.get_collab_encoded_v1(uid, params).await
+        self.inner.get_collab_encoded_v1(uid, params, true).await
       },
       Some(collab) => {
         event!(

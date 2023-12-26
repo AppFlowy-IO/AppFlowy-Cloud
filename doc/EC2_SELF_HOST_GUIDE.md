@@ -85,7 +85,7 @@ If you have any questions, please feel free to reach out to us on [Discord](http
 4. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 5. **Verify Service Status**:

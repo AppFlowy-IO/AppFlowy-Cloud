@@ -31,6 +31,7 @@ jobs:
           docker tag appflowy-cloud-gotrue appflowyinc/gotrue:$TAG
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/gotrue:$TAG
+          docker tag appflowy-cloud-gotrue appflowyinc/gotrue:latest
           docker push appflowyinc/gotrue:latest
 
   appflowy_cloud_image:

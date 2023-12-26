@@ -1,4 +1,4 @@
-name: Deployment for Test Environment
+name: Deployment AppFlowy Cloud and Admin Frontend for Kube Environment
 on:
   push:
     branches:
@@ -6,56 +6,84 @@ on:
      - 'test_deploy_*'
 
 jobs:
-  deploy:
-    environment: test.appflowy.cloud
-    runs-on: [self-hosted, test-deploy]
+  image_build:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: Set up env vars
+      - name: build docker images
         run: |
-          cp dev.env .env
-
-          # log level
-          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
-
-          # jwt secret
-          sed -i 's|GOTRUE_JWT_SECRET=.*|GOTRUE_JWT_SECRET=${{ secrets.GOTRUE_JWT_SECRET_TEST }}|' .env
-          # smtp settings
-          sed -i 's|GOTRUE_SMTP_HOST=.*|GOTRUE_SMTP_HOST=smtp.gmail.com|' .env
-          sed -i 's|GOTRUE_SMTP_PORT=.*|GOTRUE_SMTP_PORT=465|' .env
-          sed -i 's|GOTRUE_SMTP_USER=.*|GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER_TEST }}|' .env
-          sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS_TEST }}|' .env
-          sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL_TEST }}|' .env
-          sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
-          # Google OAuth
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*|GOTRUE_EXTERNAL_GOOGLE_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=.*|GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_SECRET=.*|GOTRUE_EXTERNAL_GOOGLE_SECRET=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_SECRET }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI }}|' .env
-          # GitHub OAuth
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_ENABLED=.*|GOTRUE_EXTERNAL_GITHUB_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=.*|GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_GITHUB_CLIENT_ID }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_SECRET=.*|GOTRUE_EXTERNAL_GITHUB_SECRET=${{ secrets.GOTRUE_EXTERNAL_GITHUB_SECRET }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=.*|GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI }}|' .env
-          # Discord OAuth
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_ENABLED=.*|GOTRUE_EXTERNAL_DISCORD_ENABLED=true|' .env
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=.*|GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${{ secrets.GOTRUE_EXTERNAL_DISCORD_CLIENT_ID }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_SECRET=.*|GOTRUE_EXTERNAL_DISCORD_SECRET=${{ secrets.GOTRUE_EXTERNAL_DISCORD_SECRET }}|' .env
-          sed -i 's|GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=.*|GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${{ secrets.GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI }}|' .env
-          # Server Host
-          sed -i 's|API_EXTERNAL_URL=.*|API_EXTERNAL_URL=${{ secrets.API_EXTERNAL_URL_TEST }}|' .env
-
-          # SSL
-          echo "${{ secrets.APPFLOWY_CLOUD_CRT }}" | base64 --decode > ./nginx/ssl/certificate.crt
-          echo "${{ secrets.APPFLOWY_CLOUD_KEY }}" | base64 --decode > ./nginx/ssl/private_key.key
-
-      - name: Disable appflowyinc images
+          docker compose build appflowy_cloud admin_frontend
+      - name: push docker images to docker hub
         run: |
-          sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
-          sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml 
+          docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
+          docker tag appflowyinc/admin_frontend appflowyinc/admin_frontend:${GITHUB_SHA}
+          echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
+          docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
+          docker push appflowyinc/admin_frontend:${GITHUB_SHA}
 
-      - name: Deploy docker-compose
-        run: |
-          docker compose up -d --build --force-recreate
-          docker system prune --force
+  image_deploy:
+    needs: image_build
+    runs-on: [test-kube-worker]
+    steps:
+     - name: Checkout Deployment
+       uses: actions/checkout@v4
+       with:
+         repository: AppFlowy-IO/AppFlowy-Cloud-Deployment
+         token: ${{ secrets.GH_PAT }}
+     - name: apply images
+       run: |
+         # export env var
+
+         source environments/base.env
+         source environments/test.env
+
+         export APPFLOWY_GOTRUE_JWT_SECRET=${{ secrets.TEST_GOTRUE_JWT_SECRET }}
+         export APPFLOWY_S3_ACCESS_KEY=${{ secrets.TEST_APPFLOWY_S3_ACCESS_KEY }}
+         export APPFLOWY_S3_SECRET_KEY=${{ secrets.TEST_APPFLOWY_S3_SECRET_KEY }}
+         export APPFLOWY_GOTRUE_ADMIN_PASSWORD=${{ secrets.TEST_APPFLOWY_GOTRUE_ADMIN_PASSWORD }}
+
+         export ADMIN_FRONTEND_IMAGE=appflowyinc/admin_frontend:${GITHUB_SHA}
+         export APPFLOWY_IMAGE=appflowyinc/appflowy_cloud:${GITHUB_SHA}
+
+         # keep track of final env deployment files
+         mkdir deployed
+
+         # dump all env var
+         env > deployed/.env
+
+         # create config map
+         kubernetes/scripts/env_to_configmap.sh < deployed/.env | tee deployed/appflowy-configmap.yaml | kubectl apply -f -
+
+         # deploy appflowy cloud
+         envsubst < kubernetes/templates/appflowy-cloud-deployment.yaml | tee deployed/appflowy-cloud-deployment.yaml | kubectl apply -f -
+         envsubst < kubernetes/templates/appflowy-cloud-service.yaml | tee deployed/appflowy-cloud-service.yaml | kubectl apply -f -
+
+         # deploy admin_frontend
+         envsubst < kubernetes/templates/admin-frontend-deployment.yaml | tee deployed/admin-frontend-deployment.yaml | kubectl apply -f -
+         envsubst < kubernetes/templates/admin-frontend-service.yaml | tee deployed/admin-frontend-service.yaml | kubectl apply -f -
+
+         # wait for all pods to be ready
+         tried=0
+         while true; do
+           if [ $tried -eq 10 ]; then
+             echo "Waited too long for all pods to be ready"
+             exit 1
+           fi
+
+           non_running_pods=$(kubectl get pods --field-selector=status.phase!=Running | grep -v STATUS | wc -l)
+           if [ $non_running_pods -eq 0 ]; then
+             echo "All pods are ready."
+             exit 0
+           else
+             echo "Waiting for all pods to be ready ..."
+             kubectl get pods
+             tried=$((tried + 1))
+             sleep 5
+           fi
+         done
+
+     - name: delete built images
+       run: |
+         TOKEN=$(curl -s -H "Content-Type: application/json" -X POST -d '{"username": "appflowyinc", "password": "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}"}' https://hub.docker.com/v2/users/login/ | jq -r .token)
+         curl -s -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/appflowy_cloud/tags/${GITHUB_SHA}/
+         curl -s -X DELETE -H "Authorization: JWT ${TOKEN}" https://hub.docker.com/v2/repositories/appflowyinc/admin_frontend/tags/${GITHUB_SHA}/

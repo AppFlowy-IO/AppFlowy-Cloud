@@ -157,8 +157,8 @@ pub async fn insert_into_af_collab(
         tracing::Level::TRACE,
         "did insert new collab row: {}:{}:{}",
         uid,
+        workspace_id,
         params.object_id,
-        workspace_id
       );
     },
   }

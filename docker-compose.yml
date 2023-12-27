@@ -55,6 +55,7 @@ services:
     build:
       context: .
       dockerfile: docker/gotrue.Dockerfile
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     depends_on:
       - postgres
     environment:

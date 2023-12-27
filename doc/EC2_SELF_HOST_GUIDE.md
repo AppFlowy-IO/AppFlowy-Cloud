@@ -37,6 +37,7 @@ If you have any questions, please feel free to reach out to us on [Discord](http
    sudo usermod -aG docker ${USER}
    sudo systemctl restart docker
    ```
+- Logout(exit/Ctrl-D) and log back in to take effect.
 
 ## Installing AppFlowy-Cloud
 

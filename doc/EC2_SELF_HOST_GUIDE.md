@@ -19,11 +19,23 @@ If you have any questions, please feel free to reach out to us on [Discord](http
 
 ## Installing Docker Compose on Your EC2 Ubuntu Instance
 
-- Follow the official guide for docker installation on Ubuntu: [docker install guide](https://docs.docker.com/engine/install/ubuntu/#installation-methods)
-- After it's installed, verify the installation:
+1. **Follow the official guide for docker installation on Ubuntu: [docker install guide](https://docs.docker.com/engine/install/ubuntu/#installation-methods)**
+
+2. **After it's installed, verify the installation**
    ```bash
    docker compose version
    # Docker Compose version v2.21.0
+   ```
+
+3. **Ensure that the docker daemon is running**
+   ```bash
+   sudo systemctl enable --now docker
+   ```
+
+4. **Add current user to Docker Group (optional, to run Docker commands without `sudo`)**
+   ```bash
+   sudo usermod -aG docker ${USER}
+   sudo systemctl restart docker
    ```
 
 ## Installing AppFlowy-Cloud
@@ -56,13 +68,13 @@ If you have any questions, please feel free to reach out to us on [Discord](http
 5. **Start AppFlowy Services**:
    Launch the services using Docker Compose:
    ```bash
-   sudo docker compose up -d
+   docker compose up -d
    ```
 
 6. **Verify Service Status**:
    Check that all services are running:
    ```bash
-   sudo docker ps -a
+   docker ps -a
    ```
 
 ## Post Install

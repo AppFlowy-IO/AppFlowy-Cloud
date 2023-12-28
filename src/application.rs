@@ -294,7 +294,7 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
   let region = {
     match s3_setting.use_minio {
       true => s3::Region::Custom {
-        region: "".to_owned(),
+        region: s3_setting.region.to_owned(),
         endpoint: s3_setting.minio_url.to_owned(),
       },
       false => s3_setting

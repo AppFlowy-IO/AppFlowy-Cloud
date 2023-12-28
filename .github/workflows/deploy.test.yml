@@ -51,9 +51,6 @@ jobs:
          # dump all env var
          env > deployed/.env
 
-         # create config map
-         kubernetes/scripts/env_to_configmap.sh < deployed/.env | tee deployed/appflowy-configmap.yaml | kubectl apply -f -
-
          # deploy appflowy cloud
          envsubst < kubernetes/templates/appflowy-cloud-deployment.yaml | tee deployed/appflowy-cloud-deployment.yaml | kubectl apply -f -
          envsubst < kubernetes/templates/appflowy-cloud-service.yaml | tee deployed/appflowy-cloud-service.yaml | kubectl apply -f -

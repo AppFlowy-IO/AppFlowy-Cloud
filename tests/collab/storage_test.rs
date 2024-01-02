@@ -16,7 +16,7 @@ use sqlx::types::Uuid;
 async fn success_insert_collab_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let raw_data = "hello world".to_string().as_bytes().to_vec();
-  let encoded_collab_v1 = EncodedCollab::new(vec![], raw_data.clone())
+  let encoded_collab_v1 = EncodedCollab::new_v1(vec![], raw_data.clone())
     .encode_to_bytes()
     .unwrap();
   let workspace_id = workspace_id_from_client(&c).await;

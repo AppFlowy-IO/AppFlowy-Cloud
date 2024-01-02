@@ -316,6 +316,7 @@ impl TestClient {
     self.api_client.get_profile().await.unwrap().uid
   }
 
+  #[allow(dead_code)]
   pub(crate) async fn get_snapshot(
     &self,
     workspace_id: &str,

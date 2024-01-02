@@ -13,7 +13,7 @@ use crate::biz::casbin::access_control::{CasbinCollabAccessControl, CasbinWorksp
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
 use anyhow::Context;
 use app_error::AppError;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use sqlx::PgPool;
 use std::{
   collections::HashMap,
@@ -147,7 +147,7 @@ where
     uid: &i64,
     params: QueryCollabParams,
     force_from_disk: bool,
-  ) -> DatabaseResult<EncodedCollabV1> {
+  ) -> DatabaseResult<EncodedCollab> {
     params.validate()?;
     self
       .access_control

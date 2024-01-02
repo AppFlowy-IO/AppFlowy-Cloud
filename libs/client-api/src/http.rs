@@ -22,7 +22,7 @@ use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
-use realtime_entity::EncodedCollabV1;
+use realtime_entity::EncodedCollab;
 use reqwest::header;
 
 use collab_entity::CollabType;
@@ -828,7 +828,7 @@ impl Client {
   pub async fn get_collab(
     &self,
     params: QueryCollabParams,
-  ) -> Result<EncodedCollabV1, AppResponseError> {
+  ) -> Result<EncodedCollab, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -840,7 +840,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<EncodedCollabV1>::from_response(resp)
+    AppResponse::<EncodedCollab>::from_response(resp)
       .await?
       .into_data()
   }

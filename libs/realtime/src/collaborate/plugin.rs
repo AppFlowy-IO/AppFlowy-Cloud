@@ -8,7 +8,7 @@ use crate::collaborate::{CollabAccessControl, CollabUserId};
 use anyhow::anyhow;
 use collab::core::awareness::Awareness;
 use collab::core::collab::TransactionMutExt;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::{CollabPlugin, Doc, TransactionMut};
@@ -144,7 +144,7 @@ where
 
 async fn init_collab_with_raw_data(
   oid: &str,
-  encoded_collab: &EncodedCollabV1,
+  encoded_collab: &EncodedCollab,
   doc: &Doc,
 ) -> Result<(), RealtimeError> {
   if encoded_collab.doc_state.is_empty() {
@@ -286,14 +286,14 @@ where
   }
 }
 
-async fn get_latest_snapshot<S>(object_id: &str, storage: &S) -> Option<EncodedCollabV1>
+async fn get_latest_snapshot<S>(object_id: &str, storage: &S) -> Option<EncodedCollab>
 where
   S: CollabStorage,
 {
   let metas = storage.get_collab_snapshot_list(object_id).await.ok()?;
   let meta = metas.0.first()?;
   let snapshot_data = storage.get_collab_snapshot(&meta.snapshot_id).await.ok()?;
-  EncodedCollabV1::decode_from_bytes(&snapshot_data.encoded_collab_v1).ok()
+  EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).ok()
 }
 
 struct CollabEditState {

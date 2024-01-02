@@ -10,7 +10,7 @@ use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use app_error::AppError;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
@@ -285,7 +285,7 @@ async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<EncodedCollabV1>>> {
+) -> Result<Json<AppResponse<EncodedCollab>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppResponseError::from)?;

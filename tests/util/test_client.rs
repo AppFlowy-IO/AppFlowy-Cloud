@@ -5,7 +5,7 @@ use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
@@ -396,7 +396,7 @@ impl TestClient {
     object_id: String,
     workspace_id: &str,
     collab_type: CollabType,
-    encoded_collab_v1: Option<EncodedCollabV1>,
+    encoded_collab_v1: Option<EncodedCollab>,
   ) {
     // Subscribe to object
     let handler = self.ws_client.subscribe_collab(object_id.clone()).unwrap();
@@ -530,7 +530,7 @@ pub async fn assert_server_snapshot(
         match &result {
           Ok(snapshot_data) => {
           let encoded_collab_v1 =
-            EncodedCollabV1::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
+            EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
           let json = Collab::new_with_raw_data(
             CollabOrigin::Empty,
             &object_id,

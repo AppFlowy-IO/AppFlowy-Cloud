@@ -5,7 +5,7 @@ use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 pub use anyhow::Result;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use collab_folder::{
@@ -27,7 +27,7 @@ pub trait WorkspaceTemplate {
 pub struct TemplateData {
   pub object_id: String,
   pub object_type: CollabType,
-  pub object_data: EncodedCollabV1,
+  pub object_data: EncodedCollab,
 }
 
 pub type WorkspaceTemplateHandlers = HashMap<ViewLayout, Arc<dyn WorkspaceTemplate + Send + Sync>>;

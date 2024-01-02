@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 thiserror = "1.0.47"
-serde_repr = "0.1.16"
+serde_repr = "0.1.17"
 serde.workspace = true
 anyhow = "1.0.75"
 uuid = { version = "1.4.1", features = ["v4"] }

@@ -29,7 +29,7 @@ async fn batch_insert_collab_success_test() {
   let params_list = (0..5)
     .map(|_| CollabParams {
       object_id: Uuid::new_v4().to_string(),
-      encoded_collab_v1: vec![0, 200],
+      encoded_collab_v1: vec![0u8; 1024 * 1024],
       collab_type: CollabType::Document,
       override_if_exist: false,
     })

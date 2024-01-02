@@ -729,10 +729,15 @@ impl Client {
       workspace_id: workspace_id.to_string(),
       params_list: params,
     };
+
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&payload)
+      .body(
+        payload
+          .to_bytes()
+          .map_err(|err| AppError::Internal(err.into()))?,
+      )
       .send()
       .await?;
     log_request_id(&resp);

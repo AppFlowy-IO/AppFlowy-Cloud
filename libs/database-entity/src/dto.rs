@@ -31,6 +31,13 @@ impl CreateCollabParams {
       workspace_id: workspace_id.to_string(),
     }
   }
+
+  pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+    bincode::serialize(self)
+  }
+  pub fn from_bytes(bytes: &[u8]) -> Result<Self, bincode::Error> {
+    bincode::deserialize(bytes)
+  }
 }
 
 impl Deref for CreateCollabParams {
@@ -79,6 +86,16 @@ pub struct BatchCreateCollabParams {
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
   pub params_list: Vec<CollabParams>,
+}
+
+impl BatchCreateCollabParams {
+  pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+    bincode::serialize(self)
+  }
+
+  pub fn from_bytes(bytes: &[u8]) -> Result<Self, bincode::Error> {
+    bincode::deserialize(bytes)
+  }
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

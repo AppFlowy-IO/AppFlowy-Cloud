@@ -253,14 +253,18 @@ async fn create_collab_handler(
 #[instrument(skip(state, payload), err)]
 async fn batch_create_collab_handler(
   user_uuid: UserUuid,
-  payload: Json<BatchCreateCollabParams>,
+  payload: Bytes,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
+  let payload = BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
+    AppError::InvalidRequest(format!("Failed to parse BatchCreateCollabParams: {}", err))
+  })?;
+
   payload.validate().map_err(AppError::from)?;
   let BatchCreateCollabParams {
     workspace_id,
     params_list,
-  } = payload.into_inner();
+  } = payload;
 
   if params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());

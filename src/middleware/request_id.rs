@@ -1,6 +1,6 @@
 use actix_http::header::HeaderName;
 use std::future::{ready, Ready};
-use tracing::{Instrument, Level};
+use tracing::{span, Instrument, Level};
 
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
@@ -49,22 +49,22 @@ where
       let fut = self.service.call(req);
       Box::pin(fut)
     } else {
-      let request_id = match get_request_id(&req) {
-        Some(request_id) => request_id,
-        None => {
-          let request_id = uuid::Uuid::new_v4().to_string();
-          if let Ok(header_value) = HeaderValue::from_str(&request_id) {
-            req
-              .headers_mut()
-              .insert(HeaderName::from_static(X_REQUEST_ID), header_value);
-          }
-          request_id
-        },
+      let request_id = get_request_id(&req).unwrap_or_else(|| {
+        let request_id = uuid::Uuid::new_v4().to_string();
+        if let Ok(header_value) = HeaderValue::from_str(&request_id) {
+          req
+            .headers_mut()
+            .insert(HeaderName::from_static(X_REQUEST_ID), header_value);
+        }
+        request_id
+      });
+
+      let span = match get_payload_size(&req) {
+        Some(size) => span!(Level::INFO, "request", request_id = %request_id, payload_size = size),
+        None => span!(Level::INFO, "request", request_id = %request_id),
       };
 
-      let span = tracing::span!(Level::INFO, "request_id", request_id = %request_id);
       let fut = self.service.call(req);
-
       Box::pin(async move {
         let mut res = fut.instrument(span).await?;
 
@@ -91,4 +91,12 @@ pub fn get_request_id(req: &ServiceRequest) -> Option<String> {
     },
     None => None,
   }
+}
+
+fn get_payload_size(req: &ServiceRequest) -> Option<usize> {
+  req
+    .headers()
+    .get("content-length")
+    .and_then(|val| val.to_str().ok())
+    .and_then(|val| val.parse::<usize>().ok())
 }

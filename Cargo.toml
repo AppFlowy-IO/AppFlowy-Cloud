@@ -156,10 +156,10 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

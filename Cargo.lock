@@ -1282,7 +1282,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9#efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1302,7 +1302,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9#efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
 dependencies = [
  "anyhow",
  "collab",
@@ -1320,7 +1320,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9#efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1334,7 +1334,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9#efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1353,7 +1353,7 @@ dependencies = [
 [[package]]
 name = "collab-persistence"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9#efc4ab0d2b5d9babe0c3aeecd1623b4bf6be48c9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -8,7 +8,7 @@ use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use std::collections::HashMap;
 
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::task::spawn_blocking;
@@ -188,7 +188,7 @@ where
     f(&collab);
   }
 
-  pub fn encode_v1(&self) -> EncodedCollabV1 {
+  pub fn encode_v1(&self) -> EncodedCollab {
     self.collab.lock().encode_collab_v1()
   }
 

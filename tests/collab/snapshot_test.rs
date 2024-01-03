@@ -1,5 +1,5 @@
 use crate::util::test_client::{assert_server_snapshot, TestClient};
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use serde_json::{json, Value};
@@ -119,7 +119,7 @@ async fn snapshot_limit_test() {
   assert_eq!(list.len() as i64, COLLAB_SNAPSHOT_LIMIT);
 }
 
-fn test_collab_data(uid: i64, oid: &str) -> (EncodedCollabV1, Value) {
+fn test_collab_data(uid: i64, oid: &str) -> (EncodedCollab, Value) {
   let collab = Collab::new(uid, oid, "fake_device_id", vec![]);
   collab.with_origin_transact_mut(|txn| {
     collab.insert_with_txn(txn, "0", "a");

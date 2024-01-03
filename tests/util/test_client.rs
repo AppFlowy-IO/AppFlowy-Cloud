@@ -5,7 +5,7 @@ use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
@@ -132,10 +132,10 @@ impl TestClient {
       .await
       .unwrap();
 
-    Folder::from_collab_raw_data(
+    Folder::from_collab_doc_state(
       uid,
       CollabOrigin::Empty,
-      vec![data.doc_state.to_vec()],
+      data.doc_state.to_vec(),
       &workspace_id,
       vec![],
     )
@@ -396,7 +396,7 @@ impl TestClient {
     object_id: String,
     workspace_id: &str,
     collab_type: CollabType,
-    encoded_collab_v1: Option<EncodedCollabV1>,
+    encoded_collab_v1: Option<EncodedCollab>,
   ) {
     // Subscribe to object
     let handler = self.ws_client.subscribe_collab(object_id.clone()).unwrap();
@@ -405,10 +405,10 @@ impl TestClient {
     let collab = match encoded_collab_v1 {
       None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![])),
       Some(data) => Arc::new(
-        MutexCollab::new_with_raw_data(
+        MutexCollab::new_with_doc_state(
           origin.clone(),
           &object_id,
-          vec![data.doc_state.to_vec()],
+          data.doc_state.to_vec(),
           vec![],
         )
         .unwrap(),
@@ -530,11 +530,11 @@ pub async fn assert_server_snapshot(
         match &result {
           Ok(snapshot_data) => {
           let encoded_collab_v1 =
-            EncodedCollabV1::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let json = Collab::new_with_raw_data(
+            EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
+          let json = Collab::new_with_doc_state(
             CollabOrigin::Empty,
             &object_id,
-            vec![encoded_collab_v1.doc_state.to_vec()],
+            encoded_collab_v1.doc_state.to_vec(),
             vec![],
           )
           .unwrap()
@@ -586,7 +586,7 @@ pub async fn assert_server_collab(
         retry_count += 1;
         match &result {
           Ok(data) => {
-            let json = Collab::new_with_raw_data(CollabOrigin::Empty, &object_id, vec![data.doc_state.to_vec()], vec![]).unwrap().to_json_value();
+            let json = Collab::new_with_doc_state(CollabOrigin::Empty, &object_id, data.doc_state.to_vec(), vec![]).unwrap().to_json_value();
             if retry_count > 10 {
               dbg!(workspace_id, object_id);
               assert_json_eq!(json, expected);
@@ -697,10 +697,10 @@ pub async fn get_collab_json_from_server(
     .await
     .unwrap();
 
-  Collab::new_with_raw_data(
+  Collab::new_with_doc_state(
     CollabOrigin::Empty,
     object_id,
-    vec![bytes.doc_state.to_vec()],
+    bytes.doc_state.to_vec(),
     vec![],
   )
   .unwrap()

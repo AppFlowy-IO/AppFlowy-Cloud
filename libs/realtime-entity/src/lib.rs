@@ -11,4 +11,4 @@ pub mod user;
 // ```
 pub mod realtime_proto;
 
-pub use collab::core::collab_plugin::EncodedCollabV1;
+pub use collab::core::collab_plugin::EncodedCollab;

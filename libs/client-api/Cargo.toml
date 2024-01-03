@@ -9,7 +9,7 @@ edition = "2021"
 reqwest = { version = "0.11.20", default-features = false, features = ["json","multipart"] }
 anyhow = "1.0.75"
 serde_json.workspace = true
-serde_repr = "0.1.16"
+serde_repr = "0.1.17"
 gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
 shared_entity = { path = "../shared-entity" }

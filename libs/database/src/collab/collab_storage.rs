@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context};
 use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollabV1;
+use collab::core::collab_plugin::EncodedCollab;
 
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams,
@@ -94,7 +94,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     uid: &i64,
     params: QueryCollabParams,
     force_from_disk: bool,
-  ) -> DatabaseResult<EncodedCollabV1>;
+  ) -> DatabaseResult<EncodedCollab>;
 
   async fn batch_get_collab(
     &self,
@@ -155,7 +155,7 @@ where
     uid: &i64,
     params: QueryCollabParams,
     force_from_disk: bool,
-  ) -> DatabaseResult<EncodedCollabV1> {
+  ) -> DatabaseResult<EncodedCollab> {
     self
       .as_ref()
       .get_collab_encoded_v1(uid, params, force_from_disk)
@@ -260,7 +260,7 @@ impl CollabStorage for CollabStoragePgImpl {
     _uid: &i64,
     params: QueryCollabParams,
     _force_from_disk: bool,
-  ) -> DatabaseResult<EncodedCollabV1> {
+  ) -> DatabaseResult<EncodedCollab> {
     match collab_db_ops::select_blob_from_af_collab(
       &self.pg_pool,
       &params.collab_type,
@@ -268,7 +268,7 @@ impl CollabStorage for CollabStoragePgImpl {
     )
     .await
     {
-      Ok(data) => EncodedCollabV1::decode_from_bytes(&data).map_err(|err| {
+      Ok(data) => EncodedCollab::decode_from_bytes(&data).map_err(|err| {
         AppError::Internal(anyhow!("fail to decode data to EncodedDocV1: {:?}", err))
       }),
       Err(e) => match e {

@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0.75"
 serde = "1.0.188"
 serde_json.workspace = true
-serde_repr = "0.1.16"
+serde_repr = "0.1.17"
 thiserror = "1.0.47"
 reqwest = "0.11.18"
 uuid = { version = "1.3.3", features = ["v4"] }

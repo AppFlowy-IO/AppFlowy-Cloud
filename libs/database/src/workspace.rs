@@ -1,18 +1,16 @@
 use database_entity::dto::AFRole;
 use futures_util::stream::BoxStream;
 use sqlx::{
-  Executor,
-  PgPool, Postgres, Transaction, types::{uuid, Uuid},
+  types::{uuid, Uuid},
+  Executor, PgPool, Postgres, Transaction,
 };
 use std::ops::DerefMut;
 use tracing::{event, instrument};
 
+use crate::pg_row::AFWorkspaceMemberPermRow;
+use crate::pg_row::{AFPermissionRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
 use crate::user::select_uid_from_email;
 use app_error::AppError;
-use crate::pg_row::{
-  AFPermissionRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow,
-};
-use crate::pg_row::AFWorkspaceMemberPermRow;
 
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.

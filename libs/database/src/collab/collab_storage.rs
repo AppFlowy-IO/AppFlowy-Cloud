@@ -89,7 +89,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
-  async fn get_collab_encoded_v1(
+  async fn get_collab_encoded(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -150,7 +150,7 @@ where
     self.as_ref().insert_collab(uid, params).await
   }
 
-  async fn get_collab_encoded_v1(
+  async fn get_collab_encoded(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -158,7 +158,7 @@ where
   ) -> DatabaseResult<EncodedCollab> {
     self
       .as_ref()
-      .get_collab_encoded_v1(uid, params, force_from_disk)
+      .get_collab_encoded(uid, params, force_from_disk)
       .await
   }
 
@@ -255,7 +255,7 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(())
   }
 
-  async fn get_collab_encoded_v1(
+  async fn get_collab_encoded(
     &self,
     _uid: &i64,
     params: QueryCollabParams,
@@ -268,9 +268,8 @@ impl CollabStorage for CollabStoragePgImpl {
     )
     .await
     {
-      Ok(data) => EncodedCollab::decode_from_bytes(&data).map_err(|err| {
-        AppError::Internal(anyhow!("fail to decode data to EncodedDocV1: {:?}", err))
-      }),
+      Ok(data) => EncodedCollab::decode_from_bytes(&data)
+        .map_err(|err| AppError::Internal(anyhow!("fail to decode data to EncodedDoc: {:?}", err))),
       Err(e) => match e {
         sqlx::Error::RowNotFound => {
           let msg = format!("Can't find the row for query: {:?}", params);

@@ -142,7 +142,7 @@ where
     self.inner.insert_collab(uid, params).await
   }
 
-  async fn get_collab_encoded_v1(
+  async fn get_collab_encoded(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -172,7 +172,7 @@ where
           "Get collab data:{} from disk",
           params.object_id
         );
-        self.inner.get_collab_encoded_v1(uid, params, true).await
+        self.inner.get_collab_encoded(uid, params, true).await
       },
       Some(collab) => {
         event!(

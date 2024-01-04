@@ -1,5 +1,7 @@
-use crate::dto::{AFAccessLevel, AFRole};
+use anyhow::anyhow;
+use app_error::AppError;
 use chrono::{DateTime, Utc};
+use database_entity::dto::{AFAccessLevel, AFRole, AFUserProfile, AFWorkspace};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -14,6 +16,31 @@ pub struct AFWorkspaceRow {
   pub workspace_type: i32,
   pub deleted_at: Option<DateTime<Utc>>,
   pub workspace_name: Option<String>,
+}
+
+impl TryFrom<AFWorkspaceRow> for AFWorkspace {
+  type Error = AppError;
+
+  fn try_from(value: AFWorkspaceRow) -> Result<Self, Self::Error> {
+    let owner_uid = value
+      .owner_uid
+      .ok_or(AppError::Internal(anyhow!("Unexpect empty owner_uid")))?;
+    let database_storage_id = value
+      .database_storage_id
+      .ok_or(AppError::Internal(anyhow!("Unexpect empty workspace_id")))?;
+
+    let workspace_name = value.workspace_name.unwrap_or_default();
+    let created_at = value.created_at.unwrap_or_else(Utc::now);
+
+    Ok(Self {
+      workspace_id: value.workspace_id,
+      database_storage_id,
+      owner_uid,
+      workspace_type: value.workspace_type,
+      workspace_name,
+      created_at,
+    })
+  }
 }
 
 /// Represent the row of the af_user table
@@ -45,6 +72,33 @@ pub struct AFUserProfileRow {
   pub updated_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
   pub latest_workspace_id: Option<Uuid>,
+}
+
+impl TryFrom<AFUserProfileRow> for AFUserProfile {
+  type Error = AppError;
+
+  fn try_from(value: AFUserProfileRow) -> Result<Self, Self::Error> {
+    let uid = value
+      .uid
+      .ok_or(AppError::Internal(anyhow!("Unexpect empty uid")))?;
+    let uuid = value
+      .uuid
+      .ok_or(AppError::Internal(anyhow!("Unexpect empty uuid")))?;
+    let latest_workspace_id = value.latest_workspace_id.ok_or(AppError::Internal(anyhow!(
+      "Unexpect empty latest_workspace_id"
+    )))?;
+    Ok(Self {
+      uid,
+      uuid,
+      email: value.email,
+      password: value.password,
+      name: value.name,
+      metadata: value.metadata,
+      encryption_sign: value.encryption_sign,
+      latest_workspace_id,
+      updated_at: value.updated_at.map(|v| v.timestamp()).unwrap_or(0),
+    })
+  }
 }
 
 #[derive(FromRow, Serialize, Deserialize)]

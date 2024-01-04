@@ -1,7 +1,8 @@
+use chrono::{DateTime, Utc};
 use database_entity::dto::AFRole;
-use database_entity::pg_row::AFBlobMetadataRow;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 pub struct WorkspaceMembers(pub Vec<WorkspaceMember>);
@@ -66,4 +67,13 @@ pub struct WorkspaceSpaceUsage {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct WorkspaceBlobMetadata(pub Vec<AFBlobMetadataRow>);
+pub struct RepeatedBlobMetaData(pub Vec<BlobMetadata>);
+
+#[derive(Serialize, Deserialize)]
+pub struct BlobMetadata {
+  pub workspace_id: Uuid,
+  pub file_id: String,
+  pub file_type: String,
+  pub file_size: i64,
+  pub modified_at: DateTime<Utc>,
+}

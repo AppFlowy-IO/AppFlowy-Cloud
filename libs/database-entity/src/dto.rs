@@ -1,6 +1,3 @@
-use crate::pg_row::{AFBlobMetadataRow, AFUserProfileRow, AFWorkspaceRow};
-use anyhow::anyhow;
-use app_error::AppError;
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -409,33 +406,6 @@ pub struct AFUserProfile {
   pub updated_at: i64,
 }
 
-impl TryFrom<AFUserProfileRow> for AFUserProfile {
-  type Error = AppError;
-
-  fn try_from(value: AFUserProfileRow) -> Result<Self, Self::Error> {
-    let uid = value
-      .uid
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty uid")))?;
-    let uuid = value
-      .uuid
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty uuid")))?;
-    let latest_workspace_id = value.latest_workspace_id.ok_or(AppError::Internal(anyhow!(
-      "Unexpect empty latest_workspace_id"
-    )))?;
-    Ok(Self {
-      uid,
-      uuid,
-      email: value.email,
-      password: value.password,
-      name: value.name,
-      metadata: value.metadata,
-      encryption_sign: value.encryption_sign,
-      latest_workspace_id,
-      updated_at: value.updated_at.map(|v| v.timestamp()).unwrap_or(0),
-    })
-  }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct AFWorkspace {
   pub workspace_id: Uuid,
@@ -444,31 +414,6 @@ pub struct AFWorkspace {
   pub workspace_type: i32,
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,
-}
-
-impl TryFrom<AFWorkspaceRow> for AFWorkspace {
-  type Error = AppError;
-
-  fn try_from(value: AFWorkspaceRow) -> Result<Self, Self::Error> {
-    let owner_uid = value
-      .owner_uid
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty owner_uid")))?;
-    let database_storage_id = value
-      .database_storage_id
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty workspace_id")))?;
-
-    let workspace_name = value.workspace_name.unwrap_or_default();
-    let created_at = value.created_at.unwrap_or_else(Utc::now);
-
-    Ok(Self {
-      workspace_id: value.workspace_id,
-      database_storage_id,
-      owner_uid,
-      workspace_type: value.workspace_type,
-      workspace_name,
-      created_at,
-    })
-  }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -489,6 +434,4 @@ pub struct AFWorkspaceMember {
   pub avatar_url: Option<String>,
 }
 
-/// ***************************************************************
-/// Make alias for the database entity. Hiding the Sqlx Rows type.
-pub type AFBlobMetadata = AFBlobMetadataRow;
+// pub type AFBlobMetadata = AFBlobMetadataRow;

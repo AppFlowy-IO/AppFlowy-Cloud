@@ -17,8 +17,8 @@ use database_entity::dto::{
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
 use database::collab::insert_into_af_collab;
+use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
-use database_entity::pg_row::AFUserNotification;
 use realtime::entities::RealtimeUser;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;

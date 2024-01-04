@@ -4,7 +4,7 @@ use crate::biz::workspace::member_listener::{
   WorkspaceMemberListener, WorkspaceMemberNotification,
 };
 use anyhow::Error;
-use database_entity::pg_row::AFUserNotification;
+use database::pg_row::AFUserNotification;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgListener;
 use sqlx::PgPool;

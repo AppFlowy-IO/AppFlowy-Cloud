@@ -1,5 +1,5 @@
+use crate::pg_row::AFBlobMetadataRow;
 use app_error::AppError;
-use database_entity::pg_row::AFBlobMetadataRow;
 use rust_decimal::prelude::ToPrimitive;
 use sqlx::types::Decimal;
 use sqlx::PgPool;

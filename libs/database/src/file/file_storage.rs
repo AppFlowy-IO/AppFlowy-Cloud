@@ -5,7 +5,7 @@ use crate::resource_usage::{
 };
 use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::pg_row::AFBlobMetadataRow;
+use crate::pg_row::AFBlobMetadataRow;
 use sqlx::PgPool;
 use tokio::io::AsyncRead;
 use tracing::{event, instrument};

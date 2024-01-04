@@ -6,10 +6,10 @@ use prost::Message as ProstMessage;
 use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
-  AFBlobMetadata, AFBlobRecord, AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas,
-  AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces,
-  BatchCreateCollabParams, BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify,
-  CollabParams, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams, QueryCollab,
+  AFBlobRecord, AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchCreateCollabParams,
+  BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify, CollabParams,
+  CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams, QueryCollab,
   QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
   UpdateCollabMemberParams,
 };
@@ -31,8 +31,8 @@ use reqwest::RequestBuilder;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
-  CreateWorkspaceMembers, WorkspaceBlobMetadata, WorkspaceMemberChangeset, WorkspaceMembers,
-  WorkspaceSpaceUsage,
+  BlobMetadata, CreateWorkspaceMembers, RepeatedBlobMetaData, WorkspaceMemberChangeset,
+  WorkspaceMembers, WorkspaceSpaceUsage,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1092,7 +1092,7 @@ impl Client {
   pub async fn get_blob_metadata<T: AsRef<str>>(
     &self,
     url: T,
-  ) -> Result<AFBlobMetadata, AppResponseError> {
+  ) -> Result<BlobMetadata, AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::GET, url.as_ref())
       .await?
@@ -1100,7 +1100,7 @@ impl Client {
       .await?;
 
     log_request_id(&resp);
-    AppResponse::<AFBlobMetadata>::from_response(resp)
+    AppResponse::<BlobMetadata>::from_response(resp)
       .await?
       .into_data()
   }
@@ -1134,7 +1134,7 @@ impl Client {
   pub async fn get_workspace_all_blob_metadata(
     &self,
     workspace_id: &str,
-  ) -> Result<WorkspaceBlobMetadata, AppResponseError> {
+  ) -> Result<RepeatedBlobMetaData, AppResponseError> {
     let url = format!("{}/api/file_storage/{}/blobs", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
@@ -1142,7 +1142,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<WorkspaceBlobMetadata>::from_response(resp)
+    AppResponse::<RepeatedBlobMetaData>::from_response(resp)
       .await?
       .into_data()
   }

@@ -8,7 +8,7 @@ use database::workspace::{
   upsert_workspace_member,
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
-use database_entity::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
+use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};

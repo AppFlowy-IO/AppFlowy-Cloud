@@ -12,15 +12,15 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use database_entity::dto::{
-  AFAccessLevel, AFBlobMetadata, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo,
-  AFWorkspace, AFWorkspaceMember, BatchQueryCollabResult, CollabParams, CreateCollabParams,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo, AFWorkspace,
+  AFWorkspaceMember, BatchQueryCollabResult, CollabParams, CreateCollabParams,
   InsertCollabMemberParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
   UpdateCollabMemberParams,
 };
 use image::io::Reader as ImageReader;
 use serde_json::Value;
 use shared_entity::dto::workspace_dto::{
-  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
+  BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::types::Uuid;
@@ -260,7 +260,7 @@ impl TestClient {
   }
 
   #[allow(dead_code)]
-  pub async fn get_blob_metadata<T: AsRef<str>>(&self, url: T) -> AFBlobMetadata {
+  pub async fn get_blob_metadata<T: AsRef<str>>(&self, url: T) -> BlobMetadata {
     self.api_client.get_blob_metadata(url).await.unwrap()
   }
 

@@ -116,7 +116,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
-      region: get_env_var("APPFLOWY_S3_REGION", "us-east-1"),
+      region: get_env_var("APPFLOWY_S3_REGION", ""),
     },
     casbin: CasbinSetting {
       pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,

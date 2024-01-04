@@ -1,11 +1,11 @@
 use crate::file::utils::BlobStreamReader;
+use crate::pg_row::AFBlobMetadataRow;
 use crate::resource_usage::{
   delete_blob_metadata, get_blob_metadata, get_workspace_usage_size, insert_blob_metadata,
   is_blob_metadata_exists,
 };
 use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::pg_row::AFBlobMetadataRow;
 use sqlx::PgPool;
 use tokio::io::AsyncRead;
 use tracing::{event, instrument};

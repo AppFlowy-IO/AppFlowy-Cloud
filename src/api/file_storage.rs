@@ -14,9 +14,8 @@ use chrono::DateTime;
 use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
 use database_entity::dto::AFBlobRecord;
-use database_entity::pg_row::AFBlobMetadataRow;
 use serde::Deserialize;
-use shared_entity::dto::workspace_dto::{WorkspaceBlobMetadata, WorkspaceSpaceUsage};
+use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
 use std::pin::Pin;
@@ -169,7 +168,7 @@ async fn get_blob_handler(
 async fn get_blob_metadata_handler(
   state: Data<AppState>,
   path: web::Path<PathInfo>,
-) -> Result<JsonAppResponse<AFBlobMetadataRow>> {
+) -> Result<JsonAppResponse<BlobMetadata>> {
   let PathInfo {
     workspace_id,
     file_id,
@@ -180,6 +179,13 @@ async fn get_blob_metadata_handler(
     .bucket_storage
     .get_blob_metadata(&workspace_id, &file_id)
     .await
+    .map(|meta| BlobMetadata {
+      workspace_id: meta.workspace_id,
+      file_id: meta.file_id,
+      file_type: meta.file_type,
+      file_size: meta.file_size,
+      modified_at: meta.modified_at,
+    })
     .map_err(AppResponseError::from)?;
 
   Ok(Json(AppResponse::Ok().with_data(metadata)))
@@ -205,13 +211,22 @@ async fn get_workspace_usage_handler(
 async fn get_all_workspace_blob_metadata_handler(
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
-) -> Result<JsonAppResponse<WorkspaceBlobMetadata>> {
-  let workspace_blob_metadata = get_all_workspace_blob_metadata(&state.pg_pool, &workspace_id)
+) -> Result<JsonAppResponse<RepeatedBlobMetaData>> {
+  let metas = get_all_workspace_blob_metadata(&state.pg_pool, &workspace_id)
     .await
-    .map_err(AppResponseError::from)?;
+    .map_err(AppResponseError::from)?
+    .into_iter()
+    .map(|meta| BlobMetadata {
+      workspace_id: meta.workspace_id,
+      file_id: meta.file_id,
+      file_type: meta.file_type,
+      file_size: meta.file_size,
+      modified_at: meta.modified_at,
+    })
+    .collect::<Vec<_>>();
   Ok(
     AppResponse::Ok()
-      .with_data(WorkspaceBlobMetadata(workspace_blob_metadata))
+      .with_data(RepeatedBlobMetaData(metas))
       .into(),
   )
 }

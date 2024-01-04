@@ -13,7 +13,7 @@ use database::collab::CollabStorage;
 use std::ops::Deref;
 use std::time::{Duration, Instant};
 
-use database_entity::pg_row::AFUserNotification;
+use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::{debug, error, trace};
 

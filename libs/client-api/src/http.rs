@@ -73,6 +73,7 @@ pub struct Client {
   token: Arc<RwLock<ClientToken>>,
   is_refreshing_token: Arc<AtomicBool>,
   refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
+  client_version: String,
 }
 
 type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
@@ -88,7 +89,7 @@ impl Client {
   /// - `base_url`: The base URL for API requests.
   /// - `ws_addr`: The WebSocket address for real-time communication.
   /// - `gotrue_url`: The URL for the GoTrue API.
-  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str) -> Self {
+  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str, client_version: &str) -> Self {
     let reqwest_client = reqwest::Client::new();
     Self {
       base_url: base_url.to_string(),
@@ -98,6 +99,7 @@ impl Client {
       token: Arc::new(RwLock::new(ClientToken::new())),
       is_refreshing_token: Default::default(),
       refresh_ret_txs: Default::default(),
+      client_version: client_version.to_string(),
     }
   }
 
@@ -1170,6 +1172,7 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
+      .header("client-version", &self.client_version)
       .bearer_auth(access_token);
     Ok(request_builder)
   }

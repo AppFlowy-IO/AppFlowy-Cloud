@@ -19,7 +19,13 @@ jobs:
           workspaces: |
             AppFlowy-Cloud
 
-      - name: Check
+      - name: Install cargo-tree
+        run: cargo install cargo-tree
+
+      - name: Build ClientAPI
         working-directory: ./libs/client-api
         run: cargo build
+
+      - name: Check ClientAPI Dependencies
+        run: bash ./build/client_api_deps_check.sh
 

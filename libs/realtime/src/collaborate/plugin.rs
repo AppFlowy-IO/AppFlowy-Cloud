@@ -175,7 +175,7 @@ where
 
     match self
       .storage
-      .get_collab_encoded_v1(&self.uid, params, true)
+      .get_collab_encoded(&self.uid, params, true)
       .await
     {
       Ok(encoded_collab_v1) => match init_collab_with_raw_data(object_id, &encoded_collab_v1, doc)

@@ -52,6 +52,7 @@ use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
+pub const CLIENT_API_VERSION: &str = "0.0.2";
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
 /// It provides methods to perform actions like signing in, signing out, refreshing tokens,
@@ -73,7 +74,6 @@ pub struct Client {
   token: Arc<RwLock<ClientToken>>,
   is_refreshing_token: Arc<AtomicBool>,
   refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
-  client_version: String,
 }
 
 type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
@@ -89,7 +89,7 @@ impl Client {
   /// - `base_url`: The base URL for API requests.
   /// - `ws_addr`: The WebSocket address for real-time communication.
   /// - `gotrue_url`: The URL for the GoTrue API.
-  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str, client_version: &str) -> Self {
+  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str) -> Self {
     let reqwest_client = reqwest::Client::new();
     Self {
       base_url: base_url.to_string(),
@@ -99,7 +99,6 @@ impl Client {
       token: Arc::new(RwLock::new(ClientToken::new())),
       is_refreshing_token: Default::default(),
       refresh_ret_txs: Default::default(),
-      client_version: client_version.to_string(),
     }
   }
 
@@ -1172,7 +1171,7 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", &self.client_version)
+      .header("client-version", CLIENT_API_VERSION)
       .bearer_auth(access_token);
     Ok(request_builder)
   }

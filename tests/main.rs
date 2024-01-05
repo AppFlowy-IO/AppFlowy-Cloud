@@ -18,7 +18,7 @@ pub const LOCALHOST_GOTRUE: &str = "http://localhost:9998";
 /// ./build/run_local_server.sh
 /// ```
 pub fn localhost_client() -> Client {
-  Client::new(LOCALHOST_URL, LOCALHOST_WS, LOCALHOST_GOTRUE, "1.0")
+  Client::new(LOCALHOST_URL, LOCALHOST_WS, LOCALHOST_GOTRUE)
 }
 
 pub const DEV_URL: &str = "https://test.appflowy.cloud";
@@ -27,5 +27,5 @@ pub const DEV_GOTRUE: &str = "https://test.appflowy.cloud/gotrue";
 
 #[allow(dead_code)]
 pub fn test_appflowy_cloud_client() -> Client {
-  Client::new(DEV_URL, DEV_WS, DEV_GOTRUE, "1.0")
+  Client::new(DEV_URL, DEV_WS, DEV_GOTRUE)
 }

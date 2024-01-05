@@ -59,10 +59,12 @@ where
         request_id
       });
 
-      let span = match get_payload_size(&req) {
-        Some(size) => span!(Level::INFO, "request", request_id = %request_id, payload_size = size),
-        None => span!(Level::INFO, "request", request_id = %request_id),
-      };
+      let client_info = get_client_info(&req);
+      let span = span!(Level::INFO, "request",
+        request_id = %request_id,
+        client_version = client_info.client_version,
+        payload_size = client_info.payload_size
+      );
 
       let fut = self.service.call(req);
       Box::pin(async move {
@@ -93,10 +95,27 @@ pub fn get_request_id(req: &ServiceRequest) -> Option<String> {
   }
 }
 
-fn get_payload_size(req: &ServiceRequest) -> Option<usize> {
-  req
+#[inline]
+fn get_client_info(req: &ServiceRequest) -> ClientInfo {
+  let payload_size = req
     .headers()
     .get("content-length")
     .and_then(|val| val.to_str().ok())
     .and_then(|val| val.parse::<usize>().ok())
+    .unwrap_or_default();
+
+  let client_version = req
+    .headers()
+    .get("client-version")
+    .and_then(|val| val.to_str().ok());
+
+  ClientInfo {
+    payload_size,
+    client_version,
+  }
+}
+
+struct ClientInfo<'a> {
+  payload_size: usize,
+  client_version: Option<&'a str>,
 }

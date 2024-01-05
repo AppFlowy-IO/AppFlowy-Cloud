@@ -52,6 +52,7 @@ use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
+pub const CLIENT_API_VERSION: &str = "0.0.2";
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
 /// It provides methods to perform actions like signing in, signing out, refreshing tokens,
@@ -1170,6 +1171,7 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
+      .header("client-version", CLIENT_API_VERSION)
       .bearer_auth(access_token);
     Ok(request_builder)
   }

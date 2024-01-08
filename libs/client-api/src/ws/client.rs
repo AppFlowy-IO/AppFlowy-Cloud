@@ -230,7 +230,7 @@ impl WSClient {
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
             if  msg.is_binary() && len > 40960 {
-              trace!("[websocket]: send message via http with size:{}", len);
+              trace!("send ws message via http, message len: :{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {
                   Ok(_) => {},

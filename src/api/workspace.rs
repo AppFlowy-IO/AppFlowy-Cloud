@@ -248,9 +248,9 @@ async fn create_collab_handler(
         err
       ))
     })?,
-    Some(value) => match compress_type_from_header_value(value)? {
-      CompressionType::Brotli => {
-        let decompress_data = decompress(&payload)?;
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => {
+        let decompress_data = decompress(&payload, buffer_size)?;
         CreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
           AppError::InvalidRequest(format!(
             "Failed to parse CreateCollabParams with brotli decompression data: {}",
@@ -288,9 +288,9 @@ async fn batch_create_collab_handler(
         err
       ))
     })?,
-    Some(value) => match compress_type_from_header_value(value)? {
-      CompressionType::Brotli => {
-        let decompress_data = decompress(&payload)?;
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => {
+        let decompress_data = decompress(&payload, buffer_size)?;
         BatchCreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
           AppError::InvalidRequest(format!(
             "Failed to parse BatchCreateCollabParams with decompression data: {}",

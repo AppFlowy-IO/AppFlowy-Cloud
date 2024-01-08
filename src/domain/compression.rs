@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use app_error::AppError;
 use brotli::{CompressorReader, Decompressor};
 
@@ -6,19 +5,9 @@ use std::io::Read;
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 
+pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub enum CompressionType {
-  Brotli,
-}
-
-impl TryFrom<&str> for CompressionType {
-  type Error = anyhow::Error;
-
-  fn try_from(value: &str) -> Result<Self, Self::Error> {
-    match value {
-      "brotli" => Ok(CompressionType::Brotli),
-      _ => Err(anyhow!("Unknown compression type: {}", value)),
-    }
-  }
+  Brotli { buffer_size: usize },
 }
 
 pub fn compress(data: &[u8], quality: u32) -> Result<Vec<u8>, AppError> {
@@ -30,8 +19,8 @@ pub fn compress(data: &[u8], quality: u32) -> Result<Vec<u8>, AppError> {
   Ok(compressed_data)
 }
 
-pub fn decompress(data: &[u8]) -> Result<Vec<u8>, AppError> {
-  let mut decompressor = Decompressor::new(data, 10240);
+pub fn decompress(data: &[u8], buffer_size: usize) -> Result<Vec<u8>, AppError> {
+  let mut decompressor = Decompressor::new(data, buffer_size);
   let mut decompressed_data = Vec::new();
   decompressor
     .read_to_end(&mut decompressed_data)

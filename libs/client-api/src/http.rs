@@ -62,6 +62,9 @@ pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
 
 #[derive(Clone)]
 pub struct ClientConfiguration {
+  /// Lower Levels (0-4): Faster compression and decompression speeds but lower compression ratios. Suitable for scenarios where speed is more critical than reducing data size.
+  /// Medium Levels (5-9): A balance between compression ratio and speed. These levels are generally good for a mix of performance and efficiency.
+  /// Higher Levels (10-11): The highest compression ratios, but significantly slower and more resource-intensive. These are typically used in scenarios where reducing data size is paramount and resource usage is a secondary concern, such as for static content compression in web servers.
   compression_quality: u32,
   /// A larger buffer size means more data is compressed in a single operation, which can lead to better compression ratios
   /// since Brotli has more data to analyze for patterns and repetitions.
@@ -71,6 +74,11 @@ pub struct ClientConfiguration {
 impl ClientConfiguration {
   pub fn with_compression_buffer_size(mut self, compression_buffer_size: usize) -> Self {
     self.compression_buffer_size = compression_buffer_size;
+    self
+  }
+
+  pub fn with_compression_quality(mut self, compression_quality: u32) -> Self {
+    self.compression_quality = compression_quality;
     self
   }
 }
@@ -1298,6 +1306,11 @@ fn log_request_id(resp: &reqwest::Response) {
 
 #[inline]
 pub fn compress(data: &[u8], quality: u32, buffer_size: usize) -> anyhow::Result<Vec<u8>> {
+  // The value of lgwin typically ranges from 10 to 24, which corresponds to window sizes between 1 KB (2^10 bytes)
+  // and 16 MB (2^24 bytes).
+  // Effect on Compression:
+  //     A larger window size (higher lgwin) allows Brotli to find and eliminate more redundancies, potentially leading to better compression ratios, especially for larger files or data with lots of repeating patterns.
+  //     A smaller window size reduces memory usage, which can be beneficial in memory-constrained environments but may result in lower compression ratios.
   let mut compressor = CompressorReader::new(data, buffer_size, quality, 22);
   let mut compressed_data = Vec::new();
   compressor.read_to_end(&mut compressed_data)?;

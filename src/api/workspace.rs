@@ -519,8 +519,8 @@ async fn post_realtime_message_handler(
     .map_err(AppResponseError::from)?;
 
   event!(
-    tracing::Level::DEBUG,
-    "Receive realtime message with len: {}",
+    tracing::Level::TRACE,
+    "Receive realtime http message with len: {}",
     payload.len()
   );
 
@@ -530,7 +530,15 @@ async fn post_realtime_message_handler(
   let payload = match req.headers().get(X_COMPRESSION_TYPE) {
     None => payload,
     Some(_) => match compress_type_from_header_value(req.headers())? {
-      CompressionType::Brotli { buffer_size } => decompress(&payload, buffer_size)?,
+      CompressionType::Brotli { buffer_size } => {
+        let decompressed_data = decompress(&payload, buffer_size)?;
+        event!(
+          tracing::Level::TRACE,
+          "Decompress realtime http message with len: {}",
+          decompressed_data.len()
+        );
+        decompressed_data
+      },
     },
   };
 

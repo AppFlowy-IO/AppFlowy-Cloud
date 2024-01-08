@@ -68,6 +68,7 @@ prost = "0.12.1"
 casbin = { version = "2.0.9" }
 dotenvy = "0.15.7"
 url = "2.5.0"
+brotli = "3.4.0"
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }

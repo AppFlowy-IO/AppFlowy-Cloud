@@ -1,14 +1,17 @@
+use crate::api::util::compress_type_from_header_value;
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::component::auth::jwt::UserUuid;
+use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
+
 use actix_web::web::Bytes;
 use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::Result;
 use actix_web::{web, Scope};
+use actix_web::{HttpRequest, Result};
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -234,11 +237,32 @@ async fn update_workspace_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn create_collab_handler(
   user_uuid: UserUuid,
-  payload: Json<CreateCollabParams>,
+  payload: Bytes,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  payload.validate().map_err(AppError::from)?;
-  let (params, workspace_id) = payload.into_inner().split();
+  let params = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => serde_json::from_slice::<CreateCollabParams>(&payload).map_err(|err| {
+      AppError::InvalidRequest(format!(
+        "Failed to parse CreateCollabParams from JSON: {}",
+        err
+      ))
+    })?,
+    Some(value) => match compress_type_from_header_value(value)? {
+      CompressionType::Brotli => {
+        let decompress_data = decompress(&payload)?;
+        CreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
+          AppError::InvalidRequest(format!(
+            "Failed to parse CreateCollabParams with brotli decompression data: {}",
+            err
+          ))
+        })?
+      },
+    },
+  };
+
+  params.validate().map_err(AppError::from)?;
+  let (params, workspace_id) = params.split();
   biz::collab::ops::create_collabs(
     &state.pg_pool,
     &user_uuid,
@@ -255,16 +279,33 @@ async fn batch_create_collab_handler(
   user_uuid: UserUuid,
   payload: Bytes,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let payload = BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
-    AppError::InvalidRequest(format!("Failed to parse BatchCreateCollabParams: {}", err))
-  })?;
+  let params = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
+      AppError::InvalidRequest(format!(
+        "Failed to parse batch BatchCreateCollabParams: {}",
+        err
+      ))
+    })?,
+    Some(value) => match compress_type_from_header_value(value)? {
+      CompressionType::Brotli => {
+        let decompress_data = decompress(&payload)?;
+        BatchCreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
+          AppError::InvalidRequest(format!(
+            "Failed to parse BatchCreateCollabParams with decompression data: {}",
+            err
+          ))
+        })?
+      },
+    },
+  };
 
-  payload.validate().map_err(AppError::from)?;
+  params.validate().map_err(AppError::from)?;
   let BatchCreateCollabParams {
     workspace_id,
     params_list,
-  } = payload;
+  } = params;
 
   if params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());

@@ -15,7 +15,7 @@ use collab::preclude::{CollabPlugin, Doc, TransactionMut};
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{
-  AFAccessLevel, CollabParams, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
+  AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
 };
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
@@ -84,10 +84,13 @@ where
           )
           .await;
 
-        let params = CreateCollabParams::new(
-          &self.workspace_id,
-          CollabParams::new(object_id, self.collab_type.clone(), encoded_collab_v1),
-        );
+        let params = CreateCollabParams {
+          object_id: object_id.to_string(),
+          encoded_collab_v1,
+          collab_type: self.collab_type.clone(),
+          override_if_exist: false,
+          workspace_id: self.workspace_id.clone(),
+        };
 
         self
           .storage
@@ -268,10 +271,13 @@ where
       },
     };
 
-    let params = CreateCollabParams::new(
-      &self.workspace_id,
-      CollabParams::new(object_id, self.collab_type.clone(), encoded_collab_v1),
-    );
+    let params = CreateCollabParams {
+      object_id: object_id.to_string(),
+      encoded_collab_v1,
+      collab_type: self.collab_type.clone(),
+      override_if_exist: false,
+      workspace_id: self.workspace_id.clone(),
+    };
 
     let storage = self.storage.clone();
     let uid = self.uid;

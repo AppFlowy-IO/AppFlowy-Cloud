@@ -342,7 +342,7 @@ where
               }
             },
           },
-          Err(err) => trace!("Send message failed error: {:?}", err),
+          Err(err) => error!("Send message failed error: {:?}", err),
         }
 
         self.notify()

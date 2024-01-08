@@ -163,7 +163,6 @@ impl WSClient {
     // Receive messages from the websocket, and send them to the channels.
     tokio::spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
-        trace!("receive message from websocket: {}", ws_msg);
         match ws_msg {
           Message::Binary(_) => {
             match RealtimeMessage::try_from(&ws_msg) {
@@ -215,7 +214,10 @@ impl WSClient {
             info!("websocket close: {:?}", close);
           },
           Message::Pong(_) => {
-            let _ = pong_tx.send(()).await;
+            trace!("receive pong from server");
+            if let Err(err) = pong_tx.send(()).await {
+              error!("failed to receive server pong: {}", err);
+            }
           },
           _ => warn!("received unexpected message from websocket: {:?}", ws_msg),
         }
@@ -230,7 +232,6 @@ impl WSClient {
         tokio::select! {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
-            trace!("websocket channel receive: {}", msg);
             let len = msg.len();
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
@@ -245,9 +246,12 @@ impl WSClient {
                  error!("The HTTP sender has been dropped, unable to send message.");
                  break;
               }
-            } else if let Err(err) = sink.send(msg).await.map_err(WSError::from){
-              handle_ws_error(&err);
-              break;
+            } else {
+                trace!("send ws message via websocket, message:{}", msg);
+                if let Err(err) = sink.send(msg).await.map_err(WSError::from){
+                handle_ws_error(&err);
+                break;
+              }
             }
           }
         }

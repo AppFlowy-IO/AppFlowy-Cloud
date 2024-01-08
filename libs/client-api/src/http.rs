@@ -752,22 +752,25 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compress_bytes = compress(
-      &bytes,
-      self.config.compression_quality,
-      self.config.compression_buffer_size,
-    )?;
-
-    event!(
-      tracing::Level::DEBUG,
-      "origin collab size:{}, compress size:{}",
-      bytes.len(),
-      compress_bytes.len()
-    );
+    let compression_quality = self.config.compression_quality;
+    let compression_buffer_size = self.config.compression_buffer_size;
+    let compress_bytes = tokio::task::spawn_blocking(move || {
+      let compress_bytes = compress(&bytes, compression_quality, compression_buffer_size)?;
+      event!(
+        tracing::Level::DEBUG,
+        "origin collab size:{}, compress size:{}",
+        bytes.len(),
+        compress_bytes.len()
+      );
+      Ok::<Vec<u8>, anyhow::Error>(compress_bytes)
+    })
+    .await
+    .map_err(|err| AppError::Internal(err.into()))??;
 
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)
       .await?
+      .timeout(Duration::from_secs(60))
       .body(compress_bytes)
       .send()
       .await?;
@@ -791,21 +794,25 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compress_bytes = compress(
-      &bytes,
-      self.config.compression_quality,
-      self.config.compression_buffer_size,
-    )?;
-    event!(
-      tracing::Level::DEBUG,
-      "origin collab size:{}, compress size:{}",
-      bytes.len(),
-      compress_bytes.len()
-    );
+    let compression_quality = self.config.compression_quality;
+    let compression_buffer_size = self.config.compression_buffer_size;
+    let compress_bytes = tokio::task::spawn_blocking(move || {
+      let compress_bytes = compress(&bytes, compression_quality, compression_buffer_size)?;
+      event!(
+        tracing::Level::DEBUG,
+        "origin collab size:{}, compress size:{}",
+        bytes.len(),
+        compress_bytes.len()
+      );
+      Ok::<Vec<u8>, anyhow::Error>(compress_bytes)
+    })
+    .await
+    .map_err(|err| AppError::Internal(err.into()))??;
 
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)
       .await?
+      .timeout(Duration::from_secs(60))
       .body(compress_bytes)
       .send()
       .await?;
@@ -1290,7 +1297,7 @@ fn log_request_id(resp: &reqwest::Response) {
 }
 
 #[inline]
-pub fn compress(data: &[u8], quality: u32, buffer_size: usize) -> std::io::Result<Vec<u8>> {
+pub fn compress(data: &[u8], quality: u32, buffer_size: usize) -> anyhow::Result<Vec<u8>> {
   let mut compressor = CompressorReader::new(data, buffer_size, quality, 22);
   let mut compressed_data = Vec::new();
   compressor.read_to_end(&mut compressed_data)?;

@@ -6,6 +6,7 @@ use database::collab::CollabStorage;
 use futures_util::SinkExt;
 use parking_lot::Mutex;
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
+
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::future;
@@ -76,6 +77,19 @@ where
         user,
         collab_message,
       } = self.collab_user_message;
+
+      if self
+        .client_stream_by_user
+        .try_read()
+        .map_err(|err| RealtimeError::Internal(err.into()))?
+        .get(user)
+        .is_none()
+      {
+        return Err(RealtimeError::Internal(anyhow!(
+          "The client stream: {} is not found, it should be created before receiving any client payload",
+          user
+        )));
+      }
 
       let object_id = collab_message.object_id();
       if !self.groups.contains_group(object_id).await? {

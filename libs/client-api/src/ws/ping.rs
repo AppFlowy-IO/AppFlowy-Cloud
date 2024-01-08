@@ -56,7 +56,9 @@ impl ServerFixIntervalPing {
         tokio::select! {
           _ = interval.tick() => {
             // send ping to server
-            let _ = ping_sender.send(Message::Ping(vec![]));
+            if let Err(err) = ping_sender.send(Message::Ping(vec![])) {
+              tracing::error!("ping send error: {}", err);
+            }
             if let Some(ping_count) = weak_ping_count.upgrade() {
               let mut lock = ping_count.lock().await;
               if *lock >= reconnect_per_ping {

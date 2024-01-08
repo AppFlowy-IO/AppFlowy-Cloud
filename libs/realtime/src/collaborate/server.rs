@@ -143,6 +143,7 @@ where
 
       // when a new connection is established, remove the old connection from all groups
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
+      info!("new client stream:{}", &new_conn.user);
       if let Some(old_stream) = client_stream_by_user
         .write()
         .await

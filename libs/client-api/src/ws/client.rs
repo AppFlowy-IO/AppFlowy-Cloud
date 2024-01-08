@@ -224,6 +224,7 @@ impl WSClient {
     let mut rx = self.sender.subscribe();
     let weak_http_sender = Arc::downgrade(&self.http_sender);
     let device_id = device_id.to_string();
+    // let weak_state_notify = Arc::downgrade(&self.state_notify);
     tokio::spawn(async move {
       loop {
         tokio::select! {
@@ -233,6 +234,10 @@ impl WSClient {
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
             if  msg.is_binary() && len > 40960 {
+              // let is_ws_connected= weak_state_notify.upgrade().map(|notify| notify.lock().state.is_connected()).unwrap_or_default();
+              // if !is_ws_connected {
+              //
+              // }
               trace!("send ws message via http, message len: :{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {

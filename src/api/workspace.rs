@@ -90,7 +90,7 @@ pub fn collab_scope() -> Scope {
   web::scope("/api/realtime").service(
     web::resource("post")
       .app_data(
-        PayloadConfig::new(5 * 1024 * 1024), // 10 MB
+        PayloadConfig::new(10 * 1024 * 1024), // 10 MB
       )
       .route(web::post().to(post_realtime_message_handler)),
   )
@@ -512,6 +512,7 @@ async fn post_realtime_message_handler(
   payload: Bytes,
   server: Data<CollabServerImpl>,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
@@ -525,6 +526,13 @@ async fn post_realtime_message_handler(
 
   let HttpRealtimeMessage { device_id, payload } =
     HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
+
+  let payload = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => payload,
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => decompress(&payload, buffer_size)?,
+    },
+  };
 
   let message = Message::from(payload);
   match message {

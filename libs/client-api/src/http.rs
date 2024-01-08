@@ -413,14 +413,20 @@ impl Client {
     device_id: &str,
     msg: Message,
   ) -> Result<(), AppResponseError> {
+    let payload = msg.into_data();
+    let compressed_payload = compress(
+      &payload,
+      self.config.compression_quality,
+      self.config.compression_buffer_size,
+    )?;
     let msg = HttpRealtimeMessage {
       device_id: device_id.to_string(),
-      payload: msg.into_data(),
+      payload: compressed_payload,
     }
     .encode_to_vec();
     let url = format!("{}/api/realtime/post", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url)
       .await?
       .body(msg)
       .send()

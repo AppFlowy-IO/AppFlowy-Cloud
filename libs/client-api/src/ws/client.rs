@@ -233,7 +233,7 @@ impl WSClient {
               trace!("[websocket]: send message via http with size:{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 match http_sender.send_ws_msg(&device_id, msg).await {
-                  Ok(_) => debug!("webSocket message sent via HTTP. len: {}", len),
+                  Ok(_) => {},
                   Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
                 }
               } else {

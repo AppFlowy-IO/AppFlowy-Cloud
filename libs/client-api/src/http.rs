@@ -46,7 +46,7 @@ use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{event, instrument, trace};
+use tracing::{event, instrument, trace, warn};
 use url::Url;
 
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
@@ -78,7 +78,12 @@ impl ClientConfiguration {
   }
 
   pub fn with_compression_quality(mut self, compression_quality: u32) -> Self {
-    self.compression_quality = compression_quality;
+    self.compression_quality = if compression_quality > 11 {
+      warn!("compression_quality is larger than 11, set it to 11");
+      11
+    } else {
+      compression_quality
+    };
     self
   }
 }
@@ -427,6 +432,12 @@ impl Client {
       self.config.compression_quality,
       self.config.compression_buffer_size,
     )?;
+    event!(
+      tracing::Level::DEBUG,
+      "origin collab size:{}, compressed payload size: {}",
+      payload.len(),
+      compressed_payload.len()
+    );
     let msg = HttpRealtimeMessage {
       device_id: device_id.to_string(),
       payload: compressed_payload,

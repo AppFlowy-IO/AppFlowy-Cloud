@@ -19,7 +19,7 @@ use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
-use realtime::collaborate::CollabAccessControl;
+
 use realtime::entities::{ClientMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use shared_entity::dto::workspace_dto::*;
@@ -548,31 +548,6 @@ async fn post_realtime_message_handler(
       let realtime_msg = RealtimeMessage::try_from(bytes).map_err(|err| {
         AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
       })?;
-
-      match &realtime_msg {
-        RealtimeMessage::Collab(msg) => {
-          if !state
-            .collab_access_control
-            .can_send_collab_update(&uid, msg.object_id())
-            .await?
-          {
-            return Err(
-              AppError::NotEnoughPermissions(format!(
-                "User {} is not allowed to edit: {}",
-                uid,
-                msg.object_id()
-              ))
-              .into(),
-            );
-          }
-        },
-        _ => {
-          return Err(
-            AppError::InvalidRequest(format!("Unsupported realtime message: {}", realtime_msg))
-              .into(),
-          );
-        },
-      }
 
       let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
       server

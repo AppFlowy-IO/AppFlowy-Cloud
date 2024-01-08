@@ -428,16 +428,12 @@ impl Client {
   ) -> Result<(), AppResponseError> {
     let payload = msg.into_data();
     let compressed_payload = compress(
-      &payload,
+      payload,
       self.config.compression_quality,
       self.config.compression_buffer_size,
-    )?;
-    event!(
-      tracing::Level::DEBUG,
-      "origin collab size:{}, compressed payload size: {}",
-      payload.len(),
-      compressed_payload.len()
-    );
+    )
+    .await?;
+
     let msg = HttpRealtimeMessage {
       device_id: device_id.to_string(),
       payload: compressed_payload,
@@ -771,20 +767,12 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compression_quality = self.config.compression_quality;
-    let compression_buffer_size = self.config.compression_buffer_size;
-    let compress_bytes = tokio::task::spawn_blocking(move || {
-      let compress_bytes = compress(&bytes, compression_quality, compression_buffer_size)?;
-      event!(
-        tracing::Level::DEBUG,
-        "origin collab size:{}, compress size:{}",
-        bytes.len(),
-        compress_bytes.len()
-      );
-      Ok::<Vec<u8>, anyhow::Error>(compress_bytes)
-    })
-    .await
-    .map_err(|err| AppError::Internal(err.into()))??;
+    let compress_bytes = compress(
+      bytes,
+      self.config.compression_quality,
+      self.config.compression_buffer_size,
+    )
+    .await?;
 
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)
@@ -813,20 +801,12 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compression_quality = self.config.compression_quality;
-    let compression_buffer_size = self.config.compression_buffer_size;
-    let compress_bytes = tokio::task::spawn_blocking(move || {
-      let compress_bytes = compress(&bytes, compression_quality, compression_buffer_size)?;
-      event!(
-        tracing::Level::DEBUG,
-        "origin collab size:{}, compress size:{}",
-        bytes.len(),
-        compress_bytes.len()
-      );
-      Ok::<Vec<u8>, anyhow::Error>(compress_bytes)
-    })
-    .await
-    .map_err(|err| AppError::Internal(err.into()))??;
+    let compress_bytes = compress(
+      bytes,
+      self.config.compression_quality,
+      self.config.compression_buffer_size,
+    )
+    .await?;
 
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)
@@ -1315,15 +1295,26 @@ fn log_request_id(resp: &reqwest::Response) {
   }
 }
 
-#[inline]
-pub fn compress(data: &[u8], quality: u32, buffer_size: usize) -> anyhow::Result<Vec<u8>> {
-  // The value of lgwin typically ranges from 10 to 24, which corresponds to window sizes between 1 KB (2^10 bytes)
-  // and 16 MB (2^24 bytes).
-  // Effect on Compression:
-  //     A larger window size (higher lgwin) allows Brotli to find and eliminate more redundancies, potentially leading to better compression ratios, especially for larger files or data with lots of repeating patterns.
-  //     A smaller window size reduces memory usage, which can be beneficial in memory-constrained environments but may result in lower compression ratios.
-  let mut compressor = CompressorReader::new(data, buffer_size, quality, 22);
-  let mut compressed_data = Vec::new();
-  compressor.read_to_end(&mut compressed_data)?;
-  Ok(compressed_data)
+pub async fn compress(
+  data: Vec<u8>,
+  quality: u32,
+  buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  tokio::task::spawn_blocking(move || {
+    let mut compressor = CompressorReader::new(&*data, buffer_size, quality, 22);
+    let mut compressed_data = Vec::new();
+    compressor
+      .read_to_end(&mut compressed_data)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress data: {}", err)))?;
+
+    event!(
+      tracing::Level::DEBUG,
+      "origin collab size:{}, compress size:{}",
+      data.len(),
+      compressed_data.len()
+    );
+    Ok(compressed_data)
+  })
+  .await
+  .map_err(|err| AppError::Internal(err.into()))?
 }

@@ -96,13 +96,14 @@ impl WSClient {
     addr: String,
     device_id: &str,
   ) -> Result<Option<SocketAddr>, WSError> {
+    self.set_state(ConnectState::Connecting).await;
+
     let (stop_tx, mut stop_rx) = oneshot::channel();
     if let Some(old_stop_tx) = self.stop_tx.lock().await.take() {
       let _ = old_stop_tx.send(());
     }
     *self.stop_tx.lock().await = Some(stop_tx);
 
-    self.set_state(ConnectState::Connecting).await;
     *self.addr.lock() = Some(addr.clone());
     if let Some(old_ping) = self.ping.lock().await.as_ref() {
       old_ping.stop().await;
@@ -207,7 +208,7 @@ impl WSClient {
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
             Err(e) => {
-              error!("failed to send pong message to websocket: {:?}", e);
+              error!("failed to send pong message to websocket: {}", e);
             },
           },
           Message::Close(close) => {

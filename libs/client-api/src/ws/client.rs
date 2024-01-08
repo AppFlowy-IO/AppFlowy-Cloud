@@ -97,6 +97,9 @@ impl WSClient {
     device_id: &str,
   ) -> Result<Option<SocketAddr>, WSError> {
     let (stop_tx, mut stop_rx) = oneshot::channel();
+    if let Some(old_stop_tx) = self.stop_tx.lock().await.take() {
+      let _ = old_stop_tx.send(());
+    }
     *self.stop_tx.lock().await = Some(stop_tx);
 
     self.set_state(ConnectState::Connecting).await;
@@ -304,10 +307,6 @@ impl WSClient {
   pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {
     self.sender.send(msg.into()).unwrap();
     Ok(())
-  }
-
-  pub fn sender(&self) -> Sender<Message> {
-    self.sender.clone()
   }
 
   pub fn get_state(&self) -> ConnectState {

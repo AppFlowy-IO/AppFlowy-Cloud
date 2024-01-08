@@ -309,7 +309,10 @@ where
     match self.sender.try_lock() {
       Ok(mut sender) => {
         debug!("Sending {}", collab_msg);
-        sender.send(collab_msg).await.ok()?;
+        if let Err(err) = sender.send(collab_msg).await {
+          error!("Failed to send error: {:?}", err.into());
+          return None;
+        }
       },
       Err(_) => {
         warn!("Failed to acquire the lock of the sink, retry later");

@@ -760,7 +760,7 @@ impl Client {
 
     event!(
       tracing::Level::DEBUG,
-      "origin size:{}, compression size:{}",
+      "origin collab size:{}, compress size:{}",
       bytes.len(),
       compress_bytes.len()
     );
@@ -798,7 +798,7 @@ impl Client {
     )?;
     event!(
       tracing::Level::DEBUG,
-      "origin size:{}, compression size:{}",
+      "origin collab size:{}, compress size:{}",
       bytes.len(),
       compress_bytes.len()
     );

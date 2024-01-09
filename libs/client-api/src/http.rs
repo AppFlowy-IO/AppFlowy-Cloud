@@ -91,7 +91,7 @@ impl ClientConfiguration {
 impl Default for ClientConfiguration {
   fn default() -> Self {
     Self {
-      compression_quality: 10,
+      compression_quality: 8,
       compression_buffer_size: 10240,
     }
   }

@@ -239,19 +239,17 @@ impl WSClient {
               trace!("send ws message via http, message len: :{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 let cloned_device_id = device_id.clone();
+                // Spawn a task here in case of blocking the current loop task.
                 tokio::spawn(async move {
-                  match http_sender.send_ws_msg(&cloned_device_id, msg).await {
-                    Ok(_) => {},
-                    Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
+                  if let Err(err) = http_sender.send_ws_msg(&cloned_device_id, msg).await {
+                    error!("Failed to send WebSocket message over HTTP: {}", err);
                   }
                 });
-
               } else {
                  error!("The HTTP sender has been dropped, unable to send message.");
-                 break;
+                 continue;
               }
             } else {
-                trace!("send ws message via websocket, message:{}", msg);
                 if let Err(err) = sink.send(msg).await.map_err(WSError::from){
                 handle_ws_error(&err);
                 break;

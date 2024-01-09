@@ -427,8 +427,7 @@ impl Client {
     msg: Message,
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
-    let mut payload =
-      brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
+    let payload = brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
 
     let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
     let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));

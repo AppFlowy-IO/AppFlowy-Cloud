@@ -15,13 +15,13 @@
         <button
           class="button cyan"
           hx-target="#sso-list"
-          hx-get="/web/components/admin/sso/{{ sso_provider.id }}"
+          hx-get="/web/components/admin/sso/{{ sso_provider.id|escape }}"
         >
           More Info
         </button>
         <button
           class="deletUserBtn button red"
-          hx-delete="/web-api/admin/sso/{{ sso_provider.id }}"
+          hx-delete="/web-api/admin/sso/{{ sso_provider.id|escape }}"
           hx-confirm="Are you sure?"
           hx-target="closest tr"
           hx-swap="delete"

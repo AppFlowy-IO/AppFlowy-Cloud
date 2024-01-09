@@ -1303,6 +1303,11 @@ pub async fn compress(
   buffer_size: usize,
 ) -> Result<Vec<u8>, AppError> {
   tokio::task::spawn_blocking(move || {
+    event!(
+      tracing::Level::DEBUG,
+      "start compressing collab with len:{}",
+      data.len(),
+    );
     let mut compressor = CompressorReader::new(&*data, buffer_size, quality, 22);
     let mut compressed_data = Vec::new();
     compressor
@@ -1311,7 +1316,7 @@ pub async fn compress(
 
     event!(
       tracing::Level::DEBUG,
-      "origin collab size:{}, compress size:{}",
+      "compress collab success: before:{}, after:{}",
       data.len(),
       compressed_data.len()
     );

@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, info, trace};
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -197,7 +197,7 @@ where
       },
       Ok(msg) => msg,
     };
-
+    info!("Websocket stream message: {:?}", msg);
     match msg {
       ws::Message::Ping(msg) => {
         self.hb = Instant::now();

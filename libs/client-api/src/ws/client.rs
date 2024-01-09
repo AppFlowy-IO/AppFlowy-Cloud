@@ -215,7 +215,6 @@ impl WSClient {
             info!("websocket close: {:?}", close);
           },
           Message::Pong(_) => {
-            trace!("receive pong from server");
             if let Err(err) = pong_tx.send(()).await {
               error!("failed to receive server pong: {}", err);
             }
@@ -239,10 +238,14 @@ impl WSClient {
             if  msg.is_binary() && len > 40960 {
               trace!("send ws message via http, message len: :{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
-                match http_sender.send_ws_msg(&device_id, msg).await {
-                  Ok(_) => {},
-                  Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
-                }
+                let cloned_device_id = device_id.clone();
+                tokio::spawn(async move {
+                  match http_sender.send_ws_msg(&cloned_device_id, msg).await {
+                    Ok(_) => {},
+                    Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
+                  }
+                });
+
               } else {
                  error!("The HTTP sender has been dropped, unable to send message.");
                  break;

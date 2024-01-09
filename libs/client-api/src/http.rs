@@ -426,20 +426,11 @@ impl Client {
     device_id: &str,
     msg: Message,
   ) -> Result<(), AppResponseError> {
-    let payload = msg.into_data();
-    let compressed_payload = compress(
-      payload,
-      self.config.compression_quality,
-      self.config.compression_buffer_size,
-    )
-    .await?;
+    let device_id = device_id.to_string();
+    let mut payload =
+      brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
 
-    let msg = HttpRealtimeMessage {
-      device_id: device_id.to_string(),
-      payload: compressed_payload,
-    }
-    .encode_to_vec();
-
+    let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
     let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
     let url = format!("{}/api/realtime/post/stream", self.base_url);
     let resp = self
@@ -769,7 +760,7 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compress_bytes = compress(
+    let compress_bytes = brotli_compress(
       bytes,
       self.config.compression_quality,
       self.config.compression_buffer_size,
@@ -803,7 +794,7 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compress_bytes = compress(
+    let compress_bytes = brotli_compress(
       bytes,
       self.config.compression_quality,
       self.config.compression_buffer_size,
@@ -1297,7 +1288,7 @@ fn log_request_id(resp: &reqwest::Response) {
   }
 }
 
-pub async fn compress(
+pub async fn brotli_compress(
   data: Vec<u8>,
   quality: u32,
   buffer_size: usize,

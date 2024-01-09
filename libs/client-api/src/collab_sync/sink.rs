@@ -422,10 +422,8 @@ fn calculate_timeout(payload_len: usize, default: Duration) -> Duration {
     0..=40959 => default,
     40960..=1048576 => Duration::from_secs(10),
     1048577..=2097152 => Duration::from_secs(20),
-    2097153..=4194304 => Duration::from_secs(30),
-    4194305..=8388608 => Duration::from_secs(60),
-    8388609..=16777216 => Duration::from_secs(90),
-    _ => Duration::from_secs(120),
+    2097153..=4194304 => Duration::from_secs(50),
+    _ => Duration::from_secs(160),
   }
 }
 

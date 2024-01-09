@@ -78,13 +78,13 @@ pub trait CollabSyncProtocol {
   /// an update to current `awareness` document instance.
   fn handle_sync_step2(
     &self,
-    origin: &Option<&CollabOrigin>,
+    origin: &Option<CollabOrigin>,
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<Option<Vec<u8>>, Error> {
     let mut retry_txn = TransactionRetry::new(awareness.doc());
     let mut txn = if let Some(origin) = origin.as_ref() {
-      retry_txn.try_get_write_txn_with((*origin).clone())
+      retry_txn.try_get_write_txn_with(origin.clone())
     } else {
       retry_txn.try_get_write_txn()
     }
@@ -100,7 +100,7 @@ pub trait CollabSyncProtocol {
   /// `awareness` document instance.
   fn handle_update(
     &self,
-    origin: &Option<&CollabOrigin>,
+    origin: &Option<CollabOrigin>,
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<Option<Vec<u8>>, Error> {
@@ -141,7 +141,7 @@ pub trait CollabSyncProtocol {
 
 /// Handles incoming messages from the client/server
 pub fn handle_msg<P: CollabSyncProtocol>(
-  origin: &Option<&CollabOrigin>,
+  origin: &Option<CollabOrigin>,
   protocol: &P,
   collab: &MutexCollab,
   msg: Message,

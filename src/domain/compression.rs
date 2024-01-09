@@ -23,7 +23,7 @@ pub async fn compress(
     Ok(compressed_data)
   })
   .await
-  .map_err(|err| AppError::Internal(err.into()))?
+  .map_err(AppError::from)?
 }
 
 pub async fn decompress(data: Vec<u8>, buffer_size: usize) -> Result<Vec<u8>, AppError> {
@@ -36,5 +36,5 @@ pub async fn decompress(data: Vec<u8>, buffer_size: usize) -> Result<Vec<u8>, Ap
     Ok(decompressed_data)
   })
   .await
-  .map_err(|err| AppError::Internal(err.into()))?
+  .map_err(AppError::from)?
 }

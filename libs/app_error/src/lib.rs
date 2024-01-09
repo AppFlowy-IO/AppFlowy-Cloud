@@ -92,6 +92,10 @@ pub enum AppError {
 
   #[error("{0}")]
   RequestTimeout(String),
+
+  #[cfg(feature = "tokio_error")]
+  #[error(transparent)]
+  TokioJoinError(#[from] tokio::task::JoinError),
 }
 
 impl AppError {
@@ -143,6 +147,8 @@ impl AppError {
       AppError::SerdeError(_) => ErrorCode::SerdeError,
       AppError::Connect(_) => ErrorCode::NetworkError,
       AppError::RequestTimeout(_) => ErrorCode::NetworkError,
+      #[cfg(feature = "tokio_error")]
+      AppError::TokioJoinError(_) => ErrorCode::Internal,
     }
   }
 }

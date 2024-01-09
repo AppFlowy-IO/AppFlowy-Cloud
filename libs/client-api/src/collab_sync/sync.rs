@@ -310,11 +310,12 @@ where
   {
     let mut decoder = DecoderV1::new(Cursor::new(payload));
     let reader = MessageReader::new(&mut decoder);
+    let cloned_origin = Some(origin.clone());
     for msg in reader {
       let msg = msg?;
       trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg)? {
+      if let Some(payload) = handle_msg(&cloned_origin, protocol, collab, msg)? {
         if is_sync_step_1 {
           // flush
           match collab.try_lock() {

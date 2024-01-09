@@ -15,7 +15,7 @@ use database_entity::dto::{
   QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
   UpdateCollabMemberParams,
 };
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 
@@ -25,7 +25,7 @@ use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use realtime_entity::EncodedCollab;
-use reqwest::header;
+use reqwest::{header, Body};
 
 use collab_entity::CollabType;
 use reqwest::header::HeaderValue;
@@ -439,11 +439,13 @@ impl Client {
       payload: compressed_payload,
     }
     .encode_to_vec();
-    let url = format!("{}/api/realtime/post", self.base_url);
+
+    let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
+    let url = format!("{}/api/realtime/post/stream", self.base_url);
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)
       .await?
-      .body(msg)
+      .body(body)
       .send()
       .await?;
     log_request_id(&resp);
@@ -1316,5 +1318,5 @@ pub async fn compress(
     Ok(compressed_data)
   })
   .await
-  .map_err(|err| AppError::Internal(err.into()))?
+  .map_err(AppError::from)?
 }

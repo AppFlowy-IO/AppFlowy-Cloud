@@ -8,7 +8,7 @@ use crate::component::auth::jwt::UserUuid;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
 
-use actix_web::web::Bytes;
+use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
@@ -20,13 +20,15 @@ use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
 
-use realtime::entities::{ClientMessage, RealtimeMessage};
+use bytes::BytesMut;
+use realtime::entities::{ClientMessage, ClientStreamMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
 use std::sync::Arc;
+use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
 use uuid::Uuid;
@@ -87,13 +89,21 @@ pub fn workspace_scope() -> Scope {
 }
 
 pub fn collab_scope() -> Scope {
-  web::scope("/api/realtime").service(
-    web::resource("post")
-      .app_data(
-        PayloadConfig::new(10 * 1024 * 1024), // 10 MB
-      )
-      .route(web::post().to(post_realtime_message_handler)),
-  )
+  web::scope("/api/realtime")
+    .service(
+      web::resource("post")
+        .app_data(
+          PayloadConfig::new(10 * 1024 * 1024), // 10 MB
+        )
+        .route(web::post().to(post_realtime_message_handler)),
+    )
+    .service(
+      web::resource("post/stream")
+        .app_data(
+          PayloadConfig::new(10 * 1024 * 1024), // 10 MB
+        )
+        .route(web::post().to(post_realtime_message_stream_handler)),
+    )
 }
 
 #[instrument(skip_all, err)]
@@ -523,10 +533,42 @@ async fn post_realtime_message_handler(
     "Receive realtime http message with len: {}",
     payload.len()
   );
+  let (message, user) = parser_realtime_msg(uid, payload, req).await?;
+  server.do_send(ClientMessage { user, message });
+  Ok(Json(AppResponse::Ok()))
+}
 
+#[instrument(level = "debug", skip(payload, server, state), err)]
+async fn post_realtime_message_stream_handler(
+  user_uuid: UserUuid,
+  mut payload: Payload,
+  server: Data<CollabServerImpl>,
+  state: Data<AppState>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let mut bytes = BytesMut::new();
+  while let Some(item) = payload.next().await {
+    bytes.extend_from_slice(&item?);
+  }
+
+  let (message, user) = parser_realtime_msg(uid, bytes.freeze(), req).await?;
+  let stream = Box::new(tokio_stream::once(message));
+  server.do_send(ClientStreamMessage { user, stream });
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[inline]
+async fn parser_realtime_msg(
+  uid: i64,
+  payload: Bytes,
+  req: HttpRequest,
+) -> Result<(RealtimeMessage, Arc<RealtimeUserImpl>), AppError> {
   let HttpRealtimeMessage { device_id, payload } =
     HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
-
   let payload = match req.headers().get(X_COMPRESSION_TYPE) {
     None => payload,
     Some(_) => match compress_type_from_header_value(req.headers())? {
@@ -541,25 +583,23 @@ async fn post_realtime_message_handler(
       },
     },
   };
-
   let message = Message::from(payload);
   match message {
     Message::Binary(bytes) => {
-      let realtime_msg = RealtimeMessage::try_from(bytes).map_err(|err| {
-        AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
-      })?;
+      let realtime_msg = tokio::task::spawn_blocking(move || {
+        RealtimeMessage::try_from(bytes).map_err(|err| {
+          AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
+        })
+      })
+      .await
+      .map_err(AppError::from)??;
 
       let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
-      server
-        .send(ClientMessage {
-          user: realtime_user,
-          message: realtime_msg,
-        })
-        .await
-        .map_err(|err| AppError::Unhandled(err.to_string()))?
-        .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
-      Ok(Json(AppResponse::Ok()))
+      Ok((realtime_msg, realtime_user))
     },
-    _ => Err(AppError::InvalidRequest(format!("Unsupported message type: {:?}", message)).into()),
+    _ => Err(AppError::InvalidRequest(format!(
+      "Unsupported message type: {:?}",
+      message
+    ))),
   }
 }

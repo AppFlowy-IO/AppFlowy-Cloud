@@ -1,4 +1,6 @@
-use crate::entities::{ClientMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser};
+use crate::entities::{
+  ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
+};
 use crate::error::{RealtimeError, StreamError};
 use anyhow::Result;
 
@@ -7,7 +9,10 @@ use futures_util::future::BoxFuture;
 use parking_lot::Mutex;
 use realtime_entity::collab_msg::CollabMessage;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 
+use actix::dev::Stream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -81,6 +86,53 @@ where
       editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
       access_control,
+    })
+  }
+
+  fn process_realtime_message<MS>(
+    &mut self,
+    user: U,
+    mut message_stream: MS,
+  ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>>
+  where
+    MS: Stream<Item = RealtimeMessage> + Unpin + Send,
+  {
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let groups = self.groups.clone();
+    let edit_collab_by_user = self.editing_collab_by_user.clone();
+    let access_control = self.access_control.clone();
+
+    Box::pin(async move {
+      match message_stream.next().await {
+        None => Ok(()),
+        Some(realtime_msg) => {
+          trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
+          match realtime_msg {
+            RealtimeMessage::Collab(collab_message) => {
+              let msg = CollabUserMessage {
+                user: &user,
+                collab_message: &collab_message,
+              };
+              SubscribeGroupIfNeed {
+                collab_user_message: &msg,
+                groups: &groups,
+                edit_collab_by_user: &edit_collab_by_user,
+                client_stream_by_user: &client_stream_by_user,
+                access_control: &access_control,
+              }
+              .run()
+              .await?;
+
+              broadcast_message(&user, collab_message, &client_stream_by_user).await;
+              Ok(())
+            },
+            _ => {
+              warn!("Receive unsupported message: {}", realtime_msg);
+              Ok(())
+            },
+          }
+        },
+      }
     })
   }
 }
@@ -217,37 +269,25 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
-    trace!("Receive client:{} message:{}", user.uid(), message);
-    match message {
-      RealtimeMessage::Collab(collab_message) => {
-        let client_stream_by_user = self.client_stream_by_user.clone();
-        let groups = self.groups.clone();
-        let edit_collab_by_user = self.editing_collab_by_user.clone();
-        let permission_service = self.access_control.clone();
-        Box::pin(async move {
-          let msg = CollabUserMessage {
-            user: &user,
-            collab_message: &collab_message,
-          };
-          SubscribeGroupIfNeed {
-            collab_user_message: &msg,
-            groups: &groups,
-            edit_collab_by_user: &edit_collab_by_user,
-            client_stream_by_user: &client_stream_by_user,
-            access_control: &permission_service,
-          }
-          .run()
-          .await?;
+    self.process_realtime_message(user, tokio_stream::once(message))
+  }
+}
 
-          broadcast_message(&user, collab_message, &client_stream_by_user).await;
-          Ok(())
-        })
-      },
-      _ => {
-        warn!("Receive unsupported message: {}", message);
-        Box::pin(async { Ok(()) })
-      },
-    }
+impl<S, U, AC> Handler<ClientStreamMessage<U>> for CollabServer<S, U, AC>
+where
+  U: RealtimeUser + Unpin,
+  S: CollabStorage + Unpin,
+  AC: CollabAccessControl + Unpin,
+{
+  type Result = ResponseFuture<Result<(), RealtimeError>>;
+
+  fn handle(
+    &mut self,
+    client_msg: ClientStreamMessage<U>,
+    _ctx: &mut Context<Self>,
+  ) -> Self::Result {
+    let ClientStreamMessage { user, stream } = client_msg;
+    self.process_realtime_message(user, stream)
   }
 }
 

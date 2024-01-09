@@ -83,7 +83,7 @@ database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
-app-error = { workspace = true, features = ["sqlx_error", "actix_web_error"] }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 realtime-entity.workspace = true

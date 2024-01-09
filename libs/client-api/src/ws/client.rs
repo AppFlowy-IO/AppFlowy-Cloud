@@ -249,11 +249,9 @@ impl WSClient {
                  error!("The HTTP sender has been dropped, unable to send message.");
                  continue;
               }
-            } else {
-                if let Err(err) = sink.send(msg).await.map_err(WSError::from){
-                handle_ws_error(&err);
-                break;
-              }
+            } else if let Err(err) = sink.send(msg).await.map_err(WSError::from){
+              handle_ws_error(&err);
+              break;
             }
           }
         }

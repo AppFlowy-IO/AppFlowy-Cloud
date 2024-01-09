@@ -58,8 +58,8 @@ pub struct ClientMessage<U> {
 
 #[derive(Message)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct ClientStreamMessage<U> {
-  pub user: U,
+pub struct ClientStreamMessage {
+  pub uid: i64,
   pub stream: Box<dyn Stream<Item = RealtimeMessage> + Unpin + Send>,
 }
 

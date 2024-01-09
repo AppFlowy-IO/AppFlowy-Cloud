@@ -190,7 +190,7 @@ impl CollabBroadcast {
 
               let _collab_msg_origin = collab_msg.origin();
               if object_id != collab_msg.object_id() {
-                error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
+                error!("Incoming message's object id does not match the broadcast group's object id");
                 continue;
               }
 
@@ -237,9 +237,8 @@ async fn handle_user_ws_msg<Sink>(
             })
             .await;
 
-            if let Ok(Ok(payload)) = result {
-              // Send the response to the corresponding client
-              match origin.as_ref() {
+            match result {
+              Ok(Ok(payload)) => match origin.as_ref() {
                 None => warn!("Client message does not have a origin"),
                 Some(origin) => {
                   if let Some(msg_id) = collab_msg.msg_id() {
@@ -262,7 +261,13 @@ async fn handle_user_ws_msg<Sink>(
                     }
                   }
                 },
-              }
+              },
+              Ok(Err(err)) => {
+                error!("handle user ws message fail: {}", err);
+              },
+              Err(err) => {
+                error!("internal error when handle user ws message: {}", err);
+              },
             }
           },
           Err(e) => {

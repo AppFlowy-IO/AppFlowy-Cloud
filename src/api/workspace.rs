@@ -1,7 +1,7 @@
 use crate::api::util::compress_type_from_header_value;
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
-use crate::biz::user::RealtimeUserImpl;
+
 use crate::biz::workspace;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::component::auth::jwt::UserUuid;
@@ -21,13 +21,13 @@ use database_entity::dto::*;
 use prost::Message as ProstMessage;
 
 use bytes::BytesMut;
-use realtime::entities::{ClientMessage, ClientStreamMessage, RealtimeMessage};
+use realtime::entities::{ClientStreamMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use std::sync::Arc;
+
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
@@ -89,21 +89,13 @@ pub fn workspace_scope() -> Scope {
 }
 
 pub fn collab_scope() -> Scope {
-  web::scope("/api/realtime")
-    .service(
-      web::resource("post")
-        .app_data(
-          PayloadConfig::new(10 * 1024 * 1024), // 10 MB
-        )
-        .route(web::post().to(post_realtime_message_handler)),
-    )
-    .service(
-      web::resource("post/stream")
-        .app_data(
-          PayloadConfig::new(10 * 1024 * 1024), // 10 MB
-        )
-        .route(web::post().to(post_realtime_message_stream_handler)),
-    )
+  web::scope("/api/realtime").service(
+    web::resource("post/stream")
+      .app_data(
+        PayloadConfig::new(10 * 1024 * 1024), // 10 MB
+      )
+      .route(web::post().to(post_realtime_message_stream_handler)),
+  )
 }
 
 #[instrument(skip_all, err)]
@@ -517,28 +509,6 @@ async fn get_collab_member_list_handler(
 }
 
 #[instrument(level = "debug", skip(payload, server, state), err)]
-async fn post_realtime_message_handler(
-  user_uuid: UserUuid,
-  payload: Bytes,
-  server: Data<CollabServerImpl>,
-  state: Data<AppState>,
-  req: HttpRequest,
-) -> Result<Json<AppResponse<()>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
-
-  event!(
-    tracing::Level::TRACE,
-    "Receive realtime http message with len: {}",
-    payload.len()
-  );
-  let (message, user) = parser_realtime_msg(uid, payload, req).await?;
-  server.do_send(ClientMessage { user, message });
-  Ok(Json(AppResponse::Ok()))
-}
-
-#[instrument(level = "debug", skip(payload, server, state), err)]
 async fn post_realtime_message_stream_handler(
   user_uuid: UserUuid,
   mut payload: Payload,
@@ -555,19 +525,25 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  let (message, user) = parser_realtime_msg(uid, bytes.freeze(), req).await?;
+  let message = parser_realtime_msg(bytes.freeze(), req).await?;
   let stream = Box::new(tokio_stream::once(message));
-  server.do_send(ClientStreamMessage { user, stream });
+  server
+    .send(ClientStreamMessage { uid, stream })
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?
+    .map_err(|err| AppError::Internal(err.into()))?;
   Ok(Json(AppResponse::Ok()))
 }
 
 #[inline]
 async fn parser_realtime_msg(
-  uid: i64,
   payload: Bytes,
   req: HttpRequest,
-) -> Result<(RealtimeMessage, Arc<RealtimeUserImpl>), AppError> {
-  let HttpRealtimeMessage { device_id, payload } =
+) -> Result<RealtimeMessage, AppError> {
+  let HttpRealtimeMessage {
+    device_id: _,
+    payload,
+  } =
     HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
   let payload = match req.headers().get(X_COMPRESSION_TYPE) {
     None => payload,
@@ -593,9 +569,7 @@ async fn parser_realtime_msg(
       })
       .await
       .map_err(AppError::from)??;
-
-      let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
-      Ok((realtime_msg, realtime_user))
+      Ok(realtime_msg)
     },
     _ => Err(AppError::InvalidRequest(format!(
       "Unsupported message type: {:?}",

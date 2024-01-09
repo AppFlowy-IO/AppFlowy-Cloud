@@ -211,13 +211,10 @@ where
   }
 
   fn get_origin(collab_message: &CollabMessage) -> &CollabOrigin {
-    match collab_message.origin() {
-      None => {
-        error!("🔴The origin from client message is empty");
-        &CollabOrigin::Empty
-      },
-      Some(origin) => origin,
-    }
+    collab_message.origin().unwrap_or_else(|| {
+      error!("🔴The origin from client message is empty");
+      &CollabOrigin::Empty
+    })
   }
 
   fn make_channel<'b>(

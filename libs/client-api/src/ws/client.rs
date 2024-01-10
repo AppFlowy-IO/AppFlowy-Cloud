@@ -96,10 +96,14 @@ impl WSClient {
     addr: String,
     device_id: &str,
   ) -> Result<Option<SocketAddr>, WSError> {
+    self.set_state(ConnectState::Connecting).await;
+
     let (stop_tx, mut stop_rx) = oneshot::channel();
+    if let Some(old_stop_tx) = self.stop_tx.lock().await.take() {
+      let _ = old_stop_tx.send(());
+    }
     *self.stop_tx.lock().await = Some(stop_tx);
 
-    self.set_state(ConnectState::Connecting).await;
     *self.addr.lock() = Some(addr.clone());
     if let Some(old_ping) = self.ping.lock().await.as_ref() {
       old_ping.stop().await;
@@ -204,14 +208,16 @@ impl WSClient {
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
             Err(e) => {
-              error!("failed to send pong message to websocket: {:?}", e);
+              error!("failed to send pong message to websocket: {}", e);
             },
           },
           Message::Close(close) => {
             info!("websocket close: {:?}", close);
           },
           Message::Pong(_) => {
-            let _ = pong_tx.send(()).await;
+            if let Err(err) = pong_tx.send(()).await {
+              error!("failed to receive server pong: {}", err);
+            }
           },
           _ => warn!("received unexpected message from websocket: {:?}", ws_msg),
         }
@@ -230,15 +236,18 @@ impl WSClient {
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
             if  msg.is_binary() && len > 40960 {
-              trace!("[websocket]: send message with size:{}", len);
+              trace!("send ws message via http, message len: :{}", len);
               if let Some(http_sender) = weak_http_sender.upgrade() {
-                match http_sender.send_ws_msg(&device_id, msg).await {
-                  Ok(_) => debug!("webSocket message sent via HTTP. len: {}", len),
-                  Err(err) => error!("Failed to send WebSocket message over HTTP: {}", err),
-                }
+                let cloned_device_id = device_id.clone();
+                // Spawn a task here in case of blocking the current loop task.
+                tokio::spawn(async move {
+                  if let Err(err) = http_sender.send_ws_msg(&cloned_device_id, msg).await {
+                    error!("Failed to send WebSocket message over HTTP: {}", err);
+                  }
+                });
               } else {
                  error!("The HTTP sender has been dropped, unable to send message.");
-                 break;
+                 continue;
               }
             } else if let Err(err) = sink.send(msg).await.map_err(WSError::from){
               handle_ws_error(&err);
@@ -304,10 +313,6 @@ impl WSClient {
   pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {
     self.sender.send(msg.into()).unwrap();
     Ok(())
-  }
-
-  pub fn sender(&self) -> Sender<Message> {
-    self.sender.clone()
   }
 
   pub fn get_state(&self) -> ConnectState {

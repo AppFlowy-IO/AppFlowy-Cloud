@@ -10,23 +10,33 @@ use validator::{Validate, ValidationError};
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
-  #[serde(flatten)]
-  #[validate]
-  inner: CollabParams,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
+
+  #[validate(custom = "validate_not_empty_str")]
+  pub object_id: String,
+
+  #[validate(custom = "validate_not_empty_payload")]
+  pub encoded_collab_v1: Vec<u8>,
+
+  pub collab_type: CollabType,
+
+  /// Determine whether to override the collab if it exists. Default is false.
+  #[serde(default)]
+  pub override_if_exist: bool,
 }
 
 impl CreateCollabParams {
   pub fn split(self) -> (CollabParams, String) {
-    (self.inner, self.workspace_id)
-  }
-
-  pub fn new<T: ToString>(workspace_id: T, params: CollabParams) -> Self {
-    Self {
-      inner: params,
-      workspace_id: workspace_id.to_string(),
-    }
+    (
+      CollabParams {
+        object_id: self.object_id,
+        encoded_collab_v1: self.encoded_collab_v1,
+        collab_type: self.collab_type,
+        override_if_exist: self.override_if_exist,
+      },
+      self.workspace_id,
+    )
   }
 
   pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
@@ -34,14 +44,6 @@ impl CreateCollabParams {
   }
   pub fn from_bytes(bytes: &[u8]) -> Result<Self, bincode::Error> {
     bincode::deserialize(bytes)
-  }
-}
-
-impl Deref for CreateCollabParams {
-  type Target = CollabParams;
-
-  fn deref(&self) -> &Self::Target {
-    &self.inner
   }
 }
 

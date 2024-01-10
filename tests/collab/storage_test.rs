@@ -7,8 +7,7 @@ use std::collections::HashMap;
 use app_error::ErrorCode;
 use collab_entity::CollabType;
 use database_entity::dto::{
-  CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
-  QueryCollabResult,
+  CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
 use sqlx::types::Uuid;
 
@@ -21,10 +20,13 @@ async fn success_insert_collab_test() {
     .unwrap();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
-  c.create_collab(CreateCollabParams::new(
-    workspace_id.clone(),
-    CollabParams::new(&object_id, CollabType::Document, encoded_collab_v1),
-  ))
+  c.create_collab(CreateCollabParams {
+    object_id: object_id.clone(),
+    encoded_collab_v1,
+    collab_type: CollabType::Document,
+    override_if_exist: false,
+    workspace_id: workspace_id.clone(),
+  })
   .await
   .unwrap();
 
@@ -73,10 +75,13 @@ async fn success_batch_get_collab_test() {
       },
     );
 
-    c.create_collab(CreateCollabParams::new(
-      workspace_id.clone(),
-      CollabParams::new(&object_id, collab_type, raw_data.clone()),
-    ))
+    c.create_collab(CreateCollabParams {
+      object_id: object_id.clone(),
+      encoded_collab_v1: raw_data.clone(),
+      collab_type: collab_type.clone(),
+      override_if_exist: false,
+      workspace_id: workspace_id.clone(),
+    })
     .await
     .unwrap();
   }
@@ -126,10 +131,13 @@ async fn success_part_batch_get_collab_test() {
           encode_collab_v1: raw_data.clone(),
         },
       );
-      c.create_collab(CreateCollabParams::new(
-        workspace_id.clone(),
-        CollabParams::new(&object_id, collab_type, raw_data.clone()),
-      ))
+      c.create_collab(CreateCollabParams {
+        object_id: object_id.clone(),
+        encoded_collab_v1: raw_data.clone(),
+        collab_type: collab_type.clone(),
+        override_if_exist: false,
+        workspace_id: workspace_id.clone(),
+      })
       .await
       .unwrap();
     }
@@ -147,10 +155,13 @@ async fn success_delete_collab_test() {
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
-  c.create_collab(CreateCollabParams::new(
-    workspace_id.clone(),
-    CollabParams::new(&object_id, CollabType::Document, raw_data.clone()),
-  ))
+  c.create_collab(CreateCollabParams {
+    object_id: object_id.clone(),
+    encoded_collab_v1: raw_data.clone(),
+    collab_type: CollabType::Document,
+    override_if_exist: false,
+    workspace_id: workspace_id.clone(),
+  })
   .await
   .unwrap();
 
@@ -178,10 +189,13 @@ async fn fail_insert_collab_with_empty_payload_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c).await;
   let error = c
-    .create_collab(CreateCollabParams::new(
-      workspace_id,
-      CollabParams::new(Uuid::new_v4(), CollabType::Document, vec![]),
-    ))
+    .create_collab(CreateCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      encoded_collab_v1: vec![],
+      collab_type: CollabType::Document,
+      override_if_exist: false,
+      workspace_id: workspace_id.clone(),
+    })
     .await
     .unwrap_err();
 
@@ -194,10 +208,13 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
   let workspace_id = Uuid::new_v4().to_string();
   let raw_data = "hello world".to_string().as_bytes().to_vec();
   let error = c
-    .create_collab(CreateCollabParams::new(
-      workspace_id,
-      CollabParams::new(Uuid::new_v4(), CollabType::Document, raw_data.clone()),
-    ))
+    .create_collab(CreateCollabParams {
+      object_id: Uuid::new_v4().to_string(),
+      encoded_collab_v1: raw_data.clone(),
+      collab_type: CollabType::Document,
+      override_if_exist: false,
+      workspace_id: workspace_id.clone(),
+    })
     .await
     .unwrap_err();
 

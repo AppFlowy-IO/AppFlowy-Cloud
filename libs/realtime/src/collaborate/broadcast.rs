@@ -188,55 +188,15 @@ impl CollabBroadcast {
                 continue;
               }
 
-              let collab_msg_origin = collab_msg.origin();
+              let _collab_msg_origin = collab_msg.origin();
               if object_id != collab_msg.object_id() {
-                error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
+                error!("Incoming message's object id does not match the broadcast group's object id");
                 continue;
               }
 
-              // safety: payload is not none
-              let mut decoder = DecoderV1::from(payload.unwrap().as_ref());
-              match sink.try_lock() {
-                Ok(mut sink) => {
-                  let reader = MessageReader::new(&mut decoder);
-                  for msg in reader {
-                    match msg {
-                      Ok(msg) => {
-                        if let Ok(payload) =
-                          handle_msg(&collab_msg_origin, &ServerSyncProtocol, &collab, msg) {
-                            // Send the response to the corresponding client
-                            match collab_msg_origin {
-                              None => warn!("Client message does not have a origin"),
-                              Some(collab_msg_origin) => {
-                                if let Some(msg_id) = collab_msg.msg_id() {
-                                  let resp = CollabAck::new(
-                                    collab_msg_origin.clone(),
-                                    object_id.clone(),
-                                    payload.unwrap_or_default(),
-                                    msg_id,
-                                    collab_msg.type_str()
-                                  );
-
-                                  trace!("Send response to client: {}", resp);
-                                  match sink.send(resp.into()).await {
-                                    Ok(_) => {},
-                                    Err(err) => {
-                                      trace!("fail to send response to client: {}", err);
-                                   },
-                                 }
-                               }
-                             },
-                           }
-                         }
-                      },
-                      Err(e) => {
-                        error!("Parser sync message failed: {:?}", e);
-                      },
-                    }
-                  }
-                },
-                Err(err) => error!("Requires sink lock failed: {:?}", err),
-              }
+              // TODO(nathan): the handle_user_ws_msg should run very fast, otherwise it will block
+              // the current loop. So create a task for it.
+              handle_user_ws_msg(&object_id, &sink, &collab_msg, &collab).await;
             }
           }
         }
@@ -249,6 +209,76 @@ impl CollabBroadcast {
       sink_stop_tx: Some(sink_stop_tx),
       stream_stop_tx: Some(stream_stop_tx),
     }
+  }
+}
+
+async fn handle_user_ws_msg<Sink>(
+  object_id: &str,
+  sink: &Arc<Mutex<Sink>>,
+  collab_msg: &CollabMessage,
+  collab: &MutexCollab,
+) where
+  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
+  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+{
+  // safety: payload is not none
+  match collab_msg.payload() {
+    None => {},
+    Some(payload) => {
+      let object_id = object_id.to_string();
+      let mut decoder = DecoderV1::from(payload.as_ref());
+      let origin = Arc::new(collab_msg.origin().cloned());
+      let reader = MessageReader::new(&mut decoder);
+      for msg in reader {
+        match msg {
+          Ok(msg) => {
+            let cloned_collab = collab.clone();
+            let cloned_origin = origin.clone();
+            let result = tokio::task::spawn_blocking(move || {
+              handle_msg(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg)
+            })
+            .await;
+
+            match result {
+              Ok(Ok(payload)) => match origin.as_ref() {
+                None => warn!("Client message does not have a origin"),
+                Some(origin) => {
+                  if let Some(msg_id) = collab_msg.msg_id() {
+                    let resp = CollabAck::new(
+                      origin.clone(),
+                      object_id.clone(),
+                      payload.unwrap_or_default(),
+                      msg_id,
+                      collab_msg.type_str(),
+                    );
+
+                    trace!("Send response to client: {}", resp);
+                    match sink.try_lock() {
+                      Ok(mut sink) => {
+                        if let Err(err) = sink.send(resp.into()).await {
+                          trace!("fail to send response to client: {}", err);
+                        }
+                      },
+                      Err(err) => error!("Requires sink lock failed: {:?}", err),
+                    }
+                  }
+                },
+              },
+              Ok(Err(err)) => {
+                error!("handle user ws message fail: {}", err);
+              },
+              Err(err) => {
+                error!("internal error when handle user ws message: {}", err);
+              },
+            }
+          },
+          Err(e) => {
+            error!("Parser sync message failed: {:?}", e);
+            break;
+          },
+        }
+      }
+    },
   }
 }
 

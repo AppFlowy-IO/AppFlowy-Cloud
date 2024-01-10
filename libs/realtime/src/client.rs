@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -60,6 +60,7 @@ where
     ctx.run_interval(self.heartbeat_interval, move |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
         let user = act.user.clone();
+        warn!("{} heartbeat failed, disconnecting!", user);
         act.server.do_send(Disconnect {
           user,
           session_id: session_id.clone(),
@@ -134,14 +135,14 @@ where
       .then(|res, _session, ctx| {
         match res {
           Ok(Ok(_)) => {
-            trace!("Send connect message to server success")
+            trace!("ws client send connect message to server success")
           },
           Ok(Err(err)) => {
-            error!("Send connect message to server error: {:?}", err);
+            error!("ws client send connect message to server error: {:?}", err);
             ctx.stop();
           },
           Err(err) => {
-            error!("Send connect message to server error: {:?}", err);
+            error!("ws client send connect message to server error: {:?}", err);
             ctx.stop();
           },
         }
@@ -154,6 +155,7 @@ where
     // When the user is None which means the user is kicked off by the server, do not send
     // disconnect message to the server.
     let user = self.user.clone();
+    trace!("{} stopping websocket connect", user);
     self.server.do_send(Disconnect {
       user,
       session_id: self.session_id.clone(),
@@ -197,7 +199,6 @@ where
       },
       Ok(msg) => msg,
     };
-
     match msg {
       ws::Message::Ping(msg) => {
         self.hb = Instant::now();

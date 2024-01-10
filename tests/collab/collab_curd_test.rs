@@ -1,11 +1,17 @@
 use crate::util::test_client::TestClient;
 use app_error::ErrorCode;
 use assert_json_diff::assert_json_include;
+use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
-use database_entity::dto::{CollabParams, CreateCollabParams, QueryCollab};
+use database_entity::dto::{
+  BatchCreateCollabParams, CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams,
+};
+
+use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
 
+use shared_entity::response::AppResponse;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -87,4 +93,129 @@ struct InsertCollabParams {
   pub encoded_collab_v1: Vec<u8>,
   pub workspace_id: String,
   pub collab_type: CollabType,
+}
+
+#[tokio::test]
+async fn create_collab_compatibility_with_json_params_test() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = Uuid::new_v4().to_string();
+  let api_client = &test_client.api_client;
+  let url = format!(
+    "{}/api/workspace/{}/collab/{}",
+    api_client.base_url, workspace_id, &object_id
+  );
+
+  let encoded_collab = EncodedCollab::new_v1(vec![0, 1, 2, 3, 4, 5, 6], vec![7, 8, 9, 10]);
+  let params = OldCreateCollabParams {
+    inner: CollabParams {
+      object_id: object_id.clone(),
+      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+      collab_type: CollabType::Document,
+      override_if_exist: false,
+    },
+    workspace_id: workspace_id.clone(),
+  };
+
+  test_client
+    .api_client
+    .http_client_with_auth(Method::POST, &url)
+    .await
+    .unwrap()
+    .json(&params)
+    .send()
+    .await
+    .unwrap();
+
+  let resp = test_client
+    .api_client
+    .http_client_with_auth(Method::GET, &url)
+    .await
+    .unwrap()
+    .json(&QueryCollabParams {
+      workspace_id,
+      inner: QueryCollab {
+        object_id: object_id.clone(),
+        collab_type: CollabType::Document,
+      },
+    })
+    .send()
+    .await
+    .unwrap();
+
+  let encoded_collab_from_server = AppResponse::<EncodedCollab>::from_response(resp)
+    .await
+    .unwrap()
+    .into_data()
+    .unwrap();
+  assert_eq!(encoded_collab, encoded_collab_from_server);
+}
+
+#[tokio::test]
+async fn batch_create_collab_compatibility_with_uncompress_params_test() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = Uuid::new_v4().to_string();
+  let api_client = &test_client.api_client;
+  let url = format!(
+    "{}/api/workspace/{}/collabs",
+    api_client.base_url, workspace_id,
+  );
+
+  let encoded_collab = EncodedCollab::new_v1(vec![0, 1, 2, 3, 4, 5, 6], vec![7, 8, 9, 10]);
+  let params = BatchCreateCollabParams {
+    workspace_id: workspace_id.to_string(),
+    params_list: vec![CollabParams {
+      object_id: object_id.clone(),
+      encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
+      collab_type: CollabType::Document,
+      override_if_exist: false,
+    }],
+  }
+  .to_bytes()
+  .unwrap();
+
+  test_client
+    .api_client
+    .http_client_with_auth(Method::POST, &url)
+    .await
+    .unwrap()
+    .body(params)
+    .send()
+    .await
+    .unwrap();
+
+  let url = format!(
+    "{}/api/workspace/{}/collab/{}",
+    api_client.base_url, workspace_id, &object_id
+  );
+  let resp = test_client
+    .api_client
+    .http_client_with_auth(Method::GET, &url)
+    .await
+    .unwrap()
+    .json(&QueryCollabParams {
+      workspace_id,
+      inner: QueryCollab {
+        object_id: object_id.clone(),
+        collab_type: CollabType::Document,
+      },
+    })
+    .send()
+    .await
+    .unwrap();
+
+  let encoded_collab_from_server = AppResponse::<EncodedCollab>::from_response(resp)
+    .await
+    .unwrap()
+    .into_data()
+    .unwrap();
+  assert_eq!(encoded_collab, encoded_collab_from_server);
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct OldCreateCollabParams {
+  #[serde(flatten)]
+  inner: CollabParams,
+  pub workspace_id: String,
 }

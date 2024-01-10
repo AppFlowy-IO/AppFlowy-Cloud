@@ -1,4 +1,6 @@
-use crate::entities::{ClientMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser};
+use crate::entities::{
+  ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
+};
 use crate::error::{RealtimeError, StreamError};
 use anyhow::Result;
 
@@ -7,7 +9,10 @@ use futures_util::future::BoxFuture;
 use parking_lot::Mutex;
 use realtime_entity::collab_msg::CollabMessage;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
+use std::pin::Pin;
 
+use actix::dev::Stream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,6 +44,7 @@ pub struct CollabServer<S, U, AC> {
   /// If the two session IDs differ, it indicates that the user has established a new connection
   /// to the server since the stored session ID was last updated.
   ///
+  user_by_uid: Arc<parking_lot::RwLock<HashMap<i64, U>>>,
   session_id_by_user: Arc<RwLock<HashMap<U, String>>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
@@ -77,10 +83,58 @@ where
     Ok(Self {
       storage,
       groups,
+      user_by_uid: Default::default(),
       session_id_by_user: Default::default(),
       editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
       access_control,
+    })
+  }
+
+  fn process_realtime_message<MS>(
+    &mut self,
+    user: U,
+    mut message_stream: MS,
+  ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>>
+  where
+    MS: Stream<Item = RealtimeMessage> + Unpin + Send,
+  {
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let groups = self.groups.clone();
+    let edit_collab_by_user = self.editing_collab_by_user.clone();
+    let access_control = self.access_control.clone();
+
+    Box::pin(async move {
+      match message_stream.next().await {
+        None => Ok(()),
+        Some(realtime_msg) => {
+          trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
+          match realtime_msg {
+            RealtimeMessage::Collab(collab_message) => {
+              let msg = CollabUserMessage {
+                user: &user,
+                collab_message: &collab_message,
+              };
+              SubscribeGroupIfNeed {
+                collab_user_message: &msg,
+                groups: &groups,
+                edit_collab_by_user: &edit_collab_by_user,
+                client_stream_by_user: &client_stream_by_user,
+                access_control: &access_control,
+              }
+              .run()
+              .await?;
+
+              broadcast_message(&user, collab_message, &client_stream_by_user).await;
+              Ok(())
+            },
+            _ => {
+              warn!("Receive unsupported message: {}", realtime_msg);
+              Ok(())
+            },
+          }
+        },
+      }
     })
   }
 }
@@ -128,8 +182,9 @@ where
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
-    let stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
+    let client_stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     let groups = self.groups.clone();
+    let user_by_uid = self.user_by_uid.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     let user_by_session_id = self.session_id_by_user.clone();
@@ -141,12 +196,18 @@ where
         .await
         .insert(new_conn.user.clone(), new_conn.session_id);
 
+      user_by_uid
+        .write()
+        .insert(new_conn.user.uid(), new_conn.user.clone());
+
       // when a new connection is established, remove the old connection from all groups
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
+
+      info!("new client stream:{}", &new_conn.user);
       if let Some(old_stream) = client_stream_by_user
         .write()
         .await
-        .insert(new_conn.user, stream)
+        .insert(new_conn.user, client_stream)
       {
         old_stream.disconnect();
       }
@@ -175,9 +236,9 @@ where
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
     trace!("[realtime]: disconnect => {}", msg.user);
     let groups = self.groups.clone();
+    let user_by_uid = self.user_by_uid.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
-
     let session_id_by_user = self.session_id_by_user.clone();
 
     Box::pin(async move {
@@ -197,7 +258,8 @@ where
       remove_user(&groups, &editing_collab_by_user, &msg.user).await;
       if let Ok(mut client_stream_by_user) = client_stream_by_user.try_write() {
         if client_stream_by_user.remove(&msg.user).is_some() {
-          info!("Remove client stream: {}", &msg.user);
+          user_by_uid.write().remove(&msg.user.uid());
+          info!("remove client stream: {}", &msg.user);
         }
       }
 
@@ -216,36 +278,29 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
-    trace!("Receive client:{} message:{}", user.uid(), message);
-    match message {
-      RealtimeMessage::Collab(collab_message) => {
-        let client_stream_by_user = self.client_stream_by_user.clone();
-        let groups = self.groups.clone();
-        let edit_collab_by_user = self.editing_collab_by_user.clone();
-        let permission_service = self.access_control.clone();
-        Box::pin(async move {
-          let msg = CollabUserMessage {
-            user: &user,
-            collab_message: &collab_message,
-          };
-          SubscribeGroupIfNeed {
-            collab_user_message: &msg,
-            groups: &groups,
-            edit_collab_by_user: &edit_collab_by_user,
-            client_stream_by_user: &client_stream_by_user,
-            access_control: &permission_service,
-          }
-          .run()
-          .await?;
+    self.process_realtime_message(user, tokio_stream::once(message))
+  }
+}
 
-          broadcast_message(&user, collab_message, &client_stream_by_user).await;
-          Ok(())
-        })
-      },
-      _ => {
-        warn!("Receive unsupported message: {}", message);
-        Box::pin(async { Ok(()) })
-      },
+impl<S, U, AC> Handler<ClientStreamMessage> for CollabServer<S, U, AC>
+where
+  U: RealtimeUser + Unpin,
+  S: CollabStorage + Unpin,
+  AC: CollabAccessControl + Unpin,
+{
+  type Result = ResponseFuture<Result<(), RealtimeError>>;
+
+  fn handle(&mut self, client_msg: ClientStreamMessage, _ctx: &mut Context<Self>) -> Self::Result {
+    let ClientStreamMessage { uid, stream } = client_msg;
+    let user = self.user_by_uid.read().get(&uid).cloned();
+    match user {
+      None => Box::pin(async move {
+        Err(RealtimeError::UserNotFound(format!(
+          "Can't find the user with given id: {}",
+          uid
+        )))
+      }),
+      Some(user) => self.process_realtime_message(user, stream),
     }
   }
 }

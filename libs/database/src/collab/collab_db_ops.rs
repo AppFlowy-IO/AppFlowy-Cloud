@@ -72,6 +72,12 @@ pub async fn insert_into_af_collab(
   )
   .fetch_optional(tx.deref_mut())
   .await?;
+  event!(
+    tracing::Level::TRACE,
+    "upsert collab:{}, len:{}",
+    params.object_id,
+    params.encoded_collab_v1.len(),
+  );
 
   match existing_workspace_id {
     Some(existing_workspace_id) => {

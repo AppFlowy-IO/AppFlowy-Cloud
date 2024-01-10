@@ -305,10 +305,14 @@ where
       collab_msg
     };
 
+    let payload_len = collab_msg.payload_len();
     match self.sender.try_lock() {
       Ok(mut sender) => {
         debug!("Sending {}", collab_msg);
-        sender.send(collab_msg).await.ok()?;
+        if let Err(err) = sender.send(collab_msg).await {
+          error!("Failed to send error: {:?}", err.into());
+          return None;
+        }
       },
       Err(_) => {
         warn!("Failed to acquire the lock of the sink, retry later");
@@ -316,10 +320,10 @@ where
         return None;
       },
     }
-
+    let timeout_duration = calculate_timeout(payload_len, self.config.send_timeout);
     // Wait for the message to be acked.
     // If the message is not acked within the timeout, resend the message.
-    match tokio::time::timeout(self.config.send_timeout, rx).await {
+    match tokio::time::timeout(timeout_duration, rx).await {
       Ok(result) => {
         match result {
           Ok(_) => match self.pending_msg_queue.try_lock() {
@@ -338,7 +342,7 @@ where
               }
             },
           },
-          Err(err) => trace!("Send message failed error: {:?}", err),
+          Err(err) => error!("Send message failed error: {}", err),
         }
 
         self.notify()
@@ -411,6 +415,16 @@ pub struct SinkConfig {
   pub maximum_payload_size: usize,
   /// `strategy` is the strategy to send the messages.
   pub strategy: SinkStrategy,
+}
+
+fn calculate_timeout(payload_len: usize, default: Duration) -> Duration {
+  match payload_len {
+    0..=40959 => default,
+    40960..=1048576 => Duration::from_secs(10),
+    1048577..=2097152 => Duration::from_secs(20),
+    2097153..=4194304 => Duration::from_secs(50),
+    _ => Duration::from_secs(160),
+  }
 }
 
 impl SinkConfig {

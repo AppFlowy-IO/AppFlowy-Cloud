@@ -1,14 +1,17 @@
+use crate::api::util::compress_type_from_header_value;
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
-use crate::biz::user::RealtimeUserImpl;
+
 use crate::biz::workspace;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::component::auth::jwt::UserUuid;
+use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
-use actix_web::web::Bytes;
+
+use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
-use actix_web::Result;
 use actix_web::{web, Scope};
+use actix_web::{HttpRequest, Result};
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -16,14 +19,16 @@ use database::collab::CollabStorage;
 use database::user::{select_uid_from_email, select_uid_from_uuid};
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
-use realtime::collaborate::CollabAccessControl;
-use realtime::entities::{ClientMessage, RealtimeMessage};
+
+use bytes::BytesMut;
+use realtime::entities::{ClientStreamMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use std::sync::Arc;
+
+use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
 use uuid::Uuid;
@@ -85,11 +90,11 @@ pub fn workspace_scope() -> Scope {
 
 pub fn collab_scope() -> Scope {
   web::scope("/api/realtime").service(
-    web::resource("post")
+    web::resource("post/stream")
       .app_data(
-        PayloadConfig::new(5 * 1024 * 1024), // 10 MB
+        PayloadConfig::new(10 * 1024 * 1024), // 10 MB
       )
-      .route(web::post().to(post_realtime_message_handler)),
+      .route(web::post().to(post_realtime_message_stream_handler)),
   )
 }
 
@@ -234,11 +239,32 @@ async fn update_workspace_member_handler(
 #[instrument(skip(state, payload), err)]
 async fn create_collab_handler(
   user_uuid: UserUuid,
-  payload: Json<CreateCollabParams>,
+  payload: Bytes,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  payload.validate().map_err(AppError::from)?;
-  let (params, workspace_id) = payload.into_inner().split();
+  let params = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => serde_json::from_slice::<CreateCollabParams>(&payload).map_err(|err| {
+      AppError::InvalidRequest(format!(
+        "Failed to parse CreateCollabParams from JSON: {}",
+        err
+      ))
+    })?,
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => {
+        let decompress_data = decompress(payload.to_vec(), buffer_size).await?;
+        CreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
+          AppError::InvalidRequest(format!(
+            "Failed to parse CreateCollabParams with brotli decompression data: {}",
+            err
+          ))
+        })?
+      },
+    },
+  };
+
+  params.validate().map_err(AppError::from)?;
+  let (params, workspace_id) = params.split();
   biz::collab::ops::create_collabs(
     &state.pg_pool,
     &user_uuid,
@@ -255,16 +281,33 @@ async fn batch_create_collab_handler(
   user_uuid: UserUuid,
   payload: Bytes,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let payload = BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
-    AppError::InvalidRequest(format!("Failed to parse BatchCreateCollabParams: {}", err))
-  })?;
+  let params = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
+      AppError::InvalidRequest(format!(
+        "Failed to parse batch BatchCreateCollabParams: {}",
+        err
+      ))
+    })?,
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => {
+        let decompress_data = decompress(payload.to_vec(), buffer_size).await?;
+        BatchCreateCollabParams::from_bytes(&decompress_data).map_err(|err| {
+          AppError::InvalidRequest(format!(
+            "Failed to parse BatchCreateCollabParams with decompression data: {}",
+            err
+          ))
+        })?
+      },
+    },
+  };
 
-  payload.validate().map_err(AppError::from)?;
+  params.validate().map_err(AppError::from)?;
   let BatchCreateCollabParams {
     workspace_id,
     params_list,
-  } = payload;
+  } = params;
 
   if params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
@@ -466,68 +509,71 @@ async fn get_collab_member_list_handler(
 }
 
 #[instrument(level = "debug", skip(payload, server, state), err)]
-async fn post_realtime_message_handler(
+async fn post_realtime_message_stream_handler(
   user_uuid: UserUuid,
-  payload: Bytes,
+  mut payload: Payload,
   server: Data<CollabServerImpl>,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
     .await
     .map_err(AppResponseError::from)?;
 
-  event!(
-    tracing::Level::DEBUG,
-    "Receive realtime message with len: {}",
-    payload.len()
-  );
+  let mut bytes = BytesMut::new();
+  while let Some(item) = payload.next().await {
+    bytes.extend_from_slice(&item?);
+  }
 
-  let HttpRealtimeMessage { device_id, payload } =
+  let message = parser_realtime_msg(bytes.freeze(), req).await?;
+  let stream = Box::new(tokio_stream::once(message));
+  server
+    .send(ClientStreamMessage { uid, stream })
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?
+    .map_err(|err| AppError::Internal(err.into()))?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[inline]
+async fn parser_realtime_msg(
+  payload: Bytes,
+  req: HttpRequest,
+) -> Result<RealtimeMessage, AppError> {
+  let HttpRealtimeMessage {
+    device_id: _,
+    payload,
+  } =
     HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
-
+  let payload = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => payload,
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => {
+        let decompressed_data = decompress(payload, buffer_size).await?;
+        event!(
+          tracing::Level::TRACE,
+          "Decompress realtime http message with len: {}",
+          decompressed_data.len()
+        );
+        decompressed_data
+      },
+    },
+  };
   let message = Message::from(payload);
   match message {
     Message::Binary(bytes) => {
-      let realtime_msg = RealtimeMessage::try_from(bytes).map_err(|err| {
-        AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
-      })?;
-
-      match &realtime_msg {
-        RealtimeMessage::Collab(msg) => {
-          if !state
-            .collab_access_control
-            .can_send_collab_update(&uid, msg.object_id())
-            .await?
-          {
-            return Err(
-              AppError::NotEnoughPermissions(format!(
-                "User {} is not allowed to edit: {}",
-                uid,
-                msg.object_id()
-              ))
-              .into(),
-            );
-          }
-        },
-        _ => {
-          return Err(
-            AppError::InvalidRequest(format!("Unsupported realtime message: {}", realtime_msg))
-              .into(),
-          );
-        },
-      }
-
-      let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
-      server
-        .send(ClientMessage {
-          user: realtime_user,
-          message: realtime_msg,
+      let realtime_msg = tokio::task::spawn_blocking(move || {
+        RealtimeMessage::try_from(bytes).map_err(|err| {
+          AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
         })
-        .await
-        .map_err(|err| AppError::Unhandled(err.to_string()))?
-        .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
-      Ok(Json(AppResponse::Ok()))
+      })
+      .await
+      .map_err(AppError::from)??;
+      Ok(realtime_msg)
     },
-    _ => Err(AppError::InvalidRequest(format!("Unsupported message type: {:?}", message)).into()),
+    _ => Err(AppError::InvalidRequest(format!(
+      "Unsupported message type: {:?}",
+      message
+    ))),
   }
 }

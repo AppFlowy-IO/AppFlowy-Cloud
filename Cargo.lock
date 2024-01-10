@@ -491,6 +491,7 @@ dependencies = [
  "serde_repr",
  "sqlx",
  "thiserror",
+ "tokio",
  "url",
  "uuid",
  "validator",
@@ -516,6 +517,7 @@ dependencies = [
  "assert-json-diff",
  "async-trait",
  "axum_session",
+ "brotli",
  "bytes",
  "casbin",
  "chrono",
@@ -1032,9 +1034,9 @@ dependencies = [
 
 [[package]]
 name = "brotli"
-version = "3.3.4"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1a0b1dbcc8ae29329621f8d4f0d835787c1c38bb1401979b49d13b0b305ff68"
+checksum = "516074a47ef4bce09577a3b379392300159ce5b1ba2e501ff1c819950066100f"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -1043,9 +1045,9 @@ dependencies = [
 
 [[package]]
 name = "brotli-decompressor"
-version = "2.3.4"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b6561fd3f895a11e8f72af2cb7d22e08366bebc2b6b57f7744c4bda27034744"
+checksum = "4e2e4afe60d7dd600fdd3de8d0f08c2b7ec039712e3b6137ff98b7004e82de4f"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -1247,6 +1249,7 @@ dependencies = [
  "app-error",
  "async-trait",
  "bincode",
+ "brotli",
  "bytes",
  "collab",
  "collab-entity",
@@ -1282,7 +1285,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1302,11 +1305,11 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "collab",
- "collab-persistence",
+ "collab-entity",
  "nanoid",
  "parking_lot",
  "serde",
@@ -1320,7 +1323,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1334,12 +1337,12 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "chrono",
  "collab",
- "collab-persistence",
+ "collab-entity",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1348,26 +1351,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "collab-persistence"
-version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
-dependencies = [
- "anyhow",
- "async-trait",
- "bincode",
- "chrono",
- "collab",
- "lazy_static",
- "parking_lot",
- "serde",
- "smallvec",
- "thiserror",
- "tokio",
- "tracing",
- "yrs",
 ]
 
 [[package]]

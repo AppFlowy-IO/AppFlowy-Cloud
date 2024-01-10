@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{MutexCollab, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
+use collab::core::transaction::TransactionRetry;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -77,15 +78,18 @@ pub trait CollabSyncProtocol {
   /// an update to current `awareness` document instance.
   fn handle_sync_step2(
     &self,
-    origin: &Option<&CollabOrigin>,
+    origin: &Option<CollabOrigin>,
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<Option<Vec<u8>>, Error> {
-    let mut txn = match origin {
-      Some(origin) => awareness.doc().try_transact_mut_with((*origin).clone()),
-      None => awareness.doc().try_transact_mut(),
+    let mut retry_txn = TransactionRetry::new(awareness.doc());
+    let mut txn = if let Some(origin) = origin.as_ref() {
+      retry_txn.try_get_write_txn_with(origin.clone())
+    } else {
+      retry_txn.try_get_write_txn()
     }
     .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step2. error: {}", err)))?;
+
     txn.try_apply_update(update).map_err(|err| {
       Error::YrsTransaction(format!("fail to apply sync step2 update. error: {}", err))
     })?;
@@ -96,7 +100,7 @@ pub trait CollabSyncProtocol {
   /// `awareness` document instance.
   fn handle_update(
     &self,
-    origin: &Option<&CollabOrigin>,
+    origin: &Option<CollabOrigin>,
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<Option<Vec<u8>>, Error> {
@@ -137,7 +141,7 @@ pub trait CollabSyncProtocol {
 
 /// Handles incoming messages from the client/server
 pub fn handle_msg<P: CollabSyncProtocol>(
-  origin: &Option<&CollabOrigin>,
+  origin: &Option<CollabOrigin>,
   protocol: &P,
   collab: &MutexCollab,
   msg: Message,

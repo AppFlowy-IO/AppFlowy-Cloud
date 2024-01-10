@@ -6,15 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11.20", default-features = false, features = ["stream","json","multipart"] }
-anyhow = "1.0.75"
+reqwest = { version = "0.11.23", default-features = false, features = ["stream","json","multipart"] }
+anyhow = "1.0.79"
 serde_json.workspace = true
-serde_repr = "0.1.17"
+serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
 shared_entity = { path = "../shared-entity" }
 database-entity.workspace = true
-url = "2.4.1"
+url = "2.5.0"
 tokio-stream = { version = "0.1.14" }
 parking_lot = "0.12.1"
 mime = "0.3.17"
@@ -23,15 +23,15 @@ brotli = "3.4.0"
 
 # ws
 tracing = { version = "0.1" }
-thiserror = "1.0.39"
+thiserror = "1.0.56"
 serde.workspace = true
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
-tokio = { version = "1.26", features = ["full"] }
-futures-util = "0.3.26"
-futures-core = "0.3.26"
+tokio = { version = "1.35", features = ["full"] }
+futures-util = "0.3.30"
+futures-core = "0.3.30"
 tokio-retry = "0.3"
-bytes = "1.0"
-uuid = "1.4.1"
+bytes = "1.5"
+uuid = "1.6.1"
 scraper = { version = "0.17.1", optional = true }
 
 # collab sync
@@ -42,8 +42,8 @@ realtime-entity = { workspace = true, features = ["tungstenite"] }
 realtime-protocol = { workspace = true }
 workspace-template = { workspace = true, optional = true }
 mime_guess = "2.0.4"
-async-trait = { version = "0.1.73" }
-prost = "0.12.1"
+async-trait = { version = "0.1.77" }
+prost = "0.12.3"
 bincode = "1.3.3"
 
 

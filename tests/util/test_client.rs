@@ -255,29 +255,20 @@ impl TestClient {
 
   #[allow(dead_code)]
   pub async fn get_blob_metadata(&self, workspace_id: &str, file_id: &str) -> BlobMetadata {
-    self
-      .api_client
-      .get_blob_metadata(workspace_id, file_id)
-      .await
-      .unwrap()
+    let url = self.api_client.get_blob_url(workspace_id, file_id);
+    self.api_client.get_blob_metadata(&url).await.unwrap()
   }
 
   pub async fn upload_blob<T: Into<Bytes>, M: ToString>(&self, file_id: &str, data: T, mime: M) {
     let workspace_id = self.workspace_id().await;
-    self
-      .api_client
-      .put_blob(&workspace_id, file_id, data, mime)
-      .await
-      .unwrap()
+    let url = self.api_client.get_blob_url(&workspace_id, file_id);
+    self.api_client.put_blob(&url, data, mime).await.unwrap()
   }
 
   pub async fn delete_file(&self, file_id: &str) {
     let workspace_id = self.workspace_id().await;
-    self
-      .api_client
-      .delete_blob(&workspace_id, file_id)
-      .await
-      .unwrap();
+    let url = self.api_client.get_blob_url(&workspace_id, file_id);
+    self.api_client.delete_blob(&url).await.unwrap();
   }
 
   pub async fn get_workspace_usage(&self) -> WorkspaceSpaceUsage {

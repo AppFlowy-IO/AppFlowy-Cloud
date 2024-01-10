@@ -38,8 +38,6 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tokio_tungstenite::tungstenite::Message;
@@ -992,10 +990,14 @@ impl Client {
   pub async fn put_blob<T: Into<Bytes>, M: ToString>(
     &self,
     workspace_id: &str,
+    file_id: &str,
     data: T,
     mime: M,
-  ) -> Result<String, AppResponseError> {
-    let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/{}",
+      self.base_url, workspace_id, file_id
+    );
     let data = data.into();
     let content_length = data.len();
     let resp = self
@@ -1007,32 +1009,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    let record = AppResponse::<AFBlobRecord>::from_response(resp)
-      .await?
-      .into_data()?;
-    Ok(format!(
-      "{}/api/file_storage/{}/blob/{}",
-      self.base_url, workspace_id, record.file_id
-    ))
-  }
-
-  pub async fn put_blob_with_path(
-    &self,
-    workspace_id: &str,
-    file_path: &str,
-  ) -> Result<String, AppResponseError> {
-    if file_path.is_empty() {
-      return Err(AppError::InvalidRequest("path is empty".to_owned()).into());
-    }
-
-    let mut file = File::open(&file_path).await?;
-    let mime = mime_guess::from_path(file_path)
-      .first_or_octet_stream()
-      .to_string();
-
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).await?;
-    self.put_blob(workspace_id, buffer, mime).await
+    Ok(())
   }
 
   /// Only expose this method for testing
@@ -1040,11 +1017,15 @@ impl Client {
   pub async fn put_blob_with_content_length<T: Into<Bytes>>(
     &self,
     workspace_id: &str,
+    file_id: &str,
     data: T,
     mime: &Mime,
     content_length: usize,
   ) -> Result<AFBlobRecord, AppResponseError> {
-    let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
+    let url = format!(
+      "{}/api/file_storage/{}/blob/{}",
+      self.base_url, workspace_id, file_id
+    );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
@@ -1061,10 +1042,17 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
-  pub async fn get_blob<T: AsRef<str>>(&self, url: T) -> Result<Bytes, AppResponseError> {
-    Url::parse(url.as_ref())?;
+  pub async fn get_blob(
+    &self,
+    workspace_id: &str,
+    file_id: &str,
+  ) -> Result<Bytes, AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/{}",
+      self.base_url, workspace_id, file_id
+    );
     let resp = self
-      .http_client_with_auth(Method::GET, url.as_ref())
+      .http_client_with_auth(Method::GET, &url)
       .await?
       .send()
       .await?;
@@ -1079,9 +1067,7 @@ impl Client {
         }
         Ok(Bytes::from(acc))
       },
-      reqwest::StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
-        url.as_ref().to_owned(),
-      ))),
+      reqwest::StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(url))),
       c => Err(AppResponseError::from(AppError::Unhandled(format!(
         "status code: {}, message: {}",
         c,
@@ -1090,10 +1076,15 @@ impl Client {
     }
   }
 
-  pub async fn get_blob_metadata<T: AsRef<str>>(
+  pub async fn get_blob_metadata(
     &self,
-    url: T,
+    workspace_id: &str,
+    file_id: &str,
   ) -> Result<BlobMetadata, AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/{}",
+      self.base_url, workspace_id, file_id
+    );
     let resp = self
       .http_client_with_auth(Method::GET, url.as_ref())
       .await?
@@ -1106,9 +1097,17 @@ impl Client {
       .into_data()
   }
 
-  pub async fn delete_blob(&self, url: &str) -> Result<(), AppResponseError> {
+  pub async fn delete_blob(
+    &self,
+    workspace_id: &str,
+    file_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/{}",
+      self.base_url, workspace_id, file_id
+    );
     let resp = self
-      .http_client_with_auth(Method::DELETE, url)
+      .http_client_with_auth(Method::DELETE, &url)
       .await?
       .send()
       .await?;

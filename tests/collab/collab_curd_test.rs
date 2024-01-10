@@ -5,7 +5,10 @@ use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 use database_entity::dto::{
   BatchCreateCollabParams, CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 
 use reqwest::Method;
 use serde::Serialize;
@@ -20,7 +23,7 @@ async fn batch_insert_collab_with_empty_payload_test() {
   let workspace_id = test_client.workspace_id().await;
 
   let error = test_client
-    .batch_create_collab(&workspace_id, vec![])
+    .create_collab_list(&workspace_id, vec![])
     .await
     .unwrap_err();
 
@@ -32,25 +35,33 @@ async fn batch_insert_collab_success_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
+  let mock_encoded_collab_v1 = vec![
+    create_random_bytes(100 * 1024),
+    create_random_bytes(300 * 1024),
+    create_random_bytes(600 * 1024),
+    create_random_bytes(800 * 1024),
+    create_random_bytes(1024 * 1024),
+  ];
+
   let params_list = (0..5)
-    .map(|_| CollabParams {
+    .map(|i| CollabParams {
       object_id: Uuid::new_v4().to_string(),
-      encoded_collab_v1: vec![0u8; 1024 * 1024],
+      encoded_collab_v1: mock_encoded_collab_v1[i].clone(),
       collab_type: CollabType::Document,
       override_if_exist: false,
     })
     .collect::<Vec<_>>();
 
   test_client
-    .batch_create_collab(&workspace_id, params_list.clone())
+    .create_collab_list(&workspace_id, params_list.clone())
     .await
     .unwrap();
 
   let params = params_list
-    .into_iter()
+    .iter()
     .map(|params| QueryCollab {
-      object_id: params.object_id,
-      collab_type: params.collab_type,
+      object_id: params.object_id.clone(),
+      collab_type: params.collab_type.clone(),
     })
     .collect::<Vec<_>>();
 
@@ -58,6 +69,18 @@ async fn batch_insert_collab_success_test() {
     .batch_get_collab(&workspace_id, params)
     .await
     .unwrap();
+
+  for params in params_list {
+    let encoded_collab = result.0.get(&params.object_id).unwrap();
+    match encoded_collab {
+      QueryCollabResult::Success { encode_collab_v1 } => {
+        assert_eq!(encode_collab_v1, &params.encoded_collab_v1)
+      },
+      QueryCollabResult::Failed { .. } => {
+        panic!("Failed to get collab");
+      },
+    }
+  }
 
   assert_eq!(result.0.values().len(), 5);
 }
@@ -218,4 +241,13 @@ pub struct OldCreateCollabParams {
   #[serde(flatten)]
   inner: CollabParams,
   pub workspace_id: String,
+}
+
+fn create_random_bytes(size: usize) -> Vec<u8> {
+  let s: String = thread_rng()
+    .sample_iter(&Alphanumeric)
+    .take(size)
+    .map(char::from)
+    .collect();
+  s.into_bytes()
 }

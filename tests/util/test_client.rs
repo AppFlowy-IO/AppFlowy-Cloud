@@ -17,6 +17,7 @@ use database_entity::dto::{
   InsertCollabMemberParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
   UpdateCollabMemberParams,
 };
+use mime::Mime;
 use serde_json::Value;
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
@@ -259,7 +260,7 @@ impl TestClient {
     self.api_client.get_blob_metadata(&url).await.unwrap()
   }
 
-  pub async fn upload_blob<T: Into<Bytes>, M: ToString>(&self, file_id: &str, data: T, mime: M) {
+  pub async fn upload_blob<T: Into<Bytes>>(&self, file_id: &str, data: T, mime: &Mime) {
     let workspace_id = self.workspace_id().await;
     let url = self.api_client.get_blob_url(&workspace_id, file_id);
     self.api_client.put_blob(&url, data, mime).await.unwrap()

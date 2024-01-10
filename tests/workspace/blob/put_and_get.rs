@@ -34,8 +34,9 @@ async fn put_and_get() {
   let url = c1.get_blob_url(&workspace_id, &file_id);
   c1.put_blob(&url, data, &mime).await.unwrap();
 
-  let got_data = c1.get_blob(&url).await.unwrap();
-  assert_eq!(got_data, data.as_bytes());
+  let (got_mime, got_data) = c1.get_blob(&url).await.unwrap();
+  assert_eq!(got_data, Vec::from(data));
+  assert_eq!(got_mime, mime);
 
   c1.delete_blob(&url).await.unwrap();
 }
@@ -70,11 +71,13 @@ async fn put_and_put_and_get() {
   c1.put_blob(&url_1, data1, &mime).await.unwrap();
   c1.put_blob(&url_2, data2, &mime).await.unwrap();
 
-  let got_data = c1.get_blob(&url_1).await.unwrap();
-  assert_eq!(got_data, data1.as_bytes());
+  let (got_mime, got_data) = c1.get_blob(&url_1).await.unwrap();
+  assert_eq!(got_data, Vec::from(data1));
+  assert_eq!(got_mime, mime);
 
-  let got_data = c1.get_blob(&url_2).await.unwrap();
-  assert_eq!(got_data, data2.as_bytes());
+  let (got_mime, got_data) = c1.get_blob(&url_2).await.unwrap();
+  assert_eq!(got_data, Vec::from(data2));
+  assert_eq!(got_mime, mime);
 
   c1.delete_blob(&url_1).await.unwrap();
   c1.delete_blob(&url_2).await.unwrap();

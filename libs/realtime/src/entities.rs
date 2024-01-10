@@ -6,6 +6,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::sync::Arc;
+use tokio_stream::Stream;
 
 pub use realtime_entity::message::RealtimeMessage;
 
@@ -53,6 +54,13 @@ pub enum BusinessID {
 pub struct ClientMessage<U> {
   pub user: U,
   pub message: RealtimeMessage,
+}
+
+#[derive(Message)]
+#[rtype(result = "Result<(), RealtimeError>")]
+pub struct ClientStreamMessage {
+  pub uid: i64,
+  pub stream: Box<dyn Stream<Item = RealtimeMessage> + Unpin + Send>,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]

@@ -3,6 +3,7 @@ use collab::core::collab_plugin::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use serde_json::{json, Value};
+use std::time::Duration;
 
 use database::collab::COLLAB_SNAPSHOT_LIMIT;
 use uuid::Uuid;
@@ -59,6 +60,8 @@ async fn get_snapshot_list_test() {
     .await;
 
   // By default, when create a collab, a snapshot will be created.
+  // wait for the snapshot to be saved to disk
+  tokio::time::sleep(Duration::from_secs(2)).await;
   let list = test_client
     .get_snapshot_list(&workspace_id, &object_id)
     .await

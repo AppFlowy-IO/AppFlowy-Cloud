@@ -35,6 +35,9 @@ pub enum RealtimeError {
   #[error("Client:{0} does not have enough permission to read")]
   NotEnoughPermissionToRead(i64),
 
+  #[error("{0}")]
+  UserNotFound(String),
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }

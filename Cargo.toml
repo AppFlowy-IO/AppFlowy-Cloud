@@ -68,6 +68,7 @@ prost = "0.12.1"
 casbin = { version = "2.0.9" }
 dotenvy = "0.15.7"
 url = "2.5.0"
+brotli = "3.4.0"
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
@@ -82,7 +83,7 @@ database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
-app-error = { workspace = true, features = ["sqlx_error", "actix_web_error"] }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 realtime-entity.workspace = true
@@ -156,10 +157,10 @@ lto = false
 opt-level = 3
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b036feb396aa6a1dbbab9589bd032e29db8ab024" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

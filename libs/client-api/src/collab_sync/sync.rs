@@ -16,7 +16,7 @@ use std::sync::{Arc, Weak};
 use tokio::spawn;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, trace, warn, Level};
+use tracing::{error, event, trace, warn, Level};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
@@ -284,6 +284,12 @@ where
 
     if should_process {
       if let Some(payload) = msg.payload() {
+        event!(
+          Level::TRACE,
+          "receive collab message: {}, payload: {}",
+          msg,
+          payload.len()
+        );
         if !payload.is_empty() {
           trace!("start process message:{:?}", msg.msg_id());
           SyncStream::<Sink, Stream>::process_payload(
@@ -310,11 +316,12 @@ where
   {
     let mut decoder = DecoderV1::new(Cursor::new(payload));
     let reader = MessageReader::new(&mut decoder);
+    let cloned_origin = Some(origin.clone());
     for msg in reader {
       let msg = msg?;
       trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg)? {
+      if let Some(payload) = handle_msg(&cloned_origin, protocol, collab, msg)? {
         if is_sync_step_1 {
           // flush
           match collab.try_lock() {

@@ -418,10 +418,13 @@ impl TestClient {
     let encoded_collab_v1 = collab.encode_collab_v1().encode_to_bytes().unwrap();
     self
       .api_client
-      .create_collab(CreateCollabParams::new(
-        workspace_id.to_string(),
-        CollabParams::new(&object_id, collab_type.clone(), encoded_collab_v1),
-      ))
+      .create_collab(CreateCollabParams {
+        object_id: object_id.clone(),
+        encoded_collab_v1,
+        collab_type: collab_type.clone(),
+        override_if_exist: false,
+        workspace_id: workspace_id.to_string(),
+      })
       .await
       .unwrap();
 

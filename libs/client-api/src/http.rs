@@ -1,7 +1,9 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
+use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
 use prost::Message as ProstMessage;
+use std::io::Read;
 
 use app_error::AppError;
 use bytes::Bytes;
@@ -13,7 +15,7 @@ use database_entity::dto::{
   QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
   UpdateCollabMemberParams,
 };
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 
@@ -23,9 +25,10 @@ use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use realtime_entity::EncodedCollab;
-use reqwest::header;
+use reqwest::{header, Body};
 
 use collab_entity::CollabType;
+use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
@@ -43,7 +46,7 @@ use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{event, instrument, trace};
+use tracing::{event, instrument, trace, warn};
 use url::Url;
 
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
@@ -52,7 +55,48 @@ use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
-pub const CLIENT_API_VERSION: &str = "0.0.2";
+pub const CLIENT_API_VERSION: &str = "0.0.3";
+pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
+pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
+pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
+
+#[derive(Clone)]
+pub struct ClientConfiguration {
+  /// Lower Levels (0-4): Faster compression and decompression speeds but lower compression ratios. Suitable for scenarios where speed is more critical than reducing data size.
+  /// Medium Levels (5-9): A balance between compression ratio and speed. These levels are generally good for a mix of performance and efficiency.
+  /// Higher Levels (10-11): The highest compression ratios, but significantly slower and more resource-intensive. These are typically used in scenarios where reducing data size is paramount and resource usage is a secondary concern, such as for static content compression in web servers.
+  compression_quality: u32,
+  /// A larger buffer size means more data is compressed in a single operation, which can lead to better compression ratios
+  /// since Brotli has more data to analyze for patterns and repetitions.
+  compression_buffer_size: usize,
+}
+
+impl ClientConfiguration {
+  pub fn with_compression_buffer_size(mut self, compression_buffer_size: usize) -> Self {
+    self.compression_buffer_size = compression_buffer_size;
+    self
+  }
+
+  pub fn with_compression_quality(mut self, compression_quality: u32) -> Self {
+    self.compression_quality = if compression_quality > 11 {
+      warn!("compression_quality is larger than 11, set it to 11");
+      11
+    } else {
+      compression_quality
+    };
+    self
+  }
+}
+
+impl Default for ClientConfiguration {
+  fn default() -> Self {
+    Self {
+      compression_quality: 8,
+      compression_buffer_size: 10240,
+    }
+  }
+}
+
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
 /// It provides methods to perform actions like signing in, signing out, refreshing tokens,
@@ -69,11 +113,12 @@ pub const CLIENT_API_VERSION: &str = "0.0.2";
 pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
-  base_url: String,
+  pub base_url: String,
   ws_addr: String,
   token: Arc<RwLock<ClientToken>>,
   is_refreshing_token: Arc<AtomicBool>,
   refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
+  config: ClientConfiguration,
 }
 
 type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
@@ -89,7 +134,7 @@ impl Client {
   /// - `base_url`: The base URL for API requests.
   /// - `ws_addr`: The WebSocket address for real-time communication.
   /// - `gotrue_url`: The URL for the GoTrue API.
-  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str) -> Self {
+  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str, config: ClientConfiguration) -> Self {
     let reqwest_client = reqwest::Client::new();
     Self {
       base_url: base_url.to_string(),
@@ -99,6 +144,7 @@ impl Client {
       token: Arc::new(RwLock::new(ClientToken::new())),
       is_refreshing_token: Default::default(),
       refresh_ret_txs: Default::default(),
+      config,
     }
   }
 
@@ -380,16 +426,16 @@ impl Client {
     device_id: &str,
     msg: Message,
   ) -> Result<(), AppResponseError> {
-    let msg = HttpRealtimeMessage {
-      device_id: device_id.to_string(),
-      payload: msg.into_data(),
-    }
-    .encode_to_vec();
-    let url = format!("{}/api/realtime/post", self.base_url);
+    let device_id = device_id.to_string();
+    let payload = brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
+
+    let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
+    let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
+    let url = format!("{}/api/realtime/post/stream", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url)
       .await?
-      .body(msg)
+      .body(body)
       .send()
       .await?;
     log_request_id(&resp);
@@ -709,10 +755,22 @@ impl Client {
       "{}/api/workspace/{}/collab/{}",
       self.base_url, params.workspace_id, &params.object_id
     );
+    let bytes = params
+      .to_bytes()
+      .map_err(|err| AppError::Internal(err.into()))?;
+
+    let compress_bytes = brotli_compress(
+      bytes,
+      self.config.compression_quality,
+      self.config.compression_buffer_size,
+    )
+    .await?;
+
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url)
       .await?
-      .json(&params)
+      .timeout(Duration::from_secs(60))
+      .body(compress_bytes)
       .send()
       .await?;
     log_request_id(&resp);
@@ -731,14 +789,22 @@ impl Client {
       params_list: params,
     };
 
+    let bytes = payload
+      .to_bytes()
+      .map_err(|err| AppError::Internal(err.into()))?;
+
+    let compress_bytes = brotli_compress(
+      bytes,
+      self.config.compression_quality,
+      self.config.compression_buffer_size,
+    )
+    .await?;
+
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url)
       .await?
-      .body(
-        payload
-          .to_bytes()
-          .map_err(|err| AppError::Internal(err.into()))?,
-      )
+      .timeout(Duration::from_secs(60))
+      .body(compress_bytes)
       .send()
       .await?;
     log_request_id(&resp);
@@ -1149,7 +1215,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  async fn http_client_with_auth(
+  pub async fn http_client_with_auth(
     &self,
     method: Method,
     url: &str,
@@ -1175,6 +1241,28 @@ impl Client {
       .bearer_auth(access_token);
     Ok(request_builder)
   }
+
+  #[instrument(level = "debug", skip_all, err)]
+  async fn http_client_with_auth_compress(
+    &self,
+    method: Method,
+    url: &str,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    self
+      .http_client_with_auth(method, url)
+      .await
+      .map(|builder| {
+        builder
+          .header(
+            X_COMPRESSION_TYPE,
+            HeaderValue::from_static(X_COMPRESSION_TYPE_BROTLI),
+          )
+          .header(
+            X_COMPRESSION_BUFFER_SIZE,
+            HeaderValue::from(self.config.compression_buffer_size),
+          )
+      })
+  }
 }
 
 fn url_missing_param(param: &str) -> AppResponseError {
@@ -1197,4 +1285,33 @@ fn log_request_id(resp: &reqwest::Response) {
   } else {
     event!(tracing::Level::DEBUG, "request_id: not found");
   }
+}
+
+pub async fn brotli_compress(
+  data: Vec<u8>,
+  quality: u32,
+  buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  tokio::task::spawn_blocking(move || {
+    event!(
+      tracing::Level::DEBUG,
+      "start compressing collab with len:{}",
+      data.len(),
+    );
+    let mut compressor = CompressorReader::new(&*data, buffer_size, quality, 22);
+    let mut compressed_data = Vec::new();
+    compressor
+      .read_to_end(&mut compressed_data)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to compress data: {}", err)))?;
+
+    event!(
+      tracing::Level::DEBUG,
+      "compress collab success: before:{}, after:{}",
+      data.len(),
+      compressed_data.len()
+    );
+    Ok(compressed_data)
+  })
+  .await
+  .map_err(AppError::from)?
 }

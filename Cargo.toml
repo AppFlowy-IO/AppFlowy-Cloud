@@ -21,7 +21,6 @@ openssl = { version = "0.10.45", features = ["vendored"] }
 # serde
 serde_json.workspace = true
 serde.workspace = true
-serde-aux = "4.1.2"
 
 tokio = { version = "1.26.0", features = [
     "macros",
@@ -55,13 +54,11 @@ redis = "0.23.3"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["registry", "env-filter", "ansi", "json"] }
 tracing-bunyan-formatter = "0.3.6"
-tracing-actix-web = "0.7"
 tracing-log = "0.1.1"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 async-trait = "0.1.73"
 prometheus-client = "0.22.0"
 itertools = "0.11"
-axum_session = "0.7.0"
 uuid = "1.4.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 prost = "0.12.1"

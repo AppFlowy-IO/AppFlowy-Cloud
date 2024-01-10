@@ -516,7 +516,6 @@ dependencies = [
  "argon2",
  "assert-json-diff",
  "async-trait",
- "axum_session",
  "brotli",
  "bytes",
  "casbin",
@@ -554,7 +553,6 @@ dependencies = [
  "scraper",
  "secrecy",
  "serde",
- "serde-aux",
  "serde_json",
  "shared_entity",
  "snowflake",
@@ -567,7 +565,6 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
- "tracing-actix-web",
  "tracing-bunyan-formatter",
  "tracing-log",
  "tracing-subscriber",
@@ -839,35 +836,6 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
-]
-
-[[package]]
-name = "axum_session"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32f092b0fca9f2ae692a108b3d7ba171a412accab6e32b375eb468f947b3eb10"
-dependencies = [
- "aes-gcm",
- "async-trait",
- "axum-core",
- "base64 0.21.5",
- "bytes",
- "chrono",
- "cookie 0.17.0",
- "dashmap",
- "futures",
- "http",
- "http-body",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror",
- "tokio",
- "tower-layer",
- "tower-service",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -1429,11 +1397,7 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7efb37c3e1ccb1ff97164ad95ac1606e8ccd35b3fa0a7d99a304c7f4a428cc24"
 dependencies = [
- "aes-gcm",
- "base64 0.21.5",
  "percent-encoding",
- "rand 0.8.5",
- "subtle",
  "time",
  "version_check",
 ]
@@ -1667,19 +1631,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.32",
-]
-
-[[package]]
-name = "dashmap"
-version = "5.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
-dependencies = [
- "cfg-if",
- "hashbrown 0.14.3",
- "lock_api",
- "once_cell",
- "parking_lot_core",
 ]
 
 [[package]]
@@ -2970,12 +2921,6 @@ name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
-
-[[package]]
-name = "mutually_exclusive_features"
-version = "0.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d02c0b00610773bb7fc61d85e13d86c7858cbdf00e1a120bfc41bc055dbaa0e"
 
 [[package]]
 name = "nanoid"
@@ -5442,19 +5387,6 @@ dependencies = [
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
-]
-
-[[package]]
-name = "tracing-actix-web"
-version = "0.7.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fe0d5feac3f4ca21ba33496bcb1ccab58cca6412b1405ae80f0581541e0ca78"
-dependencies = [
- "actix-web",
- "mutually_exclusive_features",
- "pin-project",
- "tracing",
- "uuid",
 ]
 
 [[package]]

@@ -1,8 +1,10 @@
+use std::ops::DerefMut;
+
 use crate::pg_row::AFBlobMetadataRow;
 use app_error::AppError;
 use rust_decimal::prelude::ToPrimitive;
 use sqlx::types::Decimal;
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -32,14 +34,13 @@ pub async fn is_blob_metadata_exists(
 
 #[instrument(level = "trace", skip_all, err)]
 pub async fn insert_blob_metadata(
-  pg_pool: &PgPool,
+  tx: &mut Transaction<'_, sqlx::Postgres>,
   file_id: &str,
   workspace_id: &Uuid,
   file_type: &str,
-  file_size: i64,
-) -> Result<AFBlobMetadataRow, AppError> {
-  let metadata = sqlx::query_as!(
-    AFBlobMetadataRow,
+  file_size: usize,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
     r#"
         INSERT INTO af_blob_metadata
         (workspace_id, file_id, file_type, file_size)
@@ -47,38 +48,39 @@ pub async fn insert_blob_metadata(
         ON CONFLICT (workspace_id, file_id) DO UPDATE SET
             file_type = $3,
             file_size = $4
-        RETURNING *
         "#,
     workspace_id,
     file_id,
     file_type,
-    file_size
+    file_size as i64,
   )
-  .fetch_one(pg_pool)
+  .execute(tx.deref_mut())
   .await?;
-  Ok(metadata)
+  let n = res.rows_affected();
+  assert_eq!(n, 1);
+  Ok(())
 }
 
 #[instrument(level = "trace", skip_all, err)]
 #[inline]
 pub async fn delete_blob_metadata(
-  pg_pool: &PgPool,
+  tx: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
   file_id: &str,
-) -> Result<AFBlobMetadataRow, AppError> {
-  let metadata = sqlx::query_as!(
-    AFBlobMetadataRow,
+) -> Result<(), AppError> {
+  let result = sqlx::query!(
     r#"
         DELETE FROM af_blob_metadata
         WHERE workspace_id = $1 AND file_id = $2
-        RETURNING *
         "#,
     workspace_id,
     file_id,
   )
-  .fetch_one(pg_pool)
+  .execute(tx.deref_mut())
   .await?;
-  Ok(metadata)
+  let n = result.rows_affected();
+  assert_eq!(n, 1);
+  Ok(())
 }
 
 #[instrument(level = "trace", skip_all, err)]
@@ -112,7 +114,7 @@ pub async fn get_all_workspace_blob_metadata(
     AFBlobMetadataRow,
     r#"
         SELECT * FROM af_blob_metadata
-        WHERE workspace_id = $1 
+        WHERE workspace_id = $1
         "#,
     workspace_id,
   )

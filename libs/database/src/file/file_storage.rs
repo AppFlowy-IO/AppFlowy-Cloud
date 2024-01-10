@@ -1,4 +1,3 @@
-use crate::file::utils::BlobStreamReader;
 use crate::pg_row::AFBlobMetadataRow;
 use crate::resource_usage::{
   delete_blob_metadata, get_blob_metadata, get_workspace_usage_size, insert_blob_metadata,
@@ -7,8 +6,7 @@ use crate::resource_usage::{
 use app_error::AppError;
 use async_trait::async_trait;
 use sqlx::PgPool;
-use tokio::io::AsyncRead;
-use tracing::{event, instrument};
+use tracing::{event, instrument, warn};
 use uuid::Uuid;
 
 /// Maximum size of a blob in bytes.
@@ -23,7 +21,7 @@ pub trait ResponseBlob {
 pub trait BucketClient {
   type ResponseData: ResponseBlob;
 
-  async fn put_blob<P>(&self, id: P, blob: Vec<u8>) -> Result<(), AppError>
+  async fn pub_blob<P>(&self, id: P, content: &[u8]) -> Result<(), AppError>
   where
     P: AsRef<str> + Send;
 
@@ -51,71 +49,59 @@ where
 
   #[instrument(skip_all, err)]
   #[inline]
-  pub async fn put_blob<R>(
+  pub async fn put_blob(
     &self,
-    blob_stream: R,
     workspace_id: Uuid,
+    file_id: String,
+    file_data: Vec<u8>,
     file_type: String,
-    file_size: i64,
-  ) -> Result<String, AppError>
-  where
-    R: AsyncRead + Unpin,
-  {
-    let (blob, file_id) = BlobStreamReader::new(blob_stream).finish().await?;
-
-    // check file is exist or not
+  ) -> Result<(), AppError> {
     if is_blob_metadata_exists(&self.pg_pool, &workspace_id, &file_id).await? {
-      event!(tracing::Level::TRACE, "file:{} is already exist", file_id);
-      return Ok(file_id);
+      warn!(
+        "file already exists, workspace_id: {}, file_id: {}",
+        workspace_id, file_id
+      );
+      return Ok(());
     }
 
     // query the storage space of the workspace
+    let obj_key = format!("{}/{}", workspace_id, file_id);
     let usage = get_workspace_usage_size(&self.pg_pool, &workspace_id).await?;
     event!(
       tracing::Level::TRACE,
       "workspace consumed space: {}, new file:{} with size: {}",
-      usage,
+      obj_key,
       file_id,
-      file_size
+      file_data.len(),
     );
     if usage > MAX_USAGE {
       return Err(AppError::StorageSpaceNotEnough);
     }
 
-    self.client.put_blob(&file_id, blob).await?;
+    let obj_key = format!("{}/{}", workspace_id, file_id);
 
-    // save the metadata
-    if let Err(err) = insert_blob_metadata(
-      &self.pg_pool,
+    let mut tx = self.pg_pool.begin().await?;
+    insert_blob_metadata(
+      &mut tx,
       &file_id,
       &workspace_id,
       &file_type,
-      file_size,
+      file_data.len(),
     )
-    .await
-    {
-      event!(
-        tracing::Level::ERROR,
-        "failed to save metadata, file_id: {}, err: {}",
-        file_id,
-        err
-      );
-      // if the metadata is not saved, delete the blob.
-      self.client.delete_blob(&file_id).await?;
-      return Err(err);
-    }
+    .await?;
 
-    Ok(file_id)
+    self.client.pub_blob(obj_key, &file_data).await?;
+    tx.commit().await?;
+    Ok(())
   }
 
-  pub async fn delete_blob(
-    &self,
-    workspace_id: &Uuid,
-    file_id: &str,
-  ) -> Result<AFBlobMetadataRow, AppError> {
-    self.client.delete_blob(file_id).await?;
-    let resp = delete_blob_metadata(&self.pg_pool, workspace_id, file_id).await?;
-    Ok(resp)
+  pub async fn delete_blob(&self, workspace_id: &Uuid, file_id: &str) -> Result<(), AppError> {
+    let obj_key = format!("{}/{}", workspace_id, file_id);
+    let mut tx = self.pg_pool.begin().await?;
+    delete_blob_metadata(&mut tx, workspace_id, file_id).await?;
+    self.client.delete_blob(obj_key).await?;
+    tx.commit().await?;
+    Ok(())
   }
 
   pub async fn get_blob_metadata(
@@ -127,8 +113,9 @@ where
     Ok(metadata)
   }
 
-  pub async fn get_blob(&self, file_id: &str) -> Result<Vec<u8>, AppError> {
-    let blob = self.client.get_blob(file_id).await?.to_blob();
+  pub async fn get_blob(&self, workspace_id: &Uuid, file_id: &str) -> Result<Vec<u8>, AppError> {
+    let obj_key = format!("{}/{}", workspace_id, file_id);
+    let blob = self.client.get_blob(obj_key).await?.to_blob();
     Ok(blob)
   }
 }

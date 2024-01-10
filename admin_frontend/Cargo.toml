@@ -10,20 +10,20 @@ edition = "2021"
 gotrue = { path = "../libs/gotrue" }
 gotrue-entity = { path = "../libs/gotrue-entity" }
 
-anyhow = "1.0.75"
+anyhow = "1.0.79"
 axum = {version = "0.6.20", features = ["json"]}
-tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.35.1", features = ["rt-multi-thread", "macros"] }
 askama = "0.12.1"
 axum-extra = { version = "0.8.0", features = ["cookie"] }
 serde.workspace = true
 serde_json.workspace = true
 redis = { version = "0.23.3", features = [ "aio", "tokio-comp", "connection-manager"] }
-uuid = { version = "1.4.1", features = ["v4"] }
+uuid = { version = "1.6.1", features = ["v4"] }
 dotenv = "0.15.0"
-reqwest = "0.11.22"
+reqwest = "0.11.23"
 tower-service = "0.3.2"
 tower-http = { version = "0.4.4", features = ["cors", "fs"] }
 tower = "0.4.13"
-tracing = "0.1.37"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 jwt = "0.16.0"

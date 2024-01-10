@@ -10,15 +10,15 @@ collab = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
-bytes = { version = "1.0", features = ["serde"] }
-anyhow = "1.0.75"
+bytes = { version = "1.5", features = ["serde"] }
+anyhow = "1.0.79"
 actix = { version = "0.13", optional = true }
 bincode.workspace = true
 tokio-tungstenite = { version = "0.20.1", optional = true }
-prost = "0.12.1"
+prost = "0.12.3"
 database-entity.workspace = true
 yrs.workspace = true
-thiserror = "1.0.48"
+thiserror = "1.0.56"
 realtime-protocol.workspace = true
 
 [features]
@@ -27,4 +27,4 @@ tungstenite = ["tokio-tungstenite"]
 
 [build-dependencies]
 protoc-bin-vendored = { version = "3.0" }
-prost-build = "0.12.1"
+prost-build = "0.12.3"

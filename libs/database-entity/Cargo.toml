@@ -11,10 +11,10 @@ serde_json.workspace = true
 collab-entity = { version = "0.1.0" }
 validator = { version = "0.16", features = ["validator_derive", "derive"] }
 chrono = {version="0.4",features = ["serde"]}
-uuid = { version = "1.4.1", features = ["serde", "v4"] }
-thiserror = "1.0.47"
-anyhow = "1.0.75"
+uuid = { version = "1.6.1", features = ["serde", "v4"] }
+thiserror = "1.0.56"
+anyhow = "1.0.79"
 tracing = "0.1"
-serde_repr = "0.1.17"
+serde_repr = "0.1.18"
 app-error = { workspace = true }
 bincode = "1.3.3"

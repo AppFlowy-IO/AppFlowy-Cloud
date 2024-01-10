@@ -14,12 +14,11 @@ use chrono::DateTime;
 use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
 use database_entity::dto::AFBlobRecord;
-use serde::Deserialize;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
 use std::pin::Pin;
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
 use tracing::{event, instrument};
@@ -28,14 +27,14 @@ use crate::state::AppState;
 
 pub fn file_storage_scope() -> Scope {
   web::scope("/api/file_storage")
-    .service(web::resource("/{workspace_id}/blob").route(web::put().to(put_blob_handler)))
     .service(
-      web::resource("/{workspace_id}/blob/{file_id:.*}")
+      web::resource("/{workspace_id}/blob/{file_id}")
+        .route(web::put().to(put_blob_handler))
         .route(web::get().to(get_blob_handler))
         .route(web::delete().to(delete_blob_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/metadata/{file_id:.*}")
+      web::resource("/{workspace_id}/metadata/{file_id}")
         .route(web::get().to(get_blob_metadata_handler)),
     )
     .service(
@@ -47,43 +46,60 @@ pub fn file_storage_scope() -> Scope {
     )
 }
 
-#[derive(Deserialize, Debug)]
-struct PathInfo {
-  workspace_id: Uuid,
-  file_id: String,
-}
-
 #[instrument(skip(state, payload), err)]
 async fn put_blob_handler(
   state: Data<AppState>,
-  payload: Payload,
+  path: web::Path<(Uuid, String)>,
   content_type: web::Header<ContentType>,
   content_length: web::Header<ContentLength>,
-  workspace_id: web::Path<Uuid>,
+  payload: Payload,
 ) -> Result<JsonAppResponse<AFBlobRecord>> {
+  let (workspace_id, file_id) = path.into_inner();
   let content_length = content_length.into_inner().into_inner();
-  // Check content length, if it's too large, return error.
-  if content_length > MAX_BLOB_SIZE {
-    return Ok(
-      AppResponse::from(AppError::PayloadTooLarge(
-        "The uploading file is too large".to_string(),
-      ))
-      .into(),
-    );
-  }
-  let file_type = content_type.into_inner().0.to_string();
-  let blob_stream = payload_to_async_read(payload);
-  let workspace_id = workspace_id.into_inner();
+  let content_type = content_type.into_inner().to_string();
+  let content = {
+    // Check content length, if it's too large, return error.
+    if content_length > MAX_BLOB_SIZE {
+      return Ok(
+        AppResponse::from(AppError::PayloadTooLarge(
+          "The uploading file is too large".to_string(),
+        ))
+        .into(),
+      );
+    }
+    let mut payload_reader = payload_to_async_read(payload);
+    let mut content = vec![0; content_length];
+    let n = payload_reader.read_exact(&mut content).await?;
+    assert_eq!(n, content_length);
+    let res = payload_reader.read_u8().await;
+    match res {
+      Ok(_) => {
+        return Ok(
+          AppResponse::from(AppError::PayloadTooLarge(
+            "Content length is {}, but the actual content is larger".to_string(),
+          ))
+          .into(),
+        );
+      },
+      Err(e) => match e.kind() {
+        std::io::ErrorKind::UnexpectedEof => (),
+        _ => return Err(AppError::Internal(anyhow::anyhow!(e)).into()),
+      },
+    };
+    content
+  };
 
   event!(
     tracing::Level::TRACE,
-    "start put blob: {}:{}",
-    file_type,
+    "start put blob. workspace_id: {}, file_id: {}, content_length: {}",
+    workspace_id,
+    file_id,
     content_length
   );
-  let file_id = state
+
+  state
     .bucket_storage
-    .put_blob(blob_stream, workspace_id, file_type, content_length as i64)
+    .put_blob(workspace_id, file_id.to_string(), content, content_type)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -95,13 +111,9 @@ async fn put_blob_handler(
 #[instrument(level = "debug", skip(state), err)]
 async fn delete_blob_handler(
   state: Data<AppState>,
-  path: web::Path<PathInfo>,
+  path: web::Path<(Uuid, String)>,
 ) -> Result<JsonAppResponse<()>> {
-  let PathInfo {
-    workspace_id,
-    file_id,
-  } = path.into_inner();
-
+  let (workspace_id, file_id) = path.into_inner();
   state
     .bucket_storage
     .delete_blob(&workspace_id, &file_id)
@@ -113,13 +125,10 @@ async fn delete_blob_handler(
 #[instrument(level = "debug", skip(state), err)]
 async fn get_blob_handler(
   state: Data<AppState>,
-  path: web::Path<PathInfo>,
+  path: web::Path<(Uuid, String)>,
   req: HttpRequest,
 ) -> Result<HttpResponse<BoxBody>> {
-  let PathInfo {
-    workspace_id,
-    file_id,
-  } = path.into_inner();
+  let (workspace_id, file_id) = path.into_inner();
 
   // Get the metadata
   let result = state
@@ -149,7 +158,7 @@ async fn get_blob_handler(
   }
   let blob = state
     .bucket_storage
-    .get_blob(&file_id)
+    .get_blob(&workspace_id, &file_id)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -167,12 +176,9 @@ async fn get_blob_handler(
 #[instrument(level = "debug", skip(state), err)]
 async fn get_blob_metadata_handler(
   state: Data<AppState>,
-  path: web::Path<PathInfo>,
+  path: web::Path<(Uuid, String)>,
 ) -> Result<JsonAppResponse<BlobMetadata>> {
-  let PathInfo {
-    workspace_id,
-    file_id,
-  } = path.into_inner();
+  let (workspace_id, file_id) = path.into_inner();
 
   // Get the metadata
   let metadata = state

@@ -16,11 +16,11 @@ pub struct BucketClientS3Impl(s3::Bucket);
 impl BucketClient for BucketClientS3Impl {
   type ResponseData = S3ResponseData;
 
-  async fn put_blob<P>(&self, id: P, blob: Vec<u8>) -> Result<(), AppError>
+  async fn pub_blob<P>(&self, id: P, content: &[u8]) -> Result<(), AppError>
   where
     P: AsRef<str> + Send,
   {
-    let code = self.0.put_object(id, &blob).await?.status_code();
+    let code = self.0.put_object(id, content).await?.status_code();
     check_s3_status_code(code)?;
     Ok(())
   }

@@ -130,7 +130,7 @@ pub struct AFCollabMemberRow {
   pub permission_id: i64,
 }
 
-#[derive(FromRow, Serialize, Deserialize)]
+#[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct AFBlobMetadataRow {
   pub workspace_id: Uuid,
   pub file_id: String,

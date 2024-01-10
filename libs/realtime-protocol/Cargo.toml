@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 yrs.workspace = true
-thiserror = "1.0.48"
+thiserror = "1.0.56"
 serde.workspace = true
 collab = { version = "0.1.0" }
 bincode.workspace = true

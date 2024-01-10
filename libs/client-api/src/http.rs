@@ -41,8 +41,6 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::fs::File;
-use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::RetryIf;
 use tokio_tungstenite::tungstenite::Message;
@@ -1055,17 +1053,23 @@ impl Client {
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
 
-  pub async fn put_blob<T: Into<Bytes>, M: ToString>(
+  pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
+    format!(
+      "{}/api/file_storage/{}/blob/{}",
+      self.base_url, workspace_id, file_id
+    )
+  }
+
+  pub async fn put_blob<T: Into<Bytes>>(
     &self,
-    workspace_id: &str,
+    url: &str,
     data: T,
-    mime: M,
-  ) -> Result<String, AppResponseError> {
-    let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
+    mime: &Mime,
+  ) -> Result<(), AppResponseError> {
     let data = data.into();
     let content_length = data.len();
     let resp = self
-      .http_client_with_auth(Method::PUT, &url)
+      .http_client_with_auth(Method::PUT, url)
       .await?
       .header(header::CONTENT_TYPE, mime.to_string())
       .header(header::CONTENT_LENGTH, content_length)
@@ -1073,46 +1077,20 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    let record = AppResponse::<AFBlobRecord>::from_response(resp)
-      .await?
-      .into_data()?;
-    Ok(format!(
-      "{}/api/file_storage/{}/blob/{}",
-      self.base_url, workspace_id, record.file_id
-    ))
-  }
-
-  pub async fn put_blob_with_path(
-    &self,
-    workspace_id: &str,
-    file_path: &str,
-  ) -> Result<String, AppResponseError> {
-    if file_path.is_empty() {
-      return Err(AppError::InvalidRequest("path is empty".to_owned()).into());
-    }
-
-    let mut file = File::open(&file_path).await?;
-    let mime = mime_guess::from_path(file_path)
-      .first_or_octet_stream()
-      .to_string();
-
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).await?;
-    self.put_blob(workspace_id, buffer, mime).await
+    Ok(())
   }
 
   /// Only expose this method for testing
   #[cfg(debug_assertions)]
   pub async fn put_blob_with_content_length<T: Into<Bytes>>(
     &self,
-    workspace_id: &str,
+    url: &str,
     data: T,
     mime: &Mime,
     content_length: usize,
   ) -> Result<AFBlobRecord, AppResponseError> {
-    let url = format!("{}/api/file_storage/{}/blob", self.base_url, workspace_id);
     let resp = self
-      .http_client_with_auth(Method::PUT, &url)
+      .http_client_with_auth(Method::PUT, url)
       .await?
       .header(header::CONTENT_TYPE, mime.to_string())
       .header(header::CONTENT_LENGTH, content_length)
@@ -1127,10 +1105,9 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
-  pub async fn get_blob<T: AsRef<str>>(&self, url: T) -> Result<Bytes, AppResponseError> {
-    Url::parse(url.as_ref())?;
+  pub async fn get_blob(&self, url: &str) -> Result<(Mime, Vec<u8>), AppResponseError> {
     let resp = self
-      .http_client_with_auth(Method::GET, url.as_ref())
+      .http_client_with_auth(Method::GET, url)
       .await?
       .send()
       .await?;
@@ -1138,15 +1115,35 @@ impl Client {
 
     match resp.status() {
       reqwest::StatusCode::OK => {
+        // get mime from resp header
+        let mime = {
+          match resp.headers().get(header::CONTENT_TYPE) {
+            Some(v) => match v.to_str() {
+              Ok(v) => match v.parse::<Mime>() {
+                Ok(v) => v,
+                Err(e) => {
+                  tracing::error!("failed to parse mime from header: {:?}", e);
+                  mime::TEXT_PLAIN
+                },
+              },
+              Err(e) => {
+                tracing::error!("failed to get mime from header: {:?}", e);
+                mime::TEXT_PLAIN
+              },
+            },
+            None => mime::TEXT_PLAIN,
+          }
+        };
+
         let mut stream = resp.bytes_stream();
         let mut acc: Vec<u8> = Vec::new();
         while let Some(raw_bytes) = stream.next().await {
           acc.extend_from_slice(&raw_bytes?);
         }
-        Ok(Bytes::from(acc))
+        Ok((mime, acc))
       },
       reqwest::StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
-        url.as_ref().to_owned(),
+        url.to_owned(),
       ))),
       c => Err(AppResponseError::from(AppError::Unhandled(format!(
         "status code: {}, message: {}",
@@ -1156,12 +1153,9 @@ impl Client {
     }
   }
 
-  pub async fn get_blob_metadata<T: AsRef<str>>(
-    &self,
-    url: T,
-  ) -> Result<BlobMetadata, AppResponseError> {
+  pub async fn get_blob_metadata(&self, url: &str) -> Result<BlobMetadata, AppResponseError> {
     let resp = self
-      .http_client_with_auth(Method::GET, url.as_ref())
+      .http_client_with_auth(Method::GET, url)
       .await?
       .send()
       .await?;

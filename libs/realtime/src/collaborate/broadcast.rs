@@ -194,6 +194,8 @@ impl CollabBroadcast {
                 continue;
               }
 
+              // TODO(nathan): the handle_user_ws_msg should run very fast, otherwise it will block
+              // the current loop. So create a task for it.
               handle_user_ws_msg(&object_id, &sink, &collab_msg, &collab).await;
             }
           }

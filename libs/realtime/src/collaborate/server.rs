@@ -196,12 +196,14 @@ where
         .await
         .insert(new_conn.user.clone(), new_conn.session_id);
 
-      // when a new connection is established, remove the old connection from all groups
-      remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
-      info!("new client stream:{}", &new_conn.user);
       user_by_uid
         .write()
         .insert(new_conn.user.uid(), new_conn.user.clone());
+
+      // when a new connection is established, remove the old connection from all groups
+      remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
+
+      info!("new client stream:{}", &new_conn.user);
       if let Some(old_stream) = client_stream_by_user
         .write()
         .await
@@ -294,7 +296,7 @@ where
     match user {
       None => Box::pin(async move {
         Err(RealtimeError::UserNotFound(format!(
-          "Can't find the user with given id:{}",
+          "Can't find the user with given id: {}",
           uid
         )))
       }),

@@ -1285,7 +1285,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1305,11 +1305,11 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "collab",
- "collab-persistence",
+ "collab-entity",
  "nanoid",
  "parking_lot",
  "serde",
@@ -1323,7 +1323,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1337,12 +1337,12 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=fe8f08fcc99ea56c78bfb746ccb0cd308126141d#fe8f08fcc99ea56c78bfb746ccb0cd308126141d"
 dependencies = [
  "anyhow",
  "chrono",
  "collab",
- "collab-persistence",
+ "collab-entity",
  "parking_lot",
  "serde",
  "serde_json",
@@ -1351,26 +1351,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "collab-persistence"
-version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b036feb396aa6a1dbbab9589bd032e29db8ab024#b036feb396aa6a1dbbab9589bd032e29db8ab024"
-dependencies = [
- "anyhow",
- "async-trait",
- "bincode",
- "chrono",
- "collab",
- "lazy_static",
- "parking_lot",
- "serde",
- "smallvec",
- "thiserror",
- "tokio",
- "tracing",
- "yrs",
 ]
 
 [[package]]

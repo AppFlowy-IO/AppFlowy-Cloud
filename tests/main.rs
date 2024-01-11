@@ -1,5 +1,6 @@
 extern crate core;
 use client_api::{Client, ClientConfiguration};
+use dotenvy::dotenv;
 use tracing::warn;
 mod casbin;
 mod collab;
@@ -22,6 +23,7 @@ lazy_static! {
 }
 
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {
+  dotenv().ok();
   match env::var(key) {
     Ok(value) => Cow::Owned(value),
     Err(_) => {

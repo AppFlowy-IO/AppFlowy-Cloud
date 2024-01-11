@@ -36,6 +36,7 @@ services:
     build:
       context: .
       dockerfile: docker/gotrue.Dockerfile
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     depends_on:
       - postgres
     environment:
@@ -45,7 +46,7 @@ services:
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}
-      - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
+      - DATABASE_URL=${GOTRUE_DATABASE_URL}
       - PORT=9999
       - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST}                          # e.g. smtp.gmail.com
       - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT}                          # e.g. 465

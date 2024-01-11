@@ -1,3 +1,5 @@
+# Essential services for AppFlowy Cloud
+
 version: '3'
 services:
   nginx:
@@ -45,8 +47,6 @@ services:
       context: .
       dockerfile: docker/gotrue.Dockerfile
     image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
-    depends_on:
-      - postgres
     environment:
       # There are a lot of options to configure GoTrue. You can reference the example config:
       # https://github.com/supabase/gotrue/blob/master/example.env
@@ -55,7 +55,7 @@ services:
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}
-      - DATABASE_URL=${DATABASE_URL:-postgres://supabase_auth_admin:root@postgres:5432/postgres}
+      - DATABASE_URL=${GOTRUE_DATABASE_URL}
       - PORT=9999
       - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST}                          # e.g. smtp.gmail.com
       - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT}                          # e.g. 465
@@ -89,10 +89,10 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_ENVIRONMENT=production
-      - APPFLOWY_DATABASE_URL=${APPFLOWY_DATABASE_URL:-postgres://postgres:password@postgres:5432/postgres}
+      - APPFLOWY_DATABASE_URL=${APPFLOWY_DATABASE_URL}
       - APPFLOWY_REDIS_URI=redis://redis:6379
       - APPFLOWY_GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}
-      - APPFLOWY_GOTRUE_BASE_URL=http://gotrue:9999
+      - APPFLOWY_GOTRUE_BASE_URL=${APPFLOWY_GOTRUE_BASE_URL}
       - APPFLOWY_GOTRUE_EXT_URL=${API_EXTERNAL_URL}
       - APPFLOWY_GOTRUE_ADMIN_EMAIL=${GOTRUE_ADMIN_EMAIL}
       - APPFLOWY_GOTRUE_ADMIN_PASSWORD=${GOTRUE_ADMIN_PASSWORD}
@@ -113,45 +113,6 @@ services:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
     image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
-
-  # Optional
-  tunnel:
-    image: cloudflare/cloudflared
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-
-  # Optional
-  portainer:
-    restart: on-failure
-    image: portainer/portainer-ce:latest
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  # Optional
-  portainer_init:
-    depends_on:
-      - portainer
-    image: alpine/curl
-    restart: on-failure
-    environment:
-      - PORTAINER_PASSWORD=${PORTAINER_PASSWORD}
-    volumes:
-      - ./docker/portainer/setup.sh:/setup.sh
-    command: ./setup.sh
-
-  # Optional
-  pgadmin:
-    restart: on-failure
-    image: dpage/pgadmin4
-    depends_on:
-      - postgres
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
-    volumes:
-      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
 volumes:
   postgres_data:

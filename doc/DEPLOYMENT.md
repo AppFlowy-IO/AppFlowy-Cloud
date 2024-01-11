@@ -3,12 +3,12 @@
 - The following document will walk you through the steps to deploy your own AppFlowy-Cloud
 
 ## Hardware Requirements
-- Because AppFlowy-Cloud will have to be running persistently (or at least when one of the user is using),
-we recommend using cloud compute services (as your host server) such as
- - [Amazon EC2](https://aws.amazon.com/ec2/) or
- - [Azure Virtual Machines](https://azure.microsoft.com/en-gb/products/virtual-machines/)
 - Minimum 2GB Ram (4GB Recommended)
 - Ports 80/443 available
+- Because AppFlowy-Cloud will have to be running persistently (or at least whenever users need access),
+we recommend deploying it on a cloud compute services as host server (if deploying it on a home server is not an option for you) such as
+    - [Amazon EC2](https://aws.amazon.com/ec2/) or
+    - [Azure Virtual Machines](https://azure.microsoft.com/en-gb/products/virtual-machines/)
 
 
 ## Software Requirements

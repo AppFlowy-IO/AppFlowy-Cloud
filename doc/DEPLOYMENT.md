@@ -6,14 +6,13 @@
 - Minimum 2GB Ram (4GB Recommended)
 - Ports 80/443 available
 - Because AppFlowy-Cloud will have to be running persistently (or at least whenever users need access),
-we recommend deploying it on a cloud compute services as host server (if deploying it on a home server is not an option for you) such as
+it's probably a good idea to run it on a non-end user device. It is best if you already have a home server(check software requirements),
+but if you don't, you can also deploy it on a cloud compute services as host server such as
     - [Amazon EC2](https://aws.amazon.com/ec2/) or
     - [Azure Virtual Machines](https://azure.microsoft.com/en-gb/products/virtual-machines/)
 
-
 ## Software Requirements
-
-Ensure you have Docker Compose installed on your host server. Follow the official guidelines for a reliable setup:
+Ensure you have Docker Compose(v2) installed on your host server. Follow the official guidelines for a reliable setup:
 
 Docker Compose is included with Docker Engine:
 - **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
@@ -21,6 +20,12 @@ Docker Compose is included with Docker Engine:
 For older versions of Docker Engine that do not include Docker Compose:
 - **Docker Compose:** Install it as per the [official documentation](https://docs.docker.com/compose/install/).
 
+Once you have it installed, you can check by running the command:
+```
+docker compose version
+# Docker Compose version 2.23.3
+```
+Note: `docker-compose` (with the hyphen) may not be supported. You are advise to use `docker compose`(without hyphen) instead.
 
 ## Steps
 

@@ -1,5 +1,5 @@
-use crate::notify::{ClientToken, TokenStateReceiver};
 use crate::entity::AFBlobRecord;
+use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;

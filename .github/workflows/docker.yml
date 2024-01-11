@@ -7,12 +7,6 @@ on:
     types: [ opened, synchronize, reopened ]
     branches: [ main ]
 
-env:
-  SQL_OFFLINE: true
-  LOCALHOST_URL: http://localhost
-  LOCALHOST_WS: ws://localhost/ws
-  LOCALHOST_GOTRUE: http://localhost/gotrue
-
 jobs:
   test:
     name: Docker
@@ -26,8 +20,8 @@ jobs:
           workspaces: |
             AppFlowy-Cloud
 
-      - name: Copy and rename dev.env to .env
-        run: cp dev.env .env
+      - name: Copy and rename deploy.env to .env
+        run: cp deploy.env .env
 
       - name: Replace values in .env
         run: |
@@ -37,6 +31,7 @@ jobs:
           sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS }}/' .env
           sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
           sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
+          sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
 
       - name: Disable appflowyinc images
         run: |
@@ -49,4 +44,4 @@ jobs:
 
       - name: Run tests
         run: |
-          RUST_LOG=debug cargo test
+          cargo test

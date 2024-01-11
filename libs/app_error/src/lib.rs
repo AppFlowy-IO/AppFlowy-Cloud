@@ -96,6 +96,10 @@ pub enum AppError {
   #[cfg(feature = "tokio_error")]
   #[error(transparent)]
   TokioJoinError(#[from] tokio::task::JoinError),
+
+  #[cfg(feature = "bincode_error")]
+  #[error(transparent)]
+  BincodeError(#[from] bincode::Error),
 }
 
 impl AppError {
@@ -149,6 +153,8 @@ impl AppError {
       AppError::RequestTimeout(_) => ErrorCode::NetworkError,
       #[cfg(feature = "tokio_error")]
       AppError::TokioJoinError(_) => ErrorCode::Internal,
+      #[cfg(feature = "bincode_error")]
+      AppError::BincodeError(_) => ErrorCode::Internal,
     }
   }
 }

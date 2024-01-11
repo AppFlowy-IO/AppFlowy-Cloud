@@ -344,14 +344,14 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn batch_create_collab(
+  pub(crate) async fn create_collab_list(
     &mut self,
     workspace_id: &str,
     params: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
     self
       .api_client
-      .batch_create_collab(workspace_id, params)
+      .create_collab_list(workspace_id, params)
       .await
   }
 

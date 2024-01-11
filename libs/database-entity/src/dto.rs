@@ -78,6 +78,14 @@ impl CollabParams {
     self.override_if_exist = override_if_exist;
     self
   }
+
+  pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+    bincode::serialize(self)
+  }
+
+  pub fn from_bytes(bytes: &[u8]) -> Result<Self, bincode::Error> {
+    bincode::deserialize(bytes)
+  }
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

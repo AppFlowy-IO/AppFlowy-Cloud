@@ -484,6 +484,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "bincode",
  "reqwest",
  "rust-s3",
  "serde",

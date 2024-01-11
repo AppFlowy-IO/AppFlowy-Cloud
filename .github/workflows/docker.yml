@@ -8,8 +8,10 @@ on:
     branches: [ main ]
 
 env:
-  SQLX_VERSION: 0.7.1
-  SQLX_FEATURES: "rustls,postgres"
+  SQL_OFFLINE: true
+  LOCALHOST_URL: http://localhost
+  LOCALHOST_WS: ws://localhost/ws
+  LOCALHOST_GOTRUE: http://localhost/gotrue
 
 jobs:
   test:
@@ -47,5 +49,4 @@ jobs:
 
       - name: Run tests
         run: |
-          cargo install sqlx-cli --version=${{ env.SQLX_VERSION }} --features ${{ env.SQLX_FEATURES }} --no-default-features --locked
           RUST_LOG=debug cargo test

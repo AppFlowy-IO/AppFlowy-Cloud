@@ -9,11 +9,10 @@ use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
   AFBlobRecord, AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
-  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchCreateCollabParams,
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify, CollabParams,
-  CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams, QueryCollab,
-  QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
-  UpdateCollabMemberParams,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
+  BatchQueryCollabResult, CollabMemberIdentify, CollabParams, CreateCollabParams,
+  DeleteCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
+  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use futures_util::{stream, StreamExt};
 use gotrue::grant::Grant;
@@ -425,7 +424,9 @@ impl Client {
     msg: Message,
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
-    let payload = brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size).await?;
+    let payload =
+      spawn_blocking_brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size)
+        .await?;
 
     let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
     let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
@@ -757,7 +758,7 @@ impl Client {
       .to_bytes()
       .map_err(|err| AppError::Internal(err.into()))?;
 
-    let compress_bytes = brotli_compress(
+    let compress_bytes = spawn_blocking_brotli_compress(
       bytes,
       self.config.compression_quality,
       self.config.compression_buffer_size,
@@ -776,35 +777,54 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn batch_create_collab(
+  pub async fn create_collab_list(
     &self,
     workspace_id: &str,
-    params: Vec<CollabParams>,
+    params_list: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
-    let url = format!("{}/api/workspace/{}/collabs", self.base_url, workspace_id);
-    let payload = BatchCreateCollabParams {
-      workspace_id: workspace_id.to_string(),
-      params_list: params,
-    };
+    let url = format!(
+      "{}/api/workspace/{}/batch/collab",
+      self.base_url, workspace_id
+    );
 
-    let bytes = payload
-      .to_bytes()
-      .map_err(|err| AppError::Internal(err.into()))?;
+    // Parallel compression
+    let compression_tasks: Vec<_> = params_list
+      .into_iter()
+      .map(|params| {
+        let config = self.config.clone();
+        tokio::spawn(async move {
+          let data = params.to_bytes().map_err(AppError::from)?;
+          spawn_blocking_brotli_compress(
+            data,
+            config.compression_quality,
+            config.compression_buffer_size,
+          )
+          .await
+        })
+      })
+      .collect();
 
-    let compress_bytes = brotli_compress(
-      bytes,
-      self.config.compression_quality,
-      self.config.compression_buffer_size,
-    )
-    .await?;
-
+    let mut framed_data = Vec::new();
+    for task in compression_tasks {
+      let compressed = task.await??;
+      // The length of a u32 in bytes is 4. The server uses a u32 to read the size of each data frame,
+      // hence the frame size header is always 4 bytes. It's crucial not to alter this size value,
+      // as the server's logic for frame size reading is based on this fixed 4-byte length.
+      // note:
+      // the size of a u32 is a constant 4 bytes across all platforms that Rust supports.
+      let size = compressed.len() as u32;
+      framed_data.extend_from_slice(&size.to_be_bytes());
+      framed_data.extend_from_slice(&compressed);
+    }
+    let body = Body::wrap_stream(stream::once(async { Ok::<_, AppError>(framed_data) }));
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)
       .await?
       .timeout(Duration::from_secs(60))
-      .body(compress_bytes)
+      .body(body)
       .send()
       .await?;
+
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
@@ -1281,7 +1301,7 @@ fn log_request_id(resp: &reqwest::Response) {
   }
 }
 
-pub async fn brotli_compress(
+pub async fn spawn_blocking_brotli_compress(
   data: Vec<u8>,
   quality: u32,
   buffer_size: usize,

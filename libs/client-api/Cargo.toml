@@ -18,7 +18,7 @@ url = "2.5.0"
 tokio-stream = { version = "0.1.14" }
 parking_lot = "0.12.1"
 mime = "0.3.17"
-app-error = { workspace = true, features = ["tokio_error"] }
+app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 brotli = "3.4.0"
 
 # ws

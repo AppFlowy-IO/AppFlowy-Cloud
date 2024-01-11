@@ -32,7 +32,9 @@ pub async fn decompress(data: Vec<u8>, buffer_size: usize) -> Result<Vec<u8>, Ap
     let mut decompressed_data = Vec::new();
     decompressor
       .read_to_end(&mut decompressed_data)
-      .map_err(|err| AppError::InvalidRequest(format!("Failed to decompress data: {}", err)))?;
+      .map_err(|err| {
+        AppError::InvalidRequest(format!("Failed to decompress data:{} {}", data.len(), err))
+      })?;
     Ok(decompressed_data)
   })
   .await

@@ -1,7 +1,6 @@
 use crate::api::util::compress_type_from_header_value;
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
-
 use crate::biz::workspace;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::component::auth::jwt::UserUuid;
@@ -27,6 +26,7 @@ use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
+use tokio::time::Instant;
 
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
@@ -59,9 +59,14 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(delete_collab_handler)),
     )
     .service(
+      web::resource("{workspace_id}/batch/collab")
+        .route(web::post().to(create_collab_list_handler)),
+    )
+    // will be deprecated
+    .service(
       web::resource("{workspace_id}/collabs")
-        .app_data(PayloadConfig::new(10 * 1024 * 1024))
-        .route(web::post().to(batch_create_collab_handler)),
+          .app_data(PayloadConfig::new(10 * 1024 * 1024))
+          .route(web::post().to(batch_create_collab_handler)),
     )
     .service(
       web::resource("{workspace_id}/{object_id}/snapshot")
@@ -273,6 +278,86 @@ async fn create_collab_handler(
     &state.collab_access_control,
   )
   .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[instrument(skip(state, payload), err)]
+async fn create_collab_list_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  mut payload: Payload,
+  state: Data<AppState>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  let mut collab_params_list = vec![];
+  let workspace_id = workspace_id.into_inner().to_string();
+  let compress_type = compress_type_from_header_value(req.headers())?;
+  event!(
+    tracing::Level::DEBUG,
+    "start decompressing collab params list"
+  );
+
+  let start_time = Instant::now();
+  let mut payload_buffer = Vec::new();
+  while let Some(item) = payload.next().await {
+    if let Ok(bytes) = item {
+      match compress_type {
+        CompressionType::Brotli { buffer_size } => {
+          payload_buffer.extend_from_slice(&bytes);
+
+          // The client API uses a u32 value as the frame separator, which determines the size of each data frame.
+          // The length of a u32 is fixed at 4 bytes. It's important not to change the size (length) of the u32,
+          // unless you also make a corresponding update in the client API. Any mismatch in frame size handling
+          // between the client and server could lead to incorrect data processing or communication errors.
+          while payload_buffer.len() >= 4 {
+            let size = u32::from_be_bytes([
+              payload_buffer[0],
+              payload_buffer[1],
+              payload_buffer[2],
+              payload_buffer[3],
+            ]) as usize;
+
+            if payload_buffer.len() < 4 + size {
+              break;
+            }
+
+            let compressed_data = payload_buffer[4..4 + size].to_vec();
+            let decompress_data = decompress(compressed_data, buffer_size).await?;
+            let params = CollabParams::from_bytes(&decompress_data).map_err(|err| {
+              AppError::InvalidRequest(format!(
+                "Failed to parse CollabParams with brotli decompression data: {}",
+                err
+              ))
+            })?;
+            params.validate().map_err(AppError::from)?;
+            collab_params_list.push(params);
+
+            payload_buffer = payload_buffer[4 + size..].to_vec();
+          }
+        },
+      }
+    }
+  }
+  let duration = start_time.elapsed();
+  event!(
+    tracing::Level::DEBUG,
+    "end decompressing collab params list, time taken: {:?}",
+    duration
+  );
+
+  if collab_params_list.is_empty() {
+    return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
+  }
+
+  biz::collab::ops::create_collabs(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    collab_params_list,
+    &state.collab_access_control,
+  )
+  .await?;
+
   Ok(Json(AppResponse::Ok()))
 }
 

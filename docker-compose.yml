@@ -17,10 +17,9 @@ services:
     image: minio/minio
     environment:
       - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
-    command: server /data --console-address ":9001"
-    environment:
       - MINIO_ROOT_USER=${AWS_ACCESS_KEY_ID:-minioadmin}
       - MINIO_ROOT_PASSWORD=${AWS_SECRET_ACCESS_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
 
@@ -84,8 +83,6 @@ services:
       - GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${GOTRUE_EXTERNAL_DISCORD_CLIENT_ID}
       - GOTRUE_EXTERNAL_DISCORD_SECRET=${GOTRUE_EXTERNAL_DISCORD_SECRET}
       - GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI}
-    ports:
-      - 9998:9999
 
   appflowy_cloud:
     restart: on-failure
@@ -108,7 +105,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
+    # image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
 
   admin_frontend:
     restart: on-failure
@@ -116,8 +113,6 @@ services:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
     image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
-    ports:
-      - 3000:3000
 
   # Optional
   tunnel:
@@ -131,8 +126,6 @@ services:
   portainer:
     restart: on-failure
     image: portainer/portainer-ce:latest
-    ports:
-      - 9442:9000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 

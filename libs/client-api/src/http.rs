@@ -25,7 +25,7 @@ use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use realtime_entity::EncodedCollab;
-use reqwest::{header, Body};
+use reqwest::{header, Body, StatusCode};
 
 use collab_entity::CollabType;
 use reqwest::header::HeaderValue;
@@ -1096,6 +1096,11 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
+    if resp.status() == StatusCode::PAYLOAD_TOO_LARGE {
+      return Err(AppResponseError::from(AppError::PayloadTooLarge(
+        StatusCode::PAYLOAD_TOO_LARGE.to_string(),
+      )));
+    }
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 

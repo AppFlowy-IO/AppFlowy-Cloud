@@ -50,7 +50,7 @@ async fn put_and_get() {
 //   let file_id = uuid::Uuid::new_v4().to_string();
 //
 //   let url = c1.get_blob_url(&workspace_id, &file_id);
-//   let data = vec![0; 10 * 1024 * 1024 * 1024].to_owned;
+//   let data = vec![0; 10 * 1024 * 1024 * 1024];
 //   let error = c1.put_blob(&url, data, &mime).await.unwrap_err();
 //
 //   assert_eq!(error.code, ErrorCode::PayloadTooLarge);

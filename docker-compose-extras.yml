@@ -29,8 +29,6 @@ services:
   pgadmin:
     restart: on-failure
     image: dpage/pgadmin4
-    depends_on:
-      - postgres
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}

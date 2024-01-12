@@ -1,6 +1,7 @@
 use crate::casbin::{
   assert_workspace_role, assert_workspace_role_error, create_user, setup_db, MODEL_CONF,
 };
+use crate::util::sqlx_is_offline;
 use anyhow::{anyhow, Context};
 use app_error::ErrorCode;
 use appflowy_cloud::biz;
@@ -15,6 +16,9 @@ use sqlx::PgPool;
 #[sqlx::test(migrations = false)]
 async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  if sqlx_is_offline() {
+    return Ok(());
+  }
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;

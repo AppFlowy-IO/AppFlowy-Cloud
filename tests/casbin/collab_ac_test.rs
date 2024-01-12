@@ -1,4 +1,5 @@
 use crate::casbin::*;
+use crate::util::sqlx_is_offline;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
@@ -17,6 +18,9 @@ use tokio::time::sleep;
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  if sqlx_is_offline() {
+    return Ok(());
+  }
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
@@ -127,6 +131,9 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  if sqlx_is_offline() {
+    return Ok(());
+  }
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
@@ -232,6 +239,9 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  if sqlx_is_offline() {
+    return Ok(());
+  }
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
@@ -317,6 +327,9 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  if sqlx_is_offline() {
+    return Ok(());
+  }
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
@@ -358,6 +371,9 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
 #[sqlx::test(migrations = false)]
 async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  if sqlx_is_offline() {
+    return Ok(());
+  }
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;

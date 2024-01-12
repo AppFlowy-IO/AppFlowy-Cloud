@@ -86,15 +86,15 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     db_settings: DatabaseSetting {
       pg_conn_opts: PgConnectOptions::from_str(&get_env_var(
         "APPFLOWY_DATABASE_URL",
-        "postgres://postgres:password@localhost:5433/postgres",
+        "postgres://postgres:password@localhost:5432/postgres",
       ))?,
       require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false").parse()?,
       max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20").parse()?,
       database_name: get_env_var("APPFLOWY_DATABASE_NAME", "postgres"),
     },
     gotrue: GoTrueSetting {
-      base_url: get_env_var("APPFLOWY_GOTRUE_BASE_URL", "http://localhost:9998"),
-      ext_url: get_env_var("APPFLOWY_GOTRUE_EXT_URL", "http://localhost:9998"),
+      base_url: get_env_var("APPFLOWY_GOTRUE_BASE_URL", "http://localhost:9999"),
+      ext_url: get_env_var("APPFLOWY_GOTRUE_EXT_URL", "http://localhost:9999"),
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
       admin_email: get_env_var("APPFLOWY_GOTRUE_ADMIN_EMAIL", "admin@example.com"),
       admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password"),
@@ -109,7 +109,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,
       client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "30").parse()?,
     },
-    redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6380").into(),
+    redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {
       use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true").parse()?,
       minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),

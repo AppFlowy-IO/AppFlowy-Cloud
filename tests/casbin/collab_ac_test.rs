@@ -355,6 +355,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
 
   Ok(())
 }
+
 #[sqlx::test(migrations = false)]
 async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;

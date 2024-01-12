@@ -6,14 +6,13 @@
 - Minimum 2GB Ram (4GB Recommended)
 - Ports 80/443 available
 - Because AppFlowy-Cloud will have to be running persistently (or at least whenever users need access),
-we recommend deploying it on a cloud compute services as host server (if deploying it on a home server is not an option for you) such as
+it's probably a good idea to run it on a non-end user device. It is best if you already have a home server(check software requirements),
+but if you don't, you can also deploy it on a cloud compute services as host server such as
     - [Amazon EC2](https://aws.amazon.com/ec2/) or
     - [Azure Virtual Machines](https://azure.microsoft.com/en-gb/products/virtual-machines/)
 
-
 ## Software Requirements
-
-Ensure you have Docker Compose installed on your host server. Follow the official guidelines for a reliable setup:
+Ensure you have Docker Compose(v2) installed on your host server. Follow the official guidelines for a reliable setup:
 
 Docker Compose is included with Docker Engine:
 - **Docker Engine:** We suggest adhering to the instructions provided by Docker for [installing Docker Engine](https://docs.docker.com/engine/install/).
@@ -21,6 +20,12 @@ Docker Compose is included with Docker Engine:
 For older versions of Docker Engine that do not include Docker Compose:
 - **Docker Compose:** Install it as per the [official documentation](https://docs.docker.com/compose/install/).
 
+Once you have it installed, you can check by running the command:
+```
+docker compose version
+# Docker Compose version 2.23.3
+```
+Note: `docker-compose` (with the hyphen) may not be supported. You are advise to use `docker compose`(without hyphen) instead.
 
 ## Steps
 
@@ -115,17 +120,7 @@ GOTRUE_EXTERNAL_DISCORD_SECRET=your-discord-secret
 GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://your-host/gotrue/callback
 ```
 
-### 3. Optional Services
-Some services in `docker-compose.yml` are optinal and can be commented out if you dont need them, the will be marked as `Optional`
-- `pgadmin` (Web UI configured easy view into deployed postgres database)
-- `portainer`/`portainer_init` (Web UI for providing some monitoring and ease of container management)
-- `tunnel` (cloud flare tunnel: provide secure way to connect appflowy to Cloudflare without a publicly routable IP address)
-- `admin_frontend` (admin portal to manage accounts and adding authentication method, recommended to keep)
-If you did not deploy an optional component, else the nginx server will not start properly
-1. comment out the corresponding `depends_on` in `nginx` service in file `docker-compose.yml`
-2. comment out the corresponding `location` section in file `nginx/nginx.conf`
-
-### 4. Running the services
+### 3. Running the services
 
 #### Start and run AppFlowy-Cloud
 - The following command will build and start the AppFlowy-Cloud.
@@ -138,18 +133,35 @@ docker compose up -d
 docker ps -a
 ```
 
+### 4. Optional Services
+There are optional services that are non essential in core functionalities of AppFlowy Cloud, there can be useful for administrative or debugging purpose.
+The files containing these services are in `docker-compose-extra.yml`.
+- `pgadmin` (Web UI configured easy view into deployed postgres database)
+- `portainer`/`portainer_init` (Web UI for providing some monitoring and ease of container management)
+- `tunnel` (cloud flare tunnel: provide secure way to connect appflowy to Cloudflare without a publicly routable IP address)
+- `admin_frontend` (admin portal to manage accounts and adding authentication method, recommended to keep)
+If you wish to deploy those, edit this file accordingly and do:
+```
+docker compose --file docker-compose-extra.yml up -d
+```
+You may ignore the orphan containers warning message from docker
+
+
 > When using the `docker compose up -d` command without specifying a tag, Docker Compose will pull the `latest`
 tag for the `appflowy_cloud` and `admin_frontend` images from Docker Hub by default. If you've set the `BACKEND_VERSION`
 environment variable, it will pull the specified version instead. If `BACKEND_VERSION` is not set, Docker Compose
 defaults to using the `latest` tag.
 
-- The metrics endpoint can also be used to verify that the AppFlowy-Cloud server is running. It should return a status of 200 OK.
-- This command should only be run in the host machine as port 8000 should not be exposed
+- Check that services are running correctly `docker ps -a`
+- If you find a particular service not working properly, you can inspect the logs:
 ```bash
-curl -v localhost:8000/metrics
+# Getting logs for a particular docker compose service
+# You can obtain name by `docker ps -a`
+docker logs <NAME>
+# e.g. docker logs appflowy-cloud-admin_frontend-1
 ```
 
-### 4. Reconfiguring and redeployment
+### 5. Reconfiguring and redeployment
 - It is very common to reconfigure and restart. To do so, simply edit the `.env` and do `docker compose up -d` again
 
 ## Ports

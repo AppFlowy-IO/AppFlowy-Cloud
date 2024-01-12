@@ -104,13 +104,8 @@ async fn sign_in_with_invalid_url() {
 async fn sign_in_with_url() {
   let c = localhost_client();
   let email = generate_unique_email();
-  let action_link = generate_sign_in_action_link(&email)
-    .await
-    .replacen("/gotrue", "", 1); // compatibility with local testing
-
+  let action_link = generate_sign_in_action_link(&email).await;
   let sign_in_url = c.extract_sign_in_url(action_link.as_str()).await.unwrap();
-  println!("url: {}", sign_in_url);
-
   let is_new = c.sign_in_with_url(&sign_in_url).await.unwrap();
   assert!(is_new);
 }

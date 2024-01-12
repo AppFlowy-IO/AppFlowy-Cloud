@@ -1,3 +1,4 @@
+use crate::entity::AFBlobRecord;
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
@@ -8,7 +9,7 @@ use std::io::Read;
 use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
-  AFBlobRecord, AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
+  AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
   BatchQueryCollabResult, CollabMemberIdentify, CollabParams, CreateCollabParams,
   DeleteCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
@@ -1087,12 +1088,10 @@ impl Client {
     mime: &Mime,
   ) -> Result<(), AppResponseError> {
     let data = data.into();
-    let content_length = data.len();
     let resp = self
       .http_client_with_auth(Method::PUT, url)
       .await?
       .header(header::CONTENT_TYPE, mime.to_string())
-      .header(header::CONTENT_LENGTH, content_length)
       .body(data)
       .send()
       .await?;

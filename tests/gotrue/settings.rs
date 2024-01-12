@@ -4,19 +4,22 @@ use gotrue::{
   params::AdminUserParams,
 };
 
-use crate::user::utils::{generate_unique_email, ADMIN_USER};
+use crate::{
+  user::utils::{generate_unique_email, ADMIN_USER},
+  LOCALHOST_GOTRUE,
+};
 
 #[tokio::test]
 async fn gotrue_settings() {
   let http_client = reqwest::Client::new();
-  let gotrue_client = Client::new(http_client, "http://localhost:9998");
+  let gotrue_client = Client::new(http_client, &LOCALHOST_GOTRUE);
   gotrue_client.settings().await.unwrap();
 }
 
 #[tokio::test]
 async fn admin_user_create() {
   let http_client = reqwest::Client::new();
-  let gotrue_client = Client::new(http_client, "http://localhost:9998");
+  let gotrue_client = Client::new(http_client, &LOCALHOST_GOTRUE);
   let admin_token = gotrue_client
     .token(&Grant::Password(PasswordGrant {
       email: ADMIN_USER.email.clone(),

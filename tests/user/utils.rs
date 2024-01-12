@@ -76,5 +76,5 @@ pub async fn generate_sign_in_action_link(email: &str) -> String {
 
 pub fn localhost_gotrue_client() -> gotrue::api::Client {
   let reqwest_client = reqwest::Client::new();
-  gotrue::api::Client::new(reqwest_client, LOCALHOST_GOTRUE)
+  gotrue::api::Client::new(reqwest_client, &LOCALHOST_GOTRUE)
 }

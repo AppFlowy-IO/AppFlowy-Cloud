@@ -7,6 +7,13 @@ on:
     types: [ opened, synchronize, reopened ]
     branches: [ main ]
 
+env:
+  LOCALHOST_URL: http://localhost
+  LOCALHOST_WS: ws://localhost/ws
+  LOCALHOST_GOTRUE: http://localhost/gotrue
+  DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
+  SQLX_OFFLINE: true
+
 jobs:
   test:
     name: Docker

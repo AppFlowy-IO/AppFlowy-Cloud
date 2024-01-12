@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
-DB_PORT="${POSTGRES_PORT:=5433}"
+DB_PORT="${POSTGRES_PORT:=5432}"
 DB_HOST="${POSTGRES_HOST:=localhost}"
 
 # Stop and remove any existing containers to avoid conflicts
@@ -34,7 +34,7 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   exit 1
 fi
 
-until curl localhost:9998/health; do
+until curl localhost:9999/health; do
   sleep 1
 done
 

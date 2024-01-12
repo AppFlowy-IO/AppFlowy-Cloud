@@ -7,9 +7,6 @@ git clone https://github.com/supabase/gotrue.git
 cp gotrue.env.docker gotrue/.env.docker
 cd gotrue
 
-# avoid port conflict with host postgres
-sed -i "s/'5432:5432'/'5433:5432'/" docker-compose-dev.yml
-
 make dev &
 
 while true; do

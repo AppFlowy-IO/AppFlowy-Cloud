@@ -19,7 +19,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
     ports:
-      - 5433:5432
+      - 5432:5432
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
       # comment out the following line if you want to persist data when restarting docker
@@ -29,13 +29,14 @@ services:
     restart: on-failure
     image: redis
     ports:
-      - 6380:6379
+      - 6379:6379
 
   gotrue:
     restart: on-failure
     build:
       context: .
       dockerfile: docker/gotrue.Dockerfile
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     depends_on:
       - postgres
     environment:
@@ -45,7 +46,7 @@ services:
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}
-      - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
+      - DATABASE_URL=${GOTRUE_DATABASE_URL}
       - PORT=9999
       - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST}                          # e.g. smtp.gmail.com
       - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT}                          # e.g. 465
@@ -74,7 +75,7 @@ services:
       - GOTRUE_METRICS_ENABLED=true
       - GOTRUE_METRICS_EXPORTER=prometheus
     ports:
-      - 9998:9999
+      - 9999:9999
 
   portainer:
     restart: on-failure

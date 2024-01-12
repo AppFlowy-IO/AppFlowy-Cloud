@@ -179,17 +179,5 @@ docker system prune -af
 
 **Caution:** This command removes all unused Docker images, containers, volumes, and networks. Be sure to backup any important data before proceeding.
 
-#### 3. Modify Docker Compose Configuration
-Alternatively, you can selectively reduce Docker's disk usage:
-
-- **Disable the Tunnel Server**: Temporarily comment out or remove the tunnel server service in the `docker-compose.yml` file.
-
-  ![Commenting Out Tunnel Server](../assets/images/comment_out_tunnel.png)
-
-- **Disable Admin Frontend**: Similarly, you can disable the `admin_frontend` service in the `docker-compose.yml` file. This involves commenting out the relevant sections.
-
-  ![Commenting Out Admin Frontend](../assets/images/comment_out_admin_frontend.png)
-
-  Additionally, ensure that dependencies on the `admin_frontend` service are also commented out as needed.
-
-  ![Commenting Out Dependencies on Admin Frontend](../assets/images/comment_out_deps_on_admin_frontend.png)
+#### 3. Additional Docker Compose Services
+- You can add additional docker compose services, refer to [main guide](./DEPLOYMENT.md) for more info

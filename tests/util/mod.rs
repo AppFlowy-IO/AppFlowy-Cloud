@@ -20,10 +20,3 @@ pub fn setup_log() {
     subscriber.try_init().unwrap();
   });
 }
-
-pub fn sqlx_is_offline() -> bool {
-  match std::env::var("SQLX_OFFLINE") {
-    Ok(sqlx_offline) => sqlx_offline == "true",
-    Err(_) => false,
-  }
-}

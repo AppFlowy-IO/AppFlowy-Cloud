@@ -1,5 +1,4 @@
 use crate::casbin::*;
-use crate::util::sqlx_is_offline;
 use anyhow::anyhow;
 use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
@@ -9,12 +8,10 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::PgPool;
 
+#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
-  if sqlx_is_offline() {
-    return Ok(());
-  }
 
   let user = create_user(&pool).await?;
 
@@ -71,12 +68,10 @@ async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
   Ok(())
 }
 
+#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
-  if sqlx_is_offline() {
-    return Ok(());
-  }
 
   let user_main = create_user(&pool).await?;
   let user_owner = create_user(&pool).await?;
@@ -224,12 +219,10 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   Ok(())
 }
 
+#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
-  if sqlx_is_offline() {
-    return Ok(());
-  }
 
   let user_owner = create_user(&pool).await?;
   let user_member = create_user(&pool).await?;

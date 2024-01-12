@@ -13,7 +13,6 @@ use app_error::AppError;
 use chrono::DateTime;
 use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
-use database_entity::dto::AFBlobRecord;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
@@ -53,7 +52,7 @@ async fn put_blob_handler(
   content_type: web::Header<ContentType>,
   content_length: web::Header<ContentLength>,
   payload: Payload,
-) -> Result<JsonAppResponse<AFBlobRecord>> {
+) -> Result<JsonAppResponse<()>> {
   let (workspace_id, file_id) = path.into_inner();
   let content_length = content_length.into_inner().into_inner();
   let content_type = content_type.into_inner().to_string();
@@ -103,9 +102,7 @@ async fn put_blob_handler(
     .await
     .map_err(AppResponseError::from)?;
 
-  let record = AFBlobRecord::new(file_id);
-  event!(tracing::Level::TRACE, "did put blob: {:?}", record);
-  Ok(Json(AppResponse::Ok().with_data(record)))
+  Ok(AppResponse::Ok().into())
 }
 
 #[instrument(level = "debug", skip(state), err)]

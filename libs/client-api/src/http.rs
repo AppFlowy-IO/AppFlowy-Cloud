@@ -1096,7 +1096,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    Ok(())
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   /// Only expose this method for testing

@@ -14,7 +14,6 @@ use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
@@ -125,7 +124,6 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
   Ok(())
 }
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
@@ -231,7 +229,6 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   Ok(())
 }
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
@@ -317,7 +314,6 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
   Ok(())
 }
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
@@ -360,7 +356,6 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   Ok(())
 }
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;

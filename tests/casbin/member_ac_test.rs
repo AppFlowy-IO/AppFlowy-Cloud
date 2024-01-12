@@ -12,7 +12,6 @@ use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::PgPool;
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;

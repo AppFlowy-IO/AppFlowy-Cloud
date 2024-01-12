@@ -8,7 +8,6 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::PgPool;
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
@@ -68,7 +67,6 @@ async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
   Ok(())
 }
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
@@ -219,7 +217,6 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   Ok(())
 }
 
-#[cfg(not(ignore_sqlx))]
 #[sqlx::test(migrations = false)]
 async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;

@@ -179,7 +179,20 @@ with your own in `nginx/ssl/` directory
 
 ## 5. FAQ
 - How do I use a different `postgres`?
-1. You need set `APPFLOWY_DATABASE_URL` to another postgres url.
-You also need to set `DATABASE_URL` to use the same postgres database.
 The default url is using the postgres in docker compose, in service `appflowy_cloud` and `gotrue` respectively.
-2. You would need to run the initialization sql file from `migrations/before` in your hosted postgres.
+However it is possible to change the database storage for it. The following steps are listed below.
+
+1. You need set `APPFLOWY_DATABASE_URL` to another postgres url.
+```
+APPFLOWY_DATABASE_URL=postgres://<postgres_user>:<password>@<host>:<port>/<dbname>
+```
+
+2. You also need to set `GOTRUE_DATABASE_URL` to use the same postgres database.
+```
+GOTRUE_DATABASE_URL=postgres://supabase_auth_admin:root@<host>:<port>/<dbname>
+```
+- `supabase_auth_admin` and `root` must be kept in sync with the init migration scripts from `migrations/before`.
+Currently it's possible to change the password, but probably can't change the username.
+- `dbname` for `appflowy_cloud` and `gotrue` must be the same.
+
+3. You would need to run the initialization sql file from `migrations/before` in your hosted postgres.

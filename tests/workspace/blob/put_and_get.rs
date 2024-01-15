@@ -42,19 +42,19 @@ async fn put_and_get() {
 }
 
 // TODO: fix inconsistent behavior due to different error handling with nginx
-// #[tokio::test]
-// async fn put_giant_file() {
-//   let (c1, _user1) = generate_unique_registered_user_client().await;
-//   let workspace_id = workspace_id_from_client(&c1).await;
-//   let mime = mime::TEXT_PLAIN_UTF_8;
-//   let file_id = uuid::Uuid::new_v4().to_string();
-//
-//   let url = c1.get_blob_url(&workspace_id, &file_id);
-//   let data = vec![0; 10 * 1024 * 1024 * 1024];
-//   let error = c1.put_blob(&url, data, &mime).await.unwrap_err();
-//
-//   assert_eq!(error.code, ErrorCode::PayloadTooLarge);
-// }
+#[tokio::test]
+async fn put_giant_file() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let mime = mime::TEXT_PLAIN_UTF_8;
+  let file_id = uuid::Uuid::new_v4().to_string();
+
+  let url = c1.get_blob_url(&workspace_id, &file_id);
+  let data = vec![0; 10 * 1024 * 1024 * 1024];
+  let error = c1.put_blob(&url, data, &mime).await.unwrap_err();
+
+  assert_eq!(error.code, ErrorCode::PayloadTooLarge);
+}
 
 #[tokio::test]
 async fn put_and_put_and_get() {

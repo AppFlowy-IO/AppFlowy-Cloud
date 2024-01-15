@@ -806,6 +806,7 @@ impl Client {
       .collect();
 
     let mut framed_data = Vec::new();
+    let mut size_count = 0;
     for task in compression_tasks {
       let compressed = task.await??;
       // The length of a u32 in bytes is 4. The server uses a u32 to read the size of each data frame,
@@ -816,7 +817,13 @@ impl Client {
       let size = compressed.len() as u32;
       framed_data.extend_from_slice(&size.to_be_bytes());
       framed_data.extend_from_slice(&compressed);
+      size_count += size;
     }
+    event!(
+      tracing::Level::INFO,
+      "create batch collab with size: {}",
+      size_count
+    );
     let body = Body::wrap_stream(stream::once(async { Ok::<_, AppError>(framed_data) }));
     let resp = self
       .http_client_with_auth_compress(Method::POST, &url)

@@ -1,7 +1,7 @@
 use crate::localhost_client;
 use crate::user::utils::generate_unique_registered_user_client;
 use app_error::ErrorCode;
-use client_api::ws::{WSClient, WSClientConfig};
+use client_api::{WSClient, WSClientConfig};
 use serde_json::json;
 use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
 use std::time::Duration;

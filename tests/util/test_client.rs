@@ -3,7 +3,7 @@ use assert_json_diff::{
 };
 use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
-use client_api::ws::{WSClient, WSClientConfig};
+use client_api::{WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;

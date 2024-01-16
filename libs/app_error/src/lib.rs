@@ -161,6 +161,7 @@ impl AppError {
 
 impl From<reqwest::Error> for AppError {
   fn from(error: reqwest::Error) -> Self {
+    #[cfg(not(target_arch = "wasm32"))]
     if error.is_connect() {
       return AppError::Connect(error.to_string());
     }

@@ -1156,6 +1156,13 @@ impl Client {
           )
       })
   }
+
+  pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
+    format!(
+      "{}/api/workspace/{}/batch/collab",
+      self.base_url, workspace_id
+    )
+  }
 }
 
 fn url_missing_param(param: &str) -> AppResponseError {

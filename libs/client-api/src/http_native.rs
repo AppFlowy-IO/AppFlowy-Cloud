@@ -47,10 +47,7 @@ impl Client {
     workspace_id: &str,
     params_list: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/batch/collab",
-      self.base_url, workspace_id
-    );
+    let url = self.batch_create_collab_url(workspace_id);
 
     // Parallel compression
     let compression_tasks: Vec<_> = params_list

@@ -41,6 +41,7 @@ impl GoTrueError {
 
 impl From<reqwest::Error> for GoTrueError {
   fn from(value: reqwest::Error) -> Self {
+    #[cfg(not(target_arch = "wasm32"))]
     if value.is_connect() {
       return GoTrueError::Connect(value.to_string());
     }

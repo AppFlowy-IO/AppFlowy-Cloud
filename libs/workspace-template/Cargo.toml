@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bytes.workspace = true
@@ -13,9 +15,12 @@ collab-document = { version = "0.1.0"}
 collab-entity = { version = "0.1.0"}
 async-trait = "0.1.77"
 anyhow.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 uuid.workspace = true
 indexmap = "2.1.0"
 serde_json.workspace = true
 nanoid = "0.4.0"
 serde = { version = "1.0.195", features = ["derive"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"]}

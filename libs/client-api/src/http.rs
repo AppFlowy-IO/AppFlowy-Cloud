@@ -1,9 +1,7 @@
-use crate::entity::AFBlobRecord;
 use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
-use prost::Message as ProstMessage;
 use std::io::Read;
 
 use app_error::AppError;
@@ -11,21 +9,20 @@ use bytes::Bytes;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
-  BatchQueryCollabResult, CollabMemberIdentify, CollabParams, CreateCollabParams,
-  DeleteCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
+  BatchQueryCollabResult, CollabMemberIdentify, CreateCollabParams, DeleteCollabParams,
+  InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
-use futures_util::{stream, StreamExt};
+use futures_util::StreamExt;
 use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
 
-use async_trait::async_trait;
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
 use realtime_entity::EncodedCollab;
-use reqwest::{header, Body, StatusCode};
+use reqwest::{header, StatusCode};
 
 use collab_entity::CollabType;
 use reqwest::header::HeaderValue;
@@ -38,20 +35,14 @@ use shared_entity::dto::workspace_dto::{
   WorkspaceMembers, WorkspaceSpaceUsage,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::RetryIf;
-use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument, trace, warn};
 use url::Url;
 
-use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
-use crate::ws::{WSClientHttpSender, WSError};
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
-use realtime_entity::realtime_proto::HttpRealtimeMessage;
 
 pub const CLIENT_API_VERSION: &str = "0.0.3";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
@@ -63,10 +54,10 @@ pub struct ClientConfiguration {
   /// Lower Levels (0-4): Faster compression and decompression speeds but lower compression ratios. Suitable for scenarios where speed is more critical than reducing data size.
   /// Medium Levels (5-9): A balance between compression ratio and speed. These levels are generally good for a mix of performance and efficiency.
   /// Higher Levels (10-11): The highest compression ratios, but significantly slower and more resource-intensive. These are typically used in scenarios where reducing data size is paramount and resource usage is a secondary concern, such as for static content compression in web servers.
-  compression_quality: u32,
+  pub(crate) compression_quality: u32,
   /// A larger buffer size means more data is compressed in a single operation, which can lead to better compression ratios
   /// since Brotli has more data to analyze for patterns and repetitions.
-  compression_buffer_size: usize,
+  pub(crate) compression_buffer_size: usize,
 }
 
 impl ClientConfiguration {
@@ -113,14 +104,14 @@ pub struct Client {
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
   ws_addr: String,
-  token: Arc<RwLock<ClientToken>>,
-  is_refreshing_token: Arc<AtomicBool>,
-  refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
-  config: ClientConfiguration,
+  pub(crate) token: Arc<RwLock<ClientToken>>,
+  pub(crate) is_refreshing_token: Arc<AtomicBool>,
+  pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
+  pub(crate) config: ClientConfiguration,
 }
 
-type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
-type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
+pub(crate) type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
+pub(crate) type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
 
 /// Hardcoded schema in the frontend application. Do not change this value.
 const DESKTOP_CALLBACK_URL: &str = "appflowy-flutter://login-callback";
@@ -418,30 +409,6 @@ impl Client {
     )
   }
 
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn post_realtime_msg(
-    &self,
-    device_id: &str,
-    msg: Message,
-  ) -> Result<(), AppResponseError> {
-    let device_id = device_id.to_string();
-    let payload =
-      spawn_blocking_brotli_compress(msg.into_data(), 6, self.config.compression_buffer_size)
-        .await?;
-
-    let msg = HttpRealtimeMessage { device_id, payload }.encode_to_vec();
-    let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
-    let url = format!("{}/api/realtime/post/stream", self.base_url);
-    let resp = self
-      .http_client_with_auth_compress(Method::POST, &url)
-      .await?
-      .body(body)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
   /// Only expose this method for testing
   #[cfg(debug_assertions)]
   pub fn token(&self) -> Arc<RwLock<ClientToken>> {
@@ -659,49 +626,6 @@ impl Client {
     Ok(is_new)
   }
 
-  /// Refreshes the access token using the stored refresh token.
-  ///
-  /// This function attempts to refresh the access token by sending a request to the authentication server
-  /// using the stored refresh token. If successful, it updates the stored access token with the new one
-  /// received from the server.
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<RefreshTokenRet, AppResponseError> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    self.refresh_ret_txs.write().push(tx);
-
-    if !self.is_refreshing_token.load(Ordering::SeqCst) {
-      self.is_refreshing_token.store(true, Ordering::SeqCst);
-      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
-      let result = self.inner_refresh_token().await;
-      for tx in txs {
-        let _ = tx.send(result.clone());
-      }
-      self.is_refreshing_token.store(false, Ordering::SeqCst);
-    }
-    Ok(rx)
-  }
-
-  async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
-    let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
-    match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
-      Ok(_) => {
-        event!(tracing::Level::INFO, "refresh token success");
-        Ok(())
-      },
-      Err(err) => {
-        let err = AppError::from(err);
-        event!(tracing::Level::ERROR, "refresh token failed: {}", err);
-
-        // If the error is an OAuth error, unset the token.
-        if err.is_oauth_error() {
-          self.token.write().unset();
-        }
-        Err(err.into())
-      },
-    }
-  }
-
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
     match self.gotrue_client.sign_up(email, password).await? {
@@ -766,73 +690,17 @@ impl Client {
     )
     .await?;
 
-    let resp = self
+    #[allow(unused_mut)]
+    let mut builder = self
       .http_client_with_auth_compress(Method::POST, &url)
-      .await?
-      .timeout(Duration::from_secs(60))
-      .body(compress_bytes)
-      .send()
       .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
 
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_collab_list(
-    &self,
-    workspace_id: &str,
-    params_list: Vec<CollabParams>,
-  ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/batch/collab",
-      self.base_url, workspace_id
-    );
-
-    // Parallel compression
-    let compression_tasks: Vec<_> = params_list
-      .into_iter()
-      .map(|params| {
-        let config = self.config.clone();
-        tokio::spawn(async move {
-          let data = params.to_bytes().map_err(AppError::from)?;
-          spawn_blocking_brotli_compress(
-            data,
-            config.compression_quality,
-            config.compression_buffer_size,
-          )
-          .await
-        })
-      })
-      .collect();
-
-    let mut framed_data = Vec::new();
-    let mut size_count = 0;
-    for task in compression_tasks {
-      let compressed = task.await??;
-      // The length of a u32 in bytes is 4. The server uses a u32 to read the size of each data frame,
-      // hence the frame size header is always 4 bytes. It's crucial not to alter this size value,
-      // as the server's logic for frame size reading is based on this fixed 4-byte length.
-      // note:
-      // the size of a u32 is a constant 4 bytes across all platforms that Rust supports.
-      let size = compressed.len() as u32;
-      framed_data.extend_from_slice(&size.to_be_bytes());
-      framed_data.extend_from_slice(&compressed);
-      size_count += size;
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      builder = builder.timeout(Duration::from_secs(60));
     }
-    event!(
-      tracing::Level::INFO,
-      "create batch collab with size: {}",
-      size_count
-    );
-    let body = Body::wrap_stream(stream::once(async { Ok::<_, AppError>(framed_data) }));
-    let resp = self
-      .http_client_with_auth_compress(Method::POST, &url)
-      .await?
-      .timeout(Duration::from_secs(60))
-      .body(body)
-      .send()
-      .await?;
 
+    let resp = builder.body(compress_bytes).send().await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
@@ -1119,7 +987,7 @@ impl Client {
     data: T,
     mime: &Mime,
     content_length: usize,
-  ) -> Result<AFBlobRecord, AppResponseError> {
+  ) -> Result<crate::entity::AFBlobRecord, AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::PUT, url)
       .await?
@@ -1129,7 +997,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<AFBlobRecord>::from_response(resp)
+    AppResponse::<crate::entity::AFBlobRecord>::from_response(resp)
       .await?
       .into_data()
   }
@@ -1268,7 +1136,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  async fn http_client_with_auth_compress(
+  pub(crate) async fn http_client_with_auth_compress(
     &self,
     method: Method,
     url: &str,
@@ -1288,23 +1156,20 @@ impl Client {
           )
       })
   }
+
+  pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
+    format!(
+      "{}/api/workspace/{}/batch/collab",
+      self.base_url, workspace_id
+    )
+  }
 }
 
 fn url_missing_param(param: &str) -> AppResponseError {
   AppError::InvalidRequest(format!("Url Missing Parameter:{}", param)).into()
 }
 
-#[async_trait]
-impl WSClientHttpSender for Client {
-  async fn send_ws_msg(&self, device_id: &str, message: Message) -> Result<(), WSError> {
-    self
-      .post_realtime_msg(device_id, message)
-      .await
-      .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
-  }
-}
-
-fn log_request_id(resp: &reqwest::Response) {
+pub(crate) fn log_request_id(resp: &reqwest::Response) {
   if let Some(request_id) = resp.headers().get("x-request-id") {
     event!(tracing::Level::DEBUG, "request_id: {:?}", request_id);
   } else {

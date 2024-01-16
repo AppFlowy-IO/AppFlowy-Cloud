@@ -7,12 +7,11 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use crate::ws::ping::ServerFixIntervalPing;
-use crate::ws::retry::ConnectAction;
-use crate::ws::state::{ConnectState, ConnectStateNotify};
-use crate::ws::{WSError, WebSocketChannel};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
+use crate::native::ping::ServerFixIntervalPing;
+use crate::native::ws::retry::ConnectAction;
+use crate::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::RealtimeMessage;
 use realtime_entity::user::UserMessage;

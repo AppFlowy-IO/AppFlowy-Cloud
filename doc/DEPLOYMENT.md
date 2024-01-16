@@ -142,7 +142,7 @@ The files containing these services are in `docker-compose-extra.yml`.
 - `admin_frontend` (admin portal to manage accounts and adding authentication method, recommended to keep)
 If you wish to deploy those, edit this file accordingly and do:
 ```
-docker compose --file docker-compose-extra.yml up -d
+docker compose --file docker-compose-extras.yml up -d
 ```
 You may ignore the orphan containers warning message from docker
 

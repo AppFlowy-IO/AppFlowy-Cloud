@@ -1,7 +1,6 @@
 use crate::http::log_request_id;
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
-use crate::ws::{WSClientHttpSender, WSError};
-use crate::{spawn_blocking_brotli_compress, Client};
+use crate::{spawn_blocking_brotli_compress, Client, WSClientHttpSender, WSError};
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::CollabParams;

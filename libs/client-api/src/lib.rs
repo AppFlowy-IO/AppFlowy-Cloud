@@ -21,17 +21,16 @@ pub mod collab_sync;
 pub mod notify;
 
 if_native! {
-  pub mod ws;
-  mod http_native;
+  mod native;
   #[allow(unused_imports)]
-  pub use http_native::*;
-  mod retry;
+  pub use native::*;
 }
 
 if_wasm! {
-  mod http_wasm;
+  mod wasm;
   #[allow(unused_imports)]
-  pub use http_wasm::*;
+  pub use wasm::*;
+  pub use wasm::ws_wasm::*;
 }
 
 pub mod error {

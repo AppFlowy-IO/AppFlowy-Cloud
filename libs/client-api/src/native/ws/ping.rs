@@ -1,4 +1,4 @@
-use crate::ws::state::{ConnectState, ConnectStateNotify};
+use crate::{ConnectState, ConnectStateNotify};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;

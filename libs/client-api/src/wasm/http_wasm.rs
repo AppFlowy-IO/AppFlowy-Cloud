@@ -1,5 +1,4 @@
 use crate::http::RefreshTokenRet;
-use crate::ws::{WSClientHttpSender, WSError};
 use crate::Client;
 use app_error::gotrue::GoTrueError;
 use app_error::AppError;
@@ -31,22 +30,6 @@ impl Client {
     if !self.is_refreshing_token.load(Ordering::SeqCst) {
       self.is_refreshing_token.store(true, Ordering::SeqCst);
       let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
-      let refresh_token = self
-        .token
-        .read()
-        .as_ref()
-        .ok_or(GoTrueError::NotLoggedIn(
-          "fail to refresh user token".to_owned(),
-        ))?
-        .refresh_token
-        .as_str()
-        .to_owned();
-      let new_token = self
-        .gotrue_client
-        .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
-        .await?;
-      self.token.write().set(new_token);
-
       let result = self.inner_refresh_token().await;
       for tx in txs {
         let _ = tx.send(result.clone());
@@ -54,5 +37,24 @@ impl Client {
       self.is_refreshing_token.store(false, Ordering::SeqCst);
     }
     Ok(rx)
+  }
+
+  async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
+    let refresh_token = self
+      .token
+      .read()
+      .as_ref()
+      .ok_or(GoTrueError::NotLoggedIn(
+        "fail to refresh user token".to_owned(),
+      ))?
+      .refresh_token
+      .as_str()
+      .to_owned();
+    let new_token = self
+      .gotrue_client
+      .token(&Grant::RefreshToken(RefreshTokenGrant { refresh_token }))
+      .await?;
+    self.token.write().set(new_token);
+    Ok(())
   }
 }

@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::ws::WSError;
+use crate::WSError;
 use tokio::net::TcpStream;
 use tokio_retry::Action;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};

@@ -12,10 +12,10 @@ use realtime_protocol::{Message, SyncMessage};
 use tokio_stream::StreamExt;
 
 use crate::collab_sync::{SinkConfig, SyncQueue};
-use crate::ws::{ConnectState, WSConnectStateReceiver};
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
+use crate::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {

@@ -1,13 +1,38 @@
 mod http;
+pub use http::*;
+
+macro_rules! if_native {
+    ($($item:item)*) => {$(
+        #[cfg(not(target_arch = "wasm32"))]
+        $item
+    )*}
+}
+
+macro_rules! if_wasm {
+    ($($item:item)*) => {$(
+        #[cfg(target_arch = "wasm32")]
+        $item
+    )*}
+}
 
 #[cfg(feature = "collab-sync")]
 pub mod collab_sync;
 
 pub mod notify;
-mod retry;
-pub mod ws;
 
-pub use http::*;
+if_native! {
+  pub mod ws;
+  mod http_native;
+  #[allow(unused_imports)]
+  pub use http_native::*;
+  mod retry;
+}
+
+if_wasm! {
+  mod http_wasm;
+  #[allow(unused_imports)]
+  pub use http_wasm::*;
+}
 
 pub mod error {
   pub use shared_entity::response::AppResponseError;

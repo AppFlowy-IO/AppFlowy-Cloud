@@ -45,12 +45,3 @@ pub fn localhost_client() -> Client {
     ClientConfiguration::default(),
   )
 }
-
-pub const DEV_URL: &str = "https://test.appflowy.cloud";
-pub const DEV_WS: &str = "wss://test.appflowy.cloud/ws";
-pub const DEV_GOTRUE: &str = "https://test.appflowy.cloud/gotrue";
-
-#[allow(dead_code)]
-pub fn test_appflowy_cloud_client() -> Client {
-  Client::new(DEV_URL, DEV_WS, DEV_GOTRUE, ClientConfiguration::default())
-}

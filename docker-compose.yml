@@ -19,8 +19,8 @@ services:
     image: minio/minio
     environment:
       - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
-      - MINIO_ROOT_USER=${AWS_ACCESS_KEY_ID:-minioadmin}
-      - MINIO_ROOT_PASSWORD=${AWS_SECRET_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${APPFLOWY_S3_SECRET_KEY:-minioadmin}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data

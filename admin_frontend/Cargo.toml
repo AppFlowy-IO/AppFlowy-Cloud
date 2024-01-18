@@ -25,5 +25,5 @@ tower-service = "0.3.2"
 tower-http = { version = "0.4.4", features = ["cors", "fs"] }
 tower = "0.4.13"
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 jwt = "0.16.0"

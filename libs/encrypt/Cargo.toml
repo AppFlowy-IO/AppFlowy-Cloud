@@ -11,7 +11,7 @@ rand = "0.8.5"
 hex = "0.4.3"
 anyhow = "1.0.79"
 aes-gcm = { version = "0.10.3" }
-base64 = "0.21.6"
+base64 = "0.21.7"
 hkdf = { version = "0.12.4" }
 sha2 = "0.10.8"
 serde = { version = "1.0.195", features = ["derive"] }

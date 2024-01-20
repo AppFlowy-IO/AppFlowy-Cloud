@@ -42,10 +42,15 @@ serde.workspace = true
 database-entity.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
+web-sys = { version = "0.3.67", features = ["BinaryType"] }
+futures = "0.3.30"
+wasm-bindgen-futures = { version = "0.4.37", features = [] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"]}
 tokio = { workspace = true, features = ["sync"]}
+web-sys = { features = ['WebSocket', 'MessageEvent', 'ErrorEvent', 'CloseEvent', 'BinaryType'] }
+futures = "0.3.30"
 
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio]

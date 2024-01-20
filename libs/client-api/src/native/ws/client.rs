@@ -260,6 +260,7 @@ impl WSClient {
     Ok(addr)
   }
 
+
   /// Return a [WebSocketChannel] that can be used to send messages to the websocket. Caller should
   /// keep the channel alive as long as it wants to receive messages from the websocket.
   pub fn subscribe_collab(

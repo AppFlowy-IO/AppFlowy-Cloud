@@ -1,20 +1,6 @@
 use reqwest::StatusCode;
 use tokio_tungstenite::tungstenite::Error;
-
-#[derive(Debug, thiserror::Error)]
-pub enum WSError {
-  #[error(transparent)]
-  TungsteniteError(Error),
-
-  #[error("{0}")]
-  LostConnection(String),
-
-  #[error("Auth error: {0}")]
-  AuthError(String),
-
-  #[error(transparent)]
-  Internal(#[from] anyhow::Error),
-}
+use crate::WSError;
 
 impl From<Error> for WSError {
   fn from(value: Error) -> Self {

@@ -1,4 +1,5 @@
 mod http_wasm;
-pub mod ws_wasm;
+mod ws;
 
 pub use http_wasm::*;
+pub use ws::*;

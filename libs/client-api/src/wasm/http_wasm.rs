@@ -1,15 +1,10 @@
 use crate::http::RefreshTokenRet;
 use crate::Client;
 use app_error::gotrue::GoTrueError;
-use app_error::AppError;
-use async_trait::async_trait;
 use database_entity::dto::CollabParams;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use shared_entity::response::AppResponseError;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::RetryIf;
 use tracing::{event, instrument};
 
 impl Client {

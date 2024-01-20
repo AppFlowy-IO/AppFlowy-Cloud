@@ -1,5 +1,7 @@
 mod http;
 pub use http::*;
+mod ws;
+pub use ws::*;
 
 macro_rules! if_native {
     ($($item:item)*) => {$(
@@ -19,6 +21,7 @@ macro_rules! if_wasm {
 pub mod collab_sync;
 
 pub mod notify;
+
 
 if_native! {
   mod native;

@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use crate::user::utils::generate_unique_registered_user_client;
 use client_api::{ConnectState, WSClient, WSClientConfig};
 
@@ -23,6 +25,13 @@ async fn realtime_connect_test() {
 #[tokio::test]
 async fn realtime_connect_after_token_exp_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
+
+  // Set the token to be expired
+  c.token().write().as_mut().unwrap().expires_at = SystemTime::now()
+    .duration_since(SystemTime::UNIX_EPOCH)
+    .unwrap()
+    .as_secs() as i64;
+
   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
   let device_id = "fake_device_id";

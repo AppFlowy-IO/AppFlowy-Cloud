@@ -120,7 +120,8 @@ members = [
     "libs/app_error",
     "libs/workspace-template",
     "libs/encrypt",
-    "libs/realtime-protocol"
+    "libs/realtime-protocol",
+    "libs/websocket",
 ]
 
 [workspace.dependencies]

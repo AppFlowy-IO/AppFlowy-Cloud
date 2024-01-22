@@ -204,7 +204,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
     match err {
       GoTrueError::Connect(msg) => AppError::Connect(msg),
       GoTrueError::RequestTimeout(msg) => AppError::RequestTimeout(msg),
-      GoTrueError::InvalidRequest(msg) => AppError::OAuthError(msg),
+      GoTrueError::InvalidRequest(msg) => AppError::InvalidRequest(msg),
       GoTrueError::ClientError(err) => AppError::OAuthError(err.to_string()),
       GoTrueError::Auth(err) => AppError::UserUnAuthorized(err),
       GoTrueError::Internal(err) => match (err.code, err.msg.as_str()) {

@@ -40,7 +40,7 @@ async fn sign_in_unconfirmed_email() {
   c.sign_up(&email, password).await.unwrap();
 
   let err = c.sign_in_password(&email, password).await.unwrap_err();
-  assert_eq!(err.code, ErrorCode::InvalidRequest);
+  assert_eq!(err.code, ErrorCode::OAuthError);
   assert!(!err.message.is_empty());
 }
 

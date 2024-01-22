@@ -166,7 +166,7 @@ async fn user_change_notify_test() {
 
   let device_id = "fake_device_id";
   let _ = ws_client
-    .connect(c.ws_url(device_id).unwrap(), device_id)
+    .connect(c.ws_url(device_id).await.unwrap(), device_id)
     .await
     .unwrap();
 

@@ -37,7 +37,7 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{event, instrument, trace, warn};
 use url::Url;
 

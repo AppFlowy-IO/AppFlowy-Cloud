@@ -40,7 +40,7 @@ async fn sign_in_unconfirmed_email() {
   c.sign_up(&email, password).await.unwrap();
 
   let err = c.sign_in_password(&email, password).await.unwrap_err();
-  assert_eq!(err.code, ErrorCode::OAuthError);
+  assert_eq!(err.code, ErrorCode::InvalidRequest);
   assert!(!err.message.is_empty());
 }
 
@@ -92,7 +92,7 @@ async fn sign_in_with_invalid_url() {
   match c.sign_in_with_url(url_str).await {
     Ok(_) => panic!("should not be ok"),
     Err(e) => {
-      assert_eq!(e.code, ErrorCode::OAuthError);
+      assert_eq!(e.code, ErrorCode::UserUnAuthorized);
       assert!(e
         .message
         .contains("invalid JWT: unable to parse or verify signature, token is expired by"));

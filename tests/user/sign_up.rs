@@ -45,7 +45,12 @@ async fn sign_up_invalid_password() {
 #[tokio::test]
 async fn sign_up_but_existing_user() {
   let (c, user) = generate_unique_registered_user_client().await;
-  c.sign_up(&user.email, &user.password).await.unwrap();
+  let code = c
+    .sign_up(&user.email, &user.password)
+    .await
+    .unwrap_err()
+    .code;
+  assert_eq!(code, ErrorCode::RecordAlreadyExists);
 }
 
 #[tokio::test]

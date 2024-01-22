@@ -37,7 +37,7 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{event, instrument, trace, warn};
 use url::Url;
 
@@ -1113,10 +1113,7 @@ impl Client {
     let expires_at = self.token_expires_at()?;
 
     // Refresh token if it's about to expire
-    let time_now_sec = SystemTime::now()
-      .duration_since(SystemTime::UNIX_EPOCH)
-      .unwrap()
-      .as_secs() as i64;
+    let time_now_sec = chrono::Local::now().timestamp();
     if time_now_sec + 10 > expires_at {
       // Add 10 seconds buffer
       self.refresh_token().await?;

@@ -120,7 +120,7 @@ impl Client {
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
+    let retry_strategy = FixedInterval::new(Duration::from_secs(10)).take(4);
     let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
     match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
       Ok(_) => {
@@ -132,7 +132,7 @@ impl Client {
         event!(tracing::Level::ERROR, "refresh token failed: {}", err);
 
         // If the error is an OAuth error, unset the token.
-        if err.is_oauth_error() {
+        if err.is_unauthorized() {
           self.token.write().unset();
         }
         Err(err.into())

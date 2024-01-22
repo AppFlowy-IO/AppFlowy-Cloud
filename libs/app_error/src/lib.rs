@@ -33,6 +33,12 @@ pub enum AppError {
   #[error("{0}")]
   OAuthError(String),
 
+  #[error("{0}")]
+  UserUnAuthorized(String),
+
+  #[error("{0}")]
+  UserAlreadyRegistered(String),
+
   #[error("Missing Payload:{0}")]
   MissingPayload(String),
 
@@ -115,8 +121,8 @@ impl AppError {
     matches!(self, AppError::Connect(_) | AppError::RequestTimeout(_))
   }
 
-  pub fn is_oauth_error(&self) -> bool {
-    matches!(self, AppError::OAuthError(_))
+  pub fn is_unauthorized(&self) -> bool {
+    matches!(self, AppError::UserUnAuthorized(_))
   }
 
   pub fn code(&self) -> ErrorCode {
@@ -128,6 +134,8 @@ impl AppError {
       AppError::InvalidEmail(_) => ErrorCode::InvalidEmail,
       AppError::InvalidPassword(_) => ErrorCode::InvalidPassword,
       AppError::OAuthError(_) => ErrorCode::OAuthError,
+      AppError::UserUnAuthorized(_) => ErrorCode::UserUnAuthorized,
+      AppError::UserAlreadyRegistered(_) => ErrorCode::RecordAlreadyExists,
       AppError::MissingPayload(_) => ErrorCode::MissingPayload,
       AppError::DBError(_) => ErrorCode::DBError,
       AppError::OpenError(_) => ErrorCode::OpenError,
@@ -198,11 +206,13 @@ impl From<crate::gotrue::GoTrueError> for AppError {
       GoTrueError::RequestTimeout(msg) => AppError::RequestTimeout(msg),
       GoTrueError::InvalidRequest(msg) => AppError::InvalidRequest(msg),
       GoTrueError::ClientError(err) => AppError::OAuthError(err.to_string()),
-      GoTrueError::Auth(err) => AppError::OAuthError(err),
+      GoTrueError::Auth(err) => AppError::UserUnAuthorized(err),
       GoTrueError::Internal(err) => match (err.code, err.msg.as_str()) {
         (400, m) if m.starts_with("oauth error") => AppError::OAuthError(err.msg),
-        (400, m) if m.starts_with("User already registered") => AppError::OAuthError(err.msg),
-        (401, _) => AppError::OAuthError(err.msg),
+        (400, m) if m.starts_with("User already registered") => {
+          AppError::UserAlreadyRegistered(err.msg)
+        },
+        (401, _) => AppError::UserUnAuthorized(err.msg),
         (422, _) => AppError::InvalidRequest(err.msg),
         _ => AppError::OAuthError(err.to_string()),
       },
@@ -252,6 +262,7 @@ pub enum ErrorCode {
   S3ResponseError = 1021,
   SerdeError = 1022,
   NetworkError = 1023,
+  UserUnAuthorized = 1024,
 }
 
 impl ErrorCode {

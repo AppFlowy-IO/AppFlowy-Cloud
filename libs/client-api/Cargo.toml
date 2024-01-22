@@ -31,6 +31,7 @@ url = "2.5.0"
 mime = "0.3.17"
 tokio-stream = { version = "0.1.14" }
 realtime-entity = { workspace = true }
+chrono = "0.4"
 
 collab = { version = "0.1.0", optional = true }
 collab-entity = { version = "0.1.0" }

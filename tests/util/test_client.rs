@@ -68,7 +68,7 @@ impl TestClient {
 
     if start_ws_conn {
       ws_client
-        .connect(api_client.ws_url(&device_id).unwrap(), &device_id)
+        .connect(api_client.ws_url(&device_id).await.unwrap(), &device_id)
         .await
         .unwrap();
     }
@@ -490,7 +490,7 @@ impl TestClient {
     self
       .ws_client
       .connect(
-        self.api_client.ws_url(&self.device_id).unwrap(),
+        self.api_client.ws_url(&self.device_id).await.unwrap(),
         &self.device_id,
       )
       .await

@@ -944,7 +944,9 @@ impl Client {
       .into_data()
   }
 
-  pub fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
+  pub async fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
+    self.refresh_if_required().await?;
+
     let access_token = self.access_token()?;
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
   }
@@ -1107,12 +1109,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn http_client_with_auth(
-    &self,
-    method: Method,
-    url: &str,
-  ) -> Result<RequestBuilder, AppResponseError> {
+  pub async fn refresh_if_required(&self) -> Result<(), AppResponseError> {
     let expires_at = self.token_expires_at()?;
 
     // Refresh token if it's about to expire
@@ -1124,6 +1121,16 @@ impl Client {
       // Add 10 seconds buffer
       self.refresh_token().await?;
     }
+    Ok(())
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn http_client_with_auth(
+    &self,
+    method: Method,
+    url: &str,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    self.refresh_if_required().await?;
 
     let access_token = self.access_token()?;
     trace!("start request: {}, method: {}", url, method);

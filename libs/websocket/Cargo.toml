@@ -19,15 +19,15 @@ __rustls-tls = []
 
 [dependencies]
 thiserror = "1"
-http = "0.2"
-httparse = "1.3"
+http = "1.0"
+httparse = "1.8"
 futures-util = { version = "0.3", default-features = false, features = [
     "sink",
     "std",
 ] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio-tungstenite = "0.20"
+tokio-tungstenite = "0.21"
 tokio = { version = "1", default-features = false, features = ["net"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -46,10 +46,3 @@ features = [
     "BinaryType",
     "Blob",
 ]
-
-[dev-dependencies]
-assert-impl = "0.1"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-tokio = { version = "1", features = ["full"] }
-rand = "0.8"

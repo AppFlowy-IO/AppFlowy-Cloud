@@ -12,10 +12,6 @@ use tokio_tungstenite::{
 
 pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
   let (inner, _response) = tokio_tungstenite::connect_async(url).await?;
-  // let addr = match inner.get_ref() {
-  //   MaybeTlsStream::Plain(s) => s.local_addr().ok(),
-  //   _ => None,
-  // };
   let inner = inner.filter_map(to_fut_message as fn(_) -> _);
   Ok(WebSocketStream { inner })
 }
@@ -142,7 +138,7 @@ impl From<Error> for crate::Error {
       Error::ConnectionClosed => crate::Error::ConnectionClosed,
       Error::AlreadyClosed => crate::Error::AlreadyClosed,
       Error::Io(inner) => crate::Error::Io(inner),
-      Error::Tls(inner) => crate::Error::Tls(inner.into()),
+      Error::Tls(inner) => crate::Error::Tls(inner),
       Error::Capacity(inner) => crate::Error::Capacity(inner.into()),
       Error::Protocol(inner) => crate::Error::Protocol(inner.into()),
       Error::WriteBufferFull(inner) => crate::Error::WriteBufferFull(inner.into()),

@@ -1268,6 +1268,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "web-sys",
 ]
 
 [[package]]

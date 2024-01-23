@@ -3,7 +3,6 @@ use crate::log::setup_log;
 use client_api::Client;
 use dotenv::dotenv;
 use lazy_static::lazy_static;
-use tracing_subscriber::fmt::format;
 use uuid::Uuid;
 
 lazy_static! {

@@ -2,7 +2,7 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
 use std::io::Read;
 
 use app_error::AppError;

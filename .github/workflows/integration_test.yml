@@ -55,3 +55,15 @@ jobs:
       - name: Run tests
         run: |
           cargo test
+
+      - name: Install Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Run WASM tests
+        working-directory: ./libs/wasm-test
+        run: | 
+          cargo install wasm-pack
+          wasm-pack test --headless --firefox --features="wasm_test"
+          

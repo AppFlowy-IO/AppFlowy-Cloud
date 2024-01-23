@@ -15,6 +15,7 @@ use crate::collab_sync::{SinkConfig, SyncQueue};
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
+use crate::platform_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
@@ -63,7 +64,7 @@ where
     );
 
     let mut sync_state_stream = WatchStream::new(sync_queue.subscribe_sync_state());
-    tokio::spawn(async move {
+    platform_spawn(async move {
       while let Some(new_state) = sync_state_stream.next().await {
         if let Some(local_collab) = weak_local_collab.upgrade() {
           if let Some(local_collab) = local_collab.try_lock() {
@@ -76,7 +77,7 @@ where
     let sync_queue = Arc::new(sync_queue);
     let weak_local_collab = collab;
     let weak_sync_queue = Arc::downgrade(&sync_queue);
-    tokio::spawn(async move {
+    platform_spawn(async move {
       while let Ok(connect_state) = ws_connect_state.recv().await {
         match connect_state {
           ConnectState::Connected => {
@@ -132,7 +133,7 @@ where
     let object_id = self.object.object_id.clone();
     let cloned_origin = origin.clone();
 
-    tokio::spawn(async move {
+    platform_spawn(async move {
       if let Some(sync_queue) = weak_sync_queue.upgrade() {
         let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
         sync_queue

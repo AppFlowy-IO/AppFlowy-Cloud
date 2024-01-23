@@ -30,8 +30,9 @@ if_wasm! {
   mod wasm;
   #[allow(unused_imports)]
   pub use wasm::*;
-  pub use wasm::ws_wasm::*;
 }
+
+pub mod ws;
 
 pub mod error {
   pub use shared_entity::response::AppResponseError;

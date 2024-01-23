@@ -1,10 +1,10 @@
-use crate::{ConnectState, ConnectStateNotify};
+use crate::ws::{ConnectState, ConnectStateNotify};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use tokio_tungstenite::tungstenite::Message;
+use websocket::Message;
 
 pub(crate) struct ServerFixIntervalPing {
   duration: Duration,

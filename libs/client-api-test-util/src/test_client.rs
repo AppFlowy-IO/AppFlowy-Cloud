@@ -1,9 +1,10 @@
+use crate::{localhost_client, setup_log};
 use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
 use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
-use client_api::{WSClient, WSClientConfig};
+use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
@@ -23,32 +24,30 @@ use shared_entity::dto::workspace_dto::{
   BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
-use sqlx::types::Uuid;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
+use uuid::Uuid;
 
-use crate::localhost_client;
-use crate::user::utils::{generate_unique_registered_user, User};
-use crate::util::setup_log;
+use crate::user::{generate_unique_registered_user, User};
 
-pub(crate) struct TestClient {
+pub struct TestClient {
   pub user: User,
   pub ws_client: WSClient,
   pub api_client: client_api::Client,
   pub collab_by_object_id: HashMap<String, TestCollab>,
   pub device_id: String,
 }
-pub(crate) struct TestCollab {
+pub struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
   pub collab: Arc<MutexCollab>,
 }
 impl TestClient {
-  pub(crate) async fn new(device_id: String, registered_user: User, start_ws_conn: bool) -> Self {
+  pub async fn new(device_id: String, registered_user: User, start_ws_conn: bool) -> Self {
     setup_log();
     let api_client = localhost_client();
     api_client
@@ -81,24 +80,24 @@ impl TestClient {
     }
   }
 
-  pub(crate) async fn new_user() -> Self {
+  pub async fn new_user() -> Self {
     let registered_user = generate_unique_registered_user().await;
     let device_id = Uuid::new_v4().to_string();
     Self::new(device_id, registered_user, true).await
   }
 
-  pub(crate) async fn new_user_without_ws_conn() -> Self {
+  pub async fn new_user_without_ws_conn() -> Self {
     let registered_user = generate_unique_registered_user().await;
     let device_id = Uuid::new_v4().to_string();
     Self::new(device_id, registered_user, false).await
   }
 
-  pub(crate) async fn user_with_new_device(registered_user: User) -> Self {
+  pub async fn user_with_new_device(registered_user: User) -> Self {
     let device_id = Uuid::new_v4().to_string();
     Self::new(device_id, registered_user, true).await
   }
 
-  pub(crate) async fn add_workspace_member(
+  pub async fn add_workspace_member(
     &self,
     workspace_id: &str,
     other_client: &TestClient,
@@ -110,15 +109,15 @@ impl TestClient {
       .unwrap();
   }
 
-  pub(crate) async fn get_user_workspace_info(&self) -> AFUserWorkspaceInfo {
+  pub async fn get_user_workspace_info(&self) -> AFUserWorkspaceInfo {
     self.api_client.get_user_workspace_info().await.unwrap()
   }
 
-  pub(crate) async fn open_workspace(&self, workspace_id: &str) -> AFWorkspace {
+  pub async fn open_workspace(&self, workspace_id: &str) -> AFWorkspace {
     self.api_client.open_workspace(workspace_id).await.unwrap()
   }
 
-  pub(crate) async fn get_user_folder(&self) -> Folder {
+  pub async fn get_user_folder(&self) -> Folder {
     let uid = self.uid().await;
     let workspace_id = self.workspace_id().await;
     let data = self
@@ -141,7 +140,7 @@ impl TestClient {
     .unwrap()
   }
 
-  pub(crate) async fn try_update_workspace_member(
+  pub async fn try_update_workspace_member(
     &self,
     workspace_id: &str,
     other_client: &TestClient,
@@ -158,7 +157,7 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn try_add_workspace_member(
+  pub async fn try_add_workspace_member(
     &self,
     workspace_id: &str,
     other_client: &TestClient,
@@ -171,7 +170,7 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn try_remove_workspace_member(
+  pub async fn try_remove_workspace_member(
     &self,
     workspace_id: &str,
     other_client: &TestClient,
@@ -191,7 +190,7 @@ impl TestClient {
       .unwrap()
   }
 
-  pub(crate) async fn add_client_as_collab_member(
+  pub async fn add_client_as_collab_member(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -211,7 +210,7 @@ impl TestClient {
       .unwrap();
   }
 
-  pub(crate) async fn update_collab_member_access_level(
+  pub async fn update_collab_member_access_level(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -231,13 +230,13 @@ impl TestClient {
       .unwrap();
   }
 
-  pub(crate) async fn wait_object_sync_complete(&self, object_id: &str) {
+  pub async fn wait_object_sync_complete(&self, object_id: &str) {
     self
       .wait_object_sync_complete_with_secs(object_id, 20)
       .await;
   }
 
-  pub(crate) async fn wait_object_sync_complete_with_secs(&self, object_id: &str, secs: u64) {
+  pub async fn wait_object_sync_complete_with_secs(&self, object_id: &str, secs: u64) {
     let mut sync_state = self
       .collab_by_object_id
       .get(object_id)
@@ -281,7 +280,7 @@ impl TestClient {
       .unwrap()
   }
 
-  pub(crate) async fn workspace_id(&self) -> String {
+  pub async fn workspace_id(&self) -> String {
     self
       .api_client
       .get_workspaces()
@@ -294,16 +293,16 @@ impl TestClient {
       .to_string()
   }
 
-  pub(crate) async fn email(&self) -> String {
+  pub async fn email(&self) -> String {
     self.api_client.get_profile().await.unwrap().email.unwrap()
   }
 
-  pub(crate) async fn uid(&self) -> i64 {
+  pub async fn uid(&self) -> i64 {
     self.api_client.get_profile().await.unwrap().uid
   }
 
   #[allow(dead_code)]
-  pub(crate) async fn get_snapshot(
+  pub async fn get_snapshot(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -321,7 +320,7 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn create_snapshot(
+  pub async fn create_snapshot(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -333,7 +332,7 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn get_snapshot_list(
+  pub async fn get_snapshot_list(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -344,7 +343,7 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn create_collab_list(
+  pub async fn create_collab_list(
     &mut self,
     workspace_id: &str,
     params: Vec<CollabParams>,
@@ -355,7 +354,7 @@ impl TestClient {
       .await
   }
 
-  pub(crate) async fn batch_get_collab(
+  pub async fn batch_get_collab(
     &mut self,
     workspace_id: &str,
     params: Vec<QueryCollab>,
@@ -364,7 +363,7 @@ impl TestClient {
   }
 
   #[allow(clippy::await_holding_lock)]
-  pub(crate) async fn create_and_edit_collab(
+  pub async fn create_and_edit_collab(
     &mut self,
     workspace_id: &str,
     collab_type: CollabType,
@@ -377,7 +376,7 @@ impl TestClient {
   }
 
   #[allow(clippy::await_holding_lock)]
-  pub(crate) async fn create_and_edit_collab_with_data(
+  pub async fn create_and_edit_collab_with_data(
     &mut self,
     object_id: String,
     workspace_id: &str,
@@ -438,14 +437,14 @@ impl TestClient {
     self.wait_object_sync_complete(&object_id).await;
   }
 
-  pub(crate) async fn open_workspace_collab(&mut self, workspace_id: &str) {
+  pub async fn open_workspace_collab(&mut self, workspace_id: &str) {
     self
       .open_collab(workspace_id, workspace_id, CollabType::Folder)
       .await;
   }
 
   #[allow(clippy::await_holding_lock)]
-  pub(crate) async fn open_collab(
+  pub async fn open_collab(
     &mut self,
     workspace_id: &str,
     object_id: &str,
@@ -482,11 +481,11 @@ impl TestClient {
       .insert(object_id.to_string(), test_collab);
   }
 
-  pub(crate) async fn disconnect(&self) {
+  pub async fn disconnect(&self) {
     self.ws_client.disconnect().await;
   }
 
-  pub(crate) async fn reconnect(&self) {
+  pub async fn reconnect(&self) {
     self
       .ws_client
       .connect(
@@ -600,7 +599,7 @@ pub async fn assert_server_collab(
   }
 }
 
-pub(crate) async fn assert_client_collab(
+pub async fn assert_client_collab(
   client: &mut TestClient,
   object_id: &str,
   key: &str,
@@ -638,7 +637,7 @@ pub(crate) async fn assert_client_collab(
   }
 }
 
-pub(crate) async fn assert_client_collab_include_value(
+pub async fn assert_client_collab_include_value(
   client: &mut TestClient,
   object_id: &str,
   expected: Value,

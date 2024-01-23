@@ -1,6 +1,5 @@
+use client_api_test_util::LOCALHOST_GOTRUE;
 use gotrue::api::Client;
-
-use crate::LOCALHOST_GOTRUE;
 
 #[tokio::test]
 async fn gotrue_health() {

@@ -1,6 +1,4 @@
-use crate::localhost_client;
-use crate::user::utils::generate_unique_email;
-use crate::util::test_client::TestClient;
+use client_api_test_util::*;
 
 #[tokio::test]
 async fn get_user_default_workspace_test() {

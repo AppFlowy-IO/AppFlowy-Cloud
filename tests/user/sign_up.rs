@@ -1,10 +1,6 @@
 use app_error::ErrorCode;
+use client_api_test_util::*;
 use gotrue_entity::dto::AuthProvider;
-
-use crate::{
-  localhost_client,
-  user::utils::{generate_unique_email, generate_unique_registered_user_client},
-};
 
 #[tokio::test]
 async fn sign_up_success() {

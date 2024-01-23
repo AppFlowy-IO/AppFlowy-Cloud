@@ -9,8 +9,8 @@ use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
 use crate::collab_sync::{SyncError, SyncObject, DEFAULT_SYNC_TIMEOUT};
 use futures_util::SinkExt;
 
+use crate::platform_spawn;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
-use tokio::spawn;
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
 use tracing::{debug, error, event, trace, warn};
@@ -96,7 +96,7 @@ where
       let weak_notifier = Arc::downgrade(&notifier);
       let (tx, rx) = mpsc::channel(1);
       interval_runner_stop_tx = Some(tx);
-      spawn(IntervalRunner::new(*duration).run(weak_notifier, rx));
+      platform_spawn(IntervalRunner::new(*duration).run(weak_notifier, rx));
     }
     Self {
       uid,
@@ -364,7 +364,7 @@ where
 }
 
 fn retry_later(weak_notifier: Weak<watch::Sender<bool>>) {
-  spawn(async move {
+  platform_spawn(async move {
     interval(Duration::from_millis(100)).tick().await;
     if let Some(notifier) = weak_notifier.upgrade() {
       let _ = notifier.send(false);

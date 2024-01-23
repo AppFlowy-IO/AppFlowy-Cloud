@@ -1,7 +1,7 @@
 use crate::http::log_request_id;
-use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
+use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::CollabParams;
@@ -55,7 +55,7 @@ impl Client {
       .into_iter()
       .map(|params| {
         let config = self.config.clone();
-        tokio::spawn(async move {
+        platform_spawn(async move {
           let data = params.to_bytes().map_err(AppError::from)?;
           spawn_blocking_brotli_compress(
             data,
@@ -153,7 +153,7 @@ impl WSClientHttpSender for Client {
   }
 }
 
-pub fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + Send + 'static,
   T::Output: Send + 'static,

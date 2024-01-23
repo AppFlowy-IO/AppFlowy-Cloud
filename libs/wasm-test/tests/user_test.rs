@@ -1,4 +1,4 @@
-use client_api_test_util::{admin_user_client, generate_unique_email, localhost_client};
+use client_api_test_util::{generate_unique_email, localhost_client};
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]

@@ -13,7 +13,7 @@ anyhow = "1.0.79"
 serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
-shared_entity = { path = "../shared-entity" }
+shared-entity = { path = "../shared-entity" }
 tracing = { version = "0.1" }
 thiserror = "1.0.56"
 bytes = "1.5"
@@ -58,8 +58,13 @@ features = ["sync", "net"]
 workspace = true
 features = ["tungstenite"]
 
+
 [features]
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
 wasm_build = []
+
+
+[profile.dev]
+debug = true

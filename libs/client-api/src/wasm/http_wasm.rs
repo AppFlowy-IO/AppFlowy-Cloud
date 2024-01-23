@@ -1,6 +1,9 @@
 use crate::http::RefreshTokenRet;
+use crate::ws::{WSClientHttpSender, WSError};
 use crate::Client;
 use app_error::gotrue::GoTrueError;
+use app_error::ErrorCode;
+use async_trait::async_trait;
 use database_entity::dto::CollabParams;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use shared_entity::response::AppResponseError;
@@ -15,7 +18,10 @@ impl Client {
     _params_list: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
     let _url = self.batch_create_collab_url(workspace_id);
-    todo!()
+    Err(AppResponseError::new(
+      ErrorCode::Unhandled,
+      "not implemented",
+    ))
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -61,4 +67,15 @@ where
   T::Output: Send + 'static,
 {
   tokio::task::spawn_local(future)
+}
+
+#[async_trait]
+impl WSClientHttpSender for Client {
+  async fn send_ws_msg(
+    &self,
+    _device_id: &str,
+    _message: websocket::Message,
+  ) -> Result<(), WSError> {
+    Err(WSError::Internal(anyhow::Error::msg("not supported")))
+  }
 }

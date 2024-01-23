@@ -1,5 +1,4 @@
-use crate::collab::workspace_id_from_client;
-use crate::user::utils::generate_unique_registered_user_client;
+use client_api_test_util::{generate_unique_registered_user_client, workspace_id_from_client};
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, CollabMemberIdentify, CreateCollabParams, InsertCollabMemberParams,

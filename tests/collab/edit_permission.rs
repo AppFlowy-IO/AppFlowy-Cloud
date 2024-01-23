@@ -1,4 +1,4 @@
-use crate::util::test_client::{
+use client_api_test_util::{
   assert_client_collab, assert_client_collab_include_value, assert_server_collab, TestClient,
 };
 use collab_entity::CollabType;

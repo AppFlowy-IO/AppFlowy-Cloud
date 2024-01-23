@@ -1,10 +1,10 @@
-use std::sync::Once;
-use tracing_subscriber::fmt::Subscriber;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
+#[cfg(not(target_arch = "wasm32"))]
+use {
+  std::sync::Once,
+  tracing_subscriber::{fmt::Subscriber, util::SubscriberInitExt, EnvFilter},
+};
 
-pub(crate) mod test_client;
-
+#[cfg(not(target_arch = "wasm32"))]
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
@@ -20,3 +20,6 @@ pub fn setup_log() {
     subscriber.try_init().unwrap();
   });
 }
+
+#[cfg(target_arch = "wasm32")]
+pub fn setup_log() {}

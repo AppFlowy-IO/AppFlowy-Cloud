@@ -3,6 +3,7 @@ use crate::log::setup_log;
 use client_api::Client;
 use dotenv::dotenv;
 use lazy_static::lazy_static;
+use tracing_subscriber::fmt::format;
 use uuid::Uuid;
 
 lazy_static! {
@@ -27,6 +28,12 @@ pub fn generate_unique_email() -> String {
 
 pub async fn admin_user_client() -> Client {
   let admin_client = localhost_client();
+  #[cfg(target_arch = "wasm32")]
+  {
+    let msg = format!("{}", admin_client);
+    web_sys::console::log_1(&msg.into());
+  }
+
   admin_client
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await

@@ -1,6 +1,7 @@
 use crate::http::log_request_id;
 use crate::retry::{RefreshTokenAction, RefreshTokenRetryCondition};
-use crate::{spawn_blocking_brotli_compress, Client, WSClientHttpSender, WSError};
+use crate::ws::{WSClientHttpSender, WSError};
+use crate::{spawn_blocking_brotli_compress, Client};
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::CollabParams;
@@ -9,6 +10,7 @@ use prost::Message;
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use reqwest::{Body, Method};
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio_retry::strategy::FixedInterval;
@@ -20,7 +22,7 @@ impl Client {
   pub async fn post_realtime_msg(
     &self,
     device_id: &str,
-    msg: tokio_tungstenite::tungstenite::Message,
+    msg: websocket::Message,
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
     let payload =
@@ -143,14 +145,18 @@ impl Client {
 
 #[async_trait]
 impl WSClientHttpSender for Client {
-  async fn send_ws_msg(
-    &self,
-    device_id: &str,
-    message: tokio_tungstenite::tungstenite::Message,
-  ) -> Result<(), WSError> {
+  async fn send_ws_msg(&self, device_id: &str, message: websocket::Message) -> Result<(), WSError> {
     self
       .post_realtime_msg(device_id, message)
       .await
       .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
   }
+}
+
+pub fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+where
+  T: Future + Send + 'static,
+  T::Output: Send + 'static,
+{
+  tokio::spawn(future)
 }

@@ -1,12 +1,8 @@
+use client_api_test_util::{generate_unique_email, ADMIN_USER, LOCALHOST_GOTRUE};
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
   params::AdminUserParams,
-};
-
-use crate::{
-  user::utils::{generate_unique_email, ADMIN_USER},
-  LOCALHOST_GOTRUE,
 };
 
 #[tokio::test]

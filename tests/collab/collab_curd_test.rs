@@ -1,4 +1,3 @@
-use crate::util::test_client::TestClient;
 use app_error::ErrorCode;
 use assert_json_diff::assert_json_include;
 use collab::core::collab_plugin::EncodedCollab;
@@ -14,6 +13,7 @@ use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
 
+use client_api_test_util::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
 

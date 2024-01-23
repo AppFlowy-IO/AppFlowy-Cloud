@@ -22,6 +22,7 @@ database-entity.workspace = true
 yrs.workspace = true
 thiserror = "1.0.56"
 realtime-protocol.workspace = true
+websocket.workspace = true
 
 [build-dependencies]
 protoc-bin-vendored = { version = "3.0" }

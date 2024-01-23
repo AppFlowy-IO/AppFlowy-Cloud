@@ -6,8 +6,8 @@ use std::task::{Context, Poll};
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
-use tokio_tungstenite::tungstenite::Message;
 use tracing::{trace, warn};
+use websocket::Message;
 
 pub struct WebSocketChannel<T> {
   object_id: String,

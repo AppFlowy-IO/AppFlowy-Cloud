@@ -1,4 +1,4 @@
-use crate::util::test_client::TestClient;
+use client_api_test_util::TestClient;
 
 #[tokio::test]
 async fn workspace_usage_put_blob_test() {

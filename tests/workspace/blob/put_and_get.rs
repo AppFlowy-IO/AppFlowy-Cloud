@@ -1,6 +1,5 @@
-use crate::collab::workspace_id_from_client;
-use crate::user::utils::generate_unique_registered_user_client;
 use app_error::ErrorCode;
+use client_api_test_util::{generate_unique_registered_user_client, workspace_id_from_client};
 
 #[tokio::test]
 async fn get_but_not_exists() {

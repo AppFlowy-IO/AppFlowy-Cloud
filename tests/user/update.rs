@@ -1,7 +1,6 @@
-use crate::localhost_client;
-use crate::user::utils::generate_unique_registered_user_client;
 use app_error::ErrorCode;
-use client_api::{WSClient, WSClientConfig};
+use client_api::ws::{WSClient, WSClientConfig};
+use client_api_test_util::*;
 use serde_json::json;
 use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
 use std::time::Duration;
@@ -165,7 +164,7 @@ async fn user_change_notify_test() {
   let mut user_change_recv = ws_client.subscribe_user_changed();
 
   let device_id = "fake_device_id";
-  let _ = ws_client
+  ws_client
     .connect(c.ws_url(device_id).await.unwrap(), device_id)
     .await
     .unwrap();

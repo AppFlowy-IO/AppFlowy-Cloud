@@ -1,5 +1,5 @@
 use reqwest::StatusCode;
-use tokio_tungstenite::tungstenite::Error;
+use websocket::Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WSError {

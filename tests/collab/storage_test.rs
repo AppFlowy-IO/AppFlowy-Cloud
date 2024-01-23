@@ -1,15 +1,12 @@
-use crate::{
-  collab::workspace_id_from_client, user::utils::generate_unique_registered_user_client,
-};
-use collab::core::collab_plugin::EncodedCollab;
-use std::collections::HashMap;
-
 use app_error::ErrorCode;
+use client_api_test_util::*;
+use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
 use sqlx::types::Uuid;
+use std::collections::HashMap;
 
 #[tokio::test]
 async fn success_insert_collab_test() {

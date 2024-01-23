@@ -2,6 +2,7 @@ use crate::collab_msg::CollabMessage;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use websocket::Message;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -71,10 +72,7 @@ impl TryFrom<Vec<u8>> for RealtimeMessage {
 }
 
 use crate::user::UserMessage;
-#[cfg(feature = "tungstenite")]
-use tokio_tungstenite::tungstenite::Message;
 
-#[cfg(feature = "tungstenite")]
 impl TryFrom<&Message> for RealtimeMessage {
   type Error = anyhow::Error;
 
@@ -86,7 +84,6 @@ impl TryFrom<&Message> for RealtimeMessage {
   }
 }
 
-#[cfg(feature = "tungstenite")]
 impl TryFrom<Message> for RealtimeMessage {
   type Error = anyhow::Error;
 
@@ -98,7 +95,6 @@ impl TryFrom<Message> for RealtimeMessage {
   }
 }
 
-#[cfg(feature = "tungstenite")]
 impl From<RealtimeMessage> for Message {
   fn from(msg: RealtimeMessage) -> Self {
     let bytes = bincode::serialize(&msg).unwrap_or_default();

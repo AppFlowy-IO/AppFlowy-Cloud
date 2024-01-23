@@ -398,6 +398,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
       .await?;
     self.get_role_from_uid(&uid, workspace_id).await
   }
+
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
     let policies = self
       .casbin_access_control

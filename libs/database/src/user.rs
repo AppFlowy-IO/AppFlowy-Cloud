@@ -93,7 +93,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
     r#"
     WITH ins_user AS (
         INSERT INTO af_user (uid, uuid, email, name)
-        VALUES ($1, $2, $3, $4) 
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT(email) DO NOTHING
         RETURNING uid
     ),
@@ -108,13 +108,8 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
     ins_collab_member AS (
         INSERT INTO af_collab_member (uid, oid, permission_id)
         SELECT ins_workspace.owner_uid,
-               ins_workspace.workspace_id::TEXT, 
+               ins_workspace.workspace_id::TEXT,
                (SELECT permission_id FROM af_role_permissions WHERE role_id = owner_role.id)
-        FROM ins_workspace, owner_role
-    ),
-    ins_workspace_member AS (
-        INSERT INTO af_workspace_member (uid, role_id, workspace_id)
-        SELECT ins_workspace.owner_uid, owner_role.id, ins_workspace.workspace_id
         FROM ins_workspace, owner_role
     )
     SELECT workspace_id FROM ins_workspace;
@@ -173,8 +168,8 @@ pub async fn is_user_exist<'a, E: Executor<'a, Database = Postgres>>(
   let exists = sqlx::query_scalar!(
     r#"
     SELECT EXISTS(
-      SELECT 1 
-      FROM af_user 
+      SELECT 1
+      FROM af_user
       WHERE uuid = $1
     ) AS user_exists;
   "#,

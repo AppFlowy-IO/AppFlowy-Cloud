@@ -490,6 +490,19 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace(&self) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self

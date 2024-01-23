@@ -40,10 +40,10 @@ pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
 
-    // deprecated, use `/` instead
+    // deprecated, use the api below instead
     .service(web::resource("/list").route(web::get().to(list_workspace_handler)))
 
-    .service(web::resource("/")
+    .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
       .route(web::post().to(add_workpace_handler))
     )

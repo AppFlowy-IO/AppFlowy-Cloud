@@ -15,6 +15,6 @@ use native as ws;
 use web as ws;
 pub use ws::WebSocketStream;
 
-pub async fn connect<S: AsRef<str>>(url: S) -> Result<WebSocketStream> {
-  ws::connect(url.as_ref()).await
+pub async fn connect_async<S: AsRef<str>>(url: S) -> Result<WebSocketStream> {
+  ws::connect_async(url.as_ref()).await
 }

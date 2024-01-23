@@ -33,6 +33,8 @@ if_wasm! {
   pub use wasm::ws_wasm::*;
 }
 
+pub mod ws;
+
 pub mod error {
   pub use shared_entity::response::AppResponseError;
   pub use shared_entity::response::ErrorCode;

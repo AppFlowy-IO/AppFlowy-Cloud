@@ -38,8 +38,9 @@ pub enum Error {
   ///
   /// Note that this error variant is enabled unconditionally even if no TLS feature is enabled,
   /// to provide a feature-agnostic API surface.
+  #[cfg(not(target_arch = "wasm32"))]
   #[error("TLS error: {0}")]
-  Tls(#[from] TlsError),
+  Tls(#[from] tokio_tungstenite::tungstenite::error::TlsError),
   /// - When reading: buffer capacity exhausted.
   /// - When writing: your message is bigger than the configured max message size
   ///   (64MB by default).
@@ -240,35 +241,6 @@ pub enum UrlError {
   /// The URL does not include a path/query.
   #[error("No path/query in URL")]
   NoPathOrQuery,
-}
-
-/// TLS errors.
-///
-/// Note that even if you enable only the rustls-based TLS support, the error at runtime could still
-/// be `Native`, as another crate in the dependency graph may enable native TLS support.
-#[allow(missing_copy_implementations)]
-#[derive(Error, Debug)]
-#[non_exhaustive]
-pub enum TlsError {
-  /// Native TLS error.
-  #[cfg(feature = "native-tls")]
-  #[error("native-tls error: {0}")]
-  Native(#[from] native_tls_crate::Error),
-  /// Rustls error.
-  #[cfg(feature = "__rustls-tls")]
-  #[error("rustls error: {0}")]
-  Rustls(#[from] rustls::Error),
-  /// Webpki error.
-  #[cfg(feature = "__rustls-tls")]
-  #[error("webpki error: {0}")]
-  Webpki(#[from] webpki::Error),
-  /// DNS name resolution error.
-  #[cfg(feature = "__rustls-tls")]
-  #[error("Invalid DNS name")]
-  InvalidDnsName,
-  /// Unknown
-  #[error("An unknown error from the underlying interface")]
-  Unknown,
 }
 
 /// Data opcodes as in RFC 6455

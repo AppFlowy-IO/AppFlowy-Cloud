@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::VecDeque, rc::Rc, task::Waker};
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
-pub async fn connect(url: &str) -> crate::Result<WebSocketStream> {
+pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
   WebSocketStream::new(url).await
 }
 
@@ -10,6 +10,7 @@ pub struct WebSocketStream {
   inner: WebSocket,
   queue: Rc<RefCell<VecDeque<crate::Result<crate::Message>>>>,
   waker: Rc<RefCell<Option<Waker>>>,
+  addr: Option<std::net::SocketAddr>,
   _on_message_callback: Closure<dyn FnMut(MessageEvent)>,
   _on_error_callback: Closure<dyn FnMut(ErrorEvent)>,
   _on_close_callback: Closure<dyn FnMut(CloseEvent)>,
@@ -106,6 +107,10 @@ impl WebSocketStream {
         })
       },
     }
+  }
+
+  pub fn address(&self) -> &Option<std::net::SocketAddr> {
+    &self.addr
   }
 }
 

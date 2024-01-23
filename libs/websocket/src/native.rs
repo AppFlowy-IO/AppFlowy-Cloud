@@ -1,8 +1,8 @@
 use futures_util::{Sink, Stream, StreamExt};
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_tungstenite::{
-  connect_async,
   tungstenite::{
     error::*,
     protocol::{frame::coding::Data, CloseFrame},
@@ -11,16 +11,26 @@ use tokio_tungstenite::{
   MaybeTlsStream,
 };
 
-pub async fn connect(url: &str) -> crate::Result<WebSocketStream> {
-  let (inner, _response) = connect_async(url).await?;
+pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
+  let (inner, _response) = tokio_tungstenite::connect_async(url).await?;
+  let addr = match inner.get_ref() {
+    MaybeTlsStream::Plain(s) => s.local_addr().ok(),
+    _ => None,
+  };
   let inner = inner.filter_map(to_fut_message as fn(_) -> _);
-  Ok(WebSocketStream { inner })
+  Ok(WebSocketStream { inner, addr })
 }
 
-type Ws = tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+type TokioTungsteniteStream =
+  tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 type FutMessage = futures_util::future::Ready<Option<crate::Result<crate::Message>>>;
 pub struct WebSocketStream {
-  inner: futures_util::stream::FilterMap<Ws, FutMessage, fn(Result<Message>) -> FutMessage>,
+  addr: Option<SocketAddr>,
+  inner: futures_util::stream::FilterMap<
+    TokioTungsteniteStream,
+    FutMessage,
+    fn(Result<Message>) -> FutMessage,
+  >,
 }
 
 impl Stream for WebSocketStream {
@@ -122,6 +132,8 @@ impl From<crate::Message> for Message {
       crate::Message::Text(inner) => Message::Text(inner),
       crate::Message::Binary(inner) => Message::Binary(inner),
       crate::Message::Close(inner) => Message::Close(inner.map(Into::into)),
+      crate::Message::Ping(data) => Message::Ping(data),
+      crate::Message::Pong(data) => Message::Pong(data),
     }
   }
 }
@@ -222,20 +234,6 @@ impl From<ProtocolError> for crate::error::ProtocolError {
       },
       ProtocolError::InvalidOpcode(inner) => crate::error::ProtocolError::InvalidOpcode(inner),
       ProtocolError::InvalidCloseSequence => crate::error::ProtocolError::InvalidCloseSequence,
-    }
-  }
-}
-
-impl From<TlsError> for crate::error::TlsError {
-  fn from(err: TlsError) -> Self {
-    match err {
-      #[cfg(feature = "native-tls")]
-      TlsError::Native(inner) => crate::error::TlsError::Native(inner),
-      #[cfg(feature = "__rustls-tls")]
-      TlsError::Rustls(inner) => crate::error::TlsError::Rustls(inner),
-      #[cfg(feature = "__rustls-tls")]
-      TlsError::InvalidDnsName => crate::error::TlsError::InvalidDnsName,
-      _ => crate::error::TlsError::Unknown,
     }
   }
 }

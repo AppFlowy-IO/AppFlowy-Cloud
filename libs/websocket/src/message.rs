@@ -7,6 +7,8 @@ pub enum Message {
   Binary(Vec<u8>),
   /// A close message with the optional close frame.
   Close(Option<CloseFrame<'static>>),
+  Ping(Vec<u8>),
+  Pong(Vec<u8>),
 }
 
 impl Message {
@@ -53,10 +55,12 @@ impl Message {
 
   /// Get the length of the WebSocket message.
   pub fn len(&self) -> usize {
-    match *self {
-      Message::Text(ref string) => string.len(),
-      Message::Binary(ref data) => data.len(),
-      Message::Close(ref data) => data.as_ref().map(|d| d.reason.len()).unwrap_or(0),
+    match self {
+      Message::Text(s) => s.len(),
+      Message::Binary(data) => data.len(),
+      Message::Close(data) => data.as_ref().map(|d| d.reason.len()).unwrap_or(0),
+      Message::Ping(data) => data.len(),
+      Message::Pong(data) => data.len(),
     }
   }
 
@@ -73,6 +77,8 @@ impl Message {
       Message::Binary(data) => data,
       Message::Close(None) => Vec::new(),
       Message::Close(Some(frame)) => frame.reason.into_owned().into_bytes(),
+      Message::Ping(data) => data,
+      Message::Pong(data) => data,
     }
   }
 
@@ -83,17 +89,21 @@ impl Message {
       Message::Binary(data) => Ok(String::from_utf8(data).map_err(|err| err.utf8_error())?),
       Message::Close(None) => Ok(String::new()),
       Message::Close(Some(frame)) => Ok(frame.reason.into_owned()),
+      Message::Ping(data) => Ok(String::from_utf8(data).map_err(|err| err.utf8_error())?),
+      Message::Pong(data) => Ok(String::from_utf8(data).map_err(|err| err.utf8_error())?),
     }
   }
 
   /// Attempt to get a &str from the WebSocket message,
   /// this will try to convert binary data to utf8.
   pub fn to_text(&self) -> Result<&str, crate::Error> {
-    match *self {
-      Message::Text(ref string) => Ok(string),
-      Message::Binary(ref data) => Ok(std::str::from_utf8(data)?),
+    match self {
+      Message::Text(s) => Ok(s.as_str()),
+      Message::Binary(data) => Ok(std::str::from_utf8(data)?),
       Message::Close(None) => Ok(""),
       Message::Close(Some(ref frame)) => Ok(&frame.reason),
+      Message::Ping(data) => Ok(std::str::from_utf8(data)?),
+      Message::Pong(data) => Ok(std::str::from_utf8(data)?),
     }
   }
 }

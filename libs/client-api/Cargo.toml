@@ -32,6 +32,7 @@ mime = "0.3.17"
 tokio-stream = { version = "0.1.14" }
 realtime-entity = { workspace = true }
 chrono = "0.4"
+websocket = { workspace = true, features = ["native-tls"] }
 
 collab = { version = "0.1.0", optional = true }
 collab-entity = { version = "0.1.0" }
@@ -56,10 +57,6 @@ features = ["sync", "net"]
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.realtime-entity]
 workspace = true
 features = ["tungstenite"]
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio-tungstenite]
-version = "0.20.1"
-features = ["native-tls"]
 
 [features]
 collab-sync = ["collab", "yrs"]

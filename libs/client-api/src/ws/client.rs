@@ -9,20 +9,17 @@ use std::time::Duration;
 
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-use crate::native::ping::ServerFixIntervalPing;
-use crate::native::ws::retry::ConnectAction;
-use crate::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
+use crate::ws::ping::ServerFixIntervalPing;
+use crate::ws::retry::ConnectAction;
+use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::RealtimeMessage;
 use realtime_entity::user::UserMessage;
 use tokio::sync::{oneshot, Mutex};
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Condition, RetryIf};
-use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use tokio_tungstenite::tungstenite::protocol::CloseFrame;
-use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::MaybeTlsStream;
 use tracing::{debug, error, info, trace, warn};
+use websocket::{CloseCode, CloseFrame, Message};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given
@@ -90,11 +87,7 @@ impl WSClient {
     }
   }
 
-  pub async fn connect(
-    &self,
-    addr: String,
-    device_id: &str,
-  ) -> Result<Option<SocketAddr>, WSError> {
+  pub async fn connect(&self, addr: String, device_id: &str) -> Result<(), WSError> {
     self.set_state(ConnectState::Connecting).await;
 
     let (stop_tx, mut stop_rx) = oneshot::channel();
@@ -137,11 +130,6 @@ impl WSClient {
     }
 
     let ws_stream = conn_result?;
-    let addr = match ws_stream.get_ref() {
-      MaybeTlsStream::Plain(s) => s.local_addr().ok(),
-      _ => None,
-    };
-
     self.set_state(ConnectState::Connected).await;
     let (mut sink, mut stream) = ws_stream.split();
     let weak_collab_channels = Arc::downgrade(&self.collab_channels);
@@ -257,7 +245,7 @@ impl WSClient {
       }
     });
 
-    Ok(addr)
+    Ok(())
   }
 
   /// Return a [WebSocketChannel] that can be used to send messages to the websocket. Caller should

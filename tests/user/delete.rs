@@ -1,11 +1,5 @@
+use client_api_test_util::*;
 use gotrue::params::{AdminDeleteUserParams, AdminUserParams};
-
-use crate::{
-  localhost_client,
-  user::utils::{
-    admin_user_client, generate_unique_registered_user_client, localhost_gotrue_client,
-  },
-};
 
 #[tokio::test]
 async fn admin_delete_create_same_user_hard() {

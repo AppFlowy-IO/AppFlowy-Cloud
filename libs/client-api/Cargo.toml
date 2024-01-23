@@ -13,7 +13,7 @@ anyhow = "1.0.79"
 serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
 gotrue-entity = { path = "../gotrue-entity" }
-shared_entity = { path = "../shared-entity" }
+shared-entity = { path = "../shared-entity" }
 tracing = { version = "0.1" }
 thiserror = "1.0.56"
 bytes = "1.5"
@@ -32,6 +32,7 @@ mime = "0.3.17"
 tokio-stream = { version = "0.1.14" }
 realtime-entity = { workspace = true }
 chrono = "0.4"
+websocket = { workspace = true, features = ["native-tls"] }
 
 collab = { version = "0.1.0", optional = true }
 collab-entity = { version = "0.1.0" }
@@ -57,12 +58,13 @@ features = ["sync", "net"]
 workspace = true
 features = ["tungstenite"]
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio-tungstenite]
-version = "0.20.1"
-features = ["native-tls"]
 
 [features]
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
 wasm_build = []
+
+
+[profile.dev]
+debug = true

@@ -1,19 +1,28 @@
+use crate::client::{localhost_client, LOCALHOST_GOTRUE};
+use crate::log::setup_log;
 use client_api::Client;
-use dotenvy::dotenv;
-
-use sqlx::types::Uuid;
-
+use dotenv::dotenv;
 use lazy_static::lazy_static;
+use uuid::Uuid;
 
-use crate::util::setup_log;
-use crate::{localhost_client, LOCALHOST_GOTRUE};
-
+#[cfg(not(target_arch = "wasm32"))]
 lazy_static! {
   pub static ref ADMIN_USER: User = {
     dotenv().ok();
     User {
       email: std::env::var("GOTRUE_ADMIN_EMAIL").unwrap(),
       password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap(),
+    }
+  };
+}
+
+#[cfg(target_arch = "wasm32")]
+lazy_static! {
+  pub static ref ADMIN_USER: User = {
+    dotenv().ok();
+    User {
+      email: "admin@example.com".to_string(),
+      password: "password".to_string(),
     }
   };
 }

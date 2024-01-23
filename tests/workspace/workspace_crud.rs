@@ -1,4 +1,4 @@
-use crate::user::utils::generate_unique_registered_user_client;
+use client_api_test_util::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn add_and_delete_workspace_for_user() {

@@ -5,7 +5,7 @@ use tracing::warn;
 mod casbin;
 mod collab;
 mod gotrue;
-mod user;
+pub mod user;
 mod util;
 mod websocket;
 mod workspace;

@@ -12,6 +12,41 @@ use crate::pg_row::{AFPermissionRow, AFUserProfileRow, AFWorkspaceMemberRow, AFW
 use crate::user::select_uid_from_email;
 use app_error::AppError;
 
+#[inline]
+pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Result<(), AppError> {
+  let pg_row = sqlx::query!(
+    r#"
+    DELETE FROM public.af_workspace where workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .execute(pg_pool)
+  .await?;
+
+  assert!(pg_row.rows_affected() == 1);
+  Ok(())
+}
+
+#[inline]
+pub async fn insert_user_workspace(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+) -> Result<AFWorkspaceRow, AppError> {
+  let workspace = sqlx::query_as!(
+    AFWorkspaceRow,
+    r#"
+    INSERT INTO public.af_workspace (owner_uid)
+    SELECT uid FROM public.af_user WHERE uuid = $1
+    RETURNING *;
+    "#,
+    user_uuid
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(workspace)
+}
+
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.
 #[inline]

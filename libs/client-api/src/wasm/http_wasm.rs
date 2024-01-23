@@ -1,22 +1,18 @@
 use crate::http::RefreshTokenRet;
 use crate::Client;
 use app_error::gotrue::GoTrueError;
-use app_error::AppError;
-use async_trait::async_trait;
 use database_entity::dto::CollabParams;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use shared_entity::response::AppResponseError;
+use std::future::Future;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::RetryIf;
-use tracing::{event, instrument};
+use tracing::instrument;
 
 impl Client {
   pub async fn create_collab_list(
     &self,
     workspace_id: &str,
-    params_list: Vec<CollabParams>,
+    _params_list: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
     let _url = self.batch_create_collab_url(workspace_id);
     todo!()
@@ -57,4 +53,12 @@ impl Client {
     self.token.write().set(new_token);
     Ok(())
   }
+}
+
+pub fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+where
+  T: Future + 'static,
+  T::Output: Send + 'static,
+{
+  tokio::task::spawn_local(future)
 }

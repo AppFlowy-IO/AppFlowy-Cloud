@@ -1,14 +1,13 @@
 use futures_util::{SinkExt, StreamExt};
-use std::borrow::Cow;
-
 use parking_lot::RwLock;
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
+use crate::spawn;
 use crate::ws::ping::ServerFixIntervalPing;
 use crate::ws::retry::ConnectAction;
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
@@ -149,7 +148,7 @@ impl WSClient {
 
     let user_message_tx = self.user_channel.as_ref().clone();
     // Receive messages from the websocket, and send them to the channels.
-    tokio::spawn(async move {
+    spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
         match ws_msg {
           Message::Binary(_) => {
@@ -214,7 +213,7 @@ impl WSClient {
     let mut rx = self.sender.subscribe();
     let weak_http_sender = Arc::downgrade(&self.http_sender);
     let device_id = device_id.to_string();
-    tokio::spawn(async move {
+    spawn(async move {
       loop {
         tokio::select! {
           _ = &mut stop_rx => break,

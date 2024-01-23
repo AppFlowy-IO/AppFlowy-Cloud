@@ -17,7 +17,11 @@ impl ConnectAction {
 }
 
 impl Action for ConnectAction {
+  #[cfg(not(target_arch = "wasm32"))]
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync>>;
+
+  #[cfg(target_arch = "wasm32")]
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>>>>;
   type Item = WebSocketStream;
   type Error = WSError;
 

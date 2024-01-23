@@ -10,6 +10,7 @@ use prost::Message;
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use reqwest::{Body, Method};
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio_retry::strategy::FixedInterval;
@@ -150,4 +151,12 @@ impl WSClientHttpSender for Client {
       .await
       .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
   }
+}
+
+pub fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+where
+  T: Future + Send + 'static,
+  T::Output: Send + 'static,
+{
+  tokio::spawn(future)
 }

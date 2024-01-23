@@ -15,7 +15,7 @@ use crate::collab_sync::{SinkConfig, SyncQueue};
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
-use crate::{ConnectState, WSConnectStateReceiver};
+use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {

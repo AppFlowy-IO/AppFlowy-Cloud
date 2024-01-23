@@ -1,5 +1,4 @@
 use futures_util::{Sink, Stream, StreamExt};
-use std::net::SocketAddr;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_tungstenite::{
@@ -13,19 +12,18 @@ use tokio_tungstenite::{
 
 pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
   let (inner, _response) = tokio_tungstenite::connect_async(url).await?;
-  let addr = match inner.get_ref() {
-    MaybeTlsStream::Plain(s) => s.local_addr().ok(),
-    _ => None,
-  };
+  // let addr = match inner.get_ref() {
+  //   MaybeTlsStream::Plain(s) => s.local_addr().ok(),
+  //   _ => None,
+  // };
   let inner = inner.filter_map(to_fut_message as fn(_) -> _);
-  Ok(WebSocketStream { inner, addr })
+  Ok(WebSocketStream { inner })
 }
 
 type TokioTungsteniteStream =
   tokio_tungstenite::WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 type FutMessage = futures_util::future::Ready<Option<crate::Result<crate::Message>>>;
 pub struct WebSocketStream {
-  addr: Option<SocketAddr>,
   inner: futures_util::stream::FilterMap<
     TokioTungsteniteStream,
     FutMessage,

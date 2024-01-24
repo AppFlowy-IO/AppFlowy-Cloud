@@ -29,6 +29,11 @@ impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   }
 }
 
+#[derive(Deserialize)]
+pub struct CreateWorkspace {
+  pub name: Option<String>,
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct CreateWorkspaceMember {
   pub email: String,

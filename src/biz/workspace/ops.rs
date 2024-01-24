@@ -25,11 +25,12 @@ pub async fn delete_workspace_for_user(
   Ok(())
 }
 
-pub async fn add_workspace_for_user(
+pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
+  workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid).await?;
+  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
   Ok(new_workspace)
 }

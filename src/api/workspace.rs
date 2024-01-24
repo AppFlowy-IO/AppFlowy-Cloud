@@ -45,7 +45,7 @@ pub fn workspace_scope() -> Scope {
 
     .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
-      .route(web::post().to(add_workpace_handler))
+      .route(web::post().to(create_workpace_handler))
     )
     .service(web::resource("/{workspace_id}")
       .route(web::delete().to(delete_workspace_handler))
@@ -116,11 +116,17 @@ pub fn collab_scope() -> Scope {
 
 // Adds a workspace for user, if success, return the workspace id
 #[instrument(skip_all, err)]
-async fn add_workpace_handler(
+async fn create_workpace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
+  create_workspace_param: Json<CreateWorkspace>,
 ) -> Result<Json<AppResponse<AFWorkspace>>> {
-  let new_workspace = workspace::ops::add_workspace_for_user(&state.pg_pool, &uuid).await?;
+  let workspace_name = create_workspace_param
+    .into_inner()
+    .name
+    .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
+  let new_workspace =
+    workspace::ops::create_workspace_for_user(&state.pg_pool, &uuid, &workspace_name).await?;
   Ok(AppResponse::Ok().with_data(new_workspace).into())
 }
 

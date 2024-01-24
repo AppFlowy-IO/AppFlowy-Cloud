@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n    INSERT INTO public.af_workspace (owner_uid)\n    SELECT uid FROM public.af_user WHERE uuid = $1\n    RETURNING *;\n    ",
+  "query": "\n    INSERT INTO public.af_workspace (owner_uid, workspace_name)\n    VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)\n    RETURNING *;\n    ",
   "describe": {
     "columns": [
       {
@@ -41,7 +41,8 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
@@ -54,5 +55,5 @@
       true
     ]
   },
-  "hash": "c08e9c86c0877ed54499e47dbf83ffe12c16dfedea5b826e2becb0d65d6c61b1"
+  "hash": "5506d75e81326efb146326c929e90442ba1a49ddb811f89faa8ba1459e17ca86"
 }

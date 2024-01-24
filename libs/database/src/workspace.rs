@@ -31,15 +31,17 @@ pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Res
 pub async fn insert_user_workspace(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
+  workspace_name: &str,
 ) -> Result<AFWorkspaceRow, AppError> {
   let workspace = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-    INSERT INTO public.af_workspace (owner_uid)
-    SELECT uid FROM public.af_user WHERE uuid = $1
+    INSERT INTO public.af_workspace (owner_uid, workspace_name)
+    VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)
     RETURNING *;
     "#,
-    user_uuid
+    user_uuid,
+    workspace_name,
   )
   .fetch_one(pg_pool)
   .await?;

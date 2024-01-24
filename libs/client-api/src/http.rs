@@ -2,6 +2,7 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
+use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use std::io::Read;
 
 use app_error::AppError;
@@ -503,12 +504,15 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn add_workspace(&self) -> Result<AFWorkspace, AppResponseError> {
+  pub async fn create_workspace(
+    &self,
+    params: CreateWorkspaceParam,
+  ) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&())
+      .json(&params)
       .send()
       .await?;
     log_request_id(&resp);

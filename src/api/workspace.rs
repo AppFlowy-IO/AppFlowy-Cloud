@@ -119,11 +119,11 @@ pub fn collab_scope() -> Scope {
 async fn create_workpace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-  create_workspace_param: Json<CreateWorkspace>,
+  create_workspace_param: Json<CreateWorkspaceParam>,
 ) -> Result<Json<AppResponse<AFWorkspace>>> {
   let workspace_name = create_workspace_param
     .into_inner()
-    .name
+    .workspace_name
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
   let new_workspace =
     workspace::ops::create_workspace_for_user(&state.pg_pool, &uuid, &workspace_name).await?;
@@ -140,6 +140,7 @@ async fn delete_workspace_handler(
   Ok(AppResponse::Ok().into())
 }
 
+// TODO: also get shared workspaces
 #[instrument(skip_all, err)]
 async fn list_workspace_handler(
   uuid: UserUuid,

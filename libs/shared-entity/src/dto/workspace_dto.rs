@@ -29,11 +29,6 @@ impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   }
 }
 
-#[derive(Deserialize)]
-pub struct CreateWorkspace {
-  pub name: Option<String>,
-}
-
 #[derive(Deserialize, Serialize)]
 pub struct CreateWorkspaceMember {
   pub email: String,
@@ -81,4 +76,9 @@ pub struct BlobMetadata {
   pub file_type: String,
   pub file_size: i64,
   pub modified_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateWorkspaceParam {
+  pub workspace_name: Option<String>,
 }

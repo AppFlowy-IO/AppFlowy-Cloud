@@ -416,7 +416,7 @@ pub struct AFUserProfile {
   pub updated_at: i64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AFWorkspace {
   pub workspace_id: Uuid,
   pub database_storage_id: Uuid,

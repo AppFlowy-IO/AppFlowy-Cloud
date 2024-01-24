@@ -25,6 +25,7 @@ use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool};
 use tokio::sync::RwLock;
 use tracing::{debug, event, instrument};
+use workspace_template::document::get_started::GetStartedDocumentTemplate;
 use workspace_template::WorkspaceTemplateBuilder;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
@@ -89,6 +90,7 @@ where
     // Create the default workspace for the user. A default workspace might contain multiple
     // templates, e.g. a document template, a database template, etc.
     let templates = WorkspaceTemplateBuilder::new(new_uid, &workspace_id)
+      .with_template(GetStartedDocumentTemplate)
       .default_workspace()
       .await?;
 

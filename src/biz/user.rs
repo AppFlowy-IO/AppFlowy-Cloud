@@ -22,11 +22,11 @@ use database::user::{create_user, is_user_exist};
 use realtime::entities::RealtimeUser;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
-use sqlx::{types::uuid, PgPool};
+use sqlx::{types::uuid, PgPool, Transaction};
 use tokio::sync::RwLock;
 use tracing::{debug, event, instrument};
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
-use workspace_template::WorkspaceTemplateBuilder;
+use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
 /// Verify the token from the gotrue server and create the user if it is a new user
 /// Return true if the user is a new user
@@ -87,48 +87,72 @@ where
       )
       .await?;
 
-    // Create the default workspace for the user. A default workspace might contain multiple
-    // templates, e.g. a document template, a database template, etc.
-    let templates = WorkspaceTemplateBuilder::new(new_uid, &workspace_id)
-      .with_template(GetStartedDocumentTemplate)
-      .default_workspace()
-      .await?;
-
-    debug!("create {} templates for user:{}", templates.len(), new_uid);
-    for template in templates {
-      let object_id = template.object_id;
-      let encoded_collab_v1 = template
-        .object_data
-        .encode_to_bytes()
-        .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
-
-      collab_access_control
-        .cache_collab_access_level(
-          realtime::collaborate::CollabUserId::UserId(&new_uid),
-          &object_id,
-          AFAccessLevel::FullAccess,
-        )
-        .await?;
-
-      insert_into_af_collab(
-        &mut txn,
-        &new_uid,
-        &workspace_id,
-        &CollabParams {
-          object_id,
-          encoded_collab_v1,
-          collab_type: template.object_type,
-          override_if_exist: false,
-        },
-      )
-      .await?;
-    }
+    // Create a workspace with the GetStarted template
+    create_workspace_for_user(
+      new_uid,
+      &workspace_id,
+      collab_access_control,
+      &mut txn,
+      vec![GetStartedDocumentTemplate],
+    )
+    .await?;
   }
   txn
     .commit()
     .await
     .context("fail to commit transaction to verify token")?;
   Ok(is_new)
+}
+
+/// Create a workspace for a user.
+/// This function generates a workspace along with its templates and stores them in the database.
+/// Each template is stored as an individual collaborative object.
+async fn create_workspace_for_user<C, T>(
+  new_uid: i64,
+  workspace_id: &str,
+  collab_access_control: &C,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+  templates: Vec<T>,
+) -> Result<(), AppError>
+where
+  C: CollabAccessControl,
+  T: WorkspaceTemplate + Send + Sync + 'static,
+{
+  let templates = WorkspaceTemplateBuilder::new(new_uid, workspace_id)
+    .with_templates(templates)
+    .build()
+    .await?;
+
+  debug!("create {} templates for user:{}", templates.len(), new_uid);
+  for template in templates {
+    let object_id = template.object_id;
+    let encoded_collab_v1 = template
+      .object_data
+      .encode_to_bytes()
+      .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
+
+    collab_access_control
+      .cache_collab_access_level(
+        realtime::collaborate::CollabUserId::UserId(&new_uid),
+        &object_id,
+        AFAccessLevel::FullAccess,
+      )
+      .await?;
+
+    insert_into_af_collab(
+      txn,
+      &new_uid,
+      workspace_id,
+      &CollabParams {
+        object_id,
+        encoded_collab_v1,
+        collab_type: template.object_type,
+        override_if_exist: false,
+      },
+    )
+    .await?;
+  }
+  Ok(())
 }
 
 pub async fn get_profile(pg_pool: &PgPool, uuid: &Uuid) -> Result<AFUserProfile, AppError> {

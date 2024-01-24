@@ -10,7 +10,10 @@ pub fn default_cors() -> Cors {
     .allow_any_origin()
     .send_wildcard()
     .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-    .allowed_headers(vec![http::header::ACCEPT])
+    .allowed_headers(vec![
+      actix_web::http::header::AUTHORIZATION,
+      actix_web::http::header::ACCEPT,
+    ])
     .allowed_header(http::header::CONTENT_TYPE)
     .max_age(3600)
 }

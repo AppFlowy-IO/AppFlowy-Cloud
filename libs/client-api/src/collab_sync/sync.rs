@@ -1,6 +1,7 @@
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, SinkConfig, SinkState, SyncError, SyncObject,
 };
+use crate::platform_spawn;
 use bytes::Bytes;
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
@@ -13,7 +14,6 @@ use realtime_protocol::{Message, MessageReader, SyncMessage};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
-use tokio::spawn;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
 use tracing::{error, event, trace, warn, Level};
@@ -75,7 +75,7 @@ where
       pause,
     ));
 
-    spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
+    platform_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
     let cloned_protocol = protocol.clone();
     let object_id = object.object_id.clone();
     let stream = SyncStream::new(
@@ -90,7 +90,7 @@ where
     let weak_sync_state = Arc::downgrade(&sync_state);
     let mut sink_state_stream = WatchStream::new(sink_state_rx);
     // Subscribe the sink state stream and update the sync state in the background.
-    spawn(async move {
+    platform_spawn(async move {
       while let Some(collab_state) = sink_state_stream.next().await {
         if let Some(sync_state) = weak_sync_state.upgrade() {
           match collab_state {
@@ -209,7 +209,7 @@ where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     let cloned_weak_collab = weak_collab.clone();
-    spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
+    platform_spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
       origin,
       object_id.clone(),
       stream,

@@ -1,3 +1,4 @@
+use crate::platform_spawn;
 use futures_util::Sink;
 use realtime_entity::message::RealtimeMessage;
 use std::fmt::Debug;
@@ -47,7 +48,7 @@ where
     let (tx, mut rx) = unbounded_channel::<T>();
     let cloned_sender = self.sender.clone();
     let object_id = self.object_id.clone();
-    tokio::spawn(async move {
+    platform_spawn(async move {
       while let Some(msg) = rx.recv().await {
         let realtime_msg: RealtimeMessage = msg.into();
         let _ = cloned_sender.send(realtime_msg.into());
@@ -61,7 +62,7 @@ where
     let (tx, rx) = unbounded_channel::<Result<T, anyhow::Error>>();
     let mut recv = self.receiver.subscribe();
     let object_id = self.object_id.clone();
-    tokio::spawn(async move {
+    platform_spawn(async move {
       while let Ok(msg) = recv.recv().await {
         if let Err(err) = tx.send(Ok(msg)) {
           trace!("Failed to send message to channel stream: {}", err);

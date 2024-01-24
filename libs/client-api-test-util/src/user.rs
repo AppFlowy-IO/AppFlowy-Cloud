@@ -5,24 +5,12 @@ use dotenv::dotenv;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
-#[cfg(not(target_arch = "wasm32"))]
 lazy_static! {
   pub static ref ADMIN_USER: User = {
     dotenv().ok();
     User {
-      email: std::env::var("GOTRUE_ADMIN_EMAIL").unwrap(),
-      password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap(),
-    }
-  };
-}
-
-#[cfg(target_arch = "wasm32")]
-lazy_static! {
-  pub static ref ADMIN_USER: User = {
-    dotenv().ok();
-    User {
-      email: "admin@example.com".to_string(),
-      password: "password".to_string(),
+      email: std::env::var("GOTRUE_ADMIN_EMAIL").unwrap_or("admin@example.com".to_string()),
+      password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap_or("password".to_string()),
     }
   };
 }
@@ -39,6 +27,12 @@ pub fn generate_unique_email() -> String {
 
 pub async fn admin_user_client() -> Client {
   let admin_client = localhost_client();
+  #[cfg(target_arch = "wasm32")]
+  {
+    let msg = format!("{}", admin_client);
+    web_sys::console::log_1(&msg.into());
+  }
+
   admin_client
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await

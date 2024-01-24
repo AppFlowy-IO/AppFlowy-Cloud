@@ -1,4 +1,4 @@
-mod document;
+pub mod document;
 mod hierarchy_builder;
 
 use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
@@ -17,6 +17,8 @@ use tokio::sync::RwLock;
 
 #[async_trait]
 pub trait WorkspaceTemplate {
+  fn layout(&self) -> ViewLayout;
+
   async fn create_workspace_view(
     &self,
     uid: i64,
@@ -40,14 +42,17 @@ pub struct WorkspaceTemplateBuilder {
 
 impl WorkspaceTemplateBuilder {
   pub fn new(uid: i64, workspace_id: &str) -> Self {
-    let mut handlers = WorkspaceTemplateHandlers::default();
-    // register the document template handler
-    handlers.insert(ViewLayout::Document, Arc::new(document::DocumentTemplate));
+    let handlers = WorkspaceTemplateHandlers::default();
     Self {
       uid,
       workspace_id: workspace_id.to_string(),
       handlers,
     }
+  }
+
+  pub fn with_template<T: WorkspaceTemplate>(mut self, template: T) -> Self {
+    self.handlers.insert(template.layout(), Arc::new(template));
+    self
   }
 
   pub async fn default_workspace(&self) -> Result<Vec<TemplateData>> {

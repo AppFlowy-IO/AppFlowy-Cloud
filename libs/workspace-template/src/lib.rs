@@ -34,6 +34,8 @@ pub struct TemplateData {
 
 pub type WorkspaceTemplateHandlers = HashMap<ViewLayout, Arc<dyn WorkspaceTemplate + Send + Sync>>;
 
+/// A builder for creating a workspace template.
+/// workspace template is a set of views that are created when a workspace is created.
 pub struct WorkspaceTemplateBuilder {
   pub uid: i64,
   pub workspace_id: String,
@@ -50,12 +52,25 @@ impl WorkspaceTemplateBuilder {
     }
   }
 
-  pub fn with_template<T: WorkspaceTemplate>(mut self, template: T) -> Self {
+  pub fn with_template<T>(mut self, template: T) -> Self
+  where
+    T: WorkspaceTemplate + Send + Sync + 'static,
+  {
     self.handlers.insert(template.layout(), Arc::new(template));
     self
   }
 
-  pub async fn default_workspace(&self) -> Result<Vec<TemplateData>> {
+  pub fn with_templates<T>(mut self, templates: Vec<T>) -> Self
+  where
+    T: WorkspaceTemplate + Send + Sync + 'static,
+  {
+    for template in templates {
+      self.handlers.insert(template.layout(), Arc::new(template));
+    }
+    self
+  }
+
+  pub async fn build(&self) -> Result<Vec<TemplateData>> {
     let workspace_view_builder = Arc::new(RwLock::new(WorkspaceViewBuilder::new(
       self.workspace_id.clone(),
       self.uid,

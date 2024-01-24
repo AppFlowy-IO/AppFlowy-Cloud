@@ -1,4 +1,4 @@
-mod document;
+pub mod document;
 mod hierarchy_builder;
 
 use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
@@ -17,6 +17,8 @@ use tokio::sync::RwLock;
 
 #[async_trait]
 pub trait WorkspaceTemplate {
+  fn layout(&self) -> ViewLayout;
+
   async fn create_workspace_view(
     &self,
     uid: i64,
@@ -32,6 +34,8 @@ pub struct TemplateData {
 
 pub type WorkspaceTemplateHandlers = HashMap<ViewLayout, Arc<dyn WorkspaceTemplate + Send + Sync>>;
 
+/// A builder for creating a workspace template.
+/// workspace template is a set of views that are created when a workspace is created.
 pub struct WorkspaceTemplateBuilder {
   pub uid: i64,
   pub workspace_id: String,
@@ -40,9 +44,7 @@ pub struct WorkspaceTemplateBuilder {
 
 impl WorkspaceTemplateBuilder {
   pub fn new(uid: i64, workspace_id: &str) -> Self {
-    let mut handlers = WorkspaceTemplateHandlers::default();
-    // register the document template handler
-    handlers.insert(ViewLayout::Document, Arc::new(document::DocumentTemplate));
+    let handlers = WorkspaceTemplateHandlers::default();
     Self {
       uid,
       workspace_id: workspace_id.to_string(),
@@ -50,7 +52,25 @@ impl WorkspaceTemplateBuilder {
     }
   }
 
-  pub async fn default_workspace(&self) -> Result<Vec<TemplateData>> {
+  pub fn with_template<T>(mut self, template: T) -> Self
+  where
+    T: WorkspaceTemplate + Send + Sync + 'static,
+  {
+    self.handlers.insert(template.layout(), Arc::new(template));
+    self
+  }
+
+  pub fn with_templates<T>(mut self, templates: Vec<T>) -> Self
+  where
+    T: WorkspaceTemplate + Send + Sync + 'static,
+  {
+    for template in templates {
+      self.handlers.insert(template.layout(), Arc::new(template));
+    }
+    self
+  }
+
+  pub async fn build(&self) -> Result<Vec<TemplateData>> {
     let workspace_view_builder = Arc::new(RwLock::new(WorkspaceViewBuilder::new(
       self.workspace_id.clone(),
       self.uid,

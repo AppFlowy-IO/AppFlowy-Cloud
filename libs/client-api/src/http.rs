@@ -3,6 +3,7 @@ use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
+use std::fmt::{Display, Formatter};
 use std::io::Read;
 
 use app_error::AppError;
@@ -1198,6 +1199,15 @@ impl Client {
       "{}/api/workspace/{}/batch/collab",
       self.base_url, workspace_id
     )
+  }
+}
+
+impl Display for Client {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "Client {{ base_url: {}, ws_addr: {}, gotrue_url: {} }}",
+      self.base_url, self.ws_addr, self.gotrue_client.base_url
+    ))
   }
 }
 

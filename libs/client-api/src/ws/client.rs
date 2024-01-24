@@ -7,16 +7,13 @@ use std::time::Duration;
 
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
-use crate::spawn;
-use crate::ws::ping::ServerFixIntervalPing;
-use crate::ws::retry::ConnectAction;
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
+use crate::ServerFixIntervalPing;
+use crate::{platform_spawn, retry_connect};
 use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::RealtimeMessage;
 use realtime_entity::user::UserMessage;
 use tokio::sync::{oneshot, Mutex};
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::{Condition, RetryIf};
 use tracing::{debug, error, info, trace, warn};
 use websocket::{CloseCode, CloseFrame, Message};
 
@@ -49,10 +46,12 @@ type WeakChannel = Weak<WebSocketChannel<CollabMessage>>;
 type ChannelByObjectId = HashMap<String, Vec<WeakChannel>>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
+pub(crate) type StateNotify = parking_lot::Mutex<ConnectStateNotify>;
+pub(crate) type CurrentAddr = parking_lot::Mutex<Option<String>>;
 pub struct WSClient {
-  addr: Arc<parking_lot::Mutex<Option<String>>>,
+  addr: Arc<CurrentAddr>,
   config: WSClientConfig,
-  state_notify: Arc<parking_lot::Mutex<ConnectStateNotify>>,
+  state_notify: Arc<StateNotify>,
   /// Sender used to send messages to the websocket.
   sender: Sender<Message>,
   http_sender: Arc<dyn WSClientHttpSender>,
@@ -89,24 +88,26 @@ impl WSClient {
   pub async fn connect(&self, addr: String, device_id: &str) -> Result<(), WSError> {
     self.set_state(ConnectState::Connecting).await;
 
+    // stop receiving message from client
     let (stop_tx, mut stop_rx) = oneshot::channel();
     if let Some(old_stop_tx) = self.stop_tx.lock().await.take() {
       let _ = old_stop_tx.send(());
     }
     *self.stop_tx.lock().await = Some(stop_tx);
 
+    // stop pinging
     *self.addr.lock() = Some(addr.clone());
     if let Some(old_ping) = self.ping.lock().await.as_ref() {
       old_ping.stop().await;
     }
 
-    let retry_strategy = FixedInterval::new(Duration::from_secs(6));
-    let action = ConnectAction::new(addr.clone());
-    let cond = RetryCondition {
-      connecting_addr: addr,
-      addr: Arc::downgrade(&self.addr),
-      state_notify: Arc::downgrade(&self.state_notify),
-    };
+    // start connecting
+    let conn_result = retry_connect(
+      &addr,
+      Arc::downgrade(&self.state_notify),
+      Arc::downgrade(&self.addr),
+    )
+    .await;
 
     // handle websocket error when connecting or sending message
     let weak_state_notify = Arc::downgrade(&self.state_notify);
@@ -122,8 +123,6 @@ impl WSClient {
         },
       }
     };
-
-    let conn_result = RetryIf::spawn(retry_strategy, action, cond).await;
     if let Err(err) = &conn_result {
       handle_ws_error(err);
     }
@@ -133,7 +132,6 @@ impl WSClient {
     let (mut sink, mut stream) = ws_stream.split();
     let weak_collab_channels = Arc::downgrade(&self.collab_channels);
     let sender = self.sender.clone();
-
     let ping_sender = sender.clone();
     let (pong_tx, pong_recv) = tokio::sync::mpsc::channel(1);
     let mut ping = ServerFixIntervalPing::new(
@@ -148,7 +146,7 @@ impl WSClient {
 
     let user_message_tx = self.user_channel.as_ref().clone();
     // Receive messages from the websocket, and send them to the channels.
-    spawn(async move {
+    platform_spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
         match ws_msg {
           Message::Binary(_) => {
@@ -213,7 +211,7 @@ impl WSClient {
     let mut rx = self.sender.subscribe();
     let weak_http_sender = Arc::downgrade(&self.http_sender);
     let device_id = device_id.to_string();
-    spawn(async move {
+    platform_spawn(async move {
       loop {
         tokio::select! {
           _ = &mut stop_rx => break,
@@ -226,7 +224,7 @@ impl WSClient {
               if let Some(http_sender) = weak_http_sender.upgrade() {
                 let cloned_device_id = device_id.clone();
                 // Spawn a task here in case of blocking the current loop task.
-                tokio::spawn(async move {
+                platform_spawn(async move {
                   if let Err(err) = http_sender.send_ws_msg(&cloned_device_id, msg).await {
                     error!("Failed to send WebSocket message over HTTP: {}", err);
                   }
@@ -307,39 +305,5 @@ impl WSClient {
 
   async fn set_state(&self, state: ConnectState) {
     self.state_notify.lock().set_state(state);
-  }
-}
-
-struct RetryCondition {
-  connecting_addr: String,
-  addr: Weak<parking_lot::Mutex<Option<String>>>,
-  state_notify: Weak<parking_lot::Mutex<ConnectStateNotify>>,
-}
-impl Condition<WSError> for RetryCondition {
-  fn should_retry(&mut self, error: &WSError) -> bool {
-    if let WSError::AuthError(err) = error {
-      debug!("{}, stop retry connect", err);
-
-      if let Some(state_notify) = self.state_notify.upgrade() {
-        state_notify.lock().set_state(ConnectState::Unauthorized);
-      }
-
-      return false;
-    }
-
-    let should_retry = self
-      .addr
-      .upgrade()
-      .map(|addr| match addr.try_lock() {
-        None => false,
-        Some(addr) => match &*addr {
-          None => false,
-          Some(addr) => addr == &self.connecting_addr,
-        },
-      })
-      .unwrap_or(false);
-
-    debug!("WSClient should_retry: {}", should_retry);
-    should_retry
   }
 }

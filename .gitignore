@@ -13,3 +13,4 @@ node_modules
 data/
 .env
 .logs
+shell.nix

@@ -39,17 +39,28 @@ pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
-    .service(web::resource("list").route(web::get().to(list_handler)))
-    .service(web::resource("{workspace_id}/open").route(web::put().to(open_workspace_handler)))
+
+    // deprecated, use the api below instead
+    .service(web::resource("/list").route(web::get().to(list_workspace_handler)))
+
+    .service(web::resource("")
+      .route(web::get().to(list_workspace_handler))
+      .route(web::post().to(create_workpace_handler))
+    )
+    .service(web::resource("/{workspace_id}")
+      .route(web::delete().to(delete_workspace_handler))
+    )
+
+    .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
     .service(
-      web::resource("{workspace_id}/member")
+      web::resource("/{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))
         .route(web::post().to(add_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
     )
     .service(
-      web::resource("{workspace_id}/collab/{object_id}")
+      web::resource("/{workspace_id}/collab/{object_id}")
         .app_data(
           PayloadConfig::new(5 * 1024 * 1024), // 5 MB
         )
@@ -59,37 +70,37 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(delete_collab_handler)),
     )
     .service(
-      web::resource("{workspace_id}/batch/collab")
+      web::resource("/{workspace_id}/batch/collab")
         .route(web::post().to(create_collab_list_handler)),
     )
     // will be deprecated
     .service(
-      web::resource("{workspace_id}/collabs")
+      web::resource("/{workspace_id}/collabs")
           .app_data(PayloadConfig::new(10 * 1024 * 1024))
           .route(web::post().to(batch_create_collab_handler)),
     )
     .service(
-      web::resource("{workspace_id}/{object_id}/snapshot")
+      web::resource("/{workspace_id}/{object_id}/snapshot")
         .route(web::get().to(get_collab_snapshot_handler))
         .route(web::post().to(create_collab_snapshot_handler)),
     )
     .service(
-      web::resource("{workspace_id}/{object_id}/snapshot/list")
+      web::resource("/{workspace_id}/{object_id}/snapshot/list")
         .route(web::get().to(get_all_collab_snapshot_list_handler)),
     )
     .service(
-      web::resource("{workspace_id}/collab/{object_id}/member")
+      web::resource("/{workspace_id}/collab/{object_id}/member")
         .route(web::post().to(add_collab_member_handler))
         .route(web::get().to(get_collab_member_handler))
         .route(web::put().to(update_collab_member_handler))
         .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
-      web::resource("{workspace_id}/collab/{object_id}/member/list")
+      web::resource("/{workspace_id}/collab/{object_id}/member/list")
         .route(web::get().to(get_collab_member_list_handler)),
     )
     .service(
-      web::resource("{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
+      web::resource("/{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
     )
 }
 
@@ -103,8 +114,35 @@ pub fn collab_scope() -> Scope {
   )
 }
 
+// Adds a workspace for user, if success, return the workspace id
 #[instrument(skip_all, err)]
-async fn list_handler(
+async fn create_workpace_handler(
+  uuid: UserUuid,
+  state: Data<AppState>,
+  create_workspace_param: Json<CreateWorkspaceParam>,
+) -> Result<Json<AppResponse<AFWorkspace>>> {
+  let workspace_name = create_workspace_param
+    .into_inner()
+    .workspace_name
+    .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
+  let new_workspace =
+    workspace::ops::create_workspace_for_user(&state.pg_pool, &uuid, &workspace_name).await?;
+  Ok(AppResponse::Ok().with_data(new_workspace).into())
+}
+
+async fn delete_workspace_handler(
+  _user_id: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  // TODO: add permission for workspace deletion
+  workspace::ops::delete_workspace_for_user(&state.pg_pool, &workspace_id).await?;
+  Ok(AppResponse::Ok().into())
+}
+
+// TODO: also get shared workspaces
+#[instrument(skip_all, err)]
+async fn list_workspace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFWorkspaces>> {

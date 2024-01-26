@@ -77,3 +77,8 @@ pub struct BlobMetadata {
   pub file_size: i64,
   pub modified_at: DateTime<Utc>,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateWorkspaceParam {
+  pub workspace_name: Option<String>,
+}

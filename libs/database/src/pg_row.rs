@@ -108,7 +108,7 @@ pub struct AFWorkspaceMemberPermRow {
   pub workspace_id: Uuid,
 }
 
-#[derive(FromRow, Serialize, Deserialize)]
+#[derive(Debug, FromRow, Serialize, Deserialize)]
 pub struct AFWorkspaceMemberRow {
   pub uid: i64,
   pub name: String,

@@ -2,6 +2,7 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
+use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 
@@ -491,8 +492,39 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn create_workspace(
+    &self,
+    params: CreateWorkspaceParam,
+  ) -> Result<AFWorkspace, AppResponseError> {
+    let url = format!("{}/api/workspace", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFWorkspace>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
-    let url = format!("{}/api/workspace/list", self.base_url);
+    let url = format!("{}/api/workspace", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?

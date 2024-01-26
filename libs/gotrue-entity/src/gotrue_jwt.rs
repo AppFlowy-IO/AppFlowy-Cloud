@@ -35,6 +35,16 @@ lazy_static::lazy_static! {
 
 impl GoTrueJWTClaims {
   pub fn verify(token: &str, secret: &[u8]) -> Result<Self, jsonwebtoken::errors::Error> {
-    Ok(decode(token, &DecodingKey::from_secret(secret), &VALIDATION)?.claims)
+    let claims = decode::<Self>(token, &DecodingKey::from_secret(secret), &VALIDATION)?.claims;
+
+    let ts_expiry = claims.exp.ok_or_else(|| {
+      jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("expect exp but not found".to_owned())
+    })?;
+
+    let ts_now = chrono::Utc::now().timestamp();
+    match ts_now > ts_expiry {
+      true => Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into()),
+      false => Ok(claims),
+    }
   }
 }

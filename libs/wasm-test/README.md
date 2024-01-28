@@ -1,12 +1,12 @@
 
 ## Run test
 
-before running the test, it requires to install the [chrome driver](https://chromedriver.chromium.org/downloads).
-for mac user, you can install it by brew.
-
-```shell
-brew install chromedriver
-```
+> Before executing the test, you need to install the [Chrome Driver](https://chromedriver.chromium.org/downloads). If
+> you are using a Mac, you can easily install it using Homebrew.
+>
+> ```shell
+> brew install chromedriver
+> ```
 
 then run the test
 

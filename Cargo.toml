@@ -169,6 +169,9 @@ collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = 
 collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
 collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
 
+[features]
+custom_env= []
+
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }
 #collab-entity = { path = "libs/AppFlowy-Collab/collab-define" }

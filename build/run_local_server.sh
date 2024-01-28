@@ -61,7 +61,7 @@ MAX_RESTARTS=5
 RESTARTS=0
 # Start the server and restart it on failure
 while [ "$RESTARTS" -lt "$MAX_RESTARTS" ]; do
-  RUST_LOG=trace RUST_BACKTRACE=full cargo run &
+  RUST_LOG=trace RUST_BACKTRACE=full cargo run --features="custom_env" &
   PID=$!
   wait $PID || {
     RESTARTS=$((RESTARTS+1))

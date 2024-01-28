@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::env;
 use tracing::warn;
 
-#[cfg(not(feature = "wasm_test"))]
+#[cfg(not(target_arch = "wasm32"))]
 lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> =
     get_env_var("LOCALHOST_URL", "http://localhost:8000");
@@ -16,7 +16,7 @@ lazy_static! {
 }
 
 // The env vars are not available in wasm32-unknown-unknown
-#[cfg(feature = "wasm_test")]
+#[cfg(target_arch = "wasm32")]
 lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> = Cow::Owned("http://localhost".to_string());
   pub static ref LOCALHOST_WS: Cow<'static, str> = Cow::Owned("ws://localhost/ws".to_string());

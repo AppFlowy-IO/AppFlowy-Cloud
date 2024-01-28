@@ -17,3 +17,5 @@ flake.nix
 flake.lock
 .envrc
 .direnv/
+
+**/.env.*

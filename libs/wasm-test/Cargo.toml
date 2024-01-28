@@ -13,6 +13,3 @@ client-api-test-util = { path = "../client-api-test-util" }
 client-api = { path = "../client-api" }
 tokio = { version = "1", features = ["sync", "macros"] }
 wasm-bindgen-futures = "0.4"
-
-[features]
-wasm_test = ["client-api-test-util/wasm_test"]

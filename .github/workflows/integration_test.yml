@@ -65,5 +65,5 @@ jobs:
         working-directory: ./libs/wasm-test
         run: | 
           cargo install wasm-pack
-          wasm-pack test --headless --firefox --features="wasm_test"
+          wasm-pack test --headless --firefox
           

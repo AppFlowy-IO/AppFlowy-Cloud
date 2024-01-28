@@ -1,3 +1,4 @@
+use anyhow::Context;
 use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
@@ -82,14 +83,20 @@ impl DatabaseSetting {
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let config = Config {
-    app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local").parse()?,
+    app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local")
+      .parse()
+      .context("fail to get APPFLOWY_ENVIRONMENT")?,
     db_settings: DatabaseSetting {
       pg_conn_opts: PgConnectOptions::from_str(&get_env_var(
         "APPFLOWY_DATABASE_URL",
         "postgres://postgres:password@localhost:5432/postgres",
       ))?,
-      require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false").parse()?,
-      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20").parse()?,
+      require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false")
+        .parse()
+        .context("fail to get APPFLOWY_DATABASE_REQUIRE_SSL")?,
+      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20")
+        .parse()
+        .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
       database_name: get_env_var("APPFLOWY_DATABASE_NAME", "postgres"),
     },
     gotrue: GoTrueSetting {
@@ -102,7 +109,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     application: ApplicationSetting {
       port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
       host: get_env_var("APPFLOWY_APPLICATION_HOST", "0.0.0.0"),
-      use_tls: get_env_var("APPFLOWY_APPLICATION_USE_TLS", "false").parse()?,
+      use_tls: get_env_var("APPFLOWY_APPLICATION_USE_TLS", "false")
+        .parse()
+        .context("fail to get APPFLOWY_APPLICATION_USE_TLS")?,
       server_key: get_env_var("APPFLOWY_APPLICATION_SERVER_KEY", "server_key").into(),
     },
     websocket: WebsocketSetting {
@@ -111,7 +120,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {
-      use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true").parse()?,
+      use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
+        .parse()
+        .context("fail to get APPFLOWY_S3_USE_MINIO")?,
       minio_url: get_env_var("APPFLOWY_S3_MINIO_URL", "http://localhost:9000"),
       access_key: get_env_var("APPFLOWY_S3_ACCESS_KEY", "minioadmin"),
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
@@ -126,17 +137,14 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
 }
 
 fn get_env_var(key: &str, default: &str) -> String {
-  match std::env::var(key) {
-    Ok(value) => value,
-    Err(e) => {
-      tracing::warn!(
-        "failed to read environment variable: {}, using default value: {}",
-        e,
-        default
-      );
-      default.to_owned()
-    },
-  }
+  std::env::var(key).unwrap_or_else(|e| {
+    tracing::warn!(
+      "failed to read environment variable: {}, using default value: {}",
+      e,
+      default
+    );
+    default.to_owned()
+  })
 }
 
 /// The possible runtime environment for our application.

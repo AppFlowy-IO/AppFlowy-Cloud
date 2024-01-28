@@ -12,3 +12,4 @@ anyhow = "1.0.79"
 lazy_static = "1.4.0"
 jsonwebtoken = "8.3.0"
 app-error = { workspace = true, features = ["gotrue_error"] }
+chrono = "0.4.33"

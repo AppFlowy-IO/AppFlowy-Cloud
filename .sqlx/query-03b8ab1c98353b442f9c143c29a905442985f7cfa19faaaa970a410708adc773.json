@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT * FROM public.af_workspace WHERE owner_uid = (\n        SELECT uid FROM public.af_user WHERE uuid = $1\n      )\n    ",
+  "query": "\n      SELECT * FROM public.af_workspace\n      WHERE workspace_id IN (\n        SELECT workspace_id FROM public.af_workspace_member\n        WHERE af_workspace_member.uid = (SELECT uid FROM public.af_user WHERE uuid = $1)\n      );\n    ",
   "describe": {
     "columns": [
       {
@@ -54,5 +54,5 @@
       true
     ]
   },
-  "hash": "030b315f14742d266f545d6db37cc8cb083f9d52ebecd252311c4faf6fb5ab22"
+  "hash": "03b8ab1c98353b442f9c143c29a905442985f7cfa19faaaa970a410708adc773"
 }

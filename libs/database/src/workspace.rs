@@ -409,19 +409,23 @@ pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
   Ok(workspaces)
 }
 
+/// Returns a list of workspaces that the user is part of.
+/// User may owner or non-owner.
 #[inline]
 pub async fn select_all_user_workspaces(
   pool: &PgPool,
-  owner_uuid: &Uuid,
+  user_uuid: &Uuid,
 ) -> Result<Vec<AFWorkspaceRow>, AppError> {
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-      SELECT * FROM public.af_workspace WHERE owner_uid = (
-        SELECT uid FROM public.af_user WHERE uuid = $1
-      )
+      SELECT * FROM public.af_workspace
+      WHERE workspace_id IN (
+        SELECT workspace_id FROM public.af_workspace_member
+        WHERE af_workspace_member.uid = (SELECT uid FROM public.af_user WHERE uuid = $1)
+      );
     "#,
-    owner_uuid
+    user_uuid
   )
   .fetch_all(pool)
   .await?;

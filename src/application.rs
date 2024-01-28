@@ -3,7 +3,6 @@ use crate::biz::casbin::adapter::PgAdapter;
 use crate::biz::casbin::MODEL_CONF;
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
-use crate::middleware::cors_mw::default_cors;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::AppState;
@@ -119,7 +118,6 @@ pub async fn run(
           .cookie_name(HEADER_TOKEN.to_string())
           .build(),
       )
-      .wrap(default_cors())
       // .wrap(DecryptPayloadMiddleware)
       .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())

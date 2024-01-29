@@ -24,6 +24,7 @@ lazy_static! {
     Cow::Owned("http://localhost/gotrue".to_string());
 }
 
+#[allow(dead_code)]
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {
   dotenv().ok();
   match env::var(key) {

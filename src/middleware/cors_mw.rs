@@ -1,10 +1,8 @@
 use actix_cors::Cors;
 use actix_web::http;
 
-// https://javascript.info/fetch-crossorigin#cors-for-safe-requests
-// https://docs.rs/actix-cors/0.5.4/actix_cors/index.html
-// http://www.ruanyifeng.com/blog/2016/04/cors.html
-// Cors short for Cross-Origin Resource Sharing.
+// Deprecated
+// AppFlowy Cloud uses nginx to configure CORS
 pub fn default_cors() -> Cors {
   Cors::default() // allowed_origin return access-control-allow-origin: * by default
     .allow_any_origin()

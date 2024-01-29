@@ -7,7 +7,7 @@ pub fn default_cors() -> Cors {
   Cors::default() // allowed_origin return access-control-allow-origin: * by default
     .allow_any_origin()
     .send_wildcard()
-    .allowed_methods(vec!["GET", "POST", "PUT", "OPTIONS", "DELETE"])
+    .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
     .allowed_headers(vec![
       actix_web::http::header::AUTHORIZATION,
       actix_web::http::header::ACCEPT,

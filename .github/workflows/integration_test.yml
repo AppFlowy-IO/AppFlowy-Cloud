@@ -43,6 +43,12 @@ jobs:
           # expose port for sqlx tests
           sed -i '38s/$/\n    ports:\n      - 5432:5432/' docker-compose.yml
 
+      - name: Update Nginx Configuration
+        run: |
+          # the wasm-pack headless tests will run on random ports, so we need to allow all origins
+          sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
+        
+
       - name: Disable appflowyinc images
         run: |
           sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml

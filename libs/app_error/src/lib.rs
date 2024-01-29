@@ -212,7 +212,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
         (400, m) if m.starts_with("User already registered") => {
           AppError::UserAlreadyRegistered(err.msg)
         },
-        (401, _) => AppError::UserUnAuthorized(err.msg),
+        (401, _) => AppError::UserUnAuthorized(format!("{}:{}", err.code, err.msg)),
         (422, _) => AppError::InvalidRequest(err.msg),
         _ => AppError::OAuthError(err.to_string()),
       },

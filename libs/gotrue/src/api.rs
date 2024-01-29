@@ -12,7 +12,6 @@ use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
 use gotrue_entity::sso::{SSOProvider, SSOProviders};
 use infra::reqwest::{check_response, from_body, from_response};
 use reqwest::{Method, RequestBuilder};
-use tracing::{instrument, trace};
 
 #[derive(Clone)]
 pub struct Client {

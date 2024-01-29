@@ -1,5 +1,4 @@
-use crate::platform_spawn;
-use crate::ws::{ConnectState, ConnectStateNotify};
+use crate::ws::ConnectStateNotify;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;

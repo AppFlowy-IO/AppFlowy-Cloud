@@ -31,7 +31,7 @@ jobs:
 
       - name: Build ClientAPI WASM
         working-directory: ./libs/client-api
-        run: wasm-pack build --features="wasm_build"
+        run: wasm-pack build
 
       - name: Check ClientAPI Dependencies
         run: bash ./build/client_api_deps_check.sh

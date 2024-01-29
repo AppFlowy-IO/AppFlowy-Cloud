@@ -26,7 +26,7 @@ async fn main() {
     .init();
 
   let gotrue_client = gotrue::api::Client::new(
-    reqwest::Client::new(),
+    reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build(),
     &std::env::var("GOTRUE_URL").unwrap_or("http://gotrue:9999".to_string()),
   );
   let redis_client =

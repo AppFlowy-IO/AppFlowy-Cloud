@@ -1,4 +1,5 @@
-use client_api::{Client, ClientConfiguration};
+use client_api::config::ClientConfiguration;
+use client_api::Client;
 use dotenv::dotenv;
 use lazy_static::lazy_static;
 use std::borrow::Cow;

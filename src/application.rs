@@ -350,7 +350,10 @@ async fn migrate(pool: &PgPool) -> Result<(), Error> {
 
 async fn get_gotrue_client(setting: &GoTrueSetting) -> Result<gotrue::api::Client, Error> {
   info!("Connecting to GoTrue with setting: {:?}", setting);
-  let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &setting.base_url);
+  let gotrue_client = gotrue::api::Client::new(
+    reqwest_middleware::ClientBuilder::new(reqwest::Client::new()).build(),
+    &setting.base_url,
+  );
   let _ = gotrue_client
     .health()
     .await

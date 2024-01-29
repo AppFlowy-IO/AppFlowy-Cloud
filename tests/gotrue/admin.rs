@@ -8,7 +8,7 @@ use gotrue::{
 #[tokio::test]
 async fn admin_user_create_list_edit_delete() {
   let http_client = reqwest::Client::new();
-  let gotrue_client = Client::new(http_client, &LOCALHOST_GOTRUE);
+  let gotrue_client = Client::new(http_client.into(), &LOCALHOST_GOTRUE);
   let admin_token = gotrue_client
     .token(&Grant::Password(PasswordGrant {
       email: ADMIN_USER.email.clone(),
@@ -110,7 +110,7 @@ async fn admin_generate_link_and_user_sign_in_and_invite() {
   // admin generate link for new user
   let new_user_sign_in_link = {
     let http_client = reqwest::Client::new();
-    let gotrue_client = Client::new(http_client, &LOCALHOST_GOTRUE);
+    let gotrue_client = Client::new(http_client.into(), &LOCALHOST_GOTRUE);
     let admin_token = gotrue_client
       .token(&Grant::Password(PasswordGrant {
         email: ADMIN_USER.email.clone(),

@@ -342,6 +342,7 @@ dependencies = [
  "jwt",
  "redis",
  "reqwest",
+ "reqwest-middleware",
  "serde",
  "serde_json",
  "tokio",
@@ -496,6 +497,7 @@ dependencies = [
  "bincode",
  "getrandom 0.2.12",
  "reqwest",
+ "reqwest-middleware",
  "rust-s3",
  "serde",
  "serde_json",
@@ -561,6 +563,7 @@ dependencies = [
  "realtime-entity",
  "redis",
  "reqwest",
+ "reqwest-middleware",
  "rust-s3",
  "scraper",
  "secrecy",
@@ -1243,11 +1246,13 @@ dependencies = [
  "realtime-entity",
  "realtime-protocol",
  "reqwest",
+ "reqwest-middleware",
  "scraper",
  "serde",
  "serde_json",
  "serde_repr",
  "shared-entity",
+ "task-local-extensions",
  "thiserror",
  "tokio",
  "tokio-retry",
@@ -2236,6 +2241,7 @@ dependencies = [
  "gotrue-entity",
  "infra",
  "reqwest",
+ "reqwest-middleware",
  "serde",
  "serde_json",
  "tokio",
@@ -4097,6 +4103,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "native-tls",
  "once_cell",
  "percent-encoding",
@@ -4119,6 +4126,21 @@ dependencies = [
  "web-sys",
  "webpki-roots 0.25.3",
  "winreg",
+]
+
+[[package]]
+name = "reqwest-middleware"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88a3e86aa6053e59030e7ce2d2a3b258dd08fc2d337d52f73f6cb480f5858690"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "http",
+ "reqwest",
+ "serde",
+ "task-local-extensions",
+ "thiserror",
 ]
 
 [[package]]
@@ -5172,6 +5194,15 @@ name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
+name = "task-local-extensions"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba323866e5d033818e3240feeb9f7db2c4296674e4d9e16b97b7bf8f490434e8"
+dependencies = [
+ "pin-utils",
+]
 
 [[package]]
 name = "tempfile"

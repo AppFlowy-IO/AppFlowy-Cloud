@@ -27,3 +27,4 @@ tower = "0.4.13"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
 jwt = "0.16.0"
+reqwest-middleware = "0.2.4"

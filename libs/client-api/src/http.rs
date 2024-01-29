@@ -1,7 +1,10 @@
+use crate::config::ClientConfiguration;
 use crate::notify::{ClientToken, TokenStateReceiver};
+use crate::refresher::Refresher;
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware, RequestBuilder};
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
@@ -29,7 +32,6 @@ use reqwest::{header, StatusCode};
 use collab_entity::CollabType;
 use reqwest::header::HeaderValue;
 use reqwest::Method;
-use reqwest::RequestBuilder;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
@@ -40,7 +42,7 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{event, instrument, trace, warn};
+use tracing::{event, instrument, trace};
 use url::Url;
 
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
@@ -50,43 +52,6 @@ pub const CLIENT_API_VERSION: &str = "0.0.3";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
-
-#[derive(Clone)]
-pub struct ClientConfiguration {
-  /// Lower Levels (0-4): Faster compression and decompression speeds but lower compression ratios. Suitable for scenarios where speed is more critical than reducing data size.
-  /// Medium Levels (5-9): A balance between compression ratio and speed. These levels are generally good for a mix of performance and efficiency.
-  /// Higher Levels (10-11): The highest compression ratios, but significantly slower and more resource-intensive. These are typically used in scenarios where reducing data size is paramount and resource usage is a secondary concern, such as for static content compression in web servers.
-  pub(crate) compression_quality: u32,
-  /// A larger buffer size means more data is compressed in a single operation, which can lead to better compression ratios
-  /// since Brotli has more data to analyze for patterns and repetitions.
-  pub(crate) compression_buffer_size: usize,
-}
-
-impl ClientConfiguration {
-  pub fn with_compression_buffer_size(mut self, compression_buffer_size: usize) -> Self {
-    self.compression_buffer_size = compression_buffer_size;
-    self
-  }
-
-  pub fn with_compression_quality(mut self, compression_quality: u32) -> Self {
-    self.compression_quality = if compression_quality > 11 {
-      warn!("compression_quality is larger than 11, set it to 11");
-      11
-    } else {
-      compression_quality
-    };
-    self
-  }
-}
-
-impl Default for ClientConfiguration {
-  fn default() -> Self {
-    Self {
-      compression_quality: 8,
-      compression_buffer_size: 10240,
-    }
-  }
-}
 
 /// `Client` is responsible for managing communication with the GoTrue API and cloud storage.
 ///
@@ -102,7 +67,7 @@ impl Default for ClientConfiguration {
 ///
 #[derive(Clone)]
 pub struct Client {
-  pub(crate) cloud_client: reqwest::Client,
+  pub(crate) cloud_client: ClientWithMiddleware,
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
   ws_addr: String,
@@ -126,13 +91,16 @@ impl Client {
   /// - `ws_addr`: The WebSocket address for real-time communication.
   /// - `gotrue_url`: The URL for the GoTrue API.
   pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str, config: ClientConfiguration) -> Self {
-    let reqwest_client = reqwest::Client::new();
+    let token = Arc::new(RwLock::new(ClientToken::new()));
+    let reqwest_client = ClientBuilder::new(reqwest::Client::new())
+      .with(Refresher::new(token.clone(), gotrue_url))
+      .build();
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
       cloud_client: reqwest_client.clone(),
       gotrue_client: gotrue::api::Client::new(reqwest_client, gotrue_url),
-      token: Arc::new(RwLock::new(ClientToken::new())),
+      token,
       is_refreshing_token: Default::default(),
       refresh_ret_txs: Default::default(),
       config,
@@ -317,7 +285,11 @@ impl Client {
   /// Used to extract the sign in url from the action link
   /// Only expose this method for testing
   pub async fn extract_sign_in_url(&self, action_link: &str) -> Result<String, AppResponseError> {
-    let resp = reqwest::Client::new().get(action_link).send().await?;
+    let resp = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+      .build()
+      .get(action_link)
+      .send()
+      .await?;
     let html = resp.text().await.unwrap();
 
     trace!("action_link:{}, html: {}", action_link, html);

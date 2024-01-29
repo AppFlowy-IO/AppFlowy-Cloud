@@ -167,8 +167,8 @@ impl AppError {
   }
 }
 
-impl From<reqwest::Error> for AppError {
-  fn from(error: reqwest::Error) -> Self {
+impl From<reqwest_middleware::Error> for AppError {
+  fn from(error: reqwest_middleware::Error) -> Self {
     #[cfg(not(target_arch = "wasm32"))]
     if error.is_connect() {
       return AppError::Connect(error.to_string());
@@ -182,6 +182,12 @@ impl From<reqwest::Error> for AppError {
       return AppError::InvalidRequest(error.to_string());
     }
     AppError::Unhandled(error.to_string())
+  }
+}
+
+impl From<reqwest::Error> for AppError {
+  fn from(error: reqwest::Error) -> Self {
+    reqwest_middleware::Error::middleware(error).into()
   }
 }
 

@@ -6,7 +6,7 @@ use reqwest::{Request, Response, StatusCode};
 use reqwest_middleware::Result;
 use reqwest_middleware::{Middleware, Next};
 use task_local_extensions::Extensions;
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::notify::ClientToken;
 
@@ -36,58 +36,65 @@ impl Middleware for Refresher {
     extensions: &mut Extensions,
     next: Next<'_>,
   ) -> Result<Response> {
-    match req.try_clone() {
-      Some(mut cloned_req) => {
-        let next_cloned = next.clone();
-        let res = next.run(req, extensions).await;
-        match res {
-          Ok(res) => match res.status() {
-            StatusCode::FORBIDDEN | StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED => {
-              warn!("Bad request or unauthorized, trying to refresh token");
+    let mut cloned_req = match req.try_clone() {
+      Some(cloned_req) => cloned_req,
+      None => return next.run(req, extensions).await,
+    };
 
-              let token = self.token.read().clone();
-              let refresh_token = token
-                .as_ref()
-                .ok_or_else(|| anyhow::anyhow!("No refresh token found in Refresher middleware"))?
-                .refresh_token
-                .as_str()
-                .to_owned();
+    let next_cloned = next.clone();
+    let res = match next.run(req, extensions).await {
+      Ok(res) => res,
+      Err(err) => return Err(err),
+    };
 
-              let gotrue_client = self.gotrue_client.clone();
-              let grant = Grant::RefreshToken(RefreshTokenGrant { refresh_token });
+    match res.status() {
+      StatusCode::FORBIDDEN | StatusCode::BAD_REQUEST | StatusCode::UNAUTHORIZED => {},
+      _ => return Ok(res),
+    }
 
-              match gotrue_client.token(&grant).await {
-                Ok(new_token) => {
-                  let access_token = new_token.access_token.clone();
-                  // update token for next time use
-                  self.token.write().set(new_token);
+    let token = self.token.read().clone();
 
-                  let headers = cloned_req.headers_mut();
-                  match headers.remove("Authorization") {
-                    Some(prev_auth) => {
-                      info!("previouse auth: {:?}", prev_auth);
-                      headers.insert(
-                        "Authorization",
-                        format!("Bearer {}", access_token).parse().unwrap(),
-                      );
-                      next_cloned.run(cloned_req, extensions).await
-                    },
-                    // No previous auth header, just return the response
-                    None => Ok(res),
-                  }
-                },
-                Err(err) => {
-                  tracing::error!("Error refreshing token: {:?}", err);
-                  Ok(res)
-                },
-              }
-            },
-            _ => Ok(res),
-          },
-          Err(_) => res,
-        }
+    let refresh_token = match token.as_ref() {
+      Some(token) => token.refresh_token.as_str().to_owned(),
+      None => return Ok(res),
+    };
+
+    warn!("Bad request or unauthorized, trying to refresh token");
+    let gotrue_client = self.gotrue_client.clone();
+    let grant = Grant::RefreshToken(RefreshTokenGrant { refresh_token });
+
+    let new_token = match gotrue_client.token(&grant).await {
+      Ok(new_token) => new_token,
+      Err(err) => {
+        tracing::error!("Error refreshing token: {:?}", err);
+        return Ok(res);
       },
-      None => next.run(req, extensions).await,
+    };
+
+    // clone access_token for next request
+    let access_token = new_token.access_token.clone();
+
+    // update token for next time use
+    self.token.write().set(new_token);
+
+    // update Authorization header
+    let headers = cloned_req.headers_mut();
+    match headers.remove("Authorization") {
+      Some(_) => {},
+      None => return Ok(res), // previous request doesn't have Authorization header
+    };
+    headers.insert(
+      "Authorization",
+      format!("Bearer {}", access_token).parse().unwrap(),
+    );
+
+    // Do request for the second time with new token
+    match next_cloned.run(cloned_req, extensions).await {
+      Ok(new_res) => Ok(new_res),
+      Err(err) => {
+        tracing::error!("successful refresh but still got error: {:?}", err);
+        Ok(res)
+      },
     }
   }
 }

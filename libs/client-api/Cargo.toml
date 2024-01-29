@@ -43,6 +43,8 @@ serde.workspace = true
 database-entity.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
+reqwest-middleware = "0.2.4"
+task-local-extensions = "0.1.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"

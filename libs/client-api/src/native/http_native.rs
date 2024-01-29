@@ -1,11 +1,12 @@
 use crate::http::log_request_id;
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
-use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
+use app_error::gotrue::GoTrueError;
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::CollabParams;
 use futures_util::stream;
+use gotrue::grant::{Grant, RefreshTokenGrant};
 use prost::Message;
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use reqwest::{Body, Method};
@@ -13,9 +14,7 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::RetryIf;
-use tracing::{event, instrument};
+use tracing::{event, instrument, warn};
 
 impl Client {
   #[instrument(level = "debug", skip_all, err)]
@@ -122,24 +121,43 @@ impl Client {
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(10)).take(4);
-    let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
-    match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
-      Ok(_) => {
-        event!(tracing::Level::INFO, "refresh token success");
-        Ok(())
-      },
-      Err(err) => {
-        let err = AppError::from(err);
-        event!(tracing::Level::ERROR, "refresh token failed: {}", err);
+    let mut current_retry_count = 0;
+    let max_retry_count = 4;
 
-        // If the error is an OAuth error, unset the token.
-        if err.is_unauthorized() {
-          self.token.write().unset();
-        }
-        Err(err.into())
-      },
+    let refresh_token = self
+      .token
+      .read()
+      .as_ref()
+      .ok_or(GoTrueError::NotLoggedIn(
+        "fail to refresh user token".to_owned(),
+      ))?
+      .refresh_token
+      .as_str()
+      .to_owned();
+    let grant_req = Grant::RefreshToken(RefreshTokenGrant { refresh_token });
+
+    while current_retry_count < max_retry_count {
+      current_retry_count += 1;
+
+      match self.gotrue_client.token(&grant_req).await {
+        Ok(new_token) => {
+          self.token.write().set(new_token);
+          return Ok(());
+        },
+        Err(err) => {
+          warn!("refresh token failed: {}", err);
+          if err.is_network_error() {
+            std::thread::sleep(Duration::from_secs(2));
+            continue;
+          }
+          return Err(AppResponseError::from(AppError::from(err)));
+        },
+      };
     }
+
+    Err(AppResponseError::from(AppError::from(
+      GoTrueError::NotLoggedIn("fail to refresh user token, max retry count reached".to_owned()),
+    )))
   }
 }
 

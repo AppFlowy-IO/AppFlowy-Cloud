@@ -13,8 +13,6 @@ node_modules
 data/
 .env
 .logs
-flake.nix
-flake.lock
 .envrc
 .direnv/
 

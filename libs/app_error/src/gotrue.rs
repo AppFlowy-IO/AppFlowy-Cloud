@@ -39,8 +39,8 @@ impl GoTrueError {
   }
 }
 
-impl From<reqwest::Error> for GoTrueError {
-  fn from(value: reqwest::Error) -> Self {
+impl From<reqwest_middleware::Error> for GoTrueError {
+  fn from(value: reqwest_middleware::Error) -> Self {
     #[cfg(not(target_arch = "wasm32"))]
     if value.is_connect() {
       return GoTrueError::Connect(value.to_string());
@@ -61,6 +61,12 @@ impl From<reqwest::Error> for GoTrueError {
     }
 
     GoTrueError::Unhandled(value.into())
+  }
+}
+
+impl From<reqwest::Error> for GoTrueError {
+  fn from(value: reqwest::Error) -> Self {
+    value.into()
   }
 }
 

@@ -11,15 +11,16 @@ use gotrue_entity::dto::{
 use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
 use gotrue_entity::sso::{SSOProvider, SSOProviders};
 use infra::reqwest::{check_response, from_body, from_response};
+use reqwest_middleware::ClientWithMiddleware;
 
 #[derive(Clone)]
 pub struct Client {
-  client: reqwest::Client,
+  client: ClientWithMiddleware,
   pub base_url: String,
 }
 
 impl Client {
-  pub fn new(client: reqwest::Client, base_url: &str) -> Self {
+  pub fn new(client: ClientWithMiddleware, base_url: &str) -> Self {
     Self {
       client,
       base_url: base_url.to_owned(),

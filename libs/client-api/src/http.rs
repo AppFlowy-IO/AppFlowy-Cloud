@@ -46,7 +46,7 @@ use url::Url;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 
-pub const CLIENT_API_VERSION: &str = "0.0.3";
+pub const CLIENT_API_VERSION: Option<&'static str> = std::option_env!("GITHUB_SHA");
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
@@ -987,7 +987,9 @@ impl Client {
   }
 
   pub async fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
-    self.refresh_if_required().await?;
+    self
+      .refresh_if_expired(chrono::Local::now().timestamp())
+      .await?;
 
     let access_token = self.access_token()?;
     Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
@@ -1151,13 +1153,12 @@ impl Client {
       .into_data()
   }
 
-  pub async fn refresh_if_required(&self) -> Result<(), AppResponseError> {
+  // Refresh token if given timestamp is close to the token expiration time
+  pub async fn refresh_if_expired(&self, ts: i64) -> Result<(), AppResponseError> {
     let expires_at = self.token_expires_at()?;
 
-    // Refresh token if it's about to expire
-    let time_now_sec = chrono::Local::now().timestamp();
-    if time_now_sec + 10 > expires_at {
-      // Add 10 seconds buffer
+    if ts + 30 > expires_at {
+      // Add 30 seconds buffer
       self.refresh_token().await?;
     }
     Ok(())
@@ -1169,14 +1170,16 @@ impl Client {
     method: Method,
     url: &str,
   ) -> Result<RequestBuilder, AppResponseError> {
-    self.refresh_if_required().await?;
+    let ts_now = chrono::Local::now().timestamp();
+    self.refresh_if_expired(ts_now).await?;
 
     let access_token = self.access_token()?;
     trace!("start request: {}, method: {}", url, method);
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", CLIENT_API_VERSION)
+      .header("client-version", CLIENT_API_VERSION.unwrap_or("unknown"))
+      .header("client-timestamp", ts_now.to_string())
       .bearer_auth(access_token);
     Ok(request_builder)
   }

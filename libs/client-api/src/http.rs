@@ -46,7 +46,7 @@ use url::Url;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 
-pub const CLIENT_API_VERSION: Option<&'static str> = std::option_env!("GITHUB_SHA");
+pub const CLIENT_API_VERSION: &str = "0.0.3";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
@@ -1178,7 +1178,7 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", CLIENT_API_VERSION.unwrap_or("unknown"))
+      .header("client-version", CLIENT_API_VERSION)
       .header("client-timestamp", ts_now.to_string())
       .bearer_auth(access_token);
     Ok(request_builder)

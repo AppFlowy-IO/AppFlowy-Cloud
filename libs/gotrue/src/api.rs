@@ -11,6 +11,7 @@ use gotrue_entity::dto::{
 use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
 use gotrue_entity::sso::{SSOProvider, SSOProviders};
 use infra::reqwest::{check_response, from_body, from_response};
+use reqwest::{Method, RequestBuilder};
 
 #[derive(Clone)]
 pub struct Client {
@@ -97,10 +98,9 @@ impl Client {
 
   #[tracing::instrument(skip_all, err)]
   pub async fn logout(&self, access_token: &str) -> Result<(), GoTrueError> {
+    let url = format!("{}/logout", self.base_url);
     let resp = self
-      .client
-      .post(format!("{}/logout", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::POST, &url, access_token)
       .send()
       .await?;
     Ok(check_response(resp).await?)
@@ -110,9 +110,7 @@ impl Client {
   pub async fn user_info(&self, access_token: &str) -> Result<User, GoTrueError> {
     let url = format!("{}/user", self.base_url);
     let resp = self
-      .client
-      .get(&url)
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::GET, &url, access_token)
       .send()
       .await?;
     to_gotrue_result(resp).await
@@ -123,10 +121,9 @@ impl Client {
     access_token: &str,
     update_user_params: &UpdateGotrueUserParams,
   ) -> Result<User, GoTrueError> {
+    let url = format!("{}/user", self.base_url);
     let resp = self
-      .client
-      .put(format!("{}/user", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::PUT, &url, access_token)
       .json(update_user_params)
       .send()
       .await?;
@@ -138,10 +135,9 @@ impl Client {
     &self,
     access_token: &str,
   ) -> Result<AdminListUsersResponse, GoTrueError> {
+    let url = format!("{}/admin/users", self.base_url);
     let resp = self
-      .client
-      .get(format!("{}/admin/users", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::GET, &url, access_token)
       .send()
       .await?;
     to_gotrue_result(resp).await
@@ -152,10 +148,9 @@ impl Client {
     access_token: &str,
     user_id: &str, // uuid
   ) -> Result<User, GoTrueError> {
+    let url = format!("{}/admin/users/{}", self.base_url, user_id);
     let resp = self
-      .client
-      .get(format!("{}/admin/users/{}", self.base_url, user_id))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::GET, &url, access_token)
       .send()
       .await?;
     to_gotrue_result(resp).await
@@ -167,10 +162,9 @@ impl Client {
     user_uuid: &str,
     delete_user_params: &AdminDeleteUserParams,
   ) -> Result<(), GoTrueError> {
+    let url = format!("{}/admin/users/{}", self.base_url, user_uuid);
     let resp = self
-      .client
-      .delete(format!("{}/admin/users/{}", self.base_url, user_uuid))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::DELETE, &url, access_token)
       .json(&delete_user_params)
       .send()
       .await?;
@@ -183,10 +177,9 @@ impl Client {
     user_uuid: &str,
     admin_user_params: &AdminUserParams,
   ) -> Result<User, GoTrueError> {
+    let url = format!("{}/admin/users/{}", self.base_url, user_uuid);
     let resp = self
-      .client
-      .put(format!("{}/admin/users/{}", self.base_url, user_uuid))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::PUT, &url, access_token)
       .json(&admin_user_params)
       .send()
       .await?;
@@ -198,10 +191,9 @@ impl Client {
     access_token: &str,
     admin_user_params: &AdminUserParams,
   ) -> Result<User, GoTrueError> {
+    let url = format!("{}/admin/users", self.base_url);
     let resp = self
-      .client
-      .post(format!("{}/admin/users", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::POST, &url, access_token)
       .json(&admin_user_params)
       .send()
       .await?;
@@ -213,10 +205,9 @@ impl Client {
     access_token: &str,
     generate_link_params: &GenerateLinkParams,
   ) -> Result<GenerateLinkResponse, GoTrueError> {
+    let url = format!("{}/admin/generate_link", self.base_url);
     let resp = self
-      .client
-      .post(format!("{}/admin/generate_link", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::POST, &url, access_token)
       .json(&generate_link_params)
       .send()
       .await?;
@@ -228,10 +219,9 @@ impl Client {
     access_token: &str,
     magic_link_params: &MagicLinkParams,
   ) -> Result<(), GoTrueError> {
+    let url = format!("{}/magiclink", self.base_url);
     let resp = self
-      .client
-      .post(format!("{}/magiclink", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::POST, &url, access_token)
       .json(&magic_link_params)
       .send()
       .await?;
@@ -242,10 +232,9 @@ impl Client {
     &self,
     access_token: &str,
   ) -> Result<SSOProviders, GoTrueError> {
+    let url = format!("{}/admin/sso/providers", self.base_url);
     let resp = self
-      .client
-      .get(format!("{}/admin/sso/providers", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::GET, &url, access_token)
       .send()
       .await?;
     to_gotrue_result(resp).await
@@ -256,10 +245,9 @@ impl Client {
     access_token: &str,
     create_sso_provider_params: &CreateSSOProviderParams,
   ) -> Result<SSOProvider, GoTrueError> {
+    let url = format!("{}/admin/sso/providers", self.base_url);
     let resp = self
-      .client
-      .post(format!("{}/admin/sso/providers", self.base_url))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::POST, &url, access_token)
       .json(create_sso_provider_params)
       .send()
       .await?;
@@ -271,10 +259,9 @@ impl Client {
     access_token: &str,
     idp_id: &str,
   ) -> Result<SSOProvider, GoTrueError> {
+    let url = format!("{}/admin/sso/providers/{}", self.base_url, idp_id);
     let resp = self
-      .client
-      .get(format!("{}/admin/sso/providers/{}", self.base_url, idp_id))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::GET, &url, access_token)
       .send()
       .await?;
     to_gotrue_result(resp).await
@@ -286,10 +273,9 @@ impl Client {
     idp_id: &str,
     create_sso_provider_params: &CreateSSOProviderParams,
   ) -> Result<SSOProvider, GoTrueError> {
+    let url = format!("{}/admin/sso/providers/{}", self.base_url, idp_id);
     let resp = self
-      .client
-      .put(format!("{}/admin/sso/providers/{}", self.base_url, idp_id))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::PUT, &url, access_token)
       .json(create_sso_provider_params)
       .send()
       .await?;
@@ -301,13 +287,21 @@ impl Client {
     access_token: &str,
     idp_id: &str,
   ) -> Result<SSOProvider, GoTrueError> {
+    let url = format!("{}/admin/sso/providers/{}", self.base_url, idp_id);
     let resp = self
-      .client
-      .delete(format!("{}/admin/sso/providers/{}", self.base_url, idp_id))
-      .header("Authorization", format!("Bearer {}", access_token))
+      .http_client_with_auth(Method::DELETE, &url, access_token)
       .send()
       .await?;
     to_gotrue_result(resp).await
+  }
+
+  pub fn http_client_with_auth(
+    &self,
+    method: Method,
+    url: &str,
+    access_token: &str,
+  ) -> RequestBuilder {
+    self.client.request(method, url).bearer_auth(access_token)
   }
 }
 

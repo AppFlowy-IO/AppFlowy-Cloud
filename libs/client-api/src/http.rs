@@ -40,7 +40,7 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{event, instrument, trace, warn};
+use tracing::{error, event, instrument, trace, warn};
 use url::Url;
 
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
@@ -215,8 +215,11 @@ impl Client {
       })?;
 
     let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    let (user, new) = self.verify_token(&access_token).await?;
+    if access_token.is_empty() {
+      return Err(AppError::OAuthError("Empty access token".to_string()).into());
+    }
 
+    let (user, new) = self.verify_token(&access_token).await?;
     self.token.write().set(GotrueTokenResponse {
       access_token,
       token_type: token_type.ok_or(url_missing_param("token_type"))?,
@@ -336,6 +339,7 @@ impl Client {
   }
 
   #[inline]
+  #[instrument(level = "debug", skip_all, err)]
   async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppResponseError> {
     let user = self.gotrue_client.user_info(access_token).await?;
     let is_new = self.verify_token_cloud(access_token).await?;
@@ -451,15 +455,20 @@ impl Client {
   pub fn access_token(&self) -> Result<String, AppResponseError> {
     match &self.token.try_read_for(Duration::from_secs(2)) {
       None => Err(AppError::Unhandled("Failed to read token".to_string()).into()),
-      Some(token) => Ok(
-        token
+      Some(token) => {
+        let access_token = token
           .as_ref()
           .ok_or(AppResponseError::from(AppError::NotLoggedIn(
             "fail to get access token. Token is empty".to_string(),
           )))?
           .access_token
-          .clone(),
-      ),
+          .clone();
+
+        if access_token.is_empty() {
+          error!("Unexpected empty access token");
+        }
+        Ok(access_token)
+      },
     }
   }
 

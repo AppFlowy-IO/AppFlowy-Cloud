@@ -13,7 +13,6 @@ actix-rt = "2"
 actix-web-actors = { version = "4.2.0" }
 actix-service = "2.0.2"
 actix-identity = "0.6.0"
-actix-cors = "0.6.5"
 actix-router = "0.5.2"
 actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
 openssl = { version = "0.10.62", features = ["vendored"] }
@@ -134,7 +133,6 @@ shared-entity = { path = "libs/shared-entity" }
 app-error = { path = "libs/app_error" }
 serde_json = "1.0.111"
 serde = { version = "1.0.195", features = ["derive"] }
-serde_repr = "0.1.18"
 bytes = "1.5.0"
 workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4"] }
@@ -159,9 +157,6 @@ inherits = "release"
 codegen-units = 16
 debug = true
 lto = false
-
-[profile.dev.package.sqlx-macros]
-opt-level = 3
 
 [patch.crates-io]
 collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }

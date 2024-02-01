@@ -98,7 +98,7 @@ AWS_REGION=us-east-1              # This option only applicable for AWS S3
 ```
 
 For authentication details, refer to the [Authentication](./AUTHENTICATION.md) documentation. You will need to update the
-redirect URI to match your host server's public IP or hostname, such as `http://<your-host-server-public-ip-or-hostname>/callback`.
+redirect URI to match your host server's public IP or hostname, such as `http://<your-host-server-public-ip-or-hostname>/gotrue/callback`.
 If using localhost, then just keep the default value.
 
 ```bash

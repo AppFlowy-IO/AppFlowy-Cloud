@@ -199,6 +199,7 @@ impl WSClient {
             info!("websocket close: {:?}", close);
           },
           Message::Pong(_) => {
+            info!("receive pong from server");
             if let Err(err) = pong_tx.send(()).await {
               error!("failed to receive server pong: {}", err);
             }

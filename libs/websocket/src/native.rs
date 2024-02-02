@@ -80,7 +80,9 @@ fn to_fut_message(msg: Result<Message>) -> FutMessage {
         Message::Text(inner) => Ok(crate::Message::Text(inner)),
         Message::Binary(inner) => Ok(crate::Message::Binary(inner)),
         Message::Close(inner) => Ok(crate::Message::Close(inner.map(Into::into))),
-        Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => return None,
+        Message::Pong(inner) => Ok(crate::Message::Pong(inner)),
+        Message::Ping(inner) => Ok(crate::Message::Ping(inner)),
+        Message::Frame(_) => return None,
       },
       Err(err) => Err(crate::Error::from(err)),
     };

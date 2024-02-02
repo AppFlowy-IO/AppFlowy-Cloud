@@ -92,10 +92,8 @@ pub struct GotrueTokenResponse {
 impl Display for GotrueTokenResponse {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("GotrueTokenResponse")
-      .field("access_token", &self.access_token)
       .field("expires_at", &self.expires_at)
       .field("token_type", &self.token_type)
-      .field("refresh_token", &self.refresh_token)
       .finish()
   }
 }

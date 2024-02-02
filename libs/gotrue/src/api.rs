@@ -116,7 +116,11 @@ impl Client {
     {
       Ok(resp) => to_gotrue_result(resp).await,
       Err(err) => {
-        event!(tracing::Level::ERROR, "access token: {}", access_token);
+        event!(
+          tracing::Level::ERROR,
+          "fail to get user info with access token: {}",
+          access_token
+        );
         Err(err.into())
       },
     }

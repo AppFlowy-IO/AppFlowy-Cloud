@@ -153,6 +153,7 @@ impl WSClientHttpSender for Client {
   }
 }
 
+// TODO(nathan): spawn for wasm
 pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + Send + 'static,

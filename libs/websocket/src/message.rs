@@ -40,12 +40,12 @@ impl Message {
 
   /// Indicates whether a message is a ping message.
   pub fn is_ping(&self) -> bool {
-    false
+    matches!(self, Message::Ping(_))
   }
 
   /// Indicates whether a message is a pong message.
   pub fn is_pong(&self) -> bool {
-    false
+    matches!(self, Message::Pong(_))
   }
 
   /// Indicates whether a message ia s close message.

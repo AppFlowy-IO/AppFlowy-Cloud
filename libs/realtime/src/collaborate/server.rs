@@ -168,7 +168,7 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    ctx.set_mailbox_capacity(100);
+    ctx.set_mailbox_capacity(1000);
   }
 }
 
@@ -203,7 +203,11 @@ where
       // when a new connection is established, remove the old connection from all groups
       remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
 
-      info!("new client stream:{}", &new_conn.user);
+      info!(
+        "new user: {}, connected user:{}",
+        &new_conn.user,
+        user_by_uid.read().keys().len()
+      );
       if let Some(old_stream) = client_stream_by_user
         .write()
         .await

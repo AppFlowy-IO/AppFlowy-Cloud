@@ -46,10 +46,17 @@ impl ClientToken {
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
   pub(crate) fn set(&mut self, new_token: GotrueTokenResponse) {
-    event!(tracing::Level::DEBUG, "Did set token: {:?}", new_token);
     let is_new = match &self.token {
       None => true,
-      Some(old_token) => old_token.access_token != new_token.access_token,
+      Some(old_token) => {
+        event!(
+          tracing::Level::INFO,
+          "old token:{}, new token:{}",
+          old_token,
+          new_token
+        );
+        old_token.access_token != new_token.access_token
+      },
     };
     self.token = Some(new_token);
 

@@ -1,5 +1,6 @@
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GoTrueJWTClaims {
@@ -22,6 +23,15 @@ pub struct GoTrueJWTClaims {
   pub session_id: Option<String>,
 }
 
+impl Display for GoTrueJWTClaims {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("GoTrueJWTClaims")
+      .field("exp", &self.exp)
+      .field("email", &self.email)
+      .finish()
+  }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Amr {
   pub method: String,
@@ -34,17 +44,21 @@ lazy_static::lazy_static! {
 }
 
 impl GoTrueJWTClaims {
-  pub fn verify(token: &str, secret: &[u8]) -> Result<Self, jsonwebtoken::errors::Error> {
-    let claims = decode::<Self>(token, &DecodingKey::from_secret(secret), &VALIDATION)?.claims;
+  pub fn decode(token: &str, secret: &[u8]) -> Result<Self, jsonwebtoken::errors::Error> {
+    let token_data = decode::<Self>(token, &DecodingKey::from_secret(secret), &VALIDATION)?;
+    Ok(token_data.claims)
+  }
 
+  pub fn verify_claim(claims: &GoTrueJWTClaims) -> Result<(), jsonwebtoken::errors::Error> {
     let ts_expiry = claims.exp.ok_or_else(|| {
       jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("expect exp but not found".to_owned())
     })?;
 
     let ts_now = chrono::Utc::now().timestamp();
-    match ts_now > ts_expiry {
-      true => Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into()),
-      false => Ok(claims),
+    if ts_now > ts_expiry {
+      Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into())
+    } else {
+      Ok(())
     }
   }
 }

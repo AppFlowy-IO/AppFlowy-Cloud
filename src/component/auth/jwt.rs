@@ -144,9 +144,19 @@ fn gotrue_jwt_claims_from_token(
   token: &str,
   state: &Data<AppState>,
 ) -> Result<GoTrueJWTClaims, actix_web::Error> {
-  GoTrueJWTClaims::verify(
+  let claims = GoTrueJWTClaims::decode(
     token,
     state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
   )
-  .map_err(actix_web::error::ErrorUnauthorized)
+  .map_err(|err| {
+    actix_web::error::ErrorUnauthorized(format!("fail to decode token:{}, error:{}", token, err))
+  })?;
+
+  GoTrueJWTClaims::verify_claim(&claims).map_err(|err| {
+    actix_web::error::ErrorUnauthorized(format!(
+      "fail to verify token:{}, claims:{}, error:{}",
+      token, claims, err
+    ))
+  })?;
+  Ok(claims)
 }

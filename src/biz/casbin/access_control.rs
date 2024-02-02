@@ -7,8 +7,8 @@ use casbin::{CoreApi, MgmtApi};
 use database::user::select_uid_from_uuid;
 use sqlx::PgPool;
 use tokio::sync::{broadcast, RwLock};
-use tracing::instrument;
 use tracing::log::warn;
+use tracing::{error, instrument};
 
 use uuid::Uuid;
 
@@ -272,26 +272,34 @@ impl CollabAccessControl for CasbinCollabAccessControl {
       .map(AFAccessLevel::from);
 
     if access_level.is_none() {
-      if let Ok(member) = self
+      match self
         .casbin_access_control
         .get_collab_member(&uid, oid)
         .await
       {
-        access_level = Some(member.permission.access_level);
-        self
-          .casbin_access_control
-          .update(
-            &uid,
-            &ObjectType::Collab(oid),
-            &ActionType::Level(member.permission.access_level),
-          )
-          .await?;
+        Ok(member) => {
+          access_level = Some(member.permission.access_level);
+          self
+            .casbin_access_control
+            .update(
+              &uid,
+              &ObjectType::Collab(oid),
+              &ActionType::Level(member.permission.access_level),
+            )
+            .await?;
+        },
+        Err(err) => {
+          error!(
+            "Failed to get member:{} in collab:{}, error: {}",
+            uid, oid, err
+          );
+        },
       }
     }
 
     access_level.ok_or(AppError::RecordNotFound(format!(
-      "collab:{} does not exist or user:{} is not a member",
-      oid, uid
+      "user:{} is not a member of collab:{}",
+      uid, oid
     )))
   }
 

@@ -16,6 +16,7 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("realtime={}", level));
   filters.push(format!("database={}", level));
   filters.push(format!("storage={}", level));
+  filters.push(format!("gotrue={}", level));
   let conf =
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
   init_subscriber(&conf.app_env, filters);

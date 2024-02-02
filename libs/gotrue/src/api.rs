@@ -12,6 +12,7 @@ use gotrue_entity::error::{GoTrueError, GoTrueErrorSerde, GotrueClientError};
 use gotrue_entity::sso::{SSOProvider, SSOProviders};
 use infra::reqwest::{check_response, from_body, from_response};
 use reqwest::{Method, RequestBuilder};
+use tracing::event;
 
 #[derive(Clone)]
 pub struct Client {
@@ -70,7 +71,6 @@ impl Client {
         "password": password,
     });
     let url: String = format!("{}/signup", self.base_url);
-
     let mut req_builder = self.client.post(&url).json(&payload);
     if let Some(redirect_to) = redirect_to {
       req_builder = req_builder.header("redirect_to", redirect_to);
@@ -109,11 +109,21 @@ impl Client {
   #[tracing::instrument(skip_all, err)]
   pub async fn user_info(&self, access_token: &str) -> Result<User, GoTrueError> {
     let url = format!("{}/user", self.base_url);
-    let resp = self
+    match self
       .http_client_with_auth(Method::GET, &url, access_token)
       .send()
-      .await?;
-    to_gotrue_result(resp).await
+      .await
+    {
+      Ok(resp) => to_gotrue_result(resp).await,
+      Err(err) => {
+        event!(
+          tracing::Level::ERROR,
+          "fail to get user info with access token: {}",
+          access_token
+        );
+        Err(err.into())
+      },
+    }
   }
 
   pub async fn update_user(

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Identity {
@@ -86,6 +87,15 @@ pub struct GotrueTokenResponse {
   pub user: User,
   pub provider_access_token: Option<String>,
   pub provider_refresh_token: Option<String>,
+}
+
+impl Display for GotrueTokenResponse {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("GotrueTokenResponse")
+      .field("expires_at", &self.expires_at)
+      .field("token_type", &self.token_type)
+      .finish()
+  }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -67,7 +67,7 @@ where
   let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
   if is_new {
     let new_uid = id_gen.write().await.next_id();
-    event!(tracing::Level::DEBUG, "create new user:{}", new_uid);
+    event!(tracing::Level::INFO, "create new user:{}", new_uid);
     let workspace_id =
       create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
 

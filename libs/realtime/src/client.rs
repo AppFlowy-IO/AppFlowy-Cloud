@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,

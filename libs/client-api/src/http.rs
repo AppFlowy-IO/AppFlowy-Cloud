@@ -40,7 +40,7 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, event, instrument, trace, warn};
+use tracing::{error, event, info, instrument, trace, warn};
 use url::Url;
 
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
@@ -1158,6 +1158,7 @@ impl Client {
     let expires_at = self.token_expires_at()?;
 
     if ts + 30 > expires_at {
+      info!("token is about to expire, refreshing token");
       // Add 30 seconds buffer
       self.refresh_token().await?;
     }

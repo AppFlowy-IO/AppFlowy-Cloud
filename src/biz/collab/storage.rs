@@ -124,7 +124,7 @@ where
         .get_user_workspace_role(uid, &params.workspace_id)
         .await?;
       event!(
-        tracing::Level::TRACE,
+        tracing::Level::INFO,
         "[{:?}]user:{} try to insert new collab:{}",
         role,
         uid,

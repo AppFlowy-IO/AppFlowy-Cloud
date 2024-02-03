@@ -346,9 +346,9 @@ impl UpdateSync {
       Some(Message::Sync(SyncMessage::Update(right))),
     ) = (self.as_update(), other.as_update())
     {
-      let mut encoder = EncoderV1::new();
       let update = merge_updates_v1(&[&left, &right])?;
       let msg = Message::Sync(SyncMessage::Update(update));
+      let mut encoder = EncoderV1::new();
       msg.encode(&mut encoder);
       self.payload = Bytes::from(encoder.to_vec());
       Ok(true)

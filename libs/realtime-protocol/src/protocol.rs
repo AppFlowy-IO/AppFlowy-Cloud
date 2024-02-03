@@ -88,11 +88,10 @@ pub trait CollabSyncProtocol {
     } else {
       retry_txn.try_get_write_txn()
     }
-    .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step2. error: {}", err)))?;
-
-    txn.try_apply_update(update).map_err(|err| {
-      Error::YrsTransaction(format!("fail to apply sync step2 update. error: {}", err))
-    })?;
+    .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
+    txn
+      .try_apply_update(update)
+      .map_err(|err| Error::YrsTransaction(format!("sync step2 apply update: {}", err)))?;
     Ok(None)
   }
 
@@ -140,7 +139,7 @@ pub trait CollabSyncProtocol {
 }
 
 /// Handles incoming messages from the client/server
-pub fn handle_msg<P: CollabSyncProtocol>(
+pub fn handle_collab_message<P: CollabSyncProtocol>(
   origin: &Option<CollabOrigin>,
   protocol: &P,
   collab: &MutexCollab,

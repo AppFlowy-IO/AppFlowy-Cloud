@@ -46,7 +46,10 @@ use url::Url;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 
-pub const CLIENT_API_VERSION: &str = "0.0.3";
+/// The API version of the client.
+/// 0.0.4
+///  fix refresh token issue
+pub const CLIENT_API_VERSION: &str = "0.0.4";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
@@ -112,7 +115,6 @@ pub struct Client {
   pub(crate) config: ClientConfiguration,
 }
 
-pub(crate) type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
 pub(crate) type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
 
 /// Hardcoded schema in the frontend application. Do not change this value.

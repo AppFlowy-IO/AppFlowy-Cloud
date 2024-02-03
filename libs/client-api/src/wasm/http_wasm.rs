@@ -1,4 +1,3 @@
-use crate::http::RefreshTokenRet;
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::Client;
 use app_error::gotrue::GoTrueError;
@@ -25,7 +24,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<RefreshTokenRet, AppResponseError> {
+  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
@@ -38,7 +37,10 @@ impl Client {
       }
       self.is_refreshing_token.store(false, Ordering::SeqCst);
     }
-    Ok(rx)
+
+    rx.await
+      .map_err(|err| AppResponseError::new(ErrorCode::Internal, err.to_string()))??;
+    Ok(())
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {

@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{debug, error, event, info, instrument, trace};
+use tracing::{error, event, info, instrument, trace};
 
 use yrs::updates::decoder::Decode;
 use yrs::{Transact, Update};
@@ -66,13 +66,8 @@ where
     plugin
   }
 
-  #[instrument(level = "trace", skip_all)]
+  #[instrument(level = "info", skip(self,doc), err, fields(object_id = %object_id))]
   async fn insert_new_collab(&self, doc: &Doc, object_id: &str) -> Result<(), AppError> {
-    debug!(
-      "create new collab, cache full access of {} for user:{}",
-      object_id, self.uid
-    );
-
     match doc.get_encoded_collab_v1().encode_to_bytes() {
       Ok(encoded_collab_v1) => {
         let _ = self
@@ -171,7 +166,6 @@ where
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
-
     match self
       .storage
       .get_collab_encoded(&self.uid, params, true)
@@ -227,8 +221,9 @@ where
           // When attempting to retrieve collaboration data from the disk and a 'Record Not Found' error is returned,
           // this indicates that the collaboration is new. Therefore, the current collaboration data should be saved to disk.
           event!(
-            tracing::Level::DEBUG,
-            "New collab object, insert collab to db"
+            tracing::Level::INFO,
+            "Create new collab:{} from realtime editing",
+            object_id
           );
           if let Err(err) = self.insert_new_collab(doc, object_id).await {
             error!("Insert collab {:?}", err);

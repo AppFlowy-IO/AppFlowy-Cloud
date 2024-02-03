@@ -1,23 +1,20 @@
 use crate::biz;
+use crate::component::auth::jwt::{Authorization, UserUuid};
 use crate::component::auth::{
   change_password, logged_user_from_request, login, register, ChangePasswordRequest,
   RegisterRequest,
 };
-
 use crate::component::auth::{InputParamsError, LoginRequest};
-
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
-use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
-use shared_entity::response::{AppResponse, JsonAppResponse};
-
-use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
+use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
+use shared_entity::response::{AppResponse, JsonAppResponse};
 
 use shared_entity::response::AppResponseError;
 

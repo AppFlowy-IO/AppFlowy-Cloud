@@ -61,6 +61,7 @@ impl UserCache {
     }
   }
 
+  /// Get the user's uid from the cache or the database.
   pub async fn get_user_uid(&self, uuid: &Uuid) -> Result<i64, AppError> {
     // Attempt to acquire a read lock and check if the user exists to minimize lock contention.
     {

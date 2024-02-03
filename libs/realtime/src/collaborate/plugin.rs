@@ -4,7 +4,7 @@ use crate::error::RealtimeError;
 use app_error::AppError;
 use async_trait::async_trait;
 
-use crate::collaborate::{CollabAccessControl, CollabUserId};
+use crate::collaborate::CollabAccessControl;
 use anyhow::anyhow;
 use collab::core::awareness::Awareness;
 use collab::core::collab::TransactionMutExt;
@@ -77,11 +77,7 @@ where
       Ok(encoded_collab_v1) => {
         let _ = self
           .access_control
-          .cache_collab_access_level(
-            CollabUserId::from(&self.uid),
-            object_id,
-            AFAccessLevel::FullAccess,
-          )
+          .cache_collab_access_level(&self.uid, object_id, AFAccessLevel::FullAccess)
           .await;
 
         let params = CreateCollabParams {

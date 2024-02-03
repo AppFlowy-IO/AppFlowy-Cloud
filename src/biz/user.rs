@@ -80,11 +80,7 @@ where
       .await?;
 
     collab_access_control
-      .cache_collab_access_level(
-        realtime::collaborate::CollabUserId::UserId(&new_uid),
-        &workspace_id,
-        AFAccessLevel::FullAccess,
-      )
+      .cache_collab_access_level(&new_uid, &workspace_id, AFAccessLevel::FullAccess)
       .await?;
 
     // Create a workspace with the GetStarted template
@@ -132,11 +128,7 @@ where
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
     collab_access_control
-      .cache_collab_access_level(
-        realtime::collaborate::CollabUserId::UserId(&new_uid),
-        &object_id,
-        AFAccessLevel::FullAccess,
-      )
+      .cache_collab_access_level(&new_uid, &object_id, AFAccessLevel::FullAccess)
       .await?;
 
     insert_into_af_collab(

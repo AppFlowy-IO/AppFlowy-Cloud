@@ -4,7 +4,6 @@ use actix_web::http::Method;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use casbin::{CoreApi, MgmtApi};
-use database::user::select_uid_from_uuid;
 use sqlx::PgPool;
 use tokio::sync::{broadcast, RwLock};
 use tracing::log::warn;
@@ -24,7 +23,7 @@ use database::workspace::select_permission;
 use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
 
 use crate::biz::casbin::enforcer_ext::{enforcer_remove, enforcer_update};
-use realtime::collaborate::{CollabAccessControl, CollabUserId};
+use realtime::collaborate::CollabAccessControl;
 
 use super::{
   Action, ActionType, ObjectType, POLICY_FIELD_INDEX_ACTION, POLICY_FIELD_INDEX_OBJECT,
@@ -99,15 +98,6 @@ impl CasbinAccessControl {
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
     let mut enforcer = self.enforcer.write().await;
     enforcer_remove(&mut enforcer, uid, obj).await
-  }
-
-  /// Get uid which is used for all operations.
-  async fn get_uid(&self, user: &CollabUserId<'_>) -> Result<i64, AppError> {
-    let uid = match user {
-      CollabUserId::UserId(uid) => **uid,
-      CollabUserId::UserUuid(uuid) => select_uid_from_uuid(&self.pg_pool, uuid).await?,
-    };
-    Ok(uid)
   }
 
   async fn get_collab_member(&self, uid: &i64, oid: &str) -> Result<AFCollabMember, AppError> {
@@ -249,12 +239,7 @@ impl CasbinCollabAccessControl {
 
 #[async_trait]
 impl CollabAccessControl for CasbinCollabAccessControl {
-  async fn get_collab_access_level(
-    &self,
-    user: CollabUserId<'_>,
-    oid: &str,
-  ) -> Result<AFAccessLevel, AppError> {
-    let uid = self.casbin_access_control.get_uid(&user).await?;
+  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     let collab_id = ObjectType::Collab(oid).to_string();
     let policies = self
       .casbin_access_control
@@ -272,17 +257,13 @@ impl CollabAccessControl for CasbinCollabAccessControl {
       .map(AFAccessLevel::from);
 
     if access_level.is_none() {
-      match self
-        .casbin_access_control
-        .get_collab_member(&uid, oid)
-        .await
-      {
+      match self.casbin_access_control.get_collab_member(uid, oid).await {
         Ok(member) => {
           access_level = Some(member.permission.access_level);
           self
             .casbin_access_control
             .update(
-              &uid,
+              uid,
               &ObjectType::Collab(oid),
               &ActionType::Level(member.permission.access_level),
             )
@@ -306,14 +287,13 @@ impl CollabAccessControl for CasbinCollabAccessControl {
   #[instrument(level = "trace", skip_all)]
   async fn cache_collab_access_level(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError> {
-    let uid = self.casbin_access_control.get_uid(&user).await?;
     self
       .casbin_access_control
-      .update(&uid, &ObjectType::Collab(oid), &ActionType::Level(level))
+      .update(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
       .await?;
 
     Ok(())
@@ -321,11 +301,10 @@ impl CollabAccessControl for CasbinCollabAccessControl {
 
   async fn can_access_http_method(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     method: &Method,
   ) -> Result<bool, AppError> {
-    let uid = self.casbin_access_control.get_uid(&user).await?;
     let action = if Method::POST == method || Method::PUT == method || Method::DELETE == method {
       Action::Write
     } else {
@@ -395,16 +374,8 @@ pub struct CasbinWorkspaceAccessControl {
 
 #[async_trait]
 impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
-  async fn get_role_from_uuid(
-    &self,
-    user_uuid: &Uuid,
-    workspace_id: &Uuid,
-  ) -> Result<AFRole, AppError> {
-    let uid = self
-      .casbin_access_control
-      .get_uid(&CollabUserId::UserUuid(user_uuid))
-      .await?;
-    self.get_role_from_uid(&uid, workspace_id).await
+  async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
+    self.get_role_from_uid(uid, workspace_id).await
   }
 
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {

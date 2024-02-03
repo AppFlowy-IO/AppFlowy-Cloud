@@ -8,7 +8,7 @@ use appflowy_cloud::biz::casbin::{ActionType, ObjectType};
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::{AFAccessLevel, AFRole};
-use realtime::collaborate::{CollabAccessControl, CollabUserId};
+use realtime::collaborate::CollabAccessControl;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -175,11 +175,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 
   assert!(
     access_control
-      .can_access_http_method(
-        CollabUserId::UserId(&user.uid),
-        "new collab oid",
-        &Method::POST
-      )
+      .can_access_http_method(&user.uid, "new collab oid", &Method::POST)
       .await?,
     "should have access to non-existent collab oid"
   );
@@ -207,7 +203,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   assert!(
     !access_control
       .can_access_http_method(
-        CollabUserId::UserId(&stranger.uid),
+        &stranger.uid,
         &workspace.workspace_id.to_string(),
         &Method::GET
       )
@@ -218,7 +214,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   assert!(
     !access_control
       .can_access_http_method(
-        CollabUserId::UserId(&stranger.uid),
+        &stranger.uid,
         &workspace.workspace_id.to_string(),
         &Method::POST
       )
@@ -332,25 +328,21 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   let uid = 123;
   let oid = "collab::oid".to_owned();
   access_control
-    .cache_collab_access_level(CollabUserId::UserId(&uid), &oid, AFAccessLevel::FullAccess)
+    .cache_collab_access_level(&uid, &oid, AFAccessLevel::FullAccess)
     .await?;
 
   assert_eq!(
     AFAccessLevel::FullAccess,
-    access_control
-      .get_collab_access_level(CollabUserId::UserId(&uid), &oid)
-      .await?
+    access_control.get_collab_access_level(&uid, &oid).await?
   );
 
   access_control
-    .cache_collab_access_level(CollabUserId::UserId(&uid), &oid, AFAccessLevel::ReadOnly)
+    .cache_collab_access_level(&uid, &oid, AFAccessLevel::ReadOnly)
     .await?;
 
   assert_eq!(
     AFAccessLevel::ReadOnly,
-    access_control
-      .get_collab_access_level(CollabUserId::UserId(&uid), &oid)
-      .await?
+    access_control.get_collab_access_level(&uid, &oid).await?
   );
 
   Ok(())

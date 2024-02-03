@@ -286,6 +286,7 @@ async fn create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.users.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => serde_json::from_slice::<CreateCollabParams>(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -310,7 +311,7 @@ async fn create_collab_handler(
   let (params, workspace_id) = params.split();
   biz::collab::ops::create_collabs(
     &state.pg_pool,
-    &user_uuid,
+    &uid,
     &workspace_id,
     vec![params],
     &state.collab_access_control,
@@ -327,6 +328,7 @@ async fn create_collab_list_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.users.get_user_uid(&user_uuid).await?;
   let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
@@ -389,7 +391,7 @@ async fn create_collab_list_handler(
 
   biz::collab::ops::create_collabs(
     &state.pg_pool,
-    &user_uuid,
+    &uid,
     &workspace_id,
     collab_params_list,
     &state.collab_access_control,
@@ -406,6 +408,7 @@ async fn batch_create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.users.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -438,7 +441,7 @@ async fn batch_create_collab_handler(
 
   biz::collab::ops::create_collabs(
     &state.pg_pool,
-    &user_uuid,
+    &uid,
     &workspace_id,
     params_list,
     &state.collab_access_control,
@@ -558,7 +561,8 @@ async fn update_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let (params, workspace_id) = payload.into_inner().split();
-  biz::collab::ops::upsert_collab(&state.pg_pool, &user_uuid, &workspace_id, vec![params]).await?;
+  let uid = state.users.get_user_uid(&user_uuid).await?;
+  biz::collab::ops::upsert_collab(&state.pg_pool, &uid, &workspace_id, vec![params]).await?;
   Ok(AppResponse::Ok().into())
 }
 

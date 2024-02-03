@@ -38,6 +38,7 @@ jobs:
          source environments/test.env
 
          export APPFLOWY_GOTRUE_JWT_SECRET=${{ secrets.TEST_GOTRUE_JWT_SECRET }}
+         export APPFLOWY_GOTRUE_JWT_EXP=${{ secrets.TEST_GOTRUE_JWT_EXP }}
          export APPFLOWY_S3_ACCESS_KEY=${{ secrets.TEST_APPFLOWY_S3_ACCESS_KEY }}
          export APPFLOWY_S3_SECRET_KEY=${{ secrets.TEST_APPFLOWY_S3_SECRET_KEY }}
          export APPFLOWY_GOTRUE_ADMIN_PASSWORD=${{ secrets.TEST_APPFLOWY_GOTRUE_ADMIN_PASSWORD }}

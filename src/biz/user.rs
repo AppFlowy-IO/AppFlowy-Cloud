@@ -24,7 +24,7 @@ use shared_entity::dto::auth_dto::UpdateUserParams;
 use snowflake::Snowflake;
 use sqlx::{types::uuid, PgPool, Transaction};
 use tokio::sync::RwLock;
-use tracing::{debug, event, instrument};
+use tracing::{debug, event, info, instrument};
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
@@ -131,6 +131,10 @@ where
       .cache_collab_access_level(&new_uid, &object_id, AFAccessLevel::FullAccess)
       .await?;
 
+    info!(
+      "insert collab for user:{} with object_id:{}",
+      new_uid, object_id
+    );
     insert_into_af_collab(
       txn,
       &new_uid,

@@ -125,7 +125,10 @@ where
               .run()
               .await?;
 
-              broadcast_message(&user, collab_message, &client_stream_by_user).await;
+              // Only broadcast the message if the group exists
+              if groups.contains_group(collab_message.object_id()).await? {
+                broadcast_message(&user, collab_message, &client_stream_by_user).await;
+              }
               Ok(())
             },
             _ => {

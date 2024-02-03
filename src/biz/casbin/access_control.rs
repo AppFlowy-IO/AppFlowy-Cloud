@@ -134,14 +134,14 @@ fn spawn_listen_on_collab_member_change(
               )
               .await
               {
-                warn!(
+                error!(
                   "Failed to update the user:{} collab{} access control, error: {}",
                   member_row.uid, member_row.oid, err
                 );
               }
             }
           } else {
-            warn!("The new collab member is None")
+            error!("The new collab member is None")
           }
         },
         CollabMemberAction::DELETE => {
@@ -182,7 +182,7 @@ fn spawn_listen_on_workspace_member_change(
             )
             .await
             {
-              warn!(
+              error!(
                 "Failed to update the user:{} workspace:{} access control, error: {}",
                 member_row.uid, member_row.workspace_id, err
               );
@@ -200,7 +200,7 @@ fn spawn_listen_on_workspace_member_change(
             )
             .await
             {
-              warn!(
+              error!(
                 "Failed to remove the user:{} workspace: {} access control, error: {}",
                 member_row.uid, member_row.workspace_id, err
               );
@@ -218,7 +218,7 @@ pub struct CasbinCollabAccessControl {
 }
 
 impl CasbinCollabAccessControl {
-  #[instrument(level = "trace", skip_all)]
+  #[instrument(level = "info", skip_all)]
   pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
     let _ = self
       .casbin_access_control
@@ -257,25 +257,19 @@ impl CollabAccessControl for CasbinCollabAccessControl {
       .map(AFAccessLevel::from);
 
     if access_level.is_none() {
-      match self.casbin_access_control.get_collab_member(uid, oid).await {
-        Ok(member) => {
-          access_level = Some(member.permission.access_level);
-          self
-            .casbin_access_control
-            .update(
-              uid,
-              &ObjectType::Collab(oid),
-              &ActionType::Level(member.permission.access_level),
-            )
-            .await?;
-        },
-        Err(err) => {
-          error!(
-            "Failed to get member:{} in collab:{}, error: {}",
-            uid, oid, err
-          );
-        },
-      }
+      let member = self
+        .casbin_access_control
+        .get_collab_member(uid, oid)
+        .await?;
+      access_level = Some(member.permission.access_level);
+      self
+        .casbin_access_control
+        .update(
+          uid,
+          &ObjectType::Collab(oid),
+          &ActionType::Level(member.permission.access_level),
+        )
+        .await?;
     }
 
     access_level.ok_or(AppError::RecordNotFound(format!(
@@ -411,7 +405,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
     })
   }
 
-  #[instrument(level = "trace", skip_all)]
+  #[instrument(level = "info", skip_all)]
   async fn update_member(
     &self,
     uid: &i64,

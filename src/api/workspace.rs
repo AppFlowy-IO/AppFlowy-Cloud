@@ -15,7 +15,7 @@ use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use database::user::{select_uid_from_email, select_uid_from_uuid};
+use database::user::select_uid_from_email;
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
 
@@ -286,6 +286,7 @@ async fn create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.users.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => serde_json::from_slice::<CreateCollabParams>(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -310,7 +311,7 @@ async fn create_collab_handler(
   let (params, workspace_id) = params.split();
   biz::collab::ops::create_collabs(
     &state.pg_pool,
-    &user_uuid,
+    &uid,
     &workspace_id,
     vec![params],
     &state.collab_access_control,
@@ -327,6 +328,7 @@ async fn create_collab_list_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.users.get_user_uid(&user_uuid).await?;
   let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
@@ -389,7 +391,7 @@ async fn create_collab_list_handler(
 
   biz::collab::ops::create_collabs(
     &state.pg_pool,
-    &user_uuid,
+    &uid,
     &workspace_id,
     collab_params_list,
     &state.collab_access_control,
@@ -406,6 +408,7 @@ async fn batch_create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.users.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -438,7 +441,7 @@ async fn batch_create_collab_handler(
 
   biz::collab::ops::create_collabs(
     &state.pg_pool,
-    &user_uuid,
+    &uid,
     &workspace_id,
     params_list,
     &state.collab_access_control,
@@ -452,7 +455,9 @@ async fn get_collab_handler(
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<EncodedCollab>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let data = state
@@ -487,7 +492,9 @@ async fn create_collab_snapshot_handler(
 ) -> Result<Json<AppResponse<AFSnapshotMeta>>> {
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.into_inner();
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let encoded_collab_v1 = state
@@ -533,7 +540,9 @@ async fn batch_get_collab_handler(
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let result = BatchQueryCollabResult(
@@ -552,7 +561,8 @@ async fn update_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let (params, workspace_id) = payload.into_inner().split();
-  biz::collab::ops::upsert_collab(&state.pg_pool, &user_uuid, &workspace_id, vec![params]).await?;
+  let uid = state.users.get_user_uid(&user_uuid).await?;
+  biz::collab::ops::upsert_collab(&state.pg_pool, &uid, &workspace_id, vec![params]).await?;
   Ok(AppResponse::Ok().into())
 }
 
@@ -639,7 +649,9 @@ async fn post_realtime_message_stream_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
 

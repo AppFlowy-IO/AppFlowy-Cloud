@@ -20,11 +20,7 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_role_from_uuid(
-    &self,
-    user_uuid: &Uuid,
-    workspace_id: &Uuid,
-  ) -> Result<AFRole, AppError>;
+  async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
 
   async fn update_member(
@@ -190,13 +186,8 @@ fn spawn_listen_on_workspace_member_change(
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn get_role_from_uuid(
-    &self,
-    user_uuid: &Uuid,
-    workspace_id: &Uuid,
-  ) -> Result<AFRole, AppError> {
-    let uid = select_uid_from_uuid(&self.pg_pool, user_uuid).await?;
-    let role = self.get_user_workspace_role(&uid, workspace_id).await?;
+  async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
+    let role = self.get_user_workspace_role(uid, workspace_id).await?;
     Ok(role)
   }
 
@@ -234,16 +225,12 @@ where
   async fn check_workspace_permission(
     &self,
     workspace_id: &Uuid,
-    user_uuid: &UserUuid,
+    uid: &i64,
     method: Method,
   ) -> Result<(), AppError> {
-    trace!(
-      "workspace_id: {:?}, user_uuid: {:?}",
-      workspace_id,
-      user_uuid
-    );
+    trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
 
-    match self.0.get_role_from_uuid(user_uuid, workspace_id).await {
+    match self.0.get_role_from_uid(uid, workspace_id).await {
       Ok(role) => {
         if method == Method::DELETE || method == Method::POST || method == Method::PUT {
           if matches!(role, AFRole::Owner) {
@@ -251,7 +238,7 @@ where
           } else {
             Err(AppError::NotEnoughPermissions(format!(
               "User:{:?} doesn't have the enough permission to access workspace:{}",
-              user_uuid, workspace_id
+              uid, workspace_id
             )))
           }
         } else {
@@ -260,7 +247,7 @@ where
       },
       Err(err) => Err(AppError::NotEnoughPermissions(format!(
         "Can't find the role of the user:{:?} in the workspace:{:?}. error: {}",
-        user_uuid, workspace_id, err
+        uid, workspace_id, err
       ))),
     }
   }

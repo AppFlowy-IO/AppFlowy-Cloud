@@ -3,7 +3,7 @@ use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, Realt
 use crate::error::RealtimeError;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
-  Recipient, Running, StreamHandler, WrapFuture,
+  MailboxError, Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::ProtocolError;
@@ -117,7 +117,15 @@ where
               metadata,
             });
             if let Err(err) = recipient.send(RealtimeMessage::User(msg)).await {
-              error!("Send user change message error: {:?}", err);
+              match err {
+                MailboxError::Closed => {
+                  error!("User change message recipient is closed");
+                  break;
+                },
+                MailboxError::Timeout => {
+                  error!("User change message recipient send timeout");
+                },
+              }
             }
           }
         }

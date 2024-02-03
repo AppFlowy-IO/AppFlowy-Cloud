@@ -5,7 +5,7 @@ use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::AppState;
+use crate::state::{AppState, UserCache};
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -201,12 +201,13 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     )
     .await,
   );
+  let users = UserCache::new(pg_pool.clone());
 
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
-    user: Arc::new(Default::default()),
+    users: Arc::new(users),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     redis_client,

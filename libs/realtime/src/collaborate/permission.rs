@@ -27,15 +27,11 @@ impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
 #[async_trait]
 pub trait CollabAccessControl: Sync + Send + 'static {
   /// Return the access level of the user in the collab
-  async fn get_collab_access_level(
-    &self,
-    user: CollabUserId<'_>,
-    oid: &str,
-  ) -> Result<AFAccessLevel, AppError>;
+  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
 
   async fn cache_collab_access_level(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError>;
@@ -45,7 +41,7 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   ///  
   async fn can_access_http_method(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     method: &Method,
   ) -> Result<bool, AppError>;
@@ -72,36 +68,29 @@ where
   T: CollabAccessControl,
 {
   #[instrument(level = "debug", skip_all)]
-  async fn get_collab_access_level(
-    &self,
-    user: CollabUserId<'_>,
-    oid: &str,
-  ) -> Result<AFAccessLevel, AppError> {
-    self.as_ref().get_collab_access_level(user, oid).await
+  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
+    self.as_ref().get_collab_access_level(uid, oid).await
   }
 
   async fn cache_collab_access_level(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .cache_collab_access_level(user, oid, level)
+      .cache_collab_access_level(uid, oid, level)
       .await
   }
 
   async fn can_access_http_method(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     method: &Method,
   ) -> Result<bool, AppError> {
-    self
-      .as_ref()
-      .can_access_http_method(user, oid, method)
-      .await
+    self.as_ref().can_access_http_method(uid, oid, method).await
   }
 
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {

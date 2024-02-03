@@ -1,5 +1,5 @@
 use anyhow::Context;
-use database::user;
+
 use std::ops::DerefMut;
 
 use app_error::AppError;
@@ -8,14 +8,14 @@ use database_entity::dto::{
   InsertCollabMemberParams, QueryCollabMembers, UpdateCollabMemberParams,
 };
 
-use realtime::collaborate::{CollabAccessControl, CollabUserId};
+use realtime::collaborate::CollabAccessControl;
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;
 
 pub async fn create_collabs<C>(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
+  uid: &i64,
   workspace_id: &str,
   params_list: Vec<CollabParams>,
   collab_access_control: &C,
@@ -42,13 +42,9 @@ where
     }
 
     collab_access_control
-      .cache_collab_access_level(
-        CollabUserId::UserUuid(user_uuid),
-        &params.object_id,
-        AFAccessLevel::FullAccess,
-      )
+      .cache_collab_access_level(uid, &params.object_id, AFAccessLevel::FullAccess)
       .await?;
-    upsert_collab(pg_pool, user_uuid, workspace_id, vec![params]).await?;
+    upsert_collab(pg_pool, uid, workspace_id, vec![params]).await?;
   }
   Ok(())
 }
@@ -57,7 +53,7 @@ where
 /// If one of the [CollabParams] validation fails, it will rollback the transaction and return the error
 pub async fn upsert_collab(
   pg_pool: &PgPool,
-  user_uuid: &Uuid,
+  uid: &i64,
   workspace_id: &str,
   params: Vec<CollabParams>,
 ) -> Result<(), AppError> {
@@ -65,10 +61,9 @@ pub async fn upsert_collab(
     .begin()
     .await
     .context("acquire transaction to upsert collab")?;
-  let owner_uid = user::select_uid_from_uuid(tx.deref_mut(), user_uuid).await?;
   for params in params {
     params.validate()?;
-    database::collab::insert_into_af_collab(&mut tx, &owner_uid, workspace_id, &params).await?;
+    database::collab::insert_into_af_collab(&mut tx, uid, workspace_id, &params).await?;
   }
 
   tx.commit()

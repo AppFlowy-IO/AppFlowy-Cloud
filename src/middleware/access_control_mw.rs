@@ -9,12 +9,14 @@ use actix_web::Error;
 use async_trait::async_trait;
 use futures_util::future::LocalBoxFuture;
 
+use actix_web::web::Data;
 use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tracing::error;
 
+use crate::state::AppState;
 use app_error::AppError;
 use uuid::Uuid;
 
@@ -38,7 +40,7 @@ pub trait HttpAccessControlService: Send + Sync {
   async fn check_workspace_permission(
     &self,
     workspace_id: &Uuid,
-    user_uuid: &UserUuid,
+    uid: &i64,
     method: Method,
   ) -> Result<(), AppError> {
     Ok(())
@@ -48,7 +50,7 @@ pub trait HttpAccessControlService: Send + Sync {
   async fn check_collab_permission(
     &self,
     oid: &str,
-    user_uuid: &Uuid,
+    uid: &i64,
     method: Method,
     path: &Path<Url>,
   ) -> Result<(), AppError> {
@@ -68,25 +70,25 @@ where
   async fn check_workspace_permission(
     &self,
     workspace_id: &Uuid,
-    user_uuid: &UserUuid,
+    uid: &i64,
     method: Method,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_workspace_permission(workspace_id, user_uuid, method)
+      .check_workspace_permission(workspace_id, uid, method)
       .await
   }
 
   async fn check_collab_permission(
     &self,
     oid: &str,
-    user_uuid: &Uuid,
+    uid: &i64,
     method: Method,
     path: &Path<Url>,
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .check_collab_permission(oid, user_uuid, method, path)
+      .check_collab_permission(oid, uid, method, path)
       .await
   }
 }
@@ -189,6 +191,25 @@ where
       },
       Some(path) => {
         let user_uuid = req.extract::<UserUuid>();
+        let user_cache = req
+          .app_data::<Data<AppState>>()
+          .map(|state| state.users.clone());
+
+        let uid = async {
+          let user_uuid = user_uuid.await.map_err(|err| {
+            AppError::Internal(anyhow::anyhow!(
+              "Can't find the user uuid from the request: {}",
+              err
+            ))
+          })?;
+
+          user_cache
+            .ok_or_else(|| {
+              AppError::Internal(anyhow::anyhow!("AppState is not found in the request"))
+            })?
+            .get_user_uid(&user_uuid)
+            .await
+        };
 
         let workspace_id = path
           .get(WORKSPACE_ID_PATH)
@@ -202,13 +223,13 @@ where
         Box::pin(async move {
           // If the workspace_id or collab_object_id is not present, skip the access control
           if workspace_id.is_some() || collab_object_id.is_some() {
-            let user_uuid = user_uuid.await?;
+            let uid = uid.await?;
 
             // check workspace permission
             if let Some(workspace_id) = workspace_id {
               if let Some(acs) = services.get(&AccessResource::Workspace) {
                 if let Err(err) = acs
-                  .check_workspace_permission(&workspace_id, &user_uuid, method.clone())
+                  .check_workspace_permission(&workspace_id, &uid, method.clone())
                   .await
                 {
                   error!(
@@ -225,7 +246,7 @@ where
             if let Some(collab_object_id) = collab_object_id {
               if let Some(acs) = services.get(&AccessResource::Collab) {
                 if let Err(err) = acs
-                  .check_collab_permission(&collab_object_id, &user_uuid, method, &path)
+                  .check_collab_permission(&collab_object_id, &uid, method, &path)
                   .await
                 {
                   error!(

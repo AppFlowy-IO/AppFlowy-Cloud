@@ -3,21 +3,24 @@ use crate::biz::casbin::access_control::{
 };
 use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::biz::pg_listener::PgListeners;
-use crate::component::auth::LoggedUser;
+
 use crate::config::config::Config;
-use chrono::{DateTime, Utc};
+use app_error::AppError;
+
 use database::file::bucket_s3_impl::S3BucketStorage;
+use database::user::select_uid_from_uuid;
 use snowflake::Snowflake;
 use sqlx::PgPool;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
   pub pg_pool: PgPool,
   pub config: Arc<Config>,
-  pub user: Arc<RwLock<UserCache>>,
+  pub users: Arc<UserCache>,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: redis::aio::ConnectionManager,
@@ -39,55 +42,39 @@ impl AppState {
   }
 }
 
-#[derive(Clone, Debug, Copy)]
-enum AuthStatus {
-  Authorized(DateTime<Utc>),
-  NotAuthorized,
+pub struct AuthenticateUser {
+  pub uid: i64,
 }
 
 pub const EXPIRED_DURATION_DAYS: i64 = 30;
 
-#[derive(Debug, Default)]
 pub struct UserCache {
-  // Keep track the user authentication state
-  user: BTreeMap<i64, AuthStatus>,
+  pool: PgPool,
+  users: RwLock<HashMap<Uuid, AuthenticateUser>>,
 }
 
 impl UserCache {
-  pub fn new() -> Self {
-    UserCache::default()
-  }
-
-  pub fn is_authorized(&self, user: &LoggedUser) -> bool {
-    match self.user.get(user.expose_secret()) {
-      None => {
-        tracing::debug!("user not login yet or server was reboot");
-        false
-      },
-      Some(status) => match *status {
-        AuthStatus::Authorized(last_time) => {
-          let current_time = Utc::now();
-          let days = (current_time - last_time).num_days();
-          days < EXPIRED_DURATION_DAYS
-        },
-        AuthStatus::NotAuthorized => {
-          tracing::debug!("user logout already");
-          false
-        },
-      },
+  pub fn new(pool: PgPool) -> Self {
+    Self {
+      pool,
+      users: RwLock::new(HashMap::new()),
     }
   }
 
-  pub fn authorized(&mut self, user: LoggedUser) {
-    self.user.insert(
-      user.expose_secret().to_owned(),
-      AuthStatus::Authorized(Utc::now()),
-    );
-  }
+  /// Get the user's uid from the cache or the database.
+  pub async fn get_user_uid(&self, uuid: &Uuid) -> Result<i64, AppError> {
+    // Attempt to acquire a read lock and check if the user exists to minimize lock contention.
+    {
+      let users_read = self.users.read().await;
+      if let Some(user) = users_read.get(uuid) {
+        return Ok(user.uid);
+      }
+    }
 
-  pub fn unauthorized(&mut self, user: LoggedUser) {
-    self
-      .user
-      .insert(user.expose_secret().to_owned(), AuthStatus::NotAuthorized);
+    // If the user is not found in the cache, query the database.
+    let uid = select_uid_from_uuid(&self.pool, uuid).await?;
+    let mut users_write = self.users.write().await;
+    users_write.insert(*uuid, AuthenticateUser { uid });
+    Ok(uid)
   }
 }

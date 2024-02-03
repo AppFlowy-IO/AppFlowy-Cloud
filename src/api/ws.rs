@@ -12,7 +12,7 @@ use realtime::collaborate::CollabServer;
 use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
-use database::user::select_uid_from_uuid;
+
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::instrument;
@@ -38,7 +38,7 @@ pub async fn establish_ws_connection(
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let result = select_uid_from_uuid(&state.pg_pool, &user_uuid).await;
+  let result = state.users.get_user_uid(&user_uuid).await;
 
   match result {
     Ok(uid) => {

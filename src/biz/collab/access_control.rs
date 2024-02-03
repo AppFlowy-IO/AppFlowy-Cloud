@@ -6,16 +6,15 @@ use actix_web::http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
 use database::collab::CollabStorageAccessControl;
-use database::user::select_uid_from_uuid;
+
 use database_entity::dto::{AFAccessLevel, AFRole};
-use realtime::collaborate::{CollabAccessControl, CollabUserId};
+use realtime::collaborate::CollabAccessControl;
 use sqlx::PgPool;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use tracing::{instrument, warn};
-use uuid::Uuid;
 
 /// Represents the access level of a collaboration object identified by its OID.
 /// - Key: OID of the collaboration object.
@@ -179,43 +178,28 @@ async fn reload_collab_member_status_from_db(
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  async fn get_collab_access_level(
-    &self,
-    user: CollabUserId<'_>,
-    oid: &str,
-  ) -> Result<AFAccessLevel, AppError> {
-    match user {
-      CollabUserId::UserId(uid) => self.get_user_collab_access_level(uid, oid).await,
-      CollabUserId::UserUuid(uuid) => {
-        let uid = select_uid_from_uuid(&self.pg_pool, uuid).await?;
-        self.get_user_collab_access_level(&uid, oid).await
-      },
-    }
+  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
+    self.get_user_collab_access_level(uid, oid).await
   }
 
   async fn cache_collab_access_level(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError> {
-    let uid = match user {
-      CollabUserId::UserId(uid) => *uid,
-      CollabUserId::UserUuid(uuid) => select_uid_from_uuid(&self.pg_pool, uuid).await?,
-    };
-
-    self.update_member(&uid, oid, level).await;
+    self.update_member(uid, oid, level).await;
     Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]
   async fn can_access_http_method(
     &self,
-    user: CollabUserId<'_>,
+    uid: &i64,
     oid: &str,
     method: &Method,
   ) -> Result<bool, AppError> {
-    match self.get_collab_access_level(user, oid).await {
+    match self.get_collab_access_level(uid, oid).await {
       Ok(level) => {
         if Method::POST == method || Method::PUT == method || Method::DELETE == method {
           Ok(level.can_write())
@@ -236,9 +220,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   #[inline]
   #[instrument(level = "debug", skip_all, err)]
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    let result = self
-      .get_collab_access_level(CollabUserId::UserId(uid), oid)
-      .await;
+    let result = self.get_collab_access_level(uid, oid).await;
 
     match result {
       Ok(level) => match level {
@@ -259,12 +241,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   #[inline]
   #[instrument(level = "debug", skip_all, err)]
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    Ok(
-      self
-        .get_collab_access_level(CollabUserId::UserId(uid), oid)
-        .await
-        .is_ok(),
-    )
+    Ok(self.get_collab_access_level(uid, oid).await.is_ok())
   }
 }
 
@@ -284,14 +261,11 @@ where
   async fn check_collab_permission(
     &self,
     oid: &str,
-    user_uuid: &Uuid,
+    uid: &i64,
     method: Method,
     _path: &Path<Url>,
   ) -> Result<(), AppError> {
-    let can_access = self
-      .0
-      .can_access_http_method(CollabUserId::UserUuid(user_uuid), oid, &method)
-      .await?;
+    let can_access = self.0.can_access_http_method(uid, oid, &method).await?;
 
     if !can_access {
       return Err(AppError::NotEnoughPermissions(format!(
@@ -319,7 +293,7 @@ where
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     self
       .collab_access_control
-      .get_collab_access_level(uid.into(), oid)
+      .get_collab_access_level(uid, oid)
       .await
   }
 
@@ -331,7 +305,7 @@ where
   ) -> Result<(), AppError> {
     self
       .collab_access_control
-      .cache_collab_access_level(uid.into(), oid, level)
+      .cache_collab_access_level(uid, oid, level)
       .await
   }
 

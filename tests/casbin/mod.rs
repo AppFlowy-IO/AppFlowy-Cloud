@@ -7,7 +7,7 @@ use appflowy_cloud::biz::casbin::access_control::{
 use appflowy_cloud::biz::workspace::access_control::WorkspaceAccessControl;
 use database_entity::dto::{AFAccessLevel, AFRole};
 use lazy_static::lazy_static;
-use realtime::collaborate::{CollabAccessControl, CollabUserId};
+use realtime::collaborate::CollabAccessControl;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -108,7 +108,7 @@ pub async fn assert_access_level<T: AsRef<str>>(
        },
        result = access_control
          .get_collab_access_level(
-           CollabUserId::UserId(uid),
+           uid,
            workspace_id.as_ref(),
          )
        => {
@@ -258,7 +258,7 @@ pub async fn assert_can_access_http_method(
        },
        result = access_control
          .can_access_http_method(
-           CollabUserId::UserId(uid),
+           uid,
            object_id,
            &method,
          )

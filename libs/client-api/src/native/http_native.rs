@@ -2,6 +2,7 @@ use crate::http::log_request_id;
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
+use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::CollabParams;
@@ -105,7 +106,7 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<crate::http::RefreshTokenRet, AppResponseError> {
+  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
@@ -118,7 +119,13 @@ impl Client {
       }
       self.is_refreshing_token.store(false, Ordering::SeqCst);
     }
-    Ok(rx)
+
+    // Wait for the result of the refresh token request.
+    match tokio::time::timeout(Duration::from_secs(60), rx).await {
+      Ok(Ok(result)) => result,
+      Ok(Err(err)) => Err(AppError::Internal(anyhow!("refresh token error: {}", err)).into()),
+      Err(_) => Err(AppError::RequestTimeout("refresh token timeout".to_string()).into()),
+    }
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {

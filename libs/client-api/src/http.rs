@@ -112,7 +112,6 @@ pub struct Client {
   pub(crate) config: ClientConfiguration,
 }
 
-pub(crate) type RefreshTokenRet = tokio::sync::oneshot::Receiver<Result<(), AppResponseError>>;
 pub(crate) type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
 
 /// Hardcoded schema in the frontend application. Do not change this value.

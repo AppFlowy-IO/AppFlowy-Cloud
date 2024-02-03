@@ -15,7 +15,7 @@ use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use database::user::{select_uid_from_email, select_uid_from_uuid};
+use database::user::select_uid_from_email;
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
 
@@ -452,7 +452,9 @@ async fn get_collab_handler(
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<EncodedCollab>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let data = state
@@ -487,7 +489,9 @@ async fn create_collab_snapshot_handler(
 ) -> Result<Json<AppResponse<AFSnapshotMeta>>> {
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.into_inner();
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let encoded_collab_v1 = state
@@ -533,7 +537,9 @@ async fn batch_get_collab_handler(
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let result = BatchQueryCollabResult(
@@ -639,7 +645,9 @@ async fn post_realtime_message_stream_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = select_uid_from_uuid(&state.pg_pool, &user_uuid)
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
 

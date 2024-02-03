@@ -198,6 +198,7 @@ where
         let method = req.method().clone();
         let fut = self.service.call(req);
         let services = self.access_control_service.clone();
+        // let state = req.app_data::<Data<AppState>>().cloned();
 
         Box::pin(async move {
           // If the workspace_id or collab_object_id is not present, skip the access control

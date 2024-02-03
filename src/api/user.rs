@@ -1,6 +1,6 @@
 use crate::biz;
 use crate::component::auth::{
-  change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
+  change_password, logged_user_from_request, login, register, ChangePasswordRequest,
   RegisterRequest,
 };
 
@@ -31,7 +31,6 @@ pub fn user_scope() -> Scope {
 
     // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))
-    .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
@@ -110,13 +109,6 @@ async fn login_handler(
   }
 
   Ok(HttpResponse::Ok().json(resp))
-}
-
-#[tracing::instrument(level = "debug", skip(state))]
-async fn logout_handler(req: HttpRequest, state: Data<AppState>) -> Result<HttpResponse> {
-  let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;
-  logout(logged_user, state.user.clone()).await;
-  Ok(HttpResponse::Ok().finish())
 }
 
 #[tracing::instrument(level = "debug", skip(state))]

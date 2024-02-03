@@ -2,7 +2,7 @@ use crate::component::auth::{
   compute_hash_password, internal_error, validate_credentials, AuthError, Credentials,
 };
 use crate::config::env::domain;
-use crate::state::{AppState, UserCache};
+use crate::state::AppState;
 use crate::telemetry::spawn_blocking_with_tracing;
 use actix_web::HttpRequest;
 use anyhow::Context;
@@ -15,9 +15,9 @@ use secrecy::zeroize::DefaultIsZeroes;
 use secrecy::{CloneableSecret, DebugSecret, ExposeSecret, Secret, Zeroize};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Transaction};
-use std::sync::Arc;
+
 use token::{create_token, parse_token, TokenError};
-use tokio::sync::RwLock;
+
 use tracing::instrument;
 
 pub async fn login(
@@ -34,8 +34,6 @@ pub async fn login(
   match validate_credentials(credentials, &state.pg_pool).await {
     Ok(uid) => {
       let token = Token::create_token(uid, server_key)?;
-      let logged_user = LoggedUser::new(uid);
-      state.user.write().await.authorized(logged_user);
       Ok((
         LoginResponse {
           token: token.0.clone(),
@@ -46,10 +44,6 @@ pub async fn login(
     },
     Err(err) => Err(err),
   }
-}
-
-pub async fn logout(logged_user: LoggedUser, cache: Arc<RwLock<UserCache>>) {
-  cache.write().await.unauthorized(logged_user);
 }
 
 #[instrument(skip_all, err)]
@@ -97,9 +91,6 @@ pub async fn register(
     .await
     .context("Failed to commit SQL transaction to register user.")
     .map_err(internal_error)?;
-
-  let logged_user = LoggedUser::new(uid);
-  state.user.write().await.authorized(logged_user);
 
   Ok(RegisterResponse {
     token: token.0.clone(),

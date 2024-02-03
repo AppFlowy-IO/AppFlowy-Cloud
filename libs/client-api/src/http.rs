@@ -153,12 +153,16 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub fn restore_token(&self, token: &str) -> Result<(), AppResponseError> {
-    if token.is_empty() {
-      return Err(AppError::OAuthError("Empty token".to_string()).into());
+    match serde_json::from_str::<GotrueTokenResponse>(token) {
+      Ok(token) => {
+        self.token.write().set(token);
+        Ok(())
+      },
+      Err(err) => {
+        error!("fail to deserialize token:{}, error:{}", token, err);
+        Err(err.into())
+      },
     }
-    let token = serde_json::from_str::<GotrueTokenResponse>(token)?;
-    self.token.write().set(token);
-    Ok(())
   }
 
   /// Retrieves the string representation of the [GotrueTokenResponse]. The returned value can be
@@ -1230,7 +1234,7 @@ fn url_missing_param(param: &str) -> AppResponseError {
 
 pub(crate) fn log_request_id(resp: &reqwest::Response) {
   if let Some(request_id) = resp.headers().get("x-request-id") {
-    event!(tracing::Level::DEBUG, "request_id: {:?}", request_id);
+    event!(tracing::Level::INFO, "request_id: {:?}", request_id);
   } else {
     event!(tracing::Level::DEBUG, "request_id: not found");
   }

@@ -2,7 +2,7 @@ use anyhow::Error;
 use gotrue_entity::dto::GotrueTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
-use tracing::event;
+use tracing::{event, warn};
 
 pub type TokenStateReceiver = Receiver<TokenState>;
 
@@ -46,8 +46,12 @@ impl ClientToken {
   ///
   /// - `token`: The new `AccessTokenResponse` to be set.
   pub(crate) fn set(&mut self, new_token: GotrueTokenResponse) {
-    let is_new = match &self.token {
-      None => true,
+    match &self.token {
+      None => {
+        self.token = Some(new_token);
+        tracing::trace!("Set new access token: {:?}", self.token);
+        let _ = self.sender.send(TokenState::Refresh);
+      },
       Some(old_token) => {
         event!(
           tracing::Level::INFO,
@@ -55,15 +59,19 @@ impl ClientToken {
           old_token,
           new_token
         );
-        old_token.access_token != new_token.access_token
+
+        if old_token.expires_at > new_token.expires_at {
+          warn!(
+            "new token expires_at:{} is less than old token expires_at:{}",
+            new_token.expires_at, old_token.expires_at
+          );
+        } else {
+          self.token = Some(new_token);
+          tracing::trace!("Set new access token: {:?}", self.token);
+          let _ = self.sender.send(TokenState::Refresh);
+        }
       },
     };
-    self.token = Some(new_token);
-
-    if is_new {
-      tracing::trace!("Set new access token: {:?}", self.token);
-      let _ = self.sender.send(TokenState::Refresh);
-    }
   }
 
   /// Unsets the current access token and notifies receivers of the invalidation.

@@ -112,8 +112,8 @@ impl Client {
 
     if !self.is_refreshing_token.load(Ordering::SeqCst) {
       self.is_refreshing_token.store(true, Ordering::SeqCst);
-      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
       let result = self.inner_refresh_token().await;
+      let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
       for tx in txs {
         let _ = tx.send(result.clone());
       }

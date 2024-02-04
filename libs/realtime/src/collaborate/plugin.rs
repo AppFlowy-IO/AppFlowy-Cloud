@@ -136,7 +136,7 @@ where
   });
 }
 
-async fn init_collab_with_raw_data(
+async fn init_collab(
   oid: &str,
   encoded_collab: &EncodedCollab,
   doc: &Doc,
@@ -144,16 +144,22 @@ async fn init_collab_with_raw_data(
   if encoded_collab.doc_state.is_empty() {
     return Err(RealtimeError::UnexpectedData("doc state is empty"));
   }
+
+  // Can turn off INFO level into DEBUG. For now, just to see the log
   event!(
-    tracing::Level::DEBUG,
-    "start decoding {}: doc state with len: {}",
+    tracing::Level::INFO,
+    "start decoding:{} state len: {}, sv len: {}, v: {:?}",
     oid,
-    encoded_collab.doc_state.len()
+    encoded_collab.doc_state.len(),
+    encoded_collab.state_vector.len(),
+    encoded_collab.version
   );
-  let mut txn = doc.transact_mut();
   let update = Update::decode_v1(&encoded_collab.doc_state)?;
+  let mut txn = doc.transact_mut();
   txn.try_apply_update(update)?;
-  event!(tracing::Level::DEBUG, "finish decoding {}: doc state", oid,);
+  drop(txn);
+
+  event!(tracing::Level::INFO, "finish decoding:{}: doc state", oid,);
   Ok(())
 }
 
@@ -171,9 +177,7 @@ where
       .get_collab_encoded(&self.uid, params, true)
       .await
     {
-      Ok(encoded_collab_v1) => match init_collab_with_raw_data(object_id, &encoded_collab_v1, doc)
-        .await
-      {
+      Ok(encoded_collab_v1) => match init_collab(object_id, &encoded_collab_v1, doc).await {
         Ok(_) => {
           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
           // assumed that the 'encoded_collab_v1' is already in a valid format. Therefore, there is no need
@@ -207,13 +211,23 @@ where
         Err(err) => {
           // When initializing a collaboration object, if the 'init_collab_with_raw_data' operation fails, attempt to
           // restore the collaboration object from the latest snapshot.
-          if let Some(encoded_collab_v1) = get_latest_snapshot(object_id, &self.storage).await {
-            if let Err(err) = init_collab_with_raw_data(object_id, &encoded_collab_v1, doc).await {
-              error!("restore collab with snapshot failed: {:?}", err);
-              return;
-            }
+          error!(
+            "init collab:{} error: {:?}, try to restore from snapshot",
+            object_id, err
+          );
+
+          match get_latest_snapshot(object_id, &self.storage).await {
+            None => error!("No snapshot found for collab: {}", object_id),
+            Some(encoded_collab) => match init_collab(object_id, &encoded_collab, doc).await {
+              Ok(_) => info!("restore collab:{} with snapshot success", object_id),
+              Err(err) => {
+                error!(
+                  "restore collab:{} with snapshot failed: {:?}",
+                  object_id, err
+                );
+              },
+            },
           }
-          error!("init collab failed: {:?}", err)
         },
       },
       Err(err) => match &err {

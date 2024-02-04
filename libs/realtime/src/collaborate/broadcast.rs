@@ -175,7 +175,7 @@ impl CollabBroadcast {
     let stream_stop_tx = {
       let collab = self.collab().clone();
       let object_id = self.object_id.clone();
-      let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1000);
+      let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       tokio::spawn(async move {
         loop {
           select! {

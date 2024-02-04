@@ -194,14 +194,12 @@ where
 #[derive(Debug, Clone)]
 pub struct WriteConfig {
   pub flush_per_update: u32,
-  pub flush_per_seconds: u32,
 }
 
 impl Default for WriteConfig {
   fn default() -> Self {
     Self {
       flush_per_update: 100,
-      flush_per_seconds: 3 * 60,
     }
   }
 }

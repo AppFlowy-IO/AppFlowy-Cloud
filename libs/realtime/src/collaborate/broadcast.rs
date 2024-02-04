@@ -6,7 +6,7 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
-use realtime_protocol::handle_msg;
+use realtime_protocol::handle_collab_message;
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
@@ -216,7 +216,7 @@ impl CollabBroadcast {
   }
 }
 
-async fn handle_user_ws_msg<Sink>(
+async fn handle_user_collab_message<Sink>(
   object_id: &str,
   sink: &Arc<Mutex<Sink>>,
   collab_msg: &CollabMessage,
@@ -225,7 +225,6 @@ async fn handle_user_ws_msg<Sink>(
   Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
 {
-  // safety: payload is not none
   match collab_msg.payload() {
     None => {},
     Some(payload) => {
@@ -239,7 +238,7 @@ async fn handle_user_ws_msg<Sink>(
             let cloned_collab = collab.clone();
             let cloned_origin = origin.clone();
             let result = tokio::task::spawn_blocking(move || {
-              handle_msg(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg)
+              handle_collab_message(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg)
             })
             .await;
 
@@ -269,7 +268,7 @@ async fn handle_user_ws_msg<Sink>(
                 },
               },
               Ok(Err(err)) => {
-                error!("handle user ws message fail: {}", err);
+                error!("object id:{} =>{}", object_id, err);
               },
               Err(err) => {
                 error!("internal error when handle user ws message: {}", err);
@@ -277,7 +276,10 @@ async fn handle_user_ws_msg<Sink>(
             }
           },
           Err(e) => {
-            error!("Parser sync message failed: {:?}", e);
+            error!(
+              "object id:{} => parser sync message failed: {:?}",
+              object_id, e
+            );
             break;
           },
         }

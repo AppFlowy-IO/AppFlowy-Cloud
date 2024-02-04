@@ -198,14 +198,10 @@ where
 
   /// Flush the [Collab] to the storage.
   /// When there is no subscriber, perform the flush in a blocking task.
-  pub async fn flush_collab(&self) {
+  pub fn flush_collab(&self) {
     let collab = self.collab.clone();
-    if let Err(err) = spawn_blocking(move || {
+    spawn_blocking(move || {
       collab.lock().flush();
-    })
-    .await
-    {
-      error!("Failed to flush collab: {:?}", err);
-    }
+    });
   }
 }

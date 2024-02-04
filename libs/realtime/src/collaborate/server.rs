@@ -361,9 +361,9 @@ async fn remove_user_from_group<S, U, AC>(
         .collect::<Vec<_>>(),
     );
 
-    // Destroy the group if the group is empty
-    let should_remove = group.is_empty().await;
-    if should_remove {
+    // Remove the group if the group is no longer active
+    let is_group_active = group.is_active().await;
+    if !is_group_active {
       group.flush_collab();
       event!(tracing::Level::INFO, "Remove group: {}", editing.object_id);
       groups.remove_group(&editing.object_id).await;

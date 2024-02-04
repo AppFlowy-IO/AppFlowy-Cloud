@@ -9,10 +9,13 @@ use database::collab::CollabStorage;
 use std::collections::HashMap;
 
 use collab::core::collab_plugin::EncodedCollab;
+use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio::task::spawn_blocking;
+use tokio::time::Instant;
 
+use realtime_entity::collab_msg::CollabMessage;
 use tracing::{debug, error, event, trace, warn};
 
 pub struct CollabGroupCache<S, U, AC> {
@@ -156,11 +159,13 @@ pub struct CollabGroup<U> {
 
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
-  pub broadcast: CollabBroadcast,
+  broadcast: CollabBroadcast,
 
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
   pub subscribers: RwLock<HashMap<U, Subscription>>,
+
+  pub modified_at: Arc<Mutex<Instant>>,
 }
 
 impl<U> CollabGroup<U>
@@ -168,15 +173,37 @@ where
   U: RealtimeUser,
 {
   pub fn new(collab: Arc<MutexCollab>, broadcast: CollabBroadcast) -> Self {
+    let modified_at = Arc::new(Mutex::new(Instant::now()));
     Self {
       collab,
       broadcast,
       subscribers: Default::default(),
+      modified_at,
     }
   }
 
   pub async fn observe_collab(&self) {
     self.broadcast.observe_collab_changes().await;
+  }
+
+  pub fn subscribe<Sink, Stream, E>(
+    &self,
+    subscriber_origin: CollabOrigin,
+    sink: Sink,
+    mut stream: Stream,
+  ) -> Subscription
+  where
+    Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+    <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+    E: Into<Error> + Send + Sync + 'static,
+  {
+    self.broadcast.subscribe(
+      subscriber_origin,
+      sink,
+      &mut stream,
+      self.modified_at.clone(),
+    )
   }
 
   /// Mutate the [Collab] by the given closure
@@ -194,6 +221,17 @@ where
 
   pub async fn is_empty(&self) -> bool {
     self.subscribers.read().await.is_empty()
+  }
+
+  /// Check if the group is active. A group is considered active if it has at least one
+  /// subscriber and has been modified within the last 3 hours.
+  pub async fn is_active(&self) -> bool {
+    if self.subscribers.read().await.is_empty() {
+      return false;
+    }
+
+    let modified_at = self.modified_at.lock().await;
+    modified_at.elapsed().as_secs() < 3 * 60 * 60
   }
 
   /// Flush the [Collab] to the storage.

@@ -34,6 +34,7 @@ chrono = "0.4.31"
 realtime-entity = { workspace = true, features = ["actix_message"] }
 realtime-protocol.workspace = true
 uuid = { version = "1", features = ["v4"] }
+md5 = "0.7"
 
 [dev-dependencies]
 actix = "0.13"

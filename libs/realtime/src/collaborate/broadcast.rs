@@ -12,6 +12,7 @@ use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
@@ -30,7 +31,7 @@ pub struct CollabBroadcast {
   collab: MutexCollab,
   sender: Sender<CollabMessage>,
   awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
-  doc_sub: Mutex<Option<UpdateSubscription>>,
+  doc_subscription: Mutex<Option<UpdateSubscription>>,
 }
 
 impl CollabBroadcast {
@@ -49,7 +50,7 @@ impl CollabBroadcast {
       collab,
       sender,
       awareness_sub: Default::default(),
-      doc_sub: Default::default(),
+      doc_subscription: Default::default(),
     }
   }
 
@@ -97,7 +98,7 @@ impl CollabBroadcast {
       (doc_sub, awareness_sub)
     };
 
-    *self.doc_sub.lock().await = Some(doc_sub);
+    *self.doc_subscription.lock().await = Some(doc_sub);
     *self.awareness_sub.lock().await = Some(awareness_sub);
   }
 
@@ -125,6 +126,7 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     sink: Sink,
     mut stream: Stream,
+    modified_at: Arc<Mutex<Instant>>,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
@@ -194,9 +196,11 @@ impl CollabBroadcast {
                 continue;
               }
 
-              // TODO(nathan): the handle_user_ws_msg should run very fast, otherwise it will block
-              // the current loop. So create a task for it.
-              handle_user_ws_msg(&object_id, &sink, &collab_msg, &collab).await;
+              handle_user_collab_message(&object_id, &sink, &collab_msg, &collab).await;
+
+              if let Ok(mut modified_at) = modified_at.try_lock() {
+               *modified_at = Instant::now();
+              }
             }
           }
         }

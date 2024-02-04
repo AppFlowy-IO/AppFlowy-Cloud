@@ -79,6 +79,10 @@ pub async fn insert_into_af_collab(
     params.encoded_collab_v1.len(),
   );
 
+  // If the collab already exists, update the row with the new data.
+  // In most cases, the workspace_id should be the same as the existing one. Comparing the workspace_id
+  // is a safety check to prevent a user from inserting a row with an existing object_id but a different
+  // workspace_id.
   match existing_workspace_id {
     Some(existing_workspace_id) => {
       if existing_workspace_id == workspace_id {
@@ -110,7 +114,8 @@ pub async fn insert_into_af_collab(
       }
     },
     None => {
-      // Get the permission_id of the Owner
+      // If the collab doesn't exist, insert a new row into the `af_collab` table and add a corresponding
+      // entry to the `af_collab_member` table.
       let permission_id: i32 = sqlx::query_scalar!(
         r#"
           SELECT rp.permission_id

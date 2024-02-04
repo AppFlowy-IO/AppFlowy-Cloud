@@ -14,7 +14,7 @@ use sqlx::types::Uuid;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use tracing::{debug, warn};
+use tracing::{debug, event, warn};
 use validator::Validate;
 
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 15;
@@ -261,6 +261,11 @@ impl CollabStorage for CollabStoragePgImpl {
     params: QueryCollabParams,
     _force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollab> {
+    event!(
+      tracing::Level::DEBUG,
+      "Get collab data:{} from disk",
+      params.object_id
+    );
     match collab_db_ops::select_blob_from_af_collab(
       &self.pg_pool,
       &params.collab_type,

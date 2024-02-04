@@ -17,6 +17,8 @@ use database::collab::CollabStorage;
 use database_entity::dto::{
   AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
 };
+use md5::Digest;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -34,6 +36,7 @@ pub struct CollabStoragePlugin<S, U, AC> {
   group: Weak<CollabGroup<U>>,
   collab_type: CollabType,
   access_control: Arc<AC>,
+  latest_collab_md5: Mutex<Option<Digest>>,
 }
 
 impl<S, U, AC> CollabStoragePlugin<S, U, AC>
@@ -61,6 +64,7 @@ where
       group,
       collab_type,
       access_control,
+      latest_collab_md5: Default::default(),
     };
     spawn_period_check(&plugin);
     plugin
@@ -261,6 +265,13 @@ where
         return;
       },
     };
+
+    // compare the current encoded collab md5 with the latest one, if they are the same, skip the flush
+    let digest = md5::compute(&encoded_collab_v1);
+    if self.latest_collab_md5.lock().as_ref() == Some(&digest) {
+      return;
+    }
+    *self.latest_collab_md5.lock() = Some(digest);
 
     let params = CreateCollabParams {
       object_id: object_id.to_string(),

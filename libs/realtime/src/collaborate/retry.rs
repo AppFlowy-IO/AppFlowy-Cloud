@@ -161,11 +161,7 @@ where
               self.access_control.clone(),
             );
 
-            entry.insert(
-              collab_group
-                .broadcast
-                .subscribe(origin.clone(), sink, stream),
-            );
+            entry.insert(collab_group.subscribe(origin.clone(), sink, stream));
           }
         }
       } else {

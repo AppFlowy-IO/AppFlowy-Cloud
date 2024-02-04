@@ -1,22 +1,14 @@
-use client_api::extract_sign_in_url;
+use client_api_test_util::*;
 use gotrue::{
   api::Client,
   grant::{Grant, PasswordGrant},
-  params::{AdminUserParams, GenerateLinkParams},
-};
-
-use crate::{
-  client::{
-    constants::LOCALHOST_GOTRUE,
-    utils::{generate_unique_email, ADMIN_USER},
-  },
-  client_api_client,
+  params::{AdminDeleteUserParams, AdminUserParams, GenerateLinkParams},
 };
 
 #[tokio::test]
-async fn admin_user_create() {
+async fn admin_user_create_list_edit_delete() {
   let http_client = reqwest::Client::new();
-  let gotrue_client = Client::new(http_client, "http://localhost:9998");
+  let gotrue_client = Client::new(http_client, &LOCALHOST_GOTRUE);
   let admin_token = gotrue_client
     .token(&Grant::Password(PasswordGrant {
       email: ADMIN_USER.email.clone(),
@@ -52,46 +44,117 @@ async fn admin_user_create() {
     .await
     .unwrap();
   assert!(user_token.user.email_confirmed_at.is_some());
-}
 
-#[tokio::test]
-async fn admin_generate_link_and_user_sign_in() {
-  let http_client = reqwest::Client::new();
-  let gotrue_client = Client::new(http_client, LOCALHOST_GOTRUE);
-  let admin_token = gotrue_client
+  // list users
+  let users = gotrue_client
+    .admin_list_user(&admin_token.access_token)
+    .await
+    .unwrap()
+    .users;
+
+  // should be able to find user that was just created
+  let new_user = users.iter().find(|u| u.email == user_email).unwrap();
+
+  // change password for user
+  let new_password = "Hello456!";
+  let _ = gotrue_client
+    .admin_update_user(
+      &admin_token.access_token,
+      new_user.id.as_str(),
+      &AdminUserParams {
+        email: user_email.clone(),
+        password: Some(new_password.to_owned()),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+  assert_eq!(user.email, user_email);
+  assert!(user.email_confirmed_at.is_some());
+
+  // login user with new password
+  let _ = gotrue_client
     .token(&Grant::Password(PasswordGrant {
-      email: ADMIN_USER.email.clone(),
-      password: ADMIN_USER.password.clone(),
+      email: user_email.clone(),
+      password: new_password.to_string(),
     }))
     .await
     .unwrap();
 
-  // new user params
-  let user_email = generate_unique_email();
-
-  // create link
-  let admin_user_params: GenerateLinkParams = GenerateLinkParams {
-    email: user_email.clone(),
-    ..Default::default()
-  };
-  let link_resp = gotrue_client
-    .generate_link(&admin_token.access_token, &admin_user_params)
+  // delete user that was just created
+  gotrue_client
+    .admin_delete_user(
+      &admin_token.access_token,
+      &new_user.id,
+      &AdminDeleteUserParams {
+        should_soft_delete: true,
+      },
+    )
     .await
     .unwrap();
 
-  assert_eq!(link_resp.email, user_email);
+  let users = gotrue_client
+    .admin_list_user(&admin_token.access_token)
+    .await
+    .unwrap()
+    .users;
 
-  // visit action link
-  let action_link = link_resp.action_link;
-  let reqwest_client = reqwest::Client::new();
-  let resp = reqwest_client.get(action_link).send().await.unwrap();
-  let resp_text = resp.text().await.unwrap();
-  let appflowy_sign_in_url = extract_sign_in_url(&resp_text).unwrap();
+  // user list should not contain the new user added
+  // since it's deleted
+  let found = users.iter().any(|u| u.email == user_email);
+  assert!(!found);
+}
 
-  let client = client_api_client();
-  let is_new = client.sign_in_url(&appflowy_sign_in_url).await.unwrap();
-  assert!(is_new);
+#[tokio::test]
+async fn admin_generate_link_and_user_sign_in_and_invite() {
+  // admin generate link for new user
+  let new_user_sign_in_link = {
+    let http_client = reqwest::Client::new();
+    let gotrue_client = Client::new(http_client, &LOCALHOST_GOTRUE);
+    let admin_token = gotrue_client
+      .token(&Grant::Password(PasswordGrant {
+        email: ADMIN_USER.email.clone(),
+        password: ADMIN_USER.password.clone(),
+      }))
+      .await
+      .unwrap();
 
-  let workspaces = client.workspaces().await.unwrap();
-  assert_eq!(workspaces.len(), 1);
+    // new user params
+    let user_email = generate_unique_email();
+
+    // create link
+    let admin_user_params: GenerateLinkParams = GenerateLinkParams {
+      email: user_email.clone(),
+      ..Default::default()
+    };
+    let link_resp = gotrue_client
+      .admin_generate_link(&admin_token.access_token, &admin_user_params)
+      .await
+      .unwrap();
+
+    assert_eq!(link_resp.email, user_email);
+    link_resp.action_link
+  };
+
+  // new user sign in with link,
+  // invite another user through magic link
+  {
+    let client = localhost_client();
+    let appflowy_sign_in_url = client
+      .extract_sign_in_url(&new_user_sign_in_link)
+      .await
+      .unwrap();
+
+    let is_new = client
+      .sign_in_with_url(&appflowy_sign_in_url)
+      .await
+      .unwrap();
+    assert!(is_new);
+
+    let workspaces = client.get_workspaces().await.unwrap();
+    assert_eq!(workspaces.0.len(), 1);
+
+    let friend_email = generate_unique_email();
+    client.invite(&friend_email).await.unwrap();
+  }
 }

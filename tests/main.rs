@@ -1,18 +1,8 @@
-use crate::client::constants::{LOCALHOST_URL, LOCALHOST_WS};
-use client::constants::LOCALHOST_GOTRUE;
-use client_api::Client;
-
-mod client;
+mod casbin;
 mod collab;
 mod collab_stream;
 mod gotrue;
-mod realtime;
+mod user;
+mod workspace;
 
-pub fn client_api_client() -> Client {
-  Client::from(
-    reqwest::Client::new(),
-    LOCALHOST_URL,
-    LOCALHOST_WS,
-    LOCALHOST_GOTRUE,
-  )
-}
+mod websocket;

@@ -1,19 +1,22 @@
 use std::sync::{Arc, Weak};
 
+use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::CollabPlugin;
-use collab::sync_protocol::awareness::Awareness;
-use collab::sync_protocol::message::{Message, SyncMessage};
-use collab_define::collab_msg::{CollabMessage, UpdateSync};
-use collab_define::{CollabObject, CollabType};
+use collab_entity::{CollabObject, CollabType};
 use futures_util::SinkExt;
+use realtime_entity::collab_msg::{CollabMessage, UpdateSync};
+use realtime_protocol::{Message, SyncMessage};
 use tokio_stream::StreamExt;
 
 use crate::collab_sync::{SinkConfig, SyncQueue};
-use crate::ws::{ConnectState, WSConnectStateReceiver};
 use tokio_stream::wrappers::WatchStream;
+use tracing::trace;
+
+use crate::platform_spawn;
+use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {
@@ -24,9 +27,15 @@ pub struct SyncPlugin<Sink, Stream, C> {
   channel: Option<Arc<C>>,
 }
 
+impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
+  fn drop(&mut self) {
+    trace!("Drop sync plugin: {}", self.object.object_id);
+  }
+}
+
 impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
@@ -40,6 +49,7 @@ where
     sink_config: SinkConfig,
     stream: Stream,
     channel: Option<Arc<C>>,
+    pause: bool,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
     let weak_local_collab = collab.clone();
@@ -50,10 +60,11 @@ where
       stream,
       collab.clone(),
       sink_config,
+      pause,
     );
 
     let mut sync_state_stream = WatchStream::new(sync_queue.subscribe_sync_state());
-    tokio::spawn(async move {
+    platform_spawn(async move {
       while let Some(new_state) = sync_state_stream.next().await {
         if let Some(local_collab) = weak_local_collab.upgrade() {
           if let Some(local_collab) = local_collab.try_lock() {
@@ -66,16 +77,28 @@ where
     let sync_queue = Arc::new(sync_queue);
     let weak_local_collab = collab;
     let weak_sync_queue = Arc::downgrade(&sync_queue);
-    tokio::spawn(async move {
+    platform_spawn(async move {
       while let Ok(connect_state) = ws_connect_state.recv().await {
-        if connect_state == ConnectState::Connected {
-          if let (Some(local_collab), Some(sync_queue)) =
-            (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
-          {
-            if let Some(local_collab) = local_collab.try_lock() {
-              sync_queue.init_sync(local_collab.get_awareness());
+        match connect_state {
+          ConnectState::Connected => {
+            // If the websocket is connected, initialize a new init sync
+            if let (Some(local_collab), Some(sync_queue)) =
+              (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
+            {
+              if let Some(local_collab) = local_collab.try_lock() {
+                let last_sync_at = local_collab.get_last_sync_at();
+                sync_queue.resume();
+                sync_queue.init_sync(local_collab.get_awareness(), last_sync_at);
+              }
             }
-          }
+          },
+          ConnectState::Unauthorized | ConnectState::Closed => {
+            if let Some(sync_queue) = weak_sync_queue.upgrade() {
+              // Stop sync if the websocket is unauthorized or disconnected
+              sync_queue.pause();
+            }
+          },
+          _ => {},
         }
       }
     });
@@ -95,13 +118,13 @@ where
 
 impl<E, Sink, Stream, C> CollabPlugin for SyncPlugin<Sink, Stream, C>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
-  fn did_init(&self, _awareness: &Awareness, _object_id: &str) {
-    self.sync_queue.init_sync(_awareness);
+  fn did_init(&self, _awareness: &Awareness, _object_id: &str, last_sync_at: i64) {
+    self.sync_queue.init_sync(_awareness, last_sync_at);
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {
@@ -110,7 +133,7 @@ where
     let object_id = self.object.object_id.clone();
     let cloned_origin = origin.clone();
 
-    tokio::spawn(async move {
+    platform_spawn(async move {
       if let Some(sync_queue) = weak_sync_queue.upgrade() {
         let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
         sync_queue

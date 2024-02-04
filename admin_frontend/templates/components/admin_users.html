@@ -1,0 +1,34 @@
+<div id="admin-users">
+  <table>
+    <tr>
+      <th>Email</th>
+      <th>Created At</th>
+      <th>Actions</th>
+    </tr>
+
+    {% for user in users %}
+    <tr>
+      <td>{{ user.email|escape }}</td>
+      <td>{{ user.created_at|escape }}</td>
+      <td>
+        <button
+          class="button cyan"
+          hx-target="#admin-users"
+          hx-get="/web/components/admin/users/{{ user.id|escape }}"
+        >
+          More Info
+        </button>
+        <button
+          class="deletUserBtn button red"
+          hx-delete="/web-api/admin/user/{{ user.id|escape }}"
+          hx-confirm="Are you sure?"
+          hx-target="closest tr"
+          hx-swap="delete"
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>

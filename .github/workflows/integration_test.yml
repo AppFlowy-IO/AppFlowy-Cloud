@@ -1,0 +1,75 @@
+name: AppFlowy-Cloud Integrations
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches: [ main ]
+
+env:
+  LOCALHOST_URL: http://localhost
+  LOCALHOST_WS: ws://localhost/ws
+  LOCALHOST_GOTRUE: http://localhost/gotrue
+  DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
+  SQLX_OFFLINE: true
+
+jobs:
+  test:
+    name: Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            AppFlowy-Cloud
+
+      - name: Copy and rename deploy.env to .env
+        run: cp deploy.env .env
+
+      - name: Replace values in .env
+        run: |
+          # log level
+          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
+          sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.GOTRUE_SMTP_USER }}/' .env
+          sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.GOTRUE_SMTP_PASS }}/' .env
+          sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
+          sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
+          sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
+          sed -i 's/API_EXTERNAL_URL=http:\/\/your-host/API_EXTERNAL_URL=http:\/\/localhost/' .env
+          # expose port for sqlx tests
+          sed -i '38s/$/\n    ports:\n      - 5432:5432/' docker-compose.yml
+
+      - name: Update Nginx Configuration
+        run: |
+          # the wasm-pack headless tests will run on random ports, so we need to allow all origins
+          sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
+        
+
+      - name: Disable appflowyinc images
+        run: |
+          sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
+          sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml
+
+      - name: Run Docker-Compose
+        run: |
+          docker compose up -d
+
+      - name: Run tests
+        run: |
+          cargo test
+
+      - name: Install Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+
+      - name: Run WASM tests
+        working-directory: ./libs/wasm-test
+        run: | 
+          cargo install wasm-pack
+          wasm-pack test --headless --firefox
+          

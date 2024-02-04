@@ -1,0 +1,64 @@
+<div>
+  {% include "user_details.html" %}
+
+  <div>
+    <form hx-put="/web-api/admin/user/{{ user.id|escape }}" hx-target="#none">
+      <table>
+        <tr>
+          <td>Set Password:</td>
+          <td>
+            <input
+              class="input"
+              type="password"
+              name="password"
+              placeholder="***"
+              required
+            />
+          </td>
+        </tr>
+        <tr>
+          <td></td>
+          <td style="text-align: right">
+            <button type="submit" class="button cyan">Set</button>
+          </td>
+        </tr>
+      </table>
+    </form>
+
+    <table>
+      <tr>
+        <td>
+          <button
+            class="button cyan"
+            hx-post="/web-api/admin/user/{{ user.email|escape }}/generate-link"
+            hx-target="#inviteLink"
+            hx-trigger="click"
+          >
+            Generate Invite Link
+          </button>
+        </td>
+        <td>
+          <textarea id="inviteLink" readonly></textarea>
+        </td>
+      </tr>
+
+      <tr>
+        <td></td>
+        <td style="text-align: right">
+          <button class="button" id="copyInviteLinkBtn">Copy Link</button>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <script>
+    document
+      .getElementById("copyInviteLinkBtn")
+      .addEventListener("click", function () {
+        const textarea = document.getElementById("inviteLink");
+        textarea.select();
+        document.execCommand("copy");
+        displaySuccess("Copied invite link to clipboard!");
+      });
+  </script>
+</div>

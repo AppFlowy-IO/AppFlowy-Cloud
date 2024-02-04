@@ -1,0 +1,45 @@
+<div id="create-user">
+  <h4>Please enter the following information to create a new user</h4>
+  <form hx-post="/web-api/admin/user" hx-target="#none">
+    <table>
+      <tr>
+        <td>Email:</td>
+        <td>
+          <input
+            class="input"
+            name="email"
+            placeholder="user@example.com"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>Password:</td>
+        <td>
+          <input
+            class="input"
+            type="password"
+            name="password"
+            placeholder="********"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td>Require Email Verification:</td>
+        <td>
+          <select name="require_email_verification" class="input">
+            <option value="false">No</option>
+            <option value="true">Yes</option>
+          </select>
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td style="text-align: right">
+          <button class="button cyan" type="submit">Create</button>
+        </td>
+      </tr>
+    </table>
+  </form>
+</div>

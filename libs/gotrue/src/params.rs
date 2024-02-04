@@ -1,9 +1,14 @@
 use std::collections::btree_map::BTreeMap;
 
-use gotrue_entity::{Factor, Identity};
+use gotrue_entity::dto::{Factor, Identity};
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AdminDeleteUserParams {
+  pub should_soft_delete: bool,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct AdminUserParams {
   pub aud: String,
   pub role: String,
@@ -17,7 +22,7 @@ pub struct AdminUserParams {
   pub ban_duration: String,
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct GenerateLinkParams {
   #[serde(rename = "type")]
   pub type_: GenerateLinkType,
@@ -30,11 +35,30 @@ pub struct GenerateLinkParams {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+pub struct MagicLinkParams {
+  pub email: String,
+  pub data: BTreeMap<String, serde_json::Value>,
+  pub code_challenge_method: String,
+  pub code_challenge: String,
+}
+
+impl Default for GenerateLinkParams {
+  fn default() -> Self {
+    GenerateLinkParams {
+      type_: GenerateLinkType::MagicLink,
+      email: String::default(),
+      new_email: String::default(),
+      password: String::default(),
+      data: BTreeMap::new(),
+      redirect_to: "appflowy-flutter://".to_string(),
+    }
+  }
+}
+
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum GenerateLinkType {
-  #[default]
   MagicLink,
-
   Recovery,
   Invite,
   Signup,
@@ -80,4 +104,14 @@ pub struct GenerateLinkResponse {
   pub hashed_token: String,
   pub verification_type: String,
   pub redirect_to: String,
+}
+
+#[derive(Debug, Serialize, Default)]
+pub struct CreateSSOProviderParams {
+  #[serde(rename = "type")]
+  pub type_: String,
+  pub metadata_url: String,
+  pub metadata_xml: String,
+  pub domains: Vec<String>,
+  pub attribute_mapping: serde_json::Value,
 }

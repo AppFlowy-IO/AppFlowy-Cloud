@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO af_blob_metadata\n        (workspace_id, file_id, file_type, file_size)\n        VALUES ($1, $2, $3, $4)\n        ON CONFLICT (workspace_id, file_id) DO UPDATE SET\n            file_type = $3,\n            file_size = $4\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Varchar",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6cc4a7da11a37413c9951983ee3f30de933cc6357a66c8e10366fde27acaefea"
+}

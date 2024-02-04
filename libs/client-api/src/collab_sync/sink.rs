@@ -1,19 +1,19 @@
 use collab::core::origin::CollabOrigin;
-use collab_define::collab_msg::CollabSinkMessage;
 
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
-use crate::collab_sync::{SyncError, DEFAULT_SYNC_TIMEOUT};
+use crate::collab_sync::{SyncError, SyncObject, DEFAULT_SYNC_TIMEOUT};
 use futures_util::SinkExt;
 
-use tokio::spawn;
+use crate::platform_spawn;
+use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, event, trace, warn};
 
 #[derive(Clone, Debug)]
 pub enum SinkState {
@@ -22,6 +22,7 @@ pub enum SinkState {
   Syncing,
   /// All the messages are synced to the remote.
   Finished,
+  Pause,
 }
 
 impl SinkState {
@@ -40,7 +41,7 @@ pub struct CollabSink<Sink, Msg> {
   /// The [PendingMsgQueue] is used to queue the messages that are waiting to be sent to the
   /// remote. It will merge the messages if possible.
   pending_msg_queue: Arc<parking_lot::Mutex<PendingMsgQueue<Msg>>>,
-  msg_id_counter: Arc<dyn MsgIdCounter>,
+  msg_id_counter: Arc<DefaultMsgIdCounter>,
 
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
@@ -55,31 +56,33 @@ pub struct CollabSink<Sink, Msg> {
   /// is [SinkStrategy::FixInterval].
   instant: Mutex<Instant>,
   state_notifier: Arc<watch::Sender<SinkState>>,
+  pause: AtomicBool,
+  object: SyncObject,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
   fn drop(&mut self) {
+    trace!("Drop CollabSink {}", self.object.object_id);
     let _ = self.notifier.send(true);
   }
 }
 
 impl<E, Sink, Msg> CollabSink<Sink, Msg>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
   Msg: CollabSinkMessage,
 {
-  pub fn new<C>(
+  pub fn new(
     uid: i64,
+    object: SyncObject,
     sink: Sink,
     notifier: watch::Sender<bool>,
     sync_state_tx: watch::Sender<SinkState>,
-    msg_id_counter: C,
     config: SinkConfig,
-  ) -> Self
-  where
-    C: MsgIdCounter,
-  {
+    pause: bool,
+  ) -> Self {
+    let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);
     let sender = Arc::new(Mutex::new(sink));
@@ -93,7 +96,7 @@ where
       let weak_notifier = Arc::downgrade(&notifier);
       let (tx, rx) = mpsc::channel(1);
       interval_runner_stop_tx = Some(tx);
-      spawn(IntervalRunner::new(*duration).run(weak_notifier, rx));
+      platform_spawn(IntervalRunner::new(*duration).run(weak_notifier, rx));
     }
     Self {
       uid,
@@ -105,6 +108,8 @@ where
       config,
       instant,
       interval_runner_stop_tx,
+      pause: AtomicBool::new(pause),
+      object,
     }
   }
 
@@ -125,6 +130,8 @@ where
     self.notify();
   }
 
+  /// When queue the init message, the sink will clear all the pending messages and send the init
+  /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> Msg) {
     // When the client is connected, remove all pending messages and send the init message.
     {
@@ -144,11 +151,21 @@ where
     self.pending_msg_queue.lock().clear();
   }
 
+  pub fn pause(&self) {
+    self.pause.store(true, Ordering::SeqCst);
+    let _ = self.state_notifier.send(SinkState::Pause);
+  }
+
+  pub fn resume(&self) {
+    self.pause.store(false, Ordering::SeqCst);
+    self.notify();
+  }
+
   /// Notify the sink to process the next message and mark the current message as done.
   pub async fn ack_msg(
     &self,
     _origin: Option<&CollabOrigin>,
-    object_id: &str,
+    _object_id: &str,
     msg_id: MsgId,
   ) -> bool {
     match self.pending_msg_queue.lock().peek_mut() {
@@ -163,7 +180,6 @@ where
 
         let is_done = pending_msg.set_state(self.uid, MessageState::Done);
         if is_done {
-          trace!("[Client {}]: Did send: {}:{}", self.uid, object_id, msg_id);
           self.notify();
         }
         is_done
@@ -172,15 +188,19 @@ where
   }
 
   async fn process_next_msg(&self) -> Result<(), SyncError> {
-    // Check if the next message can be deferred. If not, try to send the message immediately. The
-    // default value is true.
+    if self.pause.load(Ordering::SeqCst) {
+      return Ok(());
+    }
+
+    // If the message is not an init sync, it implies that it can be deferred for sending.
+    // Consequently, multiple deferred messages can be merged into a single message.
     let deferrable = self
       .pending_msg_queue
       .try_lock()
       .map(|pending_msgs| {
         pending_msgs
           .peek()
-          .map(|msg| msg.get_msg().deferrable())
+          .map(|msg| !msg.get_msg().is_init_msg())
           .unwrap_or(true)
       })
       .unwrap_or(true);
@@ -190,15 +210,23 @@ where
       return Ok(());
     }
 
+    let is_prev_msg_done = self
+      .pending_msg_queue
+      .try_lock()
+      .and_then(|queue| queue.peek().map(|msg| msg.state().is_done()))
+      .unwrap_or(false);
+
+    if is_prev_msg_done {
+      self.try_send_msg_immediately().await;
+      return Ok(());
+    }
+
     // Check the elapsed time from the last message. Return if the elapsed time is less than
     // the fix interval.
     if let SinkStrategy::FixInterval(duration) = &self.config.strategy {
       let elapsed = self.instant.lock().await.elapsed();
-      // trace!(
-      //   "elapsed interval: {:?}, fix interval: {:?}",
-      //   elapsed,
-      //   duration
-      // );
+      // If the elapsed time is less than the fixed interval or if the remaining time until the fixed
+      // interval is less than the send timeout, return.
       if elapsed < *duration {
         return Ok(());
       }
@@ -237,30 +265,54 @@ where
         return None;
       }
 
+      let mut merged_msg = vec![];
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
-      if sending_msg.is_mergeable() {
+      if sending_msg.can_merge() {
         while let Some(pending_msg) = pending_msg_queue.pop() {
-          debug!("merge_msg: {}", pending_msg.get_msg());
-          sending_msg.merge(pending_msg);
-          if !sending_msg.is_mergeable() {
-            break;
+          // If the message is not mergeable, push the message back to the queue and break the loop.
+          match sending_msg.merge(&pending_msg, &self.config.maximum_payload_size) {
+            Ok(continue_merge) => {
+              merged_msg.push(pending_msg.msg_id());
+              if !continue_merge {
+                break;
+              }
+            },
+            Err(err) => {
+              pending_msg_queue.push(pending_msg);
+              error!("Failed to merge message: {}", err);
+              break;
+            },
           }
         }
       }
 
       sending_msg.set_ret(tx);
       sending_msg.set_state(self.uid, MessageState::Processing);
+
       let _ = self.state_notifier.send(SinkState::Syncing);
       let collab_msg = sending_msg.get_msg().clone();
       pending_msg_queue.push(sending_msg);
+
+      if !merged_msg.is_empty() {
+        event!(
+          tracing::Level::DEBUG,
+          "merge: {:?}, len: {}",
+          merged_msg,
+          collab_msg.payload_len()
+        );
+      }
       collab_msg
     };
 
+    let payload_len = collab_msg.payload_len();
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        debug!("[Client {}] sending {}", self.uid, collab_msg);
-        sender.send(collab_msg).await.ok()?;
+        debug!("Sending {}", collab_msg);
+        if let Err(err) = sender.send(collab_msg).await {
+          error!("Failed to send error: {:?}", err.into());
+          return None;
+        }
       },
       Err(_) => {
         warn!("Failed to acquire the lock of the sink, retry later");
@@ -268,17 +320,21 @@ where
         return None;
       },
     }
-
+    let timeout_duration = calculate_timeout(payload_len, self.config.send_timeout);
     // Wait for the message to be acked.
     // If the message is not acked within the timeout, resend the message.
-    match tokio::time::timeout(self.config.timeout, rx).await {
+    match tokio::time::timeout(timeout_duration, rx).await {
       Ok(result) => {
         match result {
           Ok(_) => match self.pending_msg_queue.try_lock() {
             None => warn!("Failed to acquire the lock of the pending_msg_queue"),
             Some(mut pending_msg_queue) => {
-              let _ = pending_msg_queue.pop();
-              trace!("Pending messages: {}", pending_msg_queue.len());
+              let msg = pending_msg_queue.pop();
+              trace!(
+                "{:?}: Pending messages: {}",
+                msg.map(|msg| msg.object_id().to_owned()),
+                pending_msg_queue.len()
+              );
               if pending_msg_queue.is_empty() {
                 if let Err(e) = self.state_notifier.send(SinkState::Finished) {
                   error!("send sink state failed: {}", e);
@@ -286,7 +342,7 @@ where
               }
             },
           },
-          Err(err) => warn!("Send message failed error: {:?}", err),
+          Err(err) => error!("Send message failed error: {}", err),
         }
 
         self.notify()
@@ -305,16 +361,10 @@ where
   pub(crate) fn notify(&self) {
     let _ = self.notifier.send(false);
   }
-
-  /// Stop the sink.
-  #[allow(dead_code)]
-  fn stop(&self) {
-    let _ = self.notifier.send(true);
-  }
 }
 
 fn retry_later(weak_notifier: Weak<watch::Sender<bool>>) {
-  spawn(async move {
+  platform_spawn(async move {
     interval(Duration::from_millis(100)).tick().await;
     if let Some(notifier) = weak_notifier.upgrade() {
       let _ = notifier.send(false);
@@ -330,7 +380,7 @@ impl<Msg> CollabSinkRunner<Msg> {
     weak_sink: Weak<CollabSink<Sink, Msg>>,
     mut notifier: watch::Receiver<bool>,
   ) where
-    E: std::error::Error + Send + Sync + 'static,
+    E: Into<anyhow::Error> + Send + Sync + 'static,
     Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
     Msg: CollabSinkMessage,
   {
@@ -360,48 +410,48 @@ impl<Msg> CollabSinkRunner<Msg> {
 pub struct SinkConfig {
   /// `timeout` is the time to wait for the remote to ack the message. If the remote
   /// does not ack the message in time, the message will be sent again.
-  pub timeout: Duration,
-  /// `mergeable` indicates whether the messages are mergeable. If the messages are
-  /// mergeable, the sink will try to merge the messages before sending them.
-  pub mergeable: bool,
-  /// `max_zip_size` is the maximum size of the messages to be merged.
-  pub max_merge_size: usize,
+  pub send_timeout: Duration,
+  /// `maximum_payload_size` is the maximum size of the messages to be merged.
+  pub maximum_payload_size: usize,
   /// `strategy` is the strategy to send the messages.
   pub strategy: SinkStrategy,
+}
+
+fn calculate_timeout(payload_len: usize, default: Duration) -> Duration {
+  match payload_len {
+    0..=40959 => default,
+    40960..=1048576 => Duration::from_secs(10),
+    1048577..=2097152 => Duration::from_secs(20),
+    2097153..=4194304 => Duration::from_secs(50),
+    _ => Duration::from_secs(160),
+  }
 }
 
 impl SinkConfig {
   pub fn new() -> Self {
     Self::default()
   }
-  pub fn with_timeout(mut self, secs: u64) -> Self {
+  pub fn send_timeout(mut self, secs: u64) -> Self {
     let timeout_duration = Duration::from_secs(secs);
     if let SinkStrategy::FixInterval(duration) = self.strategy {
       if timeout_duration < duration {
-        tracing::warn!("The timeout duration should greater than the fix interval duration");
+        warn!("The timeout duration should greater than the fix interval duration");
       }
     }
-    self.timeout = timeout_duration;
-    self
-  }
-
-  /// `mergeable` indicates whether the messages are mergeable. If the messages are
-  /// mergeable, the sink will try to merge the messages before sending them.
-  pub fn with_mergeable(mut self, mergeable: bool) -> Self {
-    self.mergeable = mergeable;
+    self.send_timeout = timeout_duration;
     self
   }
 
   /// `max_zip_size` is the maximum size of the messages to be merged.
-  pub fn with_max_merge_size(mut self, max_merge_size: usize) -> Self {
-    self.max_merge_size = max_merge_size;
+  pub fn with_max_payload_size(mut self, max_size: usize) -> Self {
+    self.maximum_payload_size = max_size;
     self
   }
 
   pub fn with_strategy(mut self, strategy: SinkStrategy) -> Self {
     if let SinkStrategy::FixInterval(duration) = strategy {
-      if self.timeout < duration {
-        tracing::warn!("The timeout duration should greater than the fix interval duration");
+      if self.send_timeout < duration {
+        warn!("The timeout duration should greater than the fix interval duration");
       }
     }
     self.strategy = strategy;
@@ -412,9 +462,8 @@ impl SinkConfig {
 impl Default for SinkConfig {
   fn default() -> Self {
     Self {
-      timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
-      mergeable: false,
-      max_merge_size: 4096,
+      send_timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
+      maximum_payload_size: 1024 * 64,
       strategy: SinkStrategy::ASAP,
     }
   }
@@ -424,9 +473,6 @@ pub enum SinkStrategy {
   /// Send the message as soon as possible.
   ASAP,
   /// Send the message in a fixed interval.
-  /// This can reduce the number of times the message is sent. Especially if using the AWS
-  /// as the storage layer, the cost of sending the message is high. However, it may increase
-  /// the latency of the message.
   FixInterval(Duration),
 }
 
@@ -435,8 +481,6 @@ impl SinkStrategy {
     matches!(self, SinkStrategy::FixInterval(_))
   }
 }
-
-pub type MsgId = u64;
 
 pub trait MsgIdCounter: Send + Sync + 'static {
   /// Get the next message id. The message id should be unique.
@@ -450,9 +494,6 @@ impl DefaultMsgIdCounter {
   pub fn new() -> Self {
     Self::default()
   }
-}
-
-impl MsgIdCounter for DefaultMsgIdCounter {
   fn next(&self) -> MsgId {
     self.0.fetch_add(1, Ordering::SeqCst)
   }

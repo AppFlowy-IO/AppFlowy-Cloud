@@ -1,3 +1,4 @@
+pub mod compression;
 mod user_email;
 mod user_name;
 mod user_password;

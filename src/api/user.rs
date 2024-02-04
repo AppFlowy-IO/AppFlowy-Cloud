@@ -1,64 +1,85 @@
 use crate::biz;
+use crate::component::auth::jwt::{Authorization, UserUuid};
 use crate::component::auth::{
-  change_password, logged_user_from_request, login, logout, register, ChangePasswordRequest,
+  change_password, logged_user_from_request, login, register, ChangePasswordRequest,
   RegisterRequest,
 };
-
 use crate::component::auth::{InputParamsError, LoginRequest};
-
 use crate::component::token_state::SessionToken;
 use crate::domain::{UserEmail, UserName, UserPassword};
 use crate::state::AppState;
-use database_entity::AFUserProfileView;
-use shared_entity::data::{AppResponse, JsonAppResponse};
-use shared_entity::dto::{SignInTokenResponse, UpdateUsernameParams};
-
-use crate::component::auth::jwt::{Authorization, UserUuid};
 use actix_web::web::{Data, Json};
 use actix_web::HttpRequest;
 use actix_web::Result;
 use actix_web::{web, HttpResponse, Scope};
+use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
+use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
+use shared_entity::response::{AppResponse, JsonAppResponse};
+
+use shared_entity::response::AppResponseError;
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
     // auth server integration
-    .service(web::resource("/verify/{access_token}").route(web::get().to(verify_handler)))
-    .service(web::resource("/update").route(web::post().to(update_handler)))
-    .service(web::resource("/profile").route(web::get().to(profile_handler)))
+    .service(web::resource("/verify/{access_token}").route(web::get().to(verify_user_handler)))
+    .service(web::resource("/update").route(web::post().to(update_user_handler)))
+    .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
+    .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
 
-    // native
+    // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))
-    .service(web::resource("/logout").route(web::get().to(logout_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
 
-async fn verify_handler(
+#[tracing::instrument(skip(state, path), err)]
+async fn verify_user_handler(
   path: web::Path<String>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
-  let is_new = biz::user::token_verify(&state.pg_pool, &state.gotrue_client, &access_token).await?;
+  let is_new = biz::user::verify_token(
+    &state.pg_pool,
+    &state.id_gen,
+    &state.gotrue_client,
+    &access_token,
+    &state.workspace_access_control,
+    &state.collab_access_control,
+  )
+  .await
+  .map_err(AppResponseError::from)?;
   let resp = SignInTokenResponse { is_new };
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-#[tracing::instrument(level = "debug", skip(state))]
-async fn profile_handler(
+#[tracing::instrument(skip(state), err)]
+async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<AFUserProfileView>> {
-  let profile = biz::user::get_profile(&state.pg_pool, &uuid).await?;
+) -> Result<JsonAppResponse<AFUserProfile>> {
+  let profile = biz::user::get_profile(&state.pg_pool, &uuid)
+    .await
+    .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().with_data(profile).into())
 }
 
-async fn update_handler(
+#[tracing::instrument(skip(state), err)]
+async fn get_user_workspace_info_handler(
+  uuid: UserUuid,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<AFUserWorkspaceInfo>> {
+  let info = biz::user::get_user_workspace_info(&state.pg_pool, &uuid).await?;
+  Ok(AppResponse::Ok().with_data(info).into())
+}
+
+#[tracing::instrument(skip(state, auth, payload), err)]
+async fn update_user_handler(
   auth: Authorization,
-  req: Json<UpdateUsernameParams>,
+  payload: Json<UpdateUserParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
-  let params = req.into_inner();
-  biz::user::update_user(&state.pg_pool, &auth.uuid()?, &params.new_name).await?;
+  let params = payload.into_inner();
+  biz::user::update_user(&state.pg_pool, auth.uuid()?, params).await?;
   Ok(AppResponse::Ok().into())
 }
 
@@ -85,13 +106,6 @@ async fn login_handler(
   }
 
   Ok(HttpResponse::Ok().json(resp))
-}
-
-#[tracing::instrument(level = "debug", skip(state))]
-async fn logout_handler(req: HttpRequest, state: Data<AppState>) -> Result<HttpResponse> {
-  let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;
-  logout(logged_user, state.user.clone()).await;
-  Ok(HttpResponse::Ok().finish())
 }
 
 #[tracing::instrument(level = "debug", skip(state))]

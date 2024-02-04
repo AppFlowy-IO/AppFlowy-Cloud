@@ -1,0 +1,24 @@
+@keyframes slideIn {
+  from {
+    top: -20%;
+  }
+  to {
+    top: 1%;
+  }
+}
+
+.message.slideIn {
+  animation: slideIn 0.2s forwards;
+}
+
+.message {
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  display: none;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  z-index: 1;
+}

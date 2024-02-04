@@ -1,25 +1,23 @@
-use bytes::Bytes;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::sync::{Arc, Weak};
-
 use crate::collab_sync::{
-  CollabSink, CollabSinkRunner, DefaultMsgIdCounter, SinkConfig, SinkState, SyncError, SyncObject,
+  CollabSink, CollabSinkRunner, SinkConfig, SinkState, SyncError, SyncObject,
 };
+use crate::platform_spawn;
+use bytes::Bytes;
+use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
-use collab::sync_protocol::awareness::Awareness;
-use collab::sync_protocol::message::{Message, MessageReader, SyncMessage};
-use collab::sync_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
-use collab_define::collab_msg::{ClientCollabInit, CollabMessage, ServerCollabInit, UpdateSync};
 use futures_util::{SinkExt, StreamExt};
-use lib0::decoding::Cursor;
-use tokio::spawn;
+use realtime_entity::collab_msg::{CollabMessage, InitSync, ServerInit, UpdateSync};
+use realtime_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
+use realtime_protocol::{Message, MessageReader, SyncMessage};
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::sync::{Arc, Weak};
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, trace, warn};
+use tracing::{error, event, trace, warn, Level};
+use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -40,9 +38,15 @@ pub struct SyncQueue<Sink, Stream> {
   sync_state: Arc<watch::Sender<SyncState>>,
 }
 
+impl<Sink, Stream> Drop for SyncQueue<Sink, Stream> {
+  fn drop(&mut self) {
+    trace!("Drop SyncQueue {}", self.object.object_id);
+  }
+}
+
 impl<E, Sink, Stream> SyncQueue<Sink, Stream>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
@@ -53,23 +57,25 @@ where
     stream: Stream,
     collab: Weak<MutexCollab>,
     config: SinkConfig,
+    pause: bool,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(false);
-    let sync_state = Arc::new(watch::channel(SyncState::SyncInitStart).0);
+    let sync_state = Arc::new(watch::channel(SyncState::InitSyncBegin).0);
     let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
     debug_assert!(origin.client_user_id().is_some());
 
     let sink = Arc::new(CollabSink::new(
       origin.client_user_id().unwrap_or(0),
+      object.clone(),
       sink,
       notifier,
       sync_state_tx,
-      DefaultMsgIdCounter::new(),
       config,
+      pause,
     ));
 
-    spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
+    platform_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
     let cloned_protocol = protocol.clone();
     let object_id = object.object_id.clone();
     let stream = SyncStream::new(
@@ -78,25 +84,26 @@ where
       stream,
       protocol,
       collab,
-      sink.clone(),
+      Arc::downgrade(&sink),
     );
 
     let weak_sync_state = Arc::downgrade(&sync_state);
     let mut sink_state_stream = WatchStream::new(sink_state_rx);
     // Subscribe the sink state stream and update the sync state in the background.
-    spawn(async move {
+    platform_spawn(async move {
       while let Some(collab_state) = sink_state_stream.next().await {
         if let Some(sync_state) = weak_sync_state.upgrade() {
           match collab_state {
             SinkState::Syncing => {
-              let _ = sync_state.send(SyncState::SyncUpdate);
+              let _ = sync_state.send(SyncState::Syncing);
             },
             SinkState::Finished => {
               let _ = sync_state.send(SyncState::SyncFinished);
             },
             SinkState::Init => {
-              let _ = sync_state.send(SyncState::SyncInitStart);
+              let _ = sync_state.send(SyncState::InitSyncBegin);
             },
+            SinkState::Pause => {},
           }
         }
       }
@@ -112,14 +119,22 @@ where
     }
   }
 
+  pub fn pause(&self) {
+    self.sink.pause();
+  }
+
+  pub fn resume(&self) {
+    self.sink.resume();
+  }
+
   pub fn subscribe_sync_state(&self) -> watch::Receiver<SyncState> {
     self.sync_state.subscribe()
   }
 
-  pub fn init_sync(&self, awareness: &Awareness) {
+  pub fn init_sync(&self, awareness: &Awareness, _last_sync_at: i64) {
     if let Some(payload) = doc_init_state(awareness, &self.protocol) {
       self.sink.queue_init_sync(|msg_id| {
-        ClientCollabInit::new(
+        InitSync::new(
           self.origin.clone(),
           self.object.object_id.clone(),
           self.object.collab_type.clone(),
@@ -134,6 +149,7 @@ where
     }
   }
 
+  /// Remove all the messages in the sink queue
   pub fn clear(&self) {
     self.sink.clear();
   }
@@ -162,17 +178,22 @@ impl<Sink, Stream> Deref for SyncQueue<Sink, Stream> {
 
 /// Use to continuously receive updates from remote.
 struct SyncStream<Sink, Stream> {
+  object_id: String,
   #[allow(dead_code)]
   weak_collab: Weak<MutexCollab>,
-  #[allow(dead_code)]
-  runner: JoinHandle<Result<(), SyncError>>,
   phantom_sink: PhantomData<Sink>,
   phantom_stream: PhantomData<Stream>,
 }
 
+impl<Sink, Stream> Drop for SyncStream<Sink, Stream> {
+  fn drop(&mut self) {
+    trace!("Drop SyncStream {}", self.object_id);
+  }
+}
+
 impl<E, Sink, Stream> SyncStream<Sink, Stream>
 where
-  E: std::error::Error + Send + Sync + 'static,
+  E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
@@ -182,24 +203,23 @@ where
     stream: Stream,
     protocol: P,
     weak_collab: Weak<MutexCollab>,
-    sink: Arc<CollabSink<Sink, CollabMessage>>,
+    sink: Weak<CollabSink<Sink, CollabMessage>>,
   ) -> Self
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
     let cloned_weak_collab = weak_collab.clone();
-    let weak_sink = Arc::downgrade(&sink);
-    let runner = spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
+    platform_spawn(SyncStream::<Sink, Stream>::spawn_doc_stream::<P>(
       origin,
-      object_id,
+      object_id.clone(),
       stream,
       cloned_weak_collab,
-      weak_sink,
+      sink,
       protocol,
     ));
     Self {
+      object_id,
       weak_collab,
-      runner,
       phantom_sink: Default::default(),
       phantom_stream: Default::default(),
     }
@@ -213,33 +233,35 @@ where
     weak_collab: Weak<MutexCollab>,
     weak_sink: Weak<CollabSink<Sink, CollabMessage>>,
     protocol: P,
-  ) -> Result<(), SyncError>
-  where
+  ) where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    while let Some(input) = stream.next().await {
-      match input {
+    while let Some(collab_message) = stream.next().await {
+      match collab_message {
         Ok(msg) => match (weak_collab.upgrade(), weak_sink.upgrade()) {
-          (Some(awareness), Some(sink)) => {
-            SyncStream::<Sink, Stream>::process_message::<P>(
-              &origin, &object_id, &protocol, &awareness, &sink, msg,
+          (Some(collab), Some(sink)) => {
+            let span = tracing::span!(Level::TRACE, "doc_stream", object_id = %msg.object_id());
+            let _enter = span.enter();
+            if let Err(error) = SyncStream::<Sink, Stream>::process_message::<P>(
+              &origin, &object_id, &protocol, &collab, &sink, msg,
             )
-            .await?
+            .await
+            {
+              error!("Error while processing message: {}", error);
+            }
           },
           _ => {
-            warn!("ClientSync is dropped. Stopping receive incoming changes.");
-            return Ok(());
+            // The collab or sink is dropped, stop the stream.
+            warn!("Stop receive doc incoming changes.");
+            break;
           },
         },
         Err(e) => {
-          error!("Spawn doc stream failed: {}", e);
-          // If the client has disconnected, the stream will return an error, So stop receiving
-          // messages if the client has disconnected.
-          return Err(SyncError::Internal(Box::new(e)));
+          warn!("Stream error: {},stop receive incoming changes", e.into());
+          break;
         },
       }
     }
-    Ok(())
   }
 
   /// Continuously handle messages from the remote doc
@@ -254,26 +276,31 @@ where
   where
     P: CollabSyncProtocol + Send + Sync + 'static,
   {
-    {
-      if match msg.msg_id() {
-        None => true,
-        Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
-      } && !msg.payload().is_empty()
-      {
-        trace!("💬process messages");
-        SyncStream::<Sink, Stream>::process_payload(
-          origin,
-          msg.payload(),
-          object_id,
-          protocol,
-          collab,
-          sink,
-        )
-        .await?;
-        trace!("💬");
+    let should_process = match msg.msg_id() {
+      // The msg_id is None if the message is [ServerBroadcast] or [ServerAwareness]
+      None => true,
+      Some(msg_id) => sink.ack_msg(msg.origin(), msg.object_id(), msg_id).await,
+    };
+
+    if should_process {
+      if let Some(payload) = msg.payload() {
+        event!(
+          Level::TRACE,
+          "receive collab message: {}, payload: {}",
+          msg,
+          payload.len()
+        );
+        if !payload.is_empty() {
+          trace!("start process message:{:?}", msg.msg_id());
+          SyncStream::<Sink, Stream>::process_payload(
+            origin, payload, object_id, protocol, collab, sink,
+          )
+          .await?;
+          trace!("end process message: {:?}", msg.msg_id());
+        }
       }
-      Ok(())
     }
+    Ok(())
   }
 
   async fn process_payload<P>(
@@ -289,15 +316,24 @@ where
   {
     let mut decoder = DecoderV1::new(Cursor::new(payload));
     let reader = MessageReader::new(&mut decoder);
+    let cloned_origin = Some(origin.clone());
     for msg in reader {
       let msg = msg?;
       trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-      if let Some(payload) = handle_msg(&Some(origin), protocol, collab, msg).await? {
+      if let Some(payload) = handle_msg(&cloned_origin, protocol, collab, msg)? {
+        if is_sync_step_1 {
+          // flush
+          match collab.try_lock() {
+            None => warn!("Failed to acquire lock for flushing collab"),
+            Some(collab_guard) => collab_guard.flush(),
+          }
+        }
+
         let object_id = object_id.to_string();
         sink.queue_msg(|msg_id| {
           if is_sync_step_1 {
-            ServerCollabInit::new(origin.clone(), object_id, payload, msg_id).into()
+            ServerInit::new(origin.clone(), object_id, payload, msg_id).into()
           } else {
             UpdateSync::new(origin.clone(), object_id, payload, msg_id).into()
           }

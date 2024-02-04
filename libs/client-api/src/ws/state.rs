@@ -1,4 +1,5 @@
 use tokio::sync::broadcast::{channel, Receiver, Sender};
+use tracing::trace;
 
 pub struct ConnectStateNotify {
   pub(crate) state: ConnectState,
@@ -9,14 +10,14 @@ impl ConnectStateNotify {
   pub(crate) fn new() -> Self {
     let (sender, _) = channel(100);
     Self {
-      state: ConnectState::Disconnected,
+      state: ConnectState::Closed,
       sender,
     }
   }
 
   pub(crate) fn set_state(&mut self, state: ConnectState) {
     if self.state != state {
-      tracing::trace!("[🙂Client]: connect state changed to {:?}", state);
+      trace!("[websocket]: {:?}", state);
       self.state = state.clone();
       let _ = self.sender.send(state);
     }
@@ -32,7 +33,8 @@ pub enum ConnectState {
   PingTimeout,
   Connecting,
   Connected,
-  Disconnected,
+  Unauthorized,
+  Closed,
 }
 
 impl ConnectState {
@@ -51,7 +53,7 @@ impl ConnectState {
   }
 
   #[allow(dead_code)]
-  pub fn is_disconnected(&self) -> bool {
-    matches!(self, ConnectState::Disconnected)
+  pub fn is_closed(&self) -> bool {
+    matches!(self, ConnectState::Closed)
   }
 }

@@ -1,53 +1,36 @@
+<p align="center">
+  <img src="assets/logos/appflowy_logo.svg"  width="500" height="200" />
+</p>
+
+<h4 align="center">
+   <a href="https://discord.gg/9Q2xaN37tV"><img src="https://img.shields.io/badge/AppFlowy.IO-discord-orange"></a>
+    <a href="https://opensource.org/licenses/AGPL-3.0"><img src="https://img.shields.io/badge/license-AGPL-purple.svg" alt="License: AGPL"></a>
+</h4>
+
+
+<p align="center">
+    <a href="https://www.appflowy.io"><b>Website</b></a> •
+    <a href="https://twitter.com/appflowy"><b>Twitter</b></a>
+</p>
+
+<p align="center">⚡ The AppFlowy Cloud written with Rust 🦀</p>
+
 # AppFlowy Cloud
-- Cloud Server for AppFlowy
 
-## Deployment
+AppFlowy Cloud is part of the AppFlowy ecosystem, offering secure user authentication, file storage,
+and real-time WebSocket communication for an efficient and collaborative user experience.
 
-### Environmental Variables before starting
-- you can set it explicitly(below) or in a `.env` file (use `dev.env`) as template
-```bash
-# authentication key, change this and keep the key safe and secret
-GOTRUE_JWT_SECRET=secret_auth_pass
+## Table of Contents
+- [🚀 Deployment](#-deployment)
+- [💻 Development](#-development)
+- [🐞 Debugging](#-debugging)
+- [⚙️ Contributing](#-contributing)
 
-# enabled by default, if you dont want need email confirmation, set to false
-GOTRUE_MAILER_AUTOCONFIRM=true
 
-# if you enable mail confirmation, you need to set the SMTP configuration below
-GOTRUE_SMTP_HOST=smtp.gmail.com
-GOTRUE_SMTP_PORT=465
-GOTRUE_SMTP_USER=email_sender@some_company.com
-GOTRUE_SMTP_PASS=email_sender_password
-GOTRUE_SMTP_ADMIN_EMAIL=comp_admin@@some_company.com
+## 🚀 Deployment
+- See [deployment guide](./doc/DEPLOYMENT.md)
 
-# Change 'localhost:9998' to the public host of machine that is running on.
-# This is for email confirmation link
-API_EXTERNAL_URL=http://localhost:9998
-
-# Enable Google OAuth2, default: false, quick link for set up:
-# https://console.cloud.google.com/apis/credentials
-# https://console.cloud.google.com/apis/credentials/consent
-GOTRUE_EXTERNAL_GOOGLE_ENABLED=false
-GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=some_id
-GOTRUE_EXTERNAL_GOOGLE_SECRET=some_secret
-# Change 'localhost:9998' to the public host of machine that is running on.
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=http://localhost:9998/callback
-```
-- additional settings can be modified in `docker-compose.yml`
-## SSL Certificate
-- To use your own SSL, replace `certificate.crt` and `private_key.key`
-with your own in `nginx/ssl/` directory
-
-### Start Cloud Server
-```bash
-docker-compose up -d
-```
-
-### Ports
-Host Server is required to expose the following Ports:
-- `443` (https)
-- `80`  (http)
-
-## Local Development
+## 💻 Development
 
 ### Pre-requisites
 
@@ -60,41 +43,79 @@ You'll need to install:
 - copy the configurations from `dev.env` to `.env`
 - edit the `.env` as required (such as SMTP configurations)
 
-### Run the dependency servers
+### Run with all dependencies
 ```bash
-docker-compose --file docker-compose-dev.yml up -d
+./build/run_local_server.sh
 ```
 
-### Install sqlx-cli
+This process will execute all the dependencies and start the AppFlowy-Cloud server. Alternatively,
+you have the option to run the AppFlowy-Cloud server independently
+
+### Run the AppFlowy-Cloud
+
+1. Run the dependency servers
+```bash
+docker compose --file docker-compose-dev.yml up -d
+```
+
+2. Install sqlx-cli
 ```bash
 cargo install sqlx-cli
 ```
 
-### Run sqlx migration
+3. Run sqlx migration
 ```bash
 sqlx database create
 sqlx migrate run
+cargo sqlx prepare --workspace
 ```
 
-### Run the AppFlowy-Cloud server
+4. Run the server
 ```bash
 cargo run
 ```
 
 ### Run the tests
 
-#### Test
+After the server is running, you can run the tests with:
+
 ```bash
 cargo test
 ```
 
-### Debugging
-- Postgres
+## 🐞Debugging
+
+Effective debugging is essential for maintaining a healthy application. Here are some tools and commands to help you
+troubleshoot issues in various components of the AppFlowy cloud server:
+
+### Postgres
+
+A web-based administration tool for PostgreSQL. Access it at [PgAdmin](http://localhost:5400)
+
+- OR command line:
 ```bash
     export PGPASSWORD=password
-    psql --host=localhost --username=postgres --port=5433
+    psql --host=localhost --username=postgres --port=5432
 ```
+
 - Redis
+
+Redis offers a powerful command line interface for managing your Redis instance. Connect using the following command:
+
 ```bash
-    redis-cli -p 6380
+    redis-cli -p 6379
 ```
+
+### Minio
+
+Minio provides a Web UI for easy management of your files and buckets. Access it at [Web UI](http://localhost:9001)
+
+### Portainer
+For managing Docker containers, Portainer's Web UI is an excellent tool. Access it at Web UI to easily manage Docker
+environments, including container deployment, networking, volume management, and more. Access it at [Web UI](http://localhost:9442)
+
+
+## ⚙️ Contributing
+
+Any new contribution is more than welcome in this project!
+If you want to know more about the development workflow or want to contribute, please visit our [contributing guidelines](./doc/CONTRIBUTING.md) for detailed instructions!

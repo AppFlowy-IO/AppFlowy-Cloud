@@ -1,0 +1,15 @@
+#sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 128px;
+  height: 100vh;
+}
+
+.sidebar-item {
+  padding: 16px 16px; /* Padding to give button-like space */
+  cursor: pointer; /* Changing the cursor on hover to indicate clickability */
+}
+
+.sidebar-item:hover {
+  text-shadow: 0 0 8px;
+}

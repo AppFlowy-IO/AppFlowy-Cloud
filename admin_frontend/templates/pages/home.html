@@ -1,0 +1,30 @@
+<!-- prettier-ignore -->
+{% extends "layouts/base.html" %}
+
+<!-- prettier-ignore -->
+{% block title %} AppFlowy Cloud {% endblock %}
+
+<!-- prettier-ignore -->
+{% block head %}
+<link href="/assets/sidebar.css" rel="stylesheet" />
+<link href="/assets/top_menu_bar.css" rel="stylesheet" />
+<link href="/assets/home.css" rel="stylesheet" />
+<link href="/assets/navigate.css" rel="stylesheet" />
+{% endblock %}
+
+<!-- prettier-ignore -->
+{% block content %}
+
+<!-- prettier-ignore -->
+{% include "components/top_menu_bar.html" %}
+
+<div id="home" style="border-top: 1px solid">
+  <div style="border-right: 1px solid">
+    {% include "components/sidebar.html" %}
+  </div>
+  <div style="margin: 16px" id="sidebar-content">
+    {% include "components/navigate.html" %}
+  </div>
+</div>
+
+{% endblock %}

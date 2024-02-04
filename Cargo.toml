@@ -7,23 +7,22 @@ edition = "2021"
 
 [dependencies]
 actix = "0.13"
-actix-web = { version = "4.3.1", features = ["openssl"] }
-actix-http = "3.3.1"
+actix-web = { version = "4.4.1", features = ["openssl"] }
+actix-http = "3.5.1"
 actix-rt = "2"
 actix-web-actors = { version = "4.2.0" }
 actix-service = "2.0.2"
 actix-identity = "0.6.0"
-actix-cors = "0.6.4"
+actix-router = "0.5.2"
 actix-session = { version = "0.8", features = ["redis-rs-tls-session"] }
-openssl = "0.10.45"
-redis = "0.23.3"
+redis = "0.24.0"
+openssl = { version = "0.10.62", features = ["vendored"] }
 
 # serde
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-serde-aux = "4.1.2"
+serde_json.workspace = true
+serde.workspace = true
 
-tokio = { version = "1.26.0", features = [
+tokio = { version = "1.35.1", features = [
     "macros",
     "rt-multi-thread",
     "sync",
@@ -31,63 +30,73 @@ tokio = { version = "1.26.0", features = [
     "time",
 ] }
 tokio-stream = "0.1.14"
-tokio-util = { version = "0.7.9", features = ["io"] }
-futures = "0.3.17"
-futures-util ={ version = "0.3.26" , features = ["std","io"] }
-config = { version = "0.13.3", default-features = false, features = ["yaml"] }
-once_cell = "1.13.0"
-chrono = { version = "0.4.23", features = ["serde", "clock"], default-features = false }
+tokio-util = { version = "0.7.10", features = ["io"] }
+futures = "0.3.30"
+futures-util ={ version = "0.3.30" , features = ["std","io"] }
+once_cell = "1.19.0"
+chrono = { version = "0.4.31", features = ["serde", "clock"], default-features = false }
 derive_more = { version = "0.99" }
 argon2 = { version = "0.5", features = ["std"] }
 secrecy = { version = "0.8", features = ["serde"] }
 rand = { version = "0.8", features = ["std_rng"] }
-anyhow = "1.0.40"
-thiserror = "1.0.24"
-reqwest = { version = "0.11.20", default-features = false, features = ["json", "rustls-tls", "cookies"] }
-unicode-segmentation = "1.0"
+anyhow = "1.0.79"
+thiserror = "1.0.56"
+reqwest = { version = "0.11.23", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+unicode-segmentation = "1.10"
 lazy_static = "1.4.0"
 fancy-regex = "0.11.0"
-validator = "0.16.0"
-bytes = "1.4.0"
+validator = "0.16.1"
+bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
-jsonwebtoken = "8.3.0"
 mime = "0.3.17"
-# aws-config = "0.56.1"
-# aws-sdk-s3 = "0.31.1"
-rust-s3 = "0.33.0"
-
-# tracing
-tracing = { version = "0.1.37" }
-tracing-subscriber = { version = "0.3.16", features = ["registry", "env-filter", "ansi", "json"] }
-tracing-bunyan-formatter = "0.3.6"
-tracing-actix-web = "0.7"
-tracing-log = "0.1.1"
+rust-s3 = {version = "0.33.0", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
+redis = "0.23.3"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }
+tracing-bunyan-formatter = "0.3.9"
+tracing-log = "0.1.4"
 sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
-async-trait = "0.1.73"
+async-trait = "0.1.77"
+prometheus-client = "0.22.0"
+itertools = "0.11"
+uuid = "1.6.1"
+tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
+prost = "0.12.3"
+casbin = { version = "2.1.0" }
+dotenvy = "0.15.7"
+url = "2.5.0"
+brotli = "3.4.0"
 
 # collab
-collab = { version = "0.1.0" }
+collab = { version = "0.1.0", features = ["async-plugin"] }
+collab-entity = { version = "0.1.0" }
 
 #Local crate
 token = { path = "libs/token" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 database = { path = "libs/database" }
-database-entity = { path = "libs/database-entity" }
+database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
-shared_entity = { path = "libs/shared-entity", features = ["cloud"] }
 collab-stream = { path = "libs/collab-stream" }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
+shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
+workspace-template = { workspace = true }
+realtime-entity.workspace = true
+
 
 [dev-dependencies]
-once_cell = "1.7.2"
-collab-define = { version = "0.1.0" }
-tempfile = "3.4.0"
+once_cell = "1.19.0"
+tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
-dotenv = "0.15.0"
 scraper = "0.17.1"
-client-api = { path = "libs/client-api", features = ["collab-sync"] }
+client-api-test-util = { path = "libs/client-api-test-util" }
+client-api = { path = "libs/client-api", features = ["collab-sync", "test_util"] }
+opener = "0.6.1"
+image = "0.23.14"
+collab-folder = { version = "0.1.0" }
 
 [[bin]]
 name = "appflowy_cloud"
@@ -101,14 +110,44 @@ members = [
     "libs/token",
     "libs/snowflake",
     "libs/realtime",
+    "libs/realtime-entity",
     "libs/database",
     "libs/database-entity",
     "libs/client-api",
     "libs/infra",
     "libs/shared-entity",
     "libs/gotrue",
-    "libs/gotrue-entity"
+    "libs/gotrue-entity",
+    "admin_frontend",
+    "libs/app_error",
+    "libs/workspace-template",
+    "libs/encrypt",
+    "libs/realtime-protocol",
+    "libs/websocket",
+    "libs/client-api-test-util", "libs/wasm-test",
 ]
+
+[workspace.dependencies]
+realtime-entity = { path = "libs/realtime-entity" }
+realtime-protocol = { path = "libs/realtime-protocol" }
+database-entity = { path = "libs/database-entity" }
+shared-entity = { path = "libs/shared-entity" }
+app-error = { path = "libs/app_error" }
+serde_json = "1.0.111"
+serde = { version = "1.0.195", features = ["derive"] }
+bytes = "1.5.0"
+workspace-template = { path = "libs/workspace-template" }
+uuid = { version = "1.6.1", features = ["v4"] }
+anyhow = "1.0.79"
+tokio = { version = "1.35", features = ["sync"] }
+yrs = "0.17.2"
+bincode = "1.3.3"
+websocket = { path = "libs/websocket" }
+collab = { version = "0.1.0" }
+collab-folder = { version = "0.1.0" }
+tracing = { version = "0.1"}
+collab-entity = { version = "0.1.0" }
+gotrue = { path = "libs/gotrue" }
 
 [profile.release]
 lto = true
@@ -121,13 +160,15 @@ codegen-units = 16
 debug = true
 lto = false
 
-[profile.dev.package.sqlx-macros]
-opt-level = 3
-
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "489cae0"  }
-collab-define = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "489cae0" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+
+[features]
+custom_env= []
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }
-#collab-define = { path = "libs/AppFlowy-Collab/collab-define" }
+#collab-entity = { path = "libs/AppFlowy-Collab/collab-define" }

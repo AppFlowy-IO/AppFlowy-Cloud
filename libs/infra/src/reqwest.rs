@@ -27,10 +27,12 @@ pub async fn from_body<T>(resp: reqwest::Response) -> Result<T, Error>
 where
   T: serde::de::DeserializeOwned,
 {
+  let status_code = resp.status();
   let bytes = resp.bytes().await?;
   serde_json::from_slice(&bytes).map_err(|e| {
     anyhow!(
-      "deserialize error: {}, body: {}",
+      "deserialize error: {}, status: {}, body: {}",
+      status_code,
       e,
       String::from_utf8_lossy(&bytes)
     )

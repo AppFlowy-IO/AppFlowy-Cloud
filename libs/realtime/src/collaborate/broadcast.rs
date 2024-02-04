@@ -1,27 +1,26 @@
+use collab::core::awareness;
 use std::sync::Arc;
 
+use crate::collaborate::sync_protocol::ServerSyncProtocol;
+use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab::sync_protocol::awareness::{Awareness, AwarenessUpdate};
-use collab::sync_protocol::message::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use collab::sync_protocol::{awareness, handle_msg, ServerSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
-use lib0::encoding::Write;
+use realtime_protocol::handle_msg;
+use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
 use crate::collaborate::retry::SinkCollabMessageAction;
-use crate::error::{internal_error, RealtimeError};
-use collab_define::collab_msg::{
-  CollabAwarenessData, CollabBroadcastData, CollabMessage, UpdateAck,
-};
+use crate::error::RealtimeError;
+use realtime_entity::collab_msg::{CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage};
 use tracing::{error, trace, warn};
+use yrs::encoding::write::Write;
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
@@ -30,11 +29,8 @@ pub struct CollabBroadcast {
   object_id: String,
   collab: MutexCollab,
   sender: Sender<CollabMessage>,
-
-  #[allow(dead_code)]
-  awareness_sub: awareness::UpdateSubscription,
-  #[allow(dead_code)]
-  doc_sub: UpdateSubscription,
+  awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
+  doc_sub: Mutex<Option<UpdateSubscription>>,
 }
 
 impl CollabBroadcast {
@@ -46,28 +42,45 @@ impl CollabBroadcast {
   /// provided `buffer_capacity` size.
   pub fn new(object_id: &str, collab: MutexCollab, buffer_capacity: usize) -> Self {
     let object_id = object_id.to_owned();
+    // broadcast channel
     let (sender, _) = channel(buffer_capacity);
+    CollabBroadcast {
+      object_id,
+      collab,
+      sender,
+      awareness_sub: Default::default(),
+      doc_sub: Default::default(),
+    }
+  }
+
+  pub async fn observe_collab_changes(&self) {
     let (doc_sub, awareness_sub) = {
-      let mut mutex_collab = collab.lock();
+      let mut mutex_collab = self.collab.lock();
 
       // Observer the document's update and broadcast it to all subscribers.
-      let cloned_oid = object_id.clone();
-      let sink = sender.clone();
+      let cloned_oid = self.object_id.clone();
+      let broadcast_sink = self.sender.clone();
       let doc_sub = mutex_collab
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
+          let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
           let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
-          if let Err(_e) = sink.send(msg.into()) {
-            trace!("Broadcast group is closed");
+
+          match broadcast_sink.send(msg.into()) {
+            Ok(_) => trace!("observe doc update with len:{}", update_len),
+            Err(e) => error!(
+              "observe doc update with len:{} - broadcast sink fail: {}",
+              update_len, e
+            ),
           }
         })
         .unwrap();
 
-      let sink = sender.clone();
-      let cloned_oid = object_id.clone();
+      let broadcast_sink = self.sender.clone();
+      let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
       let awareness_sub = mutex_collab
@@ -75,21 +88,17 @@ impl CollabBroadcast {
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = CollabAwarenessData::new(cloned_oid.clone(), payload);
-            if let Err(_e) = sink.send(msg.into()) {
+            let msg = CollabAwareness::new(cloned_oid.clone(), payload);
+            if let Err(_e) = broadcast_sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
           }
         });
       (doc_sub, awareness_sub)
     };
-    CollabBroadcast {
-      object_id,
-      collab,
-      sender,
-      awareness_sub,
-      doc_sub,
-    }
+
+    *self.doc_sub.lock().await = Some(doc_sub);
+    *self.awareness_sub.lock().await = Some(awareness_sub);
   }
 
   /// Returns a reference to an underlying [MutexCollab] instance.
@@ -100,10 +109,7 @@ impl CollabBroadcast {
   /// Broadcasts user message to all active subscribers. Returns error if message could not have
   /// been broadcast.
   #[allow(clippy::result_large_err)]
-  pub fn broadcast_awareness(
-    &self,
-    msg: CollabAwarenessData,
-  ) -> Result<(), SendError<CollabMessage>> {
+  pub fn broadcast_awareness(&self, msg: CollabAwareness) -> Result<(), SendError<CollabMessage>> {
     self.sender.send(msg.into())?;
     Ok(())
   }
@@ -112,11 +118,11 @@ impl CollabBroadcast {
   /// Sink and Stream protocols - to a current broadcast group.
   ///
   /// Returns a subscription structure, which can be dropped in order to unsubscribe or awaited
-  /// via [Subscription::completed] method in order to complete of its own volition (due to
+  /// via [Subscription::stop] method in order to complete of its own volition (due to
   /// an internal connection error or closed connection).
   pub fn subscribe<Sink, Stream, E>(
     &self,
-    origin: CollabOrigin,
+    subscriber_origin: CollabOrigin,
     sink: Sink,
     mut stream: Stream,
   ) -> Subscription
@@ -124,35 +130,41 @@ impl CollabBroadcast {
     Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
-    E: std::error::Error + Send + Sync + 'static,
+    E: Into<anyhow::Error> + Send + Sync + 'static,
   {
-    trace!("[💭Server]: new subscriber: {}", origin);
+    let cloned_origin = subscriber_origin.clone();
+    trace!("[realtime]: new subscriber: {}", subscriber_origin);
     let sink = Arc::new(Mutex::new(sink));
     // Receive a update from the document observer and forward the  update to all
     // connected subscribers using its Sink.
-    let sink_task = {
+    let sink_stop_tx = {
       let sink = sink.clone();
+      let (stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       let mut receiver = self.sender.subscribe();
       tokio::spawn(async move {
-        while let Ok(message) = receiver.recv().await {
-          // No need to broadcast the message back to the origin.
-          if let Some(msg_origin) = message.origin() {
-            if msg_origin == &origin {
-              continue;
-            }
-          }
+        loop {
+          select! {
+            _ = stop_rx.recv() => break,
+            Ok(message) = receiver.recv() => {
+              if let Some(msg_origin) = message.origin() {
+                if msg_origin == &subscriber_origin {
+                  continue;
+                }
+              }
 
-          trace!("[💭Server]: {}", message);
-          let action = SinkCollabMessageAction {
-            sink: &sink,
-            message,
-          };
-          if let Err(err) = action.run().await {
-            error!("Fail to broadcast message:{}", err);
+              trace!("[realtime]: broadcast collab message: {}", message);
+              let action = SinkCollabMessageAction {
+                sink: &sink,
+                message,
+              };
+              if let Err(err) = action.run().await {
+                error!("fail to broadcast message:{}", err);
+              }
+            },
           }
         }
-        Ok(())
-      })
+      });
+      stop_tx
     };
 
     // Receive messages from clients and reply with the response. The message may alter the
@@ -160,103 +172,153 @@ impl CollabBroadcast {
     // the document state then the document observer will be triggered and the update will be
     // broadcast to all connected subscribers. Check out the [observe_update_v1] and [sink_task]
     // above.
-    let stream_task = {
+    let stream_stop_tx = {
       let collab = self.collab().clone();
       let object_id = self.object_id.clone();
+      let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       tokio::spawn(async move {
-        while let Some(res) = stream.next().await {
-          let collab_msg = res.map_err(internal_error)?;
-          // Continue if the message is empty
-          if collab_msg.is_empty() {
-            warn!("Unexpected empty payload of collab message");
-            continue;
-          }
-
-          let origin = collab_msg.origin();
-          if object_id != collab_msg.object_id() {
-            error!("[🔴Server]: Incoming message's object id does not match the broadcast group's object id");
-            continue;
-          }
-          let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
-          match sink.try_lock() {
-            Ok(mut sink) => {
-              let reader = MessageReader::new(&mut decoder);
-              for msg in reader {
-                match msg {
-                  Ok(msg) => {
-                    let payload = handle_msg(&origin, &ServerSyncProtocol, &collab, msg).await?;
-                    match origin {
-                      None => warn!("Client message does not have a origin"),
-                      Some(origin) => {
-                        if let Some(msg_id) = collab_msg.msg_id() {
-                          let resp = UpdateAck::new(
-                            origin.clone(),
-                            object_id.clone(),
-                            payload.unwrap_or_default(),
-                            msg_id,
-                          );
-
-                          trace!("Send response to client: {}", resp);
-                          match sink.send(resp.into()).await {
-                            Ok(_) => {},
-                            Err(err) => {
-                              trace!("fail to send response to client: {}", err);
-                            },
-                          }
-                        }
-                      },
-                    }
-                    // Send the response to the corresponding client
-                  },
-                  Err(e) => {
-                    error!("Parser sync message failed: {:?}", e);
-                    break;
-                  },
-                }
+        loop {
+          select! {
+             _ = stop_rx.recv() => break,
+            Some(Ok(collab_msg)) = stream.next() => {
+              // Continue if the message is empty
+              let payload = collab_msg.payload();
+              if payload.is_none() {
+                warn!("Unexpected empty payload of collab message:{}", collab_msg);
+                continue;
               }
-            },
-            Err(err) => error!("Requires sink lock failed: {:?}", err),
+
+              let _collab_msg_origin = collab_msg.origin();
+              if object_id != collab_msg.object_id() {
+                error!("Incoming message's object id does not match the broadcast group's object id");
+                continue;
+              }
+
+              // TODO(nathan): the handle_user_ws_msg should run very fast, otherwise it will block
+              // the current loop. So create a task for it.
+              handle_user_ws_msg(&object_id, &sink, &collab_msg, &collab).await;
+            }
           }
         }
-        Ok(())
-      })
+      });
+      stream_stop_tx
     };
 
     Subscription {
-      sink_task,
-      stream_task,
+      origin: cloned_origin,
+      sink_stop_tx: Some(sink_stop_tx),
+      stream_stop_tx: Some(stream_stop_tx),
     }
   }
 }
 
-/// A subscription structure returned from [CollabBroadcastData::subscribe], which represents a
-/// subscribed connection. It can be dropped in order to unsubscribe or awaited via
-/// [Subscription::completed] method in order to complete of its own volition (due to an internal
-/// connection error or closed connection).
-#[derive(Debug)]
-pub struct Subscription {
-  sink_task: JoinHandle<Result<(), RealtimeError>>,
-  stream_task: JoinHandle<Result<(), RealtimeError>>,
-}
+async fn handle_user_ws_msg<Sink>(
+  object_id: &str,
+  sink: &Arc<Mutex<Sink>>,
+  collab_msg: &CollabMessage,
+  collab: &MutexCollab,
+) where
+  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
+  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+{
+  // safety: payload is not none
+  match collab_msg.payload() {
+    None => {},
+    Some(payload) => {
+      let object_id = object_id.to_string();
+      let mut decoder = DecoderV1::from(payload.as_ref());
+      let origin = Arc::new(collab_msg.origin().cloned());
+      let reader = MessageReader::new(&mut decoder);
+      for msg in reader {
+        match msg {
+          Ok(msg) => {
+            let cloned_collab = collab.clone();
+            let cloned_origin = origin.clone();
+            let result = tokio::task::spawn_blocking(move || {
+              handle_msg(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg)
+            })
+            .await;
 
-impl Subscription {
-  /// Consumes current subscription, waiting for it to complete. If an underlying connection was
-  /// closed because of failure, an error which caused it to happen will be returned.
-  ///
-  /// This method doesn't invoke close procedure. If you need that, drop current subscription instead.
-  pub async fn completed(self) -> Result<(), RealtimeError> {
-    let res = select! {
-        r1 = self.sink_task => r1?,
-        r2 = self.stream_task => r2?,
-    };
-    res
+            match result {
+              Ok(Ok(payload)) => match origin.as_ref() {
+                None => warn!("Client message does not have a origin"),
+                Some(origin) => {
+                  if let Some(msg_id) = collab_msg.msg_id() {
+                    let resp = CollabAck::new(
+                      origin.clone(),
+                      object_id.clone(),
+                      payload.unwrap_or_default(),
+                      msg_id,
+                      collab_msg.type_str(),
+                    );
+
+                    trace!("Send response to client: {}", resp);
+                    match sink.try_lock() {
+                      Ok(mut sink) => {
+                        if let Err(err) = sink.send(resp.into()).await {
+                          trace!("fail to send response to client: {}", err);
+                        }
+                      },
+                      Err(err) => error!("Requires sink lock failed: {:?}", err),
+                    }
+                  }
+                },
+              },
+              Ok(Err(err)) => {
+                error!("handle user ws message fail: {}", err);
+              },
+              Err(err) => {
+                error!("internal error when handle user ws message: {}", err);
+              },
+            }
+          },
+          Err(e) => {
+            error!("Parser sync message failed: {:?}", e);
+            break;
+          },
+        }
+      }
+    },
   }
 }
 
+/// A subscription structure returned from [CollabBroadcast::subscribe], which represents a
+/// subscribed connection. It can be dropped in order to unsubscribe or awaited via
+/// [Subscription::stop] method in order to complete of its own volition (due to an internal
+/// connection error or closed connection).
+#[derive(Debug)]
+pub struct Subscription {
+  pub origin: CollabOrigin,
+  sink_stop_tx: Option<tokio::sync::mpsc::Sender<()>>,
+  stream_stop_tx: Option<tokio::sync::mpsc::Sender<()>>,
+}
+
+impl Subscription {
+  pub async fn stop(mut self) {
+    if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
+      let _ = sink_stop_tx.send(()).await;
+    }
+    if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
+      let _ = stream_stop_tx.send(()).await;
+    }
+  }
+}
+
+impl Drop for Subscription {
+  fn drop(&mut self) {
+    if self.stream_stop_tx.is_some() || self.stream_stop_tx.is_some() {
+      error!("Subscription is not stopped before dropping");
+    }
+  }
+}
+
+/// Generates a message: Message::Sync::(SyncMessage::Update(update))
 #[inline]
 fn gen_update_message(update: &[u8]) -> Vec<u8> {
   let mut encoder = EncoderV1::new();
+  // write the tag for Message::Sync
   encoder.write_var(MSG_SYNC);
+  // write the tag for SyncMessage::Update
   encoder.write_var(MSG_SYNC_UPDATE);
   encoder.write_buf(update);
   encoder.to_vec()

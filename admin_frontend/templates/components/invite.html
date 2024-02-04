@@ -1,0 +1,24 @@
+<div id="invite-user">
+  <h4>Please enter the following email invite a new user</h4>
+  <form hx-post="/web-api/invite" hx-target="#none">
+    <table>
+      <tr>
+        <td>Email:</td>
+        <td>
+          <input
+            class="input"
+            name="email"
+            placeholder="myfriend@example.com"
+            required
+          />
+        </td>
+      </tr>
+      <tr>
+        <td></td>
+        <td style="text-align: right">
+          <button class="button cyan" type="submit">Invite</button>
+        </td>
+      </tr>
+    </table>
+  </form>
+</div>

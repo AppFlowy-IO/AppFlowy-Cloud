@@ -1,0 +1,111 @@
+<!-- prettier-ignore -->
+{% extends "layouts/base.html" %}
+
+<!-- prettier-ignore -->
+{% block title %} AppFlowy Cloud Login {% endblock %}
+
+<!-- prettier-ignore -->
+{% block head %}
+<link href="/assets/login.css" rel="stylesheet" />
+<link href="/assets/google/logo.css" rel="stylesheet" />
+{% endblock %}
+
+<!-- prettier-ignore -->
+{% block content %}
+<div id="login-parent">
+  <div id="login-signin">
+    <div id="login-splash">
+      {% include "../assets/logo.html" %}
+      <h2>AppFlowy Cloud</h2>
+    </div>
+
+    <h3>Email Login</h3>
+    <form hx-post="/web-api/login" hx-target="#none">
+      <table style="width: 100%">
+        <tr>
+          <td>Email:</td>
+          <td>
+            <input
+              class="input"
+              style="width: 100%"
+              type="text"
+              id="email"
+              name="email"
+              placeholder="user@example.com"
+            />
+          </td>
+        </tr>
+        <tr>
+          <td>Password:</td>
+          <td>
+            <input
+              class="input"
+              style="width: 100%"
+              type="password"
+              id="password"
+              name="password"
+              placeholder="********"
+            />
+          </td>
+        </tr>
+      </table>
+      <button
+        class="button cyan"
+        type="submit"
+        style="width: 100%; margin: 16px auto 0; padding: 8px 8px"
+        id="submitBtn"
+      >
+        Sign In / Sign Up
+      </button>
+    </form>
+
+    <!-- Load OAuth Providers if configured -->
+    {% if oauth_providers.len() > 0 %}
+    <br />
+    <table style="width: 100%">
+      <tr style="display: flex">
+        <td style="width: 100%; margin: auto"><hr /></td>
+        <td style="flex: 1; text-align: center">&nbsp;or&nbsp;</td>
+        <td style="width: 100%; margin: auto"><hr /></td>
+      </tr>
+    </table>
+
+    <h3>OAuth Login</h3>
+    <div id="oauth-container">
+      {% for provider in oauth_providers %}
+      <div class="oauth-icon">
+        <a
+          href="/gotrue/authorize?provider={{ provider|escape }}&redirect_to=/web/login"
+        >
+          <div
+            hx-get="../assets/{{ provider|escape }}/logo.html"
+            hx-trigger="load"
+            hx-swap="outerHTML"
+          ></div>
+        </a>
+      </div>
+      {% endfor %} {% endif %}
+    </div>
+  </div>
+
+  <script>
+    // OAuthLogin
+    if (window.location.hash) {
+      // Extract data from the URL fragment
+      const fragmentData = window.location.hash.substring(1); // Remove the leading #
+      const fragmentParams = new URLSearchParams(fragmentData); // Parse the fragment data as a URLSearchParams object
+      const refreshToken = fragmentParams.get("refresh_token"); // Extract the refresh_token
+      fetch(`/web-api/login_refresh/${refreshToken}`, {
+        // Login in via refresh_token
+        method: "POST",
+      }).then((response) => {
+        if (!response.ok) {
+          displayHttpStatusAndPayload(response);
+        } else {
+          window.location.href = "/web/home";
+        }
+      });
+    }
+  </script>
+  {% endblock %}
+</div>

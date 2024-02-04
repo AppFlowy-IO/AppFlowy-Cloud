@@ -1,19 +1,16 @@
 use actix_http::Payload;
 use actix_web::{web::Data, FromRequest, HttpRequest};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
+use gotrue_entity::gotrue_jwt::GoTrueJWTClaims;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use sqlx::types::{uuid, Uuid};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
+use tracing::instrument;
 
 use crate::state::AppState;
-
-lazy_static::lazy_static! {
-  pub static ref VALIDATION: Validation = Validation::new(Algorithm::HS256);
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserUuid(uuid::Uuid);
@@ -130,6 +127,7 @@ fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::
   authorization_from_token(token, state)
 }
 
+#[instrument(level = "trace", skip_all, err)]
 pub fn authorization_from_token(
   token: &str,
   state: &Data<AppState>,
@@ -141,47 +139,24 @@ pub fn authorization_from_token(
   })
 }
 
+#[instrument(level = "trace", skip_all, err)]
 fn gotrue_jwt_claims_from_token(
   token: &str,
   state: &Data<AppState>,
 ) -> Result<GoTrueJWTClaims, actix_web::Error> {
-  GoTrueJWTClaims::verify(
+  let claims = GoTrueJWTClaims::decode(
     token,
     state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
   )
-  .map_err(actix_web::error::ErrorUnauthorized)
-}
+  .map_err(|err| {
+    actix_web::error::ErrorUnauthorized(format!("fail to decode token:{}, error:{}", token, err))
+  })?;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct GoTrueJWTClaims {
-  // JWT standard claims
-  pub aud: Option<String>,
-  pub exp: Option<i64>,
-  pub jti: Option<String>,
-  pub iat: Option<i64>,
-  pub iss: Option<String>,
-  pub nbf: Option<i64>,
-  pub sub: Option<String>,
-
-  pub email: String,
-  pub phone: String,
-  pub app_metadata: serde_json::Value,
-  pub user_metadata: serde_json::Value,
-  pub role: String,
-  pub aal: Option<String>,
-  pub amr: Option<Vec<Amr>>,
-  pub session_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Amr {
-  pub method: String,
-  pub timestamp: u64,
-  pub provider: Option<String>,
-}
-
-impl GoTrueJWTClaims {
-  pub fn verify(token: &str, secret: &[u8]) -> Result<Self, jsonwebtoken::errors::Error> {
-    Ok(decode(token, &DecodingKey::from_secret(secret), &VALIDATION)?.claims)
-  }
+  GoTrueJWTClaims::verify_claim(&claims).map_err(|err| {
+    actix_web::error::ErrorUnauthorized(format!(
+      "fail to verify token:{}, claims:{}, error:{}",
+      token, claims, err
+    ))
+  })?;
+  Ok(claims)
 }

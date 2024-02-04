@@ -1,44 +1,53 @@
 version: '3'
 services:
   minio:
+    restart: on-failure
     image: minio/minio
     ports:
       - 9000:9000
       - 9001:9001
+    environment:
+      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
     command: server /data --console-address ":9001"
 
   postgres:
-    build:
-      context: .
-      dockerfile: docker/postgres.Dockerfile
+    restart: on-failure
+    image: postgres
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
     ports:
-      - 5433:5432
+      - 5432:5432
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
+      # comment out the following line if you want to persist data when restarting docker
+      #- postgres_data:/var/lib/postgresql/data
 
   redis:
+    restart: on-failure
     image: redis
     ports:
-      - 6380:6379
+      - 6379:6379
 
   gotrue:
+    restart: on-failure
     build:
       context: .
       dockerfile: docker/gotrue.Dockerfile
-    restart: on-failure
+    image: appflowyinc/gotrue:${GOTRUE_VERSION:-latest}
     depends_on:
       - postgres
     environment:
+      # Gotrue config: https://github.com/supabase/gotrue/blob/master/example.env
       - GOTRUE_SITE_URL=appflowy-flutter://                           # redirected to AppFlowy application
+      - URI_ALLOW_LIST=*                                              # adjust restrict if necessary
       - GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}                        # authentication secret
+      - GOTRUE_JWT_EXP=${GOTRUE_JWT_EXP}
       - GOTRUE_DB_DRIVER=postgres
       - API_EXTERNAL_URL=${API_EXTERNAL_URL}
-      - DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
+      - DATABASE_URL=${GOTRUE_DATABASE_URL}
       - PORT=9999
       - GOTRUE_SMTP_HOST=${GOTRUE_SMTP_HOST}                          # e.g. smtp.gmail.com
       - GOTRUE_SMTP_PORT=${GOTRUE_SMTP_PORT}                          # e.g. 465
@@ -48,9 +57,47 @@ services:
       - GOTRUE_SMTP_MAX_FREQUENCY=${GOTRUE_SMTP_MAX_FREQUENCY:-1ns}   # set to 1ns for running tests
       - GOTRUE_MAILER_URLPATHS_CONFIRMATION=/verify
       - GOTRUE_MAILER_AUTOCONFIRM=${GOTRUE_MAILER_AUTOCONFIRM:-false} # change this to true to skip email confirmation
+      # Google OAuth config
       - GOTRUE_EXTERNAL_GOOGLE_ENABLED=${GOTRUE_EXTERNAL_GOOGLE_ENABLED}
       - GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=${GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID}
       - GOTRUE_EXTERNAL_GOOGLE_SECRET=${GOTRUE_EXTERNAL_GOOGLE_SECRET}
       - GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=${GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI}
+      # GITHUB OAuth config
+      - GOTRUE_EXTERNAL_GITHUB_ENABLED=${GOTRUE_EXTERNAL_GITHUB_ENABLED}
+      - GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=${GOTRUE_EXTERNAL_GITHUB_CLIENT_ID}
+      - GOTRUE_EXTERNAL_GITHUB_SECRET=${GOTRUE_EXTERNAL_GITHUB_SECRET}
+      - GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=${GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI}
+      # Discord OAuth config
+      - GOTRUE_EXTERNAL_DISCORD_ENABLED=${GOTRUE_EXTERNAL_DISCORD_ENABLED}
+      - GOTRUE_EXTERNAL_DISCORD_CLIENT_ID=${GOTRUE_EXTERNAL_DISCORD_CLIENT_ID}
+      - GOTRUE_EXTERNAL_DISCORD_SECRET=${GOTRUE_EXTERNAL_DISCORD_SECRET}
+      - GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=${GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI}
+      # Prometheus Metrics
+      - GOTRUE_METRICS_ENABLED=true
+      - GOTRUE_METRICS_EXPORTER=prometheus
     ports:
-      - 9998:9999
+      - 9999:9999
+
+  portainer:
+    restart: on-failure
+    image: portainer/portainer-ce:latest
+    ports:
+      - 9442:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  pgadmin:
+    restart: on-failure
+    image: dpage/pgadmin4
+    depends_on:
+      - postgres
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - 5400:80
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
+
+volumes:
+  postgres_data:

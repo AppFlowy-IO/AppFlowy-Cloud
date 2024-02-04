@@ -1,13 +1,13 @@
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
   #[error(transparent)]
-  YSync(#[from] collab::sync_protocol::message::Error),
+  YSync(#[from] realtime_protocol::Error),
 
   #[error(transparent)]
-  YAwareness(#[from] collab::sync_protocol::awareness::Error),
+  YAwareness(#[from] collab::core::awareness::Error),
 
   #[error("failed to deserialize message: {0}")]
-  DecodingError(#[from] lib0::error::Error),
+  DecodingError(#[from] yrs::encoding::read::Error),
 
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
@@ -21,6 +21,6 @@ pub enum SyncError {
   #[error("Workspace id is not found")]
   NoWorkspaceId,
 
-  #[error("Internal failure: {0}")]
-  Internal(#[from] Box<dyn std::error::Error + Send + Sync>),
+  #[error(transparent)]
+  Internal(#[from] anyhow::Error),
 }

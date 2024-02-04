@@ -1,0 +1,10 @@
+<div>
+  <p>Email: {{ user.email|escape }}</p>
+  <p>Role: {{ user.role|escape }}</p>
+  <p>Phone: {{ user.phone|escape }}</p>
+  <p>Email Confirmed At: {{ user.email_confirmed_at|default("-")|escape }}</p>
+  <p>Phone Confirmed At: {{ user.phone_confirmed_at|default("-")|escape }}</p>
+  <p>Last Sign In At: {{ user.last_sign_in_at|default("-")|escape }}</p>
+  <p>Created At: {{ user.created_at|escape }}</p>
+  <p>Updated At: {{ user.updated_at|escape }}</p>
+</div>

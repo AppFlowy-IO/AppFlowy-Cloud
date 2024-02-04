@@ -6,15 +6,19 @@ cd "$(dirname "$0")/.."
 
 DB_USER="${POSTGRES_USER:=postgres}"
 DB_PASSWORD="${POSTGRES_PASSWORD:=password}"
-DB_PORT="${POSTGRES_PORT:=5433}"
+DB_PORT="${POSTGRES_PORT:=5432}"
 DB_HOST="${POSTGRES_HOST:=localhost}"
 
 # Stop and remove any existing containers to avoid conflicts
-docker-compose --file ./docker-compose-dev.yml down
+docker compose --file ./docker-compose-dev.yml down
 
 # Start the Docker Compose setup
 export GOTRUE_MAILER_AUTOCONFIRM=true
-docker-compose --file ./docker-compose-dev.yml up -d --build
+
+# Enable Google OAuth when running locally
+export GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
+
+docker compose --file ./docker-compose-dev.yml up -d --build
 
 # Keep pinging Postgres until it's ready to accept commands
 ATTEMPTS=0
@@ -30,28 +34,48 @@ if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
   exit 1
 fi
 
-until curl localhost:9998/health; do
+until curl localhost:9999/health; do
   sleep 1
 done
 
 # Kill any existing instances
 pkill -f appflowy_cloud || true
 
+# Generate protobuf files for realtime-entity crate.
+# To run sqlx prepare, we need to build the realtime-entity crate first
+./build/code_gen.sh
+
 # Require if there are any changes to the database schema
 # To build AppFlowy-Cloud binary, we requires the .sqlx files
 # To generate the .sqlx files, we need to run the following command
 # After the .sqlx files are generated, we build in SQLX_OFFLINE=true
 # where we don't need to connect to the database
-
 cargo sqlx database create && cargo sqlx migrate run
 if [[ -z "${SKIP_SQLX_PREPARE+x}" ]]
 then
   cargo sqlx prepare --workspace
 fi
 
+# Maximum number of restart attempts
+MAX_RESTARTS=5
+RESTARTS=0
+# Start the server and restart it on failure
+while [ "$RESTARTS" -lt "$MAX_RESTARTS" ]; do
+  RUST_LOG=trace RUST_BACKTRACE=full cargo run --features="custom_env" &
+  PID=$!
+  wait $PID || {
+    RESTARTS=$((RESTARTS+1))
+    echo "Server crashed! Attempting to restart ($RESTARTS/$MAX_RESTARTS)"
+    sleep 5
+  }
+done
 
-RUST_LOG=trace cargo run &
+if [ "$RESTARTS" -eq "$MAX_RESTARTS" ]; then
+  echo "Server failed to start after $MAX_RESTARTS attempts, exiting."
+  exit 1
+fi
+
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false
-docker-compose --file ./docker-compose-dev.yml up -d
+docker compose --file ./docker-compose-dev.yml up -d

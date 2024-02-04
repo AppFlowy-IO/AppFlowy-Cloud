@@ -12,3 +12,10 @@ node_modules
 **/libs/AppFlowy-Collab/
 data/
 .env
+.logs
+flake.nix
+flake.lock
+.envrc
+.direnv/
+
+**/.env.*

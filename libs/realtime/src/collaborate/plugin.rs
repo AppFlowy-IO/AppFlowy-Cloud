@@ -19,8 +19,7 @@ use database_entity::dto::{
 };
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
-use std::time::Duration;
-use tokio::time::interval;
+
 use tracing::{error, event, info, instrument, trace};
 
 use yrs::updates::decoder::Decode;
@@ -53,7 +52,7 @@ where
     let storage = Arc::new(storage);
     let workspace_id = workspace_id.to_string();
     let edit_state = Arc::new(CollabEditState::new());
-    let plugin = Self {
+    Self {
       uid,
       workspace_id,
       storage,
@@ -61,9 +60,7 @@ where
       group,
       collab_type,
       access_control,
-    };
-    spawn_period_check(&plugin);
-    plugin
+    }
   }
 
   #[instrument(level = "info", skip(self,doc), err, fields(object_id = %object_id))]
@@ -100,43 +97,7 @@ where
   }
 }
 
-/// Spawns an asynchronous task to periodically check and perform flush operations for collaboration groups.
-///
-/// This function sets up a loop that, at regular intervals, checks if a flush operation is needed
-/// based on edit count and time interval. If so, it triggers the flush operation.
-///
-fn spawn_period_check<S, U, AC>(plugin: &CollabStoragePlugin<S, U, AC>)
-where
-  S: CollabStorage,
-  U: RealtimeUser,
-{
-  let weak_edit_state = Arc::downgrade(&plugin.edit_state);
-  let weak_storage = Arc::downgrade(&plugin.storage);
-  let weak_group = plugin.group.clone();
-  tokio::spawn(async move {
-    let mut interval = interval(Duration::from_secs(30));
-    loop {
-      interval.tick().await;
-      match (
-        weak_group.upgrade(),
-        weak_storage.upgrade(),
-        weak_edit_state.upgrade(),
-      ) {
-        (Some(group), Some(storage), Some(edit_state)) => {
-          let max_edit_count = storage.config().flush_per_update;
-          let max_interval = storage.config().flush_per_seconds as i64;
-          if edit_state.should_flush(max_edit_count, max_interval) {
-            edit_state.flush_edit();
-            group.flush_collab();
-          }
-        },
-        _ => break,
-      }
-    }
-  });
-}
-
-async fn init_collab_with_raw_data(
+async fn init_collab(
   oid: &str,
   encoded_collab: &EncodedCollab,
   doc: &Doc,
@@ -144,16 +105,22 @@ async fn init_collab_with_raw_data(
   if encoded_collab.doc_state.is_empty() {
     return Err(RealtimeError::UnexpectedData("doc state is empty"));
   }
+
+  // Can turn off INFO level into DEBUG. For now, just to see the log
   event!(
-    tracing::Level::DEBUG,
-    "start decoding {}: doc state with len: {}",
+    tracing::Level::INFO,
+    "start decoding:{} state len: {}, sv len: {}, v: {:?}",
     oid,
-    encoded_collab.doc_state.len()
+    encoded_collab.doc_state.len(),
+    encoded_collab.state_vector.len(),
+    encoded_collab.version
   );
-  let mut txn = doc.transact_mut();
   let update = Update::decode_v1(&encoded_collab.doc_state)?;
+  let mut txn = doc.transact_mut();
   txn.try_apply_update(update)?;
-  event!(tracing::Level::DEBUG, "finish decoding {}: doc state", oid,);
+  drop(txn);
+
+  event!(tracing::Level::INFO, "finish decoding:{}: doc state", oid,);
   Ok(())
 }
 
@@ -171,9 +138,7 @@ where
       .get_collab_encoded(&self.uid, params, true)
       .await
     {
-      Ok(encoded_collab_v1) => match init_collab_with_raw_data(object_id, &encoded_collab_v1, doc)
-        .await
-      {
+      Ok(encoded_collab_v1) => match init_collab(object_id, &encoded_collab_v1, doc).await {
         Ok(_) => {
           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
           // assumed that the 'encoded_collab_v1' is already in a valid format. Therefore, there is no need
@@ -207,13 +172,23 @@ where
         Err(err) => {
           // When initializing a collaboration object, if the 'init_collab_with_raw_data' operation fails, attempt to
           // restore the collaboration object from the latest snapshot.
-          if let Some(encoded_collab_v1) = get_latest_snapshot(object_id, &self.storage).await {
-            if let Err(err) = init_collab_with_raw_data(object_id, &encoded_collab_v1, doc).await {
-              error!("restore collab with snapshot failed: {:?}", err);
-              return;
-            }
+          error!(
+            "init collab:{} error: {:?}, try to restore from snapshot",
+            object_id, err
+          );
+
+          match get_latest_snapshot(object_id, &self.storage).await {
+            None => error!("No snapshot found for collab: {}", object_id),
+            Some(encoded_collab) => match init_collab(object_id, &encoded_collab, doc).await {
+              Ok(_) => info!("restore collab:{} with snapshot success", object_id),
+              Err(err) => {
+                error!(
+                  "restore collab:{} with snapshot failed: {:?}",
+                  object_id, err
+                );
+              },
+            },
           }
-          error!("init collab failed: {:?}", err)
         },
       },
       Err(err) => match &err {
@@ -343,6 +318,7 @@ impl CollabEditState {
   /// # Arguments
   /// * `max_edit_count` - The maximum number of edits allowed before a flush is triggered.
   /// * `max_interval` - The maximum time interval (in seconds) allowed before a flush is triggered.
+  #[allow(dead_code)]
   fn should_flush(&self, max_edit_count: u32, max_interval: i64) -> bool {
     // compare current time with last flush time
     let current = chrono::Utc::now().timestamp();

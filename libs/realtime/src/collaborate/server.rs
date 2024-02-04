@@ -365,6 +365,7 @@ async fn remove_user_from_group<S, U, AC>(
     let should_remove = group.is_empty().await;
     if should_remove {
       group.flush_collab();
+
       event!(tracing::Level::INFO, "Remove group: {}", editing.object_id);
       groups.remove_group(&editing.object_id).await;
     }

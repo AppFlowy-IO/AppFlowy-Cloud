@@ -4,8 +4,8 @@ use database::collab::{
   CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
-  AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams, QueryCollab,
-  QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
+  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
 
@@ -16,7 +16,7 @@ use crate::state::RedisClient;
 use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction};
 use std::{
   collections::HashMap,
   sync::{Arc, Weak},
@@ -40,7 +40,7 @@ pub async fn init_collab_storage(
     workspace_access_control: workspace_access_control.into(),
   };
   let disk_cache = CollabStoragePgImpl::new(pg_pool);
-  let mem_cache = CollabMemCache::new(pg_pool.clone(), redis_client);
+  let mem_cache = CollabMemCache::new(redis_client);
   CollabStorageController::new(disk_cache, mem_cache, access_control)
 }
 
@@ -108,11 +108,24 @@ where
     self.disk_cache.is_collab_exist(oid).await
   }
 
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+    self.disk_cache.upsert_collab(uid, params).await
+  }
+
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()> {
     params.validate()?;
 
     // Check if the user has enough permissions to insert collab
+    // 1. If the collab already exists, check if the user has enough permissions to update collab
+    // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
+    // TODO(nathan): remove is_collab_exist call and use access_control to check if the user has enough permissions to create collab.
     let has_permission = if self.is_collab_exist(&params.object_id).await? {
       // If the collab already exists, check if the user has enough permissions to update collab
       let level = self
@@ -135,18 +148,20 @@ where
     } else {
       // If the collab doesn't exist, check if the user has enough permissions to create collab.
       // If the user is the owner or member of the workspace, the user can create collab.
-      let role = self
+      let can_write_workspace = self
         .access_control
-        .get_user_workspace_role(uid, &params.workspace_id)
-        .await?;
-      event!(
-        tracing::Level::INFO,
-        "[{:?}]user:{} try to insert new collab:{}",
-        role,
-        uid,
-        params.object_id
-      );
-      role.can_create_collab()
+        .get_user_workspace_role(uid, workspace_id)
+        .await?
+        .can_create_collab();
+
+      // Cache the access level if the user has enough permissions to create collab.
+      if can_write_workspace {
+        self
+          .access_control
+          .cache_collab_access_level(uid, &params.object_id, AFAccessLevel::FullAccess)
+          .await?;
+      }
+      can_write_workspace
     };
 
     if !has_permission {
@@ -155,7 +170,15 @@ where
         uid, params.object_id
       )));
     }
-    self.disk_cache.insert_collab(uid, params).await
+
+    self
+      .mem_cache
+      .cache_encoded_collab_bytes(&params.object_id, params.encoded_collab_v1.clone())
+      .await;
+    self
+      .disk_cache
+      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
+      .await
   }
 
   async fn get_collab_encoded(
@@ -169,13 +192,18 @@ where
       .access_control
       .get_collab_access_level(uid, &params.object_id)
       .await?;
+    let object_id = params.object_id.clone();
 
+    // Read the encoded collab from the disk cache if force_from_disk is true and then cache it in memory
     if force_from_disk {
       let encoded_collab = self
         .disk_cache
         .get_collab_encoded(uid, params, true)
         .await?;
-      self.mem_cache.cache_encoded_collab(&encoded_collab).await;
+      self
+        .mem_cache
+        .cache_encoded_collab(&object_id, &encoded_collab)
+        .await;
       Ok(encoded_collab)
     } else {
       // Attempt to retrieve from the opened collab cache
@@ -205,7 +233,10 @@ where
             .disk_cache
             .get_collab_encoded(uid, params, true)
             .await?;
-          self.mem_cache.cache_encoded_collab(&encoded_collab).await;
+          self
+            .mem_cache
+            .cache_encoded_collab(&object_id, &encoded_collab)
+            .await;
           Ok(encoded_collab)
         },
       }

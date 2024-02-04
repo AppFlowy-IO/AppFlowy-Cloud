@@ -190,7 +190,7 @@ where
     &self,
     subscriber_origin: CollabOrigin,
     sink: Sink,
-    mut stream: Stream,
+    stream: Stream,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
@@ -198,12 +198,9 @@ where
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {
-    self.broadcast.subscribe(
-      subscriber_origin,
-      sink,
-      &mut stream,
-      self.modified_at.clone(),
-    )
+    self
+      .broadcast
+      .subscribe(subscriber_origin, sink, stream, self.modified_at.clone())
   }
 
   /// Mutate the [Collab] by the given closure

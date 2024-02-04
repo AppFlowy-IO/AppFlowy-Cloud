@@ -42,7 +42,6 @@ use crate::middleware::metrics_mw::MetricsMiddleware;
 use casbin::CoreApi;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use realtime::collaborate::CollabServer;
-use redis::aio::ConnectionLike;
 
 pub struct Application {
   port: u16,

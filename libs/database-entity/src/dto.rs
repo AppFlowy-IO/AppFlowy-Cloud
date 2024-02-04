@@ -26,6 +26,18 @@ pub struct CreateCollabParams {
   pub override_if_exist: bool,
 }
 
+impl From<(String, CollabParams)> for CreateCollabParams {
+  fn from((workspace_id, collab_params): (String, CollabParams)) -> Self {
+    Self {
+      workspace_id,
+      object_id: collab_params.object_id,
+      encoded_collab_v1: collab_params.encoded_collab_v1,
+      collab_type: collab_params.collab_type,
+      override_if_exist: collab_params.override_if_exist,
+    }
+  }
+}
+
 impl CreateCollabParams {
   pub fn split(self) -> (CollabParams, String) {
     (

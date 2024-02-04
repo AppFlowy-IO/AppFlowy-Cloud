@@ -6,12 +6,12 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
 
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams,
-  QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
+  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
 use sqlx::types::Uuid;
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tracing::{debug, event, warn};
@@ -68,7 +68,9 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool>;
 
-  /// Creates a new collaboration in the storage.
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
+
+  /// Insert/update a new collaboration in the storage.
   ///
   /// # Arguments
   ///
@@ -77,7 +79,13 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
@@ -146,8 +154,21 @@ where
     self.as_ref().is_collab_exist(oid).await
   }
 
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
-    self.as_ref().insert_collab(uid, params).await
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+    self.as_ref().upsert_collab(uid, params).await
+  }
+
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()> {
+    self
+      .as_ref()
+      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
+      .await
   }
 
   async fn get_collab_encoded(
@@ -238,18 +259,31 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(is_exist)
   }
 
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
     let mut transaction = self
       .pg_pool
       .begin()
       .await
       .context("Failed to acquire a Postgres transaction to insert collab")?;
     let (params, workspace_id) = params.split();
-    collab_db_ops::insert_into_af_collab(&mut transaction, uid, &workspace_id, &params).await?;
+    self
+      .upsert_collab_with_transaction(&workspace_id, uid, params, &mut transaction)
+      .await?;
     transaction
       .commit()
       .await
       .context("Failed to commit transaction to insert collab")?;
+    Ok(())
+  }
+
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()> {
+    collab_db_ops::insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
     Ok(())
   }
 

@@ -1,3 +1,4 @@
+use chrono::Utc;
 use sqlx::{Error, PgPool};
 use std::ops::DerefMut;
 
@@ -5,6 +6,7 @@ use std::ops::DerefMut;
 struct RecentCollabRow {
   recent_oid: String,
   recent_partition_key: i32,
+  snapshot_created_at: Option<chrono::DateTime<Utc>>,
 }
 
 pub async fn select_recent_collab_with_limit(
@@ -13,7 +15,9 @@ pub async fn select_recent_collab_with_limit(
 ) -> Result<Vec<RecentCollabRow>, Error> {
   let recents = sqlx::query_as!(
     RecentCollabRow,
-    "SELECT recent_oid, recent_partition_key FROM af_collab_recent_access ORDER BY access_time DESC LIMIT $1",
+    "SELECT recent_oid, recent_partition_key, snapshot_created_at \
+     FROM af_collab_recent \
+     ORDER BY access_time DESC LIMIT $1",
     limit
   )
   .fetch_all(pg_pool)
@@ -31,9 +35,9 @@ pub async fn insert_or_update_recent_collab(
   let mut transaction = pg_pool.begin().await?;
   for collab in recent_collabs.iter() {
     sqlx::query!(
-      "INSERT INTO af_collab_recent_access (recent_oid, recent_partition_key, access_time) VALUES ($1, $2, NOW())
-             ON CONFLICT (recent_oid) DO UPDATE 
-             SET recent_partition_key = EXCLUDED.recent_partition_key, access_time = NOW()",
+      "INSERT INTO af_collab_recent (recent_oid, recent_partition_key, access_time)
+       VALUES ($1, $2, NOW()) ON CONFLICT (recent_oid)
+       DO UPDATE SET recent_partition_key = EXCLUDED.recent_partition_key, access_time = NOW()",
       collab.recent_oid,
       collab.recent_partition_key
     )

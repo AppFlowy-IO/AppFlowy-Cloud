@@ -1,30 +1,22 @@
 use anyhow::{Context, Result};
-use gotrue::api::Client;
-
-use realtime::collaborate::CollabAccessControl;
-use serde_json::json;
-use shared_entity::response::AppResponseError;
-use std::fmt::{Display, Formatter};
-use std::ops::DerefMut;
-use std::sync::Arc;
-use uuid::Uuid;
-
-use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
-use database_entity::dto::{
-  AFAccessLevel, AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, CollabParams,
-};
 
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
+use crate::state::AppState;
 use app_error::AppError;
-use database::collab::insert_into_af_collab;
+use database::collab::CollabStorage;
 use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
+use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
+use database_entity::dto::{AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, CollabParams};
 use realtime::entities::RealtimeUser;
+use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;
-use snowflake::Snowflake;
+use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool, Transaction};
-use tokio::sync::RwLock;
-use tracing::{debug, event, info, instrument};
+use std::fmt::{Display, Formatter};
+use std::ops::DerefMut;
+use tracing::{debug, event, instrument};
+use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
@@ -32,23 +24,13 @@ use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 /// Return true if the user is a new user
 ///
 #[instrument(skip_all, err)]
-pub async fn verify_token<W, C>(
-  pg_pool: &PgPool,
-  id_gen: &Arc<RwLock<Snowflake>>,
-  gotrue_client: &Client,
-  access_token: &str,
-  workspace_access_control: &W,
-  collab_access_control: &C,
-) -> Result<bool, AppError>
-where
-  W: WorkspaceAccessControl,
-  C: CollabAccessControl,
-{
-  let user = gotrue_client.user_info(access_token).await?;
+pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, AppError> {
+  let user = state.gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
 
-  let mut txn = pg_pool
+  let mut txn = state
+    .pg_pool
     .begin()
     .await
     .context("acquire transaction to verify token")?;
@@ -66,30 +48,28 @@ where
 
   let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
   if is_new {
-    let new_uid = id_gen.write().await.next_id();
+    let new_uid = state.id_gen.write().await.next_id();
     event!(tracing::Level::INFO, "create new user:{}", new_uid);
     let workspace_id =
       create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
 
-    workspace_access_control
-      .update_member(
+    // It's essential to cache the user's role because subsequent actions will rely on this cached information.
+    state
+      .workspace_access_control
+      .cache_role(
         &new_uid,
         &Uuid::parse_str(&workspace_id).unwrap(),
         AFRole::Owner,
       )
       .await?;
 
-    collab_access_control
-      .cache_collab_access_level(&new_uid, &workspace_id, AFAccessLevel::FullAccess)
-      .await?;
-
     // Create a workspace with the GetStarted template
     create_workspace_for_user(
       new_uid,
       &workspace_id,
-      collab_access_control,
       &mut txn,
       vec![GetStartedDocumentTemplate],
+      state,
     )
     .await?;
   }
@@ -103,15 +83,14 @@ where
 /// Create a workspace for a user.
 /// This function generates a workspace along with its templates and stores them in the database.
 /// Each template is stored as an individual collaborative object.
-async fn create_workspace_for_user<C, T>(
+async fn create_workspace_for_user<T>(
   new_uid: i64,
   workspace_id: &str,
-  collab_access_control: &C,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
+  state: &AppState,
 ) -> Result<(), AppError>
 where
-  C: CollabAccessControl,
   T: WorkspaceTemplate + Send + Sync + 'static,
 {
   let templates = WorkspaceTemplateBuilder::new(new_uid, workspace_id)
@@ -127,26 +106,20 @@ where
       .encode_to_bytes()
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
-    collab_access_control
-      .cache_collab_access_level(&new_uid, &object_id, AFAccessLevel::FullAccess)
+    state
+      .collab_storage
+      .upsert_collab_with_transaction(
+        workspace_id,
+        &new_uid,
+        CollabParams {
+          object_id,
+          encoded_collab_v1,
+          collab_type: template.object_type,
+          override_if_exist: false,
+        },
+        txn,
+      )
       .await?;
-
-    info!(
-      "insert collab for user:{} with object_id:{}",
-      new_uid, object_id
-    );
-    insert_into_af_collab(
-      txn,
-      &new_uid,
-      workspace_id,
-      &CollabParams {
-        object_id,
-        encoded_collab_v1,
-        collab_type: template.object_type,
-        override_if_exist: false,
-      },
-    )
-    .await?;
   }
   Ok(())
 }

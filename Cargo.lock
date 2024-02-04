@@ -175,7 +175,7 @@ dependencies = [
  "async-trait",
  "derive_more",
  "rand 0.8.5",
- "redis",
+ "redis 0.23.3",
  "serde",
  "serde_json",
  "tracing",
@@ -325,7 +325,7 @@ dependencies = [
  "gotrue",
  "gotrue-entity",
  "jwt",
- "redis",
+ "redis 0.23.3",
  "reqwest",
  "serde",
  "serde_json",
@@ -520,6 +520,7 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-folder",
+ "collab-stream",
  "database",
  "database-entity",
  "derive_more",
@@ -543,7 +544,7 @@ dependencies = [
  "rcgen",
  "realtime",
  "realtime-entity",
- "redis",
+ "redis 0.24.0",
  "reqwest",
  "rust-s3",
  "scraper",
@@ -1348,6 +1349,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "collab-stream"
+version = "0.1.0"
+dependencies = [
+ "redis 0.23.3",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1679,7 +1689,7 @@ dependencies = [
  "collab-entity",
  "database-entity",
  "futures-util",
- "redis",
+ "redis 0.24.0",
  "rust-s3",
  "rust_decimal",
  "serde",
@@ -3973,6 +3983,21 @@ dependencies = [
  "tokio-native-tls",
  "tokio-retry",
  "tokio-util",
+ "url",
+]
+
+[[package]]
+name = "redis"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c580d9cbbe1d1b479e8d67cf9daf6a62c957e6846048408b80b43ac3f6af84cd"
+dependencies = [
+ "combine",
+ "itoa",
+ "percent-encoding",
+ "ryu",
+ "sha1_smol",
+ "socket2 0.4.10",
  "url",
 ]
 

@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-redis = { version = "0.23.3", features = ["aio", "tokio-comp"] }
+redis = { workspace = true, features = ["aio", "tokio-comp"] }
 tokio = { version = "1.26", features = ["rt-multi-thread", "macros" ] }
 tokio-stream = { version = "0.1.14" }

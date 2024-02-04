@@ -9,7 +9,7 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::{CollabMessage, InitSync, ServerInit, UpdateSync};
-use realtime_protocol::{handle_msg, ClientSyncProtocol, CollabSyncProtocol};
+use realtime_protocol::{handle_collab_message, ClientSyncProtocol, CollabSyncProtocol};
 use realtime_protocol::{Message, MessageReader, SyncMessage};
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -321,7 +321,7 @@ where
       let msg = msg?;
       trace!(" {}", msg);
       let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-      if let Some(payload) = handle_msg(&cloned_origin, protocol, collab, msg)? {
+      if let Some(payload) = handle_collab_message(&cloned_origin, protocol, collab, msg)? {
         if is_sync_step_1 {
           // flush
           match collab.try_lock() {

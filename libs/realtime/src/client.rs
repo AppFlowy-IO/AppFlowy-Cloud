@@ -10,8 +10,10 @@ use actix_web_actors::ws::ProtocolError;
 use bytes::Bytes;
 use database::collab::CollabStorage;
 
+use anyhow::anyhow;
 use std::ops::Deref;
 use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
@@ -73,18 +75,44 @@ where
     });
   }
 
-  fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
-    match RealtimeMessage::try_from(bytes) {
-      Ok(message) => {
-        debug!("Receive {} {}", self.user.uid(), message);
-        let user = self.user.clone();
-        if let Err(err) = self.server.try_send(ClientMessage { user, message }) {
-          error!("Send message to server error: {:?}", err);
+  async fn forward_binary(
+    user: U,
+    server: Addr<CollabServer<S, U, AC>>,
+    bytes: Bytes,
+  ) -> Result<(), RealtimeError> {
+    let message = tokio::task::spawn_blocking(move || {
+      RealtimeMessage::try_from(bytes).map_err(|err| RealtimeError::Internal(err.into()))
+    })
+    .await
+    .map_err(|err| RealtimeError::Internal(err.into()))??;
+    let mut client_message = Some(ClientMessage {
+      user: user.clone(),
+      message,
+    });
+    let mut attempts = 0;
+    const MAX_RETRIES: usize = 3;
+    const RETRY_DELAY: Duration = Duration::from_millis(500);
+    while attempts < MAX_RETRIES {
+      if let Some(message_to_send) = client_message.take() {
+        match server.try_send(message_to_send) {
+          Ok(_) => return Ok(()),
+          Err(err) if attempts < MAX_RETRIES - 1 => {
+            client_message = Some(err.into_inner());
+            attempts += 1;
+            sleep(RETRY_DELAY).await;
+          },
+          Err(err) => {
+            return Err(RealtimeError::Internal(anyhow!(
+              "Failed to send message to server after retries: {:?}",
+              err
+            )));
+          },
         }
-      },
-      Err(err) => {
-        error!("Deserialize message error: {:?}", err);
-      },
+      } else {
+        return Err(RealtimeError::Internal(anyhow!(
+          "Unexpected empty client message"
+        )));
+      }
     }
     Ok(())
   }
@@ -214,7 +242,13 @@ where
       ws::Message::Pong(_) => self.hb = Instant::now(),
       ws::Message::Text(_) => {},
       ws::Message::Binary(bytes) => {
-        let _ = self.forward_binary(bytes);
+        let fut = Self::forward_binary(self.user.clone(), self.server.clone(), bytes);
+        let act_fut = fut::wrap_future::<_, Self>(fut);
+        ctx.spawn(act_fut.map(|res, _act, _ctx| {
+          if let Err(e) = res {
+            error!("Error forwarding binary message: {}", e);
+          }
+        }));
       },
       ws::Message::Close(reason) => {
         debug!(

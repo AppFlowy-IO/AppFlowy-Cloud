@@ -36,6 +36,7 @@ pub struct CollabServer<S, U, AC> {
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S, U, AC>>,
+  user_by_device: Arc<parking_lot::RwLock<HashMap<UserDevice, U>>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
   ///
@@ -44,7 +45,6 @@ pub struct CollabServer<S, U, AC> {
   /// If the two session IDs differ, it indicates that the user has established a new connection
   /// to the server since the stored session ID was last updated.
   ///
-  user_by_uid: Arc<parking_lot::RwLock<HashMap<i64, U>>>,
   session_id_by_user: Arc<RwLock<HashMap<U, String>>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
@@ -88,7 +88,7 @@ where
     Ok(Self {
       storage,
       groups,
-      user_by_uid: Default::default(),
+      user_by_device: Default::default(),
       session_id_by_user: Default::default(),
       editing_collab_by_user: edit_collab_by_user,
       client_stream_by_user: Default::default(),
@@ -215,7 +215,7 @@ where
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
     let client_stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
     let groups = self.groups.clone();
-    let user_by_uid = self.user_by_uid.clone();
+    let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     let user_by_session_id = self.session_id_by_user.clone();
@@ -227,9 +227,9 @@ where
         .await
         .insert(new_conn.user.clone(), new_conn.session_id);
 
-      let old_user = user_by_uid
+      let old_user = user_by_device
         .write()
-        .insert(new_conn.user.uid(), new_conn.user.clone());
+        .insert(UserDevice::from(&new_conn.user), new_conn.user.clone());
 
       if let Some(old_user) = old_user {
         if let Some(old_stream) = client_stream_by_user.write().await.remove(&old_user) {
@@ -241,15 +241,15 @@ where
         remove_user(&groups, &editing_collab_by_user, &old_user).await;
       }
 
+      let mut write_guard = client_stream_by_user.write().await;
       info!(
         "new user: {}, connected user:{}",
         &new_conn.user,
-        user_by_uid.read().keys().len()
+        write_guard.keys().len()
       );
-      client_stream_by_user
-        .write()
-        .await
-        .insert(new_conn.user, client_stream);
+      write_guard.insert(new_conn.user, client_stream);
+      drop(write_guard);
+
       Ok(())
     })
   }
@@ -275,7 +275,6 @@ where
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
     trace!("[realtime]: disconnect => {}", msg.user);
     let groups = self.groups.clone();
-    let user_by_uid = self.user_by_uid.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     let session_id_by_user = self.session_id_by_user.clone();
@@ -297,7 +296,6 @@ where
       remove_user(&groups, &editing_collab_by_user, &msg.user).await;
       if let Ok(mut client_stream_by_user) = client_stream_by_user.try_write() {
         if client_stream_by_user.remove(&msg.user).is_some() {
-          user_by_uid.write().remove(&msg.user.uid());
           info!("remove client stream: {}", &msg.user);
         }
       }
@@ -330,8 +328,14 @@ where
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
   fn handle(&mut self, client_msg: ClientStreamMessage, _ctx: &mut Context<Self>) -> Self::Result {
-    let ClientStreamMessage { uid, stream } = client_msg;
-    let user = self.user_by_uid.read().get(&uid).cloned();
+    let ClientStreamMessage {
+      uid,
+      device_id,
+      stream,
+    } = client_msg;
+    let user_device = UserDevice { device_id, uid };
+    let user = self.user_by_device.read().get(&user_device).cloned();
+
     match user {
       None => Box::pin(async move {
         Err(RealtimeError::UserNotFound(format!(
@@ -479,5 +483,23 @@ impl CollabClientStream {
 
   pub fn disconnect(&self) {
     self.sink.do_send(RealtimeMessage::ServerKickedOff);
+  }
+}
+
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+struct UserDevice {
+  device_id: String,
+  uid: i64,
+}
+
+impl<T> From<&T> for UserDevice
+where
+  T: RealtimeUser,
+{
+  fn from(user: &T) -> Self {
+    Self {
+      device_id: user.device_id().to_string(),
+      uid: user.uid(),
+    }
   }
 }

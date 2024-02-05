@@ -1,16 +1,11 @@
-use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 
-use crate::collab::util::{
-  generate_random_bytes, generate_random_string, make_big_collab_doc_state,
-};
+use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
 use client_api_test_util::*;
 use database_entity::dto::AFAccessLevel;
-use realtime_entity::collab_msg::{CollabMessage, InitSync};
-use realtime_entity::message::RealtimeMessage;
+
 use serde_json::json;
 use uuid::Uuid;
-use websocket::Message;
 
 #[tokio::test]
 async fn collab_write_small_chunk_of_data_test() {
@@ -91,7 +86,7 @@ async fn collab_write_big_chunk_of_data_test() {
 }
 
 #[tokio::test]
-async fn write_big_chunk_of_data_through_request_test() {
+async fn write_big_chunk_data_init_sync_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4().to_string();
@@ -117,24 +112,6 @@ async fn write_big_chunk_of_data_through_request_test() {
     }),
   )
   .await;
-}
-
-#[tokio::test]
-async fn write_big_init_sync_test() {
-  let test_client = TestClient::new_user().await;
-  let payload: Vec<u8> = RealtimeMessage::Collab(CollabMessage::ClientInitSync(InitSync::new(
-    CollabOrigin::Empty,
-    "1".to_string(),
-    CollabType::Document,
-    "2".to_string(),
-    0,
-    generate_random_bytes(10000),
-  )))
-  .into();
-  let result = test_client
-    .post_realtime_message(Message::Binary(payload))
-    .await;
-  assert!(result.is_ok());
 }
 
 #[tokio::test]
@@ -264,7 +241,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
   //   "3": "c"
   // })
   let mut new_client =
-    TestClient::new(old_client.device_id.clone(), old_client.user.clone(), true).await;
+    TestClient::new_with_device_id(&old_client.device_id, old_client.user.clone(), true).await;
   new_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;

@@ -1,4 +1,4 @@
-use crate::api::util::compress_type_from_header_value;
+use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
 use crate::biz::workspace;
@@ -25,6 +25,7 @@ use prost::Message as ProstMessage;
 use bytes::BytesMut;
 use realtime::entities::{ClientStreamMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
+
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -670,6 +671,7 @@ async fn post_realtime_message_stream_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  let device_id = device_id_from_headers(req.headers())?;
   let uid = state
     .users
     .get_user_uid(&user_uuid)
@@ -682,35 +684,43 @@ async fn post_realtime_message_stream_handler(
   }
 
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
+  let device_id = device_id.to_string();
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let mut stream_message = None;
+  let stream = Box::new(tokio_stream::once(message));
+  let mut stream_message = Some(ClientStreamMessage {
+    uid,
+    device_id,
+    stream,
+  });
   const MAX_RETRIES: usize = 3;
   const RETRY_DELAY: Duration = Duration::from_secs(2);
 
   let mut attempts = 0;
   while attempts < MAX_RETRIES {
-    let message_to_send = stream_message.take().unwrap_or_else(|| {
-      let stream = Box::new(tokio_stream::once(message.clone()));
-      ClientStreamMessage { uid, stream }
-    });
-
-    match server.try_send(message_to_send) {
-      Ok(_) => return Ok(Json(AppResponse::Ok())),
-      Err(err) if attempts < MAX_RETRIES - 1 => {
-        attempts += 1;
-        stream_message = Some(err.into_inner());
-        sleep(RETRY_DELAY).await;
+    match stream_message.take() {
+      None => {
+        return Err(AppError::Internal(anyhow!("Unexpected empty stream message")).into());
       },
-      Err(err) => {
-        return Err(
-          AppError::Internal(anyhow!(
-            "Failed to send client stream message to websocket server after {} attempts: {}",
-            // attempts starts from 0, so add 1 for accurate count
-            attempts + 1,
-            err
-          ))
-          .into(),
-        );
+      Some(message_to_send) => {
+        match server.try_send(message_to_send) {
+          Ok(_) => return Ok(Json(AppResponse::Ok())),
+          Err(err) if attempts < MAX_RETRIES - 1 => {
+            attempts += 1;
+            stream_message = Some(err.into_inner());
+            sleep(RETRY_DELAY).await;
+          },
+          Err(err) => {
+            return Err(
+              AppError::Internal(anyhow!(
+                "Failed to send client stream message to websocket server after {} attempts: {}",
+                // attempts starts from 0, so add 1 for accurate count
+                attempts + 1,
+                err
+              ))
+              .into(),
+            );
+          },
+        }
       },
     }
   }

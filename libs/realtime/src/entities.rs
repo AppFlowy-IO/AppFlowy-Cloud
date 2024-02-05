@@ -14,6 +14,7 @@ pub trait RealtimeUser:
   Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
 {
   fn uid(&self) -> i64;
+  fn device_id(&self) -> &str;
 }
 
 impl<T> RealtimeUser for Arc<T>
@@ -22,6 +23,10 @@ where
 {
   fn uid(&self) -> i64 {
     self.as_ref().uid()
+  }
+
+  fn device_id(&self) -> &str {
+    self.as_ref().device_id()
   }
 }
 
@@ -60,6 +65,7 @@ pub struct ClientMessage<U> {
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct ClientStreamMessage {
   pub uid: i64,
+  pub device_id: String,
   pub stream: Box<dyn Stream<Item = RealtimeMessage> + Unpin + Send>,
 }
 

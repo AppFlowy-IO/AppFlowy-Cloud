@@ -7,7 +7,7 @@ use redis::AsyncCommands;
 use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{error, trace};
 
 const ENCODED_COLLAB_KEY_PREFIX: &str = "encoded_collab";
 
@@ -33,14 +33,32 @@ impl CollabMemCache {
 
   pub async fn get_encoded_collab(&self, object_id: &str) -> Option<EncodedCollab> {
     let key = encoded_collab_key(self.id, object_id);
-    self
+    let result = self
       .redis_client
       .lock()
       .await
-      .get::<_, Vec<u8>>(&key)
-      .await
-      .ok()
-      .and_then(|bytes| EncodedCollab::decode_from_bytes(&bytes).ok())
+      .get::<_, Option<Vec<u8>>>(&key)
+      .await;
+    match result {
+      Ok(Some(bytes)) => match EncodedCollab::decode_from_bytes(&bytes) {
+        Ok(encoded_collab) => Some(encoded_collab),
+        Err(err) => {
+          error!("Failed to decode collab from redis cache bytes: {:?}", err);
+          None
+        },
+      },
+      Ok(None) => {
+        trace!(
+          "No encoded collab found in cache for object_id: {}",
+          object_id
+        );
+        None
+      },
+      Err(err) => {
+        error!("Failed to get encoded collab from redis: {:?}", err);
+        None
+      },
+    }
   }
 
   pub async fn cache_encoded_collab(&self, object_id: &str, encoded_collab: &EncodedCollab) {

@@ -87,7 +87,7 @@ where
   }
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    tracing::trace!("cache collab:{}", object_id);
+    tracing::trace!("cache opened collab:{}", object_id);
     self
       .opened_collab_by_object_id
       .write()
@@ -96,7 +96,7 @@ where
   }
 
   async fn remove_collab_cache(&self, object_id: &str) {
-    tracing::trace!("remove collab:{} cache", object_id);
+    tracing::trace!("remove opened collab:{} cache", object_id);
     self
       .opened_collab_by_object_id
       .write()

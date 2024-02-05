@@ -73,6 +73,7 @@ where
       let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
+        trace!("tick groups");
         match weak_groups.upgrade() {
           Some(groups) => groups.tick().await,
           None => break,

@@ -227,25 +227,28 @@ where
         .await
         .insert(new_conn.user.clone(), new_conn.session_id);
 
-      user_by_uid
+      if let Some(old_user) = user_by_uid
         .write()
-        .insert(new_conn.user.uid(), new_conn.user.clone());
+        .insert(new_conn.user.uid(), new_conn.user.clone())
+      {
+        if let Some(old_stream) = client_stream_by_user.write().await.remove(&old_user) {
+          info!("same user connect again, remove the stream: {}", &old_user);
+          old_stream.disconnect();
+        }
 
-      // when a new connection is established, remove the old connection from all groups
-      remove_user(&groups, &editing_collab_by_user, &new_conn.user).await;
+        // when a new connection is established, remove the old connection from all groups
+        remove_user(&groups, &editing_collab_by_user, &old_user).await;
+      }
 
       info!(
         "new user: {}, connected user:{}",
         &new_conn.user,
         user_by_uid.read().keys().len()
       );
-      if let Some(old_stream) = client_stream_by_user
+      client_stream_by_user
         .write()
         .await
-        .insert(new_conn.user, client_stream)
-      {
-        old_stream.disconnect();
-      }
+        .insert(new_conn.user, client_stream);
       Ok(())
     })
   }

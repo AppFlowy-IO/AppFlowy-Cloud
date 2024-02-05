@@ -2,7 +2,7 @@ use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
 };
 use crate::error::{RealtimeError, StreamError};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use actix::{Actor, Context, Handler, ResponseFuture};
 use futures_util::future::BoxFuture;
@@ -67,15 +67,19 @@ where
     ));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
 
-    // Periodically check and remove inactive groups
     let weak_groups = Arc::downgrade(&groups);
     tokio::spawn(async move {
       let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
-        trace!("tick groups");
         match weak_groups.upgrade() {
-          Some(groups) => groups.tick().await,
+          Some(groups) => {
+            trace!(
+              "Periodically check and remove inactive groups, current groups:{}",
+              groups.number_of_groups().await
+            );
+            groups.tick().await
+          },
           None => break,
         }
       }
@@ -112,10 +116,33 @@ where
           trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
           match realtime_msg {
             RealtimeMessage::Collab(collab_message) => {
+              // 1.Check the client is connected with the websocket server
+              if client_stream_by_user
+                .try_read()
+                .map_err(|err| {
+                  RealtimeError::Internal(anyhow!(
+                    "failed to acquire the lock for client stream:{}",
+                    err
+                  ))
+                })?
+                .get(&user)
+                .is_none()
+              {
+                let msg = anyhow!(
+                  "The client stream: {} is not found, it should be created when the client is connected with this websocket server",
+                  user
+                );
+                return Err(RealtimeError::Internal(msg));
+              }
+
+              // 2. handle the message sent by the client
               let msg = CollabUserMessage {
                 user: &user,
                 collab_message: &collab_message,
               };
+
+              // 3.1 create a new group if the user is editing the object for the first time
+              // 3.2 subscribe the user to the group in order to receive changes when the collab object is updated
               SubscribeGroupIfNeed {
                 collab_user_message: &msg,
                 groups: &groups,
@@ -126,7 +153,7 @@ where
               .run()
               .await?;
 
-              // Only broadcast the message if the group exists
+              // 4 send message to the group and then broadcast the message to all connected clients
               if groups.contains_group(collab_message.object_id()).await? {
                 broadcast_message(&user, collab_message, &client_stream_by_user).await;
               }
@@ -172,7 +199,7 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    ctx.set_mailbox_capacity(1000);
+    ctx.set_mailbox_capacity(2000);
   }
 }
 

@@ -7,11 +7,13 @@ use crate::component::auth::jwt::UserUuid;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
 
+use std::time::Duration;
+
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -27,7 +29,7 @@ use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use tokio::time::Instant;
+use tokio::time::{sleep, Instant};
 
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
@@ -660,7 +662,7 @@ async fn get_collab_member_list_handler(
   Ok(Json(AppResponse::Ok().with_data(AFCollabMembers(members))))
 }
 
-#[instrument(level = "debug", skip(payload, server, state), err)]
+#[instrument(level = "info", skip_all, err)]
 async fn post_realtime_message_stream_handler(
   user_uuid: UserUuid,
   mut payload: Payload,
@@ -679,14 +681,40 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  let message = parser_realtime_msg(bytes.freeze(), req).await?;
-  let stream = Box::new(tokio_stream::once(message));
-  server
-    .send(ClientStreamMessage { uid, stream })
-    .await
-    .map_err(|err| AppError::Internal(err.into()))?
-    .map_err(|err| AppError::Internal(err.into()))?;
-  Ok(Json(AppResponse::Ok()))
+  event!(tracing::Level::INFO, "message len: {}", bytes.len());
+  let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
+  let mut stream_message = None;
+  const MAX_RETRIES: usize = 3;
+  const RETRY_DELAY: Duration = Duration::from_secs(2);
+
+  let mut attempts = 0;
+  while attempts < MAX_RETRIES {
+    let message_to_send = stream_message.take().unwrap_or_else(|| {
+      let stream = Box::new(tokio_stream::once(message.clone()));
+      ClientStreamMessage { uid, stream }
+    });
+
+    match server.try_send(message_to_send) {
+      Ok(_) => return Ok(Json(AppResponse::Ok())),
+      Err(err) if attempts < MAX_RETRIES - 1 => {
+        attempts += 1;
+        stream_message = Some(err.into_inner());
+        sleep(RETRY_DELAY).await;
+      },
+      Err(err) => {
+        return Err(
+          AppError::Internal(anyhow!(
+            "Failed to send client stream message to websocket server after {} attempts: {}",
+            // attempts starts from 0, so add 1 for accurate count
+            attempts + 1,
+            err
+          ))
+          .into(),
+        );
+      },
+    }
+  }
+  Err(AppError::Internal(anyhow!("Failed to send message to websocket server")).into())
 }
 
 #[inline]

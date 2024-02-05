@@ -180,6 +180,11 @@ where
     group.observe_collab().await;
     group
   }
+
+  #[allow(dead_code)]
+  pub async fn number_of_groups(&self) -> usize {
+    self.group_by_object_id.read().await.keys().len()
+  }
 }
 
 /// A group used to manage a single [Collab] object

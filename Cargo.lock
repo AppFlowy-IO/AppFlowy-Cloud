@@ -568,6 +568,7 @@ dependencies = [
  "url",
  "uuid",
  "validator",
+ "websocket",
  "workspace-template",
 ]
 
@@ -1274,6 +1275,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "web-sys",
+ "websocket",
 ]
 
 [[package]]

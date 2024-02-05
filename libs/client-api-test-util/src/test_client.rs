@@ -31,6 +31,7 @@ use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
+use websocket::Message;
 
 use crate::user::{generate_unique_registered_user, User};
 
@@ -450,6 +451,19 @@ impl TestClient {
     object_id: &str,
     collab_type: CollabType,
   ) {
+    self
+      .open_collab_with_doc_state(workspace_id, object_id, collab_type, vec![])
+      .await
+  }
+
+  #[allow(clippy::await_holding_lock)]
+  pub async fn open_collab_with_doc_state(
+    &mut self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+    doc_state: Vec<u8>,
+  ) {
     // Subscribe to object
     let handler = self
       .ws_client
@@ -457,7 +471,9 @@ impl TestClient {
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
+    let collab = Arc::new(
+      MutexCollab::new_with_doc_state(origin.clone(), object_id, doc_state, vec![]).unwrap(),
+    );
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();
     let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
@@ -479,6 +495,13 @@ impl TestClient {
     self
       .collab_by_object_id
       .insert(object_id.to_string(), test_collab);
+  }
+
+  pub async fn post_realtime_message(&self, message: Message) -> Result<(), AppResponseError> {
+    self
+      .api_client
+      .post_realtime_msg(&self.device_id, message)
+      .await
   }
 
   pub async fn disconnect(&self) {

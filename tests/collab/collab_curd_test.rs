@@ -6,13 +6,12 @@ use database_entity::dto::{
   BatchCreateCollabParams, CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams,
   QueryCollabResult,
 };
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
 
 use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
 
+use crate::collab::util::generate_random_bytes;
 use client_api_test_util::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
@@ -36,11 +35,11 @@ async fn batch_insert_collab_success_test() {
   let workspace_id = test_client.workspace_id().await;
 
   let mock_encoded_collab_v1 = vec![
-    create_random_bytes(100 * 1024),
-    create_random_bytes(300 * 1024),
-    create_random_bytes(600 * 1024),
-    create_random_bytes(800 * 1024),
-    create_random_bytes(1024 * 1024),
+    generate_random_bytes(100 * 1024),
+    generate_random_bytes(300 * 1024),
+    generate_random_bytes(600 * 1024),
+    generate_random_bytes(800 * 1024),
+    generate_random_bytes(1024 * 1024),
   ];
 
   let params_list = (0..5)
@@ -241,13 +240,4 @@ pub struct OldCreateCollabParams {
   #[serde(flatten)]
   inner: CollabParams,
   pub workspace_id: String,
-}
-
-fn create_random_bytes(size: usize) -> Vec<u8> {
-  let s: String = thread_rng()
-    .sample_iter(&Alphanumeric)
-    .take(size)
-    .map(char::from)
-    .collect();
-  s.into_bytes()
 }

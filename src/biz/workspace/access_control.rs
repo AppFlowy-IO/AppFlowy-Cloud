@@ -23,12 +23,7 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
 
-  async fn update_member(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-    role: AFRole,
-  ) -> Result<(), AppError>;
+  async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError>;
 
   async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
 }
@@ -196,12 +191,7 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     Ok(role)
   }
 
-  async fn update_member(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-    role: AFRole,
-  ) -> Result<(), AppError> {
+  async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError> {
     Err(AppError::Internal(anyhow!("Not support")))
   }
 

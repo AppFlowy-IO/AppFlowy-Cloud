@@ -11,6 +11,7 @@ use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
+use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -71,13 +72,13 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
-        .route(web::post().to(create_collab_list_handler)),
+        .route(web::post().to(batch_create_collab_handler)),
     )
     // will be deprecated
     .service(
       web::resource("/{workspace_id}/collabs")
           .app_data(PayloadConfig::new(10 * 1024 * 1024))
-          .route(web::post().to(batch_create_collab_handler)),
+          .route(web::post().to(create_collab_list_handler)),
     )
     .service(
       web::resource("/{workspace_id}/{object_id}/snapshot")
@@ -183,7 +184,7 @@ async fn add_workspace_members_handler(
   for (uid, role) in role_by_uid {
     state
       .workspace_access_control
-      .update_member(&uid, &workspace_id, role)
+      .cache_role(&uid, &workspace_id, role)
       .await?;
   }
   Ok(AppResponse::Ok().into())
@@ -272,7 +273,7 @@ async fn update_workspace_member_handler(
       .map_err(AppResponseError::from)?;
     state
       .workspace_access_control
-      .update_member(&uid, &workspace_id, role)
+      .cache_role(&uid, &workspace_id, role)
       .await?;
   }
 
@@ -308,20 +309,13 @@ async fn create_collab_handler(
   };
 
   params.validate().map_err(AppError::from)?;
-  let (params, workspace_id) = params.split();
-  biz::collab::ops::create_collabs(
-    &state.pg_pool,
-    &uid,
-    &workspace_id,
-    vec![params],
-    &state.collab_access_control,
-  )
-  .await?;
+  // TODO(nathan): should override the existing collab if it exists
+  state.collab_storage.upsert_collab(&uid, params).await?;
   Ok(Json(AppResponse::Ok()))
 }
 
 #[instrument(skip(state, payload), err)]
-async fn create_collab_list_handler(
+async fn batch_create_collab_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   mut payload: Payload,
@@ -388,21 +382,30 @@ async fn create_collab_list_handler(
   if collab_params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
+  let mut transaction = state
+    .pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to upsert collab")
+    .map_err(AppError::from)?;
 
-  biz::collab::ops::create_collabs(
-    &state.pg_pool,
-    &uid,
-    &workspace_id,
-    collab_params_list,
-    &state.collab_access_control,
-  )
-  .await?;
+  for params in collab_params_list {
+    state
+      .collab_storage
+      .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .await?;
+  }
 
+  transaction
+    .commit()
+    .await
+    .context("fail to commit the transaction to upsert collab")
+    .map_err(AppError::from)?;
   Ok(Json(AppResponse::Ok()))
 }
 
 #[instrument(skip(state, payload), err)]
-async fn batch_create_collab_handler(
+async fn create_collab_list_handler(
   user_uuid: UserUuid,
   payload: Bytes,
   state: Data<AppState>,
@@ -439,14 +442,26 @@ async fn batch_create_collab_handler(
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
 
-  biz::collab::ops::create_collabs(
-    &state.pg_pool,
-    &uid,
-    &workspace_id,
-    params_list,
-    &state.collab_access_control,
-  )
-  .await?;
+  let mut transaction = state
+    .pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to upsert collab")
+    .map_err(AppError::from)?;
+
+  for params in params_list {
+    state
+      .collab_storage
+      .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .await?;
+  }
+
+  transaction
+    .commit()
+    .await
+    .context("fail to commit the transaction to upsert collab")
+    .map_err(AppError::from)?;
+
   Ok(Json(AppResponse::Ok()))
 }
 #[instrument(level = "trace", skip(payload, state), err)]
@@ -462,7 +477,7 @@ async fn get_collab_handler(
     .map_err(AppResponseError::from)?;
   let data = state
     .collab_storage
-    .get_collab_encoded(&uid, payload.into_inner(), false)
+    .get_collab_encoded(&uid, payload.into_inner())
     .await
     .map_err(AppResponseError::from)?;
 
@@ -502,7 +517,6 @@ async fn create_collab_snapshot_handler(
     .get_collab_encoded(
       &uid,
       QueryCollabParams::new(&object_id, collab_type, &workspace_id),
-      false,
     )
     .await?
     .encode_to_bytes()
@@ -562,7 +576,12 @@ async fn update_collab_handler(
 ) -> Result<Json<AppResponse<()>>> {
   let (params, workspace_id) = payload.into_inner().split();
   let uid = state.users.get_user_uid(&user_uuid).await?;
-  biz::collab::ops::upsert_collab(&state.pg_pool, &uid, &workspace_id, vec![params]).await?;
+
+  let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
+  state
+    .collab_storage
+    .upsert_collab(&uid, create_params)
+    .await?;
   Ok(AppResponse::Ok().into())
 }
 

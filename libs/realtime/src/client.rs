@@ -76,7 +76,7 @@ where
   fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
     match RealtimeMessage::try_from(bytes) {
       Ok(message) => {
-        tracing::debug!("Receive {} {}", self.user.uid(), message);
+        debug!("Receive {} {}", self.user.uid(), message);
         let user = self.user.clone();
         if let Err(err) = self.server.try_send(ClientMessage { user, message }) {
           error!("Send message to server error: {:?}", err);
@@ -119,7 +119,6 @@ where
             if let Err(err) = recipient.send(RealtimeMessage::User(msg)).await {
               match err {
                 MailboxError::Closed => {
-                  error!("User change message recipient is closed");
                   break;
                 },
                 MailboxError::Timeout => {

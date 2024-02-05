@@ -196,6 +196,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let collab_storage = Arc::new(
     init_collab_storage(
       pg_pool.clone(),
+      redis_client.clone(),
       collab_access_control.clone(),
       workspace_access_control.clone(),
     )

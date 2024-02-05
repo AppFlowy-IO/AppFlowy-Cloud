@@ -15,7 +15,7 @@ use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
-use tracing::instrument;
+use tracing::{info, instrument};
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)
@@ -34,7 +34,6 @@ pub async fn establish_ws_connection(
   state: Data<AppState>,
   server: Data<CollabServerImpl>,
 ) -> Result<HttpResponse> {
-  tracing::info!("receive ws connect: {:?}", request);
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
@@ -43,6 +42,11 @@ pub async fn establish_ws_connection(
   match result {
     Ok(uid) => {
       let user_change_recv = state.pg_listeners.subscribe_user_change(uid);
+      info!(
+        "new websocket connect: uid={}, device_id={}",
+        uid, device_id
+      );
+
       let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
       let client = ClientSession::new(
         realtime_user,

@@ -38,16 +38,9 @@ async fn verify_user_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
-  let is_new = biz::user::verify_token(
-    &state.pg_pool,
-    &state.id_gen,
-    &state.gotrue_client,
-    &access_token,
-    &state.workspace_access_control,
-    &state.collab_access_control,
-  )
-  .await
-  .map_err(AppResponseError::from)?;
+  let is_new = biz::user::verify_token(&access_token, state.as_ref())
+    .await
+    .map_err(AppResponseError::from)?;
   let resp = SignInTokenResponse { is_new };
   Ok(AppResponse::Ok().with_data(resp).into())
 }

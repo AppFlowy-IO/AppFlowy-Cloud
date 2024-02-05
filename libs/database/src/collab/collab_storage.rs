@@ -1,5 +1,5 @@
 use crate::collab::{collab_db_ops, is_collab_exists};
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
@@ -230,47 +230,22 @@ impl CollabStoragePgImpl {
     let config = WriteConfig::default();
     Self { pg_pool, config }
   }
-}
-
-#[async_trait]
-impl CollabStorage for CollabStoragePgImpl {
-  fn config(&self) -> &WriteConfig {
+  pub fn config(&self) -> &WriteConfig {
     &self.config
   }
 
-  async fn is_exist(&self, object_id: &str) -> bool {
+  pub async fn is_exist(&self, object_id: &str) -> bool {
     collab_db_ops::collab_exists(&self.pg_pool, object_id)
       .await
       .unwrap_or(false)
   }
 
-  async fn cache_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {}
-
-  async fn remove_collab_cache(&self, _object_id: &str) {}
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
+  pub async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
     let is_exist = is_collab_exists(oid, &self.pg_pool).await?;
     Ok(is_exist)
   }
 
-  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
-    let mut transaction = self
-      .pg_pool
-      .begin()
-      .await
-      .context("Failed to acquire a Postgres transaction to insert collab")?;
-    let (params, workspace_id) = params.split();
-    self
-      .upsert_collab_with_transaction(&workspace_id, uid, params, &mut transaction)
-      .await?;
-    transaction
-      .commit()
-      .await
-      .context("Failed to commit transaction to insert collab")?;
-    Ok(())
-  }
-
-  async fn upsert_collab_with_transaction(
+  pub async fn upsert_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -281,7 +256,7 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(())
   }
 
-  async fn get_collab_encoded(
+  pub async fn get_collab_encoded(
     &self,
     _uid: &i64,
     params: QueryCollabParams,
@@ -310,7 +285,7 @@ impl CollabStorage for CollabStoragePgImpl {
     }
   }
 
-  async fn batch_get_collab(
+  pub async fn batch_get_collab(
     &self,
     _uid: &i64,
     queries: Vec<QueryCollab>,
@@ -318,12 +293,12 @@ impl CollabStorage for CollabStoragePgImpl {
     collab_db_ops::batch_select_collab_blob(&self.pg_pool, queries).await
   }
 
-  async fn delete_collab(&self, _uid: &i64, object_id: &str) -> DatabaseResult<()> {
+  pub async fn delete_collab(&self, _uid: &i64, object_id: &str) -> DatabaseResult<()> {
     collab_db_ops::delete_collab(&self.pg_pool, object_id).await?;
     Ok(())
   }
 
-  async fn should_create_snapshot(&self, oid: &str) -> bool {
+  pub async fn should_create_snapshot(&self, oid: &str) -> bool {
     if oid.is_empty() {
       warn!("unexpected empty object id when checking should_create_snapshot");
       return false;
@@ -334,7 +309,10 @@ impl CollabStorage for CollabStoragePgImpl {
       .unwrap_or(false)
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
+  pub async fn create_snapshot(
+    &self,
+    params: InsertSnapshotParams,
+  ) -> DatabaseResult<AFSnapshotMeta> {
     params.validate()?;
 
     debug!("create snapshot for object:{}", params.object_id);
@@ -349,7 +327,7 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(meta)
   }
 
-  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
+  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
     match collab_db_ops::select_snapshot(&self.pg_pool, snapshot_id).await? {
       None => Err(AppError::RecordNotFound(format!(
         "Can't find the snapshot with id:{}",
@@ -363,7 +341,7 @@ impl CollabStorage for CollabStoragePgImpl {
     }
   }
 
-  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+  pub async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
     let metas = collab_db_ops::get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
     Ok(metas)
   }

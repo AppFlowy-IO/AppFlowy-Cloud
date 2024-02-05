@@ -156,7 +156,11 @@ where
     let collab = Arc::new(collab.clone());
 
     // The lifecycle of the collab is managed by the group.
-    let group = Arc::new(CollabGroup::new(collab.clone(), broadcast));
+    let group = Arc::new(CollabGroup::new(
+      collab_type.clone(),
+      collab.clone(),
+      broadcast,
+    ));
     let plugin = CollabStoragePlugin::new(
       uid,
       workspace_id,
@@ -181,6 +185,7 @@ where
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
   pub collab: Arc<MutexCollab>,
+  collab_type: CollabType,
 
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -197,9 +202,14 @@ impl<U> CollabGroup<U>
 where
   U: RealtimeUser,
 {
-  pub fn new(collab: Arc<MutexCollab>, broadcast: CollabBroadcast) -> Self {
+  pub fn new(
+    collab_type: CollabType,
+    collab: Arc<MutexCollab>,
+    broadcast: CollabBroadcast,
+  ) -> Self {
     let modified_at = Arc::new(Mutex::new(Instant::now()));
     Self {
+      collab_type,
       collab,
       broadcast,
       subscribers: Default::default(),
@@ -249,7 +259,7 @@ where
   /// subscriber or has been modified within the last 10 minutes.
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at.lock().await;
-    let is_timeout = modified_at.elapsed().as_secs() > 10 * 60;
+    let is_timeout = modified_at.elapsed().as_secs() > self.timeout_secs();
     is_timeout && self.subscribers.read().await.is_empty()
   }
 
@@ -261,5 +271,26 @@ where
       collab.lock().flush();
     })
     .await;
+  }
+
+  /// Returns the timeout duration in seconds for different collaboration types.
+  ///
+  /// Collaborative entities vary in their activity and interaction patterns, necessitating
+  /// different timeout durations to balance efficient resource management with a positive
+  /// user experience. This function assigns a timeout duration to each collaboration type,
+  /// ensuring that resources are utilized judiciously without compromising user engagement.
+  ///
+  /// # Returns
+  /// A `u64` representing the timeout duration in seconds for the collaboration type in question.
+  #[inline]
+  fn timeout_secs(&self) -> u64 {
+    match self.collab_type {
+      CollabType::Document => 10 * 60,
+      CollabType::Database => 30 * 60,
+      // WorkspaceDatabase, Folder, and UserAwareness share a longer timeout duration of 2 hours.
+      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 2 * 60 * 60,
+      // DatabaseRow timeout duration corrected to 1 hour.
+      CollabType::DatabaseRow => 60 * 60,
+    }
   }
 }

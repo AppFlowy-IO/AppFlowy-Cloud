@@ -119,7 +119,6 @@ where
             if let Err(err) = recipient.send(RealtimeMessage::User(msg)).await {
               match err {
                 MailboxError::Closed => {
-                  error!("User change message recipient is closed");
                   break;
                 },
                 MailboxError::Timeout => {

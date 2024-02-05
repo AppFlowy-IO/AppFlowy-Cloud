@@ -17,10 +17,12 @@ use database::collab::CollabStorage;
 use database_entity::dto::{
   AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
 };
+use md5::Digest;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 
-use tracing::{error, event, info, instrument, trace};
+use tracing::{debug, error, event, info, instrument, trace};
 
 use yrs::updates::decoder::Decode;
 use yrs::{Transact, Update};
@@ -33,6 +35,7 @@ pub struct CollabStoragePlugin<S, U, AC> {
   group: Weak<CollabGroup<U>>,
   collab_type: CollabType,
   access_control: Arc<AC>,
+  latest_collab_md5: Mutex<Option<Digest>>,
 }
 
 impl<S, U, AC> CollabStoragePlugin<S, U, AC>
@@ -60,6 +63,7 @@ where
       group,
       collab_type,
       access_control,
+      latest_collab_md5: Default::default(),
     }
   }
 
@@ -82,7 +86,7 @@ where
 
         self
           .storage
-          .insert_collab(&self.uid, params)
+          .upsert_collab(&self.uid, params)
           .await
           .map_err(|err| {
             error!("fail to create new collab in plugin: {:?}", err);
@@ -133,11 +137,7 @@ where
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
-    match self
-      .storage
-      .get_collab_encoded(&self.uid, params, true)
-      .await
-    {
+    match self.storage.get_collab_encoded(&self.uid, params).await {
       Ok(encoded_collab_v1) => match init_collab(object_id, &encoded_collab_v1, doc).await {
         Ok(_) => {
           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
@@ -223,7 +223,11 @@ where
       trace!("number of updates reach flush_per_update, start flushing");
       match self.group.upgrade() {
         None => error!("Group is dropped, skip flush collab"),
-        Some(group) => group.flush_collab(),
+        Some(group) => {
+          tokio::spawn(async move {
+            group.flush_collab().await;
+          });
+        },
       }
     }
   }
@@ -237,6 +241,19 @@ where
       },
     };
 
+    // compare the current encoded collab md5 with the latest one, if they are the same, skip the flush.
+    // TODO(nathan): compress the encoded collab to reduce disk usage.
+    let digest = md5::compute(&encoded_collab_v1);
+    if self.latest_collab_md5.lock().as_ref() == Some(&digest) {
+      debug!(
+        "skip flush collab:{} because the content is the same",
+        object_id
+      );
+      return;
+    }
+    *self.latest_collab_md5.lock() = Some(digest);
+
+    // Insert the encoded collab into the database
     let params = CreateCollabParams {
       object_id: object_id.to_string(),
       encoded_collab_v1,
@@ -247,10 +264,9 @@ where
 
     let storage = self.storage.clone();
     let uid = self.uid;
-
     tokio::spawn(async move {
-      info!("[realtime] Flushed collab: {}", params.object_id);
-      match storage.insert_collab(&uid, params).await {
+      info!("[realtime] flush collab: {}", params.object_id);
+      match storage.upsert_collab(&uid, params).await {
         Ok(_) => {},
         Err(err) => error!("Failed to save collab: {:?}", err),
       }

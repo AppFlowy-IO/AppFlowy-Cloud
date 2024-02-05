@@ -1,20 +1,20 @@
 use crate::collab::{collab_db_ops, is_collab_exists};
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
 
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams,
-  QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
+  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
 use sqlx::types::Uuid;
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use tracing::{debug, warn};
+use tracing::{debug, event, warn};
 use validator::Validate;
 
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 15;
@@ -68,7 +68,9 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool>;
 
-  /// Creates a new collaboration in the storage.
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
+
+  /// Insert/update a new collaboration in the storage.
   ///
   /// # Arguments
   ///
@@ -77,14 +79,19 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
   /// # Arguments
   ///
   /// * `params` - The parameters required to query a collab object.
-  /// * `force_from_disk` - If `true`, the data will be retrieved from the disk instead of the cache.
   ///
   /// # Returns
   ///
@@ -93,7 +100,6 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     uid: &i64,
     params: QueryCollabParams,
-    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollab>;
 
   async fn batch_get_collab(
@@ -146,20 +152,29 @@ where
     self.as_ref().is_collab_exist(oid).await
   }
 
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
-    self.as_ref().insert_collab(uid, params).await
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+    self.as_ref().upsert_collab(uid, params).await
+  }
+
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()> {
+    self
+      .as_ref()
+      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
+      .await
   }
 
   async fn get_collab_encoded(
     &self,
     uid: &i64,
     params: QueryCollabParams,
-    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollab> {
-    self
-      .as_ref()
-      .get_collab_encoded(uid, params, force_from_disk)
-      .await
+    self.as_ref().get_collab_encoded(uid, params).await
   }
 
   async fn batch_get_collab(
@@ -206,7 +221,7 @@ impl Default for WriteConfig {
 
 #[derive(Clone)]
 pub struct CollabStoragePgImpl {
-  pg_pool: PgPool,
+  pub pg_pool: PgPool,
   config: WriteConfig,
 }
 
@@ -215,50 +230,42 @@ impl CollabStoragePgImpl {
     let config = WriteConfig::default();
     Self { pg_pool, config }
   }
-}
-
-#[async_trait]
-impl CollabStorage for CollabStoragePgImpl {
-  fn config(&self) -> &WriteConfig {
+  pub fn config(&self) -> &WriteConfig {
     &self.config
   }
 
-  async fn is_exist(&self, object_id: &str) -> bool {
+  pub async fn is_exist(&self, object_id: &str) -> bool {
     collab_db_ops::collab_exists(&self.pg_pool, object_id)
       .await
       .unwrap_or(false)
   }
 
-  async fn cache_collab(&self, _object_id: &str, _collab: Weak<MutexCollab>) {}
-
-  async fn remove_collab_cache(&self, _object_id: &str) {}
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
+  pub async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
     let is_exist = is_collab_exists(oid, &self.pg_pool).await?;
     Ok(is_exist)
   }
 
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
-    let mut transaction = self
-      .pg_pool
-      .begin()
-      .await
-      .context("Failed to acquire a Postgres transaction to insert collab")?;
-    let (params, workspace_id) = params.split();
-    collab_db_ops::insert_into_af_collab(&mut transaction, uid, &workspace_id, &params).await?;
-    transaction
-      .commit()
-      .await
-      .context("Failed to commit transaction to insert collab")?;
+  pub async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()> {
+    collab_db_ops::insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
     Ok(())
   }
 
-  async fn get_collab_encoded(
+  pub async fn get_collab_encoded(
     &self,
     _uid: &i64,
     params: QueryCollabParams,
-    _force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollab> {
+    event!(
+      tracing::Level::INFO,
+      "Get encoded collab:{} from disk",
+      params.object_id
+    );
     match collab_db_ops::select_blob_from_af_collab(
       &self.pg_pool,
       &params.collab_type,
@@ -278,7 +285,7 @@ impl CollabStorage for CollabStoragePgImpl {
     }
   }
 
-  async fn batch_get_collab(
+  pub async fn batch_get_collab(
     &self,
     _uid: &i64,
     queries: Vec<QueryCollab>,
@@ -286,12 +293,12 @@ impl CollabStorage for CollabStoragePgImpl {
     collab_db_ops::batch_select_collab_blob(&self.pg_pool, queries).await
   }
 
-  async fn delete_collab(&self, _uid: &i64, object_id: &str) -> DatabaseResult<()> {
+  pub async fn delete_collab(&self, _uid: &i64, object_id: &str) -> DatabaseResult<()> {
     collab_db_ops::delete_collab(&self.pg_pool, object_id).await?;
     Ok(())
   }
 
-  async fn should_create_snapshot(&self, oid: &str) -> bool {
+  pub async fn should_create_snapshot(&self, oid: &str) -> bool {
     if oid.is_empty() {
       warn!("unexpected empty object id when checking should_create_snapshot");
       return false;
@@ -302,7 +309,10 @@ impl CollabStorage for CollabStoragePgImpl {
       .unwrap_or(false)
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
+  pub async fn create_snapshot(
+    &self,
+    params: InsertSnapshotParams,
+  ) -> DatabaseResult<AFSnapshotMeta> {
     params.validate()?;
 
     debug!("create snapshot for object:{}", params.object_id);
@@ -317,7 +327,7 @@ impl CollabStorage for CollabStoragePgImpl {
     Ok(meta)
   }
 
-  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
+  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
     match collab_db_ops::select_snapshot(&self.pg_pool, snapshot_id).await? {
       None => Err(AppError::RecordNotFound(format!(
         "Can't find the snapshot with id:{}",
@@ -331,7 +341,7 @@ impl CollabStorage for CollabStoragePgImpl {
     }
   }
 
-  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+  pub async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
     let metas = collab_db_ops::get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
     Ok(metas)
   }

@@ -4,17 +4,19 @@ use database::collab::{
   CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
-  AFSnapshotMeta, AFSnapshotMetas, CreateCollabParams, InsertSnapshotParams, QueryCollab,
-  QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
+  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
 
 use crate::biz::casbin::access_control::{CasbinCollabAccessControl, CasbinWorkspaceAccessControl};
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
+use crate::biz::collab::mem_cache::CollabMemCache;
+use crate::state::RedisClient;
 use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
-use sqlx::PgPool;
+use sqlx::{PgPool, Transaction};
 use std::{
   collections::HashMap,
   sync::{Arc, Weak},
@@ -23,12 +25,13 @@ use tokio::sync::RwLock;
 use tracing::{event, instrument};
 use validator::Validate;
 
-pub type CollabPostgresDBStorage = CollabStorageWrapper<
+pub type CollabPostgresDBStorage = CollabStorageController<
   CollabStorageAccessControlImpl<CasbinCollabAccessControl, CasbinWorkspaceAccessControl>,
 >;
 
 pub async fn init_collab_storage(
   pg_pool: PgPool,
+  redis_client: RedisClient,
   collab_access_control: CasbinCollabAccessControl,
   workspace_access_control: CasbinWorkspaceAccessControl,
 ) -> CollabPostgresDBStorage {
@@ -36,67 +39,110 @@ pub async fn init_collab_storage(
     collab_access_control: collab_access_control.into(),
     workspace_access_control: workspace_access_control.into(),
   };
-  let collab_storage_impl = CollabStoragePgImpl::new(pg_pool);
-  CollabStorageWrapper::new(collab_storage_impl, access_control)
+  let disk_cache = CollabStoragePgImpl::new(pg_pool);
+  let mem_cache = CollabMemCache::new(redis_client);
+  CollabStorageController::new(disk_cache, mem_cache, access_control)
 }
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
-pub struct CollabStorageWrapper<AC> {
-  inner: CollabStoragePgImpl,
+pub struct CollabStorageController<AC> {
+  disk_cache: CollabStoragePgImpl,
+  mem_cache: CollabMemCache,
+  /// access control for collab object. Including read/write
   access_control: AC,
-  collab_by_object_id: Arc<RwLock<HashMap<String, Weak<MutexCollab>>>>,
+  /// cache opened collab by object_id. The collab will be removed from the cache when it's closed.
+  opened_collab_by_object_id: Arc<RwLock<HashMap<String, Weak<MutexCollab>>>>,
 }
 
-impl<AC> CollabStorageWrapper<AC>
+impl<AC> CollabStorageController<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  pub fn new(inner: CollabStoragePgImpl, access_control: AC) -> Self {
+  pub fn new(
+    disk_cache: CollabStoragePgImpl,
+    mem_cache: CollabMemCache,
+    access_control: AC,
+  ) -> Self {
     Self {
-      inner,
+      disk_cache,
+      mem_cache,
       access_control,
-      collab_by_object_id: Arc::new(RwLock::new(HashMap::new())),
+      opened_collab_by_object_id: Arc::new(RwLock::new(HashMap::new())),
     }
   }
 }
 
 #[async_trait]
-impl<AC> CollabStorage for CollabStorageWrapper<AC>
+impl<AC> CollabStorage for CollabStorageController<AC>
 where
   AC: CollabStorageAccessControl,
 {
   fn config(&self) -> &WriteConfig {
-    self.inner.config()
+    self.disk_cache.config()
   }
 
   async fn is_exist(&self, object_id: &str) -> bool {
-    self.inner.is_exist(object_id).await
+    self.disk_cache.is_exist(object_id).await
   }
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    tracing::trace!("cache collab:{}", object_id);
+    tracing::trace!("cache opened collab:{}", object_id);
     self
-      .collab_by_object_id
+      .opened_collab_by_object_id
       .write()
       .await
       .insert(object_id.to_string(), collab);
   }
 
   async fn remove_collab_cache(&self, object_id: &str) {
-    tracing::trace!("remove collab:{} cache", object_id);
-    self.collab_by_object_id.write().await.remove(object_id);
+    tracing::trace!("remove opened collab:{} cache", object_id);
+    self
+      .opened_collab_by_object_id
+      .write()
+      .await
+      .remove(object_id);
   }
 
   async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
-    self.inner.is_collab_exist(oid).await
+    self.disk_cache.is_collab_exist(oid).await
+  }
+
+  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+    let mut transaction = self
+      .disk_cache
+      .pg_pool
+      .begin()
+      .await
+      .context("acquire transaction to upsert collab")
+      .map_err(AppError::from)?;
+    let (params, workspace_id) = params.split();
+    // TODO(nathan): save list of collab within period of time to avoid too many pool connections
+    self
+      .upsert_collab_with_transaction(&workspace_id, uid, params, &mut transaction)
+      .await?;
+    transaction
+      .commit()
+      .await
+      .context("fail to commit the transaction to upsert collab")
+      .map_err(AppError::from)?;
+    Ok(())
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
-  async fn insert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
+  async fn upsert_collab_with_transaction(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> DatabaseResult<()> {
     params.validate()?;
 
     // Check if the user has enough permissions to insert collab
+    // 1. If the collab already exists, check if the user has enough permissions to update collab
+    // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
+    // TODO(nathan): remove is_collab_exist call and use access_control to check if the user has enough permissions to create collab.
     let has_permission = if self.is_collab_exist(&params.object_id).await? {
       // If the collab already exists, check if the user has enough permissions to update collab
       let level = self
@@ -107,30 +153,24 @@ where
           "Can't find the access level when user:{} try to insert collab",
           uid
         ))?;
-      event!(
-        tracing::Level::TRACE,
-        "user:{} with {:?} try to update exist collab:{}",
-        uid,
-        level,
-        params.object_id
-      );
-
       level.can_write()
     } else {
       // If the collab doesn't exist, check if the user has enough permissions to create collab.
       // If the user is the owner or member of the workspace, the user can create collab.
-      let role = self
+      let can_write_workspace = self
         .access_control
-        .get_user_workspace_role(uid, &params.workspace_id)
-        .await?;
-      event!(
-        tracing::Level::INFO,
-        "[{:?}]user:{} try to insert new collab:{}",
-        role,
-        uid,
-        params.object_id
-      );
-      role.can_create_collab()
+        .get_user_workspace_role(uid, workspace_id)
+        .await?
+        .can_create_collab();
+
+      // Cache the access level if the user has enough permissions to create collab.
+      if can_write_workspace {
+        self
+          .access_control
+          .cache_collab_access_level(uid, &params.object_id, AFAccessLevel::FullAccess)
+          .await?;
+      }
+      can_write_workspace
     };
 
     if !has_permission {
@@ -139,49 +179,69 @@ where
         uid, params.object_id
       )));
     }
-    self.inner.insert_collab(uid, params).await
+
+    self
+      .mem_cache
+      .cache_encoded_collab_bytes(&params.object_id, params.encoded_collab_v1.clone())
+      .await;
+    self
+      .disk_cache
+      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
+      .await
   }
 
   async fn get_collab_encoded(
     &self,
     uid: &i64,
     params: QueryCollabParams,
-    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollab> {
     params.validate()?;
     self
       .access_control
       .get_collab_access_level(uid, &params.object_id)
       .await?;
+    let object_id = params.object_id.clone();
 
-    let collab = if force_from_disk {
-      None
-    } else {
-      self
-        .collab_by_object_id
-        .read()
-        .await
-        .get(&params.object_id)
-        .and_then(|collab| collab.upgrade())
-    };
+    // Attempt to retrieve from the opened collab cache
+    if let Some(collab_weak_ref) = self
+      .opened_collab_by_object_id
+      .read()
+      .await
+      .get(&params.object_id)
+      .and_then(|collab| collab.upgrade())
+    {
+      event!(
+        tracing::Level::DEBUG,
+        "Get encoded collab:{} from memory",
+        params.object_id
+      );
+      let data = collab_weak_ref.encode_collab_v1();
+      return Ok(data);
+    }
 
-    match collab {
-      None => {
+    // Attempt to retrieve from memory cache if not found then try
+    // to retrieve from disk cache
+    match self
+      .mem_cache
+      .get_encoded_collab(&params.inner.object_id)
+      .await
+    {
+      Some(encoded_collab) => {
         event!(
           tracing::Level::DEBUG,
-          "Get collab data:{} from disk",
+          "Get encoded collab:{} from redis",
           params.object_id
         );
-        self.inner.get_collab_encoded(uid, params, true).await
+        Ok(encoded_collab)
       },
-      Some(collab) => {
-        event!(
-          tracing::Level::DEBUG,
-          "Get collab data:{} from memory",
-          params.object_id
-        );
-        let data = collab.encode_collab_v1();
-        Ok(data)
+      None => {
+        // Fallback to disk cache if not in memory cache
+        let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
+        self
+          .mem_cache
+          .cache_encoded_collab(&object_id, &encoded_collab)
+          .await;
+        Ok(encoded_collab)
       },
     }
   }
@@ -204,7 +264,7 @@ where
           )),
         });
 
-    let read_guard = self.collab_by_object_id.read().await;
+    let read_guard = self.opened_collab_by_object_id.read().await;
     let (results_from_memory, queries): (HashMap<_, _>, Vec<_>) =
       valid_queries.into_iter().partition_map(|params| {
         match read_guard
@@ -225,7 +285,7 @@ where
       });
 
     results.extend(results_from_memory);
-    results.extend(self.inner.batch_get_collab(uid, queries).await);
+    results.extend(self.disk_cache.batch_get_collab(uid, queries).await);
     results
   }
 
@@ -245,22 +305,22 @@ where
         uid, object_id
       )));
     }
-    self.inner.delete_collab(uid, object_id).await
+    self.disk_cache.delete_collab(uid, object_id).await
   }
 
   async fn should_create_snapshot(&self, oid: &str) -> bool {
-    self.inner.should_create_snapshot(oid).await
+    self.disk_cache.should_create_snapshot(oid).await
   }
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
-    self.inner.create_snapshot(params).await
+    self.disk_cache.create_snapshot(params).await
   }
 
   async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
-    self.inner.get_collab_snapshot(snapshot_id).await
+    self.disk_cache.get_collab_snapshot(snapshot_id).await
   }
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
-    self.inner.get_collab_snapshot_list(oid).await
+    self.disk_cache.get_collab_snapshot_list(oid).await
   }
 }

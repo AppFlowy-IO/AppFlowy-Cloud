@@ -16,6 +16,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+pub type RedisClient = redis::aio::ConnectionManager;
+
 #[derive(Clone)]
 pub struct AppState {
   pub pg_pool: PgPool,
@@ -23,7 +25,7 @@ pub struct AppState {
   pub users: Arc<UserCache>,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
-  pub redis_client: redis::aio::ConnectionManager,
+  pub redis_client: RedisClient,
   pub collab_storage: Arc<CollabPostgresDBStorage>,
   pub collab_access_control: CasbinCollabAccessControl,
   pub workspace_access_control: CasbinWorkspaceAccessControl,

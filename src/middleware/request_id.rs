@@ -45,7 +45,7 @@ where
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
     // Skip generate request id for metrics requests
-    if req.path() == "/metrics" {
+    if skip_request_id(&req) {
       let fut = self.service.call(req);
       Box::pin(fut)
     } else {
@@ -120,4 +120,9 @@ fn get_client_info(req: &ServiceRequest) -> ClientInfo {
 struct ClientInfo<'a> {
   payload_size: usize,
   client_version: Option<&'a str>,
+}
+
+#[inline]
+fn skip_request_id(req: &ServiceRequest) -> bool {
+  ["/metrics", "/ws"].contains(&req.path())
 }

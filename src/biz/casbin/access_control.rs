@@ -406,12 +406,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn update_member(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-    role: AFRole,
-  ) -> Result<(), AppError> {
+  async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError> {
     let _ = self
       .casbin_access_control
       .update(

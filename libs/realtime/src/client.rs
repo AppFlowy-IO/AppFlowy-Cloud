@@ -62,7 +62,12 @@ where
     ctx.run_interval(self.heartbeat_interval, move |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
         let user = act.user.clone();
-        warn!("{} heartbeat failed, disconnecting!", user);
+        warn!(
+          "User {} heartbeat failed, exceeding timeout limit of {} secs. Disconnecting!",
+          user,
+          act.client_timeout.as_secs()
+        );
+
         act.server.do_send(Disconnect {
           user,
           session_id: session_id.clone(),

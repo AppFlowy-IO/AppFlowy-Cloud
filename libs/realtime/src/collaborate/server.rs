@@ -199,7 +199,7 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    ctx.set_mailbox_capacity(2000);
+    ctx.set_mailbox_capacity(3000);
   }
 }
 

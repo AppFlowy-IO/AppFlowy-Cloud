@@ -227,10 +227,11 @@ where
         .await
         .insert(new_conn.user.clone(), new_conn.session_id);
 
-      if let Some(old_user) = user_by_uid
+      let old_user = user_by_uid
         .write()
-        .insert(new_conn.user.uid(), new_conn.user.clone())
-      {
+        .insert(new_conn.user.uid(), new_conn.user.clone());
+
+      if let Some(old_user) = old_user {
         if let Some(old_stream) = client_stream_by_user.write().await.remove(&old_user) {
           info!("same user connect again, remove the stream: {}", &old_user);
           old_stream.disconnect();

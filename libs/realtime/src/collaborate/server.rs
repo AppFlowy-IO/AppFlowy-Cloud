@@ -67,13 +67,13 @@ where
     ));
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
 
-    // Periodically check the collab groups
-    let weak_group = Arc::downgrade(&groups);
+    // Periodically check and remove inactive groups
+    let weak_groups = Arc::downgrade(&groups);
     tokio::spawn(async move {
       let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
-        match weak_group.upgrade() {
+        match weak_groups.upgrade() {
           Some(groups) => groups.tick().await,
           None => break,
         }
@@ -360,15 +360,6 @@ async fn remove_user_from_group<S, U, AC>(
         .map(|value| value.origin.to_string())
         .collect::<Vec<_>>(),
     );
-
-    // Remove the group if the group is no longer active
-    let is_group_active = group.is_active().await;
-    if !is_group_active {
-      group.flush_collab();
-
-      event!(tracing::Level::INFO, "Remove group: {}", editing.object_id);
-      groups.remove_group(&editing.object_id).await;
-    }
   }
 }
 
@@ -379,7 +370,7 @@ where
   AC: CollabAccessControl + Unpin,
 {
   fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, AC>>) {
-    tracing::warn!("restarting");
+    warn!("restarting");
   }
 }
 

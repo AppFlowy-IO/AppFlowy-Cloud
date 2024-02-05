@@ -16,7 +16,7 @@ use tokio::task::spawn_blocking;
 use tokio::time::Instant;
 
 use realtime_entity::collab_msg::CollabMessage;
-use tracing::{debug, error, event, trace, warn};
+use tracing::{debug, error, event, info, instrument, trace, warn};
 
 pub struct CollabGroupCache<S, U, AC> {
   group_by_object_id: Arc<RwLock<HashMap<String, Arc<CollabGroup<U>>>>>,
@@ -42,7 +42,25 @@ where
   /// 1. Groups without any subscribers.
   /// 2. Groups that have been inactive for a specified period of time.
   pub async fn tick(&self) {
-    // TODO(nathan): Implement this.
+    let mut inactive_group_ids = vec![];
+    if let Ok(groups) = self.group_by_object_id.try_read() {
+      for (object_id, group) in groups.iter() {
+        if group.is_inactive().await {
+          inactive_group_ids.push(object_id.clone());
+
+          if inactive_group_ids.len() > 10 {
+            break;
+          }
+        }
+      }
+    }
+
+    if !inactive_group_ids.is_empty() {
+      info!("Remove inactive groups: {}", inactive_group_ids.len());
+      for object_id in inactive_group_ids {
+        self.remove_group(&object_id).await;
+      }
+    }
   }
 
   pub async fn contains_user(&self, object_id: &str, user: &U) -> Result<bool, Error> {
@@ -79,10 +97,13 @@ where
       .cloned()
   }
 
+  #[instrument(skip(self))]
   pub async fn remove_group(&self, object_id: &str) {
     match self.group_by_object_id.try_write() {
       Ok(mut group_by_object_id) => {
-        group_by_object_id.remove(object_id);
+        if let Some(group) = group_by_object_id.remove(object_id) {
+          group.flush_collab().await;
+        }
         self.storage.remove_collab_cache(object_id).await;
       },
       Err(err) => error!("Failed to acquire write lock to remove group: {:?}", err),
@@ -221,22 +242,22 @@ where
   }
 
   /// Check if the group is active. A group is considered active if it has at least one
-  /// subscriber and has been modified within the last 3 hours.
-  pub async fn is_active(&self) -> bool {
-    if self.subscribers.read().await.is_empty() {
-      return false;
-    }
-
+  /// subscriber or has been modified within the last 3 minutes.
+  pub async fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at.lock().await;
-    modified_at.elapsed().as_secs() < 3 * 60 * 60
+    let is_timeout = modified_at.elapsed().as_secs() > 3 * 60;
+    let is_no_subscriber = self.subscribers.read().await.is_empty();
+
+    is_timeout && is_no_subscriber
   }
 
   /// Flush the [Collab] to the storage.
   /// When there is no subscriber, perform the flush in a blocking task.
-  pub fn flush_collab(&self) {
+  pub async fn flush_collab(&self) {
     let collab = self.collab.clone();
-    spawn_blocking(move || {
+    let _ = spawn_blocking(move || {
       collab.lock().flush();
-    });
+    })
+    .await;
   }
 }

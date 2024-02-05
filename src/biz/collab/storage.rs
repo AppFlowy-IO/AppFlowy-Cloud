@@ -109,7 +109,24 @@ where
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
-    self.disk_cache.upsert_collab(uid, params).await
+    let mut transaction = self
+      .disk_cache
+      .pg_pool
+      .begin()
+      .await
+      .context("acquire transaction to upsert collab")
+      .map_err(AppError::from)?;
+    let (params, workspace_id) = params.split();
+    // TODO(nathan): save list of collab within period of time to avoid too many pool connections
+    self
+      .upsert_collab_with_transaction(&workspace_id, uid, params, &mut transaction)
+      .await?;
+    transaction
+      .commit()
+      .await
+      .context("fail to commit the transaction to upsert collab")
+      .map_err(AppError::from)?;
+    Ok(())
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
@@ -136,14 +153,6 @@ where
           "Can't find the access level when user:{} try to insert collab",
           uid
         ))?;
-      event!(
-        tracing::Level::TRACE,
-        "user:{} with {:?} try to update exist collab:{}",
-        uid,
-        level,
-        params.object_id
-      );
-
       level.can_write()
     } else {
       // If the collab doesn't exist, check if the user has enough permissions to create collab.
@@ -185,7 +194,6 @@ where
     &self,
     uid: &i64,
     params: QueryCollabParams,
-    force_from_disk: bool,
   ) -> DatabaseResult<EncodedCollab> {
     params.validate()?;
     self
@@ -194,52 +202,47 @@ where
       .await?;
     let object_id = params.object_id.clone();
 
-    // Read the encoded collab from the disk cache if force_from_disk is true and then cache it in memory
-    if force_from_disk {
-      let encoded_collab = self
-        .disk_cache
-        .get_collab_encoded(uid, params, true)
-        .await?;
-      self
-        .mem_cache
-        .cache_encoded_collab(&object_id, &encoded_collab)
-        .await;
-      Ok(encoded_collab)
-    } else {
-      // Attempt to retrieve from the opened collab cache
-      if let Some(collab_weak_ref) = self
-        .opened_collab_by_object_id
-        .read()
-        .await
-        .get(&params.object_id)
-        .and_then(|collab| collab.upgrade())
-      {
+    // Attempt to retrieve from the opened collab cache
+    if let Some(collab_weak_ref) = self
+      .opened_collab_by_object_id
+      .read()
+      .await
+      .get(&params.object_id)
+      .and_then(|collab| collab.upgrade())
+    {
+      event!(
+        tracing::Level::DEBUG,
+        "Get encoded collab:{} from memory",
+        params.object_id
+      );
+      let data = collab_weak_ref.encode_collab_v1();
+      return Ok(data);
+    }
+
+    // Attempt to retrieve from memory cache if not found then try
+    // to retrieve from disk cache
+    match self
+      .mem_cache
+      .get_encoded_collab(&params.inner.object_id)
+      .await
+    {
+      Some(encoded_collab) => {
         event!(
           tracing::Level::DEBUG,
-          "Get encoded collab:{} from memory",
+          "Get encoded collab:{} from redis",
           params.object_id
         );
-        let data = collab_weak_ref.encode_collab_v1();
-        return Ok(data);
-      }
-
-      // Attempt to retrieve from memory cache if not found then try
-      // to retrieve from disk cache
-      match self.mem_cache.get_encoded_collab(&params.inner).await {
-        Some(encoded_collab) => Ok(encoded_collab),
-        None => {
-          // Fallback to disk cache if not in memory cache
-          let encoded_collab = self
-            .disk_cache
-            .get_collab_encoded(uid, params, true)
-            .await?;
-          self
-            .mem_cache
-            .cache_encoded_collab(&object_id, &encoded_collab)
-            .await;
-          Ok(encoded_collab)
-        },
-      }
+        Ok(encoded_collab)
+      },
+      None => {
+        // Fallback to disk cache if not in memory cache
+        let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
+        self
+          .mem_cache
+          .cache_encoded_collab(&object_id, &encoded_collab)
+          .await;
+        Ok(encoded_collab)
+      },
     }
   }
 

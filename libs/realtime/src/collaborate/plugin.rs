@@ -137,11 +137,7 @@ where
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
-    match self
-      .storage
-      .get_collab_encoded(&self.uid, params, true)
-      .await
-    {
+    match self.storage.get_collab_encoded(&self.uid, params).await {
       Ok(encoded_collab_v1) => match init_collab(object_id, &encoded_collab_v1, doc).await {
         Ok(_) => {
           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
@@ -227,7 +223,11 @@ where
       trace!("number of updates reach flush_per_update, start flushing");
       match self.group.upgrade() {
         None => error!("Group is dropped, skip flush collab"),
-        Some(group) => group.flush_collab(),
+        Some(group) => {
+          tokio::spawn(async move {
+            group.flush_collab().await;
+          });
+        },
       }
     }
   }
@@ -265,7 +265,7 @@ where
     let storage = self.storage.clone();
     let uid = self.uid;
     tokio::spawn(async move {
-      info!("[realtime] flush collab to disk: {}", params.object_id);
+      info!("[realtime] flush collab: {}", params.object_id);
       match storage.upsert_collab(&uid, params).await {
         Ok(_) => {},
         Err(err) => error!("Failed to save collab: {:?}", err),

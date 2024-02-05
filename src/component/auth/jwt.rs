@@ -149,13 +149,13 @@ fn gotrue_jwt_claims_from_token(
     state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
   )
   .map_err(|err| {
-    actix_web::error::ErrorUnauthorized(format!("fail to decode token:{}, error:{}", token, err))
+    actix_web::error::ErrorUnauthorized(format!("fail to decode token, error:{}", err))
   })?;
 
   GoTrueJWTClaims::verify_claim(&claims).map_err(|err| {
     actix_web::error::ErrorUnauthorized(format!(
-      "fail to verify token:{}, claims:{}, error:{}",
-      token, claims, err
+      "fail to verify token, claims:{}, error:{}",
+      claims, err
     ))
   })?;
   Ok(claims)

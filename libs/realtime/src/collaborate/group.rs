@@ -246,13 +246,11 @@ where
   }
 
   /// Check if the group is active. A group is considered active if it has at least one
-  /// subscriber or has been modified within the last 3 minutes.
+  /// subscriber or has been modified within the last 10 minutes.
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at.lock().await;
-    let is_timeout = modified_at.elapsed().as_secs() > 3 * 60;
-    let is_no_subscriber = self.subscribers.read().await.is_empty();
-
-    is_timeout && is_no_subscriber
+    let is_timeout = modified_at.elapsed().as_secs() > 10 * 60;
+    is_timeout && self.subscribers.read().await.is_empty()
   }
 
   /// Flush the [Collab] to the storage.

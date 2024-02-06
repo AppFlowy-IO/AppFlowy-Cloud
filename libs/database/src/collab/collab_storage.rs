@@ -26,7 +26,12 @@ pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 #[async_trait]
 pub trait CollabStorageAccessControl: Send + Sync + 'static {
   /// Checks if the user with the given ID can access the [Collab] with the given ID.
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
+  async fn get_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
+    &self,
+    uid: &i64,
+    oid: &str,
+    executor: E,
+  ) -> Result<AFAccessLevel, AppError>;
 
   /// Updates the cache of the access level of the user for given collab object.
   async fn cache_collab_access_level(

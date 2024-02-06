@@ -21,7 +21,7 @@ use crate::biz::{
 };
 use app_error::AppError;
 use database::workspace::select_permission;
-use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
+use database_entity::dto::{AFAccessLevel, AFRole};
 
 use crate::biz::casbin::enforcer_ext::{enforcer_remove, enforcer_update};
 use realtime::collaborate::CollabAccessControl;
@@ -44,14 +44,12 @@ use super::{
 /// and will be evaluated against the policies and mappings stored,
 /// according to the model defined.
 pub struct CasbinAccessControl {
-  pub pg_pool: PgPool,
   enforcer: Arc<RwLock<casbin::Enforcer>>,
 }
 
 impl Clone for CasbinAccessControl {
   fn clone(&self) -> Self {
     Self {
-      pg_pool: self.pg_pool.clone(),
       enforcer: Arc::clone(&self.enforcer),
     }
   }
@@ -66,8 +64,8 @@ impl CasbinAccessControl {
   ) -> Self {
     let enforcer = Arc::new(RwLock::new(enforcer));
     spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
-    spawn_listen_on_collab_member_change(pg_pool.clone(), collab_listener, enforcer.clone());
-    Self { pg_pool, enforcer }
+    spawn_listen_on_collab_member_change(pg_pool, collab_listener, enforcer.clone());
+    Self { enforcer }
   }
   pub fn new_collab_access_control(&self) -> CasbinCollabAccessControl {
     CasbinCollabAccessControl {
@@ -97,10 +95,6 @@ impl CasbinAccessControl {
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
     let mut enforcer = self.enforcer.write().await;
     enforcer_remove(&mut enforcer, uid, obj).await
-  }
-
-  async fn get_collab_member(&self, uid: &i64, oid: &str) -> Result<AFCollabMember, AppError> {
-    database::collab::select_collab_member(uid, oid, &self.pg_pool).await
   }
 
   async fn get_workspace_member_role<'a, E: Executor<'a, Database = Postgres>>(
@@ -249,28 +243,12 @@ impl CollabAccessControl for CasbinCollabAccessControl {
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![collab_id]);
 
     // There should only be one entry per user per object, which is enforced in [CasbinAccessControl], so just take one using next.
-    let mut access_level = policies
+    let access_level = policies
       .into_iter()
       .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
       .map(|p| p[POLICY_FIELD_INDEX_ACTION].clone())
       .and_then(|s| i32::from_str(s.as_str()).ok())
       .map(AFAccessLevel::from);
-
-    if access_level.is_none() {
-      let member = self
-        .casbin_access_control
-        .get_collab_member(uid, oid)
-        .await?;
-      access_level = Some(member.permission.access_level);
-      self
-        .casbin_access_control
-        .update(
-          uid,
-          &ObjectType::Collab(oid),
-          &ActionType::Level(member.permission.access_level),
-        )
-        .await?;
-    }
 
     access_level.ok_or(AppError::RecordNotFound(format!(
       "user:{} is not a member of collab:{}",
@@ -374,10 +352,6 @@ impl Deref for CasbinWorkspaceAccessControl {
 
 #[async_trait]
 impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
-  fn pg_pool(&self) -> &PgPool {
-    &self.0.pg_pool
-  }
-
   async fn get_role_from_uid<'a, E>(
     &self,
     uid: &i64,

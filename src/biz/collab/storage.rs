@@ -18,7 +18,7 @@ use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use sqlx::{PgPool, Transaction};
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use std::{
   collections::HashMap,
   sync::{Arc, Weak},
@@ -136,12 +136,11 @@ where
     // Check if the user has enough permissions to insert collab
     // 1. If the collab already exists, check if the user has enough permissions to update collab
     // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
-    // TODO(nathan): remove is_collab_exist call and use access_control to check if the user has enough permissions to create collab.
     let has_permission = if is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
       // If the collab already exists, check if the user has enough permissions to update collab
       let level = self
         .access_control
-        .get_collab_access_level(uid, &params.object_id)
+        .get_collab_access_level(uid, &params.object_id, transaction.deref_mut())
         .await
         .context(format!(
           "Can't find the access level when user:{} try to insert collab",
@@ -192,7 +191,7 @@ where
     params.validate()?;
     self
       .access_control
-      .get_collab_access_level(uid, &params.object_id)
+      .get_collab_access_level(uid, &params.object_id, &self.disk_cache.pg_pool)
       .await?;
     let object_id = params.object_id.clone();
 
@@ -286,7 +285,7 @@ where
   async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
     if !self
       .access_control
-      .get_collab_access_level(uid, object_id)
+      .get_collab_access_level(uid, object_id, &self.disk_cache.pg_pool)
       .await
       .context(format!(
         "Can't find the access level when user:{} try to delete {}",

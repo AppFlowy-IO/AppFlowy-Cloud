@@ -10,7 +10,8 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 use realtime::collaborate::CollabAccessControl;
 use sqlx::{Executor, Postgres};
 use std::sync::Arc;
-use tracing::instrument;
+use tracing::{error, instrument};
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct CollabHttpAccessControl<AC: CollabAccessControl>(pub Arc<AC>);
@@ -22,6 +23,16 @@ where
 {
   fn resource(&self) -> AccessResource {
     AccessResource::Collab
+  }
+
+  async fn check_workspace_permission(
+    &self,
+    _workspace_id: &Uuid,
+    _uid: &i64,
+    _method: Method,
+  ) -> Result<(), AppError> {
+    error!("Shouldn't call CollabHttpAccessControl here");
+    Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -57,11 +68,34 @@ where
   CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    self
+  async fn get_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
+    &self,
+    uid: &i64,
+    oid: &str,
+    executor: E,
+  ) -> Result<AFAccessLevel, AppError> {
+    let access_level_result = self
       .collab_access_control
       .get_collab_access_level(uid, oid)
-      .await
+      .await;
+
+    if let Ok(level) = access_level_result {
+      return Ok(level);
+    }
+
+    // Safe unwrap, we know it's an Err here
+    let err = access_level_result.unwrap_err();
+    if err.is_record_not_found() {
+      let member = database::collab::select_collab_member(uid, oid, executor).await?;
+      self
+        .collab_access_control
+        .cache_collab_access_level(uid, oid, member.permission.access_level)
+        .await?;
+
+      Ok(member.permission.access_level)
+    } else {
+      Err(err)
+    }
   }
 
   async fn cache_collab_access_level(

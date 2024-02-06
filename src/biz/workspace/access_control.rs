@@ -10,18 +10,17 @@ use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
+use actix_router::{Path, Url};
 use anyhow::anyhow;
 use app_error::AppError;
 use database_entity::dto::AFRole;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{instrument, trace, warn};
+use tracing::{error, instrument, trace, warn};
 use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  fn pg_pool(&self) -> &PgPool;
-
   async fn get_role_from_uid<'a, E>(
     &self,
     uid: &i64,
@@ -188,7 +187,10 @@ fn spawn_listen_on_workspace_member_change(
 }
 
 #[derive(Clone)]
-pub struct WorkspaceHttpAccessControl<AC: WorkspaceAccessControl>(pub Arc<AC>);
+pub struct WorkspaceHttpAccessControl<AC: WorkspaceAccessControl> {
+  pub pg_pool: PgPool,
+  pub access_control: Arc<AC>,
+}
 #[async_trait]
 impl<AC> HttpAccessControlService for WorkspaceHttpAccessControl<AC>
 where
@@ -207,8 +209,8 @@ where
   ) -> Result<(), AppError> {
     trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
     match self
-      .0
-      .get_role_from_uid(uid, workspace_id, self.0.pg_pool())
+      .access_control
+      .get_role_from_uid(uid, workspace_id, &self.pg_pool)
       .await
     {
       Ok(role) => {
@@ -230,5 +232,16 @@ where
         uid, workspace_id, err
       ))),
     }
+  }
+
+  async fn check_collab_permission(
+    &self,
+    oid: &str,
+    uid: &i64,
+    method: Method,
+    path: &Path<Url>,
+  ) -> Result<(), AppError> {
+    error!("The check_collab_permission is not implemented");
+    Ok(())
   }
 }

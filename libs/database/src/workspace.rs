@@ -310,8 +310,8 @@ pub async fn select_workspace_member_list(
 }
 
 #[inline]
-pub async fn select_workspace_member(
-  pg_pool: &PgPool,
+pub async fn select_workspace_member<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
   uid: &i64,
   workspace_id: &Uuid,
 ) -> Result<AFWorkspaceMemberRow, AppError> {
@@ -327,7 +327,7 @@ pub async fn select_workspace_member(
     workspace_id,
     uid,
   )
-  .fetch_one(pg_pool)
+  .fetch_one(executor)
   .await?;
   Ok(member)
 }

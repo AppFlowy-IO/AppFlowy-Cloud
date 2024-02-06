@@ -51,22 +51,10 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
   fn config(&self) -> &WriteConfig;
-  /// Checks if a collaboration with the given object ID exists in the storage.
-  ///
-  /// # Arguments
-  ///
-  /// * `object_id` - A string slice that holds the ID of the collaboration.
-  ///
-  /// # Returns
-  ///
-  /// * `bool` - `true` if the collaboration exists, `false` otherwise.
-  async fn is_exist(&self, object_id: &str) -> bool;
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
 
   async fn remove_collab_cache(&self, object_id: &str);
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool>;
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
 
@@ -136,20 +124,12 @@ where
     self.as_ref().config()
   }
 
-  async fn is_exist(&self, object_id: &str) -> bool {
-    self.as_ref().is_exist(object_id).await
-  }
-
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
     self.as_ref().cache_collab(object_id, collab).await
   }
 
   async fn remove_collab_cache(&self, object_id: &str) {
     self.as_ref().remove_collab_cache(object_id).await
-  }
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
-    self.as_ref().is_collab_exist(oid).await
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {

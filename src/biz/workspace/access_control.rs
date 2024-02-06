@@ -6,7 +6,7 @@ use actix_http::Method;
 use async_trait::async_trait;
 use database::user::select_uid_from_uuid;
 
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
@@ -20,7 +20,6 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
 
   async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError>;
@@ -177,27 +176,6 @@ fn spawn_listen_on_workspace_member_change(
       }
     }
   });
-}
-
-#[async_trait]
-impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let role = self.get_user_workspace_role(uid, workspace_id).await?;
-    Ok(role)
-  }
-
-  async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let role = self.get_user_workspace_role(uid, workspace_id).await?;
-    Ok(role)
-  }
-
-  async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError> {
-    Err(AppError::Internal(anyhow!("Not support")))
-  }
-
-  async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
-    Err(AppError::Internal(anyhow!("Not support")))
-  }
 }
 
 #[derive(Clone)]

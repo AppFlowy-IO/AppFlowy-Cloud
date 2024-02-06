@@ -168,6 +168,13 @@ impl CollabMessage {
       CollabMessage::AwarenessSync(value) => &value.object_id,
     }
   }
+
+  pub fn device_id(&self) -> Option<String> {
+    self.origin().and_then(|origin| match origin {
+      CollabOrigin::Client(origin) => Some(origin.device_id.clone()),
+      _ => None,
+    })
+  }
 }
 
 impl Display for CollabMessage {

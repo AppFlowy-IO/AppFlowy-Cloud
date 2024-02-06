@@ -12,7 +12,6 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 
-use actix::dev::Stream;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -96,74 +95,64 @@ where
     })
   }
 
-  fn process_realtime_message<MS>(
-    &mut self,
+  fn process_realtime_message(
     user: U,
-    mut message_stream: MS,
-  ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>>
-  where
-    MS: Stream<Item = RealtimeMessage> + Unpin + Send,
-  {
-    let client_stream_by_user = self.client_stream_by_user.clone();
-    let groups = self.groups.clone();
-    let edit_collab_by_user = self.editing_collab_by_user.clone();
-    let access_control = self.access_control.clone();
-
+    client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
+    groups: Arc<CollabGroupCache<S, U, AC>>,
+    edit_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
+    access_control: Arc<AC>,
+    realtime_msg: RealtimeMessage,
+  ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>> {
     Box::pin(async move {
-      match message_stream.next().await {
-        None => Ok(()),
-        Some(realtime_msg) => {
-          trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
-          match realtime_msg {
-            RealtimeMessage::Collab(collab_message) => {
-              // 1.Check the client is connected with the websocket server
-              if client_stream_by_user
-                .try_read()
-                .map_err(|err| {
-                  RealtimeError::Internal(anyhow!(
-                    "failed to acquire the lock for client stream:{}",
-                    err
-                  ))
-                })?
-                .get(&user)
-                .is_none()
-              {
-                let msg = anyhow!(
+      trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
+      match realtime_msg {
+        RealtimeMessage::Collab(collab_message) => {
+          // 1.Check the client is connected with the websocket server
+          if client_stream_by_user
+            .try_read()
+            .map_err(|err| {
+              RealtimeError::Internal(anyhow!(
+                "failed to acquire the lock for client stream:{}",
+                err
+              ))
+            })?
+            .get(&user)
+            .is_none()
+          {
+            let msg = anyhow!(
                   "The client stream: {} is not found, it should be created when the client is connected with this websocket server",
                   user
                 );
-                return Err(RealtimeError::Internal(msg));
-              }
-
-              // 2. handle the message sent by the client
-              let msg = CollabUserMessage {
-                user: &user,
-                collab_message: &collab_message,
-              };
-
-              // 3.1 create a new group if the user is editing the object for the first time
-              // 3.2 subscribe the user to the group in order to receive changes when the collab object is updated
-              SubscribeGroupIfNeed {
-                collab_user_message: &msg,
-                groups: &groups,
-                edit_collab_by_user: &edit_collab_by_user,
-                client_stream_by_user: &client_stream_by_user,
-                access_control: &access_control,
-              }
-              .run()
-              .await?;
-
-              // 4 send message to the group and then broadcast the message to all connected clients
-              if groups.contains_group(collab_message.object_id()).await? {
-                broadcast_message(&user, collab_message, &client_stream_by_user).await;
-              }
-              Ok(())
-            },
-            _ => {
-              warn!("Receive unsupported message: {}", realtime_msg);
-              Ok(())
-            },
+            return Err(RealtimeError::Internal(msg));
           }
+
+          // 2. handle the message sent by the client
+          let msg = CollabUserMessage {
+            user: &user,
+            collab_message: &collab_message,
+          };
+
+          // 3.1 create a new group if the user is editing the object for the first time
+          // 3.2 subscribe the user to the group in order to receive changes when the collab object is updated
+          SubscribeGroupIfNeed {
+            collab_user_message: &msg,
+            groups: &groups,
+            edit_collab_by_user: &edit_collab_by_user,
+            client_stream_by_user: &client_stream_by_user,
+            access_control: &access_control,
+          }
+          .run()
+          .await?;
+
+          // 4 send message to the group and then broadcast the message to all connected clients
+          if groups.contains_group(collab_message.object_id()).await? {
+            broadcast_message(&user, collab_message, &client_stream_by_user).await;
+          }
+          Ok(())
+        },
+        _ => {
+          warn!("Receive unsupported message: {}", realtime_msg);
+          Ok(())
         },
       }
     })
@@ -315,7 +304,18 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
-    self.process_realtime_message(user, tokio_stream::once(message))
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let groups = self.groups.clone();
+    let edit_collab_by_user = self.editing_collab_by_user.clone();
+    let access_control = self.access_control.clone();
+    Self::process_realtime_message(
+      user,
+      client_stream_by_user,
+      groups,
+      edit_collab_by_user,
+      access_control,
+      message,
+    )
   }
 }
 
@@ -330,41 +330,47 @@ where
   fn handle(&mut self, client_msg: ClientStreamMessage, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientStreamMessage {
       uid,
-      device_id,
-      stream,
+      mut device_id,
+      mut stream,
     } = client_msg;
+    let user_by_device = self.user_by_device.clone();
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let groups = self.groups.clone();
+    let edit_collab_by_user = self.editing_collab_by_user.clone();
+    let access_control = self.access_control.clone();
 
-    // TODO(nathan): after upgrade the client application, then the device_id should not be empty
-    let user_device = if device_id.is_empty() {
-      self
-        .user_by_device
-        .read()
-        .keys()
-        .find(|device_user| device_user.uid == uid)
-        .cloned()
-    } else {
-      Some(UserDevice { device_id, uid })
-    };
-
-    if let Some(user_device) = user_device {
-      let user = self.user_by_device.read().get(&user_device).cloned();
-      match user {
-        None => Box::pin(async move {
-          Err(RealtimeError::UserNotFound(format!(
-            "Can't find the user with user id: {}",
-            uid
-          )))
-        }),
-        Some(user) => self.process_realtime_message(user, stream),
+    Box::pin(async move {
+      if let Some(message) = stream.next().await {
+        // client doesn't send the device_id through the http request header before the 0.4.6
+        // so, try to get the device_id from the message
+        if device_id.is_empty() {
+          if let Some(msg_device_id) = message.device_id() {
+            device_id = msg_device_id;
+          }
+        }
+        let device_user = UserDevice { device_id, uid };
+        let user = user_by_device.read().get(&device_user).cloned();
+        match user {
+          None => Err(RealtimeError::UserNotFound(format!(
+            "Can't find the user:{} device_id:{} from client stream message",
+            uid, device_user.device_id
+          ))),
+          Some(user) => {
+            Self::process_realtime_message(
+              user,
+              client_stream_by_user,
+              groups,
+              edit_collab_by_user,
+              access_control,
+              message,
+            )
+            .await
+          },
+        }
+      } else {
+        Ok(())
       }
-    } else {
-      Box::pin(async move {
-        Err(RealtimeError::UserNotFound(format!(
-          "Can't find the user with user id: {}",
-          uid
-        )))
-      })
-    }
+    })
   }
 }
 

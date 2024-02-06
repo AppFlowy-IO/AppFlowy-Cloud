@@ -672,7 +672,7 @@ async fn post_realtime_message_stream_handler(
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
   // TODO(nathan): after upgrade the client application, then the device_id should not be empty
-  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|| "".to_string());
+  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
   let uid = state
     .users
     .get_user_uid(&user_uuid)

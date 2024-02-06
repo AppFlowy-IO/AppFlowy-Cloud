@@ -10,17 +10,25 @@ use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
+use actix_router::{Path, Url};
 use anyhow::anyhow;
 use app_error::AppError;
 use database_entity::dto::AFRole;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{instrument, trace, warn};
+use tracing::{error, instrument, trace, warn};
 use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
+  async fn get_role_from_uid<'a, E>(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    executor: E,
+  ) -> Result<AFRole, AppError>
+  where
+    E: Executor<'a, Database = Postgres>;
 
   async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError>;
 
@@ -179,7 +187,10 @@ fn spawn_listen_on_workspace_member_change(
 }
 
 #[derive(Clone)]
-pub struct WorkspaceHttpAccessControl<AC: WorkspaceAccessControl>(pub Arc<AC>);
+pub struct WorkspaceHttpAccessControl<AC: WorkspaceAccessControl> {
+  pub pg_pool: PgPool,
+  pub access_control: Arc<AC>,
+}
 #[async_trait]
 impl<AC> HttpAccessControlService for WorkspaceHttpAccessControl<AC>
 where
@@ -197,8 +208,11 @@ where
     method: Method,
   ) -> Result<(), AppError> {
     trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
-
-    match self.0.get_role_from_uid(uid, workspace_id).await {
+    match self
+      .access_control
+      .get_role_from_uid(uid, workspace_id, &self.pg_pool)
+      .await
+    {
       Ok(role) => {
         if method == Method::DELETE || method == Method::POST || method == Method::PUT {
           if matches!(role, AFRole::Owner) {
@@ -218,5 +232,16 @@ where
         uid, workspace_id, err
       ))),
     }
+  }
+
+  async fn check_collab_permission(
+    &self,
+    oid: &str,
+    uid: &i64,
+    method: Method,
+    path: &Path<Url>,
+  ) -> Result<(), AppError> {
+    error!("The check_collab_permission is not implemented");
+    Ok(())
   }
 }

@@ -95,6 +95,7 @@ client-api = { path = "libs/client-api", features = ["collab-sync", "test_util"]
 opener = "0.6.1"
 image = "0.23.14"
 collab-folder = { version = "0.1.0" }
+websocket.workspace = true
 
 [[bin]]
 name = "appflowy_cloud"
@@ -160,10 +161,10 @@ debug = true
 lto = false
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "fe8f08fcc99ea56c78bfb746ccb0cd308126141d" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2de6d172f56fed29ee6f32b82040cca4867647ac" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2de6d172f56fed29ee6f32b82040cca4867647ac" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2de6d172f56fed29ee6f32b82040cca4867647ac" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2de6d172f56fed29ee6f32b82040cca4867647ac" }
 
 [features]
 custom_env= []

@@ -16,6 +16,16 @@ pub enum RealtimeMessage {
   ServerKickedOff,
 }
 
+impl RealtimeMessage {
+  pub fn device_id(&self) -> Option<String> {
+    match self {
+      RealtimeMessage::Collab(msg) => msg.device_id(),
+      RealtimeMessage::ServerKickedOff => None,
+      RealtimeMessage::User(_) => None,
+    }
+  }
+}
+
 impl Display for RealtimeMessage {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {

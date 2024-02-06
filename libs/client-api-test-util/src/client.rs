@@ -4,6 +4,7 @@ use lazy_static::lazy_static;
 use std::borrow::Cow;
 use std::env;
 use tracing::warn;
+use uuid::Uuid;
 
 #[cfg(not(target_arch = "wasm32"))]
 lazy_static! {
@@ -41,10 +42,16 @@ fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str
 /// ./build/run_local_server.sh
 /// ```
 pub fn localhost_client() -> Client {
+  let device_id = Uuid::new_v4().to_string();
+  localhost_client_with_device_id(&device_id)
+}
+
+pub fn localhost_client_with_device_id(device_id: &str) -> Client {
   Client::new(
     &LOCALHOST_URL,
     &LOCALHOST_WS,
     &LOCALHOST_GOTRUE,
+    device_id,
     ClientConfiguration::default(),
   )
 }

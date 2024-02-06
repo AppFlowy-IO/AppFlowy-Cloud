@@ -116,7 +116,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     websocket: WebsocketSetting {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,
-      client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "30").parse()?,
+      client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "60").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {

@@ -78,19 +78,6 @@ where
         collab_message,
       } = self.collab_user_message;
 
-      if self
-        .client_stream_by_user
-        .try_read()
-        .map_err(|err| RealtimeError::Internal(err.into()))?
-        .get(user)
-        .is_none()
-      {
-        return Err(RealtimeError::Internal(anyhow!(
-          "The client stream: {} is not found, it should be created before receiving any client payload",
-          user
-        )));
-      }
-
       let object_id = collab_message.object_id();
       if !self.groups.contains_group(object_id).await? {
         if collab_message.is_init_msg() {

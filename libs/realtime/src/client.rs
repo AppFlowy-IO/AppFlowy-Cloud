@@ -10,12 +10,16 @@ use actix_web_actors::ws::ProtocolError;
 use bytes::Bytes;
 use database::collab::CollabStorage;
 
+use anyhow::anyhow;
 use std::ops::Deref;
 use std::time::{Duration, Instant};
+use tokio::time::sleep;
 
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::{debug, error, trace, warn};
+const MAX_MESSAGES_PER_INTERVAL: usize = 10;
+const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -29,6 +33,8 @@ pub struct ClientSession<
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
+  message_count: usize,
+  interval_start: Instant,
 }
 
 impl<U, S, AC> ClientSession<U, S, AC>
@@ -52,6 +58,8 @@ where
       client_timeout,
       user_change_recv: Some(user_change_recv),
       session_id: uuid::Uuid::new_v4().to_string(),
+      message_count: 0,
+      interval_start: Instant::now(),
     }
   }
 
@@ -60,7 +68,12 @@ where
     ctx.run_interval(self.heartbeat_interval, move |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
         let user = act.user.clone();
-        warn!("{} heartbeat failed, disconnecting!", user);
+        warn!(
+          "User {} heartbeat failed, exceeding timeout limit of {} secs. Disconnecting!",
+          user,
+          act.client_timeout.as_secs()
+        );
+
         act.server.do_send(Disconnect {
           user,
           session_id: session_id.clone(),
@@ -73,18 +86,44 @@ where
     });
   }
 
-  fn forward_binary(&self, bytes: Bytes) -> Result<(), RealtimeError> {
-    match RealtimeMessage::try_from(bytes) {
-      Ok(message) => {
-        debug!("Receive {} {}", self.user.uid(), message);
-        let user = self.user.clone();
-        if let Err(err) = self.server.try_send(ClientMessage { user, message }) {
-          error!("Send message to server error: {:?}", err);
+  async fn forward_binary(
+    user: U,
+    server: Addr<CollabServer<S, U, AC>>,
+    bytes: Bytes,
+  ) -> Result<(), RealtimeError> {
+    let message = tokio::task::spawn_blocking(move || {
+      RealtimeMessage::try_from(bytes).map_err(|err| RealtimeError::Internal(err.into()))
+    })
+    .await
+    .map_err(|err| RealtimeError::Internal(err.into()))??;
+    let mut client_message = Some(ClientMessage {
+      user: user.clone(),
+      message,
+    });
+    let mut attempts = 0;
+    const MAX_RETRIES: usize = 3;
+    const RETRY_DELAY: Duration = Duration::from_millis(500);
+    while attempts < MAX_RETRIES {
+      if let Some(message_to_send) = client_message.take() {
+        match server.try_send(message_to_send) {
+          Ok(_) => return Ok(()),
+          Err(err) if attempts < MAX_RETRIES - 1 => {
+            client_message = Some(err.into_inner());
+            attempts += 1;
+            sleep(RETRY_DELAY).await;
+          },
+          Err(err) => {
+            return Err(RealtimeError::Internal(anyhow!(
+              "Failed to send message to server after retries: {:?}",
+              err
+            )));
+          },
         }
-      },
-      Err(err) => {
-        error!("Deserialize message error: {:?}", err);
-      },
+      } else {
+        return Err(RealtimeError::Internal(anyhow!(
+          "Unexpected empty client message"
+        )));
+      }
     }
     Ok(())
   }
@@ -196,6 +235,18 @@ where
   AC: CollabAccessControl + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+    let now = Instant::now();
+    if now.duration_since(self.interval_start) > RATE_LIMIT_INTERVAL {
+      self.message_count = 0;
+      self.interval_start = now;
+    }
+
+    self.message_count += 1;
+    if self.message_count > MAX_MESSAGES_PER_INTERVAL {
+      // TODO(nathan): inform the client to slow down
+      return;
+    }
+
     let msg = match msg {
       Err(err) => {
         error!("Websocket stream error: {}", err);
@@ -214,7 +265,13 @@ where
       ws::Message::Pong(_) => self.hb = Instant::now(),
       ws::Message::Text(_) => {},
       ws::Message::Binary(bytes) => {
-        let _ = self.forward_binary(bytes);
+        let fut = Self::forward_binary(self.user.clone(), self.server.clone(), bytes);
+        let act_fut = fut::wrap_future::<_, Self>(fut);
+        ctx.spawn(act_fut.map(|res, _act, _ctx| {
+          if let Err(e) = res {
+            error!("Error forwarding binary message: {}", e);
+          }
+        }));
       },
       ws::Message::Close(reason) => {
         debug!(

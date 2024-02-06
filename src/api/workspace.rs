@@ -1,4 +1,4 @@
-use crate::api::util::compress_type_from_header_value;
+use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
 use crate::biz::workspace;
@@ -7,11 +7,13 @@ use crate::component::auth::jwt::UserUuid;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
 
+use std::time::Duration;
+
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -23,11 +25,12 @@ use prost::Message as ProstMessage;
 use bytes::BytesMut;
 use realtime::entities::{ClientStreamMessage, RealtimeMessage};
 use realtime_entity::realtime_proto::HttpRealtimeMessage;
+
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use tokio::time::Instant;
+use tokio::time::{sleep, Instant};
 
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
@@ -660,7 +663,7 @@ async fn get_collab_member_list_handler(
   Ok(Json(AppResponse::Ok().with_data(AFCollabMembers(members))))
 }
 
-#[instrument(level = "debug", skip(payload, server, state), err)]
+#[instrument(level = "info", skip_all, err)]
 async fn post_realtime_message_stream_handler(
   user_uuid: UserUuid,
   mut payload: Payload,
@@ -668,6 +671,8 @@ async fn post_realtime_message_stream_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
+  // TODO(nathan): after upgrade the client application, then the device_id should not be empty
+  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
   let uid = state
     .users
     .get_user_uid(&user_uuid)
@@ -679,14 +684,48 @@ async fn post_realtime_message_stream_handler(
     bytes.extend_from_slice(&item?);
   }
 
-  let message = parser_realtime_msg(bytes.freeze(), req).await?;
+  event!(tracing::Level::INFO, "message len: {}", bytes.len());
+  let device_id = device_id.to_string();
+  let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
   let stream = Box::new(tokio_stream::once(message));
-  server
-    .send(ClientStreamMessage { uid, stream })
-    .await
-    .map_err(|err| AppError::Internal(err.into()))?
-    .map_err(|err| AppError::Internal(err.into()))?;
-  Ok(Json(AppResponse::Ok()))
+  let mut stream_message = Some(ClientStreamMessage {
+    uid,
+    device_id,
+    stream,
+  });
+  const MAX_RETRIES: usize = 3;
+  const RETRY_DELAY: Duration = Duration::from_secs(2);
+
+  let mut attempts = 0;
+  while attempts < MAX_RETRIES {
+    match stream_message.take() {
+      None => {
+        return Err(AppError::Internal(anyhow!("Unexpected empty stream message")).into());
+      },
+      Some(message_to_send) => {
+        match server.try_send(message_to_send) {
+          Ok(_) => return Ok(Json(AppResponse::Ok())),
+          Err(err) if attempts < MAX_RETRIES - 1 => {
+            attempts += 1;
+            stream_message = Some(err.into_inner());
+            sleep(RETRY_DELAY).await;
+          },
+          Err(err) => {
+            return Err(
+              AppError::Internal(anyhow!(
+                "Failed to send client stream message to websocket server after {} attempts: {}",
+                // attempts starts from 0, so add 1 for accurate count
+                attempts + 1,
+                err
+              ))
+              .into(),
+            );
+          },
+        }
+      },
+    }
+  }
+  Err(AppError::Internal(anyhow!("Failed to send message to websocket server")).into())
 }
 
 #[inline]

@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use database::collab::{
-  CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult, WriteConfig,
+  is_collab_exists, CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult,
+  WriteConfig,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
@@ -17,6 +18,7 @@ use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use sqlx::{PgPool, Transaction};
+use std::ops::DerefMut;
 use std::{
   collections::HashMap,
   sync::{Arc, Weak},
@@ -82,10 +84,6 @@ where
     self.disk_cache.config()
   }
 
-  async fn is_exist(&self, object_id: &str) -> bool {
-    self.disk_cache.is_exist(object_id).await
-  }
-
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
     tracing::trace!("cache opened collab:{}", object_id);
     self
@@ -102,10 +100,6 @@ where
       .write()
       .await
       .remove(object_id);
-  }
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
-    self.disk_cache.is_collab_exist(oid).await
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
@@ -143,7 +137,7 @@ where
     // 1. If the collab already exists, check if the user has enough permissions to update collab
     // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
     // TODO(nathan): remove is_collab_exist call and use access_control to check if the user has enough permissions to create collab.
-    let has_permission = if self.is_collab_exist(&params.object_id).await? {
+    let has_permission = if is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
       // If the collab already exists, check if the user has enough permissions to update collab
       let level = self
         .access_control

@@ -368,10 +368,6 @@ pub struct CasbinWorkspaceAccessControl {
 
 #[async_trait]
 impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
-  async fn get_role_from_uuid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    self.get_role_from_uid(uid, workspace_id).await
-  }
-
   async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
     let policies = self
       .casbin_access_control

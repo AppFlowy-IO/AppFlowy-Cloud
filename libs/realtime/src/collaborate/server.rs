@@ -333,17 +333,37 @@ where
       device_id,
       stream,
     } = client_msg;
-    let user_device = UserDevice { device_id, uid };
-    let user = self.user_by_device.read().get(&user_device).cloned();
 
-    match user {
-      None => Box::pin(async move {
+    // TODO(nathan): after upgrade the client application, then the device_id should not be empty
+    let user_device = if device_id.is_empty() {
+      self
+        .user_by_device
+        .read()
+        .keys()
+        .find(|device_user| device_user.uid == uid)
+        .cloned()
+    } else {
+      Some(UserDevice { device_id, uid })
+    };
+
+    if let Some(user_device) = user_device {
+      let user = self.user_by_device.read().get(&user_device).cloned();
+      match user {
+        None => Box::pin(async move {
+          Err(RealtimeError::UserNotFound(format!(
+            "Can't find the user with user id: {}",
+            uid
+          )))
+        }),
+        Some(user) => self.process_realtime_message(user, stream),
+      }
+    } else {
+      Box::pin(async move {
         Err(RealtimeError::UserNotFound(format!(
-          "Can't find the user with given id: {}",
+          "Can't find the user with user id: {}",
           uid
         )))
-      }),
-      Some(user) => self.process_realtime_message(user, stream),
+      })
     }
   }
 }

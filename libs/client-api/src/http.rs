@@ -49,7 +49,7 @@ use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 /// The API version of the client.
 /// 0.0.4
 ///  fix refresh token issue
-pub const CLIENT_API_VERSION: &str = "0.0.4";
+pub const CLIENT_API_VERSION: &str = "0.0.5";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";

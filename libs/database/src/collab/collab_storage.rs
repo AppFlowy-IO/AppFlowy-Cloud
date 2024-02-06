@@ -4,7 +4,6 @@ use app_error::AppError;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
-
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
   InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
@@ -14,7 +13,9 @@ use sqlx::types::Uuid;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use tracing::{debug, event, warn};
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::{debug, event, warn, Level};
 use validator::Validate;
 
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 15;
@@ -26,7 +27,7 @@ pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 #[async_trait]
 pub trait CollabStorageAccessControl: Send + Sync + 'static {
   /// Checks if the user with the given ID can access the [Collab] with the given ID.
-  async fn get_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
+  async fn get_or_refresh_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     uid: &i64,
     oid: &str,
@@ -246,28 +247,50 @@ impl CollabStoragePgImpl {
     &self,
     _uid: &i64,
     params: QueryCollabParams,
-  ) -> DatabaseResult<EncodedCollab> {
+  ) -> Result<EncodedCollab, AppError> {
     event!(
-      tracing::Level::INFO,
+      Level::INFO,
       "Get encoded collab:{} from disk",
       params.object_id
     );
-    match collab_db_ops::select_blob_from_af_collab(
-      &self.pg_pool,
-      &params.collab_type,
-      &params.object_id,
-    )
-    .await
-    {
-      Ok(data) => EncodedCollab::decode_from_bytes(&data)
-        .map_err(|err| AppError::Internal(anyhow!("fail to decode data to EncodedDoc: {:?}", err))),
-      Err(e) => match e {
-        sqlx::Error::RowNotFound => {
-          let msg = format!("Can't find the row for query: {:?}", params);
-          Err(AppError::RecordNotFound(msg))
+
+    const MAX_ATTEMPTS: usize = 3;
+    let mut attempts = 0;
+
+    loop {
+      let result = collab_db_ops::select_blob_from_af_collab(
+        &self.pg_pool,
+        &params.collab_type,
+        &params.object_id,
+      )
+      .await;
+
+      match result {
+        Ok(data) => {
+          return tokio::task::spawn_blocking(move || {
+            EncodedCollab::decode_from_bytes(&data).map_err(|err| {
+              AppError::Internal(anyhow!("fail to decode data to EncodedCollab: {:?}", err))
+            })
+          })
+          .await?;
         },
-        _ => Err(e.into()),
-      },
+        Err(e) => {
+          // Handle non-retryable errors immediately
+          if matches!(e, sqlx::Error::RowNotFound) {
+            let msg = format!("Can't find the row for query: {:?}", params);
+            return Err(AppError::RecordNotFound(msg));
+          }
+
+          // Increment attempts and retry if below MAX_ATTEMPTS and the error is retryable
+          if attempts < MAX_ATTEMPTS - 1 && matches!(e, sqlx::Error::PoolTimedOut) {
+            attempts += 1;
+            sleep(Duration::from_millis(500 * attempts as u64)).await;
+            continue;
+          } else {
+            return Err(e.into());
+          }
+        },
+      }
     }
   }
 
@@ -302,15 +325,23 @@ impl CollabStoragePgImpl {
     params.validate()?;
 
     debug!("create snapshot for object:{}", params.object_id);
-    let meta = collab_db_ops::create_snapshot_and_maintain_limit(
-      &self.pg_pool,
-      &params.object_id,
-      &params.encoded_collab_v1,
-      &params.workspace_id.parse::<Uuid>()?,
-      COLLAB_SNAPSHOT_LIMIT,
-    )
-    .await?;
-    Ok(meta)
+    match self.pg_pool.try_begin().await {
+      Ok(Some(transaction)) => {
+        let meta = collab_db_ops::create_snapshot_and_maintain_limit(
+          transaction,
+          &params.object_id,
+          &params.encoded_collab_v1,
+          &params.workspace_id.parse::<Uuid>()?,
+          COLLAB_SNAPSHOT_LIMIT,
+        )
+        .await?;
+
+        Ok(meta)
+      },
+      _ => Err(AppError::Internal(anyhow!(
+        "fail to acquire transaction to create snapshot",
+      ))),
+    }
   }
 
   pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {

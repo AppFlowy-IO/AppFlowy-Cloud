@@ -18,6 +18,8 @@ use tokio::time::sleep;
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::{debug, error, trace, warn};
+const MAX_MESSAGES_PER_INTERVAL: usize = 10;
+const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct ClientSession<
   U: Unpin + RealtimeUser,
@@ -31,6 +33,8 @@ pub struct ClientSession<
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
+  message_count: usize,
+  interval_start: Instant,
 }
 
 impl<U, S, AC> ClientSession<U, S, AC>
@@ -54,6 +58,8 @@ where
       client_timeout,
       user_change_recv: Some(user_change_recv),
       session_id: uuid::Uuid::new_v4().to_string(),
+      message_count: 0,
+      interval_start: Instant::now(),
     }
   }
 
@@ -229,6 +235,18 @@ where
   AC: CollabAccessControl + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+    let now = Instant::now();
+    if now.duration_since(self.interval_start) > RATE_LIMIT_INTERVAL {
+      self.message_count = 0;
+      self.interval_start = now;
+    }
+
+    self.message_count += 1;
+    if self.message_count > MAX_MESSAGES_PER_INTERVAL {
+      // TODO(nathan): inform the client to slow down
+      return;
+    }
+
     let msg = match msg {
       Err(err) => {
         error!("Websocket stream error: {}", err);

@@ -150,6 +150,7 @@ pub async fn assert_workspace_role(
   uid: &i64,
   workspace_id: &Uuid,
   expected_role: Option<AFRole>,
+  pg_pool: &PgPool,
 ) {
   let mut retry_count = 0;
   loop {
@@ -158,7 +159,7 @@ pub async fn assert_workspace_role(
          panic!("can't get the expected role before timeout");
        },
        result = access_control
-         .get_role_from_uid(uid, workspace_id)
+         .get_role_from_uid(uid, workspace_id, pg_pool)
        => {
         retry_count += 1;
         match result {
@@ -198,6 +199,7 @@ pub async fn assert_workspace_role_error(
   uid: &i64,
   workspace_id: &Uuid,
   expected_error: ErrorCode,
+  pg_pool: &PgPool,
 ) {
   let mut retry_count = 0;
   loop {
@@ -206,10 +208,10 @@ pub async fn assert_workspace_role_error(
          panic!("can't get the expected role before timeout");
        },
        result = access_control
-         .get_role_from_uid(uid, workspace_id)
+         .get_role_from_uid(uid, workspace_id, pg_pool)
        => {
         retry_count += 1;
-        match result {
+        match &result {
           Ok(role) => {
             if retry_count > 10 {
               panic!("expected error: {:?}, but got role: {:?}", expected_error, role);

@@ -96,9 +96,10 @@ pub async fn run(
   .start();
 
   let access_control = WorkspaceAccessControl::new()
-    .with_acs(WorkspaceHttpAccessControl(
-      state.workspace_access_control.clone().into(),
-    ))
+    .with_acs(WorkspaceHttpAccessControl {
+      pg_pool: state.pg_pool.clone(),
+      access_control: state.workspace_access_control.clone().into(),
+    })
     .with_acs(CollabHttpAccessControl(
       state.collab_access_control.clone().into(),
     ));
@@ -338,6 +339,8 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
   PgPoolOptions::new()
     .max_connections(setting.max_connections)
     .acquire_timeout(Duration::from_secs(10))
+    .max_lifetime(Duration::from_secs(60 * 60))
+    .idle_timeout(Duration::from_secs(60))
     .connect_with(setting.with_db())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))

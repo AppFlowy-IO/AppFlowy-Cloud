@@ -11,7 +11,7 @@ use database_entity::dto::{
 };
 
 use sqlx::types::Uuid;
-use sqlx::{PgPool, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tracing::{debug, event, warn};
@@ -26,7 +26,12 @@ pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 #[async_trait]
 pub trait CollabStorageAccessControl: Send + Sync + 'static {
   /// Checks if the user with the given ID can access the [Collab] with the given ID.
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
+  async fn get_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
+    &self,
+    uid: &i64,
+    oid: &str,
+    executor: E,
+  ) -> Result<AFAccessLevel, AppError>;
 
   /// Updates the cache of the access level of the user for given collab object.
   async fn cache_collab_access_level(
@@ -37,10 +42,11 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   ) -> Result<(), AppError>;
 
   /// Returns the role of the user in the workspace.
-  async fn get_user_workspace_role(
+  async fn get_user_workspace_role<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     uid: &i64,
     workspace_id: &str,
+    executor: E,
   ) -> Result<AFRole, AppError>;
 }
 
@@ -51,22 +57,10 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
   fn config(&self) -> &WriteConfig;
-  /// Checks if a collaboration with the given object ID exists in the storage.
-  ///
-  /// # Arguments
-  ///
-  /// * `object_id` - A string slice that holds the ID of the collaboration.
-  ///
-  /// # Returns
-  ///
-  /// * `bool` - `true` if the collaboration exists, `false` otherwise.
-  async fn is_exist(&self, object_id: &str) -> bool;
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
 
   async fn remove_collab_cache(&self, object_id: &str);
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool>;
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
 
@@ -136,20 +130,12 @@ where
     self.as_ref().config()
   }
 
-  async fn is_exist(&self, object_id: &str) -> bool {
-    self.as_ref().is_exist(object_id).await
-  }
-
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
     self.as_ref().cache_collab(object_id, collab).await
   }
 
   async fn remove_collab_cache(&self, object_id: &str) {
     self.as_ref().remove_collab_cache(object_id).await
-  }
-
-  async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
-    self.as_ref().is_collab_exist(oid).await
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {

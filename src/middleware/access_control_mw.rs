@@ -42,9 +42,7 @@ pub trait HttpAccessControlService: Send + Sync {
     workspace_id: &Uuid,
     uid: &i64,
     method: Method,
-  ) -> Result<(), AppError> {
-    Ok(())
-  }
+  ) -> Result<(), AppError>;
 
   #[allow(unused_variables)]
   async fn check_collab_permission(
@@ -53,9 +51,7 @@ pub trait HttpAccessControlService: Send + Sync {
     uid: &i64,
     method: Method,
     path: &Path<Url>,
-  ) -> Result<(), AppError> {
-    Ok(())
-  }
+  ) -> Result<(), AppError>;
 }
 
 #[async_trait]

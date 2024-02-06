@@ -517,10 +517,10 @@ pub async fn select_collab_members(
 }
 
 #[inline]
-pub async fn select_collab_member(
+pub async fn select_collab_member<'a, E: Executor<'a, Database = Postgres>>(
   uid: &i64,
   oid: &str,
-  pg_pool: &PgPool,
+  executor: E,
 ) -> Result<AFCollabMember, AppError> {
   let row = sqlx::query(
   r#"
@@ -532,7 +532,7 @@ pub async fn select_collab_member(
   )
   .bind(uid)
   .bind(oid)
-  .fetch_one(pg_pool)
+  .fetch_one(executor)
   .await?;
 
   let member = collab_member_try_from_row(row)?;

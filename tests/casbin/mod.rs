@@ -158,7 +158,7 @@ pub async fn assert_workspace_role(
          panic!("can't get the expected role before timeout");
        },
        result = access_control
-         .get_role_from_uid(uid, workspace_id)
+         .get_role_from_uid(uid, workspace_id, &access_control.pg_pool)
        => {
         retry_count += 1;
         match result {
@@ -206,7 +206,7 @@ pub async fn assert_workspace_role_error(
          panic!("can't get the expected role before timeout");
        },
        result = access_control
-         .get_role_from_uid(uid, workspace_id)
+         .get_role_from_uid(uid, workspace_id, &access_control.pg_pool)
        => {
         retry_count += 1;
         match result {

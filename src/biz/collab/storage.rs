@@ -18,7 +18,7 @@ use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use sqlx::{PgPool, Transaction};
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 use std::{
   collections::HashMap,
   sync::{Arc, Weak},
@@ -153,7 +153,7 @@ where
       // If the user is the owner or member of the workspace, the user can create collab.
       let can_write_workspace = self
         .access_control
-        .get_user_workspace_role(uid, workspace_id)
+        .get_user_workspace_role(uid, workspace_id, transaction.deref_mut())
         .await?
         .can_create_collab();
 

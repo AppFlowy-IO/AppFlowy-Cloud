@@ -11,7 +11,7 @@ use database_entity::dto::{
 };
 
 use sqlx::types::Uuid;
-use sqlx::{PgPool, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tracing::{debug, event, warn};
@@ -37,10 +37,11 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   ) -> Result<(), AppError>;
 
   /// Returns the role of the user in the workspace.
-  async fn get_user_workspace_role(
+  async fn get_user_workspace_role<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     uid: &i64,
     workspace_id: &str,
+    executor: E,
   ) -> Result<AFRole, AppError>;
 }
 

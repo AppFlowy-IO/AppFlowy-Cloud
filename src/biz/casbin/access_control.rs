@@ -1,10 +1,11 @@
+use std::ops::Deref;
 use std::{str::FromStr, sync::Arc};
 
 use actix_web::http::Method;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use casbin::{CoreApi, MgmtApi};
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use tokio::sync::{broadcast, RwLock};
 use tracing::log::warn;
 use tracing::{error, instrument};
@@ -43,7 +44,7 @@ use super::{
 /// and will be evaluated against the policies and mappings stored,
 /// according to the model defined.
 pub struct CasbinAccessControl {
-  pg_pool: PgPool,
+  pub pg_pool: PgPool,
   enforcer: Arc<RwLock<casbin::Enforcer>>,
 }
 
@@ -75,9 +76,7 @@ impl CasbinAccessControl {
   }
 
   pub fn new_workspace_access_control(&self) -> CasbinWorkspaceAccessControl {
-    CasbinWorkspaceAccessControl {
-      casbin_access_control: self.clone(),
-    }
+    CasbinWorkspaceAccessControl(self.clone())
   }
 
   /// Only expose this method for testing
@@ -104,12 +103,13 @@ impl CasbinAccessControl {
     database::collab::select_collab_member(uid, oid, &self.pg_pool).await
   }
 
-  async fn get_workspace_member_role(
+  async fn get_workspace_member_role<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
+    executor: E,
   ) -> Result<AFRole, AppError> {
-    database::workspace::select_workspace_member(&self.pg_pool, uid, workspace_id)
+    database::workspace::select_workspace_member(executor, uid, workspace_id)
       .await
       .map(|r| r.role)
   }
@@ -362,22 +362,35 @@ impl CollabAccessControl for CasbinCollabAccessControl {
 }
 
 #[derive(Clone)]
-pub struct CasbinWorkspaceAccessControl {
-  casbin_access_control: CasbinAccessControl,
+pub struct CasbinWorkspaceAccessControl(CasbinAccessControl);
+
+impl Deref for CasbinWorkspaceAccessControl {
+  type Target = CasbinAccessControl;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
 }
 
 #[async_trait]
 impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
-  async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let policies = self
-      .casbin_access_control
-      .enforcer
-      .read()
-      .await
-      .get_filtered_policy(
-        POLICY_FIELD_INDEX_OBJECT,
-        vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
-      );
+  fn pg_pool(&self) -> &PgPool {
+    &self.0.pg_pool
+  }
+
+  async fn get_role_from_uid<'a, E>(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    executor: E,
+  ) -> Result<AFRole, AppError>
+  where
+    E: Executor<'a, Database = Postgres>,
+  {
+    let policies = self.0.enforcer.read().await.get_filtered_policy(
+      POLICY_FIELD_INDEX_OBJECT,
+      vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
+    );
 
     let role = match policies
       .into_iter()
@@ -387,8 +400,8 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
         .ok()
         .map(AFRole::from),
       None => self
-        .casbin_access_control
-        .get_workspace_member_role(uid, workspace_id)
+        .0
+        .get_workspace_member_role(uid, workspace_id, executor)
         .await
         .ok(),
     };
@@ -404,7 +417,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
   #[instrument(level = "info", skip_all)]
   async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError> {
     let _ = self
-      .casbin_access_control
+      .0
       .update(
         uid,
         &ObjectType::Workspace(&workspace_id.to_string()),
@@ -416,7 +429,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
 
   async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
     let _ = self
-      .casbin_access_control
+      .0
       .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
       .await?;
     Ok(())

@@ -20,7 +20,16 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError>;
+  fn pg_pool(&self) -> &PgPool;
+
+  async fn get_role_from_uid<'a, E>(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    executor: E,
+  ) -> Result<AFRole, AppError>
+  where
+    E: Executor<'a, Database = Postgres>;
 
   async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError>;
 
@@ -197,8 +206,11 @@ where
     method: Method,
   ) -> Result<(), AppError> {
     trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
-
-    match self.0.get_role_from_uid(uid, workspace_id).await {
+    match self
+      .0
+      .get_role_from_uid(uid, workspace_id, self.0.pg_pool())
+      .await
+    {
       Ok(role) => {
         if method == Method::DELETE || method == Method::POST || method == Method::PUT {
           if matches!(role, AFRole::Owner) {

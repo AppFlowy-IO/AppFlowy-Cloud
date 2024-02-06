@@ -1,13 +1,9 @@
-use assert_json_diff::assert_json_eq;
-use collab_entity::CollabType;
-use std::time::Duration;
-
 use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
+use assert_json_diff::assert_json_eq;
 use client_api_test_util::*;
+use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
-
 use serde_json::json;
-
 use uuid::Uuid;
 
 #[tokio::test]

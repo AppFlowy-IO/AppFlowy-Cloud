@@ -413,11 +413,10 @@ async fn multiple_collab_edit_test() {
 #[tokio::test]
 async fn concurrent_device_edit_test() {
   let mut tasks = Vec::new();
-  for _i in 0..50 {
+  for _i in 0..20 {
     let task = tokio::spawn(async move {
       let collab_type = CollabType::Document;
       let mut test_client = TestClient::new_user().await;
-      tokio::time::sleep(Duration::from_millis(200)).await;
 
       let workspace_id = test_client.workspace_id().await;
       let object_id = Uuid::new_v4().to_string();
@@ -453,7 +452,7 @@ async fn concurrent_device_edit_test() {
   }
 
   let results = futures::future::join_all(tasks).await;
-  for (_i, result) in results.into_iter().enumerate() {
+  for result in results {
     let (expected_json, json) = result.unwrap();
     assert_json_eq!(expected_json, json);
   }

@@ -96,9 +96,10 @@ pub async fn run(
   .start();
 
   let access_control = WorkspaceAccessControl::new()
-    .with_acs(WorkspaceHttpAccessControl(
-      state.workspace_access_control.clone().into(),
-    ))
+    .with_acs(WorkspaceHttpAccessControl {
+      pg_pool: state.pg_pool.clone(),
+      access_control: state.workspace_access_control.clone().into(),
+    })
     .with_acs(CollabHttpAccessControl(
       state.collab_access_control.clone().into(),
     ));

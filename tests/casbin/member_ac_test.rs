@@ -41,6 +41,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
     &user.uid,
     &workspace.workspace_id,
     Some(AFRole::Owner),
+    &pool,
   )
   .await;
 
@@ -62,6 +63,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
     &member.uid,
     &workspace.workspace_id,
     Some(AFRole::Member),
+    &pool,
   )
   .await;
 
@@ -83,6 +85,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
     &member.uid,
     &workspace.workspace_id,
     Some(AFRole::Guest),
+    &pool,
   )
   .await;
 
@@ -100,6 +103,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
     &member.uid,
     &workspace.workspace_id,
     ErrorCode::NotEnoughPermissions,
+    &pool,
   )
   .await;
 

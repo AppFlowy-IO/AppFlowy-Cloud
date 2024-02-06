@@ -1,10 +1,11 @@
+use std::ops::Deref;
 use std::{str::FromStr, sync::Arc};
 
 use actix_web::http::Method;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use casbin::{CoreApi, MgmtApi};
-use sqlx::PgPool;
+use sqlx::{Executor, PgPool, Postgres};
 use tokio::sync::{broadcast, RwLock};
 use tracing::log::warn;
 use tracing::{error, instrument};
@@ -20,7 +21,7 @@ use crate::biz::{
 };
 use app_error::AppError;
 use database::workspace::select_permission;
-use database_entity::dto::{AFAccessLevel, AFCollabMember, AFRole};
+use database_entity::dto::{AFAccessLevel, AFRole};
 
 use crate::biz::casbin::enforcer_ext::{enforcer_remove, enforcer_update};
 use realtime::collaborate::CollabAccessControl;
@@ -43,14 +44,12 @@ use super::{
 /// and will be evaluated against the policies and mappings stored,
 /// according to the model defined.
 pub struct CasbinAccessControl {
-  pg_pool: PgPool,
   enforcer: Arc<RwLock<casbin::Enforcer>>,
 }
 
 impl Clone for CasbinAccessControl {
   fn clone(&self) -> Self {
     Self {
-      pg_pool: self.pg_pool.clone(),
       enforcer: Arc::clone(&self.enforcer),
     }
   }
@@ -65,8 +64,8 @@ impl CasbinAccessControl {
   ) -> Self {
     let enforcer = Arc::new(RwLock::new(enforcer));
     spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
-    spawn_listen_on_collab_member_change(pg_pool.clone(), collab_listener, enforcer.clone());
-    Self { pg_pool, enforcer }
+    spawn_listen_on_collab_member_change(pg_pool, collab_listener, enforcer.clone());
+    Self { enforcer }
   }
   pub fn new_collab_access_control(&self) -> CasbinCollabAccessControl {
     CasbinCollabAccessControl {
@@ -75,9 +74,7 @@ impl CasbinAccessControl {
   }
 
   pub fn new_workspace_access_control(&self) -> CasbinWorkspaceAccessControl {
-    CasbinWorkspaceAccessControl {
-      casbin_access_control: self.clone(),
-    }
+    CasbinWorkspaceAccessControl(self.clone())
   }
 
   /// Only expose this method for testing
@@ -100,16 +97,13 @@ impl CasbinAccessControl {
     enforcer_remove(&mut enforcer, uid, obj).await
   }
 
-  async fn get_collab_member(&self, uid: &i64, oid: &str) -> Result<AFCollabMember, AppError> {
-    database::collab::select_collab_member(uid, oid, &self.pg_pool).await
-  }
-
-  async fn get_workspace_member_role(
+  async fn get_workspace_member_role<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
+    executor: E,
   ) -> Result<AFRole, AppError> {
-    database::workspace::select_workspace_member(&self.pg_pool, uid, workspace_id)
+    database::workspace::select_workspace_member(executor, uid, workspace_id)
       .await
       .map(|r| r.role)
   }
@@ -249,28 +243,12 @@ impl CollabAccessControl for CasbinCollabAccessControl {
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![collab_id]);
 
     // There should only be one entry per user per object, which is enforced in [CasbinAccessControl], so just take one using next.
-    let mut access_level = policies
+    let access_level = policies
       .into_iter()
       .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
       .map(|p| p[POLICY_FIELD_INDEX_ACTION].clone())
       .and_then(|s| i32::from_str(s.as_str()).ok())
       .map(AFAccessLevel::from);
-
-    if access_level.is_none() {
-      let member = self
-        .casbin_access_control
-        .get_collab_member(uid, oid)
-        .await?;
-      access_level = Some(member.permission.access_level);
-      self
-        .casbin_access_control
-        .update(
-          uid,
-          &ObjectType::Collab(oid),
-          &ActionType::Level(member.permission.access_level),
-        )
-        .await?;
-    }
 
     access_level.ok_or(AppError::RecordNotFound(format!(
       "user:{} is not a member of collab:{}",
@@ -362,22 +340,31 @@ impl CollabAccessControl for CasbinCollabAccessControl {
 }
 
 #[derive(Clone)]
-pub struct CasbinWorkspaceAccessControl {
-  casbin_access_control: CasbinAccessControl,
+pub struct CasbinWorkspaceAccessControl(CasbinAccessControl);
+
+impl Deref for CasbinWorkspaceAccessControl {
+  type Target = CasbinAccessControl;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
 }
 
 #[async_trait]
 impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
-  async fn get_role_from_uid(&self, uid: &i64, workspace_id: &Uuid) -> Result<AFRole, AppError> {
-    let policies = self
-      .casbin_access_control
-      .enforcer
-      .read()
-      .await
-      .get_filtered_policy(
-        POLICY_FIELD_INDEX_OBJECT,
-        vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
-      );
+  async fn get_role_from_uid<'a, E>(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+    executor: E,
+  ) -> Result<AFRole, AppError>
+  where
+    E: Executor<'a, Database = Postgres>,
+  {
+    let policies = self.0.enforcer.read().await.get_filtered_policy(
+      POLICY_FIELD_INDEX_OBJECT,
+      vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
+    );
 
     let role = match policies
       .into_iter()
@@ -387,8 +374,8 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
         .ok()
         .map(AFRole::from),
       None => self
-        .casbin_access_control
-        .get_workspace_member_role(uid, workspace_id)
+        .0
+        .get_workspace_member_role(uid, workspace_id, executor)
         .await
         .ok(),
     };
@@ -404,7 +391,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
   #[instrument(level = "info", skip_all)]
   async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError> {
     let _ = self
-      .casbin_access_control
+      .0
       .update(
         uid,
         &ObjectType::Workspace(&workspace_id.to_string()),
@@ -416,7 +403,7 @@ impl WorkspaceAccessControl for CasbinWorkspaceAccessControl {
 
   async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
     let _ = self
-      .casbin_access_control
+      .0
       .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
       .await?;
     Ok(())

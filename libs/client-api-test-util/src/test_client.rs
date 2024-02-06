@@ -31,7 +31,6 @@ use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
-use websocket::Message;
 
 use crate::user::{generate_unique_registered_user, User};
 
@@ -508,7 +507,11 @@ impl TestClient {
       .insert(object_id.to_string(), test_collab);
   }
 
-  pub async fn post_realtime_message(&self, message: Message) -> Result<(), AppResponseError> {
+  #[cfg(not(target_arch = "wasm32"))]
+  pub async fn post_realtime_message(
+    &self,
+    message: websocket::Message,
+  ) -> Result<(), AppResponseError> {
     self
       .api_client
       .post_realtime_msg(&self.device_id, message)

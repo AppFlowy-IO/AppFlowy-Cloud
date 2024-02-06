@@ -1,4 +1,4 @@
-use crate::{localhost_client, setup_log};
+use crate::{localhost_client_with_device_id, setup_log};
 use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
@@ -47,13 +47,24 @@ pub struct TestCollab {
   pub collab: Arc<MutexCollab>,
 }
 impl TestClient {
-  pub async fn new(device_id: String, registered_user: User, start_ws_conn: bool) -> Self {
+  pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
     setup_log();
-    let api_client = localhost_client();
+    let device_id = Uuid::new_v4().to_string();
+    Self::new_with_device_id(&device_id, registered_user, start_ws_conn).await
+  }
+
+  pub async fn new_with_device_id(
+    device_id: &str,
+    registered_user: User,
+    start_ws_conn: bool,
+  ) -> Self {
+    setup_log();
+    let api_client = localhost_client_with_device_id(device_id);
     api_client
       .sign_in_password(&registered_user.email, &registered_user.password)
       .await
       .unwrap();
+    let device_id = api_client.device_id.clone();
 
     // Connect to server via websocket
     let ws_client = WSClient::new(
@@ -67,7 +78,10 @@ impl TestClient {
 
     if start_ws_conn {
       ws_client
-        .connect(api_client.ws_url(&device_id).await.unwrap(), &device_id)
+        .connect(
+          api_client.ws_url(&api_client.device_id).await.unwrap(),
+          &api_client.device_id,
+        )
         .await
         .unwrap();
     }
@@ -82,19 +96,16 @@ impl TestClient {
 
   pub async fn new_user() -> Self {
     let registered_user = generate_unique_registered_user().await;
-    let device_id = Uuid::new_v4().to_string();
-    Self::new(device_id, registered_user, true).await
+    Self::new(registered_user, true).await
   }
 
   pub async fn new_user_without_ws_conn() -> Self {
     let registered_user = generate_unique_registered_user().await;
-    let device_id = Uuid::new_v4().to_string();
-    Self::new(device_id, registered_user, false).await
+    Self::new(registered_user, false).await
   }
 
   pub async fn user_with_new_device(registered_user: User) -> Self {
-    let device_id = Uuid::new_v4().to_string();
-    Self::new(device_id, registered_user, true).await
+    Self::new(registered_user, true).await
   }
 
   pub async fn add_workspace_member(
@@ -450,6 +461,19 @@ impl TestClient {
     object_id: &str,
     collab_type: CollabType,
   ) {
+    self
+      .open_collab_with_doc_state(workspace_id, object_id, collab_type, vec![])
+      .await
+  }
+
+  #[allow(clippy::await_holding_lock)]
+  pub async fn open_collab_with_doc_state(
+    &mut self,
+    workspace_id: &str,
+    object_id: &str,
+    collab_type: CollabType,
+    doc_state: Vec<u8>,
+  ) {
     // Subscribe to object
     let handler = self
       .ws_client
@@ -457,7 +481,9 @@ impl TestClient {
       .unwrap();
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Arc::new(MutexCollab::new(origin.clone(), object_id, vec![]));
+    let collab = Arc::new(
+      MutexCollab::new_with_doc_state(origin.clone(), object_id, doc_state, vec![]).unwrap(),
+    );
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();
     let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
@@ -479,6 +505,17 @@ impl TestClient {
     self
       .collab_by_object_id
       .insert(object_id.to_string(), test_collab);
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
+  pub async fn post_realtime_message(
+    &self,
+    message: websocket::Message,
+  ) -> Result<(), AppResponseError> {
+    self
+      .api_client
+      .post_realtime_msg(&self.device_id, message)
+      .await
   }
 
   pub async fn disconnect(&self) {

@@ -235,4 +235,8 @@ impl RealtimeUser for RealtimeUserImpl {
   fn uid(&self) -> i64 {
     self.uid
   }
+
+  fn device_id(&self) -> &str {
+    &self.device_id
+  }
 }

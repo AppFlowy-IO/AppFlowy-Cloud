@@ -49,7 +49,7 @@ use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 /// The API version of the client.
 /// 0.0.4
 ///  fix refresh token issue
-pub const CLIENT_API_VERSION: &str = "0.0.4";
+pub const CLIENT_API_VERSION: &str = "0.0.5";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
@@ -109,6 +109,7 @@ pub struct Client {
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
   ws_addr: String,
+  pub device_id: String,
   pub(crate) token: Arc<RwLock<ClientToken>>,
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
@@ -127,7 +128,13 @@ impl Client {
   /// - `base_url`: The base URL for API requests.
   /// - `ws_addr`: The WebSocket address for real-time communication.
   /// - `gotrue_url`: The URL for the GoTrue API.
-  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str, config: ClientConfiguration) -> Self {
+  pub fn new(
+    base_url: &str,
+    ws_addr: &str,
+    gotrue_url: &str,
+    device_id: &str,
+    config: ClientConfiguration,
+  ) -> Self {
     let reqwest_client = reqwest::Client::new();
     Self {
       base_url: base_url.to_string(),
@@ -138,6 +145,7 @@ impl Client {
       is_refreshing_token: Default::default(),
       refresh_ret_txs: Default::default(),
       config,
+      device_id: device_id.to_string(),
     }
   }
 
@@ -1187,6 +1195,7 @@ impl Client {
       .request(method, url)
       .header("client-version", CLIENT_API_VERSION)
       .header("client-timestamp", ts_now.to_string())
+      .header("device_id", self.device_id.clone())
       .bearer_auth(access_token);
     Ok(request_builder)
   }

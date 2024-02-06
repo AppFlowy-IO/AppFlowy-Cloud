@@ -124,5 +124,13 @@ struct ClientInfo<'a> {
 
 #[inline]
 fn skip_request_id(req: &ServiceRequest) -> bool {
-  ["/metrics", "/ws"].contains(&req.path())
+  if req.path().starts_with("/metrics") {
+    return true;
+  }
+
+  if req.path().starts_with("/ws") {
+    return true;
+  }
+
+  false
 }

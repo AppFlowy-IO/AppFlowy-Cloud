@@ -42,3 +42,17 @@ pub fn compress_type_from_header_value(headers: &HeaderMap) -> Result<Compressio
     ))),
   }
 }
+
+pub fn device_id_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
+  headers
+    .get("device_id")
+    .ok_or(AppError::InvalidRequest(
+      "Missing device_id header".to_string(),
+    ))
+    .and_then(|header| {
+      header
+        .to_str()
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
+    })
+    .map(|s| s.to_string())
+}

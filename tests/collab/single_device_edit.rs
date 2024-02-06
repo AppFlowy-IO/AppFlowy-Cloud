@@ -1,5 +1,6 @@
 use assert_json_diff::assert_json_eq;
 use collab_entity::CollabType;
+use std::time::Duration;
 
 use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
 use client_api_test_util::*;
@@ -416,6 +417,8 @@ async fn concurrent_device_edit_test() {
     let task = tokio::spawn(async move {
       let collab_type = CollabType::Document;
       let mut test_client = TestClient::new_user().await;
+      tokio::time::sleep(Duration::from_millis(200)).await;
+
       let workspace_id = test_client.workspace_id().await;
       let object_id = Uuid::new_v4().to_string();
 

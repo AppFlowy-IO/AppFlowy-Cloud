@@ -111,7 +111,6 @@ where
       .context("acquire transaction to upsert collab")
       .map_err(AppError::from)?;
     let (params, workspace_id) = params.split();
-    // TODO(nathan): save list of collab within period of time to avoid too many pool connections
     self
       .upsert_collab_with_transaction(&workspace_id, uid, params, &mut transaction)
       .await?;

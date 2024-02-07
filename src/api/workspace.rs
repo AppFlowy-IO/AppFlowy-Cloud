@@ -465,7 +465,6 @@ async fn create_collab_list_handler(
 
   Ok(Json(AppResponse::Ok()))
 }
-#[instrument(level = "trace", skip(payload, state), err)]
 async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,

@@ -68,7 +68,7 @@ where
   CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  async fn get_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
+  async fn get_or_refresh_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     uid: &i64,
     oid: &str,

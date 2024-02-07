@@ -140,7 +140,7 @@ where
       // If the collab already exists, check if the user has enough permissions to update collab
       let level = self
         .access_control
-        .get_collab_access_level(uid, &params.object_id, transaction.deref_mut())
+        .get_or_refresh_collab_access_level(uid, &params.object_id, transaction.deref_mut())
         .await
         .context(format!(
           "Can't find the access level when user:{} try to insert collab",
@@ -172,15 +172,17 @@ where
         uid, params.object_id
       )));
     }
-
-    self
-      .mem_cache
-      .cache_encoded_collab_bytes(&params.object_id, params.encoded_collab_v1.clone())
-      .await;
+    let object_id = params.object_id.clone();
+    let encoded_collab = params.encoded_collab_v1.clone();
     self
       .disk_cache
       .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
-      .await
+      .await?;
+
+    self
+      .mem_cache
+      .cache_encoded_collab_bytes(object_id, encoded_collab);
+    Ok(())
   }
 
   async fn get_collab_encoded(
@@ -191,7 +193,7 @@ where
     params.validate()?;
     self
       .access_control
-      .get_collab_access_level(uid, &params.object_id, &self.disk_cache.pg_pool)
+      .get_or_refresh_collab_access_level(uid, &params.object_id, &self.disk_cache.pg_pool)
       .await?;
     let object_id = params.object_id.clone();
 
@@ -232,8 +234,7 @@ where
         let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
         self
           .mem_cache
-          .cache_encoded_collab(&object_id, &encoded_collab)
-          .await;
+          .cache_encoded_collab(object_id, &encoded_collab);
         Ok(encoded_collab)
       },
     }
@@ -285,7 +286,7 @@ where
   async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
     if !self
       .access_control
-      .get_collab_access_level(uid, object_id, &self.disk_cache.pg_pool)
+      .get_or_refresh_collab_access_level(uid, object_id, &self.disk_cache.pg_pool)
       .await
       .context(format!(
         "Can't find the access level when user:{} try to delete {}",

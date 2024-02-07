@@ -253,6 +253,16 @@ pub async fn login_refresh_handler(
     ))
     .await?;
 
+  // Do another round of refresh_token to consume and invalidate the old one
+  let token = state
+    .gotrue_client
+    .token(&gotrue::grant::Grant::RefreshToken(
+      gotrue::grant::RefreshTokenGrant {
+        refresh_token: token.refresh_token,
+      },
+    ))
+    .await?;
+
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
@@ -339,7 +349,7 @@ pub async fn logout_handler(
 
   state.session_store.del_user_session(session_id).await?;
   Ok((
-    jar.remove(Cookie::named("session_id")),
+    jar.remove(Cookie::from("session_id")),
     htmx_redirect("/web/login"),
   ))
 }

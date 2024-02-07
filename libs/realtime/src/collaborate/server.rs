@@ -67,10 +67,16 @@ where
     let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
 
     let weak_groups = Arc::downgrade(&groups);
+    let weak_storage = Arc::downgrade(&storage);
     tokio::spawn(async move {
       let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
+
+        if let Some(storage) = weak_storage.upgrade() {
+          info!("{}", storage.status().await);
+        }
+
         match weak_groups.upgrade() {
           Some(groups) => {
             trace!(

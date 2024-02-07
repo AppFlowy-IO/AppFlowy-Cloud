@@ -13,10 +13,18 @@ pub struct CollabMemCache {
 
 impl CollabMemCache {
   pub fn new(_redis_client: RedisClient) -> Self {
-    let lru = LruCache::new(NonZeroUsize::new(5000).unwrap());
+    let lru = LruCache::new(NonZeroUsize::new(3000).unwrap());
     Self {
       lru_cache: Arc::new(Mutex::new(lru)),
     }
+  }
+
+  pub async fn len(&self) -> usize {
+    self
+      .lru_cache
+      .try_lock()
+      .map(|cache| cache.len())
+      .unwrap_or(0)
   }
 
   pub async fn get_encoded_collab(&self, object_id: &str) -> Option<EncodedCollab> {

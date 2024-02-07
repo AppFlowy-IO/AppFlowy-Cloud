@@ -1,35 +1,55 @@
 use crate::state::RedisClient;
+use bytes::Bytes;
 use collab::core::collab_plugin::EncodedCollab;
-use lru::LruCache;
-use std::num::NonZeroUsize;
+use moka::future::Cache;
+use moka::notification::RemovalCause;
+use moka::policy::EvictionPolicy;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct CollabMemCache {
-  lru_cache: Arc<Mutex<LruCache<String, Vec<u8>>>>,
+  cache: Arc<Cache<String, Bytes>>,
+  #[allow(dead_code)]
+  redis_client: Arc<Mutex<RedisClient>>,
 }
 
 impl CollabMemCache {
-  pub fn new(_redis_client: RedisClient) -> Self {
-    let lru = LruCache::new(NonZeroUsize::new(3000).unwrap());
+  pub fn new(redis_client: RedisClient) -> Self {
+    let eviction_listener = |key, value: Bytes, cause| {
+      if matches!(cause, RemovalCause::Expired | RemovalCause::Size) {
+        info!(
+          "Evicted key {}. value:{}, cause:{:?}",
+          key,
+          value.len(),
+          cause
+        );
+      }
+    };
+
+    let cache = Cache::builder()
+        .weigher(|_key, value: &Bytes| -> u32 {
+          value.len() as u32
+        })
+        // This cache will hold up to 200MiB of values.
+        .max_capacity(200 * 1024 * 1024)
+        .eviction_policy(EvictionPolicy::tiny_lfu())
+        .eviction_listener(eviction_listener)
+        .build();
     Self {
-      lru_cache: Arc::new(Mutex::new(lru)),
+      cache: Arc::new(cache),
+      redis_client: Arc::new(Mutex::new(redis_client)),
     }
   }
 
   pub async fn len(&self) -> usize {
-    self
-      .lru_cache
-      .try_lock()
-      .map(|cache| cache.len())
-      .unwrap_or(0)
+    self.cache.entry_count() as usize
   }
 
   pub async fn get_encoded_collab(&self, object_id: &str) -> Option<EncodedCollab> {
-    let cache = self.lru_cache.lock().await.get(object_id)?.clone();
-    tokio::task::spawn_blocking(move || match EncodedCollab::decode_from_bytes(&cache) {
+    let bytes = self.cache.get(object_id).await?;
+    tokio::task::spawn_blocking(move || match EncodedCollab::decode_from_bytes(&bytes) {
       Ok(encoded_collab) => Some(encoded_collab),
       Err(err) => {
         error!("Failed to decode collab from redis cache bytes: {:?}", err);
@@ -42,10 +62,10 @@ impl CollabMemCache {
 
   pub fn cache_encoded_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
     let encoded_collab = encoded_collab.clone();
-    let cache = self.lru_cache.clone();
+    let cache = self.cache.clone();
     tokio::task::spawn_blocking(move || match encoded_collab.encode_to_bytes() {
       Ok(bytes) => {
-        tokio::spawn(async move { cache.lock().await.put(object_id, bytes) });
+        tokio::spawn(async move { cache.insert(object_id, Bytes::from(bytes)).await });
       },
       Err(e) => {
         error!("Failed to encode collab to bytes: {:?}", e);
@@ -53,8 +73,12 @@ impl CollabMemCache {
     });
   }
 
+  pub async fn remove_encoded_collab(&self, object_id: &str) {
+    self.cache.invalidate(object_id).await;
+  }
+
   pub fn cache_encoded_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
-    let cache = self.lru_cache.clone();
-    tokio::spawn(async move { cache.lock().await.put(object_id, bytes) });
+    let cache = self.cache.clone();
+    tokio::spawn(async move { cache.insert(object_id, Bytes::from(bytes)).await });
   }
 }

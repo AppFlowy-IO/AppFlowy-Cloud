@@ -65,7 +65,7 @@ casbin = { version = "2.1.0" }
 dotenvy = "0.15.7"
 url = "2.5.0"
 brotli = "3.4.0"
-lru.workspace = true
+moka.workspace = true
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
@@ -153,7 +153,7 @@ tracing = { version = "0.1"}
 collab-entity = { version = "0.1.0" }
 gotrue = { path = "libs/gotrue" }
 redis = "0.24.0"
-lru = "0.12.2"
+moka = { version = "0.12.5", features = ["future"] }
 
 [profile.release]
 lto = true

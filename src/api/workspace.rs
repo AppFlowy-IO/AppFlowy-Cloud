@@ -312,7 +312,6 @@ async fn create_collab_handler(
   };
 
   params.validate().map_err(AppError::from)?;
-  // TODO(nathan): should override the existing collab if it exists
   state.collab_storage.upsert_collab(&uid, params).await?;
   Ok(Json(AppResponse::Ok()))
 }
@@ -391,7 +390,6 @@ async fn batch_create_collab_handler(
     .await
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
-
   for params in collab_params_list {
     state
       .collab_storage

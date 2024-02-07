@@ -11,6 +11,7 @@ use crate::pg_row::AFSnapshotRow;
 use app_error::AppError;
 use chrono::{Duration, Utc};
 use futures_util::stream::BoxStream;
+
 use sqlx::postgres::PgRow;
 use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
 use std::collections::HashMap;
@@ -178,11 +179,14 @@ pub async fn insert_into_af_collab(
 }
 
 #[inline]
-pub async fn select_blob_from_af_collab(
-  pg_pool: &PgPool,
+pub async fn select_blob_from_af_collab<'a, E>(
+  conn: E,
   collab_type: &CollabType,
   object_id: &str,
-) -> Result<Vec<u8>, sqlx::Error> {
+) -> Result<Vec<u8>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
   let partition_key = collab_type.value();
   sqlx::query_scalar!(
     r#"
@@ -193,7 +197,7 @@ pub async fn select_blob_from_af_collab(
     object_id,
     partition_key,
   )
-  .fetch_one(pg_pool)
+  .fetch_one(conn)
   .await
 }
 
@@ -330,18 +334,13 @@ pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
 /// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
 /// is exceeded, the oldest snapshots are deleted to maintain the limit.
 ///
-pub(crate) async fn create_snapshot_and_maintain_limit(
-  pg_pool: &PgPool,
+pub(crate) async fn create_snapshot_and_maintain_limit<'a>(
+  mut transaction: Transaction<'a, Postgres>,
   oid: &str,
   encoded_collab_v1: &[u8],
   workspace_id: &Uuid,
   snapshot_limit: i64,
 ) -> Result<AFSnapshotMeta, AppError> {
-  let mut tx = pg_pool
-    .begin()
-    .await
-    .context("acquire transaction to insert collab snapshot")?;
-
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMeta,
     r#"
@@ -355,7 +354,7 @@ pub(crate) async fn create_snapshot_and_maintain_limit(
     0,
     workspace_id,
   )
-  .fetch_one(tx.deref_mut())
+  .fetch_one(transaction.deref_mut())
   .await?;
 
   // When a new snapshot is created that surpasses the preset limit, older snapshots will be deleted to maintain the limit
@@ -367,10 +366,11 @@ pub(crate) async fn create_snapshot_and_maintain_limit(
     )
     .bind(oid)
     .bind(snapshot_limit)
-    .execute(tx.deref_mut())
+    .execute(transaction.deref_mut())
     .await?;
 
-  tx.commit()
+  transaction
+    .commit()
     .await
     .context("fail to commit the transaction to insert collab snapshot")?;
 

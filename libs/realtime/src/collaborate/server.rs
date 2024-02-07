@@ -68,7 +68,7 @@ where
 
     let weak_groups = Arc::downgrade(&groups);
     tokio::spawn(async move {
-      let mut interval = interval(Duration::from_secs(30));
+      let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
         match weak_groups.upgrade() {

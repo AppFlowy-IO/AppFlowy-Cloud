@@ -6,13 +6,15 @@ mod templates;
 mod web_api;
 mod web_app;
 
+use axum::http::Method;
 use axum::{response::Redirect, routing::get, Router};
-use reqwest::Method;
+use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::{
   cors::{Any, CorsLayer},
   services::ServeDir,
 };
+use tracing::info;
 
 #[tokio::main]
 async fn main() {
@@ -62,10 +64,9 @@ async fn main() {
     .nest_service("/web-api", web_api_router)
     .nest_service("/assets", ServeDir::new("assets"));
 
-  axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
-    .serve(app.into_make_service())
-    .await
-    .unwrap();
+  let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+  info!("listening on: {:?}", listener);
+  axum::serve(listener, app).await.unwrap();
 }
 
 #[derive(Clone)]

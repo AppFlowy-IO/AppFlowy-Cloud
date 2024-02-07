@@ -47,7 +47,7 @@ where
       for (object_id, group) in groups.iter() {
         if group.is_inactive().await {
           inactive_group_ids.push(object_id.clone());
-          if inactive_group_ids.len() > 10 {
+          if inactive_group_ids.len() > 5 {
             break;
           }
         }
@@ -138,7 +138,7 @@ where
     }
   }
 
-  #[tracing::instrument(skip(self))]
+  #[tracing::instrument(level = "trace", skip(self))]
   async fn init_group(
     &self,
     uid: i64,
@@ -146,11 +146,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) -> Arc<CollabGroup<U>> {
-    event!(
-      tracing::Level::INFO,
-      "Create new group for object_id:{}",
-      object_id
-    );
+    event!(tracing::Level::TRACE, "New group:{}", object_id);
     let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
     let broadcast = CollabBroadcast::new(object_id, collab.clone(), 10);
     let collab = Arc::new(collab.clone());
@@ -170,7 +166,7 @@ where
       self.access_control.clone(),
     );
     collab.lock().add_plugin(Arc::new(plugin));
-    event!(tracing::Level::INFO, "Init group collab:{}", object_id);
+    event!(tracing::Level::TRACE, "Init group collab:{}", object_id);
     collab.lock_arc().initialize().await;
 
     self

@@ -55,12 +55,7 @@ impl Client {
   }
 
   #[tracing::instrument(skip_all, err)]
-  pub async fn sign_up(&self, email: &str, password: &str) -> Result<SignUpResponse, GoTrueError> {
-    self.sign_up_with_referrer(email, password, None).await
-  }
-
-  #[tracing::instrument(skip_all, err)]
-  pub async fn sign_up_with_referrer(
+  pub async fn sign_up(
     &self,
     email: &str,
     password: &str,
@@ -224,14 +219,17 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
-  pub async fn magic_link(&self, magic_link_params: &MagicLinkParams) -> Result<(), GoTrueError> {
+  pub async fn magic_link(
+    &self,
+    magic_link_params: &MagicLinkParams,
+    redirect_to: Option<String>,
+  ) -> Result<(), GoTrueError> {
     let url = format!("{}/magiclink", self.base_url);
-    let resp = self
-      .client
-      .request(Method::POST, &url)
-      .json(&magic_link_params)
-      .send()
-      .await?;
+    let mut req_builder = self.client.request(Method::POST, &url);
+    if let Some(redirect_to) = redirect_to {
+      req_builder = req_builder.header("redirect_to", redirect_to);
+    }
+    let resp = req_builder.json(&magic_link_params).send().await?;
     check_gotrue_result(resp).await
   }
 

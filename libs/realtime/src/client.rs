@@ -222,7 +222,7 @@ where
     match &msg {
       RealtimeMessage::Collab(_) => ctx.binary(msg),
       RealtimeMessage::User(_) => ctx.binary(msg),
-      RealtimeMessage::ServerKickedOff => ctx.stop(),
+      RealtimeMessage::System(_) => ctx.binary(msg),
     }
   }
 }

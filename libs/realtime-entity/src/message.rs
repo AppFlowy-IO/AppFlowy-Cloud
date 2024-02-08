@@ -13,15 +13,15 @@ use websocket::Message;
 pub enum RealtimeMessage {
   Collab(CollabMessage),
   User(UserMessage),
-  ServerKickedOff,
+  System(SystemMessage),
 }
 
 impl RealtimeMessage {
   pub fn device_id(&self) -> Option<String> {
     match self {
       RealtimeMessage::Collab(msg) => msg.device_id(),
-      RealtimeMessage::ServerKickedOff => None,
       RealtimeMessage::User(_) => None,
+      RealtimeMessage::System(_) => None,
     }
   }
 }
@@ -30,8 +30,8 @@ impl Display for RealtimeMessage {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       RealtimeMessage::Collab(msg) => f.write_fmt(format_args!("Collab:{}", msg.object_id())),
-      RealtimeMessage::ServerKickedOff => f.write_fmt(format_args!("ServerKickedOff")),
       RealtimeMessage::User(_) => f.write_fmt(format_args!("User")),
+      RealtimeMessage::System(_) => f.write_fmt(format_args!("System")),
     }
   }
 }
@@ -110,4 +110,10 @@ impl From<RealtimeMessage> for Message {
     let bytes = bincode::serialize(&msg).unwrap_or_default();
     Message::Binary(bytes)
   }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SystemMessage {
+  RateLimit(u32),
+  KickOff,
 }

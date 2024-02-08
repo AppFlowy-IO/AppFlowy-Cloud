@@ -84,10 +84,6 @@ where
     self.disk_cache.config()
   }
 
-  async fn status(&self) -> String {
-    format!("cache collab: {}", self.mem_cache.len().await)
-  }
-
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
     tracing::trace!("cache opened collab:{}", object_id);
     self
@@ -104,6 +100,7 @@ where
       .write()
       .await
       .remove(object_id);
+    self.mem_cache.remove_encoded_collab(object_id).await;
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {

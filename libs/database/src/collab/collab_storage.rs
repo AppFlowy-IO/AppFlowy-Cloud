@@ -59,8 +59,6 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 pub trait CollabStorage: Send + Sync + 'static {
   fn config(&self) -> &WriteConfig;
 
-  async fn status(&self) -> String;
-
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
 
   async fn remove_collab_cache(&self, object_id: &str);
@@ -131,10 +129,6 @@ where
 {
   fn config(&self) -> &WriteConfig {
     self.as_ref().config()
-  }
-
-  async fn status(&self) -> String {
-    self.as_ref().status().await
   }
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {

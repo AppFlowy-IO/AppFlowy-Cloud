@@ -1312,6 +1312,7 @@ dependencies = [
  "collab-folder",
  "database-entity",
  "dotenv",
+ "futures",
  "gotrue",
  "image",
  "lazy_static",

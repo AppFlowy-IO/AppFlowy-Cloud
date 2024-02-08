@@ -1,6 +1,7 @@
 use app_error::ErrorCode;
 use client_api_test_util::*;
 use gotrue_entity::dto::AuthProvider;
+use std::time::Duration;
 
 #[tokio::test]
 async fn sign_up_success() {
@@ -58,4 +59,21 @@ async fn sign_up_oauth_not_available() {
     err.code,
     ErrorCode::InvalidOAuthProvider
   );
+}
+
+#[tokio::test]
+async fn concurrent_user_sign_up_test() {
+  let mut tasks = Vec::new();
+  for _i in 0..50 {
+    let task = tokio::spawn(async move {
+      let _ = TestClient::new_user().await;
+      tokio::time::sleep(Duration::from_millis(300)).await;
+    });
+    tasks.push(task);
+  }
+
+  let results = futures::future::join_all(tasks).await;
+  for result in results {
+    assert!(result.is_ok(), "Task completed successfully");
+  }
 }

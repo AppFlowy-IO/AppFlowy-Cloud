@@ -20,10 +20,10 @@
     </div>
 
     <h3>Email Login</h3>
-    <form hx-post="/web-api/login" hx-target="#none">
+    <form>
       <table style="width: 100%">
         <tr>
-          <td>Email:</td>
+          <td>Email</td>
           <td>
             <input
               class="input"
@@ -36,7 +36,7 @@
           </td>
         </tr>
         <tr>
-          <td>Password:</td>
+          <td>Password &nbsp</td>
           <td>
             <input
               class="input"
@@ -44,19 +44,37 @@
               type="password"
               id="password"
               name="password"
-              placeholder="********"
+              placeholder="********(optional)"
             />
           </td>
         </tr>
       </table>
-      <button
-        class="button cyan"
-        type="submit"
-        style="width: 100%; margin: 16px auto 0; padding: 8px 8px"
-        id="submitBtn"
+
+      <small style="color: #888"
+        ><i>
+          (Magic link will be sent to email if password is not provided)
+        </i></small
       >
-        Sign In / Sign Up
-      </button>
+      <div style="display: flex; margin: 8px 0px">
+        <button
+          hx-post="/web-api/signin"
+          hx-target="#none"
+          class="button cyan"
+          type="submit"
+          style="width: 100%; padding: 8px 8px"
+        >
+          Sign In
+        </button>
+        <button
+          hx-post="/web-api/signup"
+          hx-target="#none"
+          class="button purple"
+          type="submit"
+          style="width: 100%; padding: 8px 8px"
+        >
+          Sign Up
+        </button>
+      </div>
     </form>
 
     <!-- Load OAuth Providers if configured -->

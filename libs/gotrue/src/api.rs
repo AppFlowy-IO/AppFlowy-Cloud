@@ -224,14 +224,11 @@ impl Client {
     to_gotrue_result(resp).await
   }
 
-  pub async fn magic_link(
-    &self,
-    access_token: &str,
-    magic_link_params: &MagicLinkParams,
-  ) -> Result<(), GoTrueError> {
+  pub async fn magic_link(&self, magic_link_params: &MagicLinkParams) -> Result<(), GoTrueError> {
     let url = format!("{}/magiclink", self.base_url);
     let resp = self
-      .http_client_with_auth(Method::POST, &url, access_token)
+      .client
+      .request(Method::POST, &url)
       .json(&magic_link_params)
       .send()
       .await?;

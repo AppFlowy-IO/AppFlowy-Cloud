@@ -2,7 +2,7 @@
   {% include "user_details.html" %}
 
   <div>
-    <form hx-put="/web-api/admin/user/{{ user.id|escape }}" hx-target="#none">
+    <form hx-put="/web-api/admin/user/{{ user.id|escape }}">
       <table>
         <tr>
           <td>Set Password:</td>

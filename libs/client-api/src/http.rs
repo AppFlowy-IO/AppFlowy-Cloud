@@ -374,23 +374,16 @@ impl Client {
   pub async fn invite(&self, email: &str) -> Result<(), AppResponseError> {
     self
       .gotrue_client
-      .magic_link(
-        &self.access_token()?,
-        &MagicLinkParams {
-          email: email.to_owned(),
-          ..Default::default()
-        },
-      )
+      .magic_link(&MagicLinkParams {
+        email: email.to_owned(),
+        ..Default::default()
+      })
       .await?;
     Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_magic_link(
-    &self,
-    email: &str,
-    password: &str,
-  ) -> Result<User, AppResponseError> {
+  pub async fn create_user(&self, email: &str, password: &str) -> Result<User, AppResponseError> {
     Ok(
       self
         .gotrue_client

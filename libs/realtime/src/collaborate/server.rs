@@ -483,6 +483,9 @@ impl CollabClientStream {
         if can_sink {
           // Send the message to websocket client actor
           client_ws_sink.do_send(msg.into());
+        } else {
+          // when then client is not allowed to receive the message
+          tokio::time::sleep(Duration::from_secs(2)).await;
         }
       }
     });
@@ -496,6 +499,9 @@ impl CollabClientStream {
       while let Some(Ok(Ok(RealtimeMessage::Collab(msg)))) = stream_rx.next().await {
         if stream_filter(&cloned_object_id, &msg).await {
           let _ = tx.send(Ok(msg)).await;
+        } else {
+          // when then client is not allowed to receive the message
+          tokio::time::sleep(Duration::from_secs(2)).await;
         }
       }
     });

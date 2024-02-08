@@ -1,3 +1,6 @@
+extern crate core;
+extern crate core;
+
 mod http;
 pub use http::*;
 

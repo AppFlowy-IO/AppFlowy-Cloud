@@ -28,6 +28,7 @@ use crate::collaborate::permission::CollabAccessControl;
 use crate::collaborate::retry::{CollabUserMessage, SubscribeGroupIfNeed};
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
+use realtime_entity::message::SystemMessage;
 
 #[derive(Clone)]
 pub struct CollabServer<S, U, AC> {
@@ -509,7 +510,9 @@ impl CollabClientStream {
   }
 
   pub fn disconnect(&self) {
-    self.sink.do_send(RealtimeMessage::ServerKickedOff);
+    self
+      .sink
+      .do_send(RealtimeMessage::System(SystemMessage::KickOff));
   }
 }
 

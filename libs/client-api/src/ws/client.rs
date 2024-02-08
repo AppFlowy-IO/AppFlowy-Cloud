@@ -1,17 +1,23 @@
 use futures_util::{SinkExt, StreamExt};
+use governor::clock::DefaultClock;
+use governor::middleware::NoOpMiddleware;
+use governor::state::{InMemoryState, NotKeyed};
+use governor::{Quota, RateLimiter};
 use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
+
+use futures_util::FutureExt;
+use std::num::NonZeroU32;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use crate::ServerFixIntervalPing;
 use crate::{platform_spawn, retry_connect};
 use realtime_entity::collab_msg::CollabMessage;
-use realtime_entity::message::RealtimeMessage;
+use realtime_entity::message::{RealtimeMessage, SystemMessage};
 use realtime_entity::user::UserMessage;
 use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, error, info, trace, warn};
@@ -59,6 +65,8 @@ pub struct WSClient {
   collab_channels: Arc<RwLock<ChannelByObjectId>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
   stop_tx: Mutex<Option<oneshot::Sender<()>>>,
+  rate_limiter:
+    Arc<tokio::sync::RwLock<RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>>>,
 }
 
 impl WSClient {
@@ -72,6 +80,7 @@ impl WSClient {
     let ping = Arc::new(Mutex::new(None));
     let http_sender = Arc::new(http_sender);
     let (user_channel, _) = channel(1);
+    let rate_limiter = gen_rate_limiter(10);
     WSClient {
       addr: Arc::new(parking_lot::Mutex::new(None)),
       config,
@@ -82,6 +91,7 @@ impl WSClient {
       collab_channels,
       ping,
       stop_tx: Mutex::new(None),
+      rate_limiter: Arc::new(tokio::sync::RwLock::new(rate_limiter)),
     }
   }
 
@@ -145,6 +155,7 @@ impl WSClient {
     *self.ping.lock().await = Some(ping);
 
     let user_message_tx = self.user_channel.as_ref().clone();
+    let rate_limiter = self.rate_limiter.clone();
     // Receive messages from the websocket, and send them to the channels.
     platform_spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
@@ -180,7 +191,14 @@ impl WSClient {
                   RealtimeMessage::User(user_message) => {
                     let _ = user_message_tx.send(user_message);
                   },
-                  RealtimeMessage::ServerKickedOff => {},
+                  RealtimeMessage::System(sys_message) => match sys_message {
+                    SystemMessage::RateLimit(limit) => {
+                      *rate_limiter.write().await = gen_rate_limiter(limit);
+                    },
+                    SystemMessage::KickOff => {
+                      //
+                    },
+                  },
                 }
               },
               Err(err) => {
@@ -210,12 +228,15 @@ impl WSClient {
 
     let mut rx = self.sender.subscribe();
     let weak_http_sender = Arc::downgrade(&self.http_sender);
+    let rate_limiter = self.rate_limiter.clone();
     let device_id = device_id.to_string();
     platform_spawn(async move {
       loop {
         tokio::select! {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
+            rate_limiter.read().await.until_ready().fuse().await;
+
             let len = msg.len();
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
             // 40,960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
@@ -306,4 +327,15 @@ impl WSClient {
   async fn set_state(&self, state: ConnectState) {
     self.state_notify.lock().set_state(state);
   }
+}
+
+fn gen_rate_limiter(
+  mut times_per_sec: u32,
+) -> RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware> {
+  // make sure the rate limiter is not zero
+  if times_per_sec == 0 {
+    times_per_sec = 1;
+  }
+  let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
+  RateLimiter::direct(quota)
 }

@@ -80,7 +80,7 @@ where
     let cloned_client_stream_by_user = client_stream_by_user.clone();
     let cloned_storage = storage.clone();
     tokio::spawn(async move {
-      let mut interval = interval(Duration::from_secs(10));
+      let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {

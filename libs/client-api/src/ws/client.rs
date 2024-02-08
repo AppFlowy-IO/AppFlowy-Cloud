@@ -193,13 +193,8 @@ impl WSClient {
                     let _ = user_message_tx.send(user_message);
                   },
                   RealtimeMessage::System(sys_message) => match sys_message {
-                    SystemMessage::TrafficMode(mode) => match mode {
-                      RealtimeTrafficMode::Fast => {
-                        *rate_limiter.write() = gen_rate_limiter(100);
-                      },
-                      RealtimeTrafficMode::Slow => {
-                        *rate_limiter.write() = gen_rate_limiter(10);
-                      },
+                    SystemMessage::RateLimit(limit) => {
+                      *rate_limiter.write() = gen_rate_limiter(limit);
                     },
                     SystemMessage::KickOff => {
                       //

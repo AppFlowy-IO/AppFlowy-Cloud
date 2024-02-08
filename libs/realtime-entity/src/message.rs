@@ -113,13 +113,7 @@ impl From<RealtimeMessage> for Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RealtimeTrafficMode {
-  Fast = 0,
-  Slow = 1,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SystemMessage {
-  TrafficMode(RealtimeTrafficMode),
+  RateLimit(u32),
   KickOff,
 }

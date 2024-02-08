@@ -235,13 +235,6 @@ impl WSClient {
         tokio::select! {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
-            // Wait for permission to send the next message
-            match rate_limiter.read().await.check() {
-                Ok(_) => {},
-                Err(err) => {
-                info!("rate limit reached: {}", err);
-                }
-            }
             rate_limiter.read().await.until_ready().fuse().await;
 
             let len = msg.len();

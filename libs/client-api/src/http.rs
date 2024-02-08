@@ -49,7 +49,7 @@ use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 /// The API version of the client.
 /// 0.0.4
 ///  fix refresh token issue
-pub const CLIENT_API_VERSION: &str = "0.0.5";
+pub const HTTP_CLIENT_API_VERSION: &str = "0.0.5";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
@@ -110,6 +110,7 @@ pub struct Client {
   pub base_url: String,
   ws_addr: String,
   pub device_id: String,
+  pub client: String,
   pub(crate) token: Arc<RwLock<ClientToken>>,
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
@@ -134,6 +135,7 @@ impl Client {
     gotrue_url: &str,
     device_id: &str,
     config: ClientConfiguration,
+    client: &str,
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
     Self {
@@ -146,6 +148,7 @@ impl Client {
       refresh_ret_txs: Default::default(),
       config,
       device_id: device_id.to_string(),
+      client: client.to_string(),
     }
   }
 
@@ -1193,7 +1196,10 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", CLIENT_API_VERSION)
+      .header(
+        "client-version",
+        format!("{}=>{}", HTTP_CLIENT_API_VERSION, self.client),
+      )
       .header("client-timestamp", ts_now.to_string())
       .header("device_id", self.device_id.clone())
       .bearer_auth(access_token);

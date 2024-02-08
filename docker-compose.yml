@@ -115,6 +115,10 @@ services:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
     image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
+      - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
 
 volumes:
   postgres_data:

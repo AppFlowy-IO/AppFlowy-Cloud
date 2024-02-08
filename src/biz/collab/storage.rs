@@ -100,6 +100,7 @@ where
       .write()
       .await
       .remove(object_id);
+    self.mem_cache.remove_encoded_collab(object_id).await;
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {

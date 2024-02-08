@@ -376,16 +376,14 @@ async fn send_magic_link(
   State(state): State<AppState>,
   email: &str,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
-  Ok(
-    state
-      .gotrue_client
-      .magic_link(&MagicLinkParams {
-        email: email.to_owned(),
-        ..Default::default()
-      })
-      .await?
-      .into(),
-  )
+  state
+    .gotrue_client
+    .magic_link(&MagicLinkParams {
+      email: email.to_owned(),
+      ..Default::default()
+    })
+    .await?;
+  Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))
 }
 
 fn get_base_url(header_map: &HeaderMap) -> String {

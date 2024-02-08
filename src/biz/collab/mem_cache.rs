@@ -20,7 +20,7 @@ impl CollabMemCache {
     let eviction_listener = |key, value: Bytes, cause| {
       if matches!(cause, RemovalCause::Expired | RemovalCause::Size) {
         info!(
-          "Evicted key {}. value:{}, cause:{:?}",
+          "Evicted key {}. value_len:{}, cause:{:?}",
           key,
           value.len(),
           cause
@@ -41,6 +41,10 @@ impl CollabMemCache {
       cache: Arc::new(cache),
       redis_client: Arc::new(Mutex::new(redis_client)),
     }
+  }
+
+  pub fn usage(&self) -> usize {
+    self.cache.weighted_size() as usize
   }
 
   pub async fn len(&self) -> usize {

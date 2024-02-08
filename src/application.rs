@@ -1,4 +1,4 @@
-use crate::api::metrics::{metrics_registry, metrics_scope};
+use crate::api::metrics::{metrics_scope, AppFlowyCloudMetrics};
 use crate::biz::casbin::adapter::PgAdapter;
 use crate::biz::casbin::MODEL_CONF;
 use crate::component::auth::HEADER_TOKEN;
@@ -41,7 +41,8 @@ use crate::middleware::access_control_mw::WorkspaceAccessControl;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use casbin::CoreApi;
 use database::file::bucket_s3_impl::S3BucketStorage;
-use realtime::collaborate::CollabServer;
+use prometheus_client::registry::Registry;
+use realtime::collaborate::{CollabServer, RealtimeMetrics};
 
 pub struct Application {
   port: u16,
@@ -88,12 +89,6 @@ pub async fn run(
     .unwrap_or_else(Key::generate);
 
   let storage = state.collab_storage.clone();
-  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
-    storage.clone(),
-    state.collab_access_control.clone(),
-  )
-  .unwrap()
-  .start();
 
   let access_control = WorkspaceAccessControl::new()
     .with_acs(WorkspaceHttpAccessControl {
@@ -105,9 +100,21 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let (metrics, registry) = metrics_registry();
+  let mut registry = Registry::default();
+  let af_cloud_metric = AppFlowyCloudMetrics::register(&mut registry);
+  let af_realtime_metric = RealtimeMetrics::register(&mut registry);
+
   let registry_arc = Arc::new(registry);
-  let metrics_arc = Arc::new(metrics);
+  let af_cloud_metric_arc = Arc::new(af_cloud_metric);
+  let af_realtime_metric_arc = Arc::new(af_realtime_metric);
+
+  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
+    storage.clone(),
+    state.collab_access_control.clone(),
+    af_realtime_metric_arc.clone(),
+  )
+  .unwrap()
+  .start();
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -129,7 +136,8 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
-      .app_data(Data::new(metrics_arc.clone()))
+      .app_data(Data::new(af_cloud_metric_arc.clone()))
+      .app_data(Data::new(af_realtime_metric_arc.clone()))
       .app_data(Data::new(registry_arc.clone()))
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))

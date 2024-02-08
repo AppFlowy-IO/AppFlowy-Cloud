@@ -51,51 +51,8 @@ cd AppFlowy-Cloud
 ```bash
 cp deploy.env .env
 ```
-- There will be values in the `.env` that needs to be change according to your needs
-- Kindly read the following comments for each set of settings
-```bash
-# This is the secret key for authentication, please change this and keep the key safe
-GOTRUE_JWT_SECRET=hello456
-
-# This determine if the user will be user automatically be confirmed(verified) when they sign up
-# If this is enabled, it requires a clicking a confirmation link in the email after a user signs up.
-# If you do not have SMTP service set up, or any other OAuth2 method, you should set this to true,
-# or else no user will be able to be authenticated
-GOTRUE_MAILER_AUTOCONFIRM=true
-
-# If you require mail confirmation, you need to set the SMTP configuration below
-# and set `GOTRUE_MAILER_AUTOCONFIRM` to be false
-GOTRUE_SMTP_HOST=smtp.gmail.com
-GOTRUE_SMTP_PORT=465
-GOTRUE_SMTP_USER=user1@example.com
-# this is typically an app password that you would need to generate: https://myaccount.google.com/apppasswords
-GOTRUE_SMTP_PASS=somesecretkey
-# You can leave this field same as GOTRUE_SMTP_USER
-GOTRUE_SMTP_ADMIN_EMAIL=user1@example.com
-
-# This is the email account that is the admin account
-# which has the highest privilege level, typically use to
-# manage other users, such as user creation, deletion, password change, etc
-GOTRUE_ADMIN_EMAIL=admin@example.com
-GOTRUE_ADMIN_PASSWORD=password
-
-# This is the address of the authentication server
-# which is the same as the public IP/hostname of your host server
-# when an email confirmation link is click, this is the host that user's devices
-# will try to connect to
-API_EXTERNAL_URL=http://your-host
-
-# File Storage
-# This affects where the files will be uploaded.
-# By default, Minio will be deployed as file storage server which will use the host's disk storage.
-# You can also AWS S3 by setting USE_MINIO as false and configure the AWS related fields.
-USE_MINIO=true                    # determine if minio-server is used
-# MINIO_URL=http://localhost:9000 # change this to use minio from a different host (e.g. maybe you self host Minio somewhere)
-AWS_ACCESS_KEY_ID=minioadmin
-AWS_SECRET_ACCESS_KEY=minioadmin
-AWS_S3_BUCKET=appflowy
-AWS_REGION=us-east-1              # This option only applicable for AWS S3
-```
+- Kindly read through the comments for each option
+- Modify the values in `.env` according to your needs
 
 For authentication details, refer to the [Authentication](./AUTHENTICATION.md) documentation. You will need to update the
 redirect URI to match your host server's public IP or hostname, such as `http://<your-host-server-public-ip-or-hostname>/gotrue/callback`.

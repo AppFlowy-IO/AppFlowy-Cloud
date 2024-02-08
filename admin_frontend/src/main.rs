@@ -1,3 +1,4 @@
+mod config;
 mod error;
 mod models;
 mod response;
@@ -16,6 +17,8 @@ use tower_http::{
 };
 use tracing::info;
 
+use crate::config::Config;
+
 #[tokio::main]
 async fn main() {
   // load from .env
@@ -27,16 +30,23 @@ async fn main() {
     .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
     .init();
 
-  let gotrue_client = gotrue::api::Client::new(
-    reqwest::Client::new(),
-    &std::env::var("GOTRUE_URL").unwrap_or("http://gotrue:9999".to_string()),
-  );
-  let redis_client =
-    redis::Client::open(std::env::var("REDIS_URL").unwrap_or("redis://redis:6379".to_string()))
-      .unwrap()
-      .get_tokio_connection_manager()
-      .await
-      .unwrap();
+  let config = Config::from_env();
+  info!("config loaded: {:?}", &config);
+
+  let gotrue_client = gotrue::api::Client::new(reqwest::Client::new(), &config.gotrue_url);
+  gotrue_client
+    .health()
+    .await
+    .expect("gotrue health check failed");
+  info!("Gotrue client initialized.");
+
+  let redis_client = redis::Client::open(config.redis_url)
+    .expect("failed to create redis client")
+    .get_tokio_connection_manager()
+    .await
+    .expect("failed to get redis connection manager");
+  info!("Redis client initialized.");
+
   let session_store = session::SessionStorage::new(redis_client);
 
   let state = AppState {
@@ -64,9 +74,13 @@ async fn main() {
     .nest_service("/web-api", web_api_router)
     .nest_service("/assets", ServeDir::new("assets"));
 
-  let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
+  let listener = TcpListener::bind("0.0.0.0:3000")
+    .await
+    .expect("failed to bind to port");
   info!("listening on: {:?}", listener);
-  axum::serve(listener, app).await.unwrap();
+  axum::serve(listener, app)
+    .await
+    .expect("failed to run server");
 }
 
 #[derive(Clone)]

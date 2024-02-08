@@ -1,25 +1,23 @@
-use core::fmt;
 use futures_util::{SinkExt, StreamExt};
 use governor::clock::DefaultClock;
-use governor::middleware::{NoOpMiddleware, RateLimitingMiddleware, StateSnapshot};
+use governor::middleware::NoOpMiddleware;
 use governor::state::{InMemoryState, NotKeyed};
-use governor::{clock, NotUntil, Quota, RateLimiter};
+use governor::{Quota, RateLimiter};
 use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::Debug;
-use std::marker::PhantomData;
+
+use futures_util::FutureExt;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use crate::ServerFixIntervalPing;
 use crate::{platform_spawn, retry_connect};
 use realtime_entity::collab_msg::CollabMessage;
-use realtime_entity::message::{RealtimeMessage, RealtimeTrafficMode, SystemMessage};
+use realtime_entity::message::{RealtimeMessage, SystemMessage};
 use realtime_entity::user::UserMessage;
 use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, error, info, trace, warn};
@@ -67,7 +65,8 @@ pub struct WSClient {
   collab_channels: Arc<RwLock<ChannelByObjectId>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
   stop_tx: Mutex<Option<oneshot::Sender<()>>>,
-  rate_limiter: Arc<RwLock<RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>>>,
+  rate_limiter:
+    Arc<tokio::sync::RwLock<RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>>>,
 }
 
 impl WSClient {
@@ -92,7 +91,7 @@ impl WSClient {
       collab_channels,
       ping,
       stop_tx: Mutex::new(None),
-      rate_limiter: Arc::new(RwLock::new(rate_limiter)),
+      rate_limiter: Arc::new(tokio::sync::RwLock::new(rate_limiter)),
     }
   }
 
@@ -194,7 +193,7 @@ impl WSClient {
                   },
                   RealtimeMessage::System(sys_message) => match sys_message {
                     SystemMessage::RateLimit(limit) => {
-                      *rate_limiter.write() = gen_rate_limiter(limit);
+                      *rate_limiter.write().await = gen_rate_limiter(limit);
                     },
                     SystemMessage::KickOff => {
                       //
@@ -237,13 +236,13 @@ impl WSClient {
           _ = &mut stop_rx => break,
          Ok(msg) = rx.recv() => {
             // Wait for permission to send the next message
-            match rate_limiter.check() {
+            match rate_limiter.read().await.check() {
                 Ok(_) => {},
                 Err(err) => {
                 info!("rate limit reached: {}", err);
                 }
             }
-            rate_limiter.read().until_ready().fuse().await;
+            rate_limiter.read().await.until_ready().fuse().await;
 
             let len = msg.len();
             // The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
@@ -338,8 +337,12 @@ impl WSClient {
 }
 
 fn gen_rate_limiter(
-  time_per_sec: u32,
+  mut times_per_sec: u32,
 ) -> RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware> {
-  let quota = Quota::per_second(NonZeroU32::new(time_per_sec).unwrap());
+  // make sure the rate limiter is not zero
+  if times_per_sec == 0 {
+    times_per_sec = 1;
+  }
+  let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
   RateLimiter::direct(quota)
 }

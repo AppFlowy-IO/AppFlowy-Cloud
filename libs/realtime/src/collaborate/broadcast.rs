@@ -300,7 +300,7 @@ pub struct Subscription {
 }
 
 impl Subscription {
-  pub async fn stop(mut self) {
+  pub async fn stop(&mut self) {
     if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
       let _ = sink_stop_tx.send(()).await;
     }

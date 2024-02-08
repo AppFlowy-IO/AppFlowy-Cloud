@@ -73,7 +73,7 @@ where
   pub async fn remove_user(&self, object_id: &str, user: &U) -> Result<(), Error> {
     let group_by_object_id = self.group_by_object_id.try_read()?;
     if let Some(group) = group_by_object_id.get(object_id) {
-      if let Some(subscriber) = group.subscribers.try_write()?.remove(user) {
+      if let Some(mut subscriber) = group.subscribers.try_write()?.remove(user) {
         trace!("Remove subscriber: {}", subscriber.origin);
         subscriber.stop().await;
       }
@@ -97,21 +97,30 @@ where
 
   #[instrument(skip(self))]
   pub async fn remove_group(&self, object_id: &str) {
-    match self.group_by_object_id.try_write() {
-      Ok(mut group_by_object_id) => {
-        match group_by_object_id.remove(object_id) {
-          None => {
-            // The group should be exist, but it's not. This is an unexpected situation.
-            error!("Group for object_id:{} not found", object_id);
-          },
-          Some(group) => {
-            group.flush_collab().await;
-          },
-        }
-        self.storage.remove_collab_cache(object_id).await;
+    let mut group_by_object_id = match self.group_by_object_id.try_write() {
+      Ok(lock) => lock,
+      Err(err) => {
+        error!("Failed to acquire write lock to remove group: {:?}", err);
+        return;
       },
-      Err(err) => error!("Failed to acquire write lock to remove group: {:?}", err),
+    };
+
+    if let Some(group) = group_by_object_id.remove(object_id) {
+      group.flush_collab().await;
+
+      // As we've already removed the group, we directly operate on the removed group's subscribers.
+      if let Ok(mut subscribers) = group.subscribers.try_write() {
+        for (_, subscriber) in subscribers.iter_mut() {
+          subscriber.stop().await;
+        }
+      }
+    } else {
+      // Log error if the group doesn't exist
+      error!("Group for object_id:{} not found", object_id);
     }
+    drop(group_by_object_id);
+
+    self.storage.remove_collab_cache(object_id).await;
   }
 
   pub async fn create_group_if_need(

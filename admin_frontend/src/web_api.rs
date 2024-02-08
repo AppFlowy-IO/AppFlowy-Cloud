@@ -117,10 +117,13 @@ pub async fn invite_handler(
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   state
     .gotrue_client
-    .magic_link(&MagicLinkParams {
-      email: param.email,
-      ..Default::default()
-    })
+    .magic_link(
+      &MagicLinkParams {
+        email: param.email,
+        ..Default::default()
+      },
+      Some("/".to_owned()),
+    )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
 }
@@ -308,7 +311,7 @@ pub async fn sign_up_handler(
 
   let sign_up_res = state
     .gotrue_client
-    .sign_up_with_referrer(&param.email, &param.password, Some("/"))
+    .sign_up(&param.email, &param.password, Some("/"))
     .await?;
 
   match sign_up_res {
@@ -378,10 +381,13 @@ async fn send_magic_link(
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   state
     .gotrue_client
-    .magic_link(&MagicLinkParams {
-      email: email.to_owned(),
-      ..Default::default()
-    })
+    .magic_link(
+      &MagicLinkParams {
+        email: email.to_owned(),
+        ..Default::default()
+      },
+      Some("/".to_owned()),
+    )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))
 }

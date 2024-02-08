@@ -24,18 +24,31 @@
 </html>
 
 <script>
+  function findButton(event) {
+    let button = event.target.querySelector(".button");
+    if (button) {
+      return button;
+    } else {
+      return event.target.closest(".button");
+    }
+  }
+
   document.body.addEventListener("htmx:beforeRequest", function (event) {
-    const closeButton = event.target.querySelector(".button");
-    closeButton.classList.add("loading-button");
-    closeButton.disabled = true;
+    const closeButton = findButton(event);
+    if (closeButton) {
+      closeButton.classList.add("loading-button");
+      closeButton.disabled = true;
+    }
   });
 
-  document.body.addEventListener("htmx:afterRequest", function (evt) {
-    const closeButton = event.target.querySelector(".button");
-    closeButton.classList.remove("loading-button");
-    closeButton.disabled = false;
+  document.body.addEventListener("htmx:afterRequest", function (event) {
+    const closeButton = findButton(event);
+    if (closeButton) {
+      closeButton.classList.remove("loading-button");
+      closeButton.disabled = false;
+    }
 
-    const detail = evt.detail;
+    const detail = event.detail;
     if (detail.failed) {
       const xhr = detail.xhr;
       displayHttpFail(xhr.status, xhr.statusText, xhr.responseText);

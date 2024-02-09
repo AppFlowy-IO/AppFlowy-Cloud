@@ -73,6 +73,60 @@ where
       opened_collab_by_object_id: Arc::new(RwLock::new(HashMap::new())),
     }
   }
+
+  async fn check_collab_permission(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: &CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> Result<(), AppError> {
+    // Check if the user has enough permissions to insert collab
+    // 1. If the collab already exists, check if the user has enough permissions to update collab
+    // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
+    let collab_exists = is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
+    if collab_exists {
+      // If the collab already exists, check if the user has enough permissions to update collab
+      let can_write = self
+        .access_control
+        .get_or_refresh_collab_access_level(uid, &params.object_id, transaction.deref_mut())
+        .await
+        .context(format!(
+          "Can't find the access level when user:{} try to insert collab",
+          uid
+        ))?
+        .can_write();
+      if !can_write {
+        return Err(AppError::NotEnoughPermissions(format!(
+          "user:{} doesn't have enough permissions to update collab {}",
+          uid, params.object_id
+        )));
+      }
+    } else {
+      // If the collab doesn't exist, check if the user has enough permissions to create collab.
+      // If the user is the owner or member of the workspace, the user can create collab.
+      let can_write_workspace = self
+        .access_control
+        .get_user_workspace_role(uid, workspace_id, transaction.deref_mut())
+        .await?
+        .can_create_collab();
+
+      if !can_write_workspace {
+        return Err(AppError::NotEnoughPermissions(format!(
+          "user:{} doesn't have enough permissions to insert collab {}",
+          uid, params.object_id
+        )));
+      }
+
+      // Cache the access level if the user has enough permissions to create collab.
+      self
+        .access_control
+        .cache_collab_access_level(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
+
+    Ok(())
+  }
 }
 
 #[async_trait]
@@ -124,6 +178,7 @@ where
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
+  #[allow(clippy::blocks_in_conditions)]
   async fn upsert_collab_with_transaction(
     &self,
     workspace_id: &str,
@@ -132,46 +187,9 @@ where
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> DatabaseResult<()> {
     params.validate()?;
-
-    // Check if the user has enough permissions to insert collab
-    // 1. If the collab already exists, check if the user has enough permissions to update collab
-    // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
-    let has_permission = if is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
-      // If the collab already exists, check if the user has enough permissions to update collab
-      let level = self
-        .access_control
-        .get_or_refresh_collab_access_level(uid, &params.object_id, transaction.deref_mut())
-        .await
-        .context(format!(
-          "Can't find the access level when user:{} try to insert collab",
-          uid
-        ))?;
-      level.can_write()
-    } else {
-      // If the collab doesn't exist, check if the user has enough permissions to create collab.
-      // If the user is the owner or member of the workspace, the user can create collab.
-      let can_write_workspace = self
-        .access_control
-        .get_user_workspace_role(uid, workspace_id, transaction.deref_mut())
-        .await?
-        .can_create_collab();
-
-      // Cache the access level if the user has enough permissions to create collab.
-      if can_write_workspace {
-        self
-          .access_control
-          .cache_collab_access_level(uid, &params.object_id, AFAccessLevel::FullAccess)
-          .await?;
-      }
-      can_write_workspace
-    };
-
-    if !has_permission {
-      return Err(AppError::NotEnoughPermissions(format!(
-        "user:{} doesn't have enough permissions to insert collab {}",
-        uid, params.object_id
-      )));
-    }
+    self
+      .check_collab_permission(workspace_id, uid, &params, transaction)
+      .await?;
     let object_id = params.object_id.clone();
     let encoded_collab = params.encoded_collab_v1.clone();
     self

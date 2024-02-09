@@ -7,7 +7,7 @@ use crate::biz::{
 };
 use anyhow::anyhow;
 use app_error::AppError;
-use casbin::{Enforcer, MgmtApi};
+use casbin::{CoreApi, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -57,6 +57,11 @@ impl AccessControl {
     &self.enforcer
   }
 
+  pub async fn contains(&self, obj: &ObjectType<'_>) -> bool {
+    let enforcer = self.enforcer.read().await;
+    enforcer.get_all_objects().contains(&obj.to_string())
+  }
+
   pub async fn update(
     &self,
     uid: &i64,
@@ -69,6 +74,18 @@ impl AccessControl {
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
     let mut enforcer = self.enforcer.write().await;
     enforcer_remove(&mut enforcer, uid, obj).await
+  }
+
+  pub async fn enforce(
+    &self,
+    uid: &i64,
+    obj: &ObjectType<'_>,
+    act: &Action,
+  ) -> Result<bool, AppError> {
+    let enforcer = self.enforcer.read().await;
+    enforcer
+      .enforce((uid.to_string(), obj.to_string(), act.to_string()))
+      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
   }
 }
 

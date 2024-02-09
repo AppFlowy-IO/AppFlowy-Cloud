@@ -154,6 +154,8 @@ collab-entity = { version = "0.1.0" }
 gotrue = { path = "libs/gotrue" }
 redis = "0.24.0"
 moka = { version = "0.12.5", features = ["future"] }
+evmap = "10.0.2"
+dashmap = "5.5.3"
 
 [profile.release]
 lto = true

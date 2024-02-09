@@ -500,7 +500,7 @@ impl TestClient {
     );
 
     collab.lock().add_plugin(Arc::new(sync_plugin));
-    collab.lock().initialize().await;
+    futures::executor::block_on(collab.lock().initialize());
     let test_collab = TestCollab { origin, collab };
     self
       .collab_by_object_id

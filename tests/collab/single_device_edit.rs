@@ -1,9 +1,8 @@
-use collab_entity::CollabType;
-
 use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
+use assert_json_diff::assert_json_eq;
 use client_api_test_util::*;
+use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
-
 use serde_json::json;
 use uuid::Uuid;
 
@@ -405,4 +404,52 @@ async fn multiple_collab_edit_test() {
     }),
   )
   .await;
+}
+
+#[tokio::test]
+async fn concurrent_device_edit_test() {
+  let mut tasks = Vec::new();
+  for _i in 0..20 {
+    let task = tokio::spawn(async move {
+      let collab_type = CollabType::Document;
+      let mut test_client = TestClient::new_user().await;
+
+      let workspace_id = test_client.workspace_id().await;
+      let object_id = Uuid::new_v4().to_string();
+
+      test_client
+        .open_collab(&workspace_id, &object_id, collab_type.clone())
+        .await;
+
+      let random_str = generate_random_string(200);
+      test_client
+        .collab_by_object_id
+        .get_mut(&object_id)
+        .unwrap()
+        .collab
+        .lock()
+        .insert("string", random_str.clone());
+      let expected_json = json!({
+        "string": random_str
+      });
+
+      test_client.wait_object_sync_complete(&object_id).await;
+      (
+        expected_json,
+        test_client
+          .collab_by_object_id
+          .get(&object_id)
+          .unwrap()
+          .collab
+          .to_json_value(),
+      )
+    });
+    tasks.push(task);
+  }
+
+  let results = futures::future::join_all(tasks).await;
+  for result in results {
+    let (expected_json, json) = result.unwrap();
+    assert_json_eq!(expected_json, json);
+  }
 }

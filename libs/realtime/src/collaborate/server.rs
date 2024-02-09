@@ -85,15 +85,13 @@ where
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {
           // Perform operations that require awaiting outside of the synchronous code block
-          let groups_operation = groups.number_of_groups().await;
-          cloned_metrics.record_opening_collab_count(groups_operation);
+          if let Some(groups_operation) = groups.number_of_groups().await {
+            cloned_metrics.record_opening_collab_count(groups_operation);
+          }
 
-          // Minimize the scope of the async lock for connected users
-          let connected_user_count = {
-            let read_guard = cloned_client_stream_by_user.read().await;
-            read_guard.keys().len()
-          };
-          cloned_metrics.record_connected_users(connected_user_count);
+          if let Ok(read_guard) = cloned_client_stream_by_user.try_read() {
+            cloned_metrics.record_connected_users(read_guard.keys().len());
+          }
 
           // Assuming mem_usage() is synchronous and quick to execute
           let mem_usage = cloned_storage.mem_usage();

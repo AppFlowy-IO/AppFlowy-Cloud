@@ -186,12 +186,12 @@ impl CollabBroadcast {
       let object_id = self.object_id.clone();
 
       tokio::spawn(async move {
-        while let Some(result) = stream.next().await {
+        loop {
           select! {
              _ = stop_rx.recv() => break,
-             _ = async { // Wrap the processing logic to use await within select!
+             result = stream.next() => {
                match result {
-                 Ok(collab_msg) => {
+                 Some(Ok(collab_msg)) => {
                    if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
                      handle_user_collab_message(&object_id, &sink, &collab_msg, &collab).await;
                      if let Ok(mut modified_at) = modified_at.try_lock() {
@@ -201,9 +201,10 @@ impl CollabBroadcast {
                      warn!("Invalid collab message: {:?}", collab_msg);
                    }
                  },
-                 Err(e) => error!("Error receiving collab message: {:?}", e.into()),
+                 Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
+                 None => break,
                }
-             } => {}
+             }
           }
         }
       });

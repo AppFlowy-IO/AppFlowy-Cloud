@@ -271,7 +271,7 @@ where
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at.lock().await;
     let is_timeout = modified_at.elapsed().as_secs() > self.timeout_secs();
-    is_timeout
+    is_timeout && self.subscribers.read().await.is_empty()
   }
 
   /// Flush the [Collab] to the storage.

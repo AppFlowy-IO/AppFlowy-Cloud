@@ -406,6 +406,20 @@ async fn multiple_collab_edit_test() {
   .await;
 }
 
+// #[tokio::test]
+// async fn open_100_collab_test() {
+//   let mut clients = vec![];
+//   for _ in 0..40 {
+//     let mut test_client = TestClient::new_user().await;
+//     let workspace_id = test_client.workspace_id().await;
+//     let object_id = test_client
+//       .create_and_edit_collab(&workspace_id, CollabType::Document)
+//       .await;
+//     clients.push(test_client);
+//   }
+//
+//   tokio::time::sleep(Duration::from_secs(50)).await;
+// }
 #[tokio::test]
 async fn concurrent_device_edit_test() {
   let mut tasks = Vec::new();

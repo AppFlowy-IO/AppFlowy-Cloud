@@ -43,15 +43,14 @@ where
     method: Method,
     _path: &Path<Url>,
   ) -> Result<(), AppError> {
-    let can_access = self.0.can_access_http_method(uid, oid, &method).await?;
-
-    if !can_access {
-      return Err(AppError::NotEnoughPermissions(format!(
+    if self.0.can_access_http_method(uid, oid, &method).await? {
+      Ok(())
+    } else {
+      Err(AppError::NotEnoughPermissions(format!(
         "Not enough permissions to access the collab: {} with http method: {}",
         oid, method
-      )));
+      )))
     }
-    Ok(())
   }
 }
 

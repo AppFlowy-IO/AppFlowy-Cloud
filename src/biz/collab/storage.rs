@@ -84,6 +84,10 @@ where
     self.disk_cache.config()
   }
 
+  fn mem_usage(&self) -> usize {
+    self.mem_cache.usage()
+  }
+
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
     tracing::trace!("cache opened collab:{}", object_id);
     self

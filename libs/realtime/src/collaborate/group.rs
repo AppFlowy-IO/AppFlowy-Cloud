@@ -195,6 +195,7 @@ where
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
   pub collab: Arc<MutexCollab>,
+  #[allow(dead_code)]
   collab_type: CollabType,
 
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -293,14 +294,17 @@ where
   /// # Returns
   /// A `u64` representing the timeout duration in seconds for the collaboration type in question.
   #[inline]
+  #[cfg(debug_assertions)]
+  fn timeout_secs(&self) -> u64 {
+    2 * 60
+  }
+
+  #[cfg(not(debug_assertions))]
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {
-      CollabType::Document => 10 * 60,
-      CollabType::Database => 30 * 60,
-      // WorkspaceDatabase, Folder, and UserAwareness share a longer timeout duration of 2 hours.
-      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 2 * 60 * 60,
-      // DatabaseRow timeout duration corrected to 1 hour.
-      CollabType::DatabaseRow => 60 * 60,
+      CollabType::Document => 10 * 60, // 10 minutes
+      CollabType::Database | CollabType::DatabaseRow => 60 * 60, // 1 hour
+      CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 2 * 60 * 60, // 2 hours,
     }
   }
 }

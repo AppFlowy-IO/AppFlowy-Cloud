@@ -147,20 +147,26 @@ impl CollabBroadcast {
         loop {
           select! {
             _ = stop_rx.recv() => break,
-            Ok(message) = receiver.recv() => {
-              if let Some(msg_origin) = message.origin() {
-                if msg_origin == &subscriber_origin {
-                  continue;
-                }
-              }
+            result = receiver.recv() => {
+              match result {
+                Ok(message) => {
+                  if let Some(msg_origin) = message.origin() {
+                    if msg_origin == &subscriber_origin {
+                      continue;
+                    }
+                  }
 
-              trace!("[realtime]: broadcast collab message: {}", message);
-              let action = SinkCollabMessageAction {
-                sink: &sink,
-                message,
-              };
-              if let Err(err) = action.run().await {
-                error!("fail to broadcast message:{}", err);
+                  trace!("[realtime]: broadcast collab message: {}", message);
+                  let action = SinkCollabMessageAction {
+                    sink: &sink,
+                    message,
+                  };
+
+                  if let Err(err) = action.run().await {
+                    error!("fail to broadcast message:{}", err);
+                  }
+                }
+                Err( _) => break,
               }
             },
           }
@@ -175,36 +181,34 @@ impl CollabBroadcast {
     // broadcast to all connected subscribers. Check out the [observe_update_v1] and [sink_task]
     // above.
     let stream_stop_tx = {
+      let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       let collab = self.collab().clone();
       let object_id = self.object_id.clone();
-      let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
+
       tokio::spawn(async move {
         loop {
           select! {
              _ = stop_rx.recv() => break,
-            Some(Ok(collab_msg)) = stream.next() => {
-              // Continue if the message is empty
-              let payload = collab_msg.payload();
-              if payload.is_none() {
-                warn!("Unexpected empty payload of collab message:{}", collab_msg);
-                continue;
-              }
-
-              let _collab_msg_origin = collab_msg.origin();
-              if object_id != collab_msg.object_id() {
-                error!("Incoming message's object id does not match the broadcast group's object id");
-                continue;
-              }
-
-              handle_user_collab_message(&object_id, &sink, &collab_msg, &collab).await;
-
-              if let Ok(mut modified_at) = modified_at.try_lock() {
-               *modified_at = Instant::now();
-              }
-            }
+             result = stream.next() => {
+               match result {
+                 Some(Ok(collab_msg)) => {
+                   if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
+                     handle_user_collab_message(&object_id, &sink, &collab_msg, &collab).await;
+                     if let Ok(mut modified_at) = modified_at.try_lock() {
+                       *modified_at = Instant::now();
+                     }
+                   } else {
+                     warn!("Invalid collab message: {:?}", collab_msg);
+                   }
+                 },
+                 Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
+                 None => break,
+               }
+             }
           }
         }
       });
+
       stream_stop_tx
     };
 

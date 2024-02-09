@@ -16,7 +16,7 @@ COPY . .
 ENV SQLX_OFFLINE true
 
 # Build the project
-RUN cargo build --release --bin appflowy_cloud
+RUN cargo build --profile=profiling --bin appflowy_cloud
 
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
@@ -27,7 +27,7 @@ RUN apt-get update -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/appflowy_cloud /usr/local/bin/appflowy_cloud
+COPY --from=builder /app/target/profiling/appflowy_cloud /usr/local/bin/appflowy_cloud
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
 CMD ["appflowy_cloud"]

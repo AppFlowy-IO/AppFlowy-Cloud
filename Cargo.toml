@@ -162,9 +162,7 @@ codegen-units = 1
 
 [profile.profiling]
 inherits = "release"
-codegen-units = 16
 debug = true
-lto = false
 
 [patch.crates-io]
 collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "2de6d172f56fed29ee6f32b82040cca4867647ac" }

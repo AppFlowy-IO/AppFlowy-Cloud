@@ -2,9 +2,9 @@ use std::ops::Deref;
 use std::{str::FromStr, sync::Arc};
 
 use actix_web::http::Method;
-use anyhow::anyhow;
+
 use async_trait::async_trait;
-use casbin::{CoreApi, MgmtApi};
+use casbin::MgmtApi;
 use sqlx::{Executor, PgPool, Postgres};
 use tokio::sync::{broadcast, RwLock};
 use tracing::log::warn;
@@ -27,7 +27,7 @@ use crate::biz::casbin::enforcer_ext::{enforcer_remove, enforcer_update};
 use realtime::collaborate::CollabAccessControl;
 
 use super::{
-  Action, ActionType, ObjectType, POLICY_FIELD_INDEX_ACTION, POLICY_FIELD_INDEX_OBJECT,
+  ActionType, ObjectType, POLICY_FIELD_INDEX_ACTION, POLICY_FIELD_INDEX_OBJECT,
   POLICY_FIELD_INDEX_USER,
 };
 

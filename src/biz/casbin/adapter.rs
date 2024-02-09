@@ -1,4 +1,4 @@
-use super::{Action, ObjectType};
+use crate::biz::casbin::access_control::{Action, ObjectType};
 use async_trait::async_trait;
 use casbin::error::AdapterError;
 use casbin::Adapter;

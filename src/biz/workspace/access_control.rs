@@ -30,9 +30,10 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   where
     E: Executor<'a, Database = Postgres>;
 
-  async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError>;
+  async fn update_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
+    -> Result<(), AppError>;
 
-  async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
+  async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
 }
 
 /// Represents the role of the user in the workspace by the workspace id.

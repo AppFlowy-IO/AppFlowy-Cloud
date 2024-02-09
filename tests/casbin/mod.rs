@@ -1,9 +1,7 @@
 use actix_http::Method;
 use anyhow::Context;
 use app_error::ErrorCode;
-use appflowy_cloud::biz::casbin::access_control::{
-  CasbinCollabAccessControl, CasbinWorkspaceAccessControl,
-};
+use appflowy_cloud::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use appflowy_cloud::biz::workspace::access_control::WorkspaceAccessControl;
 use database_entity::dto::{AFAccessLevel, AFRole};
 use lazy_static::lazy_static;
@@ -95,7 +93,7 @@ pub async fn create_user(pool: &PgPool) -> anyhow::Result<User> {
 /// # Panics
 /// Panics if the expected access level is not achieved before the timeout.
 pub async fn assert_access_level<T: AsRef<str>>(
-  access_control: &CasbinCollabAccessControl,
+  access_control: &CollabAccessControlImpl,
   uid: &i64,
   workspace_id: T,
   expected_level: Option<AFAccessLevel>,
@@ -146,7 +144,7 @@ pub async fn assert_access_level<T: AsRef<str>>(
 /// Panics if the expected role is not achieved before the timeout.
 
 pub async fn assert_workspace_role(
-  access_control: &CasbinWorkspaceAccessControl,
+  access_control: &WorkspaceAccessControlImpl,
   uid: &i64,
   workspace_id: &Uuid,
   expected_role: Option<AFRole>,
@@ -195,7 +193,7 @@ pub async fn assert_workspace_role(
 /// Panics if the expected error is not encountered before the timeout or if an unexpected role is received.
 
 pub async fn assert_workspace_role_error(
-  access_control: &CasbinWorkspaceAccessControl,
+  access_control: &WorkspaceAccessControlImpl,
   uid: &i64,
   workspace_id: &Uuid,
   expected_error: ErrorCode,
@@ -246,7 +244,7 @@ pub async fn assert_workspace_role_error(
 /// Panics if the expected access result is not achieved before the timeout.
 
 pub async fn assert_can_access_http_method(
-  access_control: &CasbinCollabAccessControl,
+  access_control: &CollabAccessControlImpl,
   uid: &i64,
   object_id: &str,
   method: Method,

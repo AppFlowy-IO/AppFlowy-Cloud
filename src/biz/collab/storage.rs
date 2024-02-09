@@ -10,7 +10,7 @@ use database_entity::dto::{
 };
 use itertools::{Either, Itertools};
 
-use crate::biz::casbin::access_control::{CasbinCollabAccessControl, CasbinWorkspaceAccessControl};
+use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
 use crate::biz::collab::mem_cache::CollabMemCache;
 use crate::state::RedisClient;
@@ -28,14 +28,14 @@ use tracing::{event, instrument};
 use validator::Validate;
 
 pub type CollabPostgresDBStorage = CollabStorageController<
-  CollabStorageAccessControlImpl<CasbinCollabAccessControl, CasbinWorkspaceAccessControl>,
+  CollabStorageAccessControlImpl<CollabAccessControlImpl, WorkspaceAccessControlImpl>,
 >;
 
 pub async fn init_collab_storage(
   pg_pool: PgPool,
   redis_client: RedisClient,
-  collab_access_control: CasbinCollabAccessControl,
-  workspace_access_control: CasbinWorkspaceAccessControl,
+  collab_access_control: CollabAccessControlImpl,
+  workspace_access_control: WorkspaceAccessControlImpl,
 ) -> CollabPostgresDBStorage {
   let access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.into(),

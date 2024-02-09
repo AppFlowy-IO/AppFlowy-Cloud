@@ -4,7 +4,7 @@ use crate::casbin::{
 use anyhow::{anyhow, Context};
 use app_error::ErrorCode;
 use appflowy_cloud::biz;
-use appflowy_cloud::biz::casbin::access_control::CasbinAccessControl;
+use appflowy_cloud::biz::casbin::access_control::AccessControl;
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use casbin::{CoreApi, DefaultModel, Enforcer};
@@ -19,7 +19,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),

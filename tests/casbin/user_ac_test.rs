@@ -1,8 +1,8 @@
 use crate::casbin::*;
 use anyhow::anyhow;
 use appflowy_cloud::biz;
+use appflowy_cloud::biz::casbin::access_control::{Action, ObjectType};
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
-use appflowy_cloud::biz::casbin::{Action, ObjectType};
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::{AFAccessLevel, AFRole};
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;

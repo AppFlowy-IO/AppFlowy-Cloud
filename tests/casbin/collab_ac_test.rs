@@ -2,9 +2,8 @@ use crate::casbin::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
-use appflowy_cloud::biz::casbin::access_control::CasbinAccessControl;
+use appflowy_cloud::biz::casbin::access_control::{AccessControl, ActionType, ObjectType};
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
-use appflowy_cloud::biz::casbin::{ActionType, ObjectType};
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::{AFAccessLevel, AFRole};
@@ -21,7 +20,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -131,7 +130,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -232,7 +231,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -317,7 +316,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -355,7 +354,7 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),

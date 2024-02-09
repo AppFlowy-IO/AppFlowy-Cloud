@@ -373,10 +373,13 @@ impl Client {
   pub async fn invite(&self, email: &str) -> Result<(), AppResponseError> {
     self
       .gotrue_client
-      .magic_link(&MagicLinkParams {
-        email: email.to_owned(),
-        ..Default::default()
-      }, None)
+      .magic_link(
+        &MagicLinkParams {
+          email: email.to_owned(),
+          ..Default::default()
+        },
+        None,
+      )
       .await?;
     Ok(())
   }

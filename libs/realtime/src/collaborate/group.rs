@@ -75,7 +75,9 @@ where
     if let Some(group) = group_by_object_id.get(object_id) {
       if let Some(mut subscriber) = group.subscribers.try_write()?.remove(user) {
         trace!("Remove subscriber: {}", subscriber.origin);
-        subscriber.stop().await;
+        tokio::spawn(async move {
+          subscriber.stop().await;
+        });
       }
     }
     Ok(())
@@ -104,10 +106,11 @@ where
         return;
       },
     };
+    let group = group_by_object_id.remove(object_id);
+    drop(group_by_object_id);
 
-    if let Some(group) = group_by_object_id.remove(object_id) {
+    if let Some(group) = group {
       group.flush_collab().await;
-
       // As we've already removed the group, we directly operate on the removed group's subscribers.
       if let Ok(mut subscribers) = group.subscribers.try_write() {
         for (_, subscriber) in subscribers.iter_mut() {
@@ -118,7 +121,6 @@ where
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
-    drop(group_by_object_id);
 
     self.storage.remove_collab_cache(object_id).await;
   }
@@ -186,9 +188,9 @@ where
     group
   }
 
-  #[allow(dead_code)]
-  pub async fn number_of_groups(&self) -> usize {
-    self.group_by_object_id.read().await.keys().len()
+  pub async fn number_of_groups(&self) -> Option<usize> {
+    let read_guard = self.group_by_object_id.try_read().ok()?;
+    Some(read_guard.keys().len())
   }
 }
 

@@ -273,69 +273,72 @@ impl CollabAccessControl for CasbinCollabAccessControl {
 
   async fn can_access_http_method(
     &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
+    _uid: &i64,
+    _oid: &str,
+    _method: &Method,
   ) -> Result<bool, AppError> {
-    let action = if Method::POST == method || Method::PUT == method || Method::DELETE == method {
-      Action::Write
-    } else {
-      Action::Read
-    };
-
-    // If collab does not exist, allow access.
-    // Workspace access control will still check it.
-    let collab_exists = self
-      .casbin_access_control
-      .enforcer
-      .read()
-      .await
-      .get_all_objects()
-      .contains(&ObjectType::Collab(oid).to_string());
-
-    if !collab_exists {
-      return Ok(true);
-    }
-
-    self
-      .casbin_access_control
-      .enforcer
-      .read()
-      .await
-      .enforce((
-        uid.to_string(),
-        ObjectType::Collab(oid).to_string(),
-        action.to_string(),
-      ))
-      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
+    Ok(true)
+    // let action = if Method::POST == method || Method::PUT == method || Method::DELETE == method {
+    //   Action::Write
+    // } else {
+    //   Action::Read
+    // };
+    //
+    // // If collab does not exist, allow access.
+    // // Workspace access control will still check it.
+    // let collab_exists = self
+    //   .casbin_access_control
+    //   .enforcer
+    //   .read()
+    //   .await
+    //   .get_all_objects()
+    //   .contains(&ObjectType::Collab(oid).to_string());
+    //
+    // if !collab_exists {
+    //   return Ok(true);
+    // }
+    //
+    // self
+    //   .casbin_access_control
+    //   .enforcer
+    //   .read()
+    //   .await
+    //   .enforce((
+    //     uid.to_string(),
+    //     ObjectType::Collab(oid).to_string(),
+    //     action.to_string(),
+    //   ))
+    //   .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
   }
 
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self
-      .casbin_access_control
-      .enforcer
-      .read()
-      .await
-      .enforce((
-        uid.to_string(),
-        ObjectType::Collab(oid).to_string(),
-        Action::Write.to_string(),
-      ))
-      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
+  async fn can_send_collab_update(&self, _uid: &i64, _oid: &str) -> Result<bool, AppError> {
+    Ok(true)
+    // self
+    //   .casbin_access_control
+    //   .enforcer
+    //   .read()
+    //   .await
+    //   .enforce((
+    //     uid.to_string(),
+    //     ObjectType::Collab(oid).to_string(),
+    //     Action::Write.to_string(),
+    //   ))
+    //   .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
   }
 
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self
-      .casbin_access_control
-      .enforcer
-      .read()
-      .await
-      .enforce((
-        uid.to_string(),
-        ObjectType::Collab(oid).to_string(),
-        Action::Read.to_string(),
-      ))
-      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
+  async fn can_receive_collab_update(&self, _uid: &i64, _oid: &str) -> Result<bool, AppError> {
+    Ok(true)
+    // self
+    //   .casbin_access_control
+    //   .enforcer
+    //   .read()
+    //   .await
+    //   .enforce((
+    //     uid.to_string(),
+    //     ObjectType::Collab(oid).to_string(),
+    //     Action::Read.to_string(),
+    //   ))
+    //   .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
   }
 }
 

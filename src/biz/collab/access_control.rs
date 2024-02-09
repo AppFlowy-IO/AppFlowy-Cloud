@@ -36,6 +36,7 @@ where
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  #[allow(clippy::blocks_in_if_conditions)]
   async fn check_collab_permission(
     &self,
     oid: &str,

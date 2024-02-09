@@ -26,6 +26,7 @@ use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::collaborate::retry::{CollabUserMessage, SubscribeGroupIfNeed};
+use crate::collaborate::RealtimeMetrics;
 use crate::util::channel_ext::UnboundedSenderSink;
 use database::collab::CollabStorage;
 use realtime_entity::message::SystemMessage;
@@ -51,6 +52,8 @@ pub struct CollabServer<S, U, AC> {
   /// Keep track of all client streams
   client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
   access_control: Arc<AC>,
+  #[allow(dead_code)]
+  metrics: Arc<RealtimeMetrics>,
 }
 
 impl<S, U, AC> CollabServer<S, U, AC>
@@ -59,29 +62,47 @@ where
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  pub fn new(storage: Arc<S>, access_control: AC) -> Result<Self, RealtimeError> {
+  pub fn new(
+    storage: Arc<S>,
+    access_control: AC,
+    metrics: Arc<RealtimeMetrics>,
+  ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
     let groups = Arc::new(CollabGroupCache::new(
       storage.clone(),
       access_control.clone(),
     ));
-    let edit_collab_by_user = Arc::new(Mutex::new(HashMap::new()));
+    let client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>> = Default::default();
+    let editing_collab_by_user = Default::default();
 
     let weak_groups = Arc::downgrade(&groups);
+    let cloned_metrics = metrics.clone();
+    let cloned_client_stream_by_user = client_stream_by_user.clone();
+    let cloned_storage = storage.clone();
     tokio::spawn(async move {
-      let mut interval = interval(Duration::from_secs(30));
+      let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
+        if let Some(groups) = weak_groups.upgrade() {
+          // Perform operations that require awaiting outside of the synchronous code block
+          let groups_operation = groups.number_of_groups().await;
+          cloned_metrics.record_opening_collab_count(groups_operation);
 
-        match weak_groups.upgrade() {
-          Some(groups) => {
-            trace!(
-              "Periodically check and remove inactive groups, current groups:{}",
-              groups.number_of_groups().await
-            );
-            groups.tick().await
-          },
-          None => break,
+          // Minimize the scope of the async lock for connected users
+          let connected_user_count = {
+            let read_guard = cloned_client_stream_by_user.read().await;
+            read_guard.keys().len()
+          };
+          cloned_metrics.record_connected_users(connected_user_count);
+
+          // Assuming mem_usage() is synchronous and quick to execute
+          let mem_usage = cloned_storage.mem_usage();
+          cloned_metrics.record_mem_cache_usage(mem_usage);
+
+          // Perform groups tick operation
+          groups.tick().await;
+        } else {
+          break;
         }
       }
     });
@@ -91,9 +112,10 @@ where
       groups,
       user_by_device: Default::default(),
       session_id_by_user: Default::default(),
-      editing_collab_by_user: edit_collab_by_user,
-      client_stream_by_user: Default::default(),
+      editing_collab_by_user,
+      client_stream_by_user,
       access_control,
+      metrics,
     })
   }
 

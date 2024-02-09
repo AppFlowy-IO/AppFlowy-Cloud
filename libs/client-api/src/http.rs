@@ -373,10 +373,13 @@ impl Client {
   pub async fn invite(&self, email: &str) -> Result<(), AppResponseError> {
     self
       .gotrue_client
-      .magic_link(&MagicLinkParams {
-        email: email.to_owned(),
-        ..Default::default()
-      })
+      .magic_link(
+        &MagicLinkParams {
+          email: email.to_owned(),
+          ..Default::default()
+        },
+        None,
+      )
       .await?;
     Ok(())
   }
@@ -676,7 +679,7 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
-    match self.gotrue_client.sign_up(email, password).await? {
+    match self.gotrue_client.sign_up(email, password, None).await? {
       Authenticated(access_token_resp) => {
         self.token.write().set(access_token_resp);
         Ok(())

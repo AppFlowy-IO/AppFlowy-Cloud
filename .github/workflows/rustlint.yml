@@ -24,6 +24,8 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           override: true
+          components: rustfmt, clippy
+          profile: minimal
 
       - uses: Swatinem/rust-cache@v2
         with:

@@ -1,8 +1,8 @@
-use crate::biz::collab::member_listener::{CollabMemberListener, CollabMemberNotification};
-use crate::biz::user::UserListener;
-use crate::biz::workspace::member_listener::{
-  WorkspaceMemberListener, WorkspaceMemberNotification,
+use crate::biz::casbin::pg_listen::{
+  CollabMemberListener, CollabMemberNotification, WorkspaceMemberListener,
+  WorkspaceMemberNotification,
 };
+use crate::biz::user::UserListener;
 use anyhow::Error;
 use database::pg_row::AFUserNotification;
 use serde::de::DeserializeOwned;

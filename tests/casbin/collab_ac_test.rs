@@ -2,7 +2,9 @@ use crate::casbin::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
-use appflowy_cloud::biz::casbin::access_control::{AccessControl, ActionType, ObjectType};
+use appflowy_cloud::biz::casbin::access_control::{
+  AccessControl, Action, ActionType, ObjectType, MODEL_CONF,
+};
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use casbin::{CoreApi, DefaultModel, Enforcer};
@@ -327,7 +329,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   let uid = 123;
   let oid = "collab::oid".to_owned();
   access_control
-    .cache_collab_access_level(&uid, &oid, AFAccessLevel::FullAccess)
+    .insert_collab_access_level(&uid, &oid, AFAccessLevel::FullAccess)
     .await?;
 
   assert_eq!(
@@ -336,7 +338,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   );
 
   access_control
-    .cache_collab_access_level(&uid, &oid, AFAccessLevel::ReadOnly)
+    .insert_collab_access_level(&uid, &oid, AFAccessLevel::ReadOnly)
     .await?;
 
   assert_eq!(
@@ -371,23 +373,23 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
       )
       .await?
   );
-  assert!(access_control.get_enforcer().read().await.enforce((
-    uid.to_string(),
-    ObjectType::Workspace("123").to_string(),
-    i32::from(AFRole::Owner).to_string(),
-  ))?);
 
   assert!(
     access_control
-      .remove(&uid, &ObjectType::Workspace("123"))
+      .enforce(&uid, &ObjectType::Workspace("123"), AFRole::Owner)
       .await?
   );
 
-  assert!(!access_control.get_enforcer().read().await.enforce((
-    uid.to_string(),
-    ObjectType::Workspace("123").to_string(),
-    i32::from(AFRole::Owner).to_string(),
-  ))?);
+  assert!(access_control
+    .remove(&uid, &ObjectType::Workspace("123"))
+    .await
+    .is_ok());
+
+  assert!(
+    !access_control
+      .enforce(&uid, &ObjectType::Workspace("123"), AFRole::Owner)
+      .await?
+  );
 
   Ok(())
 }

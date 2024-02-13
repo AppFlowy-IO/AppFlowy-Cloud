@@ -176,7 +176,7 @@ where
       Arc::downgrade(&group),
       self.access_control.clone(),
     );
-    collab.lock().add_plugin(Arc::new(plugin));
+    collab.lock().add_plugin(Box::new(plugin));
     event!(tracing::Level::TRACE, "Init group collab:{}", object_id);
     collab.lock_arc().initialize().await;
 

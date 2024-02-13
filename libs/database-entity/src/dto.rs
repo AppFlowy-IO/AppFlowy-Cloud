@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 use tracing::error;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -294,10 +295,11 @@ pub struct AFCollabMember {
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[repr(i32)]
 pub enum AFRole {
-  Owner,
-  Member,
-  Guest,
+  Owner = 1,
+  Member = 2,
+  Guest = 3,
 }
 
 impl AFRole {
@@ -322,32 +324,24 @@ impl From<i32> for AFRole {
   }
 }
 
-impl From<i64> for AFRole {
-  fn from(value: i64) -> Self {
-    Self::from(value as i32)
-  }
-}
-
-impl From<Option<i32>> for AFRole {
-  fn from(value: Option<i32>) -> Self {
-    match value {
-      None => {
-        error!("Invalid role id: None");
-        AFRole::Guest
-      },
-      Some(value) => value.into(),
+impl From<&str> for AFRole {
+  fn from(value: &str) -> Self {
+    match i32::from_str(value) {
+      Ok(value) => value.into(),
+      Err(_) => AFRole::Guest,
     }
   }
 }
 
 impl From<AFRole> for i32 {
   fn from(role: AFRole) -> Self {
-    // Can't modify the value of the enum
-    match role {
-      AFRole::Owner => 1,
-      AFRole::Member => 2,
-      AFRole::Guest => 3,
-    }
+    role as i32
+  }
+}
+
+impl From<&AFRole> for i32 {
+  fn from(role: &AFRole) -> Self {
+    role.clone() as i32
   }
 }
 
@@ -404,12 +398,26 @@ impl From<i32> for AFAccessLevel {
   }
 }
 
+impl From<&str> for AFAccessLevel {
+  fn from(value: &str) -> Self {
+    match i32::from_str(value) {
+      Ok(value) => AFAccessLevel::from(value),
+      Err(_) => AFAccessLevel::ReadOnly,
+    }
+  }
+}
+
 impl From<AFAccessLevel> for i32 {
   fn from(level: AFAccessLevel) -> Self {
     level as i32
   }
 }
 
+impl From<&AFAccessLevel> for i32 {
+  fn from(level: &AFAccessLevel) -> Self {
+    *level as i32
+  }
+}
 #[derive(Serialize, Deserialize)]
 pub struct AFCollabMembers(pub Vec<AFCollabMember>);
 

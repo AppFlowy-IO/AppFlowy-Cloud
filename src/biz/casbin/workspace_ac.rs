@@ -1,81 +1,59 @@
 use crate::biz::casbin::access_control::AccessControl;
-use crate::biz::casbin::access_control::{
-  ActionType, ObjectType, POLICY_FIELD_INDEX_ACTION, POLICY_FIELD_INDEX_OBJECT,
-  POLICY_FIELD_INDEX_USER,
-};
+use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
-use casbin::MgmtApi;
+
 use database_entity::dto::AFRole;
 use sqlx::{Executor, Postgres};
-use std::ops::Deref;
-use std::str::FromStr;
+
 use tracing::instrument;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct WorkspaceAccessControlImpl(AccessControl);
+pub struct WorkspaceAccessControlImpl {
+  access_control: AccessControl,
+}
 
 impl WorkspaceAccessControlImpl {
   pub fn new(access_control: AccessControl) -> Self {
-    Self(access_control)
-  }
-}
-
-impl Deref for WorkspaceAccessControlImpl {
-  type Target = AccessControl;
-  fn deref(&self) -> &Self::Target {
-    &self.0
+    Self { access_control }
   }
 }
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn get_role_from_uid<'a, E>(
+  async fn get_workspace_role<'a, E>(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
-    executor: E,
+    _executor: E,
   ) -> Result<AFRole, AppError>
   where
     E: Executor<'a, Database = Postgres>,
   {
-    let policies = self.0.enforcer.read().await.get_filtered_policy(
-      POLICY_FIELD_INDEX_OBJECT,
-      vec![ObjectType::Workspace(&workspace_id.to_string()).to_string()],
-    );
-
-    let role = match policies
-      .into_iter()
-      .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-    {
-      Some(policy) => i32::from_str(policy[POLICY_FIELD_INDEX_ACTION].as_str())
-        .ok()
-        .map(AFRole::from),
-      None => database::workspace::select_workspace_member(executor, uid, workspace_id)
-        .await
-        .map(|r| r.role)
-        .ok(),
-    };
-
-    role.ok_or_else(|| {
-      AppError::NotEnoughPermissions(format!(
-        "user:{} is not a member of workspace:{}",
-        uid, workspace_id
-      ))
-    })
+    let workspace_id = workspace_id.to_string();
+    self
+      .access_control
+      .get_role(uid, &workspace_id)
+      .await
+      .ok_or_else(|| {
+        AppError::RecordNotFound(format!(
+          "can't find the role for user:{} workspace:{}",
+          uid, workspace_id
+        ))
+      })
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn update_role(
+  async fn insert_workspace_role(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
     let _ = self
-      .0
+      .access_control
       .update(
         uid,
         &ObjectType::Workspace(&workspace_id.to_string()),
@@ -85,9 +63,10 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     Ok(())
   }
 
+  #[instrument(level = "info", skip_all)]
   async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
     let _ = self
-      .0
+      .access_control
       .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
       .await?;
     Ok(())

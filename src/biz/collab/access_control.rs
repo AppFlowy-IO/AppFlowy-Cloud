@@ -88,7 +88,7 @@ where
       let member = database::collab::select_collab_member(uid, oid, executor).await?;
       self
         .collab_access_control
-        .cache_collab_access_level(uid, oid, member.permission.access_level)
+        .insert_collab_access_level(uid, oid, member.permission.access_level)
         .await?;
 
       Ok(member.permission.access_level)
@@ -105,7 +105,7 @@ where
   ) -> Result<(), AppError> {
     self
       .collab_access_control
-      .cache_collab_access_level(uid, oid, level)
+      .insert_collab_access_level(uid, oid, level)
       .await
   }
 
@@ -117,7 +117,7 @@ where
   ) -> Result<AFRole, AppError> {
     self
       .workspace_access_control
-      .get_role_from_uid(uid, &workspace_id.parse()?, executor)
+      .get_workspace_role(uid, &workspace_id.parse()?, executor)
       .await
   }
 }

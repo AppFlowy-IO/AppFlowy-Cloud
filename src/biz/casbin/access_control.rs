@@ -1,18 +1,15 @@
 use crate::biz::casbin::collab_ac::CollabAccessControlImpl;
+use crate::biz::casbin::enforcer::AFEnforcer;
 use crate::biz::casbin::pg_listen::*;
 use crate::biz::casbin::workspace_ac::WorkspaceAccessControlImpl;
-use crate::biz::{
-  collab::member_listener::CollabMemberNotification,
-  workspace::member_listener::WorkspaceMemberNotification,
-};
-use anyhow::anyhow;
+
 use app_error::AppError;
-use casbin::{CoreApi, Enforcer, MgmtApi};
+use casbin::Enforcer;
 use database_entity::dto::{AFAccessLevel, AFRole};
+
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{event, instrument};
 
 /// Manages access control.
 ///
@@ -28,7 +25,7 @@ use tracing::{event, instrument};
 /// according to the model defined.
 #[derive(Clone)]
 pub struct AccessControl {
-  pub(crate) enforcer: Arc<RwLock<Enforcer>>,
+  enforcer: Arc<RwLock<AFEnforcer>>,
 }
 
 impl AccessControl {
@@ -38,7 +35,7 @@ impl AccessControl {
     workspace_listener: broadcast::Receiver<WorkspaceMemberNotification>,
     enforcer: Enforcer,
   ) -> Self {
-    let enforcer = Arc::new(RwLock::new(enforcer));
+    let enforcer = Arc::new(RwLock::new(AFEnforcer::new(enforcer)));
     spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
     spawn_listen_on_collab_member_change(pg_pool, collab_listener, enforcer.clone());
     Self { enforcer }
@@ -51,15 +48,8 @@ impl AccessControl {
     WorkspaceAccessControlImpl::new(self.clone())
   }
 
-  /// Only expose this method for testing
-  #[cfg(debug_assertions)]
-  pub fn get_enforcer(&self) -> &Arc<RwLock<casbin::Enforcer>> {
-    &self.enforcer
-  }
-
   pub async fn contains(&self, obj: &ObjectType<'_>) -> bool {
-    let enforcer = self.enforcer.read().await;
-    enforcer.get_all_objects().contains(&obj.to_string())
+    self.enforcer.read().await.contains(obj).await
   }
 
   pub async fn update(
@@ -68,24 +58,43 @@ impl AccessControl {
     obj: &ObjectType<'_>,
     act: &ActionType,
   ) -> Result<bool, AppError> {
-    enforcer_update(&self.enforcer, uid, obj, act).await
+    let mut write_guard = self.enforcer.write().await;
+    write_guard.update(uid, obj, act).await
   }
 
-  pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<bool, AppError> {
-    let mut enforcer = self.enforcer.write().await;
-    enforcer_remove(&mut enforcer, uid, obj).await
+  pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
+    let mut write_guard = self.enforcer.write().await;
+    write_guard.remove(uid, obj).await?;
+    Ok(())
   }
 
-  pub async fn enforce(
-    &self,
-    uid: &i64,
-    obj: &ObjectType<'_>,
-    act: &Action,
-  ) -> Result<bool, AppError> {
-    let enforcer = self.enforcer.read().await;
-    enforcer
-      .enforce((uid.to_string(), obj.to_string(), act.to_string()))
-      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
+  pub async fn enforce<A>(&self, uid: &i64, obj: &ObjectType<'_>, act: A) -> Result<bool, AppError>
+  where
+    A: ToCasbinAction,
+  {
+    self.enforcer.read().await.enforce(uid, obj, act).await
+  }
+
+  pub async fn get_access_level(&self, uid: &i64, oid: &str) -> Option<AFAccessLevel> {
+    let collab_id = ObjectType::Collab(oid);
+    self
+      .enforcer
+      .read()
+      .await
+      .get_action(uid, &collab_id)
+      .await
+      .map(|value| AFAccessLevel::from_action(&value))
+  }
+
+  pub async fn get_role(&self, uid: &i64, workspace_id: &str) -> Option<AFRole> {
+    let workspace_id = ObjectType::Workspace(workspace_id);
+    self
+      .enforcer
+      .read()
+      .await
+      .get_action(uid, &workspace_id)
+      .await
+      .map(|value| AFRole::from_action(&value))
   }
 }
 
@@ -97,8 +106,8 @@ r = sub, obj, act
 p = sub, obj, act
 
 [role_definition]
-g = _, _ # role to action
-g2 = _, _ # worksheet to collab
+g = _, _ # rule for action
+g2 = _, _ # rule for collab object id
 
 [policy_effect]
 e = some(where (p.eft == allow))
@@ -111,6 +120,7 @@ m = r.sub == p.sub && g2(p.obj, r.obj) && g(p.act, r.act)
 /// `user_id, object_id, role/action`
 ///
 /// E.g. user1, collab::123, Owner
+///
 pub const POLICY_FIELD_INDEX_USER: usize = 0;
 pub const POLICY_FIELD_INDEX_OBJECT: usize = 1;
 pub const POLICY_FIELD_INDEX_ACTION: usize = 2;
@@ -133,8 +143,8 @@ pub enum ObjectType<'id> {
   Collab(&'id str),
 }
 
-impl ToString for ObjectType<'_> {
-  fn to_string(&self) -> String {
+impl ObjectType<'_> {
+  pub fn to_object_id(&self) -> String {
     match self {
       ObjectType::Collab(s) => format!("collab::{}", s),
       ObjectType::Workspace(s) => format!("workspace::{}", s),
@@ -149,6 +159,15 @@ pub enum ActionType {
   Level(AFAccessLevel),
 }
 
+impl ToCasbinAction for ActionType {
+  fn to_action(&self) -> String {
+    match self {
+      ActionType::Role(role) => role.to_action(),
+      ActionType::Level(level) => level.to_action(),
+    }
+  }
+}
+
 /// Represents the actions that can be performed on objects.
 #[derive(Debug)]
 pub enum Action {
@@ -157,8 +176,8 @@ pub enum Action {
   Delete,
 }
 
-impl ToString for Action {
-  fn to_string(&self) -> String {
+impl ToCasbinAction for Action {
+  fn to_action(&self) -> String {
     match self {
       Action::Read => "read".to_owned(),
       Action::Write => "write".to_owned(),
@@ -167,74 +186,32 @@ impl ToString for Action {
   }
 }
 
-/// Update permission for a user.
-///
-/// [`ObjectType::Workspace`] has to be paired with [`ActionType::Role`],
-/// [`ObjectType::Collab`] has to be paired with [`ActionType::Level`],
-#[inline]
-#[instrument(level = "trace", skip(enforcer, obj, act), err)]
-pub(crate) async fn enforcer_update(
-  enforcer: &Arc<RwLock<casbin::Enforcer>>,
-  uid: &i64,
-  obj: &ObjectType<'_>,
-  act: &ActionType,
-) -> Result<bool, AppError> {
-  let (obj_id, action) = match (obj, act) {
-    (ObjectType::Workspace(_), ActionType::Role(role)) => {
-      Ok((obj.to_string(), i32::from(role.clone()).to_string()))
-    },
-    (ObjectType::Collab(_), ActionType::Level(level)) => {
-      Ok((obj.to_string(), i32::from(*level).to_string()))
-    },
-    _ => Err(AppError::Internal(anyhow!(
-      "invalid object type and action type combination: object={:?}, action={:?}",
-      obj,
-      act
-    ))),
-  }?;
-
-  let mut enforcer = enforcer.write().await;
-  enforcer_remove(&mut enforcer, uid, obj).await?;
-  event!(
-    tracing::Level::INFO,
-    "updating policy: object={}, user={},action={}",
-    obj_id,
-    uid,
-    action
-  );
-  enforcer
-    .add_policy(vec![uid.to_string(), obj_id, action])
-    .await
-    .map_err(|e| AppError::Internal(anyhow!("casbin error adding policy: {e:?}")))
+pub trait ToCasbinAction {
+  fn to_action(&self) -> String;
+}
+pub trait FromCasbinAction {
+  fn from_action(action: &str) -> Self;
 }
 
-#[inline]
-#[instrument(level = "trace", skip(enforcer, uid, obj), err)]
-pub(crate) async fn enforcer_remove(
-  enforcer: &mut Enforcer,
-  uid: &i64,
-  obj: &ObjectType<'_>,
-) -> Result<bool, AppError> {
-  let obj_id = obj.to_string();
-  let policies = enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj_id]);
-  let rem = policies
-    .into_iter()
-    .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-    .collect::<Vec<_>>();
-
-  if rem.is_empty() {
-    return Ok(false);
+impl ToCasbinAction for AFAccessLevel {
+  fn to_action(&self) -> String {
+    i32::from(self).to_string()
   }
+}
 
-  event!(
-    tracing::Level::INFO,
-    "removing policy: object={}, user={}, policies={:?}",
-    obj.to_string(),
-    uid,
-    rem
-  );
-  enforcer
-    .remove_policies(rem)
-    .await
-    .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))
+impl FromCasbinAction for AFAccessLevel {
+  fn from_action(action: &str) -> Self {
+    Self::from(action)
+  }
+}
+
+impl ToCasbinAction for AFRole {
+  fn to_action(&self) -> String {
+    i32::from(self).to_string()
+  }
+}
+impl FromCasbinAction for AFRole {
+  fn from_action(action: &str) -> Self {
+    Self::from(action)
+  }
 }

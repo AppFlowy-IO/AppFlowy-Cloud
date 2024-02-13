@@ -1,15 +1,12 @@
 use crate::biz::casbin::access_control::{AccessControl, Action};
-use crate::biz::casbin::access_control::{
-  ActionType, ObjectType, POLICY_FIELD_INDEX_ACTION, POLICY_FIELD_INDEX_OBJECT,
-  POLICY_FIELD_INDEX_USER,
-};
+use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use actix_http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
-use casbin::MgmtApi;
+
 use database_entity::dto::AFAccessLevel;
 use realtime::collaborate::CollabAccessControl;
-use std::str::FromStr;
+
 use tracing::instrument;
 
 #[derive(Clone)]
@@ -43,30 +40,20 @@ impl CollabAccessControlImpl {
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    let collab_id = ObjectType::Collab(oid).to_string();
-    let policies = self
+    self
       .access_control
-      .enforcer
-      .read()
+      .get_access_level(uid, oid)
       .await
-      .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![collab_id]);
-
-    // There should only be one entry per user per object, which is enforced in [AccessControl], so just take one using next.
-    let access_level = policies
-      .into_iter()
-      .find(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-      .map(|p| p[POLICY_FIELD_INDEX_ACTION].clone())
-      .and_then(|s| i32::from_str(s.as_str()).ok())
-      .map(AFAccessLevel::from);
-
-    access_level.ok_or(AppError::RecordNotFound(format!(
-      "user:{} is not a member of collab:{}",
-      uid, oid
-    )))
+      .ok_or_else(|| {
+        AppError::RecordNotFound(format!(
+          "can't find the access level for user:{} of {} in cache",
+          uid, oid
+        ))
+      })
   }
 
   #[instrument(level = "trace", skip_all)]
-  async fn cache_collab_access_level(
+  async fn insert_collab_access_level(
     &self,
     uid: &i64,
     oid: &str,
@@ -101,21 +88,21 @@ impl CollabAccessControl for CollabAccessControlImpl {
 
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), &action)
+      .enforce(uid, &ObjectType::Collab(oid), action)
       .await
   }
 
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), &Action::Write)
+      .enforce(uid, &ObjectType::Collab(oid), Action::Write)
       .await
   }
 
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), &Action::Read)
+      .enforce(uid, &ObjectType::Collab(oid), Action::Read)
       .await
   }
 }

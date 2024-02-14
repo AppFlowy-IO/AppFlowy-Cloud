@@ -14,6 +14,7 @@ pub struct Config {
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
   pub casbin: CasbinSetting,
+  pub pyroscope_url: String,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -132,6 +133,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     casbin: CasbinSetting {
       pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
     },
+    pyroscope_url: get_env_var("APPFLOWY_PYROSCOPE_URL", "http://localhost:4040"),
   };
   Ok(config)
 }

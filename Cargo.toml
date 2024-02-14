@@ -85,6 +85,9 @@ shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 realtime-entity.workspace = true
 
+# Pyroscope for profiling
+pyroscope = "0.5.7"
+pyroscope_pprofrs = "0.2.7"
 
 # profiling
 #puffin = "0.16.0"

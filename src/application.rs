@@ -60,7 +60,9 @@ impl Application {
   }
 
   pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
-    self.server.await
+    let stopped = self.server.await;
+    tracing::error!("AppFlowy Cloud Shutdown: {:?}", stopped);
+    Ok(())
   }
 
   pub fn port(&self) -> u16 {

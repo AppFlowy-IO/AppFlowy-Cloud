@@ -1,4 +1,5 @@
 use crate::api::metrics::{metrics_scope, AppFlowyCloudMetrics};
+use crate::api::pprof::pprof_scope;
 use crate::biz::casbin::adapter::PgAdapter;
 use crate::biz::casbin::MODEL_CONF;
 use crate::component::auth::HEADER_TOKEN;
@@ -136,6 +137,7 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
+      .service(pprof_scope())
       .app_data(Data::new(af_cloud_metric_arc.clone()))
       .app_data(Data::new(af_realtime_metric_arc.clone()))
       .app_data(Data::new(registry_arc.clone()))

@@ -25,11 +25,20 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
     .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
+    .service(web::resource("/test").route(web::get().to(mem_pprof_handler)))
 
     // deprecated
     .service(web::resource("/login").route(web::post().to(login_handler)))
     .service(web::resource("/register").route(web::post().to(register_handler)))
     .service(web::resource("/password").route(web::post().to(change_password_handler)))
+}
+
+async fn mem_pprof_handler() -> Vec<u8> {
+  let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
+  if !prof_ctl.activated() {
+    panic!("heap profiling not activated");
+  }
+  prof_ctl.dump_pprof().unwrap()
 }
 
 #[tracing::instrument(skip(state, path), err)]

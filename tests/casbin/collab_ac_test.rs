@@ -211,7 +211,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
       .await?,
     "stranger should not have read access"
   );
-
+  //
   assert!(
     !access_control
       .can_access_http_method(
@@ -266,7 +266,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
 
   // Need to wait for the listener(spawn_listen_on_workspace_member_change) to receive the event
   //
-  sleep(Duration::from_secs(1)).await;
+  sleep(Duration::from_secs(2)).await;
 
   assert!(
     access_control

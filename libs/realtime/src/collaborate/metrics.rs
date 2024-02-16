@@ -46,7 +46,7 @@ impl RealtimeMetrics {
   }
 
   pub fn record_mem_cache_usage(&self, usage: usize) {
-    trace!("[metrics]: mem_cache_usage: {}KB", usage / 1024);
+    trace!("[metrics]: mem_cache_usage: {} KB", usage / 1024);
     self.mem_cache_usage.set(usage as i64);
   }
 

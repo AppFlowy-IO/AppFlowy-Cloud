@@ -225,21 +225,6 @@ pub async fn assert_workspace_role_error(
     .await
     .expect("Operation timed out");
 }
-/// Asserts whether the user has access to a specific HTTP method on a given object.
-///
-/// This function continuously checks if the user is allowed to access a particular HTTP method
-/// on an object and asserts that the result matches the expected outcome. It retries the check
-/// a fixed number of times before timing out.
-///
-/// # Arguments
-/// * `access_control` - A reference to the `CasbinCollabAccessControl` instance.
-/// * `uid` - The user ID for which to check the access.
-/// * `object_id` - The ID of the object being accessed.
-/// * `method` - The HTTP method (`Method`) to check.
-/// * `expected` - The expected boolean result of the access check.
-///
-/// # Panics
-/// Panics if the expected access result is not achieved before the timeout.
 
 pub async fn assert_can_access_http_method(
   access_control: &CollabAccessControlImpl,
@@ -248,36 +233,37 @@ pub async fn assert_can_access_http_method(
   method: Method,
   expected: bool,
 ) {
-  let mut retry_count = 0;
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(10)) => {
-         panic!("can't get the expected access level before timeout");
-       },
-       result = access_control
-         .can_access_http_method(
-           uid,
-           object_id,
-           &method,
-         )
-       => {
-        retry_count += 1;
-        match result {
-          Ok(access) => {
-            if retry_count > 10 {
-              assert_eq!(access, expected);
-              break;
-            }
-            if access == expected {
-              break;
-            }
-            tokio::time::sleep(Duration::from_millis(300)).await;
-          },
-          Err(_err) => {
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+  let timeout_duration = Duration::from_secs(10);
+  let retry_interval = Duration::from_millis(300);
+  let mut retries = 0usize;
+  let max_retries = 10;
+
+  let operation = async {
+    let mut interval = interval(retry_interval);
+    loop {
+      interval.tick().await; // Wait for the next interval tick before retrying
+      match access_control
+        .can_access_http_method(uid, object_id, &method)
+        .await
+      {
+        Ok(access) => {
+          if access == expected {
+            break;
           }
-        }
-       },
+        },
+        Err(_) => {
+          retries += 1;
+          if retries > max_retries {
+            // If retries exceed the maximum, return an error
+            panic!("Exceeded maximum number of retries without encountering the expected error");
+          }
+          // On any other error, continue retrying
+        },
+      }
     }
-  }
+  };
+
+  timeout(timeout_duration, operation)
+    .await
+    .expect("Operation timed out");
 }

@@ -45,9 +45,10 @@ impl RealtimeMetrics {
     self.connected_users.set(num as i64);
   }
 
-  pub fn record_mem_cache_usage(&self, usage: usize) {
-    trace!("[metrics]: mem_cache_usage: {}KB", usage / 1024);
-    self.mem_cache_usage.set(usage as i64);
+  pub fn record_mem_cache_usage(&self, size_in_bytes: usize) {
+    let size_in_mb = size_in_bytes / (1024 * 1024);
+    trace!("[metrics]: mem_cache_usage: {} MB", size_in_mb);
+    self.mem_cache_usage.set(size_in_mb as i64);
   }
 
   pub fn record_opening_collab_count(&self, count: usize) {

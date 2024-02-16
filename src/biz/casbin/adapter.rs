@@ -1,4 +1,4 @@
-use super::{Action, ObjectType};
+use crate::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction};
 use async_trait::async_trait;
 use casbin::error::AdapterError;
 use casbin::Adapter;
@@ -35,8 +35,8 @@ async fn create_collab_policies(
     let member_access_lv = result.map_err(|err| AdapterError(Box::new(err)))?;
     let policy = [
       member_access_lv.uid.to_string(),
-      ObjectType::Collab(&member_access_lv.oid).to_string(),
-      i32::from(member_access_lv.access_level).to_string(),
+      ObjectType::Collab(&member_access_lv.oid).to_object_id(),
+      member_access_lv.access_level.to_action(),
     ]
     .to_vec();
     policies.push(policy);
@@ -54,8 +54,8 @@ async fn create_workspace_policies(
     let member_permission = result.map_err(|err| AdapterError(Box::new(err)))?;
     let policy = [
       member_permission.uid.to_string(),
-      ObjectType::Workspace(&member_permission.workspace_id.to_string()).to_string(),
-      i32::from(member_permission.role).to_string(),
+      ObjectType::Workspace(&member_permission.workspace_id.to_string()).to_object_id(),
+      member_permission.role.to_action(),
     ]
     .to_vec();
     policies.push(policy);
@@ -79,7 +79,7 @@ impl Adapter for PgAdapter {
     // Policy definition `p` of type `p`. See `model.conf`
     model.add_policies("p", "p", collab_policies);
 
-    // Grouping definition of role to action.
+    // Grouping definition of access level to action.
     let af_access_levels = [
       AFAccessLevel::ReadOnly,
       AFAccessLevel::ReadAndComment,
@@ -89,12 +89,12 @@ impl Adapter for PgAdapter {
     let mut grouping_policies = Vec::new();
     for level in af_access_levels {
       // All levels can read
-      grouping_policies.push([i32::from(level).to_string(), Action::Read.to_string()].to_vec());
+      grouping_policies.push([i32::from(level).to_string(), Action::Read.to_action()].to_vec());
       if level.can_write() {
-        grouping_policies.push([i32::from(level).to_string(), Action::Write.to_string()].to_vec());
+        grouping_policies.push([i32::from(level).to_string(), Action::Write.to_action()].to_vec());
       }
       if level.can_delete() {
-        grouping_policies.push([i32::from(level).to_string(), Action::Delete.to_string()].to_vec());
+        grouping_policies.push([i32::from(level).to_string(), Action::Delete.to_action()].to_vec());
       }
     }
 

@@ -1,12 +1,11 @@
-use crate::biz::casbin::access_control::{
-  CasbinAccessControl, CasbinCollabAccessControl, CasbinWorkspaceAccessControl,
-};
+use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::biz::pg_listener::PgListeners;
 
 use crate::config::config::Config;
 use app_error::AppError;
 
+use crate::biz::casbin::access_control::AccessControl;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use database::user::select_uid_from_uuid;
 use snowflake::Snowflake;
@@ -27,11 +26,11 @@ pub struct AppState {
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: RedisClient,
   pub collab_storage: Arc<CollabPostgresDBStorage>,
-  pub collab_access_control: CasbinCollabAccessControl,
-  pub workspace_access_control: CasbinWorkspaceAccessControl,
+  pub collab_access_control: CollabAccessControlImpl,
+  pub workspace_access_control: WorkspaceAccessControlImpl,
   pub bucket_storage: Arc<S3BucketStorage>,
   pub pg_listeners: Arc<PgListeners>,
-  pub casbin_access_control: CasbinAccessControl,
+  pub access_control: AccessControl,
 }
 
 impl AppState {

@@ -56,7 +56,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
     // It's essential to cache the user's role because subsequent actions will rely on this cached information.
     state
       .workspace_access_control
-      .cache_role(
+      .insert_workspace_role(
         &new_uid,
         &Uuid::parse_str(&workspace_id).unwrap(),
         AFRole::Owner,

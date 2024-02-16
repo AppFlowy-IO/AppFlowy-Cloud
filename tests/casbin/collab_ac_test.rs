@@ -2,9 +2,10 @@ use crate::casbin::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
-use appflowy_cloud::biz::casbin::access_control::CasbinAccessControl;
+use appflowy_cloud::biz::casbin::access_control::{
+  AccessControl, ActionType, ObjectType, MODEL_CONF,
+};
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
-use appflowy_cloud::biz::casbin::{ActionType, ObjectType};
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::{AFAccessLevel, AFRole};
@@ -21,7 +22,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -131,7 +132,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -210,7 +211,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
       .await?,
     "stranger should not have read access"
   );
-
+  //
   assert!(
     !access_control
       .can_access_http_method(
@@ -232,7 +233,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -265,7 +266,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
 
   // Need to wait for the listener(spawn_listen_on_workspace_member_change) to receive the event
   //
-  sleep(Duration::from_secs(1)).await;
+  sleep(Duration::from_secs(2)).await;
 
   assert!(
     access_control
@@ -317,7 +318,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -328,7 +329,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   let uid = 123;
   let oid = "collab::oid".to_owned();
   access_control
-    .cache_collab_access_level(&uid, &oid, AFAccessLevel::FullAccess)
+    .insert_collab_access_level(&uid, &oid, AFAccessLevel::FullAccess)
     .await?;
 
   assert_eq!(
@@ -337,7 +338,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
   );
 
   access_control
-    .cache_collab_access_level(&uid, &oid, AFAccessLevel::ReadOnly)
+    .insert_collab_access_level(&uid, &oid, AFAccessLevel::ReadOnly)
     .await?;
 
   assert_eq!(
@@ -355,7 +356,7 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
-  let access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
@@ -372,23 +373,23 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
       )
       .await?
   );
-  assert!(access_control.get_enforcer().read().await.enforce((
-    uid.to_string(),
-    ObjectType::Workspace("123").to_string(),
-    i32::from(AFRole::Owner).to_string(),
-  ))?);
 
   assert!(
     access_control
-      .remove(&uid, &ObjectType::Workspace("123"))
+      .enforce(&uid, &ObjectType::Workspace("123"), AFRole::Owner)
       .await?
   );
 
-  assert!(!access_control.get_enforcer().read().await.enforce((
-    uid.to_string(),
-    ObjectType::Workspace("123").to_string(),
-    i32::from(AFRole::Owner).to_string(),
-  ))?);
+  assert!(access_control
+    .remove(&uid, &ObjectType::Workspace("123"))
+    .await
+    .is_ok());
+
+  assert!(
+    !access_control
+      .enforce(&uid, &ObjectType::Workspace("123"), AFRole::Owner)
+      .await?
+  );
 
   Ok(())
 }

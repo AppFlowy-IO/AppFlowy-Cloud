@@ -1,4 +1,3 @@
-use crate::biz::casbin::access_control::CasbinCollabAccessControl;
 use crate::state::AppState;
 use actix::Addr;
 use actix_web::web::{Data, Path, Payload};
@@ -13,6 +12,7 @@ use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
+use crate::biz::casbin::CollabAccessControlImpl;
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::{info, instrument};
@@ -23,7 +23,7 @@ pub fn ws_scope() -> Scope {
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 pub type CollabServerImpl =
-  Addr<CollabServer<CollabPostgresDBStorage, Arc<RealtimeUserImpl>, CasbinCollabAccessControl>>;
+  Addr<CollabServer<CollabPostgresDBStorage, Arc<RealtimeUserImpl>, CollabAccessControlImpl>>;
 
 #[instrument(skip_all, err)]
 #[get("/{token}/{device_id}")]

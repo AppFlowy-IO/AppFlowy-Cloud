@@ -187,7 +187,7 @@ async fn add_workspace_members_handler(
   for (uid, role) in role_by_uid {
     state
       .workspace_access_control
-      .cache_role(&uid, &workspace_id, role)
+      .insert_workspace_role(&uid, &workspace_id, role)
       .await?;
   }
   Ok(AppResponse::Ok().into())
@@ -241,7 +241,7 @@ async fn remove_workspace_member_handler(
     {
       state
         .workspace_access_control
-        .remove_member(&uid, &workspace_id)
+        .remove_role(&uid, &workspace_id)
         .await?;
     }
   }
@@ -276,7 +276,7 @@ async fn update_workspace_member_handler(
       .map_err(AppResponseError::from)?;
     state
       .workspace_access_control
-      .cache_role(&uid, &workspace_id, role)
+      .insert_workspace_role(&uid, &workspace_id, role)
       .await?;
   }
 

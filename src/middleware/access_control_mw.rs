@@ -175,12 +175,13 @@ where
   forward_ready!(service);
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
-    match req.match_pattern().map(|pattern| {
+    let path = req.match_pattern().map(|pattern| {
       let resource_ref = ResourceDef::new(pattern);
       let mut path = req.match_info().clone();
       resource_ref.capture_match_info(&mut path);
       path
-    }) {
+    });
+    match path {
       None => {
         let fut = self.service.call(req);
         Box::pin(fut)

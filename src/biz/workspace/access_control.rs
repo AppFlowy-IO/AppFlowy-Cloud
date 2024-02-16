@@ -54,6 +54,7 @@ where
   }
 
   #[instrument(level = "trace", skip_all, err)]
+  #[allow(clippy::blocks_in_if_conditions)]
   async fn check_workspace_permission(
     &self,
     workspace_id: &Uuid,
@@ -61,33 +62,28 @@ where
     method: Method,
   ) -> Result<(), AppError> {
     trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
-    match self
+    let role = self
       .access_control
       .get_workspace_role(uid, workspace_id, &self.pg_pool)
       .await
-    {
-      Ok(role) => {
-        if method == Method::DELETE
-          || method == Method::POST
-          || method == Method::PUT
-          || method == Method::GET
-        {
-          if matches!(role, AFRole::Owner) {
-            Ok(())
-          } else {
-            Err(AppError::NotEnoughPermissions(format!(
-              "User:{:?} doesn't have the enough permission to access workspace:{}",
-              uid, workspace_id
-            )))
-          }
-        } else {
-          Ok(())
-        }
+      .map_err(|err| {
+        AppError::NotEnoughPermissions(format!(
+          "Can't find the role of the user:{:?} in the workspace:{:?}. error: {}",
+          uid, workspace_id, err
+        ))
+      })?;
+
+    match method {
+      Method::DELETE | Method::POST | Method::PUT => match role {
+        AFRole::Owner => return Ok(()),
+        _ => {
+          return Err(AppError::NotEnoughPermissions(format!(
+            "User:{:?} doesn't have the enough permission to access workspace:{}",
+            uid, workspace_id
+          )))
+        },
       },
-      Err(err) => Err(AppError::NotEnoughPermissions(format!(
-        "Can't find the role of the user:{:?} in the workspace:{:?}. error: {}",
-        uid, workspace_id, err
-      ))),
+      _ => Ok(()),
     }
   }
 

@@ -1,6 +1,5 @@
 use crate::api::metrics::{metrics_scope, AppFlowyCloudMetrics};
 use crate::biz::casbin::adapter::PgAdapter;
-use crate::biz::casbin::MODEL_CONF;
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::request_id::RequestIdMiddleware;
@@ -30,7 +29,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::casbin::access_control::CasbinAccessControl;
+use crate::biz::casbin::access_control::{AccessControl, MODEL_CONF};
 use crate::biz::collab::access_control::CollabHttpAccessControl;
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
@@ -192,15 +191,15 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF).await?;
   let access_control_adapter = PgAdapter::new(pg_pool.clone());
   let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter).await?;
-  let casbin_access_control = CasbinAccessControl::new(
+  let access_control = AccessControl::new(
     pg_pool.clone(),
     collab_member_listener,
     workspace_member_listener,
     enforcer,
   );
 
-  let collab_access_control = casbin_access_control.new_collab_access_control();
-  let workspace_access_control = casbin_access_control.new_workspace_access_control();
+  let collab_access_control = access_control.new_collab_access_control();
+  let workspace_access_control = access_control.new_workspace_access_control();
 
   let collab_storage = Arc::new(
     init_collab_storage(
@@ -226,7 +225,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     workspace_access_control,
     bucket_storage,
     pg_listeners,
-    casbin_access_control,
+    access_control,
   })
 }
 

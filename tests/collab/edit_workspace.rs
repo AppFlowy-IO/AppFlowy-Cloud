@@ -106,7 +106,6 @@ async fn edit_workspace_with_guest_permission() {
   client_2
     .wait_object_sync_complete_with_secs(&workspace_id, 5)
     .await;
-
   assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "zack"})).await;
   assert_client_collab_include_value(&mut client_2, &workspace_id, json!({"name": "nathan"})).await;
 

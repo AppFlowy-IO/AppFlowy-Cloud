@@ -1,8 +1,8 @@
 use crate::casbin::*;
 use anyhow::anyhow;
 use appflowy_cloud::biz;
+use appflowy_cloud::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction, MODEL_CONF};
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
-use appflowy_cloud::biz::casbin::{Action, ObjectType};
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::{AFAccessLevel, AFRole};
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
@@ -27,40 +27,40 @@ async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
   assert!(enforcer
     .enforce((
       user.uid.to_string(),
-      ObjectType::Workspace(&workspace.workspace_id.to_string()).to_string(),
-      i32::from(AFRole::Owner).to_string(),
+      ObjectType::Workspace(&workspace.workspace_id.to_string()).to_object_id(),
+      AFRole::Owner.to_action()
     ))
     .context("user should be owner of its workspace")?);
 
   assert!(enforcer
     .enforce((
       user.uid.to_string(),
-      ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-      i32::from(AFAccessLevel::FullAccess).to_string(),
+      ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+      AFAccessLevel::FullAccess.to_action(),
     ))
     .context("user should have full access of its collab")?);
 
   assert!(enforcer
     .enforce((
       user.uid.to_string(),
-      ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-      Action::Read.to_string(),
+      ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+      Action::Read.to_action(),
     ))
     .context("user should be able to read its collab")?);
 
   assert!(enforcer
     .enforce((
       user.uid.to_string(),
-      ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-      Action::Write.to_string(),
+      ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+      Action::Write.to_action(),
     ))
     .context("user should be able to write its collab")?);
 
   assert!(enforcer
     .enforce((
       user.uid.to_string(),
-      ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-      Action::Delete.to_string(),
+      ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+      Action::Delete.to_action(),
     ))
     .context("user should be able to delete its collab")?);
 
@@ -115,31 +115,31 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        i32::from(AFAccessLevel::FullAccess).to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        AFAccessLevel::FullAccess.to_action(),
       ))
       .context("owner should have full access of its collab")?);
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Read.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Read.to_action(),
       ))
       .context("user should be able to read its collab")?);
 
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Write.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Write.to_action(),
       ))
       .context("user should be able to write its collab")?);
 
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Delete.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Delete.to_action(),
       ))
       .context("user should be able to delete its collab")?);
   }
@@ -150,31 +150,31 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        i32::from(AFAccessLevel::ReadAndWrite).to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        AFAccessLevel::ReadAndWrite.to_action(),
       ))
       .context("member should have read write access of its collab")?);
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Read.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Read.to_action(),
       ))
       .context("user should be able to read its collab")?);
 
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Write.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Write.to_action(),
       ))
       .context("user should be able to write its collab")?);
 
     assert!(!enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Delete.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Delete.to_action(),
       ))
       .context("user should not be able to delete its collab")?);
   }
@@ -185,31 +185,31 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        i32::from(AFAccessLevel::ReadOnly).to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        AFAccessLevel::ReadOnly.to_action(),
       ))
       .context("guest should have read only access of its collab")?);
     assert!(enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Read.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Read.to_action(),
       ))
       .context("user should not be able to read its collab")?);
 
     assert!(!enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Write.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Write.to_action(),
       ))
       .context("user should not be able to write its collab")?);
 
     assert!(!enforcer
       .enforce((
         user.uid.to_string(),
-        ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-        Action::Delete.to_string(),
+        ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+        Action::Delete.to_action(),
       ))
       .context("user should not be able to delete its collab")?);
   }
@@ -251,8 +251,8 @@ async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyh
   assert!(!enforcer
     .enforce((
       user_member.uid.to_string(),
-      ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-      i32::from(AFAccessLevel::ReadAndWrite).to_string(),
+      ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+      AFAccessLevel::ReadAndWrite.to_action(),
     ))
     .context("member should not have read write access to collab before reload")?);
 
@@ -261,8 +261,8 @@ async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyh
   assert!(enforcer
     .enforce((
       user_member.uid.to_string(),
-      ObjectType::Collab(&workspace.workspace_id.to_string()).to_string(),
-      i32::from(AFAccessLevel::ReadAndWrite).to_string(),
+      ObjectType::Collab(&workspace.workspace_id.to_string()).to_object_id(),
+      AFAccessLevel::ReadAndWrite.to_action(),
     ))
     .context("member should have read write access to collab")?);
 

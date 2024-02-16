@@ -438,7 +438,7 @@ impl TestClient {
       ws_connect_state,
     );
 
-    collab.lock().add_plugin(Arc::new(sync_plugin));
+    collab.lock().add_plugin(Box::new(sync_plugin));
     collab.lock().initialize().await;
     let test_collab = TestCollab { origin, collab };
     self
@@ -499,7 +499,7 @@ impl TestClient {
       ws_connect_state,
     );
 
-    collab.lock().add_plugin(Arc::new(sync_plugin));
+    collab.lock().add_plugin(Box::new(sync_plugin));
     futures::executor::block_on(collab.lock().initialize());
     let test_collab = TestCollab { origin, collab };
     self

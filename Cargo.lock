@@ -520,10 +520,12 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-folder",
+ "dashmap",
  "database",
  "database-entity",
  "derive_more",
  "dotenvy",
+ "evmap",
  "fancy-regex",
  "futures",
  "futures-util",
@@ -1336,7 +1338,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2de6d172f56fed29ee6f32b82040cca4867647ac#2de6d172f56fed29ee6f32b82040cca4867647ac"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f#0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1358,7 +1360,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2de6d172f56fed29ee6f32b82040cca4867647ac#2de6d172f56fed29ee6f32b82040cca4867647ac"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f#0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f"
 dependencies = [
  "anyhow",
  "collab",
@@ -1377,7 +1379,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2de6d172f56fed29ee6f32b82040cca4867647ac#2de6d172f56fed29ee6f32b82040cca4867647ac"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f#0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1392,7 +1394,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=2de6d172f56fed29ee6f32b82040cca4867647ac#2de6d172f56fed29ee6f32b82040cca4867647ac"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f#0c4bcfaf033ef6bfe2ebb40c26b787bfd4cc095f"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2004,6 +2006,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
+name = "evmap"
+version = "10.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e3ea06a83f97d3dc2eb06e51e7a729b418f0717a5558a5c870e3d5156dc558d"
+dependencies = [
+ "hashbag",
+ "slab",
+ "smallvec",
+]
+
+[[package]]
 name = "fancy-regex"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2400,6 +2413,12 @@ dependencies = [
  "cfg-if",
  "crunchy",
 ]
+
+[[package]]
+name = "hashbag"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3d44c238cb72d3e8993a30c32e97b2b2c2c1a12388603f28c4f19a44c4396bc"
 
 [[package]]
 name = "hashbrown"

@@ -29,7 +29,7 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   /// Return the access level of the user in the collab
   async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
 
-  async fn cache_collab_access_level(
+  async fn insert_collab_access_level(
     &self,
     uid: &i64,
     oid: &str,
@@ -72,7 +72,7 @@ where
     self.as_ref().get_collab_access_level(uid, oid).await
   }
 
-  async fn cache_collab_access_level(
+  async fn insert_collab_access_level(
     &self,
     uid: &i64,
     oid: &str,
@@ -80,7 +80,7 @@ where
   ) -> Result<(), AppError> {
     self
       .as_ref()
-      .cache_collab_access_level(uid, oid, level)
+      .insert_collab_access_level(uid, oid, level)
       .await
   }
 

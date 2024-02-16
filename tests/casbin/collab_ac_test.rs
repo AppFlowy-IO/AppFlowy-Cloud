@@ -3,7 +3,7 @@ use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::access_control::{
-  AccessControl, Action, ActionType, ObjectType, MODEL_CONF,
+  AccessControl, ActionType, ObjectType, MODEL_CONF,
 };
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
 use appflowy_cloud::biz::pg_listener::PgListeners;

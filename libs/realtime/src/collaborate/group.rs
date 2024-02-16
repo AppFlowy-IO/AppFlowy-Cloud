@@ -272,8 +272,7 @@ where
   /// subscriber or has been modified within the last 10 minutes.
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at.lock().await;
-    let is_timeout = modified_at.elapsed().as_secs() > self.timeout_secs();
-    is_timeout && self.subscribers.read().await.is_empty()
+    modified_at.elapsed().as_secs() > self.timeout_secs()
   }
 
   /// Flush the [Collab] to the storage.
@@ -300,7 +299,6 @@ where
   fn timeout_secs(&self) -> u64 {
     2 * 60
   }
-
   #[cfg(not(debug_assertions))]
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {

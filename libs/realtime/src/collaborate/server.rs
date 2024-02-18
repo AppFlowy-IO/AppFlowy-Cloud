@@ -131,13 +131,12 @@ where
             None => {
               let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
               let runner = GroupCommandRunner {
-                control: groups.clone(),
+                group_control: groups.clone(),
                 client_stream_by_user: client_stream_by_user.clone(),
                 edit_collab_by_user: edit_collab_by_user.clone(),
                 access_control: access_control.clone(),
                 recv: Some(recv),
               };
-
               tokio::task::spawn_local(runner.run());
               group_sender_by_object_id
                 .insert(collab_message.object_id().to_string(), new_sender.clone());

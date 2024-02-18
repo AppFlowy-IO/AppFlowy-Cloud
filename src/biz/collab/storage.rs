@@ -17,13 +17,14 @@ use crate::state::RedisClient;
 use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
+use dashmap::DashMap;
 use sqlx::{PgPool, Transaction};
 use std::ops::DerefMut;
 use std::{
   collections::HashMap,
   sync::{Arc, Weak},
 };
-use tokio::sync::RwLock;
+
 use tracing::{event, instrument};
 use validator::Validate;
 
@@ -54,7 +55,7 @@ pub struct CollabStorageController<AC> {
   /// access control for collab object. Including read/write
   access_control: AC,
   /// cache opened collab by object_id. The collab will be removed from the cache when it's closed.
-  opened_collab_by_object_id: Arc<RwLock<HashMap<String, Weak<MutexCollab>>>>,
+  opened_collab_by_object_id: Arc<DashMap<String, Weak<MutexCollab>>>,
 }
 
 impl<AC> CollabStorageController<AC>
@@ -70,7 +71,7 @@ where
       disk_cache,
       mem_cache,
       access_control,
-      opened_collab_by_object_id: Arc::new(RwLock::new(HashMap::new())),
+      opened_collab_by_object_id: Arc::new(DashMap::new()),
     }
   }
 
@@ -146,18 +147,12 @@ where
     tracing::trace!("cache opened collab:{}", object_id);
     self
       .opened_collab_by_object_id
-      .write()
-      .await
       .insert(object_id.to_string(), collab);
   }
 
   async fn remove_collab_cache(&self, object_id: &str) {
     tracing::trace!("remove opened collab:{} cache", object_id);
-    self
-      .opened_collab_by_object_id
-      .write()
-      .await
-      .remove(object_id);
+    self.opened_collab_by_object_id.remove(object_id);
     self.mem_cache.remove_encoded_collab(object_id).await;
   }
 
@@ -222,10 +217,8 @@ where
     // Attempt to retrieve from the opened collab cache
     if let Some(collab_weak_ref) = self
       .opened_collab_by_object_id
-      .read()
-      .await
       .get(&params.object_id)
-      .and_then(|collab| collab.upgrade())
+      .and_then(|entry| entry.value().upgrade())
     {
       event!(
         tracing::Level::DEBUG,
@@ -280,12 +273,12 @@ where
           )),
         });
 
-    let read_guard = self.opened_collab_by_object_id.read().await;
     let (results_from_memory, queries): (HashMap<_, _>, Vec<_>) =
       valid_queries.into_iter().partition_map(|params| {
-        match read_guard
+        match self
+          .opened_collab_by_object_id
           .get(&params.object_id)
-          .and_then(|collab| collab.upgrade())
+          .and_then(|entry| entry.value().upgrade())
         {
           Some(collab) => match collab.encode_collab_v1().encode_to_bytes() {
             Ok(bytes) => Either::Left((

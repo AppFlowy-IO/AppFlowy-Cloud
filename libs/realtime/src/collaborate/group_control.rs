@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
-use tracing::{debug, error, event, instrument, trace};
+use tracing::{debug, error, event, instrument};
 
 pub struct CollabGroupControl<S, U, AC> {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,

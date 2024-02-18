@@ -159,6 +159,8 @@ redis = "0.24.0"
 moka = { version = "0.12.5", features = ["future"] }
 evmap = "10.0.2"
 dashmap = "5.5.3"
+futures = "0.3.30"
+async-stream = "0.3.5"
 
 [profile.release]
 lto = true

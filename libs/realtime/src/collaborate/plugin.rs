@@ -1,4 +1,3 @@
-use crate::collaborate::group::CollabGroup;
 use crate::entities::RealtimeUser;
 use crate::error::RealtimeError;
 use app_error::AppError;
@@ -24,6 +23,7 @@ use std::sync::{Arc, Weak};
 
 use tracing::{debug, error, event, info, instrument, trace};
 
+use crate::collaborate::group_control::CollabGroup;
 use yrs::updates::decoder::Decode;
 use yrs::{Transact, Update};
 

@@ -47,12 +47,10 @@ impl AFEnforcer {
       .await
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![object_type_id]);
 
-    let policies_for_user_on_object = policies_related_to_object
+    policies_related_to_object
       .into_iter()
       .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-      .collect::<Vec<_>>();
-
-    policies_for_user_on_object
+      .collect::<Vec<_>>()
   }
 
   /// Update permission for a user.

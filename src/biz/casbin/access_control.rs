@@ -189,10 +189,10 @@ impl From<Method> for Action {
 
 impl From<&Method> for Action {
   fn from(method: &Method) -> Self {
-    match method {
-      &Method::POST => Action::Write,
-      &Method::PUT => Action::Write,
-      &Method::DELETE => Action::Delete,
+    match *method {
+      Method::POST => Action::Write,
+      Method::PUT => Action::Write,
+      Method::DELETE => Action::Delete,
       _ => Action::Read,
     }
   }

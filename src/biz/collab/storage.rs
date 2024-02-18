@@ -177,7 +177,7 @@ where
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
-  #[allow(clippy::blocks_in_if_conditions)]
+  #[allow(clippy::blocks_in_conditions)]
   async fn upsert_collab_with_transaction(
     &self,
     workspace_id: &str,

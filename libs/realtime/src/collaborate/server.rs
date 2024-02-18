@@ -1,7 +1,7 @@
 use crate::client::ClientWSSink;
-use crate::collaborate::group::CollabGroupControl;
+use crate::collaborate::group::{GroupCommand, GroupCommandRunner, GroupControlCommandSender};
+use crate::collaborate::group_control::CollabGroupControl;
 use crate::collaborate::permission::CollabAccessControl;
-use crate::collaborate::retry::{CollabUserMessage, CreateGroupAction, SubscribeGroup};
 use crate::collaborate::RealtimeMetrics;
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
@@ -9,11 +9,11 @@ use crate::entities::{
 use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::future::BoxFuture;
-use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
+use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::SystemMessage;
 use std::collections::HashSet;
 use std::future::Future;
@@ -45,6 +45,7 @@ pub struct CollabServer<S, U, AC> {
   editing_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
+  group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
@@ -68,11 +69,14 @@ where
     ));
     let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
+    let group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>> =
+      Arc::new(Default::default());
 
     let weak_groups = Arc::downgrade(&groups);
     let cloned_metrics = metrics.clone();
     let cloned_client_stream_by_user = client_stream_by_user.clone();
     let cloned_storage = storage.clone();
+    let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
     tokio::spawn(async move {
       let mut interval = interval(Duration::from_secs(60));
       loop {
@@ -82,8 +86,10 @@ where
           cloned_metrics.record_connected_users(cloned_client_stream_by_user.len());
           cloned_metrics.record_mem_cache_usage(cloned_storage.mem_usage());
 
-          // Perform groups tick operation
-          groups.tick().await;
+          let inactive_group_ids = groups.tick().await;
+          for id in inactive_group_ids {
+            cloned_group_sender_by_object_id.remove(&id);
+          }
         } else {
           break;
         }
@@ -97,19 +103,15 @@ where
       session_id_by_user: Default::default(),
       editing_collab_by_user,
       client_stream_by_user,
+      group_sender_by_object_id,
       access_control,
       metrics,
     })
   }
 
-  /// When processing a message from a client, the server performs the following actions:
-  /// 1. Check if the client is connected to the websocket server.
-  /// 2. Handle message sent by the client if the message is [CollabMessage]
-  ///   2.1 If the message is init sync and the group exists, remove the old subscriber and subscribe the user to the group.
-  ///   2.2 If the message is init sync and the group is not exist, create a new group.
-  ///   2.3 If the message is not init sync, send the message to the group and then broadcast the message to all connected clients.
   fn process_realtime_message(
     user: U,
+    group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
     client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
     groups: Arc<CollabGroupControl<S, U, AC>>,
     edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
@@ -120,80 +122,39 @@ where
       trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
       match realtime_msg {
         RealtimeMessage::Collab(collab_message) => {
-          // 1.Check the client is connected with the websocket server
-          if client_stream_by_user.get(&user).is_none() {
-            let msg = anyhow!(
-                  "The client stream: {} is not found, it should be created when the client is connected with this websocket server",
-                  user
-                );
-            return Err(RealtimeError::Internal(msg));
+          let old_sender = group_sender_by_object_id
+            .get(collab_message.object_id())
+            .map(|entry| entry.value().clone());
+
+          let sender = match old_sender {
+            Some(sender) => sender,
+            None => {
+              let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+              let runner = GroupCommandRunner {
+                control: groups.clone(),
+                client_stream_by_user: client_stream_by_user.clone(),
+                edit_collab_by_user: edit_collab_by_user.clone(),
+                access_control: access_control.clone(),
+                recv: Some(recv),
+              };
+
+              tokio::task::spawn_local(runner.run());
+              group_sender_by_object_id
+                .insert(collab_message.object_id().to_string(), new_sender.clone());
+              new_sender
+            },
+          };
+
+          if let Err(err) = sender
+            .send(GroupCommand::HandleCollabMessage {
+              user,
+              collab_message,
+            })
+            .await
+          {
+            error!("Send message to group error: {}", err);
           }
-
-          if groups.contains_group(collab_message.object_id()).await {
-            // 2.1 If a group exists for the specified object_id and the message is an 'init sync',
-            // then remove any existing subscriber from that group and add the new user as a subscriber to the group.
-            if collab_message.is_init_msg() {
-              groups
-                .remove_user(collab_message.object_id(), &user)
-                .await?;
-            }
-
-            // 2.1.1 subscribe the user to the group. then the user will receive the changes from the
-            // group
-            if !groups
-              .contains_user(collab_message.object_id(), &user)
-              .await
-            {
-              SubscribeGroup {
-                message: &CollabUserMessage {
-                  user: &user,
-                  collab_message: &collab_message,
-                },
-                groups: &groups,
-                edit_collab_by_user: &edit_collab_by_user,
-                client_stream_by_user: &client_stream_by_user,
-                access_control: &access_control,
-              }
-              .run()
-              .await?;
-            }
-            // 2.3 If the message is not init sync, send the message to the group and then broadcast
-            // the message to all connected clients.
-            broadcast_message(&user, collab_message, &client_stream_by_user).await;
-            Ok(())
-          } else {
-            // 2.2 If there is no existing group for the given object_id and the message is an 'init message',
-            // then create a new group and add the user as a subscriber to this group.
-            if collab_message.is_init_msg() {
-              // 2.2.1 create group
-              CreateGroupAction {
-                collab_message: &collab_message,
-                groups: &groups,
-                client_stream_by_user: &client_stream_by_user,
-              }
-              .run()
-              .await?;
-
-              // 2.2.2 subscribe the user to the group
-              SubscribeGroup {
-                message: &CollabUserMessage {
-                  user: &user,
-                  collab_message: &collab_message,
-                },
-                groups: &groups,
-                edit_collab_by_user: &edit_collab_by_user,
-                client_stream_by_user: &client_stream_by_user,
-                access_control: &access_control,
-              }
-              .run()
-              .await?;
-
-              Ok(())
-            } else {
-              // TODO(nathan): ask the client to send the init message first
-              Ok(())
-            }
-          }
+          Ok(())
         },
         _ => {
           warn!("Receive unsupported message: {}", realtime_msg);
@@ -325,12 +286,14 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
+    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
     let edit_collab_by_user = self.editing_collab_by_user.clone();
     let access_control = self.access_control.clone();
     Self::process_realtime_message(
       user,
+      group_sender_by_object_id,
       client_stream_by_user,
       groups,
       edit_collab_by_user,
@@ -354,6 +317,7 @@ where
       mut device_id,
       mut stream,
     } = client_msg;
+    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
@@ -379,6 +343,7 @@ where
           Some(entry) => {
             Self::process_realtime_message(
               entry.value().clone(),
+              group_sender_by_object_id,
               client_stream_by_user,
               groups,
               edit_collab_by_user,
@@ -396,7 +361,7 @@ where
 }
 
 #[inline]
-async fn broadcast_message<U>(
+pub async fn broadcast_message<U>(
   user: &U,
   collab_message: CollabMessage,
   client_streams: &Arc<DashMap<U, CollabClientStream>>,

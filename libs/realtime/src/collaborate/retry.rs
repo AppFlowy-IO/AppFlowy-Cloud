@@ -22,7 +22,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, Retry, RetryIf};
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::collaborate::group::CollabGroupControl;
+use crate::collaborate::group_control::CollabGroupControl;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;

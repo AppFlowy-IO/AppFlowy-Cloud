@@ -1,5 +1,10 @@
+use anyhow::{anyhow, Error};
 use collab::core::awareness;
+use std::future::Future;
+use std::iter::Take;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
@@ -13,11 +18,12 @@ use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
 use tokio::time::Instant;
+use tokio_retry::strategy::FixedInterval;
+use tokio_retry::{Action, Retry};
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
-use crate::collaborate::retry::SinkCollabMessageAction;
 use crate::error::RealtimeError;
 use realtime_entity::collab_msg::{CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage};
 use tracing::{error, trace, warn};
@@ -348,4 +354,43 @@ fn gen_awareness_update_message(
   changed.extend_from_slice(removed);
   let update = awareness.update_with_clients(changed)?;
   Ok(update)
+}
+
+pub struct SinkCollabMessageAction<'a, Sink> {
+  pub sink: &'a Arc<tokio::sync::Mutex<Sink>>,
+  pub message: CollabMessage,
+}
+
+impl<'a, Sink> SinkCollabMessageAction<'a, Sink>
+where
+  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'a,
+{
+  pub fn run(self) -> Retry<Take<FixedInterval>, SinkCollabMessageAction<'a, Sink>> {
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
+    Retry::spawn(retry_strategy, self)
+  }
+}
+
+impl<'a, Sink> Action for SinkCollabMessageAction<'a, Sink>
+where
+  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'a,
+{
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync + 'a>>;
+  type Item = ();
+  type Error = RealtimeError;
+
+  fn run(&mut self) -> Self::Future {
+    let sink = self.sink.clone();
+    let message = self.message.clone();
+    Box::pin(async move {
+      let mut sink = sink
+        .try_lock()
+        .map_err(|err| RealtimeError::Internal(Error::from(err)))?;
+      sink
+        .send(message)
+        .await
+        .map_err(|_err| RealtimeError::Internal(anyhow!("Sink message fail")))?;
+      Ok(())
+    })
+  }
 }

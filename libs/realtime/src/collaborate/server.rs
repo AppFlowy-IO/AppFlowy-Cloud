@@ -78,15 +78,9 @@ where
       loop {
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {
-          if let Some(groups_operation) = groups.number_of_groups().await {
-            cloned_metrics.record_opening_collab_count(groups_operation);
-          }
-
+          cloned_metrics.record_opening_collab_count(groups.number_of_groups().await);
           cloned_metrics.record_connected_users(cloned_client_stream_by_user.len());
-
-          // Assuming mem_usage() is synchronous and quick to execute
-          let mem_usage = cloned_storage.mem_usage();
-          cloned_metrics.record_mem_cache_usage(mem_usage);
+          cloned_metrics.record_mem_cache_usage(cloned_storage.mem_usage());
 
           // Perform groups tick operation
           groups.tick().await;

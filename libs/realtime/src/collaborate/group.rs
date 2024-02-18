@@ -9,6 +9,7 @@ use database::collab::CollabStorage;
 
 use collab::core::collab_plugin::EncodedCollab;
 
+use async_stream::stream;
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
@@ -18,6 +19,113 @@ use tokio::time::Instant;
 
 use realtime_entity::collab_msg::CollabMessage;
 use tracing::{debug, error, event, instrument, trace, warn};
+
+pub enum GroupControlCommand<U> {
+  CreateGroupIfNeed {
+    uid: i64,
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+  },
+  ContainsUser {
+    object_id: String,
+    user: U,
+    ret: tokio::sync::oneshot::Sender<bool>,
+  },
+  RemoveUser {
+    object_id: String,
+    user: U,
+  },
+  ContainsGroup {
+    object_id: String,
+    ret: tokio::sync::oneshot::Sender<bool>,
+  },
+  GetGroup {
+    object_id: String,
+    ret: tokio::sync::oneshot::Sender<Option<Arc<CollabGroup<U>>>>,
+  },
+  RemoveGroup {
+    object_id: String,
+  },
+  NumberOfGroups {
+    ret: tokio::sync::oneshot::Sender<usize>,
+  },
+  Tick,
+}
+
+pub type GroupControlCommandSender<U> = tokio::sync::mpsc::Sender<GroupControlCommand<U>>;
+pub type GroupControlCommandReceiver<U> = tokio::sync::mpsc::Receiver<GroupControlCommand<U>>;
+
+pub struct GroupControlRunner<S, U, AC> {
+  control: CollabGroupControl<S, U, AC>,
+  recv: Option<GroupControlCommandReceiver<U>>,
+}
+
+impl<S, U, AC> GroupControlRunner<S, U, AC>
+where
+  S: CollabStorage,
+  U: RealtimeUser,
+  AC: CollabAccessControl,
+{
+  pub async fn run(mut self) {
+    let mut receiver = self.recv.take().expect("Only take once");
+    let stream = stream! {
+        loop {
+            match receiver.recv().await {
+                Some(changed) => yield changed,
+                None => break,
+            }
+        }
+    };
+
+    stream
+      .for_each(|command| async {
+        match command {
+          GroupControlCommand::CreateGroupIfNeed {
+            uid,
+            workspace_id,
+            object_id,
+            collab_type,
+          } => {
+            self
+              .control
+              .create_group_if_need(uid, &workspace_id, &object_id, collab_type)
+              .await;
+          },
+          GroupControlCommand::ContainsUser {
+            object_id,
+            user,
+            ret,
+          } => {
+            let result = self.control.contains_user(&object_id, &user).await;
+            let _ = ret.send(result);
+          },
+          GroupControlCommand::RemoveUser { object_id, user } => {
+            self.control.remove_user(&object_id, &user).await;
+          },
+          GroupControlCommand::ContainsGroup { object_id, ret } => {
+            let result = self.control.contains_group(&object_id).await;
+            let _ = ret.send(result);
+          },
+          GroupControlCommand::GetGroup { object_id, ret } => {
+            let group = self.control.get_group(&object_id).await;
+            let _ = ret.send(group);
+          },
+          GroupControlCommand::RemoveGroup { object_id } => {
+            self.control.remove_group(&object_id).await;
+          },
+          GroupControlCommand::NumberOfGroups { ret } => {
+            let count = self.control.number_of_groups().await;
+            let _ = ret.send(count);
+          },
+          GroupControlCommand::Tick => {
+            self.control.tick().await;
+          },
+        }
+      })
+      .await;
+  }
+}
 
 pub struct CollabGroupControl<S, U, AC> {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,
@@ -167,8 +275,8 @@ where
     group
   }
 
-  pub async fn number_of_groups(&self) -> Option<usize> {
-    Some(self.group_by_object_id.len())
+  pub async fn number_of_groups(&self) -> usize {
+    self.group_by_object_id.len()
   }
 }
 

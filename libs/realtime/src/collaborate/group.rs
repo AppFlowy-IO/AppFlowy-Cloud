@@ -6,26 +6,26 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
-use std::collections::HashMap;
 
 use collab::core::collab_plugin::EncodedCollab;
+
 use dashmap::DashMap;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
 
 use realtime_entity::collab_msg::CollabMessage;
 use tracing::{debug, error, event, instrument, trace, warn};
 
-pub struct CollabGroupCache<S, U, AC> {
+pub struct CollabGroupControl<S, U, AC> {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,
   storage: Arc<S>,
   access_control: Arc<AC>,
 }
 
-impl<S, U, AC> CollabGroupCache<S, U, AC>
+impl<S, U, AC> CollabGroupControl<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
@@ -61,18 +61,18 @@ where
     }
   }
 
-  pub async fn contains_user(&self, object_id: &str, user: &U) -> Result<bool, Error> {
+  pub async fn contains_user(&self, object_id: &str, user: &U) -> bool {
     if let Some(entry) = self.group_by_object_id.get(object_id) {
-      Ok(entry.value().subscribers.try_read()?.get(user).is_some())
+      entry.value().contains_user(user)
     } else {
-      Ok(false)
+      false
     }
   }
 
   pub async fn remove_user(&self, object_id: &str, user: &U) -> Result<(), Error> {
     if let Some(entry) = self.group_by_object_id.get(object_id) {
       let group = entry.value();
-      if let Some(mut subscriber) = group.subscribers.try_write()?.remove(user) {
+      if let Some(mut subscriber) = group.remove_user(user) {
         trace!("Remove subscriber: {}", subscriber.origin);
         tokio::spawn(async move {
           subscriber.stop().await;
@@ -82,8 +82,8 @@ where
     Ok(())
   }
 
-  pub async fn contains_group(&self, object_id: &str) -> Result<bool, Error> {
-    Ok(self.group_by_object_id.get(object_id).is_some())
+  pub async fn contains_group(&self, object_id: &str) -> bool {
+    self.group_by_object_id.get(object_id).is_some()
   }
 
   pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup<U>>> {
@@ -99,12 +99,7 @@ where
 
     if let Some(entry) = entry {
       let group = entry.1;
-      // As we've already removed the group, we directly operate on the removed group's subscribers.
-      if let Ok(mut subscribers) = group.subscribers.try_write() {
-        for (_, subscriber) in subscribers.iter_mut() {
-          subscriber.stop().await;
-        }
-      }
+      group.stop().await;
       group.flush_collab().await;
     } else {
       // Log error if the group doesn't exist
@@ -180,17 +175,14 @@ where
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
   pub collab: Arc<MutexCollab>,
-  #[allow(dead_code)]
   collab_type: CollabType,
-
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
   broadcast: CollabBroadcast,
-
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
-  pub subscribers: RwLock<HashMap<U, Subscription>>,
-
+  subscribers: DashMap<U, Subscription>,
+  user_by_user_device: DashMap<String, U>,
   pub modified_at: Arc<Mutex<Instant>>,
 }
 
@@ -209,6 +201,7 @@ where
       collab,
       broadcast,
       subscribers: Default::default(),
+      user_by_user_device: Default::default(),
       modified_at,
     }
   }
@@ -217,21 +210,55 @@ where
     self.broadcast.observe_collab_changes().await;
   }
 
-  pub fn subscribe<Sink, Stream, E>(
+  pub fn contains_user(&self, user: &U) -> bool {
+    self.subscribers.contains_key(user)
+  }
+
+  pub fn remove_user(&self, user: &U) -> Option<Subscription> {
+    self.subscribers.remove(user).map(|(_, s)| s)
+  }
+
+  pub fn user_count(&self) -> usize {
+    self.subscribers.len()
+  }
+
+  pub fn unsubscribe(&self, user: &U) {
+    if let Some(subscription) = self.subscribers.remove(user) {
+      let mut subscriber = subscription.1;
+      tokio::spawn(async move {
+        subscriber.stop().await;
+      });
+    }
+  }
+
+  pub async fn subscribe<Sink, Stream, E>(
     &self,
+    user: &U,
     subscriber_origin: CollabOrigin,
     sink: Sink,
     stream: Stream,
-  ) -> Subscription
-  where
+  ) where
     Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {
-    self
+    let sub = self
       .broadcast
-      .subscribe(subscriber_origin, sink, stream, self.modified_at.clone())
+      .subscribe(subscriber_origin, sink, stream, self.modified_at.clone());
+
+    // Remove the old user if it exists
+    let user_device = user.user_device();
+    if let Some((_, old)) = self.user_by_user_device.remove(&user_device) {
+      if let Some((_, mut old_sub)) = self.subscribers.remove(&old) {
+        old_sub.stop().await;
+      }
+    }
+
+    self
+      .user_by_user_device
+      .insert(user_device, (*user).clone());
+    self.subscribers.insert((*user).clone(), sub);
   }
 
   /// Mutate the [Collab] by the given closure
@@ -248,7 +275,7 @@ where
   }
 
   pub async fn is_empty(&self) -> bool {
-    self.subscribers.read().await.is_empty()
+    self.subscribers.is_empty()
   }
 
   /// Check if the group is active. A group is considered active if it has at least one
@@ -256,6 +283,12 @@ where
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.modified_at.lock().await;
     modified_at.elapsed().as_secs() > self.timeout_secs()
+  }
+
+  pub async fn stop(&self) {
+    for mut entry in self.subscribers.iter_mut() {
+      entry.value_mut().stop().await;
+    }
   }
 
   /// Flush the [Collab] to the storage.
@@ -278,11 +311,6 @@ where
   /// # Returns
   /// A `u64` representing the timeout duration in seconds for the collaboration type in question.
   #[inline]
-  #[cfg(debug_assertions)]
-  fn timeout_secs(&self) -> u64 {
-    2 * 60
-  }
-  #[cfg(not(debug_assertions))]
   fn timeout_secs(&self) -> u64 {
     match self.collab_type {
       CollabType::Document => 10 * 60, // 10 minutes

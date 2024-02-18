@@ -18,7 +18,7 @@ pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) collab_message: &'a CollabMessage,
 }
 
-pub(crate) struct SubscribeGroup<'a, U, S, AC> {
+pub(crate) struct SubscribeGroup<'a, S, U, AC> {
   pub(crate) message: &'a CollabUserMessage<'a, U>,
   pub(crate) groups: &'a Arc<CollabGroupControl<S, U, AC>>,
   pub(crate) edit_collab_by_user: &'a Arc<DashMap<U, HashSet<Editing>>>,
@@ -26,7 +26,7 @@ pub(crate) struct SubscribeGroup<'a, U, S, AC> {
   pub(crate) access_control: &'a Arc<AC>,
 }
 
-impl<'a, U, S, AC> SubscribeGroup<'a, U, S, AC>
+impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
@@ -138,7 +138,7 @@ where
   }
 }
 
-impl<'a, U, S, AC> SubscribeGroup<'a, U, S, AC>
+impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,

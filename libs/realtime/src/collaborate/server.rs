@@ -1,35 +1,29 @@
-use crate::entities::{
-  ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
-};
-use crate::error::{RealtimeError, StreamError};
-use anyhow::{anyhow, Result};
-
-use actix::{Actor, Context, Handler, ResponseFuture};
-use futures_util::future::BoxFuture;
-use parking_lot::Mutex;
-use realtime_entity::collab_msg::CollabMessage;
-use std::collections::{HashMap, HashSet};
-use std::future::Future;
-use std::pin::Pin;
-
-use std::sync::Arc;
-use std::time::Duration;
-
-use tokio::sync::RwLock;
-use tokio::time::interval;
-
-use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
-use tokio_stream::StreamExt;
-use tracing::{error, event, info, instrument, trace, warn};
-
 use crate::client::ClientWSSink;
 use crate::collaborate::group::CollabGroupCache;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::collaborate::retry::{CollabUserMessage, SubscribeGroupIfNeed};
 use crate::collaborate::RealtimeMetrics;
+use crate::entities::{
+  ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
+};
+use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
+use actix::{Actor, Context, Handler, ResponseFuture};
+use anyhow::{anyhow, Result};
+use dashmap::DashMap;
 use database::collab::CollabStorage;
+use futures_util::future::BoxFuture;
+use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::SystemMessage;
+use std::collections::HashSet;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::interval;
+use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
+use tokio_stream::StreamExt;
+use tracing::{error, event, info, instrument, trace, warn};
 
 #[derive(Clone)]
 pub struct CollabServer<S, U, AC> {
@@ -37,7 +31,7 @@ pub struct CollabServer<S, U, AC> {
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<CollabGroupCache<S, U, AC>>,
-  user_by_device: Arc<parking_lot::RwLock<HashMap<UserDevice, U>>>,
+  user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
   ///
@@ -46,11 +40,11 @@ pub struct CollabServer<S, U, AC> {
   /// If the two session IDs differ, it indicates that the user has established a new connection
   /// to the server since the stored session ID was last updated.
   ///
-  session_id_by_user: Arc<RwLock<HashMap<U, String>>>,
+  session_id_by_user: Arc<DashMap<U, String>>,
   /// Keep track of all object ids that a user is subscribed to
-  editing_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
+  editing_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   /// Keep track of all client streams
-  client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
+  client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
@@ -72,7 +66,7 @@ where
       storage.clone(),
       access_control.clone(),
     ));
-    let client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>> = Default::default();
+    let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
 
     let weak_groups = Arc::downgrade(&groups);
@@ -84,14 +78,11 @@ where
       loop {
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {
-          // Perform operations that require awaiting outside of the synchronous code block
           if let Some(groups_operation) = groups.number_of_groups().await {
             cloned_metrics.record_opening_collab_count(groups_operation);
           }
 
-          if let Ok(read_guard) = cloned_client_stream_by_user.try_read() {
-            cloned_metrics.record_connected_users(read_guard.keys().len());
-          }
+          cloned_metrics.record_connected_users(cloned_client_stream_by_user.len());
 
           // Assuming mem_usage() is synchronous and quick to execute
           let mem_usage = cloned_storage.mem_usage();
@@ -119,9 +110,9 @@ where
 
   fn process_realtime_message(
     user: U,
-    client_stream_by_user: Arc<RwLock<HashMap<U, CollabClientStream>>>,
+    client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
     groups: Arc<CollabGroupCache<S, U, AC>>,
-    edit_collab_by_user: Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
+    edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
     access_control: Arc<AC>,
     realtime_msg: RealtimeMessage,
   ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>> {
@@ -130,17 +121,7 @@ where
       match realtime_msg {
         RealtimeMessage::Collab(collab_message) => {
           // 1.Check the client is connected with the websocket server
-          if client_stream_by_user
-            .try_read()
-            .map_err(|err| {
-              RealtimeError::Internal(anyhow!(
-                "failed to acquire the lock for client stream:{}",
-                err
-              ))
-            })?
-            .get(&user)
-            .is_none()
-          {
+          if client_stream_by_user.get(&user).is_none() {
             let msg = anyhow!(
                   "The client stream: {} is not found, it should be created when the client is connected with this websocket server",
                   user
@@ -183,19 +164,16 @@ where
 
 async fn remove_user<S, U, AC>(
   groups: &Arc<CollabGroupCache<S, U, AC>>,
-  editing_collab_by_user: &Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
+  editing_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
   user: &U,
 ) where
   S: CollabStorage,
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  let editing_set = editing_collab_by_user
-    .try_lock()
-    .and_then(|mut guard| guard.remove(user));
-
-  if let Some(editing_set) = editing_set {
-    for editing in editing_set {
+  let entry = editing_collab_by_user.remove(user);
+  if let Some(entry) = entry {
+    for editing in entry.1 {
       remove_user_from_group(user, groups, &editing).await;
     }
   }
@@ -233,17 +211,13 @@ where
 
     Box::pin(async move {
       trace!("[realtime]: new connection => {} ", new_conn.user);
-      user_by_session_id
-        .write()
-        .await
-        .insert(new_conn.user.clone(), new_conn.session_id);
+      user_by_session_id.insert(new_conn.user.clone(), new_conn.session_id);
 
-      let old_user = user_by_device
-        .write()
-        .insert(UserDevice::from(&new_conn.user), new_conn.user.clone());
+      let old_user = user_by_device.insert(UserDevice::from(&new_conn.user), new_conn.user.clone());
 
       if let Some(old_user) = old_user {
-        if let Some(old_stream) = client_stream_by_user.write().await.remove(&old_user) {
+        if let Some(value) = client_stream_by_user.remove(&old_user) {
+          let old_stream = value.1;
           info!("same user connect again, remove the stream: {}", &old_user);
           old_stream.disconnect();
         }
@@ -252,15 +226,7 @@ where
         remove_user(&groups, &editing_collab_by_user, &old_user).await;
       }
 
-      let mut write_guard = client_stream_by_user.write().await;
-      info!(
-        "new user: {}, connected user:{}",
-        &new_conn.user,
-        write_guard.keys().len()
-      );
-      write_guard.insert(new_conn.user, client_stream);
-      drop(write_guard);
-
+      client_stream_by_user.insert(new_conn.user, client_stream);
       Ok(())
     })
   }
@@ -291,26 +257,18 @@ where
     let session_id_by_user = self.session_id_by_user.clone();
 
     Box::pin(async move {
-      let guard = match session_id_by_user.try_read() {
-        Ok(guard) => guard,
-        Err(_) => {
-          return Ok(());
-        },
-      };
-
-      if let Some(session_id) = guard.get(&msg.user) {
-        if session_id != &msg.session_id {
+      // If the user has reconnected with a new session, the session id will be different.
+      // So do not remove the user from groups and client streams
+      if let Some(entry) = session_id_by_user.get(&msg.user) {
+        if entry.value() != &msg.session_id {
           return Ok(());
         }
       }
 
       remove_user(&groups, &editing_collab_by_user, &msg.user).await;
-      if let Ok(mut client_stream_by_user) = client_stream_by_user.try_write() {
-        if client_stream_by_user.remove(&msg.user).is_some() {
-          info!("remove client stream: {}", &msg.user);
-        }
+      if client_stream_by_user.remove(&msg.user).is_some() {
+        info!("remove client stream: {}", &msg.user);
       }
-
       Ok(())
     })
   }
@@ -371,15 +329,15 @@ where
           }
         }
         let device_user = UserDevice { device_id, uid };
-        let user = user_by_device.read().get(&device_user).cloned();
-        match user {
+        let entry = user_by_device.get(&device_user);
+        match entry {
           None => Err(RealtimeError::UserNotFound(format!(
             "Can't find the user:{} device_id:{} from client stream message",
             uid, device_user.device_id
           ))),
-          Some(user) => {
+          Some(entry) => {
             Self::process_realtime_message(
-              user,
+              entry.value().clone(),
               client_stream_by_user,
               groups,
               edit_collab_by_user,
@@ -400,11 +358,10 @@ where
 async fn broadcast_message<U>(
   user: &U,
   collab_message: CollabMessage,
-  client_streams: &Arc<RwLock<HashMap<U, CollabClientStream>>>,
+  client_streams: &Arc<DashMap<U, CollabClientStream>>,
 ) where
   U: RealtimeUser,
 {
-  let client_streams = client_streams.read().await;
   if let Some(client_stream) = client_streams.get(user) {
     trace!("[realtime]: receives collab message: {}", collab_message);
     match client_stream

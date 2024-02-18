@@ -16,7 +16,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 #[sqlx::test(migrations = false)]
-async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Result<()> {
+async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
@@ -61,6 +61,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
       .await
       .context("adding users to workspace")?;
 
+  // user that created the workspace should have full access
   assert_access_level(
     &access_control,
     &user.uid,
@@ -69,6 +70,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
   )
   .await;
 
+  // member should have read and write access
   assert_access_level(
     &access_control,
     &member.uid,
@@ -77,6 +79,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
   )
   .await;
 
+  // guest should have read access
   assert_access_level(
     &access_control,
     &guest.uid,
@@ -90,6 +93,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
     .await
     .context("acquire transaction to update collab member")?;
 
+  // update guest access level to read and comment
   database::collab::upsert_collab_member_with_txn(
     guest.uid,
     &workspace.workspace_id.to_string(),
@@ -103,6 +107,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
     .await
     .expect("commit transaction to update collab member");
 
+  // guest should have read and comment access
   assert_access_level(
     &access_control,
     &guest.uid,
@@ -115,6 +120,7 @@ async fn test_collab_access_control_get_access_level(pool: PgPool) -> anyhow::Re
     .await
     .context("delete collab member")?;
 
+  // guest should not have access after removed from collab
   assert_access_level(
     &access_control,
     &guest.uid,

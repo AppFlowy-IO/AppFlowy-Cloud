@@ -4,18 +4,18 @@ use anyhow::{anyhow, Error};
 use collab::core::origin::CollabOrigin;
 use database::collab::CollabStorage;
 use futures_util::SinkExt;
-use parking_lot::Mutex;
+
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
 
+use dashmap::DashMap;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::future;
 use std::future::Future;
 use std::iter::Take;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::RwLock;
 
 use crate::entities::{Editing, RealtimeUser};
 use tokio_retry::strategy::FixedInterval;
@@ -36,8 +36,8 @@ pub(crate) struct CollabUserMessage<'a, U> {
 pub(crate) struct SubscribeGroupIfNeed<'a, U, S, AC> {
   pub(crate) collab_user_message: &'a CollabUserMessage<'a, U>,
   pub(crate) groups: &'a Arc<CollabGroupCache<S, U, AC>>,
-  pub(crate) edit_collab_by_user: &'a Arc<Mutex<HashMap<U, HashSet<Editing>>>>,
-  pub(crate) client_stream_by_user: &'a Arc<RwLock<HashMap<U, CollabClientStream>>>,
+  pub(crate) edit_collab_by_user: &'a Arc<DashMap<U, HashSet<Editing>>>,
+  pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream>>,
   pub(crate) access_control: &'a Arc<AC>,
 }
 
@@ -107,12 +107,7 @@ where
       }
 
       let origin = Self::get_origin(collab_message);
-      if let Some(client_stream) = self
-        .client_stream_by_user
-        .try_write()
-        .map_err(|err| RealtimeError::Internal(err.into()))?
-        .get_mut(user)
-      {
+      if let Some(mut client_stream) = self.client_stream_by_user.get_mut(user) {
         if let Some(collab_group) = self.groups.get_group(object_id).await {
           if let Entry::Vacant(entry) = collab_group
             .subscribers
@@ -129,10 +124,6 @@ where
             let client_uid = user.uid();
             self
               .edit_collab_by_user
-              .try_lock()
-              .ok_or(RealtimeError::Internal(anyhow!(
-                "Failed to acquire lock to insert editing"
-              )))?
               .entry((*user).clone())
               .or_default()
               .insert(Editing {
@@ -142,7 +133,7 @@ where
 
             let (sink, stream) = Self::make_channel(
               object_id,
-              client_stream,
+              client_stream.value_mut(),
               client_uid,
               self.access_control.clone(),
               self.access_control.clone(),
@@ -295,7 +286,7 @@ where
   }
 }
 
-pub struct SubscribeGroupCondition<U>(pub Weak<RwLock<HashMap<U, CollabClientStream>>>);
+pub struct SubscribeGroupCondition<U>(pub Weak<DashMap<U, CollabClientStream>>);
 impl<U> Condition<RealtimeError> for SubscribeGroupCondition<U> {
   fn should_retry(&mut self, _error: &RealtimeError) -> bool {
     self.0.upgrade().is_some()

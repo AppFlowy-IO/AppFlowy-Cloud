@@ -24,6 +24,7 @@ serde_repr = "0.1.18"
 tokio-retry = "0.3.0"
 reqwest = "0.11.23"
 app-error = { workspace = true }
+dashmap.workspace = true
 
 collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }

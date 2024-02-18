@@ -70,12 +70,7 @@ where
   pub async fn remove_user(&self, object_id: &str, user: &U) -> Result<(), Error> {
     if let Some(entry) = self.group_by_object_id.get(object_id) {
       let group = entry.value();
-      if let Some(mut subscriber) = group.remove_user(user) {
-        trace!("Remove subscriber: {}", subscriber.origin);
-        tokio::spawn(async move {
-          subscriber.stop().await;
-        });
-      }
+      group.remove_user(user).await;
     }
     Ok(())
   }
@@ -207,8 +202,10 @@ where
     self.subscribers.contains_key(user)
   }
 
-  pub fn remove_user(&self, user: &U) -> Option<Subscription> {
-    self.subscribers.remove(user).map(|(_, s)| s)
+  pub async fn remove_user(&self, user: &U) {
+    if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
+      old_sub.stop().await;
+    }
   }
 
   pub fn user_count(&self) -> usize {

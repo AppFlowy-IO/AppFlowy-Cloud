@@ -79,11 +79,11 @@ where
       return Err(RealtimeError::Internal(msg));
     }
 
-    if self
+    let is_group_exist = self
       .control
       .contains_group(collab_message.object_id())
-      .await
-    {
+      .await;
+    if is_group_exist {
       // 2.1 If a group exists for the specified object_id and the message is an 'init sync',
       // then remove any existing subscriber from that group and add the new user as a subscriber to the group.
       if collab_message.is_init_msg() {
@@ -95,11 +95,11 @@ where
 
       // 2.1.1 subscribe the user to the group. then the user will receive the changes from the
       // group
-      if !self
+      let is_user_subscribed = self
         .control
         .contains_user(collab_message.object_id(), &user)
-        .await
-      {
+        .await;
+      if !is_user_subscribed {
         SubscribeGroup {
           message: &CollabUserMessage {
             user: &user,

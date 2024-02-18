@@ -4215,6 +4215,7 @@ dependencies = [
  "chrono",
  "collab",
  "collab-entity",
+ "dashmap",
  "database",
  "database-entity",
  "futures-util",

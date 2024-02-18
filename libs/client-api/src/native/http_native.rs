@@ -129,7 +129,7 @@ impl Client {
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(10)).take(4);
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
     let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
     match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
       Ok(_) => {

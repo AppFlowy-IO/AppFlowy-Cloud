@@ -29,7 +29,7 @@ impl RealtimeMessage {
 impl Display for RealtimeMessage {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      RealtimeMessage::Collab(msg) => f.write_fmt(format_args!("Collab:{}", msg.object_id())),
+      RealtimeMessage::Collab(msg) => f.write_fmt(format_args!("Collab:{}", msg)),
       RealtimeMessage::User(_) => f.write_fmt(format_args!("User")),
       RealtimeMessage::System(_) => f.write_fmt(format_args!("System")),
     }

@@ -1,14 +1,14 @@
-use crate::collaborate::CollabClientStream;
+use crate::collaborate::{CollabClientStream, Subscription};
 
 use anyhow::{anyhow, Error};
 use collab::core::origin::CollabOrigin;
 use database::collab::CollabStorage;
 use futures_util::SinkExt;
 
-use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
+use realtime_entity::collab_msg::CollabMessage;
 
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::future;
 use std::future::Future;
@@ -22,7 +22,7 @@ use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, Retry, RetryIf};
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::collaborate::group::CollabGroupCache;
+use crate::collaborate::group_control::CollabGroupControl;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
@@ -33,15 +33,15 @@ pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) collab_message: &'a CollabMessage,
 }
 
-pub(crate) struct SubscribeGroupIfNeed<'a, U, S, AC> {
-  pub(crate) collab_user_message: &'a CollabUserMessage<'a, U>,
-  pub(crate) groups: &'a Arc<CollabGroupCache<S, U, AC>>,
+pub(crate) struct SubscribeGroup<'a, U, S, AC> {
+  pub(crate) message: &'a CollabUserMessage<'a, U>,
+  pub(crate) groups: &'a Arc<CollabGroupControl<S, U, AC>>,
   pub(crate) edit_collab_by_user: &'a Arc<DashMap<U, HashSet<Editing>>>,
   pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream>>,
   pub(crate) access_control: &'a Arc<AC>,
 }
 
-impl<'a, U, S, AC> SubscribeGroupIfNeed<'a, U, S, AC>
+impl<'a, U, S, AC> SubscribeGroup<'a, U, S, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
@@ -49,19 +49,14 @@ where
 {
   pub(crate) fn run(
     self,
-  ) -> RetryIf<Take<FixedInterval>, SubscribeGroupIfNeed<'a, U, S, AC>, SubscribeGroupCondition<U>>
-  {
+  ) -> RetryIf<Take<FixedInterval>, SubscribeGroup<'a, U, S, AC>, SubscribeGroupCond<U>> {
     let weak_client_stream = Arc::downgrade(self.client_stream_by_user);
-    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
-    RetryIf::spawn(
-      retry_strategy,
-      self,
-      SubscribeGroupCondition(weak_client_stream),
-    )
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(3);
+    RetryIf::spawn(retry_strategy, self, SubscribeGroupCond(weak_client_stream))
   }
 }
 
-impl<'a, U, S, AC> Action for SubscribeGroupIfNeed<'a, U, S, AC>
+impl<'a, U, S, AC> Action for SubscribeGroup<'a, U, S, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
@@ -76,45 +71,14 @@ where
       let CollabUserMessage {
         user,
         collab_message,
-      } = self.collab_user_message;
+      } = self.message;
 
       let object_id = collab_message.object_id();
-      if !self.groups.contains_group(object_id).await? {
-        if collab_message.is_init_msg() {
-          let groups = self.groups.clone();
-          Self::create_new_group(&groups, collab_message, object_id).await?;
-        } else {
-          // If the collab message is not init sync. Discard it.
-          return Ok(());
-        }
-      }
-
-      // Where an "init sync message" is received, it typically indicates that the client has reopened
-      // the collaboration session. Such a situation can arise due to network issues leading to websocket reconnection.
-      // 1. The user is first removed from the group to reset their state in the session.
-      // 2. Then, the client's stream is subscribed to the group again, effectively re-establishing the user's participation in the collaborative session.
-      if collab_message.is_init_msg() {
-        self.groups.remove_user(object_id, user).await?;
-      } else if self
-        .groups
-        .contains_user(object_id, user)
-        .await
-        .unwrap_or(false)
-      {
-        // In this case, it implies that the client is already a member of the group.
-        // Therefore, no further action is required.
-        return Ok(());
-      }
 
       let origin = Self::get_origin(collab_message);
       if let Some(mut client_stream) = self.client_stream_by_user.get_mut(user) {
         if let Some(collab_group) = self.groups.get_group(object_id).await {
-          if let Entry::Vacant(entry) = collab_group
-            .subscribers
-            .try_write()
-            .map_err(|err| RealtimeError::Internal(err.into()))?
-            .entry((*user).clone())
-          {
+          if !collab_group.contains_user(user) {
             trace!(
               "[realtime]: {} subscribe group:{}",
               user,
@@ -138,8 +102,9 @@ where
               self.access_control.clone(),
               self.access_control.clone(),
             );
-
-            entry.insert(collab_group.subscribe(origin.clone(), sink, stream));
+            collab_group
+              .subscribe(user, origin.clone(), sink, stream)
+              .await;
           }
         }
       } else {
@@ -150,40 +115,12 @@ where
   }
 }
 
-impl<'a, U, S, AC> SubscribeGroupIfNeed<'a, U, S, AC>
+impl<'a, U, S, AC> SubscribeGroup<'a, U, S, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
   AC: CollabAccessControl,
 {
-  async fn create_new_group(
-    groups: &Arc<CollabGroupCache<S, U, AC>>,
-    collab_message: &CollabMessage,
-    object_id: &str,
-  ) -> Result<(), RealtimeError> {
-    match collab_message {
-      CollabMessage::ClientInitSync(client_init) => {
-        let uid = client_init
-          .origin
-          .client_user_id()
-          .ok_or(RealtimeError::UnexpectedData("The client user id is empty"))?;
-        groups
-          .create_group_if_need(
-            uid,
-            &client_init.workspace_id,
-            object_id,
-            client_init.collab_type.clone(),
-          )
-          .await;
-
-        Ok(())
-      },
-      _ => Err(RealtimeError::UnexpectedData(
-        "The first message must be init sync message",
-      )),
-    }
-  }
-
   fn get_origin(collab_message: &CollabMessage) -> &CollabOrigin {
     collab_message.origin().unwrap_or_else(|| {
       error!("🔴The origin from client message is empty");
@@ -286,8 +223,8 @@ where
   }
 }
 
-pub struct SubscribeGroupCondition<U>(pub Weak<DashMap<U, CollabClientStream>>);
-impl<U> Condition<RealtimeError> for SubscribeGroupCondition<U> {
+pub struct SubscribeGroupCond<U>(pub Weak<DashMap<U, CollabClientStream>>);
+impl<U> Condition<RealtimeError> for SubscribeGroupCond<U> {
   fn should_retry(&mut self, _error: &RealtimeError) -> bool {
     self.0.upgrade().is_some()
   }
@@ -329,5 +266,94 @@ where
         .map_err(|_err| RealtimeError::Internal(anyhow!("Sink message fail")))?;
       Ok(())
     })
+  }
+}
+
+pub(crate) struct CreateGroupAction<'a, U, S, AC> {
+  pub(crate) collab_message: &'a CollabMessage,
+  pub(crate) groups: &'a Arc<CollabGroupControl<S, U, AC>>,
+  pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream>>,
+}
+
+impl<'a, U, S, AC> CreateGroupAction<'a, U, S, AC>
+where
+  U: RealtimeUser,
+  S: CollabStorage,
+  AC: CollabAccessControl,
+{
+  async fn create_new_group(
+    groups: &Arc<CollabGroupControl<S, U, AC>>,
+    collab_message: &CollabMessage,
+  ) -> Result<(), RealtimeError> {
+    let object_id = collab_message.object_id();
+    match collab_message {
+      CollabMessage::ClientInitSync(client_init) => {
+        let uid = client_init
+          .origin
+          .client_user_id()
+          .ok_or(RealtimeError::ExpectInitSync(
+            "The client user id is empty".to_string(),
+          ))?;
+
+        groups
+          .create_group_if_need(
+            uid,
+            &client_init.workspace_id,
+            object_id,
+            client_init.collab_type.clone(),
+          )
+          .await;
+
+        Ok(())
+      },
+      _ => Err(RealtimeError::ExpectInitSync(collab_message.to_string())),
+    }
+  }
+}
+impl<'a, U, S, AC> CreateGroupAction<'a, U, S, AC>
+where
+  U: RealtimeUser,
+  S: CollabStorage,
+  AC: CollabAccessControl,
+{
+  pub(crate) fn run(
+    self,
+  ) -> RetryIf<Take<FixedInterval>, CreateGroupAction<'a, U, S, AC>, RetryCreateGroupCond<U>> {
+    let client_stream_by_user = self.client_stream_by_user.clone();
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(3);
+    RetryIf::spawn(
+      retry_strategy,
+      self,
+      RetryCreateGroupCond(client_stream_by_user),
+    )
+  }
+}
+
+impl<'a, U, S, AC> Action for CreateGroupAction<'a, U, S, AC>
+where
+  U: RealtimeUser,
+  S: CollabStorage,
+  AC: CollabAccessControl,
+{
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + 'a>>;
+  type Item = ();
+  type Error = RealtimeError;
+
+  fn run(&mut self) -> Self::Future {
+    Box::pin(async {
+      Self::create_new_group(self.groups, self.collab_message).await?;
+      Ok(())
+    })
+  }
+}
+
+pub(crate) struct RetryCreateGroupCond<U>(Arc<DashMap<U, CollabClientStream>>);
+impl<U> Condition<RealtimeError> for RetryCreateGroupCond<U> {
+  fn should_retry(&mut self, error: &RealtimeError) -> bool {
+    if matches!(error, RealtimeError::ExpectInitSync(_)) {
+      false
+    } else {
+      true
+    }
   }
 }

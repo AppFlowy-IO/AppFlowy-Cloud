@@ -1,7 +1,7 @@
 use crate::client::ClientWSSink;
-use crate::collaborate::group::CollabGroupCache;
+use crate::collaborate::group::{GroupCommand, GroupCommandRunner, GroupControlCommandSender};
+use crate::collaborate::group_control::CollabGroupControl;
 use crate::collaborate::permission::CollabAccessControl;
-use crate::collaborate::retry::{CollabUserMessage, SubscribeGroupIfNeed};
 use crate::collaborate::RealtimeMetrics;
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
@@ -9,7 +9,7 @@ use crate::entities::{
 use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::future::BoxFuture;
@@ -30,7 +30,7 @@ pub struct CollabServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
-  groups: Arc<CollabGroupCache<S, U, AC>>,
+  groups: Arc<CollabGroupControl<S, U, AC>>,
   user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
@@ -45,6 +45,7 @@ pub struct CollabServer<S, U, AC> {
   editing_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   /// Keep track of all client streams
   client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
+  group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
@@ -62,34 +63,33 @@ where
     metrics: Arc<RealtimeMetrics>,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
-    let groups = Arc::new(CollabGroupCache::new(
+    let groups = Arc::new(CollabGroupControl::new(
       storage.clone(),
       access_control.clone(),
     ));
     let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
+    let group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>> =
+      Arc::new(Default::default());
 
     let weak_groups = Arc::downgrade(&groups);
     let cloned_metrics = metrics.clone();
     let cloned_client_stream_by_user = client_stream_by_user.clone();
     let cloned_storage = storage.clone();
+    let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
     tokio::spawn(async move {
       let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {
-          if let Some(groups_operation) = groups.number_of_groups().await {
-            cloned_metrics.record_opening_collab_count(groups_operation);
-          }
-
+          cloned_metrics.record_opening_collab_count(groups.number_of_groups().await);
           cloned_metrics.record_connected_users(cloned_client_stream_by_user.len());
+          cloned_metrics.record_mem_cache_usage(cloned_storage.mem_usage());
 
-          // Assuming mem_usage() is synchronous and quick to execute
-          let mem_usage = cloned_storage.mem_usage();
-          cloned_metrics.record_mem_cache_usage(mem_usage);
-
-          // Perform groups tick operation
-          groups.tick().await;
+          let inactive_group_ids = groups.tick().await;
+          for id in inactive_group_ids {
+            cloned_group_sender_by_object_id.remove(&id);
+          }
         } else {
           break;
         }
@@ -103,6 +103,7 @@ where
       session_id_by_user: Default::default(),
       editing_collab_by_user,
       client_stream_by_user,
+      group_sender_by_object_id,
       access_control,
       metrics,
     })
@@ -110,8 +111,9 @@ where
 
   fn process_realtime_message(
     user: U,
+    group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
     client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-    groups: Arc<CollabGroupCache<S, U, AC>>,
+    groups: Arc<CollabGroupControl<S, U, AC>>,
     edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
     access_control: Arc<AC>,
     realtime_msg: RealtimeMessage,
@@ -120,36 +122,37 @@ where
       trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
       match realtime_msg {
         RealtimeMessage::Collab(collab_message) => {
-          // 1.Check the client is connected with the websocket server
-          if client_stream_by_user.get(&user).is_none() {
-            let msg = anyhow!(
-                  "The client stream: {} is not found, it should be created when the client is connected with this websocket server",
-                  user
-                );
-            return Err(RealtimeError::Internal(msg));
-          }
+          let old_sender = group_sender_by_object_id
+            .get(collab_message.object_id())
+            .map(|entry| entry.value().clone());
 
-          // 2. handle the message sent by the client
-          let msg = CollabUserMessage {
-            user: &user,
-            collab_message: &collab_message,
+          let sender = match old_sender {
+            Some(sender) => sender,
+            None => {
+              let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+              let runner = GroupCommandRunner {
+                control: groups.clone(),
+                client_stream_by_user: client_stream_by_user.clone(),
+                edit_collab_by_user: edit_collab_by_user.clone(),
+                access_control: access_control.clone(),
+                recv: Some(recv),
+              };
+
+              tokio::task::spawn_local(runner.run());
+              group_sender_by_object_id
+                .insert(collab_message.object_id().to_string(), new_sender.clone());
+              new_sender
+            },
           };
 
-          // 3.1 create a new group if the user is editing the object for the first time
-          // 3.2 subscribe the user to the group in order to receive changes when the collab object is updated
-          SubscribeGroupIfNeed {
-            collab_user_message: &msg,
-            groups: &groups,
-            edit_collab_by_user: &edit_collab_by_user,
-            client_stream_by_user: &client_stream_by_user,
-            access_control: &access_control,
-          }
-          .run()
-          .await?;
-
-          // 4 send message to the group and then broadcast the message to all connected clients
-          if groups.contains_group(collab_message.object_id()).await? {
-            broadcast_message(&user, collab_message, &client_stream_by_user).await;
+          if let Err(err) = sender
+            .send(GroupCommand::HandleCollabMessage {
+              user,
+              collab_message,
+            })
+            .await
+          {
+            error!("Send message to group error: {}", err);
           }
           Ok(())
         },
@@ -163,7 +166,7 @@ where
 }
 
 async fn remove_user<S, U, AC>(
-  groups: &Arc<CollabGroupCache<S, U, AC>>,
+  groups: &Arc<CollabGroupControl<S, U, AC>>,
   editing_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
   user: &U,
 ) where
@@ -214,7 +217,6 @@ where
       user_by_session_id.insert(new_conn.user.clone(), new_conn.session_id);
 
       let old_user = user_by_device.insert(UserDevice::from(&new_conn.user), new_conn.user.clone());
-
       if let Some(old_user) = old_user {
         if let Some(value) = client_stream_by_user.remove(&old_user) {
           let old_stream = value.1;
@@ -284,12 +286,14 @@ where
 
   fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let ClientMessage { user, message } = client_msg;
+    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
     let edit_collab_by_user = self.editing_collab_by_user.clone();
     let access_control = self.access_control.clone();
     Self::process_realtime_message(
       user,
+      group_sender_by_object_id,
       client_stream_by_user,
       groups,
       edit_collab_by_user,
@@ -313,6 +317,7 @@ where
       mut device_id,
       mut stream,
     } = client_msg;
+    let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let groups = self.groups.clone();
@@ -338,6 +343,7 @@ where
           Some(entry) => {
             Self::process_realtime_message(
               entry.value().clone(),
+              group_sender_by_object_id,
               client_stream_by_user,
               groups,
               edit_collab_by_user,
@@ -355,7 +361,7 @@ where
 }
 
 #[inline]
-async fn broadcast_message<U>(
+pub async fn broadcast_message<U>(
   user: &U,
   collab_message: CollabMessage,
   client_streams: &Arc<DashMap<U, CollabClientStream>>,
@@ -378,7 +384,7 @@ async fn broadcast_message<U>(
 #[instrument(level = "debug", skip_all)]
 async fn remove_user_from_group<S, U, AC>(
   user: &U,
-  groups: &Arc<CollabGroupCache<S, U, AC>>,
+  groups: &Arc<CollabGroupControl<S, U, AC>>,
   editing: &Editing,
 ) where
   S: CollabStorage,
@@ -389,17 +395,10 @@ async fn remove_user_from_group<S, U, AC>(
   if let Some(group) = groups.get_group(&editing.object_id).await {
     event!(
       tracing::Level::TRACE,
-      "{}: Remove group subscriber:{}, Current group member: {}. member ids: {:?}",
+      "{}: Remove group subscriber:{}, Current group member: {}",
       &editing.object_id,
       editing.origin,
-      group.subscribers.read().await.len(),
-      group
-        .subscribers
-        .read()
-        .await
-        .values()
-        .map(|value| value.origin.to_string())
-        .collect::<Vec<_>>(),
+      group.user_count(),
     );
   }
 }

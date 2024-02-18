@@ -205,11 +205,7 @@ pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotifi
 pub struct RealtimeUserImpl {
   pub uid: i64,
   pub device_id: String,
-  /// Use the unique connect ID to identify users. This is important because a user with the same device ID
-  /// may disconnect and then reconnect. In such cases, the server could receive the connect signal before
-  /// the disconnect signal. The unique connect ID helps in correctly identifying and managing the user's
-  /// session under these circumstances.
-  pub connect_id: String,
+  pub timestamp: i64,
 }
 
 impl RealtimeUserImpl {
@@ -217,7 +213,7 @@ impl RealtimeUserImpl {
     Self {
       uid,
       device_id,
-      connect_id: Uuid::new_v4().to_string(),
+      timestamp: chrono::Utc::now().timestamp(),
     }
   }
 }

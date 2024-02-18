@@ -355,6 +355,7 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
 
 async fn migrate(pool: &PgPool) -> Result<(), Error> {
   sqlx::migrate!("./migrations")
+    .set_ignore_missing(true)
     .run(pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))

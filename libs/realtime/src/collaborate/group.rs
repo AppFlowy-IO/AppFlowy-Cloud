@@ -11,7 +11,7 @@ use futures_util::StreamExt;
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::{error, info, trace};
+use tracing::{error, trace};
 
 pub enum GroupCommand<U> {
   HandleCollabMessage {

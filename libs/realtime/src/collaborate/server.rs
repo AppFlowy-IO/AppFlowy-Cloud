@@ -141,7 +141,7 @@ where
                   recv: Some(recv),
                 };
 
-                let _ = tokio::task::spawn_local(runner.run());
+                tokio::task::spawn_local(runner.run());
                 entry.insert(new_sender.clone());
                 new_sender
               },

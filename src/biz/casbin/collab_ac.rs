@@ -81,6 +81,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    // Ok(true)
     self
       .access_control
       .enforce(uid, &ObjectType::Collab(oid), Action::Write)
@@ -88,6 +89,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    // Ok(true)
     self
       .access_control
       .enforce(uid, &ObjectType::Collab(oid), Action::Read)

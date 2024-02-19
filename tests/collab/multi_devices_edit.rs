@@ -1,13 +1,11 @@
-use std::time::Duration;
-
 use client_api_test_util::*;
 use collab_entity::CollabType;
+use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 use serde_json::json;
 use sqlx::types::uuid;
+use std::time::Duration;
 use tokio::time::sleep;
 use tracing::trace;
-
-use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 
 #[tokio::test]
 async fn edit_collab_with_ws_reconnect_sync_test() {

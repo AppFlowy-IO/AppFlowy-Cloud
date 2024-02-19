@@ -1,9 +1,8 @@
 use crate::access_control::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
-use appflowy_cloud::biz::casbin::access_control::{AccessControl, Action, ActionType, ObjectType};
+use appflowy_cloud::biz::casbin::access_control::{Action, ActionType, ObjectType};
 
-use appflowy_cloud::biz::pg_listener::PgListeners;
 use database_entity::dto::{AFAccessLevel, AFRole};
 use realtime::collaborate::CollabAccessControl;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
@@ -13,17 +12,8 @@ use tokio::time::sleep;
 
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
-  setup_db(&pool).await?;
-
-  let listeners = PgListeners::new(&pool).await?;
-  let access_control = AccessControl::new(
-    pool.clone(),
-    listeners.subscribe_collab_member_change(),
-    listeners.subscribe_workspace_member_change(),
-  )
-  .await
-  .unwrap();
-  let access_control = access_control.new_collab_access_control();
+  let access_control = setup_access_control(&pool).await?;
+  let collab_access_control = access_control.new_collab_access_control();
 
   let user = create_user(&pool).await?;
   let owner = create_user(&pool).await?;
@@ -55,7 +45,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 
   // user that created the workspace should have full access
   assert_access_level(
-    &access_control,
+    &collab_access_control,
     &user.uid,
     workspace.workspace_id.to_string(),
     Some(AFAccessLevel::FullAccess),
@@ -64,7 +54,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 
   // member should have read and write access
   assert_access_level(
-    &access_control,
+    &collab_access_control,
     &member.uid,
     workspace.workspace_id.to_string(),
     Some(AFAccessLevel::ReadAndWrite),
@@ -73,7 +63,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 
   // guest should have read access
   assert_access_level(
-    &access_control,
+    &collab_access_control,
     &guest.uid,
     workspace.workspace_id.to_string(),
     Some(AFAccessLevel::ReadOnly),
@@ -101,7 +91,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 
   // guest should have read and comment access
   assert_access_level(
-    &access_control,
+    &collab_access_control,
     &guest.uid,
     workspace.workspace_id.to_string(),
     Some(AFAccessLevel::ReadAndComment),
@@ -114,7 +104,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 
   // guest should not have access after removed from collab
   assert_access_level(
-    &access_control,
+    &collab_access_control,
     &guest.uid,
     workspace.workspace_id.to_string(),
     None,
@@ -125,21 +115,12 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::Result<()> {
-  setup_db(&pool).await?;
-
-  let listeners = PgListeners::new(&pool).await?;
-  let access_control = AccessControl::new(
-    pool.clone(),
-    listeners.subscribe_collab_member_change(),
-    listeners.subscribe_workspace_member_change(),
-  )
-  .await
-  .unwrap();
-  let access_control = access_control.new_collab_access_control();
+  let access_control = setup_access_control(&pool).await?;
+  let collab_access_control = access_control.new_collab_access_control();
   let user = create_user(&pool).await?;
 
   for method in [Method::GET, Method::POST, Method::PUT, Method::DELETE] {
-    assert_can_access_http_method(&access_control, &user.uid, "fake_id", method, true).await;
+    assert_can_access_http_method(&collab_access_control, &user.uid, "fake_id", method, true).await;
   }
 
   Ok(())
@@ -147,17 +128,8 @@ async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::
 
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::Result<()> {
-  setup_db(&pool).await?;
-
-  let listeners = PgListeners::new(&pool).await?;
-  let access_control = AccessControl::new(
-    pool.clone(),
-    listeners.subscribe_collab_member_change(),
-    listeners.subscribe_workspace_member_change(),
-  )
-  .await
-  .unwrap();
-  let access_control = access_control.new_collab_access_control();
+  let access_control = setup_access_control(&pool).await?;
+  let collab_access_control = access_control.new_collab_access_control();
 
   let user = create_user(&pool).await?;
   let guest = create_user(&pool).await?;
@@ -182,7 +154,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 
   for method in [Method::GET, Method::POST, Method::PUT, Method::DELETE] {
     assert_can_access_http_method(
-      &access_control,
+      &collab_access_control,
       &user.uid,
       &workspace.workspace_id.to_string(),
       method,
@@ -192,7 +164,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   }
 
   assert!(
-    access_control
+    collab_access_control
       .can_access_http_method(&user.uid, "new collab oid", &Method::POST)
       .await?,
     "should have access to non-existent collab oid"
@@ -200,7 +172,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 
   // guest should have read access
   assert_can_access_http_method(
-    &access_control,
+    &collab_access_control,
     &guest.uid,
     &workspace.workspace_id.to_string(),
     Method::GET,
@@ -210,7 +182,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 
   // guest should not have write access
   assert_can_access_http_method(
-    &access_control,
+    &collab_access_control,
     &guest.uid,
     &workspace.workspace_id.to_string(),
     Method::POST,
@@ -219,7 +191,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   .await;
 
   assert!(
-    !access_control
+    !collab_access_control
       .can_access_http_method(
         &stranger.uid,
         &workspace.workspace_id.to_string(),
@@ -230,7 +202,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
   );
   //
   assert!(
-    !access_control
+    !collab_access_control
       .can_access_http_method(
         &stranger.uid,
         &workspace.workspace_id.to_string(),
@@ -245,17 +217,8 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> anyhow::Result<()> {
-  setup_db(&pool).await?;
-
-  let listeners = PgListeners::new(&pool).await?;
-  let access_control = AccessControl::new(
-    pool.clone(),
-    listeners.subscribe_collab_member_change(),
-    listeners.subscribe_workspace_member_change(),
-  )
-  .await
-  .unwrap();
-  let access_control = access_control.new_collab_access_control();
+  let access_control = setup_access_control(&pool).await?;
+  let collab_access_control = access_control.new_collab_access_control();
 
   let user = create_user(&pool).await?;
   let guest = create_user(&pool).await?;
@@ -283,40 +246,40 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
   sleep(Duration::from_secs(2)).await;
 
   assert!(
-    access_control
+    collab_access_control
       .can_send_collab_update(&user.uid, &workspace.workspace_id.to_string())
       .await?
   );
 
   assert!(
-    access_control
+    collab_access_control
       .can_receive_collab_update(&user.uid, &workspace.workspace_id.to_string())
       .await?
   );
 
   assert!(
-    !access_control
+    !collab_access_control
       .can_send_collab_update(&guest.uid, &workspace.workspace_id.to_string())
       .await?,
     "guest cannot send collab update"
   );
 
   assert!(
-    access_control
+    collab_access_control
       .can_receive_collab_update(&guest.uid, &workspace.workspace_id.to_string())
       .await?,
     "guest can receive collab update"
   );
 
   assert!(
-    !access_control
+    !collab_access_control
       .can_send_collab_update(&stranger.uid, &workspace.workspace_id.to_string())
       .await?,
     "stranger cannot send collab update"
   );
 
   assert!(
-    !access_control
+    !collab_access_control
       .can_receive_collab_update(&stranger.uid, &workspace.workspace_id.to_string())
       .await?,
     "stranger cannot receive collab update"
@@ -327,36 +290,31 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
 
 #[sqlx::test(migrations = false)]
 async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> anyhow::Result<()> {
-  setup_db(&pool).await?;
-
-  let listeners = PgListeners::new(&pool).await?;
-  let access_control = AccessControl::new(
-    pool.clone(),
-    listeners.subscribe_collab_member_change(),
-    listeners.subscribe_workspace_member_change(),
-  )
-  .await
-  .unwrap();
-  let access_control = access_control.new_collab_access_control();
+  let access_control = setup_access_control(&pool).await?;
+  let collab_access_control = access_control.new_collab_access_control();
 
   let uid = 123;
   let oid = "collab::oid".to_owned();
-  access_control
+  collab_access_control
     .insert_collab_access_level(&uid, &oid, AFAccessLevel::FullAccess)
     .await?;
 
   assert_eq!(
     AFAccessLevel::FullAccess,
-    access_control.get_collab_access_level(&uid, &oid).await?
+    collab_access_control
+      .get_collab_access_level(&uid, &oid)
+      .await?
   );
 
-  access_control
+  collab_access_control
     .insert_collab_access_level(&uid, &oid, AFAccessLevel::ReadOnly)
     .await?;
 
   assert_eq!(
     AFAccessLevel::ReadOnly,
-    access_control.get_collab_access_level(&uid, &oid).await?
+    collab_access_control
+      .get_collab_access_level(&uid, &oid)
+      .await?
   );
 
   Ok(())
@@ -364,15 +322,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
 
 #[sqlx::test(migrations = false)]
 async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Result<()> {
-  setup_db(&pool).await?;
-  let listeners = PgListeners::new(&pool).await?;
-  let access_control = AccessControl::new(
-    pool.clone(),
-    listeners.subscribe_collab_member_change(),
-    listeners.subscribe_workspace_member_change(),
-  )
-  .await
-  .unwrap();
+  let access_control = setup_access_control(&pool).await?;
 
   let uid = 123;
   assert!(

@@ -2,6 +2,7 @@ use crate::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction};
 use crate::biz::casbin::enforcer::ActionCacheKey;
 use async_trait::async_trait;
 
+use crate::biz::casbin::metrics::AccessControlMetrics;
 use casbin::Adapter;
 use casbin::Filter;
 use casbin::Model;
@@ -15,6 +16,7 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 use futures_util::stream::BoxStream;
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio_stream::StreamExt;
 
 /// Implementation of [`casbin::Adapter`] for access control authorisation.
@@ -22,13 +24,19 @@ use tokio_stream::StreamExt;
 pub struct PgAdapter {
   pg_pool: PgPool,
   action_cache: Arc<DashMap<ActionCacheKey, String>>,
+  access_control_metrics: Arc<AccessControlMetrics>,
 }
 
 impl PgAdapter {
-  pub fn new(pg_pool: PgPool, action_cache: Arc<DashMap<ActionCacheKey, String>>) -> Self {
+  pub fn new(
+    pg_pool: PgPool,
+    action_cache: Arc<DashMap<ActionCacheKey, String>>,
+    access_control_metrics: Arc<AccessControlMetrics>,
+  ) -> Self {
     Self {
       pg_pool,
       action_cache,
+      access_control_metrics,
     }
   }
 }
@@ -75,6 +83,7 @@ async fn load_workspace_policies(
 #[async_trait]
 impl Adapter for PgAdapter {
   async fn load_policy(&mut self, model: &mut dyn Model) -> Result<()> {
+    let start = Instant::now();
     let workspace_member_perm_stream = select_workspace_member_perm_stream(&self.pg_pool);
     let workspace_policies =
       load_workspace_policies(&self.action_cache, workspace_member_perm_stream).await?;
@@ -112,11 +121,13 @@ impl Adapter for PgAdapter {
     for role in af_roles {
       match role {
         AFRole::Owner => {
+          grouping_policies.push([role.to_action(), Action::Delete.to_action()].to_vec());
           grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
         },
         AFRole::Member => {
-          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
           grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
         },
         AFRole::Guest => {
           grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
@@ -126,6 +137,9 @@ impl Adapter for PgAdapter {
 
     // Grouping definition `g` of type `g`. See `model.conf`
     model.add_policies("g", "g", grouping_policies);
+    self
+      .access_control_metrics
+      .record_load_all_policies_in_secs(start.elapsed().as_millis() as u64);
 
     Ok(())
   }

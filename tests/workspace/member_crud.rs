@@ -1,5 +1,5 @@
 use app_error::ErrorCode;
-use client_api_test_util::TestClient;
+use client_api_test_util::{admin_user_client, TestClient};
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 
@@ -252,4 +252,35 @@ async fn get_user_workspace_info_after_open_workspace() {
     info.visiting_workspace.workspace_id.to_string(),
     workspace_id_c1
   );
+}
+
+#[tokio::test]
+async fn add_workspace_member_not_exists() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id_c1 = c1.workspace_id().await;
+  let non_exist_email = format!("{}@appflowy.io", uuid::Uuid::new_v4());
+  c1.api_client
+    .add_workspace_members(
+      &workspace_id_c1,
+      vec![CreateWorkspaceMember {
+        email: non_exist_email.clone(),
+        role: AFRole::Member,
+      }],
+    )
+    .await
+    .expect("should be able to add member whose email not exists yet");
+
+  let admin_client = admin_user_client().await;
+  let users = admin_client
+    .admin_list_users(Some(&non_exist_email))
+    .await
+    .expect("should be able to list users");
+  println!("---------non_exist_email: {}", non_exist_email);
+  let non_exist_user = users
+    .iter()
+    .find(|u| u.email == non_exist_email)
+    .expect("should find the user");
+
+  // since user does not exist and is just created, it should not be confirmed yet
+  assert!(non_exist_user.confirmed_at.is_none());
 }

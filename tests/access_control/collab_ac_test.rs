@@ -1,7 +1,6 @@
 use crate::access_control::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
-use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::access_control::{AccessControl, Action, ActionType, ObjectType};
 
 use appflowy_cloud::biz::pg_listener::PgListeners;
@@ -52,10 +51,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
       role: AFRole::Guest,
     },
   ];
-  let _ =
-    biz::workspace::ops::add_workspace_members(&pool, &user.uuid, &workspace.workspace_id, members)
-      .await
-      .context("adding users to workspace")?;
+  let _ = add_workspace_members_in_tx(&pool, &workspace.workspace_id, members).await;
 
   // user that created the workspace should have full access
   assert_access_level(
@@ -174,17 +170,15 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let _ = biz::workspace::ops::add_workspace_members(
+  let _ = add_workspace_members_in_tx(
     &pool,
-    &guest.uuid,
     &workspace.workspace_id,
     vec![CreateWorkspaceMember {
       email: guest.email,
       role: AFRole::Guest,
     }],
   )
-  .await
-  .context("adding users to workspace")?;
+  .await;
 
   for method in [Method::GET, Method::POST, Method::PUT, Method::DELETE] {
     assert_can_access_http_method(
@@ -274,17 +268,15 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let _ = biz::workspace::ops::add_workspace_members(
+  let _ = add_workspace_members_in_tx(
     &pool,
-    &guest.uuid,
     &workspace.workspace_id,
     vec![CreateWorkspaceMember {
       email: guest.email,
       role: AFRole::Guest,
     }],
   )
-  .await
-  .context("adding users to workspace")?;
+  .await;
 
   // Need to wait for the listener(spawn_listen_on_workspace_member_change) to receive the event
   //

@@ -121,11 +121,13 @@ impl Adapter for PgAdapter {
     for role in af_roles {
       match role {
         AFRole::Owner => {
+          grouping_policies.push([role.to_action(), Action::Delete.to_action()].to_vec());
           grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
         },
         AFRole::Member => {
-          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
           grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
         },
         AFRole::Guest => {
           grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());

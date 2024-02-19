@@ -10,6 +10,7 @@ use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use anyhow::Result;
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::future::BoxFuture;
@@ -43,7 +44,9 @@ pub struct CollabServer<S, U, AC> {
   session_id_by_user: Arc<DashMap<U, String>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
-  /// Keep track of all client streams
+  /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
+  /// 1. User disconnection.
+  /// 2. Server closes the connection due to a ping/pong timeout.
   client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
   group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
   access_control: Arc<AC>,
@@ -128,19 +131,22 @@ where
 
           let sender = match old_sender {
             Some(sender) => sender,
-            None => {
-              let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
-              let runner = GroupCommandRunner {
-                group_control: groups.clone(),
-                client_stream_by_user: client_stream_by_user.clone(),
-                edit_collab_by_user: edit_collab_by_user.clone(),
-                access_control: access_control.clone(),
-                recv: Some(recv),
-              };
-              tokio::task::spawn_local(runner.run());
-              group_sender_by_object_id
-                .insert(collab_message.object_id().to_string(), new_sender.clone());
-              new_sender
+            None => match group_sender_by_object_id.entry(collab_message.object_id().to_string()) {
+              Entry::Occupied(entry) => entry.get().clone(),
+              Entry::Vacant(entry) => {
+                let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+                let runner = GroupCommandRunner {
+                  group_control: groups.clone(),
+                  client_stream_by_user: client_stream_by_user.clone(),
+                  edit_collab_by_user: edit_collab_by_user.clone(),
+                  access_control: access_control.clone(),
+                  recv: Some(recv),
+                };
+
+                tokio::task::spawn_local(runner.run());
+                entry.insert(new_sender.clone());
+                new_sender
+              },
             },
           };
 
@@ -268,7 +274,7 @@ where
 
       remove_user(&groups, &editing_collab_by_user, &msg.user).await;
       if client_stream_by_user.remove(&msg.user).is_some() {
-        info!("remove client stream: {}", &msg.user);
+        trace!("remove client stream: {}", &msg.user);
       }
       Ok(())
     })
@@ -369,12 +375,11 @@ pub async fn broadcast_message<U>(
 {
   if let Some(client_stream) = client_streams.get(user) {
     trace!("[realtime]: receives collab message: {}", collab_message);
-    match client_stream
+    if let Err(err) = client_stream
       .stream_tx
       .send(Ok(RealtimeMessage::Collab(collab_message)))
     {
-      Ok(_) => {},
-      Err(e) => error!("send error: {}", e),
+      trace!("client stream sender error: {}", err);
     }
   }
 }

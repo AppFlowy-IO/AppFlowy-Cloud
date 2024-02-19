@@ -62,19 +62,24 @@ where
       .await;
   }
 
-  /// When processing a message from a client, the server performs the following actions:
-  /// 1. Check if the client is connected to the websocket server.
-  /// 2. Handle message sent by the client if the message is [CollabMessage]
-  ///   2.1 If the message is init sync and the group exists, remove the old subscriber and subscribe the user to the group.
-  ///   2.2 If the message is init sync and the group is not exist, create a new group.
-  ///   2.3 If the message is not init sync, send the message to the group and then broadcast the message to all connected clients.
-  ///   2.4 If the message is not init sync and the group is not exist. Ask client to send the init message first.
+  /// Processes a client message with the following logic:
+  /// 1. Verifies client connection to the websocket server.
+  /// 2. Processes [CollabMessage] messages as follows:
+  ///    2.1 For 'init sync' messages:
+  ///      - If the group exists: Removes the old subscription and re-subscribes the user.
+  ///      - If the group does not exist: Creates a new group.
+  ///      In both cases, the message is then sent to the group for synchronization according to [CollabSyncProtocol],
+  ///      which includes broadcasting to all connected clients.
+  ///    2.2 For non-'init sync' messages:
+  ///      - If the group exists: The message is sent to the group for synchronization as per [CollabSyncProtocol].
+  ///      - If the group does not exist: The client is prompted to send an 'init sync' message first.
+
   async fn handle_collab_message(
     &self,
     user: U,
     collab_message: CollabMessage,
   ) -> Result<(), RealtimeError> {
-    // 1.Check the client is connected with the websocket server
+    // 1.Check the client is connected with the websocket server.
     if self.client_stream_by_user.get(&user).is_none() {
       let msg = anyhow!("The client stream: {} is not found, it should be created when the client is connected with this websocket server", user);
       return Err(RealtimeError::Internal(msg));
@@ -85,7 +90,7 @@ where
       .contains_group(collab_message.object_id())
       .await;
     if is_group_exist {
-      // 2.1 If a group exists for the specified object_id and the message is an 'init sync',
+      // If a group exists for the specified object_id and the message is an 'init sync',
       // then remove any existing subscriber from that group and add the new user as a subscriber to the group.
       if collab_message.is_init_msg() {
         self
@@ -94,8 +99,7 @@ where
           .await?;
       }
 
-      // 2.1.1 subscribe the user to the group. then the user will receive the changes from the
-      // group
+      // subscribe the user to the group. then the user will receive the changes from the group
       let is_user_subscribed = self
         .group_control
         .contains_user(collab_message.object_id(), &user)
@@ -103,21 +107,14 @@ where
       if !is_user_subscribed {
         self.subscribe_group(&user, &collab_message).await?;
       }
-      // 2.3 If the message is not init sync, send the message to the group and then broadcast
-      // the message to all connected clients.
       broadcast_message(&user, collab_message, &self.client_stream_by_user).await;
     } else {
-      // 2.2 If there is no existing group for the given object_id and the message is an 'init message',
+      // If there is no existing group for the given object_id and the message is an 'init message',
       // then create a new group and add the user as a subscriber to this group.
       if collab_message.is_init_msg() {
-        // 2.2.1 create group
         self.create_group(&collab_message).await?;
-
-        // 2.2.2 subscribe the user to the group
         self.subscribe_group(&user, &collab_message).await?;
       } else {
-        // 2.4 If the group is not exist and the message is not init sync, then the server should
-        // ask the client to send the init message first
         // TODO(nathan): ask the client to send the init message first
       }
     }

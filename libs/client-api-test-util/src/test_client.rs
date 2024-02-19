@@ -259,9 +259,11 @@ impl TestClient {
     let duration = Duration::from_secs(secs);
     while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
       if state == SyncState::SyncFinished {
-        break;
+        return;
       }
     }
+
+    panic!("Timeout or SyncState stream ended before reaching SyncFinished");
   }
 
   #[allow(dead_code)]

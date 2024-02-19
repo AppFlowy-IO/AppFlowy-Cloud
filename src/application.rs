@@ -197,7 +197,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     )
     .await,
   );
-  let users = UserCache::new(pg_pool.clone());
+  let users = UserCache::new(pg_pool.clone()).await;
 
   info!("Application state initialized");
   Ok(AppState {

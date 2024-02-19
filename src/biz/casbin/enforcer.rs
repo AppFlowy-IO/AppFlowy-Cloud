@@ -31,14 +31,6 @@ impl AFEnforcer {
       action_cache,
     }
   }
-  pub async fn contains(&self, obj: &ObjectType<'_>) -> bool {
-    self
-      .enforcer
-      .read()
-      .await
-      .get_all_objects()
-      .contains(&obj.to_object_id())
-  }
 
   pub async fn policies_for_user_with_given_object(
     &self,

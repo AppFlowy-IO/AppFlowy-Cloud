@@ -79,7 +79,7 @@ where
     user: U,
     collab_message: CollabMessage,
   ) -> Result<(), RealtimeError> {
-    // 1.Check the client is connected with the websocket server
+    // 1.Check the client is connected with the websocket server.
     if self.client_stream_by_user.get(&user).is_none() {
       let msg = anyhow!("The client stream: {} is not found, it should be created when the client is connected with this websocket server", user);
       return Err(RealtimeError::Internal(msg));

@@ -1,9 +1,14 @@
+use crate::collab::util::generate_random_string;
+use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api_test_util::{
   assert_client_collab, assert_client_collab_include_value, assert_server_collab, TestClient,
 };
 use collab_entity::CollabType;
-use database_entity::dto::AFAccessLevel;
+use database_entity::dto::{AFAccessLevel, AFRole};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn recv_updates_without_permission_test() {
@@ -362,4 +367,159 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
     }),
   )
   .await;
+}
+
+#[tokio::test]
+async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
+  let mut tasks = Vec::new();
+  let mut owner = TestClient::new_user().await;
+  let object_id = Uuid::new_v4().to_string();
+  let collab_type = CollabType::Document;
+  let workspace_id = owner.workspace_id().await;
+  owner
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+  let arc_owner = Arc::new(owner);
+
+  // simulate multiple users edit the same collab. All of them have read and write permission
+  for i in 0..10 {
+    let owner = arc_owner.clone();
+    let object_id = object_id.clone();
+    let collab_type = collab_type.clone();
+    let workspace_id = workspace_id.clone();
+    let task = tokio::spawn(async move {
+      let mut new_user = TestClient::new_user().await;
+      owner
+        .add_workspace_member(&workspace_id, &new_user, AFRole::Member)
+        .await;
+      owner
+        .add_client_as_collab_member(
+          &workspace_id,
+          &object_id,
+          &new_user,
+          AFAccessLevel::ReadAndWrite,
+        )
+        .await;
+
+      new_user
+        .open_collab(&workspace_id, &object_id, collab_type.clone())
+        .await;
+
+      // generate random string and insert it to the collab
+      let random_str = generate_random_string(200);
+      new_user
+        .collab_by_object_id
+        .get_mut(&object_id)
+        .unwrap()
+        .collab
+        .lock()
+        .insert(&i.to_string(), random_str.clone());
+      new_user.wait_object_sync_complete(&object_id).await;
+      (random_str, new_user)
+    });
+    tasks.push(task);
+  }
+
+  let results = futures::future::join_all(tasks).await;
+  let mut expected_json = HashMap::new();
+  let mut clients = vec![];
+  for (index, result) in results.into_iter().enumerate() {
+    let (s, client) = result.unwrap();
+    clients.push(client);
+    expected_json.insert(index.to_string(), s);
+  }
+
+  // all the clients should have the same collab object
+  assert_json_include!(
+    actual: json!(expected_json),
+    expected: arc_owner
+      .collab_by_object_id
+      .get(&object_id)
+      .unwrap()
+      .collab
+      .to_json_value()
+  );
+
+  for client in clients {
+    assert_json_include!(
+      expected: json!(expected_json),
+      actual: client
+        .collab_by_object_id
+        .get(&object_id)
+        .unwrap()
+        .collab
+        .to_json_value()
+    );
+  }
+}
+
+#[tokio::test]
+async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
+  let mut tasks = Vec::new();
+  let mut owner = TestClient::new_user().await;
+  let object_id = Uuid::new_v4().to_string();
+  let collab_type = CollabType::Document;
+  let workspace_id = owner.workspace_id().await;
+  owner
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+  let arc_owner = Arc::new(owner);
+
+  for i in 0..5 {
+    let owner = arc_owner.clone();
+    let object_id = object_id.clone();
+    let collab_type = collab_type.clone();
+    let workspace_id = workspace_id.clone();
+    let task = tokio::spawn(async move {
+      let mut new_user = TestClient::new_user().await;
+      owner
+        .add_client_as_collab_member(
+          &workspace_id,
+          &object_id,
+          &new_user,
+          AFAccessLevel::ReadOnly,
+        )
+        .await;
+
+      new_user
+        .open_collab(&workspace_id, &object_id, collab_type.clone())
+        .await;
+
+      let random_str = generate_random_string(200);
+      new_user
+        .collab_by_object_id
+        .get_mut(&object_id)
+        .unwrap()
+        .collab
+        .lock()
+        .insert(&i.to_string(), random_str.clone());
+      new_user.wait_object_sync_complete(&object_id).await;
+      (random_str, new_user)
+    });
+    tasks.push(task);
+  }
+
+  let results = futures::future::join_all(tasks).await;
+  for (index, result) in results.into_iter().enumerate() {
+    let (s, client) = result.unwrap();
+    assert_json_eq!(
+      json!({index.to_string(): s}),
+      client
+        .collab_by_object_id
+        .get(&object_id)
+        .unwrap()
+        .collab
+        .to_json_value(),
+    );
+  }
+  // all the clients should have the same collab object
+  assert_json_eq!(
+    json!({}),
+    arc_owner
+      .collab_by_object_id
+      .get(&object_id)
+      .unwrap()
+      .collab
+      .to_json_value(),
+  );
 }

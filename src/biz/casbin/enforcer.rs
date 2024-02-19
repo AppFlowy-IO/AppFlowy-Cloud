@@ -77,7 +77,6 @@ impl AFEnforcer {
       return Ok(*value);
     }
 
-    event!(tracing::Level::INFO, "updating policy: {:?}", policy);
     // only one policy per user per object. So remove the old policy and add the new one.
     let _remove_policies = self.remove(uid, obj).await?;
     let object_key = ActionCacheKey::new(uid, obj);
@@ -88,10 +87,22 @@ impl AFEnforcer {
       .add_policy(policy)
       .await
       .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")));
-    if result.is_ok() {
-      trace!("cache action: {}:{}", object_key.0, act.to_action());
-      self.action_cache.insert(object_key, act.to_action());
+
+    match &result {
+      Ok(value) => {
+        trace!("[access control]: add policy:{} => {}", policy_key.0, value);
+        self.action_cache.insert(object_key, act.to_action());
+        self.enforcer_result_cache.insert(policy_key, *value);
+      },
+      Err(err) => {
+        trace!(
+          "[access control]: fail to add policy:{} => {:?}",
+          policy_key.0,
+          err
+        );
+      },
     }
+
     result
   }
 
@@ -112,7 +123,7 @@ impl AFEnforcer {
 
     event!(
       tracing::Level::INFO,
-      "removing policy: object={}, user={}, policies={:?}",
+      "[access control]: remove policy: object={}, user={}, policies={:?}",
       object_type.to_object_id(),
       uid,
       policies_for_user_on_object
@@ -127,7 +138,7 @@ impl AFEnforcer {
       .await
       .remove_policies(policies_for_user_on_object.clone())
       .await
-      .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))?;
+      .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
 
     let object_key = ActionCacheKey::new(uid, object_type);
     self.action_cache.remove(&object_key);
@@ -166,6 +177,8 @@ impl AFEnforcer {
       .await
       .enforce(policy)
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
+
+    trace!("[access control]: policy:{} => {}", policy_key.0, result);
     self.enforcer_result_cache.insert(policy_key, result);
     Ok(result)
   }
@@ -180,8 +193,8 @@ impl AFEnforcer {
     let policies = self
       .policies_for_user_with_given_object(uid, object_type)
       .await;
-    let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
 
+    let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
     trace!("cache action: {}:{}", object_key.0, action.clone());
     self.action_cache.insert(object_key, action.clone());
     Some(action)

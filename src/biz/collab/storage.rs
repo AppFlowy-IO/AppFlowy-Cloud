@@ -198,7 +198,8 @@ where
 
     self
       .mem_cache
-      .cache_encoded_collab_bytes(object_id, encoded_collab);
+      .cache_encoded_collab_bytes(object_id, encoded_collab)
+      .await;
     Ok(())
   }
 

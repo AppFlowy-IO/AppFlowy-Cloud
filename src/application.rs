@@ -1,29 +1,4 @@
-use crate::api::metrics::{metrics_scope, AppFlowyCloudMetrics};
-
-use crate::component::auth::HEADER_TOKEN;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
-use crate::middleware::request_id::RequestIdMiddleware;
-use crate::self_signed::create_self_signed_certificate;
-use crate::state::{AppState, UserCache};
-use actix_identity::IdentityMiddleware;
-use actix_session::storage::RedisSessionStore;
-use actix_session::SessionMiddleware;
-use actix_web::cookie::Key;
-use actix_web::{dev::Server, web, web::Data, App, HttpServer};
-
-use actix::Actor;
-use anyhow::{Context, Error};
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
-use openssl::x509::X509;
-use secrecy::{ExposeSecret, Secret};
-use snowflake::Snowflake;
-use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::net::TcpListener;
-use std::sync::Arc;
-use std::time::Duration;
-
-use tokio::sync::RwLock;
-use tracing::info;
+use crate::api::metrics::metrics_scope;
 
 use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
@@ -35,12 +10,32 @@ use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
+use crate::component::auth::HEADER_TOKEN;
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
-
 use crate::middleware::metrics_mw::MetricsMiddleware;
+use crate::middleware::request_id::RequestIdMiddleware;
+use crate::self_signed::create_self_signed_certificate;
+use crate::state::{AppMetrics, AppState, UserCache};
+use actix::Actor;
+use actix_identity::IdentityMiddleware;
+use actix_session::storage::RedisSessionStore;
+use actix_session::SessionMiddleware;
+use actix_web::cookie::Key;
+use actix_web::{dev::Server, web, web::Data, App, HttpServer};
+use anyhow::{Context, Error};
 use database::file::bucket_s3_impl::S3BucketStorage;
-use prometheus_client::registry::Registry;
-use realtime::collaborate::{CollabServer, RealtimeMetrics};
+use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
+use openssl::x509::X509;
+use realtime::collaborate::CollabServer;
+use secrecy::{ExposeSecret, Secret};
+use snowflake::Snowflake;
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::net::TcpListener;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
+use tracing::info;
 
 pub struct Application {
   port: u16,
@@ -98,18 +93,11 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let mut registry = Registry::default();
-  let af_cloud_metric = AppFlowyCloudMetrics::register(&mut registry);
-  let af_realtime_metric = RealtimeMetrics::register(&mut registry);
-
-  let registry_arc = Arc::new(registry);
-  let af_cloud_metric_arc = Arc::new(af_cloud_metric);
-  let af_realtime_metric_arc = Arc::new(af_realtime_metric);
 
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.clone(),
     state.collab_access_control.clone(),
-    af_realtime_metric_arc.clone(),
+    state.metrics.realtime_metrics.clone(),
   )
   .unwrap()
   .start();
@@ -134,9 +122,9 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
-      .app_data(Data::new(af_cloud_metric_arc.clone()))
-      .app_data(Data::new(af_realtime_metric_arc.clone()))
-      .app_data(Data::new(registry_arc.clone()))
+      .app_data(Data::new(state.metrics.request_metrics.clone()))
+      .app_data(Data::new(state.metrics.realtime_metrics.clone()))
+      .app_data(Data::new(state.metrics.access_control_metrics.clone()))
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
@@ -161,8 +149,10 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 }
 
 pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+  let metrics = AppMetrics::new();
+
   // Postgres
-  info!("Preparng to run database migrations...");
+  info!("Preparing to run database migrations...");
   let pg_pool = get_connection_pool(&config.db_settings).await?;
   migrate(&pg_pool).await?;
 
@@ -191,6 +181,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     pg_pool.clone(),
     collab_member_listener,
     workspace_member_listener,
+    metrics.access_control_metrics.clone(),
   )
   .await?;
 
@@ -222,6 +213,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     bucket_storage,
     pg_listeners,
     access_control,
+    metrics,
   })
 }
 

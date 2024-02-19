@@ -1,4 +1,6 @@
+use crate::pg_row::AFUserIdRow;
 use app_error::AppError;
+use futures_util::stream::BoxStream;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres};
@@ -141,6 +143,12 @@ pub async fn select_uid_from_uuid<'a, E: Executor<'a, Database = Postgres>>(
   .await?
   .uid;
   Ok(uid)
+}
+
+pub fn select_all_uid_uuid<'a, E: Executor<'a, Database = Postgres> + 'a>(
+  executor: E,
+) -> BoxStream<'a, sqlx::Result<AFUserIdRow>> {
+  sqlx::query_as!(AFUserIdRow, r#" SELECT uid, uuid FROM af_user"#,).fetch(executor)
 }
 
 #[inline]

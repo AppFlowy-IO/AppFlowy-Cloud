@@ -58,6 +58,12 @@ pub struct AFUserRow {
   pub created_at: Option<DateTime<Utc>>,
 }
 
+#[derive(Debug, FromRow)]
+pub struct AFUserIdRow {
+  pub uid: i64,
+  pub uuid: Uuid,
+}
+
 /// Represent the row of the af_user_profile_view
 #[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct AFUserProfileRow {

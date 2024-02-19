@@ -9,11 +9,18 @@ use lazy_static::lazy_static;
 use realtime::collaborate::CollabAccessControl;
 use snowflake::Snowflake;
 use sqlx::PgPool;
+use std::sync::Arc;
 
+use casbin::{CoreApi, DefaultModel, Enforcer};
+use dashmap::DashMap;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::{interval, timeout};
 
+use appflowy_cloud::biz::casbin::access_control::{AccessControl, MODEL_CONF};
+use appflowy_cloud::biz::casbin::adapter::PgAdapter;
+use appflowy_cloud::biz::pg_listener::PgListeners;
+use appflowy_cloud::state::AppMetrics;
 use uuid::Uuid;
 
 mod collab_ac_test;
@@ -22,6 +29,40 @@ mod user_ac_test;
 
 lazy_static! {
   pub static ref ID_GEN: RwLock<Snowflake> = RwLock::new(Snowflake::new(1));
+}
+
+pub async fn setup_access_control(pool: &PgPool) -> anyhow::Result<AccessControl> {
+  setup_db(pool).await?;
+
+  let metrics = AppMetrics::new();
+  let listeners = PgListeners::new(pool).await?;
+  Ok(
+    AccessControl::new(
+      pool.clone(),
+      listeners.subscribe_collab_member_change(),
+      listeners.subscribe_workspace_member_change(),
+      metrics.access_control_metrics,
+    )
+    .await
+    .unwrap(),
+  )
+}
+
+pub async fn setup_enforcer(pool: &PgPool) -> anyhow::Result<Enforcer> {
+  let metrics = AppMetrics::new();
+  let model = DefaultModel::from_str(MODEL_CONF).await?;
+  Ok(
+    Enforcer::new(
+      model,
+      PgAdapter::new(
+        pool.clone(),
+        Arc::new(DashMap::new()),
+        metrics.access_control_metrics,
+      ),
+    )
+    .await
+    .unwrap(),
+  )
 }
 
 pub async fn setup_db(pool: &PgPool) -> anyhow::Result<()> {

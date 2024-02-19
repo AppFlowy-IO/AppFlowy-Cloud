@@ -1,6 +1,5 @@
 use crate::access_control::*;
 use anyhow::anyhow;
-use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction, MODEL_CONF};
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
 use casbin::{CoreApi, DefaultModel, Enforcer};
@@ -103,14 +102,8 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
       role: AFRole::Guest,
     },
   ];
-  let _ = biz::workspace::ops::add_workspace_members(
-    &pool,
-    &user_main.uuid,
-    &workspace.workspace_id,
-    members,
-  )
-  .await
-  .context("adding users to workspace")?;
+
+  let _ = add_workspace_members_in_tx(&pool, &workspace.workspace_id, members).await;
 
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   let enforcer = Enforcer::new(
@@ -251,14 +244,8 @@ async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyh
     email: user_member.email.clone(),
     role: AFRole::Member,
   }];
-  let _ = biz::workspace::ops::add_workspace_members(
-    &pool,
-    &user_owner.uuid,
-    &workspace.workspace_id,
-    members,
-  )
-  .await
-  .context("adding users to workspace")?;
+
+  let _ = add_workspace_members_in_tx(&pool, &workspace.workspace_id, members).await;
 
   assert!(!enforcer
     .enforce((

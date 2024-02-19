@@ -13,6 +13,8 @@ use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 
 use actix::Actor;
 use anyhow::{Context, Error};
+use app_error::AppError;
+use gotrue::grant::{Grant, PasswordGrant};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -176,6 +178,12 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
 
+  // Gotrue Admin
+  let gotrue_admin = GoTrueAdmin::new(
+    config.gotrue.admin_email.clone(),
+    config.gotrue.admin_password.clone(),
+  );
+
   // Redis
   info!("Connecting to Redis...");
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
@@ -215,6 +223,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     users: Arc::new(users),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
+    gotrue_admin,
     redis_client,
     collab_storage,
     collab_access_control,
@@ -223,6 +232,31 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     pg_listeners,
     access_control,
   })
+}
+
+#[derive(Debug, Clone)]
+pub struct GoTrueAdmin {
+  pub admin_email: String,
+  pub password: Secret<String>,
+}
+
+impl GoTrueAdmin {
+  pub fn new(admin_email: String, password: String) -> Self {
+    Self {
+      admin_email,
+      password: password.into(),
+    }
+  }
+
+  pub async fn token(&self, client: &gotrue::api::Client) -> Result<String, AppError> {
+    let token = client
+      .token(&Grant::Password(PasswordGrant {
+        email: self.admin_email.clone(),
+        password: self.password.expose_secret().clone(),
+      }))
+      .await?;
+    Ok(token.access_token)
+  }
 }
 
 async fn setup_admin_account(

@@ -1,15 +1,18 @@
 use actix_http::Method;
 use anyhow::Context;
 use app_error::ErrorCode;
+use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use appflowy_cloud::biz::workspace::access_control::WorkspaceAccessControl;
 use client_api_test_util::setup_log;
 use database_entity::dto::{AFAccessLevel, AFRole};
 use lazy_static::lazy_static;
 use realtime::collaborate::CollabAccessControl;
+use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::{interval, timeout};
@@ -266,4 +269,23 @@ pub async fn assert_can_access_http_method(
   timeout(timeout_duration, operation)
     .await
     .expect("Operation timed out");
+}
+
+pub async fn add_workspace_members_in_tx(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+  members: Vec<CreateWorkspaceMember>,
+) -> HashMap<i64, AFRole> {
+  let mut txn = pool
+    .begin()
+    .await
+    .expect("acquire transaction to add workspace members");
+  let res = biz::workspace::ops::add_workspace_members_db(workspace_id, members, &mut txn)
+    .await
+    .expect("add workspace members");
+  txn
+    .commit()
+    .await
+    .expect("commit transaction to add workspace members");
+  res
 }

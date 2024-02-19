@@ -79,10 +79,6 @@ impl AccessControl {
     WorkspaceAccessControlImpl::new(self.clone())
   }
 
-  pub async fn contains(&self, obj: &ObjectType<'_>) -> bool {
-    self.enforcer.contains(obj).await
-  }
-
   pub async fn update(
     &self,
     uid: &i64,

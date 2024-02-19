@@ -4,10 +4,9 @@ use crate::access_control::{
 use anyhow::{anyhow, Context};
 use app_error::ErrorCode;
 use appflowy_cloud::biz;
-use appflowy_cloud::biz::casbin::access_control::{AccessControl, MODEL_CONF};
-use appflowy_cloud::biz::casbin::adapter::PgAdapter;
+use appflowy_cloud::biz::casbin::access_control::AccessControl;
+
 use appflowy_cloud::biz::pg_listener::PgListeners;
-use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::PgPool;
@@ -16,15 +15,14 @@ use sqlx::PgPool;
 async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
   let access_control = access_control.new_workspace_access_control();
 
   let user = create_user(&pool).await?;

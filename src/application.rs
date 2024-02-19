@@ -187,7 +187,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let collab_member_listener = pg_listeners.subscribe_collab_member_change();
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
-  info!("Setting up access controls with Casbin...");
+  info!("Setting up access controls...");
   let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF).await?;
   let access_control_adapter = PgAdapter::new(pg_pool.clone());
   let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter).await?;

@@ -1,4 +1,6 @@
-use crate::casbin::{assert_workspace_role, assert_workspace_role_error, create_user, setup_db};
+use crate::access_control::{
+  assert_workspace_role, assert_workspace_role_error, create_user, setup_db,
+};
 use anyhow::{anyhow, Context};
 use app_error::ErrorCode;
 use appflowy_cloud::biz;

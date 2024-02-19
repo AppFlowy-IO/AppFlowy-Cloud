@@ -7,9 +7,10 @@ use app_error::AppError;
 use casbin::Enforcer;
 use database_entity::dto::{AFAccessLevel, AFRole};
 
+use actix_http::Method;
 use sqlx::PgPool;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::broadcast;
 
 /// Manages access control.
 ///
@@ -25,7 +26,7 @@ use tokio::sync::{broadcast, RwLock};
 /// according to the model defined.
 #[derive(Clone)]
 pub struct AccessControl {
-  enforcer: Arc<RwLock<AFEnforcer>>,
+  enforcer: Arc<AFEnforcer>,
 }
 
 impl AccessControl {
@@ -35,7 +36,7 @@ impl AccessControl {
     workspace_listener: broadcast::Receiver<WorkspaceMemberNotification>,
     enforcer: Enforcer,
   ) -> Self {
-    let enforcer = Arc::new(RwLock::new(AFEnforcer::new(enforcer)));
+    let enforcer = Arc::new(AFEnforcer::new(enforcer));
     spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
     spawn_listen_on_collab_member_change(pg_pool, collab_listener, enforcer.clone());
     Self { enforcer }
@@ -49,7 +50,7 @@ impl AccessControl {
   }
 
   pub async fn contains(&self, obj: &ObjectType<'_>) -> bool {
-    self.enforcer.read().await.contains(obj).await
+    self.enforcer.contains(obj).await
   }
 
   pub async fn update(
@@ -58,13 +59,11 @@ impl AccessControl {
     obj: &ObjectType<'_>,
     act: &ActionType,
   ) -> Result<bool, AppError> {
-    let mut write_guard = self.enforcer.write().await;
-    write_guard.update(uid, obj, act).await
+    self.enforcer.update(uid, obj, act).await
   }
 
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
-    let mut write_guard = self.enforcer.write().await;
-    write_guard.remove(uid, obj).await?;
+    self.enforcer.remove(uid, obj).await?;
     Ok(())
   }
 
@@ -72,15 +71,13 @@ impl AccessControl {
   where
     A: ToCasbinAction,
   {
-    self.enforcer.read().await.enforce(uid, obj, act).await
+    self.enforcer.enforce(uid, obj, act).await
   }
 
   pub async fn get_access_level(&self, uid: &i64, oid: &str) -> Option<AFAccessLevel> {
     let collab_id = ObjectType::Collab(oid);
     self
       .enforcer
-      .read()
-      .await
       .get_action(uid, &collab_id)
       .await
       .map(|value| AFAccessLevel::from_action(&value))
@@ -90,8 +87,6 @@ impl AccessControl {
     let workspace_id = ObjectType::Workspace(workspace_id);
     self
       .enforcer
-      .read()
-      .await
       .get_action(uid, &workspace_id)
       .await
       .map(|value| AFRole::from_action(&value))
@@ -182,6 +177,23 @@ impl ToCasbinAction for Action {
       Action::Read => "read".to_owned(),
       Action::Write => "write".to_owned(),
       Action::Delete => "delete".to_owned(),
+    }
+  }
+}
+
+impl From<Method> for Action {
+  fn from(method: Method) -> Self {
+    Self::from(&method)
+  }
+}
+
+impl From<&Method> for Action {
+  fn from(method: &Method) -> Self {
+    match *method {
+      Method::POST => Action::Write,
+      Method::PUT => Action::Write,
+      Method::DELETE => Action::Delete,
+      _ => Action::Read,
     }
   }
 }

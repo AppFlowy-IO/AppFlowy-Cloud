@@ -1,4 +1,4 @@
-use crate::casbin::*;
+use crate::access_control::*;
 use anyhow::anyhow;
 use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction, MODEL_CONF};

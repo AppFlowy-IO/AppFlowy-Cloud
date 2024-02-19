@@ -1,9 +1,9 @@
-use crate::casbin::*;
+use crate::access_control::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::access_control::{
-  AccessControl, ActionType, ObjectType, MODEL_CONF,
+  AccessControl, Action, ActionType, ObjectType, MODEL_CONF,
 };
 use appflowy_cloud::biz::casbin::adapter::PgAdapter;
 use appflowy_cloud::biz::pg_listener::PgListeners;
@@ -128,6 +128,29 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
     None,
   )
   .await;
+  Ok(())
+}
+
+#[sqlx::test(migrations = false)]
+async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::Result<()> {
+  setup_db(&pool).await?;
+
+  let model = DefaultModel::from_str(MODEL_CONF).await?;
+  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
+  let listeners = PgListeners::new(&pool).await?;
+  let access_control = AccessControl::new(
+    pool.clone(),
+    listeners.subscribe_collab_member_change(),
+    listeners.subscribe_workspace_member_change(),
+    enforcer,
+  );
+  let access_control = access_control.new_collab_access_control();
+  let user = create_user(&pool).await?;
+
+  for method in [Method::GET, Method::POST, Method::PUT, Method::DELETE] {
+    assert_can_access_http_method(&access_control, &user.uid, "fake_id", method, true).await;
+  }
+
   Ok(())
 }
 
@@ -382,7 +405,7 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
 
   assert!(
     access_control
-      .enforce(&uid, &ObjectType::Workspace("123"), AFRole::Owner)
+      .enforce(&uid, &ObjectType::Workspace("123"), Action::Write)
       .await?
   );
 
@@ -392,8 +415,8 @@ async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Resul
     .is_ok());
 
   assert!(
-    !access_control
-      .enforce(&uid, &ObjectType::Workspace("123"), AFRole::Owner)
+    access_control
+      .enforce(&uid, &ObjectType::Workspace("123"), Action::Read)
       .await?
   );
 

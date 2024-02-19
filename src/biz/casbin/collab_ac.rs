@@ -73,19 +73,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
     oid: &str,
     method: &Method,
   ) -> Result<bool, AppError> {
-    let action = if Method::POST == method || Method::PUT == method || Method::DELETE == method {
-      Action::Write
-    } else {
-      Action::Read
-    };
-
-    // If collab does not exist, allow access.
-    // Workspace access control will still check it.
-    let collab_exists = self.access_control.contains(&ObjectType::Collab(oid)).await;
-    if !collab_exists {
-      return Ok(true);
-    }
-
+    let action = Action::from(method);
     self
       .access_control
       .enforce(uid, &ObjectType::Collab(oid), action)

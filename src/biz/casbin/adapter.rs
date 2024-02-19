@@ -9,7 +9,7 @@ use database::collab::select_collab_member_access_level;
 use database::pg_row::AFCollabMemerAccessLevelRow;
 use database::pg_row::AFWorkspaceMemberPermRow;
 use database::workspace::select_workspace_member_perm_stream;
-use database_entity::dto::AFAccessLevel;
+use database_entity::dto::{AFAccessLevel, AFRole};
 use futures_util::stream::BoxStream;
 use sqlx::PgPool;
 use tokio_stream::StreamExt;
@@ -89,12 +89,28 @@ impl Adapter for PgAdapter {
     let mut grouping_policies = Vec::new();
     for level in af_access_levels {
       // All levels can read
-      grouping_policies.push([i32::from(level).to_string(), Action::Read.to_action()].to_vec());
+      grouping_policies.push([level.to_action(), Action::Read.to_action()].to_vec());
       if level.can_write() {
-        grouping_policies.push([i32::from(level).to_string(), Action::Write.to_action()].to_vec());
+        grouping_policies.push([level.to_action(), Action::Write.to_action()].to_vec());
       }
       if level.can_delete() {
-        grouping_policies.push([i32::from(level).to_string(), Action::Delete.to_action()].to_vec());
+        grouping_policies.push([level.to_action(), Action::Delete.to_action()].to_vec());
+      }
+    }
+
+    let af_roles = [AFRole::Owner, AFRole::Member, AFRole::Guest];
+    for role in af_roles {
+      match role {
+        AFRole::Owner => {
+          grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+        },
+        AFRole::Member => {
+          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+          grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+        },
+        AFRole::Guest => {
+          grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        },
       }
     }
 

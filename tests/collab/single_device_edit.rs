@@ -502,3 +502,27 @@ async fn post_realtime_message_test() {
     drop(client);
   }
 }
+
+#[tokio::test]
+async fn collab_flush_test() {
+  let mut new_user = TestClient::new_user().await;
+  let object_id = Uuid::new_v4().to_string();
+  let workspace_id = new_user.workspace_id().await;
+  new_user
+    .open_collab(&workspace_id, &object_id, CollabType::Document)
+    .await;
+
+  // the default flush_per_update is 100 that defined in [WriteConfig]
+  // so we need to write 200 times to trigger the flush
+  for i in 0..200 {
+    new_user
+      .collab_by_object_id
+      .get_mut(&object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .insert(&i.to_string(), i.to_string());
+    sleep(Duration::from_millis(300)).await;
+  }
+  // TODO(nathan): assert the collab content in disk
+}

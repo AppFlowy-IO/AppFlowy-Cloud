@@ -113,7 +113,7 @@ async fn init_collab(
 
   // Can turn off INFO level into DEBUG. For now, just to see the log
   event!(
-    tracing::Level::INFO,
+    tracing::Level::DEBUG,
     "start decoding:{} state len: {}, sv len: {}, v: {:?}",
     oid,
     encoded_collab.doc_state.len(),
@@ -125,7 +125,6 @@ async fn init_collab(
   txn.try_apply_update(update)?;
   drop(txn);
 
-  event!(tracing::Level::INFO, "finish decoding:{}: doc state", oid,);
   Ok(())
 }
 

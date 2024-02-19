@@ -142,10 +142,6 @@ where
                 };
 
                 let _ = tokio::task::spawn_local(runner.run());
-                info!(
-                  "Create new group sender for object_id:{}",
-                  collab_message.object_id()
-                );
                 entry.insert(new_sender.clone());
                 new_sender
               },

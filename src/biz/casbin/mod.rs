@@ -2,6 +2,7 @@ pub mod access_control;
 pub mod adapter;
 mod collab_ac;
 mod enforcer;
+pub(crate) mod metrics;
 pub mod pg_listen;
 mod workspace_ac;
 

@@ -54,7 +54,7 @@ where
   }
 
   #[instrument(level = "trace", skip_all, err)]
-  #[allow(clippy::blocks_in_conditions)]
+  #[allow(clippy::blocks_in_if_conditions)]
   async fn check_workspace_permission(
     &self,
     workspace_id: &Uuid,

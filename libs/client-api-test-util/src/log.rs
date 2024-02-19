@@ -8,7 +8,7 @@ use {
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = "info";
+    let level = "trace";
     let mut filters = vec![];
     filters.push(format!("client_api={}", level));
     std::env::set_var("RUST_LOG", filters.join(","));

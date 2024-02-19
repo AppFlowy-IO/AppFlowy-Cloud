@@ -1,18 +1,15 @@
 use crate::access_control::*;
 use anyhow::anyhow;
-use appflowy_cloud::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction, MODEL_CONF};
-use appflowy_cloud::biz::casbin::adapter::PgAdapter;
-use casbin::{CoreApi, DefaultModel, Enforcer};
-use dashmap::DashMap;
+use appflowy_cloud::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction};
+use casbin::CoreApi;
+
 use database_entity::dto::{AFAccessLevel, AFRole};
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::PgPool;
-use std::sync::Arc;
 
 #[sqlx::test(migrations = false)]
 async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
-
   let user = create_user(&pool).await?;
 
   // Get workspace details
@@ -22,12 +19,7 @@ async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(
-    model,
-    PgAdapter::new(pool.clone(), Arc::new(DashMap::new())),
-  )
-  .await?;
+  let enforcer = setup_enforcer(&pool).await?;
 
   assert!(enforcer
     .enforce((
@@ -102,15 +94,8 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
       role: AFRole::Guest,
     },
   ];
-
   let _ = add_workspace_members_in_tx(&pool, &workspace.workspace_id, members).await;
-
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(
-    model,
-    PgAdapter::new(pool.clone(), Arc::new(DashMap::new())),
-  )
-  .await?;
+  let enforcer = setup_enforcer(&pool).await?;
   {
     // Owner
     let user = user_owner;
@@ -222,6 +207,7 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
 #[sqlx::test(migrations = false)]
 async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
+  let mut enforcer = setup_enforcer(&pool).await?;
 
   let user_owner = create_user(&pool).await?;
   let user_member = create_user(&pool).await?;
@@ -233,13 +219,6 @@ async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyh
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  // Create enforcer before adding user to workspace
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let mut enforcer = Enforcer::new(
-    model,
-    PgAdapter::new(pool.clone(), Arc::new(DashMap::new())),
-  )
-  .await?;
   let members = vec![CreateWorkspaceMember {
     email: user_member.email.clone(),
     role: AFRole::Member,

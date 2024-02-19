@@ -1,4 +1,4 @@
-use crate::api::metrics::{metrics_scope, AppFlowyCloudMetrics};
+use crate::api::metrics::metrics_scope;
 
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
@@ -38,11 +38,10 @@ use crate::biz::pg_listener::PgListeners;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
-
 use crate::middleware::metrics_mw::MetricsMiddleware;
+use crate::state::AppMetrics;
 use database::file::bucket_s3_impl::S3BucketStorage;
-use prometheus_client::registry::Registry;
-use realtime::collaborate::{CollabServer, RealtimeMetrics};
+use realtime::collaborate::CollabServer;
 
 pub struct Application {
   port: u16,
@@ -100,18 +99,11 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let mut registry = Registry::default();
-  let af_cloud_metric = AppFlowyCloudMetrics::register(&mut registry);
-  let af_realtime_metric = RealtimeMetrics::register(&mut registry);
-
-  let registry_arc = Arc::new(registry);
-  let af_cloud_metric_arc = Arc::new(af_cloud_metric);
-  let af_realtime_metric_arc = Arc::new(af_realtime_metric);
 
   let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.clone(),
     state.collab_access_control.clone(),
-    af_realtime_metric_arc.clone(),
+    state.metrics.realtime_metrics.clone(),
   )
   .unwrap()
   .start();
@@ -136,9 +128,9 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
-      .app_data(Data::new(af_cloud_metric_arc.clone()))
-      .app_data(Data::new(af_realtime_metric_arc.clone()))
-      .app_data(Data::new(registry_arc.clone()))
+      .app_data(Data::new(state.metrics.request_metrics.clone()))
+      .app_data(Data::new(state.metrics.realtime_metrics.clone()))
+      .app_data(Data::new(state.metrics.access_control_metrics.clone()))
       .app_data(Data::new(collab_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
@@ -163,8 +155,10 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 }
 
 pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+  let metrics = AppMetrics::new();
+
   // Postgres
-  info!("Preparng to run database migrations...");
+  info!("Preparing to run database migrations...");
   let pg_pool = get_connection_pool(&config.db_settings).await?;
   migrate(&pg_pool).await?;
 
@@ -199,6 +193,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     pg_pool.clone(),
     collab_member_listener,
     workspace_member_listener,
+    metrics.access_control_metrics.clone(),
   )
   .await?;
 
@@ -231,6 +226,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     bucket_storage,
     pg_listeners,
     access_control,
+    metrics,
   })
 }
 

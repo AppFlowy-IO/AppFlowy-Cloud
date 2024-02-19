@@ -5,6 +5,9 @@ use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;
 
+use std::time::Duration;
+use tokio::time::sleep;
+
 use uuid::Uuid;
 
 #[tokio::test]
@@ -407,20 +410,6 @@ async fn multiple_collab_edit_test() {
   .await;
 }
 
-// #[tokio::test]
-// async fn open_100_collab_test() {
-//   let mut clients = vec![];
-//   for _ in 0..40 {
-//     let mut test_client = TestClient::new_user().await;
-//     let workspace_id = test_client.workspace_id().await;
-//     let object_id = test_client
-//       .create_and_edit_collab(&workspace_id, CollabType::Document)
-//       .await;
-//     clients.push(test_client);
-//   }
-//
-//   tokio::time::sleep(Duration::from_secs(50)).await;
-// }
 #[tokio::test]
 async fn simulate_multiple_user_edit_collab_test() {
   let mut tasks = Vec::new();
@@ -465,5 +454,51 @@ async fn simulate_multiple_user_edit_collab_test() {
   for result in results {
     let (expected_json, json) = result.unwrap();
     assert_json_eq!(expected_json, json);
+  }
+}
+
+#[tokio::test]
+async fn post_realtime_message_test() {
+  let mut tasks = Vec::new();
+  let big_text = generate_random_string(1024 * 1024 * 3);
+
+  for i in 0..20 {
+    let cloned_text = big_text.clone();
+    let task = tokio::spawn(async move {
+      let mut new_user = TestClient::new_user().await;
+      // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
+      sleep(Duration::from_secs(i % 3)).await;
+
+      let object_id = Uuid::new_v4().to_string();
+      let workspace_id = new_user.workspace_id().await;
+      let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
+      // the big doc_state will force the init_sync using the http request.
+      // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
+      new_user
+        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Document, doc_state)
+        .await;
+
+      new_user.wait_object_sync_complete(&object_id).await;
+      (new_user, object_id, workspace_id)
+    });
+    tasks.push(task);
+  }
+
+  let results = futures::future::join_all(tasks).await;
+  for result in results.into_iter() {
+    let (mut client, object_id, workspace_id) = result.unwrap();
+    assert_server_collab(
+      &workspace_id,
+      &mut client.api_client,
+      &object_id,
+      &CollabType::Document,
+      10,
+      json!({
+        "text": big_text
+      }),
+    )
+    .await;
+
+    drop(client);
   }
 }

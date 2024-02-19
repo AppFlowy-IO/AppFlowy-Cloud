@@ -81,8 +81,7 @@ impl CollabMemCache {
     self.cache.invalidate(object_id).await;
   }
 
-  pub fn cache_encoded_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
-    let cache = self.cache.clone();
-    tokio::spawn(async move { cache.insert(object_id, Bytes::from(bytes)).await });
+  pub async fn cache_encoded_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
+    self.cache.insert(object_id, Bytes::from(bytes)).await;
   }
 }

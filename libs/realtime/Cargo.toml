@@ -27,6 +27,7 @@ app-error = { workspace = true }
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
+actix-rt = "2"
 
 collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }

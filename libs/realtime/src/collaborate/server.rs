@@ -10,6 +10,7 @@ use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use anyhow::Result;
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::future::BoxFuture;
@@ -128,19 +129,26 @@ where
 
           let sender = match old_sender {
             Some(sender) => sender,
-            None => {
-              let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
-              let runner = GroupCommandRunner {
-                group_control: groups.clone(),
-                client_stream_by_user: client_stream_by_user.clone(),
-                edit_collab_by_user: edit_collab_by_user.clone(),
-                access_control: access_control.clone(),
-                recv: Some(recv),
-              };
-              tokio::task::spawn_local(runner.run());
-              group_sender_by_object_id
-                .insert(collab_message.object_id().to_string(), new_sender.clone());
-              new_sender
+            None => match group_sender_by_object_id.entry(collab_message.object_id().to_string()) {
+              Entry::Occupied(entry) => entry.get().clone(),
+              Entry::Vacant(entry) => {
+                let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+                let runner = GroupCommandRunner {
+                  group_control: groups.clone(),
+                  client_stream_by_user: client_stream_by_user.clone(),
+                  edit_collab_by_user: edit_collab_by_user.clone(),
+                  access_control: access_control.clone(),
+                  recv: Some(recv),
+                };
+
+                let _ = tokio::task::spawn_local(runner.run());
+                info!(
+                  "Create new group sender for object_id:{}",
+                  collab_message.object_id()
+                );
+                entry.insert(new_sender.clone());
+                new_sender
+              },
             },
           };
 

@@ -1,9 +1,11 @@
 use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
-use assert_json_diff::assert_json_eq;
+use assert_json_diff::{assert_json_eq, assert_json_include};
 use client_api_test_util::*;
 use collab_entity::CollabType;
-use database_entity::dto::AFAccessLevel;
+use database_entity::dto::{AFAccessLevel, AFRole};
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -421,22 +423,21 @@ async fn multiple_collab_edit_test() {
 //   tokio::time::sleep(Duration::from_secs(50)).await;
 // }
 #[tokio::test]
-async fn concurrent_device_edit_test() {
+async fn simulate_multiple_user_edit_collab_test() {
   let mut tasks = Vec::new();
   for _i in 0..20 {
     let task = tokio::spawn(async move {
+      let mut new_user = TestClient::new_user().await;
       let collab_type = CollabType::Document;
-      let mut test_client = TestClient::new_user().await;
-
-      let workspace_id = test_client.workspace_id().await;
+      let workspace_id = new_user.workspace_id().await;
       let object_id = Uuid::new_v4().to_string();
 
-      test_client
+      new_user
         .open_collab(&workspace_id, &object_id, collab_type.clone())
         .await;
 
       let random_str = generate_random_string(200);
-      test_client
+      new_user
         .collab_by_object_id
         .get_mut(&object_id)
         .unwrap()
@@ -447,10 +448,10 @@ async fn concurrent_device_edit_test() {
         "string": random_str
       });
 
-      test_client.wait_object_sync_complete(&object_id).await;
+      new_user.wait_object_sync_complete(&object_id).await;
       (
         expected_json,
-        test_client
+        new_user
           .collab_by_object_id
           .get(&object_id)
           .unwrap()
@@ -465,5 +466,86 @@ async fn concurrent_device_edit_test() {
   for result in results {
     let (expected_json, json) = result.unwrap();
     assert_json_eq!(expected_json, json);
+  }
+}
+
+#[tokio::test]
+async fn simulate_multiple_user_edit_same_collab_test() {
+  let mut tasks = Vec::new();
+  let mut owner = TestClient::new_user().await;
+  let object_id = Uuid::new_v4().to_string();
+  let collab_type = CollabType::Document;
+  let workspace_id = owner.workspace_id().await;
+  owner
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+  let arc_owner = Arc::new(owner);
+
+  for i in 0..10 {
+    let owner = arc_owner.clone();
+    let object_id = object_id.clone();
+    let collab_type = collab_type.clone();
+    let workspace_id = workspace_id.clone();
+    let task = tokio::spawn(async move {
+      let mut new_user = TestClient::new_user().await;
+      owner
+        .add_workspace_member(&workspace_id, &new_user, AFRole::Member)
+        .await;
+      owner
+        .add_client_as_collab_member(
+          &workspace_id,
+          &object_id,
+          &new_user,
+          AFAccessLevel::ReadAndWrite,
+        )
+        .await;
+
+      new_user
+        .open_collab(&workspace_id, &object_id, collab_type.clone())
+        .await;
+
+      let random_str = generate_random_string(200);
+      new_user
+        .collab_by_object_id
+        .get_mut(&object_id)
+        .unwrap()
+        .collab
+        .lock()
+        .insert(&i.to_string(), random_str.clone());
+      new_user.wait_object_sync_complete(&object_id).await;
+      (random_str, new_user)
+    });
+    tasks.push(task);
+  }
+
+  let results = futures::future::join_all(tasks).await;
+  let mut expected_json = HashMap::new();
+  let mut clients = vec![];
+  for (index, result) in results.into_iter().enumerate() {
+    let (s, client) = result.unwrap();
+    clients.push(client);
+    expected_json.insert(index.to_string(), s);
+  }
+
+  assert_json_include!(
+    actual: json!(expected_json),
+    expected: arc_owner
+      .collab_by_object_id
+      .get(&object_id)
+      .unwrap()
+      .collab
+      .to_json_value()
+  );
+
+  for client in clients {
+    assert_json_include!(
+      actual: json!(expected_json),
+      expected: client
+        .collab_by_object_id
+        .get(&object_id)
+        .unwrap()
+        .collab
+        .to_json_value()
+    );
   }
 }

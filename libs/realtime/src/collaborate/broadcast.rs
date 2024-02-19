@@ -143,7 +143,7 @@ impl CollabBroadcast {
     let cloned_origin = subscriber_origin.clone();
     trace!("[realtime]: new subscriber: {}", subscriber_origin);
     let sink = Arc::new(Mutex::new(sink));
-    // Receive a update from the document observer and forward the  update to all
+    // Receive a update from the document observer and forward the update to all
     // connected subscribers using its Sink.
     let sink_stop_tx = {
       let sink = sink.clone();

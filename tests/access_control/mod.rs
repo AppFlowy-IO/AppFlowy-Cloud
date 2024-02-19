@@ -49,7 +49,6 @@ pub async fn setup_access_control(pool: &PgPool) -> anyhow::Result<AccessControl
 }
 
 pub async fn setup_enforcer(pool: &PgPool) -> anyhow::Result<Enforcer> {
-  setup_db(pool).await?;
   let metrics = AppMetrics::new();
   let model = DefaultModel::from_str(MODEL_CONF).await?;
   Ok(

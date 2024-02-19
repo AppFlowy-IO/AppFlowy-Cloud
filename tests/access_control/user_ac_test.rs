@@ -11,6 +11,7 @@ use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
 async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
+  setup_db(&pool).await?;
   let user = create_user(&pool).await?;
 
   // Get workspace details
@@ -67,7 +68,7 @@ async fn test_create_user(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = false)]
 async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
-  let enforcer = setup_enforcer(&pool).await?;
+  setup_db(&pool).await?;
 
   let user_main = create_user(&pool).await?;
   let user_owner = create_user(&pool).await?;
@@ -103,7 +104,7 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
   )
   .await
   .context("adding users to workspace")?;
-
+  let enforcer = setup_enforcer(&pool).await?;
   {
     // Owner
     let user = user_owner;
@@ -214,6 +215,7 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
 
 #[sqlx::test(migrations = false)]
 async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyhow::Result<()> {
+  setup_db(&pool).await?;
   let mut enforcer = setup_enforcer(&pool).await?;
 
   let user_owner = create_user(&pool).await?;

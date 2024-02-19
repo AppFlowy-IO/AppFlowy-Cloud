@@ -1,5 +1,5 @@
 use crate::api::metrics::{metrics_scope, AppFlowyCloudMetrics};
-use crate::biz::casbin::adapter::PgAdapter;
+
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::request_id::RequestIdMiddleware;
@@ -29,7 +29,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::casbin::access_control::{AccessControl, MODEL_CONF};
+use crate::biz::casbin::access_control::AccessControl;
 use crate::biz::collab::access_control::CollabHttpAccessControl;
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
@@ -38,7 +38,6 @@ use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
 
 use crate::middleware::metrics_mw::MetricsMiddleware;
-use casbin::CoreApi;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use prometheus_client::registry::Registry;
 use realtime::collaborate::{CollabServer, RealtimeMetrics};
@@ -188,15 +187,12 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!("Setting up access controls...");
-  let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF).await?;
-  let access_control_adapter = PgAdapter::new(pg_pool.clone());
-  let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter).await?;
   let access_control = AccessControl::new(
     pg_pool.clone(),
     collab_member_listener,
     workspace_member_listener,
-    enforcer,
-  );
+  )
+  .await?;
 
   let collab_access_control = access_control.new_collab_access_control();
   let workspace_access_control = access_control.new_workspace_access_control();

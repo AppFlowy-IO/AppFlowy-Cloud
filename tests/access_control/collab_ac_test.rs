@@ -2,12 +2,9 @@ use crate::access_control::*;
 use actix_http::Method;
 use anyhow::{anyhow, Context};
 use appflowy_cloud::biz;
-use appflowy_cloud::biz::casbin::access_control::{
-  AccessControl, Action, ActionType, ObjectType, MODEL_CONF,
-};
-use appflowy_cloud::biz::casbin::adapter::PgAdapter;
+use appflowy_cloud::biz::casbin::access_control::{AccessControl, Action, ActionType, ObjectType};
+
 use appflowy_cloud::biz::pg_listener::PgListeners;
-use casbin::{CoreApi, DefaultModel, Enforcer};
 use database_entity::dto::{AFAccessLevel, AFRole};
 use realtime::collaborate::CollabAccessControl;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
@@ -19,15 +16,14 @@ use tokio::time::sleep;
 async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
   let access_control = access_control.new_collab_access_control();
 
   let user = create_user(&pool).await?;
@@ -135,15 +131,14 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
   let access_control = access_control.new_collab_access_control();
   let user = create_user(&pool).await?;
 
@@ -158,15 +153,14 @@ async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::
 async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
   let access_control = access_control.new_collab_access_control();
 
   let user = create_user(&pool).await?;
@@ -259,15 +253,14 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
   let access_control = access_control.new_collab_access_control();
 
   let user = create_user(&pool).await?;
@@ -344,15 +337,14 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
 async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
 
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
   let access_control = access_control.new_collab_access_control();
 
   let uid = 123;
@@ -381,16 +373,14 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
 #[sqlx::test(migrations = false)]
 async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Result<()> {
   setup_db(&pool).await?;
-
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer = Enforcer::new(model, PgAdapter::new(pool.clone())).await?;
   let listeners = PgListeners::new(&pool).await?;
   let access_control = AccessControl::new(
     pool.clone(),
     listeners.subscribe_collab_member_change(),
     listeners.subscribe_workspace_member_change(),
-    enforcer,
-  );
+  )
+  .await
+  .unwrap();
 
   let uid = 123;
   assert!(

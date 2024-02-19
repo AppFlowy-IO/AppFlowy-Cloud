@@ -8,22 +8,27 @@ use casbin::{CoreApi, Enforcer, MgmtApi};
 use dashmap::DashMap;
 
 use std::ops::Deref;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{event, trace};
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
   /// Cache for the result of the policy check. It's a memory cache for faster access.
-  result_by_policy_cache: DashMap<CachePolicyKey, bool>,
-  action_by_object_cache: DashMap<CacheObjectKey, String>,
+  enforcer_result_cache: Arc<DashMap<PolicyCacheKey, bool>>,
+  action_cache: Arc<DashMap<ActionCacheKey, String>>,
 }
 
 impl AFEnforcer {
-  pub fn new(enforcer: Enforcer) -> Self {
+  pub fn new(
+    enforcer: Enforcer,
+    enforcer_result_cache: Arc<DashMap<PolicyCacheKey, bool>>,
+    action_cache: Arc<DashMap<ActionCacheKey, String>>,
+  ) -> Self {
     Self {
       enforcer: RwLock::new(enforcer),
-      result_by_policy_cache: DashMap::new(),
-      action_by_object_cache: Default::default(),
+      enforcer_result_cache,
+      action_cache,
     }
   }
   pub async fn contains(&self, obj: &ObjectType<'_>) -> bool {
@@ -65,17 +70,17 @@ impl AFEnforcer {
   ) -> Result<bool, AppError> {
     validate_obj_action(obj, act)?;
     let policy = vec![uid.to_string(), obj.to_object_id(), act.to_action()];
-    let policy_key = CachePolicyKey::new(&policy);
+    let policy_key = PolicyCacheKey::new(&policy);
 
     // if the policy is already in the cache, return. Only update the policy if it's not in the cache.
-    if let Some(value) = self.result_by_policy_cache.get(&policy_key) {
+    if let Some(value) = self.enforcer_result_cache.get(&policy_key) {
       return Ok(*value);
     }
 
     event!(tracing::Level::INFO, "updating policy: {:?}", policy);
     // only one policy per user per object. So remove the old policy and add the new one.
     let _remove_policies = self.remove(uid, obj).await?;
-    let object_key = CacheObjectKey::new(uid, obj);
+    let object_key = ActionCacheKey::new(uid, obj);
     let result = self
       .enforcer
       .write()
@@ -85,9 +90,7 @@ impl AFEnforcer {
       .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")));
     if result.is_ok() {
       trace!("cache action: {}:{}", object_key.0, act.to_action());
-      self
-        .action_by_object_cache
-        .insert(object_key, act.to_action());
+      self.action_cache.insert(object_key, act.to_action());
     }
     result
   }
@@ -126,12 +129,12 @@ impl AFEnforcer {
       .await
       .map_err(|e| AppError::Internal(anyhow!("casbin error enforce: {e:?}")))?;
 
-    let object_key = CacheObjectKey::new(uid, object_type);
-    self.action_by_object_cache.remove(&object_key);
+    let object_key = ActionCacheKey::new(uid, object_type);
+    self.action_cache.remove(&object_key);
     for policy in &policies_for_user_on_object {
       self
-        .result_by_policy_cache
-        .remove(&CachePolicyKey::new(policy));
+        .enforcer_result_cache
+        .remove(&PolicyCacheKey::new(policy));
     }
 
     Ok(policies_for_user_on_object)
@@ -142,8 +145,8 @@ impl AFEnforcer {
     A: ToCasbinAction,
   {
     let policy = vec![uid.to_string(), obj.to_object_id(), act.to_action()];
-    let policy_key = CachePolicyKey::new(&policy);
-    if let Some(value) = self.result_by_policy_cache.get(&policy_key) {
+    let policy_key = PolicyCacheKey::new(&policy);
+    if let Some(value) = self.enforcer_result_cache.get(&policy_key) {
       return Ok(*value);
     }
 
@@ -163,13 +166,13 @@ impl AFEnforcer {
       .await
       .enforce(policy)
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
-    self.result_by_policy_cache.insert(policy_key, result);
+    self.enforcer_result_cache.insert(policy_key, result);
     Ok(result)
   }
 
   pub async fn get_action(&self, uid: &i64, object_type: &ObjectType<'_>) -> Option<String> {
-    let object_key = CacheObjectKey::new(uid, object_type);
-    if let Some(value) = self.action_by_object_cache.get(&object_key) {
+    let object_key = ActionCacheKey::new(uid, object_type);
+    if let Some(value) = self.action_cache.get(&object_key) {
       return Some(value.clone());
     }
 
@@ -180,23 +183,21 @@ impl AFEnforcer {
     let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
 
     trace!("cache action: {}:{}", object_key.0, action.clone());
-    self
-      .action_by_object_cache
-      .insert(object_key, action.clone());
+    self.action_cache.insert(object_key, action.clone());
     Some(action)
   }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
-struct CachePolicyKey(String);
+pub struct PolicyCacheKey(String);
 
-impl CachePolicyKey {
+impl PolicyCacheKey {
   fn new(policy: &[String]) -> Self {
     Self(policy.join(":"))
   }
 }
 
-impl Deref for CachePolicyKey {
+impl Deref for PolicyCacheKey {
   type Target = str;
   fn deref(&self) -> &Self::Target {
     &self.0
@@ -204,10 +205,10 @@ impl Deref for CachePolicyKey {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
-struct CacheObjectKey(String);
+pub struct ActionCacheKey(String);
 
-impl CacheObjectKey {
-  fn new(uid: &i64, object_type: &ObjectType<'_>) -> Self {
+impl ActionCacheKey {
+  pub(crate) fn new(uid: &i64, object_type: &ObjectType<'_>) -> Self {
     Self(format!("{}:{}", uid, object_type.to_object_id()))
   }
 }

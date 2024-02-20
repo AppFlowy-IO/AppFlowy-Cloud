@@ -160,6 +160,7 @@ impl AFEnforcer {
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj.to_object_id()]);
 
     if policies_for_object.is_empty() {
+      self.enforcer_result_cache.insert(policy_key, true);
       return Ok(true);
     }
 

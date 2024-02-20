@@ -341,11 +341,11 @@ impl CollabStoragePgImpl {
           COLLAB_SNAPSHOT_LIMIT,
         )
         .await?;
-
         Ok(meta)
       },
       _ => Err(AppError::Internal(anyhow!(
-        "fail to acquire transaction to create snapshot",
+        "fail to acquire transaction to create snapshot for object:{}",
+        params.object_id,
       ))),
     }
   }

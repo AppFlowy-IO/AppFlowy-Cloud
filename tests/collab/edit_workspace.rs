@@ -2,6 +2,8 @@ use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::AFRole;
 use serde_json::json;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::test]
 async fn edit_workspace_without_permission() {
@@ -75,7 +77,7 @@ async fn edit_workspace_with_guest_permission() {
   let workspace_id = client_1.workspace_id().await;
   client_1.open_workspace_collab(&workspace_id).await;
 
-  // add client 2 as the member of the workspace then the client 2 will receive the update.
+  // add client 2 as the member of the workspace then the client 2 can receive the update.
   client_1
     .add_workspace_member(&workspace_id, &client_2, AFRole::Guest)
     .await;
@@ -91,9 +93,7 @@ async fn edit_workspace_with_guest_permission() {
 
   client_2.open_workspace_collab(&workspace_id).await;
   // make sure the client 2 has received the remote updates before the client 2 edits the collab
-  client_2
-    .wait_object_sync_complete_with_secs(&workspace_id, 10)
-    .await;
+  sleep(Duration::from_secs(3)).await;
 
   // client_2 only has the guest permission, so it can not edit the collab
   client_2
@@ -103,9 +103,7 @@ async fn edit_workspace_with_guest_permission() {
     .collab
     .lock()
     .insert("name", "nathan");
-  client_2
-    .wait_object_sync_complete_with_secs(&workspace_id, 5)
-    .await;
+
   assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "zack"})).await;
   assert_client_collab_include_value(&mut client_2, &workspace_id, json!({"name": "nathan"})).await;
 

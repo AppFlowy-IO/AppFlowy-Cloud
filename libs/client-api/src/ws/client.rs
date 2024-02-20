@@ -19,6 +19,7 @@ use crate::{platform_spawn, retry_connect};
 use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::{RealtimeMessage, SystemMessage};
 use realtime_entity::user::UserMessage;
+
 use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, error, info, trace, warn};
 use websocket::{CloseCode, CloseFrame, Message};
@@ -68,7 +69,6 @@ pub struct WSClient {
   rate_limiter:
     Arc<tokio::sync::RwLock<RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>>>,
 }
-
 impl WSClient {
   pub fn new<H>(config: WSClientConfig, http_sender: H) -> Self
   where
@@ -209,8 +209,9 @@ impl WSClient {
           // ping from server
           Message::Ping(_) => match sender.send(Message::Pong(vec![])) {
             Ok(_) => {},
-            Err(e) => {
-              error!("failed to send pong message to websocket: {}", e);
+            Err(_e) => {
+              // if the sender returns an error, it means the receiver has been dropped
+              break;
             },
           },
           Message::Close(close) => {
@@ -261,6 +262,7 @@ impl WSClient {
           }
         }
       }
+      info!("exit websocket send loop");
     });
 
     Ok(())

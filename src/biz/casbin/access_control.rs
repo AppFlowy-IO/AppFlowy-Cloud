@@ -124,6 +124,38 @@ impl AccessControl {
   }
 }
 
+/// policy in db:
+///   p = 1, 123, 1 (1 mean AFRole::Owner)
+///   p = 1, 456, 50 (50 mean AFAccessLevel::FullAccess)
+///
+/// role_definition in db:
+///   g = _, _
+///      af role:
+///      ["1", "delete"], ["1", "write"], ["1", "read"],
+///      ["2", "write"], ["2", "read"],
+///      ["3", "read"],
+///      af access level:
+///      ["10", "read"],
+///      ["20", "read"],
+///      ["30", "read"], ["30", "write"],
+///      ["50", "read"], ["50", "write"], ["50", "delete"]
+///
+/// matchers:
+/// r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)
+///
+/// Example:
+///   request:
+///    1. api/workspace/123, user=1, workspace_id=123 GET
+///     r = sub = 1, obj = 123, act =read
+///     p = sub = 1, obj = 123, act = 1
+///
+///    Evaluation:
+///     1. Subject Match: r.sub == p.sub
+///     2. Object Match: p.obj == r.obj
+///     3. Action Permission: g(p.act, r.act) => g(1, read) =>  ["1", "read"]
+///    Result:
+///     Allow
+///
 pub const MODEL_CONF: &str = r###"
 [request_definition]
 r = sub, obj, act
@@ -133,13 +165,12 @@ p = sub, obj, act
 
 [role_definition]
 g = _, _ # rule for action
-g2 = _, _ # rule for collab object id
 
 [policy_effect]
 e = some(where (p.eft == allow))
 
 [matchers]
-m = r.sub == p.sub && g2(p.obj, r.obj) && g(p.act, r.act)
+m = r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)
 "###;
 
 /// Represents the entity stored at the index of the access control policy.

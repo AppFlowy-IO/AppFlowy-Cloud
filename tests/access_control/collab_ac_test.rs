@@ -120,7 +120,9 @@ async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::
   let user = create_user(&pool).await?;
 
   for method in [Method::GET, Method::POST, Method::PUT, Method::DELETE] {
-    assert_can_access_http_method(&collab_access_control, &user.uid, "fake_id", method, true).await;
+    assert_can_access_http_method(&collab_access_control, &user.uid, "fake_id", method, true)
+      .await
+      .unwrap();
   }
 
   Ok(())
@@ -160,7 +162,8 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
       method,
       true,
     )
-    .await;
+    .await
+    .unwrap();
   }
 
   assert!(
@@ -178,7 +181,8 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
     Method::GET,
     true,
   )
-  .await;
+  .await
+  .unwrap();
 
   // guest should not have write access
   assert_can_access_http_method(
@@ -188,7 +192,8 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
     Method::POST,
     false,
   )
-  .await;
+  .await
+  .unwrap();
 
   assert!(
     !collab_access_control
@@ -242,7 +247,6 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
   .await;
 
   // Need to wait for the listener(spawn_listen_on_workspace_member_change) to receive the event
-  //
   sleep(Duration::from_secs(2)).await;
 
   assert!(

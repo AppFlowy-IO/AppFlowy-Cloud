@@ -96,7 +96,7 @@ impl UserCache {
 #[derive(Clone)]
 pub struct AppMetrics {
   #[allow(dead_code)]
-  registry: Arc<prometheus_client::registry::Registry>,
+  pub registry: Arc<prometheus_client::registry::Registry>,
   pub request_metrics: Arc<RequestMetrics>,
   pub realtime_metrics: Arc<RealtimeMetrics>,
   pub access_control_metrics: Arc<AccessControlMetrics>,

@@ -122,6 +122,7 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
+      .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
       .app_data(Data::new(state.metrics.access_control_metrics.clone()))

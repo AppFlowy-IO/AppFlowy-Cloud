@@ -434,6 +434,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
     expected_json.insert(index.to_string(), s);
   }
 
+  // wait 5 seconds to make sure all the server broadcast the updates to all the clients
+  sleep(Duration::from_secs(5)).await;
+
   // all the clients should have the same collab object
   assert_json_include!(
     actual: json!(expected_json),

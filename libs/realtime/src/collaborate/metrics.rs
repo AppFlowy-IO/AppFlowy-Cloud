@@ -46,8 +46,8 @@ impl RealtimeMetrics {
   }
 
   pub fn record_mem_cache_usage(&self, size_in_bytes: usize) {
-    let size_in_mb = size_in_bytes / (1024 * 1024);
-    trace!("[metrics]: mem_cache_usage: {} MB", size_in_mb);
+    let size_in_mb = size_in_bytes / 1024;
+    trace!("[metrics]: mem_cache_usage: {} KB", size_in_mb);
     self.mem_cache_usage.set(size_in_mb as i64);
   }
 

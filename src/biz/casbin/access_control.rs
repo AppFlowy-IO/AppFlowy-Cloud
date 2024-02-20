@@ -14,7 +14,7 @@ use anyhow::anyhow;
 use dashmap::DashMap;
 use sqlx::PgPool;
 use std::sync::Arc;
-use std::time::Instant;
+
 use tokio::sync::broadcast;
 
 /// Manages access control.
@@ -32,6 +32,7 @@ use tokio::sync::broadcast;
 #[derive(Clone)]
 pub struct AccessControl {
   enforcer: Arc<AFEnforcer>,
+  #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
 }
 
@@ -97,12 +98,7 @@ impl AccessControl {
   where
     A: ToCasbinAction,
   {
-    let start = Instant::now();
-    let result = self.enforcer.enforce(uid, obj, act).await;
-    self
-      .access_control_metrics
-      .record_enforce_duration(start.elapsed().as_millis() as u64);
-    result
+    self.enforcer.enforce(uid, obj, act).await
   }
 
   pub async fn get_access_level(&self, uid: &i64, oid: &str) -> Option<AFAccessLevel> {

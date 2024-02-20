@@ -240,7 +240,7 @@ where
       Some(encoded_collab) => {
         event!(
           tracing::Level::DEBUG,
-          "Get encoded collab:{} from redis",
+          "Get encoded collab:{} from cache",
           params.object_id
         );
         Ok(encoded_collab)

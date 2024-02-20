@@ -73,7 +73,6 @@ impl CollabAccessControl for CollabAccessControlImpl {
     oid: &str,
     method: &Method,
   ) -> Result<bool, AppError> {
-    // Ok(true)
     let action = Action::from(method);
     self
       .access_control
@@ -81,19 +80,19 @@ impl CollabAccessControl for CollabAccessControlImpl {
       .await
   }
 
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    // Ok(true)
-    self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Write)
-      .await
+  async fn can_send_collab_update(&self, _uid: &i64, _oid: &str) -> Result<bool, AppError> {
+    Ok(true)
+    // self
+    //   .access_control
+    //   .enforce(uid, &ObjectType::Collab(oid), Action::Write)
+    //   .await
   }
 
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    // Ok(true)
-    self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Read)
-      .await
+  async fn can_receive_collab_update(&self, _uid: &i64, _oid: &str) -> Result<bool, AppError> {
+    Ok(true)
+    // self
+    //   .access_control
+    //   .enforce(uid, &ObjectType::Collab(oid), Action::Read)
+    //   .await
   }
 }

@@ -32,6 +32,7 @@ use tokio::sync::broadcast;
 #[derive(Clone)]
 pub struct AccessControl {
   enforcer: Arc<AFEnforcer>,
+  #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
 }
 

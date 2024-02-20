@@ -11,7 +11,7 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
-use realtime_protocol::{handle_collab_message, Error};
+use realtime_protocol::handle_collab_message;
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;

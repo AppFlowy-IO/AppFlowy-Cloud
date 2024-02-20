@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Error};
+use anyhow::anyhow;
 use collab::core::awareness;
 use std::future::Future;
 use std::iter::Take;
@@ -130,19 +130,18 @@ impl CollabBroadcast {
   pub fn subscribe<Sink, Stream, E>(
     &self,
     subscriber_origin: CollabOrigin,
-    sink: Sink,
+    mut sink: Sink,
     mut stream: Stream,
     modified_at: Arc<Mutex<Instant>>,
   ) -> Subscription
   where
-    Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
+    Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<anyhow::Error> + Send + Sync + 'static,
   {
     let cloned_origin = subscriber_origin.clone();
     trace!("[realtime]: new subscriber: {}", subscriber_origin);
-    let sink = Arc::new(Mutex::new(sink));
     // Receive a update from the document observer and forward the update to all
     // connected subscribers using its Sink.
     let sink_stop_tx = {
@@ -199,7 +198,7 @@ impl CollabBroadcast {
                match result {
                  Some(Ok(collab_msg)) => {
                    if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
-                     handle_user_collab_message(&object_id, &sink, &collab_msg, &collab).await;
+                     handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
                      if let Ok(mut modified_at) = modified_at.try_lock() {
                        *modified_at = Instant::now();
                      }
@@ -226,9 +225,10 @@ impl CollabBroadcast {
   }
 }
 
-async fn handle_user_collab_message<Sink>(
+/// Handle the message sent from the client
+async fn handle_client_collab_message<Sink>(
   object_id: &str,
-  sink: &Arc<Mutex<Sink>>,
+  sink: &mut Sink,
   collab_msg: &CollabMessage,
   collab: &MutexCollab,
 ) where
@@ -247,13 +247,11 @@ async fn handle_user_collab_message<Sink>(
           Ok(msg) => {
             let cloned_collab = collab.clone();
             let cloned_origin = origin.clone();
-            let result = tokio::task::spawn_blocking(move || {
-              handle_collab_message(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg)
-            })
-            .await;
+            let result =
+              handle_collab_message(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg);
 
             match result {
-              Ok(Ok(payload)) => match origin.as_ref() {
+              Ok(payload) => match origin.as_ref() {
                 None => warn!("Client message does not have a origin"),
                 Some(origin) => {
                   if let Some(msg_id) = collab_msg.msg_id() {
@@ -266,22 +264,14 @@ async fn handle_user_collab_message<Sink>(
                     );
 
                     trace!("Send response to client: {}", resp);
-                    match sink.try_lock() {
-                      Ok(mut sink) => {
-                        if let Err(err) = sink.send(resp.into()).await {
-                          trace!("fail to send response to client: {}", err);
-                        }
-                      },
-                      Err(err) => error!("Requires sink lock failed: {:?}", err),
+                    if let Err(err) = sink.send(resp.into()).await {
+                      trace!("fail to send response to client: {}", err);
                     }
                   }
                 },
               },
-              Ok(Err(err)) => {
-                error!("object id:{} =>{}", object_id, err);
-              },
               Err(err) => {
-                error!("internal error when handle user ws message: {}", err);
+                error!("object id:{} =>{}", object_id, err);
               },
             }
           },
@@ -356,14 +346,14 @@ fn gen_awareness_update_message(
   Ok(update)
 }
 
-pub struct SinkCollabMessageAction<'a, Sink> {
-  pub sink: &'a Arc<tokio::sync::Mutex<Sink>>,
+pub struct SinkCollabMessageAction<'a, Sink: Clone> {
+  pub sink: &'a Sink,
   pub message: CollabMessage,
 }
 
 impl<'a, Sink> SinkCollabMessageAction<'a, Sink>
 where
-  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'a,
+  Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'a,
 {
   pub fn run(self) -> Retry<Take<FixedInterval>, SinkCollabMessageAction<'a, Sink>> {
     let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
@@ -373,19 +363,16 @@ where
 
 impl<'a, Sink> Action for SinkCollabMessageAction<'a, Sink>
 where
-  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'a,
+  Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'a,
 {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync + 'a>>;
   type Item = ();
   type Error = RealtimeError;
 
   fn run(&mut self) -> Self::Future {
-    let sink = self.sink.clone();
+    let mut sink = self.sink.clone();
     let message = self.message.clone();
     Box::pin(async move {
-      let mut sink = sink
-        .try_lock()
-        .map_err(|err| RealtimeError::Internal(Error::from(err)))?;
       sink
         .send(message)
         .await

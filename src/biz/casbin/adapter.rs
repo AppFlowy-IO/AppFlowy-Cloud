@@ -134,7 +134,6 @@ impl Adapter for PgAdapter {
         },
       }
     }
-
     // Grouping definition `g` of type `g`. See `model.conf`
     model.add_policies("g", "g", grouping_policies);
     self

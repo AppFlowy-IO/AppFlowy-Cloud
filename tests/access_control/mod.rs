@@ -1,5 +1,5 @@
 use actix_http::Method;
-use anyhow::Context;
+use anyhow::{Context, Error};
 use app_error::ErrorCode;
 use appflowy_cloud::biz;
 use appflowy_cloud::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
@@ -276,7 +276,7 @@ pub async fn assert_can_access_http_method(
   object_id: &str,
   method: Method,
   expected: bool,
-) {
+) -> Result<(), Error> {
   let timeout_duration = Duration::from_secs(10);
   let retry_interval = Duration::from_millis(300);
   let mut retries = 0usize;
@@ -307,9 +307,8 @@ pub async fn assert_can_access_http_method(
     }
   };
 
-  timeout(timeout_duration, operation)
-    .await
-    .expect("Operation timed out");
+  timeout(timeout_duration, operation).await?;
+  Ok(())
 }
 
 pub async fn add_workspace_members_in_tx(

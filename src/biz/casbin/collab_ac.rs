@@ -1,4 +1,4 @@
-use crate::biz::casbin::access_control::AccessControl;
+use crate::biz::casbin::access_control::{AccessControl, Action};
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use actix_http::Method;
 use app_error::AppError;
@@ -69,31 +69,28 @@ impl CollabAccessControl for CollabAccessControlImpl {
 
   async fn can_access_http_method(
     &self,
-    _uid: &i64,
-    _oid: &str,
-    _method: &Method,
+    uid: &i64,
+    oid: &str,
+    method: &Method,
   ) -> Result<bool, AppError> {
-    Ok(true)
-    // let action = Action::from(method);
-    // self
-    //   .access_control
-    //   .enforce(uid, &ObjectType::Collab(oid), action)
-    //   .await
+    let action = Action::from(method);
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Collab(oid), action)
+      .await
   }
 
-  async fn can_send_collab_update(&self, _uid: &i64, _oid: &str) -> Result<bool, AppError> {
-    Ok(true)
-    // self
-    //   .access_control
-    //   .enforce(uid, &ObjectType::Collab(oid), Action::Write)
-    //   .await
+  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Collab(oid), Action::Write)
+      .await
   }
 
-  async fn can_receive_collab_update(&self, _uid: &i64, _oid: &str) -> Result<bool, AppError> {
-    Ok(true)
-    // self
-    //   .access_control
-    //   .enforce(uid, &ObjectType::Collab(oid), Action::Read)
-    //   .await
+  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Collab(oid), Action::Read)
+      .await
   }
 }

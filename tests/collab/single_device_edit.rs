@@ -467,7 +467,7 @@ async fn post_realtime_message_test() {
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;
       // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
-      sleep(Duration::from_secs(i % 3)).await;
+      sleep(Duration::from_secs(i % 5)).await;
 
       let object_id = Uuid::new_v4().to_string();
       let workspace_id = new_user.workspace_id().await;

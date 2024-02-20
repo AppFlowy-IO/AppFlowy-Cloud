@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[derive(Clone)]
 pub struct UnboundedSenderSink<T>(pub tokio::sync::mpsc::UnboundedSender<T>);
 
 impl<T> UnboundedSenderSink<T> {

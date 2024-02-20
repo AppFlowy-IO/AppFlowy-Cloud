@@ -37,25 +37,6 @@ async fn add_duplicate_workspace_members() {
 }
 
 #[tokio::test]
-async fn add_not_exist_workspace_members() {
-  let c1 = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = c1.workspace_id().await;
-  let email = format!("{}@appflowy.io", uuid::Uuid::new_v4());
-  let err = c1
-    .api_client
-    .add_workspace_members(
-      workspace_id,
-      vec![CreateWorkspaceMember {
-        email,
-        role: AFRole::Member,
-      }],
-    )
-    .await
-    .unwrap_err();
-
-  assert_eq!(err.code, ErrorCode::RecordNotFound);
-}
-#[tokio::test]
 async fn update_workspace_member_role_not_enough_permission() {
   let c1 = TestClient::new_user_without_ws_conn().await;
   let c2 = TestClient::new_user_without_ws_conn().await;

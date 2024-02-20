@@ -8,6 +8,8 @@ use database_entity::dto::{AFAccessLevel, AFRole};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -389,6 +391,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
     let workspace_id = workspace_id.clone();
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;
+      // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
+      sleep(Duration::from_secs(i % 3)).await;
+
       owner
         .add_workspace_member(&workspace_id, &new_user, AFRole::Member)
         .await;
@@ -472,6 +477,8 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
     let workspace_id = workspace_id.clone();
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;
+      // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
+      sleep(Duration::from_secs(i % 2)).await;
       owner
         .add_client_as_collab_member(
           &workspace_id,
@@ -493,7 +500,10 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
         .collab
         .lock()
         .insert(&i.to_string(), random_str.clone());
-      new_user.wait_object_sync_complete(&object_id).await;
+
+      // wait 3 seconds to let the client try to send the update to the server
+      // can't use want_object_sync_complete because the client do not have permission to send the update
+      sleep(Duration::from_secs(3)).await;
       (random_str, new_user)
     });
     tasks.push(task);

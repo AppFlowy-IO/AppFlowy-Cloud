@@ -128,6 +128,7 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
+      .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
       .app_data(Data::new(state.metrics.access_control_metrics.clone()))
@@ -209,7 +210,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     )
     .await,
   );
-  let users = UserCache::new(pg_pool.clone());
+  let users = UserCache::new(pg_pool.clone()).await;
 
   info!("Application state initialized");
   Ok(AppState {

@@ -9,14 +9,16 @@ use app_error::AppError;
 use crate::api::metrics::RequestMetrics;
 use crate::biz::casbin::access_control::AccessControl;
 use crate::biz::casbin::metrics::AccessControlMetrics;
+use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
-use database::user::select_uid_from_uuid;
+use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use realtime::collaborate::RealtimeMetrics;
 use snowflake::Snowflake;
 use sqlx::PgPool;
-use std::collections::HashMap;
+
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 pub type RedisClient = redis::aio::ConnectionManager;
@@ -57,31 +59,38 @@ pub const EXPIRED_DURATION_DAYS: i64 = 30;
 
 pub struct UserCache {
   pool: PgPool,
-  users: RwLock<HashMap<Uuid, AuthenticateUser>>,
+  users: DashMap<Uuid, AuthenticateUser>,
 }
 
 impl UserCache {
-  pub fn new(pool: PgPool) -> Self {
-    Self {
-      pool,
-      users: RwLock::new(HashMap::new()),
-    }
+  /// Load all users from database when initializing the cache.
+  pub async fn new(pool: PgPool) -> Self {
+    let users = {
+      let users = DashMap::new();
+      let mut stream = select_all_uid_uuid(&pool);
+      while let Some(Ok(af_user_id)) = stream.next().await {
+        users.insert(
+          af_user_id.uuid,
+          AuthenticateUser {
+            uid: af_user_id.uid,
+          },
+        );
+      }
+      users
+    };
+
+    Self { pool, users }
   }
 
   /// Get the user's uid from the cache or the database.
   pub async fn get_user_uid(&self, uuid: &Uuid) -> Result<i64, AppError> {
-    // Attempt to acquire a read lock and check if the user exists to minimize lock contention.
-    {
-      let users_read = self.users.read().await;
-      if let Some(user) = users_read.get(uuid) {
-        return Ok(user.uid);
-      }
+    if let Some(entry) = self.users.get(uuid) {
+      return Ok(entry.value().uid);
     }
 
     // If the user is not found in the cache, query the database.
     let uid = select_uid_from_uuid(&self.pool, uuid).await?;
-    let mut users_write = self.users.write().await;
-    users_write.insert(*uuid, AuthenticateUser { uid });
+    self.users.insert(*uuid, AuthenticateUser { uid });
     Ok(uid)
   }
 }
@@ -89,7 +98,7 @@ impl UserCache {
 #[derive(Clone)]
 pub struct AppMetrics {
   #[allow(dead_code)]
-  registry: Arc<prometheus_client::registry::Registry>,
+  pub registry: Arc<prometheus_client::registry::Registry>,
   pub request_metrics: Arc<RequestMetrics>,
   pub realtime_metrics: Arc<RealtimeMetrics>,
   pub access_control_metrics: Arc<AccessControlMetrics>,

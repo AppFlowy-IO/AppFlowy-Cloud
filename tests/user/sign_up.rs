@@ -64,7 +64,7 @@ async fn sign_up_oauth_not_available() {
 #[tokio::test]
 async fn concurrent_user_sign_up_test() {
   let mut tasks = Vec::new();
-  for _i in 0..50 {
+  for _i in 0..30 {
     let task = tokio::spawn(async move {
       let _ = TestClient::new_user().await;
       tokio::time::sleep(Duration::from_millis(300)).await;

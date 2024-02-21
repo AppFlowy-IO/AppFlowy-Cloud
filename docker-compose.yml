@@ -107,6 +107,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        FEATURES: "disable_access_control"
     image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
 
   admin_frontend:

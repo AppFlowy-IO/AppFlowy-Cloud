@@ -179,6 +179,8 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 
 [features]
 custom_env= []
+# This feature will be removed once the cpu spike issue is resolved
+disable_collab_ac = []
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

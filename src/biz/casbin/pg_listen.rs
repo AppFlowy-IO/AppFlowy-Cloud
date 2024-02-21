@@ -22,7 +22,8 @@ pub(crate) fn spawn_listen_on_collab_member_change(
       match change.action_type {
         CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
           if let Some(member_row) = change.new {
-            if let Ok(Some(row)) = select_permission(&pg_pool, &member_row.permission_id).await {
+            let permission_row = select_permission(&pg_pool, &member_row.permission_id).await;
+            if let Ok(Some(row)) = permission_row {
               if let Err(err) = enforcer
                 .update(
                   &member_row.uid,

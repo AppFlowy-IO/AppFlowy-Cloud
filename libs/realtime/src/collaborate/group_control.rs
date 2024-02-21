@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
-use tracing::{debug, error, event, instrument};
+use tracing::{debug, error, event, instrument, trace};
 
 pub struct CollabGroupControl<S, U, AC> {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,
@@ -174,6 +174,12 @@ pub struct CollabGroup<U> {
   pub modified_at: Arc<Mutex<Instant>>,
 }
 
+impl<U> Drop for CollabGroup<U> {
+  fn drop(&mut self) {
+    trace!("Drop collab group:{}", self.collab.lock().object_id);
+  }
+}
+
 impl<U> CollabGroup<U>
 where
   U: RealtimeUser,
@@ -221,6 +227,61 @@ where
     }
   }
 
+  /// Subscribes a new connection to the broadcast group for collaborative activities.
+  ///
+  /// This method establishes a new subscription for a user, represented by a `sink`/`stream` pair.
+  /// These pairs implement the futures `Sink` and `Stream` protocols, facilitating real-time
+  /// communication between the server and the client.
+  ///
+  /// # Parameters
+  /// - `user`: Reference to the user initiating the subscription. Used for managing user-specific
+  ///   subscriptions and ensuring unique subscriptions per user-device combination.
+  /// - `subscriber_origin`: Identifies the origin of the subscription, used to prevent echoing
+  ///   messages back to the sender.
+  /// - `sink`: A `Sink` implementation used for sending collaboration changes to the client.
+  /// - `stream`: A `Stream` implementation for receiving messages from the client.
+  ///
+  /// # Behavior
+  /// - **Sink**: Utilized for forwarding any collaboration changes within the group to the client.
+  ///   Ensures that updates are communicated in real-time.
+  ///
+  ///   Collaboration Group Changes
+  ///               |
+  ///               | (1) Detect Change
+  ///               V
+  ///   +---------------------------+
+  ///   | Subscribe Function        |
+  ///   +---------------------------+
+  ///               |
+  ///               | (2) Forward Update
+  ///               V
+  ///        +-------------+
+  ///        |             |
+  ///        | Sink        |-----> (To Client)
+  ///        |             |
+  ///        +-------------+
+  ///
+  /// - **Stream**: Processes incoming messages from the client. After processing, responses are
+  ///   dispatched back to the client through the `sink`.
+  ///        (From Client)
+  ///             |
+  ///             | (1) Receive Message
+  ///             V
+  ///        +-------------+
+  ///        |             |
+  ///        | Stream      |
+  ///        |             |
+  ///        +-------------+
+  ///             |
+  ///             | (2) Process Message
+  ///             V
+  ///   +---------------------------+
+  ///   | Subscribe Function        |
+  ///   +---------------------------+
+  ///             |
+  ///             | (3) Alter Document (if applicable)
+  ///             V
+  ///   Collaboration Group Updates (triggers Sink flow)
   pub async fn subscribe<Sink, Stream, E>(
     &self,
     user: &U,

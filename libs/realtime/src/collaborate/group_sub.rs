@@ -33,10 +33,7 @@ where
   AC: CollabAccessControl,
 {
   fn get_origin(collab_message: &CollabMessage) -> &CollabOrigin {
-    collab_message.origin().unwrap_or_else(|| {
-      error!("🔴The origin from client message is empty");
-      &CollabOrigin::Empty
-    })
+    collab_message.origin()
   }
 
   fn make_channel<'b>(
@@ -56,7 +53,7 @@ where
       object_id,
       move |object_id, msg| {
         if msg.object_id() != object_id {
-          warn!(
+          error!(
             "The object id:{} from message is not matched with the object id:{} from sink",
             msg.object_id(),
             object_id
@@ -65,9 +62,9 @@ where
         }
 
         let object_id = object_id.to_string();
-        let cloned_sink_permission_service = sink_permission_service.clone();
+        let permission_service = sink_permission_service.clone();
         Box::pin(async move {
-          match cloned_sink_permission_service
+          match permission_service
             .can_receive_collab_update(&client_uid, &object_id)
             .await
           {
@@ -79,7 +76,6 @@ where
                   object_id,
                 );
               }
-
               is_allowed
             },
             Err(err) => {

@@ -415,13 +415,15 @@ pub struct AckSource {
   #[serde(rename = "sync_verbose")]
   pub verbose: String,
   pub msg_id: MsgId,
+  pub seq_num: i32,
 }
 
 impl CollabAck {
-  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId, seq_num: i32) -> Self {
     let source = AckSource {
       verbose: "".to_string(),
       msg_id,
+      seq_num,
     };
     Self {
       origin,
@@ -468,14 +470,16 @@ pub struct CollabBroadcastData {
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))
   payload: Bytes,
+  seq_num: i32,
 }
 
 impl CollabBroadcastData {
-  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, seq_num: i32) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
+      seq_num,
     }
   }
 }

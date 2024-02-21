@@ -176,15 +176,13 @@ async fn add_workspace_members_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let create_members = payload.into_inner();
-  let role_by_uid = workspace::ops::add_workspace_members(
-    &state.pg_pool,
-    &user_uuid,
-    &workspace_id,
-    create_members.0,
-  )
-  .await?;
+
+  let role_by_uid =
+    workspace::ops::add_workspace_members(&state, &user_uuid, &workspace_id, create_members.0)
+      .await?;
 
   for (uid, role) in role_by_uid {
+    // TODO: use one single query to insert all roles
     state
       .workspace_access_control
       .insert_workspace_role(&uid, &workspace_id, role)

@@ -16,7 +16,7 @@ COPY . .
 ENV SQLX_OFFLINE true
 
 # Build the project
-RUN cargo build --profile=profiling --features="disable_collab_ac" --bin appflowy_cloud
+RUN cargo build --profile=profiling --features="disable_access_control" --bin appflowy_cloud
 
 
 FROM debian:bookworm-slim AS runtime

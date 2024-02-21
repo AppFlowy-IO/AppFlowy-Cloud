@@ -84,7 +84,6 @@ impl AFEnforcer {
       Ok(value) => {
         trace!("[access control]: add policy:{} => {}", policy_key.0, value);
         self.action_cache.insert(object_key, act.to_action());
-        self.enforcer_result_cache.insert(policy_key, *value);
       },
       Err(err) => {
         trace!(
@@ -160,7 +159,6 @@ impl AFEnforcer {
       .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj.to_object_id()]);
 
     if policies_for_object.is_empty() {
-      self.enforcer_result_cache.insert(policy_key, true);
       return Ok(true);
     }
 

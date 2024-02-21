@@ -86,37 +86,57 @@ impl AccessControl {
     obj: &ObjectType<'_>,
     act: &ActionType,
   ) -> Result<bool, AppError> {
-    self.enforcer.update(uid, obj, act).await
+    if cfg!(feature = "disable_access_control") {
+      Ok(true)
+    } else {
+      self.enforcer.update(uid, obj, act).await
+    }
   }
 
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
-    self.enforcer.remove(uid, obj).await?;
-    Ok(())
+    if cfg!(feature = "disable_access_control") {
+      Ok(())
+    } else {
+      self.enforcer.remove(uid, obj).await?;
+      Ok(())
+    }
   }
 
   pub async fn enforce<A>(&self, uid: &i64, obj: &ObjectType<'_>, act: A) -> Result<bool, AppError>
   where
     A: ToCasbinAction,
   {
-    self.enforcer.enforce(uid, obj, act).await
+    if cfg!(feature = "disable_access_control") {
+      Ok(true)
+    } else {
+      self.enforcer.enforce(uid, obj, act).await
+    }
   }
 
   pub async fn get_access_level(&self, uid: &i64, oid: &str) -> Option<AFAccessLevel> {
-    let collab_id = ObjectType::Collab(oid);
-    self
-      .enforcer
-      .get_action(uid, &collab_id)
-      .await
-      .map(|value| AFAccessLevel::from_action(&value))
+    if cfg!(feature = "disable_access_control") {
+      Some(AFAccessLevel::FullAccess)
+    } else {
+      let collab_id = ObjectType::Collab(oid);
+      self
+        .enforcer
+        .get_action(uid, &collab_id)
+        .await
+        .map(|value| AFAccessLevel::from_action(&value))
+    }
   }
 
   pub async fn get_role(&self, uid: &i64, workspace_id: &str) -> Option<AFRole> {
-    let workspace_id = ObjectType::Workspace(workspace_id);
-    self
-      .enforcer
-      .get_action(uid, &workspace_id)
-      .await
-      .map(|value| AFRole::from_action(&value))
+    if cfg!(feature = "disable_access_control") {
+      Some(AFRole::Owner)
+    } else {
+      let workspace_id = ObjectType::Workspace(workspace_id);
+      self
+        .enforcer
+        .get_action(uid, &workspace_id)
+        .await
+        .map(|value| AFRole::from_action(&value))
+    }
   }
 }
 

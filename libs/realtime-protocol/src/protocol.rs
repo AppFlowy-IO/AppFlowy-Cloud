@@ -78,20 +78,17 @@ pub trait CollabSyncProtocol {
   /// an update to current `awareness` document instance.
   fn handle_sync_step2(
     &self,
-    origin: &Option<CollabOrigin>,
+    origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<Option<Vec<u8>>, Error> {
     let mut retry_txn = TransactionRetry::new(awareness.doc());
-    let mut txn = if let Some(origin) = origin.as_ref() {
-      retry_txn.try_get_write_txn_with(origin.clone())
-    } else {
-      retry_txn.try_get_write_txn()
-    }
-    .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
+    let mut txn = retry_txn
+      .try_get_write_txn_with(origin.clone())
+      .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
     txn
       .try_apply_update(update)
-      .map_err(|err| Error::YrsTransaction(format!("sync step2 apply update: {}", err)))?;
+      .map_err(|err| Error::YrsApplyUpdate(format!("sync step2 apply update: {}", err)))?;
     Ok(None)
   }
 
@@ -99,7 +96,7 @@ pub trait CollabSyncProtocol {
   /// `awareness` document instance.
   fn handle_update(
     &self,
-    origin: &Option<CollabOrigin>,
+    origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<Option<Vec<u8>>, Error> {
@@ -140,7 +137,7 @@ pub trait CollabSyncProtocol {
 
 /// Handles incoming messages from the client/server
 pub fn handle_collab_message<P: CollabSyncProtocol>(
-  origin: &Option<CollabOrigin>,
+  origin: &CollabOrigin,
   protocol: &P,
   collab: &MutexCollab,
   msg: Message,

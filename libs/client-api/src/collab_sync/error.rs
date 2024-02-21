@@ -9,6 +9,9 @@ pub enum SyncError {
   #[error("failed to deserialize message: {0}")]
   DecodingError(#[from] yrs::encoding::read::Error),
 
+  #[error("Can not apply update for object:{0}")]
+  CannotApplyUpdate(String),
+
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
 
@@ -23,4 +26,10 @@ pub enum SyncError {
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
+}
+
+impl SyncError {
+  pub fn is_cannot_apply_update(&self) -> bool {
+    matches!(self, Self::CannotApplyUpdate(_))
+  }
 }

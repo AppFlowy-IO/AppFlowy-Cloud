@@ -1,3 +1,6 @@
+# Build argument for features
+ARG FEATURES=""
+
 FROM lukemathwalker/cargo-chef:latest-rust-1.75.0 as chef
 
 WORKDIR /app
@@ -16,7 +19,7 @@ COPY . .
 ENV SQLX_OFFLINE true
 
 # Build the project
-RUN cargo build --profile=profiling --features="disable_access_control" --bin appflowy_cloud
+RUN cargo build --profile=profiling --features="${FEATURES}" --bin appflowy_cloud
 
 
 FROM debian:bookworm-slim AS runtime

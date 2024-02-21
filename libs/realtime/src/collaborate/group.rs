@@ -37,13 +37,13 @@ where
   U: RealtimeUser,
   AC: CollabAccessControl,
 {
-  pub async fn run(mut self) {
+  pub async fn run(mut self, object_id: String) {
     let mut receiver = self.recv.take().expect("Only take once");
     let stream = stream! {
       while let Some(msg) = receiver.recv().await {
          yield msg;
       }
-      trace!("The group command runner is stopped");
+      trace!("Collab group:{} command runner is stopped", object_id);
     };
 
     stream

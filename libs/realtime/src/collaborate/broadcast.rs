@@ -11,7 +11,7 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
-use realtime_protocol::handle_collab_message;
+use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
@@ -25,7 +25,9 @@ use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
 use crate::error::RealtimeError;
-use realtime_entity::collab_msg::{CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage};
+use realtime_entity::collab_msg::{
+  AckCode, CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage,
+};
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 
@@ -38,6 +40,12 @@ pub struct CollabBroadcast {
   sender: Sender<CollabMessage>,
   awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
   doc_subscription: Mutex<Option<UpdateSubscription>>,
+}
+
+impl Drop for CollabBroadcast {
+  fn drop(&mut self) {
+    trace!("Drop collab broadcast:{}", self.object_id);
+  }
 }
 
 impl CollabBroadcast {
@@ -121,12 +129,35 @@ impl CollabBroadcast {
     Ok(())
   }
 
-  /// Subscribes a new connection - represented by `sink`/`stream` pair implementing a futures
-  /// Sink and Stream protocols - to a current broadcast group.
+  /// Subscribes a new connection to a broadcast group, enabling real-time collaboration.
   ///
-  /// Returns a subscription structure, which can be dropped in order to unsubscribe or awaited
-  /// via [Subscription::stop] method in order to complete of its own volition (due to
-  /// an internal connection error or closed connection).
+  /// This function takes a `sink`/`stream` pair representing the connection to a subscriber. The `sink`
+  /// is used to send messages to the subscriber, while the `stream` receives messages from the subscriber.
+  ///
+  /// # Arguments
+  /// - `subscriber_origin`: Identifies the subscriber's origin to avoid echoing messages back.
+  /// - `sink`: A `Sink` implementation for sending messages to the subscriber(Each connected client).
+  /// - `stream`: A `Stream` implementation for receiving messages from the subscriber((Each connected client)).
+  /// - `modified_at`: A shared, mutable reference to track the last modification time of the document.
+  ///
+  /// # Behavior
+  /// - [Sink] Forwards updates received from the document observer to all subscribers through 'sink', excluding the originator
+  ///   of the message, to prevent echoing back the same message.
+  /// - [Stream] Processes incoming messages from the `stream` associated with the subscriber. If a message alters
+  ///   the document's state, it triggers an update broadcast to all subscribers.
+  ///
+  /// - Utilizes two asynchronous tasks: one for broadcasting updates to the `sink`, and another for
+  ///   processing messages from the `stream`.
+  ///
+  /// # Termination
+  /// - The subscription can be manually stopped by dropping the returned `Subscription` structure or
+  ///   by awaiting its `stop` method. This action will terminate both the sink and stream tasks.
+  /// - Internal errors or disconnection will also terminate the tasks, ending the subscription.
+  ///
+  /// # Returns
+  /// A `Subscription` instance that represents the active subscription. Dropping this structure or
+  /// calling its `stop` method will unsubscribe the connection and cease all related activities.
+  ///
   pub fn subscribe<Sink, Stream, E>(
     &self,
     subscriber_origin: CollabOrigin,
@@ -155,10 +186,8 @@ impl CollabBroadcast {
             result = receiver.recv() => {
               match result {
                 Ok(message) => {
-                  if let Some(msg_origin) = message.origin() {
-                    if msg_origin == &subscriber_origin {
-                      continue;
-                    }
+                  if message.origin() == &subscriber_origin {
+                    continue;
                   }
 
                   trace!("[realtime]: broadcast collab message: {}", message);
@@ -240,39 +269,34 @@ async fn handle_client_collab_message<Sink>(
     Some(payload) => {
       let object_id = object_id.to_string();
       let mut decoder = DecoderV1::from(payload.as_ref());
-      let origin = Arc::new(collab_msg.origin().cloned());
+      let origin = collab_msg.origin().clone();
       let reader = MessageReader::new(&mut decoder);
       for msg in reader {
         match msg {
           Ok(msg) => {
             let cloned_collab = collab.clone();
-            let cloned_origin = origin.clone();
-            let result =
-              handle_collab_message(&cloned_origin, &ServerSyncProtocol, &cloned_collab, msg);
+            let result = handle_collab_message(&origin, &ServerSyncProtocol, &cloned_collab, msg);
+            if let Some(msg_id) = collab_msg.msg_id() {
+              match result {
+                Ok(payload) => {
+                  let resp = CollabAck::new(origin.clone(), object_id.clone(), msg_id)
+                    .with_payload(payload.unwrap_or_default());
 
-            match result {
-              Ok(payload) => match origin.as_ref() {
-                None => warn!("Client message does not have a origin"),
-                Some(origin) => {
-                  if let Some(msg_id) = collab_msg.msg_id() {
-                    let resp = CollabAck::new(
-                      origin.clone(),
-                      object_id.clone(),
-                      payload.unwrap_or_default(),
-                      msg_id,
-                      collab_msg.type_str(),
-                    );
-
-                    trace!("Send response to client: {}", resp);
-                    if let Err(err) = sink.send(resp.into()).await {
-                      trace!("fail to send response to client: {}", err);
-                    }
+                  trace!("Send response to client: {}", resp);
+                  if let Err(err) = sink.send(resp.into()).await {
+                    trace!("fail to send response to client: {}", err);
                   }
                 },
-              },
-              Err(err) => {
-                error!("object id:{} =>{}", object_id, err);
-              },
+                Err(err) => {
+                  error!("handle collab:{} message error:{}", object_id, err);
+                  let resp = CollabAck::new(origin.clone(), object_id.clone(), msg_id)
+                    .with_code(ack_code_from_error(&err));
+
+                  if let Err(err) = sink.send(resp.into()).await {
+                    trace!("fail to send response to client: {}", err);
+                  }
+                },
+              }
             }
           },
           Err(e) => {
@@ -285,6 +309,15 @@ async fn handle_client_collab_message<Sink>(
         }
       }
     },
+  }
+}
+
+#[inline]
+fn ack_code_from_error(error: &Error) -> AckCode {
+  match error {
+    Error::YrsTransaction(_) => AckCode::Retry,
+    Error::YrsApplyUpdate(_) => AckCode::CannotApplyUpdate,
+    _ => AckCode::Internal,
   }
 }
 
@@ -302,10 +335,14 @@ pub struct Subscription {
 impl Subscription {
   pub async fn stop(&mut self) {
     if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
-      let _ = sink_stop_tx.send(()).await;
+      if let Err(err) = sink_stop_tx.send(()).await {
+        error!("fail to stop sink:{}", err);
+      }
     }
     if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
-      let _ = stream_stop_tx.send(()).await;
+      if let Err(err) = stream_stop_tx.send(()).await {
+        error!("fail to stop stream:{}", err);
+      }
     }
   }
 }

@@ -248,6 +248,9 @@ pub enum Error {
   #[error("{0}")]
   YrsTransaction(String),
 
+  #[error("{0}")]
+  YrsApplyUpdate(String),
+
   #[error(transparent)]
   BinCodeSerde(#[from] bincode::Error),
 

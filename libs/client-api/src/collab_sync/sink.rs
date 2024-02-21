@@ -1,5 +1,3 @@
-use collab::core::origin::CollabOrigin;
-
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
@@ -10,7 +8,7 @@ use crate::collab_sync::{SyncError, SyncObject, DEFAULT_SYNC_TIMEOUT};
 use futures_util::SinkExt;
 
 use crate::platform_spawn;
-use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
+use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage, MsgId};
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
 use tracing::{debug, error, event, trace, warn};
@@ -162,27 +160,28 @@ where
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
-  pub async fn ack_msg(
-    &self,
-    _origin: Option<&CollabOrigin>,
-    _object_id: &str,
-    msg_id: MsgId,
-  ) -> bool {
-    match self.pending_msg_queue.lock().peek_mut() {
-      None => false,
-      Some(mut pending_msg) => {
-        // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
-        // due to network issues, the client might send multiple messages with the same msg_id.
-        // Therefore, the msg_id might not always match the msg_id of the pending_msg.
-        if pending_msg.msg_id() != msg_id {
-          return false;
-        }
+  pub async fn ack_msg(&self, msg: &CollabMessage) -> bool {
+    // the msg_id will be None if the message is [ServerBroadcast] or [ServerAwareness]
+    match msg.msg_id() {
+      None => true,
+      Some(msg_id) => {
+        match self.pending_msg_queue.lock().peek_mut() {
+          None => false,
+          Some(mut pending_msg) => {
+            // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
+            // due to network issues, the client might send multiple messages with the same msg_id.
+            // Therefore, the msg_id might not always match the msg_id of the pending_msg.
+            if pending_msg.msg_id() != msg_id {
+              return false;
+            }
 
-        let is_done = pending_msg.set_state(self.uid, MessageState::Done);
-        if is_done {
-          self.notify();
+            let is_done = pending_msg.set_state(self.uid, MessageState::Done);
+            if is_done {
+              self.notify();
+            }
+            is_done
+          },
         }
-        is_done
       },
     }
   }

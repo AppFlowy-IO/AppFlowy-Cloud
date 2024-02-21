@@ -55,6 +55,7 @@ jobs:
           sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml
           sed -i '/FEATURES: disable_access_control\/FEATURES:/d' docker-compose.yml
           cat docker-compose.yml
+          cat Dockerfile
 
       - name: Run Docker-Compose
         run: |

@@ -265,7 +265,7 @@ where
       )
       .await
       {
-        if error.is_can_not_apply_update() {
+        if error.is_cannot_apply_update() {
           // TODO(nathan): ask the client to resolve the conflict.
           error!(
             "collab:{} can not be synced because of error: {}",
@@ -294,7 +294,7 @@ where
     // If server return the AckCode::ApplyInternalError, which means the server can not apply the
     // update
     if let CollabMessage::ClientAck(ack) = &msg {
-      if ack.code == AckCode::ApplyInternalError {
+      if ack.code == AckCode::CannotApplyUpdate {
         return Err(SyncError::CannotApplyUpdate(object_id.to_string()));
       }
     }

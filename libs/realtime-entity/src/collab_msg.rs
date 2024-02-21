@@ -396,7 +396,9 @@ impl Display for UpdateSync {
 #[repr(u8)]
 pub enum AckCode {
   Success = 0,
-  ApplyInternalError = 1,
+  CannotApplyUpdate = 1,
+  Retry = 2,
+  Internal = 3,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]

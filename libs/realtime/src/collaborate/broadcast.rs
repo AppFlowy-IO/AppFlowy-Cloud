@@ -11,7 +11,7 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
-use realtime_protocol::handle_collab_message;
+use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
@@ -290,7 +290,7 @@ async fn handle_client_collab_message<Sink>(
                 Err(err) => {
                   error!("handle collab:{} message error:{}", object_id, err);
                   let resp = CollabAck::new(origin.clone(), object_id.clone(), msg_id)
-                    .with_code(AckCode::ApplyInternalError);
+                    .with_code(ack_code_from_error(&err));
 
                   if let Err(err) = sink.send(resp.into()).await {
                     trace!("fail to send response to client: {}", err);
@@ -309,6 +309,15 @@ async fn handle_client_collab_message<Sink>(
         }
       }
     },
+  }
+}
+
+#[inline]
+fn ack_code_from_error(error: &Error) -> AckCode {
+  match error {
+    Error::YrsTransaction(_) => AckCode::Retry,
+    Error::YrsApplyUpdate(_) => AckCode::CannotApplyUpdate,
+    _ => AckCode::Internal,
   }
 }
 

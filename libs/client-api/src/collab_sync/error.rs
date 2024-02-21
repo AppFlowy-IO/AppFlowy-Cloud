@@ -29,7 +29,7 @@ pub enum SyncError {
 }
 
 impl SyncError {
-  pub fn is_can_not_apply_update(&self) -> bool {
+  pub fn is_cannot_apply_update(&self) -> bool {
     matches!(self, Self::CannotApplyUpdate(_))
   }
 }

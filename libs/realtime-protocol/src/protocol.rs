@@ -88,7 +88,7 @@ pub trait CollabSyncProtocol {
       .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
     txn
       .try_apply_update(update)
-      .map_err(|err| Error::YrsTransaction(format!("sync step2 apply update: {}", err)))?;
+      .map_err(|err| Error::YrsApplyUpdate(format!("sync step2 apply update: {}", err)))?;
     Ok(None)
   }
 

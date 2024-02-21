@@ -86,7 +86,7 @@ impl AccessControl {
     obj: &ObjectType<'_>,
     act: &ActionType,
   ) -> Result<bool, AppError> {
-    if cfg!(feature = "disable_collab_ac") {
+    if cfg!(feature = "disable_access_control") {
       Ok(true)
     } else {
       self.enforcer.update(uid, obj, act).await
@@ -94,7 +94,7 @@ impl AccessControl {
   }
 
   pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
-    if cfg!(feature = "disable_collab_ac") {
+    if cfg!(feature = "disable_access_control") {
       Ok(())
     } else {
       self.enforcer.remove(uid, obj).await?;
@@ -106,7 +106,7 @@ impl AccessControl {
   where
     A: ToCasbinAction,
   {
-    if cfg!(feature = "disable_collab_ac") {
+    if cfg!(feature = "disable_access_control") {
       Ok(true)
     } else {
       self.enforcer.enforce(uid, obj, act).await
@@ -114,7 +114,7 @@ impl AccessControl {
   }
 
   pub async fn get_access_level(&self, uid: &i64, oid: &str) -> Option<AFAccessLevel> {
-    if cfg!(feature = "disable_collab_ac") {
+    if cfg!(feature = "disable_access_control") {
       Some(AFAccessLevel::FullAccess)
     } else {
       let collab_id = ObjectType::Collab(oid);
@@ -127,7 +127,7 @@ impl AccessControl {
   }
 
   pub async fn get_role(&self, uid: &i64, workspace_id: &str) -> Option<AFRole> {
-    if cfg!(feature = "disable_collab_ac") {
+    if cfg!(feature = "disable_access_control") {
       Some(AFRole::Owner)
     } else {
       let workspace_id = ObjectType::Workspace(workspace_id);

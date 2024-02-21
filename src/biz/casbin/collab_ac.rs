@@ -81,16 +81,24 @@ impl CollabAccessControl for CollabAccessControlImpl {
   }
 
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Write)
-      .await
+    if cfg!(feature = "disable_access_control") {
+      Ok(true)
+    } else {
+      self
+        .access_control
+        .enforce(uid, &ObjectType::Collab(oid), Action::Write)
+        .await
+    }
   }
 
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Read)
-      .await
+    if cfg!(feature = "disable_access_control") {
+      Ok(true)
+    } else {
+      self
+        .access_control
+        .enforce(uid, &ObjectType::Collab(oid), Action::Read)
+        .await
+    }
   }
 }

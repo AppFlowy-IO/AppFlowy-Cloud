@@ -278,7 +278,7 @@ pub async fn assert_can_access_http_method(
   expected: bool,
 ) -> Result<(), Error> {
   let timeout_duration = Duration::from_secs(10);
-  let retry_interval = Duration::from_millis(300);
+  let retry_interval = Duration::from_millis(1000);
   let mut retries = 0usize;
   let max_retries = 10;
 

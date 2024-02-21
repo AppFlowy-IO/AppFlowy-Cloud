@@ -131,22 +131,26 @@ where
 
           let sender = match old_sender {
             Some(sender) => sender,
-            None => match group_sender_by_object_id.entry(collab_message.object_id().to_string()) {
-              Entry::Occupied(entry) => entry.get().clone(),
-              Entry::Vacant(entry) => {
-                let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
-                let runner = GroupCommandRunner {
-                  group_control: groups.clone(),
-                  client_stream_by_user: client_stream_by_user.clone(),
-                  edit_collab_by_user: edit_collab_by_user.clone(),
-                  access_control: access_control.clone(),
-                  recv: Some(recv),
-                };
+            None => {
+              let object_id = collab_message.object_id().to_string();
+              match group_sender_by_object_id.entry(object_id) {
+                Entry::Occupied(entry) => entry.get().clone(),
+                Entry::Vacant(entry) => {
+                  let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+                  let runner = GroupCommandRunner {
+                    group_control: groups.clone(),
+                    client_stream_by_user: client_stream_by_user.clone(),
+                    edit_collab_by_user: edit_collab_by_user.clone(),
+                    access_control: access_control.clone(),
+                    recv: Some(recv),
+                  };
 
-                tokio::task::spawn_local(runner.run());
-                entry.insert(new_sender.clone());
-                new_sender
-              },
+                  let object_id = entry.key().clone();
+                  tokio::task::spawn_local(runner.run(object_id));
+                  entry.insert(new_sender.clone());
+                  new_sender
+                },
+              }
             },
           };
 
@@ -436,6 +440,12 @@ impl CollabClientStream {
   }
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.
+  /// [Sink] will be used to receive changes from the collab object. Before receiving the changes, the sink_filter
+  /// will be used to check if the client is allowed to receive the changes.
+  ///
+  /// [Stream] will be used to send changes to the collab object. Before sending the changes, the stream_filter
+  /// will be used to check if the client is allowed to send the changes.
+  ///
   #[allow(clippy::type_complexity)]
   pub fn client_channel<T, SinkFilter, StreamFilter>(
     &mut self,
@@ -456,20 +466,20 @@ impl CollabClientStream {
     let cloned_object_id = object_id.to_string();
 
     // Send the message to the connected websocket client
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<T>();
+    let (client_sink_tx, mut client_sink_rx) = tokio::sync::mpsc::unbounded_channel::<T>();
     tokio::task::spawn(async move {
-      while let Some(msg) = rx.recv().await {
+      while let Some(msg) = client_sink_rx.recv().await {
         let can_sink = sink_filter(&cloned_object_id, &msg).await;
         if can_sink {
           // Send the message to websocket client actor
           client_ws_sink.do_send(msg.into());
         } else {
-          // when then client is not allowed to receive the message
+          // when then client is not allowed to receive messages
           tokio::time::sleep(Duration::from_secs(2)).await;
         }
       }
     });
-    let client_forward_sink = UnboundedSenderSink::<T>::new(tx);
+    let client_sink = UnboundedSenderSink::<T>::new(client_sink_tx);
 
     // forward the message to the stream that was subscribed by the broadcast group, which will
     // send the messages to all connected clients using the client_forward_sink
@@ -480,19 +490,14 @@ impl CollabClientStream {
         if stream_filter(&cloned_object_id, &msg).await {
           let _ = tx.send(Ok(msg)).await;
         } else {
-          // when then client is not allowed to receive the message
+          // when then client is not allowed to send messages
           tokio::time::sleep(Duration::from_secs(2)).await;
         }
       }
     });
-    let client_forward_stream = ReceiverStream::new(rx);
+    let client_stream = ReceiverStream::new(rx);
 
-    // When broadcast group write a message to the client_forward_sink, the message will be forwarded
-    // to the client's websocket sink, which will then send the message to the connected client
-    //
-    // When receiving a message from the client_forward_stream, it will send the message to the broadcast
-    // group. The message will be broadcast to all connected clients.
-    (client_forward_sink, client_forward_stream)
+    (client_sink, client_stream)
   }
 
   pub fn disconnect(&self) {

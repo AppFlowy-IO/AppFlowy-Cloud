@@ -11,6 +11,7 @@ use collab::preclude::updates::encoder::{Encode, Encoder, EncoderV1};
 use collab_entity::CollabType;
 use realtime_protocol::{Message, MessageReader, SyncMessage};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn collab_object_id(&self) -> &str;
@@ -143,19 +144,19 @@ impl CollabMessage {
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
-  pub fn origin(&self) -> Option<&CollabOrigin> {
+  pub fn origin(&self) -> &CollabOrigin {
     match self {
-      CollabMessage::ClientInitSync(value) => Some(&value.origin),
-      CollabMessage::ClientUpdateSync(value) => Some(&value.origin),
-      CollabMessage::ClientAck(value) => Some(&value.origin),
-      CollabMessage::ServerInitSync(value) => Some(&value.origin),
-      CollabMessage::ServerBroadcast(value) => Some(&value.origin),
-      CollabMessage::AwarenessSync(_) => None,
+      CollabMessage::ClientInitSync(value) => &value.origin,
+      CollabMessage::ClientUpdateSync(value) => &value.origin,
+      CollabMessage::ClientAck(value) => &value.origin,
+      CollabMessage::ServerInitSync(value) => &value.origin,
+      CollabMessage::ServerBroadcast(value) => &value.origin,
+      CollabMessage::AwarenessSync(value) => &value.origin,
     }
   }
 
   pub fn uid(&self) -> Option<i64> {
-    self.origin().and_then(|origin| origin.client_user_id())
+    self.origin().client_user_id()
   }
 
   pub fn object_id(&self) -> &str {
@@ -170,10 +171,10 @@ impl CollabMessage {
   }
 
   pub fn device_id(&self) -> Option<String> {
-    self.origin().and_then(|origin| match origin {
+    match self.origin() {
       CollabOrigin::Client(origin) => Some(origin.device_id.clone()),
       _ => None,
-    })
+    }
   }
 }
 
@@ -194,6 +195,7 @@ impl Display for CollabMessage {
 pub struct CollabAwareness {
   object_id: String,
   payload: Bytes,
+  origin: CollabOrigin,
 }
 
 impl CollabAwareness {
@@ -201,6 +203,7 @@ impl CollabAwareness {
     Self {
       object_id,
       payload: Bytes::from(payload),
+      origin: CollabOrigin::Server,
     }
   }
 }
@@ -389,37 +392,54 @@ impl Display for UpdateSync {
   }
 }
 
+#[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum AckCode {
+  Success = 0,
+  CannotApplyUpdate = 1,
+  Retry = 2,
+  Internal = 3,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CollabAck {
   pub origin: CollabOrigin,
   pub object_id: String,
   pub source: AckSource,
   pub payload: Bytes,
+  pub code: AckCode,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct AckSource {
-  pub sync_verbose: String,
+  #[serde(rename = "sync_verbose")]
+  pub verbose: String,
   pub msg_id: MsgId,
 }
 
 impl CollabAck {
-  pub fn new(
-    origin: CollabOrigin,
-    object_id: String,
-    payload: Vec<u8>,
-    msg_id: MsgId,
-    sync_verbose: String,
-  ) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId) -> Self {
+    let source = AckSource {
+      verbose: "".to_string(),
+      msg_id,
+    };
     Self {
       origin,
       object_id,
-      payload: Bytes::from(payload),
-      source: AckSource {
-        sync_verbose,
-        msg_id,
-      },
+      source,
+      payload: Bytes::from(vec![]),
+      code: AckCode::Success,
     }
+  }
+
+  pub fn with_payload<T: Into<Bytes>>(mut self, payload: T) -> Self {
+    self.payload = payload.into();
+    self
+  }
+
+  pub fn with_code(mut self, code: AckCode) -> Self {
+    self.code = code;
+    self
   }
 }
 
@@ -432,11 +452,10 @@ impl From<CollabAck> for CollabMessage {
 impl Display for CollabAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "ack: [origin:{}|oid:{}|msg_id:{:?}|{}|len:{}]",
+      "ack: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
       self.origin,
       self.object_id,
       self.source.msg_id,
-      self.source.sync_verbose,
       self.payload.len(),
     ))
   }

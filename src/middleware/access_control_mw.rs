@@ -10,6 +10,8 @@ use async_trait::async_trait;
 use futures_util::future::LocalBoxFuture;
 
 use actix_web::web::Data;
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::future::{ready, Ready};
 use std::ops::{Deref, DerefMut};
@@ -19,6 +21,8 @@ use tracing::error;
 use crate::state::AppState;
 use app_error::AppError;
 use uuid::Uuid;
+
+static RESOURCE_DEF_CACHE: Lazy<DashMap<String, ResourceDef>> = Lazy::new(DashMap::new);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum AccessResource {
@@ -176,11 +180,16 @@ where
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
     let path = req.match_pattern().map(|pattern| {
-      let resource_ref = ResourceDef::new(pattern);
+      // Create ResourceDef will cause memory leak, so we use the cache to store the ResourceDef
       let mut path = req.match_info().clone();
-      resource_ref.capture_match_info(&mut path);
+      RESOURCE_DEF_CACHE
+        .entry(pattern.to_owned())
+        .or_insert_with(|| ResourceDef::new(pattern))
+        .value()
+        .capture_match_info(&mut path);
       path
     });
+
     match path {
       None => {
         let fut = self.service.call(req);

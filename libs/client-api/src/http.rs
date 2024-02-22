@@ -2,7 +2,7 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
-use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
+use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 
@@ -538,19 +538,6 @@ impl Client {
     AppResponse::<AFWorkspace>::from_response(resp)
       .await?
       .into_data()
-  }
-
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn patch_workspace(&self, params: PatchWorkspaceParam) -> Result<(), AppResponseError> {
-    let url = format!("{}/api/workspace", self.base_url);
-    let resp = self
-      .http_client_with_auth(Method::PATCH, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   #[instrument(level = "debug", skip_all, err)]

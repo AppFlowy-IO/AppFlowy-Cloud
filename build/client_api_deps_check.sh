@@ -3,7 +3,7 @@
 # Generate the current dependency list
 cargo tree > current_deps.txt
 
-BASELINE_COUNT=1684
+BASELINE_COUNT=1685
 CURRENT_COUNT=$(cat current_deps.txt | wc -l)
 
 echo "Expected dependency count (baseline): $BASELINE_COUNT"

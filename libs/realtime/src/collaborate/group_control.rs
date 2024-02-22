@@ -11,9 +11,9 @@ use database::collab::CollabStorage;
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::CollabMessage;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+
 use tokio::task::spawn_blocking;
-use tokio::time::Instant;
+
 use tracing::{debug, error, event, instrument, trace};
 
 pub struct CollabGroupControl<S, U, AC> {
@@ -171,7 +171,6 @@ pub struct CollabGroup<U> {
   /// broadcast.
   subscribers: DashMap<U, Subscription>,
   user_by_user_device: DashMap<String, U>,
-  pub modified_at: Arc<Mutex<Instant>>,
 }
 
 impl<U> Drop for CollabGroup<U> {
@@ -189,14 +188,12 @@ where
     collab: Arc<MutexCollab>,
     broadcast: CollabBroadcast,
   ) -> Self {
-    let modified_at = Arc::new(Mutex::new(Instant::now()));
     Self {
       collab_type,
       collab,
       broadcast,
       subscribers: Default::default(),
       user_by_user_device: Default::default(),
-      modified_at,
     }
   }
 
@@ -294,9 +291,7 @@ where
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {
-    let sub = self
-      .broadcast
-      .subscribe(subscriber_origin, sink, stream, self.modified_at.clone());
+    let sub = self.broadcast.subscribe(subscriber_origin, sink, stream);
 
     // Remove the old user if it exists
     let user_device = user.user_device();
@@ -332,7 +327,7 @@ where
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber or has been modified within the last 10 minutes.
   pub async fn is_inactive(&self) -> bool {
-    let modified_at = self.modified_at.lock().await;
+    let modified_at = self.broadcast.modified_at.lock().await;
     if cfg!(debug_assertions) {
       modified_at.elapsed().as_secs() > 60
     } else {

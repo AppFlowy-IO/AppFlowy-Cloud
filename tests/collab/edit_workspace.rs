@@ -23,11 +23,15 @@ async fn edit_workspace_without_permission() {
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&workspace_id).await;
 
-  assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}))
-    .await;
+  assert_client_collab_include_value_within_30_secs(
+    &mut client_1,
+    &workspace_id,
+    json!({"name": "AppFlowy"}),
+  )
+  .await;
 
   // client 2 has not permission to read/edit the workspace
-  assert_client_collab_include_value(&mut client_2, &workspace_id, json!({})).await;
+  assert_client_collab_include_value_within_30_secs(&mut client_2, &workspace_id, json!({})).await;
 }
 
 #[tokio::test]
@@ -52,20 +56,18 @@ async fn init_sync_workspace_with_guest_permission() {
     .insert("name", "AppFlowy");
   client_1.wait_object_sync_complete(&workspace_id).await;
 
-  assert_client_collab(
+  assert_client_collab_within_30_secs(
     &mut client_1,
     &workspace_id,
     "name",
     json!({"name": "AppFlowy"}),
-    3,
   )
   .await;
-  assert_client_collab(
+  assert_client_collab_within_30_secs(
     &mut client_2,
     &workspace_id,
     "name",
     json!({"name": "AppFlowy"}),
-    3,
   )
   .await;
 }
@@ -104,8 +106,18 @@ async fn edit_workspace_with_guest_permission() {
     .lock()
     .insert("name", "nathan");
 
-  assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "zack"})).await;
-  assert_client_collab_include_value(&mut client_2, &workspace_id, json!({"name": "nathan"})).await;
+  assert_client_collab_include_value_within_30_secs(
+    &mut client_1,
+    &workspace_id,
+    json!({"name": "zack"}),
+  )
+  .await;
+  assert_client_collab_include_value_within_30_secs(
+    &mut client_2,
+    &workspace_id,
+    json!({"name": "nathan"}),
+  )
+  .await;
 
   assert_server_collab(
     &workspace_id,

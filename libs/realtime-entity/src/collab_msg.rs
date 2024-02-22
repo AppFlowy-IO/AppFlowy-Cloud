@@ -106,6 +106,13 @@ impl CollabMessage {
     matches!(self, CollabMessage::ServerInitSync(_))
   }
 
+  pub fn broadcase_seq_num(&self) -> Option<u32> {
+    match self {
+      CollabMessage::ServerBroadcast(data) => Some(data.seq_num),
+      _ => None,
+    }
+  }
+
   pub fn type_str(&self) -> String {
     match self {
       CollabMessage::ClientInitSync(_) => "ClientInitSync".to_string(),
@@ -468,14 +475,16 @@ pub struct CollabBroadcastData {
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))
   payload: Bytes,
+  seq_num: u32,
 }
 
 impl CollabBroadcastData {
-  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, seq_num: u32) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
+      seq_num,
     }
   }
 }

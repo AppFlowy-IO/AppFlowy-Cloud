@@ -3,10 +3,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use crate::collab_sync::pending_msg::{MessageState, PendingMsgQueue};
-use crate::collab_sync::{SyncError, SyncObject, DEFAULT_SYNC_TIMEOUT};
+use crate::collab_sync::sink_pending_queue::{MessageState, SinkPendingQueue};
+use crate::collab_sync::{SyncError, SyncObject};
 use futures_util::SinkExt;
 
+use crate::collab_sync::sink_config::{SinkConfig, SinkStrategy};
 use crate::platform_spawn;
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage, MsgId};
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
@@ -35,21 +36,17 @@ pub struct CollabSink<Sink, Msg> {
   /// The [Sink] is used to send the messages to the remote. It might be a websocket sink or
   /// other sink that implements the [SinkExt] trait.
   sender: Arc<Mutex<Sink>>,
-
-  /// The [PendingMsgQueue] is used to queue the messages that are waiting to be sent to the
+  /// The [SinkPendingQueue] is used to queue the messages that are waiting to be sent to the
   /// remote. It will merge the messages if possible.
-  pending_msg_queue: Arc<parking_lot::Mutex<PendingMsgQueue<Msg>>>,
+  pending_msg_queue: Arc<parking_lot::Mutex<SinkPendingQueue<Msg>>>,
   msg_id_counter: Arc<DefaultMsgIdCounter>,
-
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
   notifier: Arc<watch::Sender<bool>>,
   config: SinkConfig,
-
   /// Stop the [IntervalRunner] if the sink strategy is [SinkStrategy::FixInterval].
   #[allow(dead_code)]
   interval_runner_stop_tx: Option<mpsc::Sender<()>>,
-
   /// Used to calculate the time interval between two messages. Only used when the sink strategy
   /// is [SinkStrategy::FixInterval].
   instant: Mutex<Instant>,
@@ -84,7 +81,7 @@ where
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);
     let sender = Arc::new(Mutex::new(sink));
-    let pending_msg_queue = PendingMsgQueue::new(uid);
+    let pending_msg_queue = SinkPendingQueue::new(uid);
     let pending_msg_queue = Arc::new(parking_lot::Mutex::new(pending_msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
     //
@@ -112,7 +109,7 @@ where
   }
 
   /// Put the message into the queue and notify the sink to process the next message.
-  /// After the [Msg] was pushed into the [PendingMsgQueue]. The queue will pop the next msg base on
+  /// After the [Msg] was pushed into the [SinkPendingQueue]. The queue will pop the next msg base on
   /// its priority. And the message priority is determined by the [Msg] that implement the [Ord] and
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
@@ -134,8 +131,13 @@ where
     // When the client is connected, remove all pending messages and send the init message.
     {
       let mut pending_msg_queue = self.pending_msg_queue.lock();
+      // if there is an init message in the queue, return;
+      if let Some(msg) = pending_msg_queue.peek() {
+        if msg.get_msg().is_init_msg() {
+          return;
+        }
+      }
       pending_msg_queue.clear();
-
       let msg_id = self.msg_id_counter.next();
       let msg = f(msg_id);
       pending_msg_queue.push_msg(msg_id, msg);
@@ -143,6 +145,16 @@ where
     }
 
     self.notify();
+  }
+
+  pub fn can_queue_init_sync(&self) -> bool {
+    let pending_msg_queue = self.pending_msg_queue.lock();
+    if let Some(msg) = pending_msg_queue.peek() {
+      if msg.get_msg().is_init_msg() {
+        return false;
+      }
+    }
+    true
   }
 
   pub fn clear(&self) {
@@ -341,7 +353,10 @@ where
               }
             },
           },
-          Err(err) => error!("Send message failed error: {}", err),
+          Err(err) => {
+            // the error might be caused by the sending message was removed from the queue.
+            trace!("pending message oneshot channel error: {}", err)
+          },
         }
 
         self.notify()
@@ -406,16 +421,6 @@ impl<Msg> CollabSinkRunner<Msg> {
   }
 }
 
-pub struct SinkConfig {
-  /// `timeout` is the time to wait for the remote to ack the message. If the remote
-  /// does not ack the message in time, the message will be sent again.
-  pub send_timeout: Duration,
-  /// `maximum_payload_size` is the maximum size of the messages to be merged.
-  pub maximum_payload_size: usize,
-  /// `strategy` is the strategy to send the messages.
-  pub strategy: SinkStrategy,
-}
-
 fn calculate_timeout(payload_len: usize, default: Duration) -> Duration {
   match payload_len {
     0..=40959 => default,
@@ -423,61 +428,6 @@ fn calculate_timeout(payload_len: usize, default: Duration) -> Duration {
     1048577..=2097152 => Duration::from_secs(20),
     2097153..=4194304 => Duration::from_secs(50),
     _ => Duration::from_secs(160),
-  }
-}
-
-impl SinkConfig {
-  pub fn new() -> Self {
-    Self::default()
-  }
-  pub fn send_timeout(mut self, secs: u64) -> Self {
-    let timeout_duration = Duration::from_secs(secs);
-    if let SinkStrategy::FixInterval(duration) = self.strategy {
-      if timeout_duration < duration {
-        warn!("The timeout duration should greater than the fix interval duration");
-      }
-    }
-    self.send_timeout = timeout_duration;
-    self
-  }
-
-  /// `max_zip_size` is the maximum size of the messages to be merged.
-  pub fn with_max_payload_size(mut self, max_size: usize) -> Self {
-    self.maximum_payload_size = max_size;
-    self
-  }
-
-  pub fn with_strategy(mut self, strategy: SinkStrategy) -> Self {
-    if let SinkStrategy::FixInterval(duration) = strategy {
-      if self.send_timeout < duration {
-        warn!("The timeout duration should greater than the fix interval duration");
-      }
-    }
-    self.strategy = strategy;
-    self
-  }
-}
-
-impl Default for SinkConfig {
-  fn default() -> Self {
-    Self {
-      send_timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
-      maximum_payload_size: 1024 * 64,
-      strategy: SinkStrategy::ASAP,
-    }
-  }
-}
-
-pub enum SinkStrategy {
-  /// Send the message as soon as possible.
-  ASAP,
-  /// Send the message in a fixed interval.
-  FixInterval(Duration),
-}
-
-impl SinkStrategy {
-  pub fn is_fix_interval(&self) -> bool {
-    matches!(self, SinkStrategy::FixInterval(_))
   }
 }
 

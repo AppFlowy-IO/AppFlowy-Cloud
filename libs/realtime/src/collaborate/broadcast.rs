@@ -1,25 +1,19 @@
-use anyhow::anyhow;
-use collab::core::awareness;
-use std::future::Future;
-use std::iter::Take;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::time::Duration;
-
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
+use collab::core::awareness;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
 use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::Mutex;
 use tokio::time::Instant;
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::{Action, Retry};
+
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
@@ -34,12 +28,18 @@ use yrs::encoding::write::Write;
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
 /// object_id.
+///
 pub struct CollabBroadcast {
   object_id: String,
   collab: MutexCollab,
   sender: Sender<CollabMessage>,
   awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
+  /// Keep the lifetime of the document observer subscription. The subscription will be stopped
+  /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
+  broadcast_seq_num_counter: Arc<AtomicU32>,
+  /// The last modified time of the document.
+  pub modified_at: Arc<Mutex<Instant>>,
 }
 
 impl Drop for CollabBroadcast {
@@ -65,6 +65,8 @@ impl CollabBroadcast {
       sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
+      broadcast_seq_num_counter: Arc::new(Default::default()),
+      modified_at: Arc::new(Mutex::new(Instant::now())),
     }
   }
 
@@ -75,14 +77,23 @@ impl CollabBroadcast {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
       let broadcast_sink = self.sender.clone();
+      let seq_num_counter = self.broadcast_seq_num_counter.clone();
+      let modified_at = self.modified_at.clone();
+
+      // Observer the document's update and broadcast it to all subscribers. When one of the clients
+      // sends an update to the document that alters its state, the document observer will trigger
+      // an update event. This event is then broadcast to all connected clients. After broadcasting, all
+      // connected clients will receive the update and apply it to their local document state.
       let doc_sub = mutex_collab
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
+          let value = seq_num_counter.fetch_add(1, Ordering::SeqCst);
+
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload);
+          let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload, value + 1);
 
           match broadcast_sink.send(msg.into()) {
             Ok(_) => trace!("observe doc update with len:{}", update_len),
@@ -90,6 +101,10 @@ impl CollabBroadcast {
               "observe doc update with len:{} - broadcast sink fail: {}",
               update_len, e
             ),
+          }
+
+          if let Ok(mut modified_at) = modified_at.try_lock() {
+            *modified_at = Instant::now();
           }
         })
         .unwrap();
@@ -138,7 +153,6 @@ impl CollabBroadcast {
   /// - `subscriber_origin`: Identifies the subscriber's origin to avoid echoing messages back.
   /// - `sink`: A `Sink` implementation for sending messages to the subscriber(Each connected client).
   /// - `stream`: A `Stream` implementation for receiving messages from the subscriber((Each connected client)).
-  /// - `modified_at`: A shared, mutable reference to track the last modification time of the document.
   ///
   /// # Behavior
   /// - [Sink] Forwards updates received from the document observer to all subscribers through 'sink', excluding the originator
@@ -163,7 +177,6 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
-    modified_at: Arc<Mutex<Instant>>,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
@@ -173,11 +186,12 @@ impl CollabBroadcast {
   {
     let cloned_origin = subscriber_origin.clone();
     trace!("[realtime]: new subscriber: {}", subscriber_origin);
-    // Receive a update from the document observer and forward the update to all
-    // connected subscribers using its Sink.
     let sink_stop_tx = {
-      let sink = sink.clone();
+      let mut sink = sink.clone();
       let (stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
+
+      // the receiver will continue to receive updates from the document observer and forward the update to
+      // connected subscriber using its Sink. The loop will break if the stop_rx receives a message.
       let mut receiver = self.sender.subscribe();
       tokio::spawn(async move {
         loop {
@@ -190,13 +204,8 @@ impl CollabBroadcast {
                     continue;
                   }
 
-                  trace!("[realtime]: broadcast collab message: {}", message);
-                  let action = SinkCollabMessageAction {
-                    sink: &sink,
-                    message,
-                  };
-
-                  if let Err(err) = action.run().await {
+                  trace!("[realtime]: broadcast message to client: {}", message);
+                  if let Err(err) = sink.send(message).await {
                     error!("fail to broadcast message:{}", err);
                   }
                 }
@@ -209,16 +218,14 @@ impl CollabBroadcast {
       stop_tx
     };
 
-    // Receive messages from clients and reply with the response. The message may alter the
-    // document that the current broadcast group is associated with. If the message alter
-    // the document state then the document observer will be triggered and the update will be
-    // broadcast to all connected subscribers. Check out the [observe_update_v1] and [sink_task]
-    // above.
     let stream_stop_tx = {
       let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       let collab = self.collab().clone();
       let object_id = self.object_id.clone();
 
+      // the stream will continue to receive messages from the client and it will stop if the stop_rx
+      // receives a message. If the client's message alter the document state, it will trigger the
+      // document observer and broadcast the update to all connected subscribers. Check out the [observe_update_v1] and [sink_task] above.
       tokio::spawn(async move {
         loop {
           select! {
@@ -226,11 +233,9 @@ impl CollabBroadcast {
              result = stream.next() => {
                match result {
                  Some(Ok(collab_msg)) => {
+                   // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
                    if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
                      handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
-                     if let Ok(mut modified_at) = modified_at.try_lock() {
-                       *modified_at = Instant::now();
-                     }
                    } else {
                      warn!("Invalid collab message: {:?}", collab_msg);
                    }
@@ -267,7 +272,6 @@ async fn handle_client_collab_message<Sink>(
   match collab_msg.payload() {
     None => {},
     Some(payload) => {
-      let object_id = object_id.to_string();
       let mut decoder = DecoderV1::from(payload.as_ref());
       let origin = collab_msg.origin().clone();
       let reader = MessageReader::new(&mut decoder);
@@ -279,7 +283,7 @@ async fn handle_client_collab_message<Sink>(
             if let Some(msg_id) = collab_msg.msg_id() {
               match result {
                 Ok(payload) => {
-                  let resp = CollabAck::new(origin.clone(), object_id.clone(), msg_id)
+                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
                     .with_payload(payload.unwrap_or_default());
 
                   trace!("Send response to client: {}", resp);
@@ -289,7 +293,7 @@ async fn handle_client_collab_message<Sink>(
                 },
                 Err(err) => {
                   error!("handle collab:{} message error:{}", object_id, err);
-                  let resp = CollabAck::new(origin.clone(), object_id.clone(), msg_id)
+                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
                     .with_code(ack_code_from_error(&err));
 
                   if let Err(err) = sink.send(resp.into()).await {
@@ -381,40 +385,4 @@ fn gen_awareness_update_message(
   changed.extend_from_slice(removed);
   let update = awareness.update_with_clients(changed)?;
   Ok(update)
-}
-
-pub struct SinkCollabMessageAction<'a, Sink: Clone> {
-  pub sink: &'a Sink,
-  pub message: CollabMessage,
-}
-
-impl<'a, Sink> SinkCollabMessageAction<'a, Sink>
-where
-  Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'a,
-{
-  pub fn run(self) -> Retry<Take<FixedInterval>, SinkCollabMessageAction<'a, Sink>> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(5);
-    Retry::spawn(retry_strategy, self)
-  }
-}
-
-impl<'a, Sink> Action for SinkCollabMessageAction<'a, Sink>
-where
-  Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'a,
-{
-  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync + 'a>>;
-  type Item = ();
-  type Error = RealtimeError;
-
-  fn run(&mut self) -> Self::Future {
-    let mut sink = self.sink.clone();
-    let message = self.message.clone();
-    Box::pin(async move {
-      sink
-        .send(message)
-        .await
-        .map_err(|_err| RealtimeError::Internal(anyhow!("Sink message fail")))?;
-      Ok(())
-    })
-  }
 }

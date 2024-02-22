@@ -1,27 +1,27 @@
 use std::sync::{Arc, Weak};
 
-use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::CollabPlugin;
+use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::{CollabObject, CollabType};
 use futures_util::SinkExt;
 use realtime_entity::collab_msg::{CollabMessage, UpdateSync};
 use realtime_protocol::{Message, SyncMessage};
 use tokio_stream::StreamExt;
 
-use crate::collab_sync::{SinkConfig, SyncQueue};
+use crate::collab_sync::SyncControl;
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
+use crate::collab_sync::sink_config::SinkConfig;
 use crate::platform_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {
   object: SyncObject,
-  sync_queue: Arc<SyncQueue<Sink, Stream>>,
+  sync_queue: Arc<SyncControl<Sink, Stream>>,
   // Used to keep the lifetime of the channel
   #[allow(dead_code)]
   channel: Option<Arc<C>>,
@@ -53,13 +53,13 @@ where
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
     let weak_local_collab = collab.clone();
-    let sync_queue = SyncQueue::new(
+    let sync_queue = SyncControl::new(
       object.clone(),
       origin,
       sink,
+      sink_config,
       stream,
       collab.clone(),
-      sink_config,
       pause,
     );
 
@@ -86,16 +86,19 @@ where
               (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
             {
               if let Some(local_collab) = local_collab.try_lock() {
-                let last_sync_at = local_collab.get_last_sync_at();
                 sync_queue.resume();
-                sync_queue.init_sync(local_collab.get_awareness(), last_sync_at);
+                sync_queue.init_sync(&local_collab);
               }
+            } else {
+              break;
             }
           },
           ConnectState::Unauthorized | ConnectState::Closed => {
             if let Some(sync_queue) = weak_sync_queue.upgrade() {
               // Stop sync if the websocket is unauthorized or disconnected
               sync_queue.pause();
+            } else {
+              break;
             }
           },
           _ => {},
@@ -123,8 +126,8 @@ where
   Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
-  fn did_init(&self, _awareness: &Awareness, _object_id: &str, last_sync_at: i64) {
-    self.sync_queue.init_sync(_awareness, last_sync_at);
+  fn did_init(&self, collab: &Collab, _object_id: &str, _last_sync_at: i64) {
+    self.sync_queue.init_sync(collab);
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {

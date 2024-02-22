@@ -51,6 +51,7 @@ pub trait WSClientHttpSender: Send + Sync {
 
 type WeakChannel = Weak<WebSocketChannel<CollabMessage>>;
 type ChannelByObjectId = HashMap<String, Vec<WeakChannel>>;
+type AFRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub(crate) type StateNotify = parking_lot::Mutex<ConnectStateNotify>;
@@ -66,8 +67,10 @@ pub struct WSClient {
   collab_channels: Arc<RwLock<ChannelByObjectId>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
   stop_tx: Mutex<Option<oneshot::Sender<()>>>,
-  rate_limiter:
-    Arc<tokio::sync::RwLock<RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>>>,
+  rate_limiter: Arc<tokio::sync::RwLock<AFRateLimiter>>,
+
+  #[cfg(debug_assertions)]
+  skip_realtime_message: Arc<std::sync::atomic::AtomicBool>,
 }
 impl WSClient {
   pub fn new<H>(config: WSClientConfig, http_sender: H) -> Self
@@ -92,6 +95,9 @@ impl WSClient {
       ping,
       stop_tx: Mutex::new(None),
       rate_limiter: Arc::new(tokio::sync::RwLock::new(rate_limiter)),
+
+      #[cfg(debug_assertions)]
+      skip_realtime_message: Default::default(),
     }
   }
 
@@ -156,11 +162,22 @@ impl WSClient {
 
     let user_message_tx = self.user_channel.as_ref().clone();
     let rate_limiter = self.rate_limiter.clone();
+
+    #[cfg(debug_assertions)]
+    let cloned_skip_realtime_message = self.skip_realtime_message.clone();
+
     // Receive messages from the websocket, and send them to the channels.
     platform_spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
         match ws_msg {
           Message::Binary(_) => {
+            #[cfg(debug_assertions)]
+            {
+              if cloned_skip_realtime_message.load(std::sync::atomic::Ordering::SeqCst) {
+                continue;
+              }
+            }
+
             match RealtimeMessage::try_from(&ws_msg) {
               Ok(msg) => {
                 match msg {
@@ -340,4 +357,19 @@ fn gen_rate_limiter(
   }
   let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
   RateLimiter::direct(quota)
+}
+
+#[cfg(debug_assertions)]
+impl WSClient {
+  pub fn disable_receive_message(&self) {
+    self
+      .skip_realtime_message
+      .store(true, std::sync::atomic::Ordering::SeqCst);
+  }
+
+  pub fn enable_receive_message(&self) {
+    self
+      .skip_realtime_message
+      .store(false, std::sync::atomic::Ordering::SeqCst);
+  }
 }

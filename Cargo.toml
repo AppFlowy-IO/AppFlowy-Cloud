@@ -172,10 +172,10 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "01be7a981515dd02a8bd37e3e79f1d24eade0f47" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "01be7a981515dd02a8bd37e3e79f1d24eade0f47" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "01be7a981515dd02a8bd37e3e79f1d24eade0f47" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "01be7a981515dd02a8bd37e3e79f1d24eade0f47" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "a63db38f04268062da5b0106becbddebf681ffbd" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "a63db38f04268062da5b0106becbddebf681ffbd" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "a63db38f04268062da5b0106becbddebf681ffbd" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "a63db38f04268062da5b0106becbddebf681ffbd" }
 
 [features]
 custom_env= []

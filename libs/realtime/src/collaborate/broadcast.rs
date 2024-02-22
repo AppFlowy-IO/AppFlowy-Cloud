@@ -6,7 +6,7 @@ use collab::core::origin::CollabOrigin;
 use futures_util::{SinkExt, StreamExt};
 use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
@@ -37,13 +37,7 @@ pub struct CollabBroadcast {
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
-  /// a unique sequence number to each update it sends to ensure that clients receive all messages
-  /// in the correct order. This sequence number is incremented by one for every new update dispatched
-  /// by the document observer. When a client receives a message, it checks if the sequence number
-  /// in the message matches its own last known sequence number plus one. If there's a mismatch,
-  /// indicating that the client may have missed one or more updates, the client is expected
-  /// to initiate a synchronization process to retrieve any missing updates.
-  seq_num_counter: Arc<AtomicI32>,
+  broadcast_seq_num_counter: Arc<AtomicU32>,
   /// The last modified time of the document.
   pub modified_at: Arc<Mutex<Instant>>,
 }
@@ -71,7 +65,7 @@ impl CollabBroadcast {
       sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
-      seq_num_counter: Arc::new(Default::default()),
+      broadcast_seq_num_counter: Arc::new(Default::default()),
       modified_at: Arc::new(Mutex::new(Instant::now())),
     }
   }
@@ -83,7 +77,7 @@ impl CollabBroadcast {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
       let broadcast_sink = self.sender.clone();
-      let seq_num_counter = self.seq_num_counter.clone();
+      let seq_num_counter = self.broadcast_seq_num_counter.clone();
       let modified_at = self.modified_at.clone();
 
       // Observer the document's update and broadcast it to all subscribers. When one of the clients
@@ -94,17 +88,12 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
-          seq_num_counter.fetch_add(1, Ordering::SeqCst);
+          let value = seq_num_counter.fetch_add(1, Ordering::SeqCst);
 
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = CollabBroadcastData::new(
-            origin,
-            cloned_oid.clone(),
-            payload,
-            seq_num_counter.load(Ordering::SeqCst),
-          );
+          let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload, value + 1);
 
           match broadcast_sink.send(msg.into()) {
             Ok(_) => trace!("observe doc update with len:{}", update_len),
@@ -233,7 +222,6 @@ impl CollabBroadcast {
       let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       let collab = self.collab().clone();
       let object_id = self.object_id.clone();
-      let seq_num_counter = self.seq_num_counter.clone();
 
       // the stream will continue to receive messages from the client and it will stop if the stop_rx
       // receives a message. If the client's message alter the document state, it will trigger the
@@ -247,7 +235,7 @@ impl CollabBroadcast {
                  Some(Ok(collab_msg)) => {
                    // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
                    if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
-                     handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab, &seq_num_counter).await;
+                     handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
                    } else {
                      warn!("Invalid collab message: {:?}", collab_msg);
                    }
@@ -277,7 +265,6 @@ async fn handle_client_collab_message<Sink>(
   sink: &mut Sink,
   collab_msg: &CollabMessage,
   collab: &MutexCollab,
-  seq_num_counter: &Arc<AtomicI32>,
 ) where
   Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
@@ -293,11 +280,10 @@ async fn handle_client_collab_message<Sink>(
           Ok(msg) => {
             let cloned_collab = collab.clone();
             let result = handle_collab_message(&origin, &ServerSyncProtocol, &cloned_collab, msg);
-            let seq_num = seq_num_counter.load(Ordering::SeqCst);
             if let Some(msg_id) = collab_msg.msg_id() {
               match result {
                 Ok(payload) => {
-                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id, seq_num)
+                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
                     .with_payload(payload.unwrap_or_default());
 
                   trace!("Send response to client: {}", resp);
@@ -307,7 +293,7 @@ async fn handle_client_collab_message<Sink>(
                 },
                 Err(err) => {
                   error!("handle collab:{} message error:{}", object_id, err);
-                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id, seq_num)
+                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
                     .with_code(ack_code_from_error(&err));
 
                   if let Err(err) = sink.send(resp.into()).await {

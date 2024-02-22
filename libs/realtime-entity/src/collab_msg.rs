@@ -106,6 +106,13 @@ impl CollabMessage {
     matches!(self, CollabMessage::ServerInitSync(_))
   }
 
+  pub fn broadcase_seq_num(&self) -> Option<u32> {
+    match self {
+      CollabMessage::ServerBroadcast(data) => Some(data.seq_num),
+      _ => None,
+    }
+  }
+
   pub fn type_str(&self) -> String {
     match self {
       CollabMessage::ClientInitSync(_) => "ClientInitSync".to_string(),
@@ -415,15 +422,13 @@ pub struct AckSource {
   #[serde(rename = "sync_verbose")]
   pub verbose: String,
   pub msg_id: MsgId,
-  pub seq_num: i32,
 }
 
 impl CollabAck {
-  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId, seq_num: i32) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId) -> Self {
     let source = AckSource {
       verbose: "".to_string(),
       msg_id,
-      seq_num,
     };
     Self {
       origin,
@@ -470,11 +475,11 @@ pub struct CollabBroadcastData {
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))
   payload: Bytes,
-  seq_num: i32,
+  seq_num: u32,
 }
 
 impl CollabBroadcastData {
-  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, seq_num: i32) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, seq_num: u32) -> Self {
     Self {
       origin,
       object_id,

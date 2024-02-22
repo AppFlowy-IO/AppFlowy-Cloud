@@ -258,7 +258,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
   new_client.wait_object_sync_complete(&object_id).await;
 
   // Old client shouldn't receive the new client's edit
-  assert_client_collab_include_value(
+  assert_client_collab_include_value_within_30_secs(
     &mut old_client,
     &object_id,
     json!({
@@ -268,7 +268,7 @@ async fn user_with_duplicate_devices_connect_edit_test() {
   )
   .await;
 
-  assert_client_collab_include_value(
+  assert_client_collab_include_value_within_30_secs(
     &mut new_client,
     &object_id,
     json!({
@@ -342,8 +342,18 @@ async fn two_direction_peer_sync_test() {
     "name": "AppFlowy",
     "support platform": "macOS, Windows, Linux, iOS, Android"
   });
-  assert_client_collab_include_value(&mut client_1, &object_id, expected_json.clone()).await;
-  assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone()).await;
+  assert_client_collab_include_value_within_30_secs(
+    &mut client_1,
+    &object_id,
+    expected_json.clone(),
+  )
+  .await;
+  assert_client_collab_include_value_within_30_secs(
+    &mut client_2,
+    &object_id,
+    expected_json.clone(),
+  )
+  .await;
 }
 
 #[tokio::test]

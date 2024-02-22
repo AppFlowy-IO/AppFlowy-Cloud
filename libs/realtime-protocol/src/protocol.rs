@@ -47,7 +47,11 @@ pub trait CollabSyncProtocol {
 
   fn start<E: Encoder>(&self, awareness: &Awareness, encoder: &mut E) -> Result<(), Error> {
     let (sv, update) = {
-      let sv = awareness.doc().transact().state_vector();
+      let sv = awareness
+        .doc()
+        .try_transact()
+        .map_err(|e| Error::YrsTransaction(e.to_string()))?
+        .state_vector();
       let update = awareness.update()?;
       (sv, update)
     };

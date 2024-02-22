@@ -1,32 +1,5 @@
 use crate::api::metrics::metrics_scope;
 
-use crate::component::auth::HEADER_TOKEN;
-use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
-use crate::middleware::request_id::RequestIdMiddleware;
-use crate::self_signed::create_self_signed_certificate;
-use crate::state::{AppState, UserCache};
-use actix_identity::IdentityMiddleware;
-use actix_session::storage::RedisSessionStore;
-use actix_session::SessionMiddleware;
-use actix_web::cookie::Key;
-use actix_web::{dev::Server, web, web::Data, App, HttpServer};
-
-use actix::Actor;
-use anyhow::{Context, Error};
-use app_error::AppError;
-use gotrue::grant::{Grant, PasswordGrant};
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
-use openssl::x509::X509;
-use secrecy::{ExposeSecret, Secret};
-use snowflake::Snowflake;
-use sqlx::{postgres::PgPoolOptions, PgPool};
-use std::net::TcpListener;
-use std::sync::Arc;
-use std::time::Duration;
-
-use tokio::sync::RwLock;
-use tracing::info;
-
 use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
@@ -37,11 +10,32 @@ use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
+use crate::component::auth::HEADER_TOKEN;
+use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::access_control_mw::WorkspaceAccessControl;
 use crate::middleware::metrics_mw::MetricsMiddleware;
-use crate::state::AppMetrics;
+use crate::middleware::request_id::RequestIdMiddleware;
+use crate::self_signed::create_self_signed_certificate;
+use crate::state::{AppMetrics, AppState, UserCache};
+use actix::Actor;
+use actix_identity::IdentityMiddleware;
+use actix_session::storage::RedisSessionStore;
+use actix_session::SessionMiddleware;
+use actix_web::cookie::Key;
+use actix_web::{dev::Server, web, web::Data, App, HttpServer};
+use anyhow::{Context, Error};
 use database::file::bucket_s3_impl::S3BucketStorage;
+use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
+use openssl::x509::X509;
 use realtime::collaborate::CollabServer;
+use secrecy::{ExposeSecret, Secret};
+use snowflake::Snowflake;
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::net::TcpListener;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
+use tracing::info;
 
 pub struct Application {
   port: u16,
@@ -173,12 +167,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
   setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
 
-  // Gotrue Admin
-  let gotrue_admin = GoTrueAdmin::new(
-    config.gotrue.admin_email.clone(),
-    config.gotrue.admin_password.clone(),
-  );
-
   // Redis
   info!("Connecting to Redis...");
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
@@ -219,7 +207,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     users: Arc::new(users),
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
-    gotrue_admin,
     redis_client,
     collab_storage,
     collab_access_control,
@@ -229,31 +216,6 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     access_control,
     metrics,
   })
-}
-
-#[derive(Debug, Clone)]
-pub struct GoTrueAdmin {
-  pub admin_email: String,
-  pub password: Secret<String>,
-}
-
-impl GoTrueAdmin {
-  pub fn new(admin_email: String, password: String) -> Self {
-    Self {
-      admin_email,
-      password: password.into(),
-    }
-  }
-
-  pub async fn token(&self, client: &gotrue::api::Client) -> Result<String, AppError> {
-    let token = client
-      .token(&Grant::Password(PasswordGrant {
-        email: self.admin_email.clone(),
-        password: self.password.expose_secret().clone(),
-      }))
-      .await?;
-    Ok(token.access_token)
-  }
 }
 
 async fn setup_admin_account(

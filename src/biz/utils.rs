@@ -1,4 +1,3 @@
-use app_error::AppError;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{self, AsyncRead, ReadBuf};
@@ -42,20 +41,4 @@ where
   fn as_ref(&self) -> &R {
     &self.reader
   }
-}
-
-pub async fn check_user_exists(
-  admin_token: &str,
-  gotrue_client: &gotrue::api::Client,
-  email: &str,
-) -> Result<bool, AppError> {
-  let users = gotrue_client
-    .admin_list_user(admin_token, Some(email))
-    .await?;
-  for user in users.users {
-    if user.email == email {
-      return Ok(true);
-    }
-  }
-  Ok(false)
 }

@@ -146,7 +146,7 @@ pub async fn admin_users_handler(
 ) -> Result<Html<String>, WebAppError> {
   let users = state
     .gotrue_client
-    .admin_list_user(&session.token.access_token, None)
+    .admin_list_user(&session.token.access_token)
     .await
     .map_or_else(
       |err| {

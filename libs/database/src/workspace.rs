@@ -390,7 +390,6 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
   Ok(workspace)
 }
-
 #[inline]
 pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,

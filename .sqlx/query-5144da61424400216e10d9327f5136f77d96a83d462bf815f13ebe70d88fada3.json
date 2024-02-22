@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)\n      VALUES ($1, $2, $3, $4, $5)\n      RETURNING sid AS snapshot_id, oid AS object_id, created_at\n    ",
+  "query": "\n      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id) \n      VALUES ($1, $2, $3, $4, $5)\n      RETURNING sid AS snapshot_id, oid AS object_id, created_at\n    ",
   "describe": {
     "columns": [
       {
@@ -34,5 +34,5 @@
       false
     ]
   },
-  "hash": "f18d6e075a522b0ce5935351dd57ab0dda4d8b4ed3881c2ad0bc09c07c43e6fe"
+  "hash": "5144da61424400216e10d9327f5136f77d96a83d462bf815f13ebe70d88fada3"
 }

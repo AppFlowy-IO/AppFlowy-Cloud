@@ -1,4 +1,3 @@
-use crate::application::GoTrueAdmin;
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::storage::CollabPostgresDBStorage;
 use crate::biz::pg_listener::PgListeners;
@@ -30,7 +29,6 @@ pub struct AppState {
   pub users: Arc<UserCache>,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
-  pub gotrue_admin: GoTrueAdmin,
   pub redis_client: RedisClient,
   pub collab_storage: Arc<CollabPostgresDBStorage>,
   pub collab_access_control: CollabAccessControlImpl,

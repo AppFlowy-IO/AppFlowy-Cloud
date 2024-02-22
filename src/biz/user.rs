@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use gotrue_entity::dto::User;
 
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::state::AppState;
@@ -27,29 +26,14 @@ use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 #[instrument(skip_all, err)]
 pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, AppError> {
   let user = state.gotrue_client.user_info(access_token).await?;
+  let user_uuid = uuid::Uuid::parse_str(&user.id)?;
+  let name = name_from_user_metadata(&user.user_metadata);
+
   let mut txn = state
     .pg_pool
     .begin()
     .await
     .context("acquire transaction to verify token")?;
-
-  let is_new = create_user_if_not_exists(&user, &mut txn, state).await;
-  txn
-    .commit()
-    .await
-    .context("fail to commit transaction to verify token")?;
-
-  is_new
-}
-
-/// Returns if user is new
-pub async fn create_user_if_not_exists(
-  user: &User,
-  txn: &mut Transaction<'_, sqlx::Postgres>,
-  state: &AppState,
-) -> Result<bool, AppError> {
-  let user_uuid = uuid::Uuid::parse_str(&user.id)?;
-  let name = name_from_user_metadata(&user.user_metadata);
 
   // To prevent concurrent creation of the same user with the same workspace resources, we lock
   // the user row when `verify_token` is called. This means that if multiple requests try to
@@ -83,12 +67,16 @@ pub async fn create_user_if_not_exists(
     create_workspace_for_user(
       new_uid,
       &workspace_id,
-      txn,
+      &mut txn,
       vec![GetStartedDocumentTemplate],
       state,
     )
     .await?;
   }
+  txn
+    .commit()
+    .await
+    .context("fail to commit transaction to verify token")?;
   Ok(is_new)
 }
 

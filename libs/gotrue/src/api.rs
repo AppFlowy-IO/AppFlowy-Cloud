@@ -1,7 +1,7 @@
 use super::grant::Grant;
 use crate::params::{
   AdminDeleteUserParams, AdminUserParams, CreateSSOProviderParams, GenerateLinkParams,
-  GenerateLinkResponse, InviteUserParams, MagicLinkParams,
+  GenerateLinkResponse, MagicLinkParams,
 };
 use anyhow::Context;
 use gotrue_entity::dto::{
@@ -139,14 +139,12 @@ impl Client {
   pub async fn admin_list_user(
     &self,
     access_token: &str,
-    filter: Option<&str>,
   ) -> Result<AdminListUsersResponse, GoTrueError> {
     let url = format!("{}/admin/users", self.base_url);
-    let mut req = self.http_client_with_auth(Method::GET, &url, access_token);
-    if let Some(filter) = filter {
-      req = req.query(&[("filter", filter)]);
-    }
-    let resp = req.send().await?;
+    let resp = self
+      .http_client_with_auth(Method::GET, &url, access_token)
+      .send()
+      .await?;
     to_gotrue_result(resp).await
   }
 
@@ -187,20 +185,6 @@ impl Client {
     let url = format!("{}/admin/users/{}", self.base_url, user_uuid);
     let resp = self
       .http_client_with_auth(Method::PUT, &url, access_token)
-      .json(&admin_user_params)
-      .send()
-      .await?;
-    to_gotrue_result(resp).await
-  }
-
-  pub async fn admin_invite_user(
-    &self,
-    access_token: &str,
-    admin_user_params: &InviteUserParams,
-  ) -> Result<User, GoTrueError> {
-    let url = format!("{}/invite", self.base_url);
-    let resp = self
-      .http_client_with_auth(Method::POST, &url, access_token)
       .json(&admin_user_params)
       .send()
       .await?;

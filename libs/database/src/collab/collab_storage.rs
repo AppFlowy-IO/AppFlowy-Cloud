@@ -59,7 +59,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 pub trait CollabStorage: Send + Sync + 'static {
   fn config(&self) -> &WriteConfig;
 
-  fn mem_usage(&self) -> usize;
+  fn encode_collab_mem_hit_rate(&self) -> f64;
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
 
@@ -133,8 +133,8 @@ where
     self.as_ref().config()
   }
 
-  fn mem_usage(&self) -> usize {
-    self.as_ref().mem_usage()
+  fn encode_collab_mem_hit_rate(&self) -> f64 {
+    self.as_ref().encode_collab_mem_hit_rate()
   }
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {

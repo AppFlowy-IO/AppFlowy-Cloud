@@ -139,8 +139,8 @@ where
     self.disk_cache.config()
   }
 
-  fn mem_usage(&self) -> usize {
-    self.mem_cache.usage()
+  fn encode_collab_mem_hit_rate(&self) -> f64 {
+    self.mem_cache.get_hit_rate()
   }
 
   async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
@@ -153,7 +153,6 @@ where
   async fn remove_collab_cache(&self, object_id: &str) {
     tracing::trace!("remove opened collab:{} cache", object_id);
     self.opened_collab_by_object_id.remove(object_id);
-    self.mem_cache.remove_encoded_collab(object_id).await;
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
@@ -250,7 +249,8 @@ where
         let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
         self
           .mem_cache
-          .cache_encoded_collab(object_id, &encoded_collab);
+          .cache_encoded_collab(object_id, &encoded_collab)
+          .await;
         Ok(encoded_collab)
       },
     }

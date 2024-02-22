@@ -5,7 +5,7 @@ use tracing::trace;
 #[derive(Clone)]
 pub struct RealtimeMetrics {
   connected_users: Gauge,
-  mem_cache_usage: Gauge,
+  encode_collab_mem_hit_rate: Gauge,
   opening_collab_count: Gauge,
 }
 
@@ -13,7 +13,7 @@ impl RealtimeMetrics {
   fn init() -> Self {
     Self {
       connected_users: Gauge::default(),
-      mem_cache_usage: Gauge::default(),
+      encode_collab_mem_hit_rate: Gauge::default(),
       opening_collab_count: Gauge::default(),
     }
   }
@@ -27,9 +27,9 @@ impl RealtimeMetrics {
       metrics.connected_users.clone(),
     );
     realtime_registry.register(
-      "mem_cache_usage",
-      "memory cache usage in bytes",
-      metrics.mem_cache_usage.clone(),
+      "mem_hit_rate",
+      "memory hit rate",
+      metrics.encode_collab_mem_hit_rate.clone(),
     );
     realtime_registry.register(
       "opening_collab_count",
@@ -45,10 +45,8 @@ impl RealtimeMetrics {
     self.connected_users.set(num as i64);
   }
 
-  pub fn record_mem_cache_usage(&self, size_in_bytes: usize) {
-    let size_in_mb = size_in_bytes / 1024;
-    trace!("[metrics]: mem_cache_usage: {} KB", size_in_mb);
-    self.mem_cache_usage.set(size_in_mb as i64);
+  pub fn record_encode_collab_mem_hit_rate(&self, rate: f64) {
+    self.encode_collab_mem_hit_rate.set(rate as i64);
   }
 
   pub fn record_opening_collab_count(&self, count: usize) {

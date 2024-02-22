@@ -82,3 +82,9 @@ pub struct BlobMetadata {
 pub struct CreateWorkspaceParam {
   pub workspace_name: Option<String>,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct PatchWorkspaceParam {
+  pub workspace_id: Uuid,
+  pub workspace_name: Option<String>,
+}

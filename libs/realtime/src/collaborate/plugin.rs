@@ -6,12 +6,12 @@ use std::fmt::Display;
 
 use crate::collaborate::CollabAccessControl;
 use anyhow::anyhow;
-use collab::core::awareness::Awareness;
+
 use collab::core::collab::TransactionMutExt;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::DocTransactionExtension;
-use collab::preclude::{CollabPlugin, Doc, TransactionMut};
+use collab::preclude::{Collab, CollabPlugin, Doc, TransactionMut};
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::{
@@ -208,7 +208,7 @@ where
       },
     }
   }
-  fn did_init(&self, _awareness: &Awareness, _object_id: &str, _last_sync_at: i64) {
+  fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
     self.edit_state.set_did_load()
   }
 

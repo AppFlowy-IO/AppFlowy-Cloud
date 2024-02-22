@@ -534,6 +534,16 @@ impl TestClient {
       .await
       .unwrap();
   }
+
+  pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {
+    self
+      .collab_by_object_id
+      .get(object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .to_json_value()
+  }
 }
 
 pub async fn assert_server_snapshot(
@@ -638,12 +648,11 @@ pub async fn assert_server_collab(
   }
 }
 
-pub async fn assert_client_collab(
+pub async fn assert_client_collab_within_30_secs(
   client: &mut TestClient,
   object_id: &str,
   key: &str,
   expected: Value,
-  _retry_duration: u64,
 ) {
   let secs = 30;
   let object_id = object_id.to_string();
@@ -676,7 +685,7 @@ pub async fn assert_client_collab(
   }
 }
 
-pub async fn assert_client_collab_include_value(
+pub async fn assert_client_collab_include_value_within_30_secs(
   client: &mut TestClient,
   object_id: &str,
   expected: Value,

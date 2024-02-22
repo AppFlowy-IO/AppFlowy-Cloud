@@ -7,13 +7,13 @@ use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 use tokio::sync::oneshot;
 use tracing::{trace, warn};
 
-pub(crate) struct PendingMsgQueue<Msg> {
+pub(crate) struct SinkPendingQueue<Msg> {
   #[allow(dead_code)]
   uid: i64,
   queue: BinaryHeap<PendingMessage<Msg>>,
 }
 
-impl<Msg> PendingMsgQueue<Msg>
+impl<Msg> SinkPendingQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -29,7 +29,7 @@ where
   }
 }
 
-impl<Msg> Deref for PendingMsgQueue<Msg>
+impl<Msg> Deref for SinkPendingQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -40,7 +40,7 @@ where
   }
 }
 
-impl<Msg> DerefMut for PendingMsgQueue<Msg>
+impl<Msg> DerefMut for SinkPendingQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {

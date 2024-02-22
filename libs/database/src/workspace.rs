@@ -49,30 +49,6 @@ pub async fn insert_user_workspace(
   Ok(workspace)
 }
 
-#[inline]
-pub async fn rename_workspace(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
-  workspace_id: &Uuid,
-  new_workspace_name: &str,
-) -> Result<(), AppError> {
-  let res = sqlx::query!(
-    r#"
-      UPDATE public.af_workspace
-      SET workspace_name = $1
-      WHERE workspace_id = $2
-    "#,
-    new_workspace_name,
-    workspace_id,
-  )
-  .execute(tx.deref_mut())
-  .await?;
-
-  if res.rows_affected() != 1 {
-    tracing::error!("Failed to rename workspace, workspace_id: {}", workspace_id);
-  }
-  Ok(())
-}
-
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.
 #[inline]

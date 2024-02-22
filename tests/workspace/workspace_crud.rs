@@ -2,7 +2,6 @@ use client_api_test_util::generate_unique_registered_user_client;
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
-use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 
 #[tokio::test]
 async fn add_and_delete_workspace_for_user() {

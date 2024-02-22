@@ -553,10 +553,7 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn rename_workspace(
-    &self,
-    params: PatchWorkspaceParam,
-  ) -> Result<(), AppResponseError> {
+  pub async fn patch_workspace(&self, params: PatchWorkspaceParam) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
       .http_client_with_auth(Method::PATCH, &url)

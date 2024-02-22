@@ -27,7 +27,7 @@ use yrs::updates::encoder::{Encoder, EncoderV1};
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 4;
 pub const NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC: u32 = 5;
 
-const DEBOUNCE_DURATION: Duration = Duration::from_secs(5);
+const DEBOUNCE_DURATION: Duration = Duration::from_secs(10);
 
 pub struct SyncControl<Sink, Stream> {
   object: SyncObject,

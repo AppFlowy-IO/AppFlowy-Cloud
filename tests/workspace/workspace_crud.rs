@@ -2,6 +2,7 @@ use client_api_test_util::generate_unique_registered_user_client;
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
+use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 
 #[tokio::test]
 async fn add_and_delete_workspace_for_user() {
@@ -71,4 +72,51 @@ async fn add_and_delete_workspace_for_non_owner_user() {
   // Member should have 1 workspaces, because owner removed him
   let member_workspaces = member.get_workspaces().await.unwrap();
   assert_eq!(member_workspaces.0.len(), 1);
+}
+
+#[tokio::test]
+async fn test_workspace_rename() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = c
+    .get_workspaces()
+    .await
+    .unwrap()
+    .0
+    .first()
+    .unwrap()
+    .workspace_id;
+  let desired_new_name = "tom's workspace";
+
+  {
+    c.patch_workspace(PatchWorkspaceParam {
+      workspace_id,
+      workspace_name: Some(desired_new_name.to_string()),
+    })
+    .await
+    .expect("Failed to rename workspace");
+
+    let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
+    let actual_new_name = &workspaces
+      .0
+      .first()
+      .expect("No workspace found")
+      .workspace_name;
+    assert_eq!(actual_new_name, desired_new_name);
+  }
+
+  {
+    c.patch_workspace(PatchWorkspaceParam {
+      workspace_id,
+      workspace_name: None,
+    })
+    .await
+    .expect("Failed to rename workspace");
+    let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
+    let actual_new_name = &workspaces
+      .0
+      .first()
+      .expect("No workspace found")
+      .workspace_name;
+    assert_eq!(actual_new_name, desired_new_name);
+  }
 }

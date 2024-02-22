@@ -1,87 +1,99 @@
 use crate::state::RedisClient;
-use bytes::Bytes;
 use collab::core::collab_plugin::EncodedCollab;
-use moka::future::Cache;
-use moka::notification::RemovalCause;
-use moka::policy::EvictionPolicy;
+use redis::AsyncCommands;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::{error, trace};
 
 #[derive(Clone)]
 pub struct CollabMemCache {
-  cache: Arc<Cache<String, Bytes>>,
-  #[allow(dead_code)]
   redis_client: Arc<Mutex<RedisClient>>,
+  hits: Arc<AtomicU64>,
+  total_attempts: Arc<AtomicU64>,
 }
 
 impl CollabMemCache {
   pub fn new(redis_client: RedisClient) -> Self {
-    let eviction_listener = |key, value: Bytes, cause| {
-      if matches!(cause, RemovalCause::Expired | RemovalCause::Size) {
-        info!(
-          "Evicted key {}. value_len:{}, cause:{:?}",
-          key,
-          value.len(),
-          cause
-        );
-      }
-    };
-
-    let cache = Cache::builder()
-        .weigher(|_key, value: &Bytes| -> u32 {
-          value.len() as u32
-        })
-        // This cache will hold up to 200MiB of values.
-        .max_capacity(200 * 1024 * 1024)
-        .eviction_policy(EvictionPolicy::tiny_lfu())
-        .eviction_listener(eviction_listener)
-        .build();
     Self {
-      cache: Arc::new(cache),
       redis_client: Arc::new(Mutex::new(redis_client)),
+      hits: Arc::new(AtomicU64::new(0)),
+      total_attempts: Arc::new(AtomicU64::new(0)),
     }
   }
 
-  pub fn usage(&self) -> usize {
-    self.cache.weighted_size() as usize
-  }
-
-  pub async fn len(&self) -> usize {
-    self.cache.entry_count() as usize
-  }
-
   pub async fn get_encoded_collab(&self, object_id: &str) -> Option<EncodedCollab> {
-    let bytes = self.cache.get(object_id).await?;
-    tokio::task::spawn_blocking(move || match EncodedCollab::decode_from_bytes(&bytes) {
-      Ok(encoded_collab) => Some(encoded_collab),
-      Err(err) => {
-        error!("Failed to decode collab from redis cache bytes: {:?}", err);
+    self.total_attempts.fetch_add(1, Ordering::Relaxed);
+    let result = self
+      .redis_client
+      .lock()
+      .await
+      .get::<_, Option<Vec<u8>>>(object_id)
+      .await;
+
+    match result {
+      Ok(Some(bytes)) => match EncodedCollab::decode_from_bytes(&bytes) {
+        Ok(encoded_collab) => {
+          self.hits.fetch_add(1, Ordering::Relaxed);
+          Some(encoded_collab)
+        },
+        Err(err) => {
+          error!("Failed to decode collab from redis cache bytes: {:?}", err);
+          None
+        },
+      },
+      Ok(None) => {
+        trace!(
+          "No encoded collab found in cache for object_id: {}",
+          object_id
+        );
+
         None
       },
-    })
-    .await
-    .ok()?
+      Err(err) => {
+        error!("Failed to get encoded collab from redis: {:?}", err);
+        None
+      },
+    }
   }
 
-  pub fn cache_encoded_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
-    let encoded_collab = encoded_collab.clone();
-    let cache = self.cache.clone();
-    tokio::task::spawn_blocking(move || match encoded_collab.encode_to_bytes() {
+  pub async fn cache_encoded_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
+    match encoded_collab.encode_to_bytes() {
       Ok(bytes) => {
-        tokio::spawn(async move { cache.insert(object_id, Bytes::from(bytes)).await });
+        if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {
+          error!("Failed to cache encoded collab: {:?}", err);
+        }
       },
       Err(e) => {
         error!("Failed to encode collab to bytes: {:?}", e);
       },
-    });
-  }
-
-  pub async fn remove_encoded_collab(&self, object_id: &str) {
-    self.cache.invalidate(object_id).await;
+    }
   }
 
   pub async fn cache_encoded_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
-    self.cache.insert(object_id, Bytes::from(bytes)).await;
+    if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {
+      error!("Failed to cache encoded collab bytes: {:?}", err);
+    }
+  }
+
+  // Helper function to set bytes in Redis.
+  async fn set_bytes_in_redis(&self, object_id: String, bytes: Vec<u8>) -> redis::RedisResult<()> {
+    self
+      .redis_client
+      .lock()
+      .await
+      .set::<_, Vec<u8>, ()>(object_id, bytes)
+      .await
+  }
+
+  pub fn get_hit_rate(&self) -> f64 {
+    let hits = self.hits.load(Ordering::Relaxed) as f64;
+    let total_attempts = self.total_attempts.load(Ordering::Relaxed) as f64;
+
+    if total_attempts == 0.0 {
+      0.0
+    } else {
+      hits / total_attempts
+    }
   }
 }

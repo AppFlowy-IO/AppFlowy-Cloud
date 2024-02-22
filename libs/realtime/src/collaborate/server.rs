@@ -87,7 +87,8 @@ where
         if let Some(groups) = weak_groups.upgrade() {
           cloned_metrics.record_opening_collab_count(groups.number_of_groups().await);
           cloned_metrics.record_connected_users(cloned_client_stream_by_user.len());
-          cloned_metrics.record_mem_cache_usage(cloned_storage.mem_usage());
+          cloned_metrics
+            .record_encode_collab_mem_hit_rate(cloned_storage.encode_collab_mem_hit_rate());
 
           let inactive_group_ids = groups.tick().await;
           for id in inactive_group_ids {

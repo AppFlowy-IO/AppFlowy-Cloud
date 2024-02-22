@@ -9,7 +9,6 @@ use database::workspace::{
   select_workspace_member_list, update_updated_at_of_workspace, upsert_workspace_member,
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
-use gotrue::params::InviteUserParams;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
@@ -17,10 +16,6 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 use tracing::instrument;
 use uuid::Uuid;
-
-use crate::biz::user::create_user_if_not_exists;
-use crate::biz::utils::check_user_exists;
-use crate::state::AppState;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
@@ -101,52 +96,16 @@ pub async fn open_workspace(
 ///
 #[instrument(level = "debug", skip_all, err)]
 pub async fn add_workspace_members(
-  state: &AppState,
+  pg_pool: &PgPool,
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
   members: Vec<CreateWorkspaceMember>,
 ) -> Result<HashMap<i64, AFRole>, AppError> {
-  // Invite user to workspace if user is not registered
-  let admin_token = state.gotrue_admin.token(&state.gotrue_client).await?;
-  let mut txn = state
-    .pg_pool
+  let mut txn = pg_pool
     .begin()
     .await
     .context("Begin transaction to insert workspace members")?;
 
-  let gotrue_client = &state.gotrue_client;
-  for member in members.iter() {
-    let user_exists = check_user_exists(&admin_token, gotrue_client, &member.email).await?;
-    if !user_exists {
-      let user = gotrue_client
-        .admin_invite_user(
-          &admin_token,
-          &InviteUserParams {
-            email: member.email.clone(),
-            ..Default::default()
-          },
-        )
-        .await?;
-      let is_new = create_user_if_not_exists(&user, &mut txn, state).await?;
-      if !is_new {
-        tracing::error!("User should be new but is not new. User: {:?}", user);
-      }
-    }
-  }
-  let role_by_uid = add_workspace_members_db(workspace_id, members, &mut txn).await?;
-
-  txn
-    .commit()
-    .await
-    .context("Commit transaction to insert workspace members")?;
-  Ok(role_by_uid)
-}
-
-pub async fn add_workspace_members_db(
-  workspace_id: &Uuid,
-  members: Vec<CreateWorkspaceMember>,
-  txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-) -> Result<HashMap<i64, AFRole>, AppError> {
   let mut role_by_uid = HashMap::new();
   for member in members.into_iter() {
     let access_level = match &member.role {
@@ -160,11 +119,16 @@ pub async fn add_workspace_members_db(
     //   "Failed to get uid from email {} when adding workspace members",
     //   member.email
     // ))?;
-    insert_workspace_member_with_txn(txn, workspace_id, &member.email, member.role.clone()).await?;
-    upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, txn).await?;
+    insert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
+      .await?;
+    upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
     role_by_uid.insert(uid, member.role);
   }
 
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to insert workspace members")?;
   Ok(role_by_uid)
 }
 

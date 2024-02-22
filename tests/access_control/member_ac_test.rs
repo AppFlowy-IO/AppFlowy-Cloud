@@ -1,6 +1,5 @@
 use crate::access_control::{
-  add_workspace_members_in_tx, assert_workspace_role, assert_workspace_role_error, create_user,
-  setup_access_control,
+  assert_workspace_role, assert_workspace_role_error, create_user, setup_access_control,
 };
 use anyhow::{anyhow, Context};
 use app_error::ErrorCode;
@@ -34,16 +33,17 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   .await;
 
   let member = create_user(&pool).await?;
-
-  let _ = add_workspace_members_in_tx(
+  let _ = biz::workspace::ops::add_workspace_members(
     &pool,
+    &member.uuid,
     &workspace.workspace_id,
     vec![CreateWorkspaceMember {
       email: member.email.clone(),
       role: AFRole::Member,
     }],
   )
-  .await;
+  .await
+  .context("adding users to workspace")?;
 
   assert_workspace_role(
     &workspace_access_control,

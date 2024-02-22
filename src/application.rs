@@ -150,6 +150,11 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 }
 
 pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+  // Print the feature flags
+  if cfg!(feature = "disable_access_control") {
+    info!("Access control is disabled");
+  }
+
   let metrics = AppMetrics::new();
 
   // Postgres

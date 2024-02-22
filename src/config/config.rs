@@ -94,7 +94,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_REQUIRE_SSL")?,
-      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20")
+      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "40")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
       database_name: get_env_var("APPFLOWY_DATABASE_NAME", "postgres"),

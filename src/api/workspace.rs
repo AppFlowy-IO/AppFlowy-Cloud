@@ -50,6 +50,7 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
       .route(web::post().to(create_workpace_handler))
+      .route(web::patch().to(patch_workpace_handler))
     )
     .service(web::resource("/{workspace_id}")
       .route(web::delete().to(delete_workspace_handler))
@@ -132,6 +133,23 @@ async fn create_workpace_handler(
   let new_workspace =
     workspace::ops::create_workspace_for_user(&state.pg_pool, &uuid, &workspace_name).await?;
   Ok(AppResponse::Ok().with_data(new_workspace).into())
+}
+
+// Adds a workspace for user, if success, return the workspace id
+#[instrument(skip_all, err)]
+async fn patch_workpace_handler(
+  _uuid: UserUuid,
+  state: Data<AppState>,
+  params: Json<PatchWorkspaceParam>,
+) -> Result<Json<AppResponse<()>>> {
+  let params = params.into_inner();
+  workspace::ops::patch_workspace(
+    &state.pg_pool,
+    &params.workspace_id,
+    params.workspace_name.as_deref(),
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
 }
 
 async fn delete_workspace_handler(

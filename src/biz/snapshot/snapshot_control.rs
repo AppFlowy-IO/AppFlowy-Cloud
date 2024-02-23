@@ -56,7 +56,7 @@ impl SnapshotControl {
     tokio::spawn(runner.run());
 
     // Spawn a task to send tick command every SNAPSHOT_TICK_INTERVAL seconds
-    // In debug mode, we set the interval to 1 second to speed up the test
+    // In debug mode, we set the interval to 2 second to speed up the test
     let interval_in_secs = if cfg!(debug_assertions) {
       2
     } else {

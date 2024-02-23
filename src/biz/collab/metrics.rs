@@ -1,7 +1,7 @@
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
 use std::sync::atomic::AtomicU64;
-use tracing::trace;
+
 
 #[derive(Clone)]
 pub struct CollabMetrics {

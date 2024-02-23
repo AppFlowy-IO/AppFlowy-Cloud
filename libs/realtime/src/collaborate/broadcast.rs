@@ -39,7 +39,7 @@ pub struct CollabBroadcast {
   doc_subscription: Mutex<Option<UpdateSubscription>>,
   broadcast_seq_num_counter: Arc<AtomicU32>,
   /// The last modified time of the document.
-  pub modified_at: Arc<Mutex<Instant>>,
+  pub modified_at: Arc<parking_lot::Mutex<Instant>>,
 }
 
 impl Drop for CollabBroadcast {
@@ -66,7 +66,7 @@ impl CollabBroadcast {
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
       broadcast_seq_num_counter: Arc::new(Default::default()),
-      modified_at: Arc::new(Mutex::new(Instant::now())),
+      modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
     }
   }
 
@@ -103,9 +103,7 @@ impl CollabBroadcast {
             ),
           }
 
-          if let Ok(mut modified_at) = modified_at.try_lock() {
-            *modified_at = Instant::now();
-          }
+          *modified_at.lock() = Instant::now();
         })
         .unwrap();
 

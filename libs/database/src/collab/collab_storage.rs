@@ -9,7 +9,6 @@ use database_entity::dto::{
   InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
-use sqlx::types::Uuid;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -118,6 +117,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn should_create_snapshot(&self, oid: &str) -> bool;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta>;
+  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()>;
 
   async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData>;
 
@@ -188,6 +188,10 @@ where
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
     self.as_ref().create_snapshot(params).await
+  }
+
+  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()> {
+    self.as_ref().queue_snapshot(params).await
   }
 
   async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
@@ -335,9 +339,9 @@ impl CollabStoragePgImpl {
       Ok(Some(transaction)) => {
         let meta = collab_db_ops::create_snapshot_and_maintain_limit(
           transaction,
+          &params.workspace_id,
           &params.object_id,
           &params.encoded_collab_v1,
-          &params.workspace_id.parse::<Uuid>()?,
           COLLAB_SNAPSHOT_LIMIT,
         )
         .await?;

@@ -1,11 +1,12 @@
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
+use std::sync::atomic::AtomicU64;
 use tracing::trace;
 
 #[derive(Clone)]
 pub struct RealtimeMetrics {
   connected_users: Gauge,
-  encode_collab_mem_hit_rate: Gauge,
+  encode_collab_mem_hit_rate: Gauge<f64, AtomicU64>,
   opening_collab_count: Gauge,
 }
 
@@ -47,7 +48,7 @@ impl RealtimeMetrics {
 
   pub fn record_encode_collab_mem_hit_rate(&self, rate: f64) {
     trace!("[metrics]: encode collab hit rate: {}", rate);
-    self.encode_collab_mem_hit_rate.set(rate as i64);
+    self.encode_collab_mem_hit_rate.set(rate);
   }
 
   pub fn record_opening_collab_count(&self, count: usize) {

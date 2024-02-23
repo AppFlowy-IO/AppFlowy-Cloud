@@ -200,6 +200,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
       redis_client.clone(),
       collab_access_control.clone(),
       workspace_access_control.clone(),
+      metrics.collab_metrics.clone(),
     )
     .await,
   );
@@ -285,7 +286,7 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
   info!("Connecting to redis with uri: {}", redis_uri);
   let manager = redis::Client::open(redis_uri)
     .context("failed to connect to redis")?
-    .get_tokio_connection_manager()
+    .get_connection_manager()
     .await
     .context("failed to get the connection manager")?;
   Ok(manager)

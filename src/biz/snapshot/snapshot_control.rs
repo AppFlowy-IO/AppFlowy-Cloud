@@ -20,6 +20,9 @@ use validator::Validate;
 
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
 pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
+
+pub const SNAPSHOT_TICK_INTERVAL: u64 = 30;
+
 pub enum SnapshotCommand {
   InsertSnapshot(InsertSnapshotParams),
   Tick(tokio::sync::oneshot::Sender<SnapshotMetric>),
@@ -39,6 +42,8 @@ impl SnapshotControl {
     let redis_client = Arc::new(Mutex::new(redis_client));
     let (command_sender, rx) = tokio::sync::mpsc::channel(1000);
     let cache = SnapshotCache::new(redis_client);
+
+    // Load remaining items from cache
     let remaining_item = cache
       .keys(SNAPSHOT_PREFIX)
       .await
@@ -50,9 +55,17 @@ impl SnapshotControl {
     let runner = SnapshotCommandRunner::new(pg_pool, cache, rx, remaining_item);
     tokio::spawn(runner.run());
 
+    // Spawn a task to send tick command every SNAPSHOT_TICK_INTERVAL seconds
+    // In debug mode, we set the interval to 1 second to speed up the test
+    let interval_in_secs = if cfg!(debug_assertions) {
+      2
+    } else {
+      SNAPSHOT_TICK_INTERVAL
+    };
+
     let cloned_sender = command_sender.clone();
     tokio::spawn(async move {
-      let mut interval = interval(Duration::from_secs(60));
+      let mut interval = interval(Duration::from_secs(interval_in_secs));
       loop {
         interval.tick().await;
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -71,6 +84,7 @@ impl SnapshotControl {
 
   pub async fn queue_snapshot(&self, params: InsertSnapshotParams) -> Result<(), AppError> {
     params.validate()?;
+    trace!("Queuing snapshot for {}", params.object_id);
     self
       .command_sender
       .send(SnapshotCommand::InsertSnapshot(params))
@@ -127,12 +141,16 @@ impl SnapshotCommandRunner {
   async fn handle_command(&self, command: SnapshotCommand) {
     match command {
       SnapshotCommand::InsertSnapshot(params) => {
-        let item = self.queue.write().await.generate_item(
+        let mut queue = self.queue.write().await;
+        let item = queue.generate_item(
           params.workspace_id,
           params.object_id,
           params.encoded_collab_v1.len(),
         );
         let key = SnapshotKey::from_pending_item(&item);
+        queue.push_item(item);
+        drop(queue);
+
         if let Err(err) = self.cache.insert(&key.0, params.encoded_collab_v1).await {
           error!("Failed to insert snapshot to cache: {}", err);
         }
@@ -159,6 +177,9 @@ impl SnapshotCommandRunner {
     let data = match self.cache.try_get(&key.0).await {
       Ok(data) => data,
       Err(_) => {
+        if cfg!(debug_assertions) {
+          error!("Failed to get snapshot from cache: {}", key.0);
+        }
         self.queue.write().await.push_item(next_item);
         return Ok(());
       },
@@ -183,7 +204,11 @@ impl SnapshotCommandRunner {
     .await
     {
       Ok(_) => {
-        trace!("Successfully created snapshot for {}", next_item.object_id);
+        trace!(
+          "successfully created snapshot for {}, remaining task: {}",
+          next_item.object_id,
+          self.queue.read().await.len()
+        );
         let _ = self.cache.remove(&key.0).await;
         self.success_attempts.fetch_add(1, Ordering::Relaxed);
         Ok(())
@@ -195,6 +220,7 @@ impl SnapshotCommandRunner {
     }
   }
 
+  /// If the ratio is very low, it means that writing snapshots is failing a lot.
   pub fn cal_write_snapshot_success_ratio(&self) -> f64 {
     let hits = self.success_attempts.load(Ordering::Relaxed) as f64;
     let total_attempts = self.total_attempts.load(Ordering::Relaxed) as f64;

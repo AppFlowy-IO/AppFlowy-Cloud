@@ -28,7 +28,6 @@ impl CollabMetrics {
   }
 
   pub fn record_success_write_snapshot_ratio(&self, ratio: f64) {
-    trace!("[metrics]: success write snapshot ratio: {}", ratio);
     self.success_write_snapshot_ratio.set(ratio);
   }
 }

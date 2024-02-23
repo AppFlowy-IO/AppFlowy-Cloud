@@ -87,9 +87,8 @@ where
   }
 
   #[instrument(skip(self))]
-  pub async fn remove_group(&self, object_id: &str) {
+  async fn remove_group(&self, object_id: &str) {
     let entry = self.group_by_object_id.remove(object_id);
-
     if let Some(entry) = entry {
       let group = entry.1;
       group.stop().await;
@@ -98,7 +97,6 @@ where
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
-
     self.storage.remove_collab_cache(object_id).await;
   }
 

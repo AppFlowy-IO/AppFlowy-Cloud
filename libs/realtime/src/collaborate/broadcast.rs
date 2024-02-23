@@ -103,9 +103,7 @@ impl CollabBroadcast {
             ),
           }
 
-          if let Ok(mut modified_at) = modified_at.try_lock() {
-            *modified_at = Instant::now();
-          }
+          *modified_at.lock() = Instant::now();
         })
         .unwrap();
 

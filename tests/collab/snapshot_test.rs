@@ -62,7 +62,7 @@ async fn get_snapshot_list_test() {
   // By default, when create a collab, a snapshot will be created.
   // Sleep 5 seconds to wait for the snapshot write to disk.
   // Also checkout the SNAPSHOT_TICK_INTERVAL
-  tokio::time::sleep(Duration::from_secs(3)).await;
+  tokio::time::sleep(Duration::from_secs(5)).await;
   let list = test_client
     .get_snapshot_list(&workspace_id, &object_id)
     .await

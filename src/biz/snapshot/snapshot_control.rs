@@ -21,7 +21,7 @@ use validator::Validate;
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
 pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
 
-pub const SNAPSHOT_TICK_INTERVAL: u64 = 30;
+pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(30);
 
 pub enum SnapshotCommand {
   InsertSnapshot(InsertSnapshotParams),
@@ -55,17 +55,9 @@ impl SnapshotControl {
     let runner = SnapshotCommandRunner::new(pg_pool, cache, rx, remaining_item);
     tokio::spawn(runner.run());
 
-    // Spawn a task to send tick command every SNAPSHOT_TICK_INTERVAL seconds
-    // In debug mode, we set the interval to 2 second to speed up the test
-    let interval_in_secs = if cfg!(debug_assertions) {
-      2
-    } else {
-      SNAPSHOT_TICK_INTERVAL
-    };
-
     let cloned_sender = command_sender.clone();
     tokio::spawn(async move {
-      let mut interval = interval(Duration::from_secs(interval_in_secs));
+      let mut interval = interval(SNAPSHOT_TICK_INTERVAL);
       loop {
         interval.tick().await;
         let (tx, rx) = tokio::sync::oneshot::channel();

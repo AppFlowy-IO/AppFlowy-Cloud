@@ -7,7 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -31,7 +31,6 @@ use yrs::encoding::write::Write;
 ///
 pub struct CollabBroadcast {
   object_id: String,
-  collab: MutexCollab,
   sender: Sender<CollabMessage>,
   awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
@@ -55,13 +54,12 @@ impl CollabBroadcast {
   ///
   /// The overflow of the incoming events that needs to be propagates will be buffered up to a
   /// provided `buffer_capacity` size.
-  pub fn new(object_id: &str, collab: MutexCollab, buffer_capacity: usize) -> Self {
+  pub fn new(object_id: &str, buffer_capacity: usize) -> Self {
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
     CollabBroadcast {
       object_id,
-      collab,
       sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
@@ -70,9 +68,9 @@ impl CollabBroadcast {
     }
   }
 
-  pub async fn observe_collab_changes(&self) {
+  pub async fn observe_collab_changes(&self, collab: &Arc<MutexCollab>) {
     let (doc_sub, awareness_sub) = {
-      let mut mutex_collab = self.collab.lock();
+      let mut mutex_collab = collab.lock();
 
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
@@ -129,11 +127,6 @@ impl CollabBroadcast {
     *self.awareness_sub.lock().await = Some(awareness_sub);
   }
 
-  /// Returns a reference to an underlying [MutexCollab] instance.
-  pub fn collab(&self) -> &MutexCollab {
-    &self.collab
-  }
-
   /// Broadcasts user message to all active subscribers. Returns error if message could not have
   /// been broadcast.
   #[allow(clippy::result_large_err)]
@@ -175,6 +168,7 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
+    collab: Weak<MutexCollab>,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
@@ -218,7 +212,6 @@ impl CollabBroadcast {
 
     let stream_stop_tx = {
       let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
-      let collab = self.collab().clone();
       let object_id = self.object_id.clone();
 
       // the stream will continue to receive messages from the client and it will stop if the stop_rx
@@ -227,21 +220,26 @@ impl CollabBroadcast {
       tokio::spawn(async move {
         loop {
           select! {
-             _ = stop_rx.recv() => break,
-             result = stream.next() => {
-               match result {
-                 Some(Ok(collab_msg)) => {
-                   // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
-                   if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
-                     handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
-                   } else {
-                     warn!("Invalid collab message: {:?}", collab_msg);
-                   }
-                 },
-                 Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
-                 None => break,
-               }
-             }
+            _ = stop_rx.recv() => break,
+            result = stream.next() => {
+              match result {
+                Some(Ok(collab_msg)) => {
+                  match collab.upgrade() {
+                    None => break, // break the loop if the collab is dropped
+                    Some(collab) => {
+                      // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
+                      if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
+                        handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
+                      } else {
+                        warn!("Invalid collab message: {:?}", collab_msg);
+                      }
+                    }
+                  }
+                },
+                Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
+                None => break,
+              }
+            }
           }
         }
       });

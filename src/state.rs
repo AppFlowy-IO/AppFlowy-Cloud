@@ -15,6 +15,7 @@ use realtime::collaborate::RealtimeMetrics;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 
+use crate::biz::collab::metrics::CollabMetrics;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
@@ -100,6 +101,7 @@ pub struct AppMetrics {
   pub request_metrics: Arc<RequestMetrics>,
   pub realtime_metrics: Arc<RealtimeMetrics>,
   pub access_control_metrics: Arc<AccessControlMetrics>,
+  pub collab_metrics: Arc<CollabMetrics>,
 }
 
 impl Default for AppMetrics {
@@ -114,11 +116,13 @@ impl AppMetrics {
     let request_metrics = Arc::new(RequestMetrics::register(&mut registry));
     let realtime_metrics = Arc::new(RealtimeMetrics::register(&mut registry));
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
+    let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
     Self {
       registry: Arc::new(registry),
       request_metrics,
       realtime_metrics,
       access_control_metrics,
+      collab_metrics,
     }
   }
 }

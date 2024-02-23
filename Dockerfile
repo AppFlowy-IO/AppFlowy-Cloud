@@ -1,7 +1,7 @@
+FROM lukemathwalker/cargo-chef:latest-rust-1.75.0 as chef
+
 # Build argument for features
 ARG FEATURES=""
-
-FROM lukemathwalker/cargo-chef:latest-rust-1.75.0 as chef
 
 WORKDIR /app
 RUN apt update && apt install lld clang -y
@@ -19,7 +19,8 @@ COPY . .
 ENV SQLX_OFFLINE true
 
 # Build the project
-RUN cargo build --profile=profiling --features="${FEATURES}" --bin appflowy_cloud
+RUN echo "Building with features: ${FEATURES}"
+RUN cargo build --profile=profiling --features=${FEATURES} --bin appflowy_cloud
 
 
 FROM debian:bookworm-slim AS runtime

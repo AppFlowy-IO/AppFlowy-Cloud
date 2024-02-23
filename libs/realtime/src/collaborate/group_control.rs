@@ -325,7 +325,7 @@ where
   /// Check if the group is active. A group is considered active if it has at least one
   /// subscriber or has been modified within the last 10 minutes.
   pub async fn is_inactive(&self) -> bool {
-    let modified_at = self.broadcast.modified_at.lock().await;
+    let modified_at = self.broadcast.modified_at.lock();
     if cfg!(debug_assertions) {
       modified_at.elapsed().as_secs() > 60
     } else {

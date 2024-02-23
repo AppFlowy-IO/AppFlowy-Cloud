@@ -74,7 +74,10 @@ impl SnapshotControl {
         }
 
         if let Ok(metric) = rx.await {
-          collab_metrics.record_success_write_snapshot_ratio(metric.success_write_snapshot_ratio);
+          collab_metrics.record_write_snapshot(
+            metric.success_write_snapshot_count,
+            metric.total_write_snapshot_count,
+          );
         }
       }
     });
@@ -161,7 +164,8 @@ impl SnapshotCommandRunner {
         }
 
         let _ = tx.send(SnapshotMetric {
-          success_write_snapshot_ratio: self.cal_write_snapshot_success_ratio(),
+          success_write_snapshot_count: self.success_attempts.load(Ordering::Relaxed) as i64,
+          total_write_snapshot_count: self.total_attempts.load(Ordering::Relaxed) as i64,
         });
       },
     }
@@ -219,17 +223,6 @@ impl SnapshotCommandRunner {
       },
     }
   }
-
-  /// If the ratio is very low, it means that writing snapshots is failing a lot.
-  pub fn cal_write_snapshot_success_ratio(&self) -> f64 {
-    let hits = self.success_attempts.load(Ordering::Relaxed) as f64;
-    let total_attempts = self.total_attempts.load(Ordering::Relaxed) as f64;
-    if total_attempts == 0.0 {
-      0.0
-    } else {
-      hits / total_attempts
-    }
-  }
 }
 
 const SNAPSHOT_PREFIX: &str = "full_snapshot";
@@ -267,5 +260,6 @@ impl SnapshotKey {
 }
 
 pub struct SnapshotMetric {
-  success_write_snapshot_ratio: f64,
+  success_write_snapshot_count: i64,
+  total_write_snapshot_count: i64,
 }

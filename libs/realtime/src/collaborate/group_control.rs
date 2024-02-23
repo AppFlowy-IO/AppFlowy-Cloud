@@ -2,9 +2,9 @@ use crate::collaborate::{CollabAccessControl, CollabBroadcast, CollabStoragePlug
 use crate::entities::RealtimeUser;
 use anyhow::Error;
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollab;
+
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
+
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
@@ -37,8 +37,7 @@ where
   }
 
   /// Performs a periodic check to remove groups based on the following conditions:
-  /// 1. Groups without any subscribers.
-  /// 2. Groups that have been inactive for a specified period of time.
+  /// Groups that have been inactive for a specified period of time.
   pub async fn tick(&self) -> Vec<String> {
     let mut inactive_group_ids = vec![];
     for entry in self.group_by_object_id.iter() {
@@ -123,9 +122,8 @@ where
     collab_type: CollabType,
   ) -> Arc<CollabGroup<U>> {
     event!(tracing::Level::TRACE, "New group:{}", object_id);
-    let collab = MutexCollab::new(CollabOrigin::Server, object_id, vec![]);
-    let broadcast = CollabBroadcast::new(object_id, collab.clone(), 10);
-    let collab = Arc::new(collab.clone());
+    let collab = Arc::new(MutexCollab::new(CollabOrigin::Server, object_id, vec![]));
+    let broadcast = CollabBroadcast::new(object_id, 10);
 
     // The lifecycle of the collab is managed by the group.
     let group = Arc::new(CollabGroup::new(
@@ -149,7 +147,7 @@ where
       .storage
       .cache_collab(object_id, Arc::downgrade(&collab))
       .await;
-    group.observe_collab().await;
+    group.observe_collab(&collab).await;
     group
   }
 
@@ -160,7 +158,7 @@ where
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
-  pub collab: Arc<MutexCollab>,
+  collab: Arc<MutexCollab>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -195,8 +193,8 @@ where
     }
   }
 
-  pub async fn observe_collab(&self) {
-    self.broadcast.observe_collab_changes().await;
+  pub async fn observe_collab(&self, collab: &Arc<MutexCollab>) {
+    self.broadcast.observe_collab_changes(collab).await;
   }
 
   pub fn contains_user(&self, user: &U) -> bool {
@@ -289,7 +287,12 @@ where
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {
-    let sub = self.broadcast.subscribe(subscriber_origin, sink, stream);
+    let sub = self.broadcast.subscribe(
+      subscriber_origin,
+      sink,
+      stream,
+      Arc::downgrade(&self.collab),
+    );
 
     // Remove the old user if it exists
     let user_device = user.user_device();
@@ -303,19 +306,6 @@ where
       .user_by_user_device
       .insert(user_device, (*user).clone());
     self.subscribers.insert((*user).clone(), sub);
-  }
-
-  /// Mutate the [Collab] by the given closure
-  pub fn get_mut_collab<F>(&self, f: F)
-  where
-    F: FnOnce(&Collab),
-  {
-    let collab = self.collab.lock();
-    f(&collab);
-  }
-
-  pub fn encode_v1(&self) -> EncodedCollab {
-    self.collab.lock().encode_collab_v1()
   }
 
   pub async fn is_empty(&self) -> bool {

@@ -161,7 +161,7 @@ where
                 // task for creating a snapshot might write to the database before a previous task completes. To address
                 // this, consider using `stream!` to queue these tasks, ensuring they are executed in the order they were
                 // spawned.
-                if let Err(err) = storage.create_snapshot(params).await {
+                if let Err(err) = storage.queue_snapshot(params).await {
                   error!("create snapshot {:?}", err);
                 }
               });

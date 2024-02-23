@@ -25,6 +25,8 @@ use std::{
   sync::{Arc, Weak},
 };
 
+use crate::biz::collab::metrics::CollabMetrics;
+use crate::biz::snapshot::SnapshotControl;
 use tracing::{event, instrument};
 use validator::Validate;
 
@@ -37,14 +39,16 @@ pub async fn init_collab_storage(
   redis_client: RedisClient,
   collab_access_control: CollabAccessControlImpl,
   workspace_access_control: WorkspaceAccessControlImpl,
+  collab_metrics: Arc<CollabMetrics>,
 ) -> CollabPostgresDBStorage {
   let access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.into(),
     workspace_access_control: workspace_access_control.into(),
   };
-  let disk_cache = CollabStoragePgImpl::new(pg_pool);
-  let mem_cache = CollabMemCache::new(redis_client);
-  CollabStorageController::new(disk_cache, mem_cache, access_control)
+  let disk_cache = CollabStoragePgImpl::new(pg_pool.clone());
+  let mem_cache = CollabMemCache::new(redis_client.clone());
+  let snapshot_control = SnapshotControl::new(redis_client, pg_pool, collab_metrics).await;
+  CollabStorageController::new(disk_cache, mem_cache, access_control, snapshot_control)
 }
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
@@ -56,6 +60,7 @@ pub struct CollabStorageController<AC> {
   access_control: AC,
   /// cache opened collab by object_id. The collab will be removed from the cache when it's closed.
   opened_collab_by_object_id: Arc<DashMap<String, Weak<MutexCollab>>>,
+  snapshot_control: SnapshotControl,
 }
 
 impl<AC> CollabStorageController<AC>
@@ -66,12 +71,15 @@ where
     disk_cache: CollabStoragePgImpl,
     mem_cache: CollabMemCache,
     access_control: AC,
+
+    snapshot_control: SnapshotControl,
   ) -> Self {
     Self {
       disk_cache,
       mem_cache,
       access_control,
       opened_collab_by_object_id: Arc::new(DashMap::new()),
+      snapshot_control,
     }
   }
 
@@ -324,6 +332,10 @@ where
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
     self.disk_cache.create_snapshot(params).await
+  }
+
+  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()> {
+    self.snapshot_control.queue_snapshot(params).await
   }
 
   async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {

@@ -334,13 +334,14 @@ pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
 /// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
 /// is exceeded, the oldest snapshots are deleted to maintain the limit.
 ///
-pub(crate) async fn create_snapshot_and_maintain_limit<'a>(
+pub async fn create_snapshot_and_maintain_limit<'a>(
   mut transaction: Transaction<'a, Postgres>,
+  workspace_id: &str,
   oid: &str,
   encoded_collab_v1: &[u8],
-  workspace_id: &Uuid,
   snapshot_limit: i64,
 ) -> Result<AFSnapshotMeta, AppError> {
+  let workspace_id = Uuid::from_str(workspace_id)?;
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMeta,
     r#"

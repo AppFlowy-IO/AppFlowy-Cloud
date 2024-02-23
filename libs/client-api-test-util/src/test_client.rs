@@ -356,6 +356,28 @@ impl TestClient {
       .await
   }
 
+  pub async fn get_snapshot_list_until(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    f: impl Fn(&AFSnapshotMetas) -> bool,
+    timeout_secs: u64,
+  ) -> AFSnapshotMetas {
+    let duration = Duration::from_secs(timeout_secs);
+    let mut snapshot_metas = self
+      .get_snapshot_list(workspace_id, object_id)
+      .await
+      .unwrap();
+    while !f(&snapshot_metas) {
+      tokio::time::sleep(Duration::from_secs(1)).await;
+      snapshot_metas = timeout(duration, self.get_snapshot_list(workspace_id, object_id))
+        .await
+        .unwrap()
+        .unwrap();
+    }
+    snapshot_metas
+  }
+
   pub async fn create_collab_list(
     &mut self,
     workspace_id: &str,

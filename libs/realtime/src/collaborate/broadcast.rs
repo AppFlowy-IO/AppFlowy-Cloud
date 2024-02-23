@@ -223,18 +223,21 @@ impl CollabBroadcast {
             _ = stop_rx.recv() => break,
             result = stream.next() => {
               match result {
-              Some(Ok(collab_msg)) => {
-               if let Some(collab) = collab.upgrade() {
-                 // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
-                 if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
-                   handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
-                 } else {
-                   warn!("Invalid collab message: {:?}", collab_msg);
-                 }
-               }
-              },
-              Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
-              None => break,
+                Some(Ok(collab_msg)) => {
+                  match collab.upgrade() {
+                    None => break, // break the loop if the collab is dropped
+                    Some(collab) => {
+                      // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
+                      if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
+                        handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
+                      } else {
+                        warn!("Invalid collab message: {:?}", collab_msg);
+                      }
+                    }
+                  }
+                },
+                Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
+                None => break,
               }
             }
           }

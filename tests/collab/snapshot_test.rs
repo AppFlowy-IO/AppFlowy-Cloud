@@ -4,6 +4,7 @@ use collab_entity::CollabType;
 use serde_json::{json, Value};
 use std::time::Duration;
 
+use appflowy_cloud::biz::snapshot::SNAPSHOT_TICK_INTERVAL;
 use client_api_test_util::*;
 use database::collab::COLLAB_SNAPSHOT_LIMIT;
 use uuid::Uuid;
@@ -60,9 +61,7 @@ async fn get_snapshot_list_test() {
     .await;
 
   // By default, when create a collab, a snapshot will be created.
-  // Sleep 5 seconds to wait for the snapshot write to disk.
-  // Also checkout the SNAPSHOT_TICK_INTERVAL
-  tokio::time::sleep(Duration::from_secs(5)).await;
+  tokio::time::sleep(Duration::from_secs(2 * SNAPSHOT_TICK_INTERVAL)).await;
   let list = test_client
     .get_snapshot_list(&workspace_id, &object_id)
     .await

@@ -188,6 +188,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
     collab_member_listener,
     workspace_member_listener,
     metrics.access_control_metrics.clone(),
+    redis_client.clone(),
   )
   .await?;
 

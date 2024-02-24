@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 use validator::Validate;
 
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
@@ -171,7 +171,11 @@ impl SnapshotCommandRunner {
 
     let key = SnapshotKey::from_pending_item(&next_item);
     let data = match self.cache.try_get(&key.0).await {
-      Ok(data) => data,
+      Ok(Some(data)) => data,
+      Ok(None) => {
+        warn!("Failed to get snapshot from cache: {}", key.0);
+        return Ok(());
+      },
       Err(_) => {
         if cfg!(debug_assertions) {
           error!("Failed to get snapshot from cache: {}", key.0);

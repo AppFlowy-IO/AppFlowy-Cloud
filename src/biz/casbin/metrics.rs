@@ -1,6 +1,7 @@
 use prometheus_client::metrics::gauge::Gauge;
 
 use prometheus_client::registry::Registry;
+use tracing::trace;
 
 #[derive(Clone)]
 pub struct AccessControlMetrics {
@@ -47,6 +48,11 @@ impl AccessControlMetrics {
   }
 
   pub fn record_enforce_count(&self, total: i64, from_cache: i64) {
+    trace!(
+      "enforce_count: total: {}, from_cache: {}",
+      total,
+      from_cache
+    );
     self.total_read_enforce_count.set(total);
     self.read_enforce_from_cache_count.set(from_cache);
   }

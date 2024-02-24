@@ -2,6 +2,7 @@ use crate::biz::casbin::enforcer::{AFEnforcerCache, ActionCacheKey, PolicyCacheK
 use crate::state::RedisClient;
 use redis::AsyncCommands;
 
+use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::error;
@@ -19,6 +20,7 @@ impl AFEnforcerCacheImpl {
   }
 }
 
+#[async_trait]
 impl AFEnforcerCache for AFEnforcerCacheImpl {
   async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) {
     if let Err(err) = self
@@ -33,7 +35,13 @@ impl AFEnforcerCache for AFEnforcerCacheImpl {
   }
 
   async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool> {
-    self.redis_client.lock().await.get(key.as_ref()).await.ok()
+    self
+      .redis_client
+      .lock()
+      .await
+      .get::<&str, Option<bool>>(key.as_ref())
+      .await
+      .ok()?
   }
 
   async fn remove_enforcer_result(&self, key: &PolicyCacheKey) {
@@ -61,7 +69,13 @@ impl AFEnforcerCache for AFEnforcerCacheImpl {
   }
 
   async fn get_action(&self, key: &ActionCacheKey) -> Option<String> {
-    self.redis_client.lock().await.get(key.as_ref()).await.ok()
+    self
+      .redis_client
+      .lock()
+      .await
+      .get::<&str, Option<String>>(key.as_ref())
+      .await
+      .ok()?
   }
 
   async fn remove_action(&self, key: &ActionCacheKey) {

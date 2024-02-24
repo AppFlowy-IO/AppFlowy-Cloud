@@ -1,4 +1,7 @@
+use assert_json_diff::assert_json_eq;
+use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
+use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use serde_json::{json, Value};
@@ -87,6 +90,54 @@ async fn get_snapshot_list_test() {
   assert_eq!(list.len(), 3);
   assert_eq!(list[0].snapshot_id, meta_2.snapshot_id);
   assert_eq!(list[1].snapshot_id, meta_1.snapshot_id);
+}
+
+#[tokio::test]
+async fn get_snapshot_date_test() {
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+
+  let collab_type = CollabType::Document;
+  let object_id = Uuid::new_v4().to_string();
+  let (data, _) = test_collab_data(test_client.uid().await, &object_id);
+
+  test_client
+    .create_and_edit_collab_with_data(
+      object_id.clone(),
+      &workspace_id,
+      collab_type.clone(),
+      Some(data),
+    )
+    .await;
+
+  let meta = test_client
+    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 60)
+    .await
+    .0
+    .remove(0);
+
+  let data = test_client
+    .get_snapshot(&workspace_id, &object_id, &meta.snapshot_id)
+    .await
+    .unwrap();
+
+  let encoded_collab = EncodedCollab::decode_from_bytes(&data.encoded_collab_v1).unwrap();
+  let collab = MutexCollab::new_with_doc_state(
+    CollabOrigin::Empty,
+    &object_id,
+    encoded_collab.doc_state.to_vec(),
+    vec![],
+  )
+  .unwrap();
+  let json = collab.to_json_value();
+  assert_json_eq!(
+    json,
+    json!({
+      "0": "a",
+      "1": "b",
+      "2": "c"
+    })
+  );
 }
 
 #[tokio::test]

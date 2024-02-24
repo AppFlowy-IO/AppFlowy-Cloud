@@ -23,7 +23,7 @@ pub trait AFEnforcerCache: Send + Sync {
   async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool);
   async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool>;
   async fn remove_enforcer_result(&self, key: &PolicyCacheKey);
-  async fn set_action(&self, key: ActionCacheKey, value: String);
+  async fn set_action(&self, key: &ActionCacheKey, value: String);
   async fn get_action(&self, key: &ActionCacheKey) -> Option<String>;
   async fn remove_action(&self, key: &ActionCacheKey);
 }
@@ -32,30 +32,31 @@ pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
-  cache: Box<dyn AFEnforcerCache>,
-  total_read_enforce_result: Arc<AtomicI64>,
-  read_enforce_result_from_cache: Arc<AtomicI64>,
+  cache: Arc<dyn AFEnforcerCache>,
+  metrics_cal: MetricsCal,
 }
 
 impl AFEnforcer {
   pub fn new(
     enforcer: Enforcer,
-    cache: Box<dyn AFEnforcerCache>,
+    cache: Arc<dyn AFEnforcerCache>,
     metrics: Arc<AccessControlMetrics>,
   ) -> Self {
-    let total_read_enforce_result = Arc::new(AtomicI64::new(0));
-    let read_enforce_result_from_cache = Arc::new(AtomicI64::new(0));
+    let metrics_cal = MetricsCal::new();
+    let cloned_metrics_cal = metrics_cal.clone();
 
-    let cloned_total_read_enforce_result = total_read_enforce_result.clone();
-    let cloned_read_enforce_result_from_cache = read_enforce_result_from_cache.clone();
     tokio::spawn(async move {
       let mut interval = interval(ENFORCER_METRICS_TICK_INTERVAL);
       loop {
         interval.tick().await;
 
         metrics.record_enforce_count(
-          cloned_total_read_enforce_result.load(Ordering::Relaxed),
-          cloned_read_enforce_result_from_cache.load(Ordering::Relaxed),
+          cloned_metrics_cal
+            .total_read_enforce_result
+            .load(Ordering::Relaxed),
+          cloned_metrics_cal
+            .read_enforce_result_from_cache
+            .load(Ordering::Relaxed),
         );
       }
     });
@@ -63,8 +64,7 @@ impl AFEnforcer {
     Self {
       enforcer: RwLock::new(enforcer),
       cache,
-      total_read_enforce_result,
-      read_enforce_result_from_cache,
+      metrics_cal,
     }
   }
 
@@ -119,7 +119,7 @@ impl AFEnforcer {
     match &result {
       Ok(value) => {
         trace!("[access control]: add policy:{} => {}", policy_key.0, value);
-        self.cache.set_action(object_key, act.to_action()).await;
+        self.cache.set_action(&object_key, act.to_action()).await;
       },
       Err(err) => {
         trace!(
@@ -184,12 +184,14 @@ impl AFEnforcer {
     A: ToCasbinAction,
   {
     self
+      .metrics_cal
       .total_read_enforce_result
       .fetch_add(1, Ordering::Relaxed);
     let policy = vec![uid.to_string(), obj.to_object_id(), act.to_action()];
     let policy_key = PolicyCacheKey::new(&policy);
     if let Some(value) = self.cache.get_enforcer_result(&policy_key).await {
       self
+        .metrics_cal
         .read_enforce_result_from_cache
         .fetch_add(1, Ordering::Relaxed);
       return Ok(value);
@@ -230,7 +232,7 @@ impl AFEnforcer {
 
     let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
     trace!("cache action: {}:{}", object_key.0, action.clone());
-    self.cache.set_action(object_key, action.clone()).await;
+    self.cache.set_action(&object_key, action.clone()).await;
     Some(action)
   }
 }
@@ -292,5 +294,20 @@ fn validate_obj_action(obj: &ObjectType<'_>, act: &ActionType) -> Result<(), App
       obj,
       act
     ))),
+  }
+}
+
+#[derive(Clone)]
+struct MetricsCal {
+  total_read_enforce_result: Arc<AtomicI64>,
+  read_enforce_result_from_cache: Arc<AtomicI64>,
+}
+
+impl MetricsCal {
+  fn new() -> Self {
+    Self {
+      total_read_enforce_result: Arc::new(Default::default()),
+      read_enforce_result_from_cache: Arc::new(Default::default()),
+    }
   }
 }

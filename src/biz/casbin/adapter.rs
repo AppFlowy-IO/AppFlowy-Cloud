@@ -24,13 +24,13 @@ use tokio_stream::StreamExt;
 pub struct PgAdapter {
   pg_pool: PgPool,
   access_control_metrics: Arc<AccessControlMetrics>,
-  enforce_cache: Box<dyn AFEnforcerCache>,
+  enforce_cache: Arc<dyn AFEnforcerCache>,
 }
 
 impl PgAdapter {
   pub fn new(
     pg_pool: PgPool,
-    enforce_cache: Box<dyn AFEnforcerCache>,
+    enforce_cache: Arc<dyn AFEnforcerCache>,
     access_control_metrics: Arc<AccessControlMetrics>,
   ) -> Self {
     Self {
@@ -42,7 +42,7 @@ impl PgAdapter {
 }
 
 async fn load_collab_policies(
-  enforce_cache: &Box<dyn AFEnforcerCache>,
+  enforce_cache: &Arc<dyn AFEnforcerCache>,
   mut stream: BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
@@ -52,7 +52,7 @@ async fn load_collab_policies(
     let object_type = ObjectType::Collab(&member_access_lv.oid);
     let action = member_access_lv.access_level.to_action();
     enforce_cache
-      .set_action(ActionCacheKey::new(&uid, &object_type), action.clone())
+      .set_action(&ActionCacheKey::new(&uid, &object_type), action.clone())
       .await;
 
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();
@@ -63,7 +63,7 @@ async fn load_collab_policies(
 }
 
 async fn load_workspace_policies(
-  enforce_cache: &Box<dyn AFEnforcerCache>,
+  enforce_cache: &Arc<dyn AFEnforcerCache>,
   mut stream: BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
@@ -74,7 +74,7 @@ async fn load_workspace_policies(
     let object_type = ObjectType::Workspace(&workspace_id);
     let action = member_permission.role.to_action();
     enforce_cache
-      .set_action(ActionCacheKey::new(&uid, &object_type), action.clone())
+      .set_action(&ActionCacheKey::new(&uid, &object_type), action.clone())
       .await;
 
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();

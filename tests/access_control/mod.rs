@@ -1,7 +1,10 @@
 use actix_http::Method;
 use anyhow::{Context, Error};
-use app_error::ErrorCode;
-use appflowy_cloud::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
+use app_error::{AppError, ErrorCode};
+use appflowy_cloud::biz::casbin::{
+  AFEnforcerCache, ActionCacheKey, CollabAccessControlImpl, PolicyCacheKey,
+  WorkspaceAccessControlImpl,
+};
 use appflowy_cloud::biz::workspace::access_control::WorkspaceAccessControl;
 use client_api_test_util::setup_log;
 use database_entity::dto::{AFAccessLevel, AFRole};
@@ -11,6 +14,7 @@ use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use casbin::{CoreApi, DefaultModel, Enforcer};
 use dashmap::DashMap;
 use std::time::Duration;
@@ -36,12 +40,16 @@ pub async fn setup_access_control(pool: &PgPool) -> anyhow::Result<AccessControl
 
   let metrics = AppMetrics::new();
   let listeners = PgListeners::new(pool).await?;
+  let enforcer_cache = Arc::new(TestEnforcerCacheImpl {
+    cache: DashMap::new(),
+  });
   Ok(
     AccessControl::new(
       pool.clone(),
       listeners.subscribe_collab_member_change(),
       listeners.subscribe_workspace_member_change(),
       metrics.access_control_metrics,
+      enforcer_cache,
     )
     .await
     .unwrap(),
@@ -51,14 +59,13 @@ pub async fn setup_access_control(pool: &PgPool) -> anyhow::Result<AccessControl
 pub async fn setup_enforcer(pool: &PgPool) -> anyhow::Result<Enforcer> {
   let metrics = AppMetrics::new();
   let model = DefaultModel::from_str(MODEL_CONF).await?;
+  let enforcer_cache = Arc::new(TestEnforcerCacheImpl {
+    cache: DashMap::new(),
+  });
   Ok(
     Enforcer::new(
       model,
-      PgAdapter::new(
-        pool.clone(),
-        Arc::new(DashMap::new()),
-        metrics.access_control_metrics,
-      ),
+      PgAdapter::new(pool.clone(), enforcer_cache, metrics.access_control_metrics),
     )
     .await
     .unwrap(),
@@ -306,4 +313,42 @@ pub async fn assert_can_access_http_method(
 
   timeout(timeout_duration, operation).await?;
   Ok(())
+}
+
+struct TestEnforcerCacheImpl {
+  cache: DashMap<String, String>,
+}
+
+#[async_trait]
+impl AFEnforcerCache for TestEnforcerCacheImpl {
+  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) -> Result<(), AppError> {
+    self
+      .cache
+      .insert(key.as_ref().to_string(), value.to_string());
+    Ok(())
+  }
+
+  async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool> {
+    self
+      .cache
+      .get(key.as_ref())
+      .map(|v| v.value().parse().unwrap())
+  }
+
+  async fn remove_enforcer_result(&self, key: &PolicyCacheKey) {
+    self.cache.remove(key.as_ref());
+  }
+
+  async fn set_action(&self, key: &ActionCacheKey, value: String) -> Result<(), AppError> {
+    self.cache.insert(key.as_ref().to_string(), value);
+    Ok(())
+  }
+
+  async fn get_action(&self, key: &ActionCacheKey) -> Option<String> {
+    self.cache.get(key.as_ref()).map(|v| v.value().to_string())
+  }
+
+  async fn remove_action(&self, key: &ActionCacheKey) {
+    self.cache.remove(key.as_ref());
+  }
 }

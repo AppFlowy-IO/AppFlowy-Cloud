@@ -24,16 +24,16 @@ impl CollabMetrics {
       metrics.success_write_snapshot_count.clone(),
     );
     realtime_registry.register(
-      "total_write_snapshot_count",
-      "Fail to write snapshot to db",
+      "total_attempt_write_snapshot_count",
+      "total attempt write snapshot to db",
       metrics.total_write_snapshot_count.clone(),
     );
 
     metrics
   }
 
-  pub fn record_write_snapshot(&self, success: i64, total: i64) {
-    self.success_write_snapshot_count.set(success);
-    self.total_write_snapshot_count.set(total);
+  pub fn record_write_snapshot(&self, success_attempt: i64, total_attempt: i64) {
+    self.success_write_snapshot_count.set(success_attempt);
+    self.total_write_snapshot_count.set(total_attempt);
   }
 }

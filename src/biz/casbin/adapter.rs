@@ -1,5 +1,5 @@
 use crate::biz::casbin::access_control::{Action, ObjectType, ToCasbinAction};
-use crate::biz::casbin::enforcer::ActionCacheKey;
+use crate::biz::casbin::enforcer::{AFEnforcerCache, ActionCacheKey};
 use async_trait::async_trait;
 
 use crate::biz::casbin::metrics::AccessControlMetrics;
@@ -7,7 +7,7 @@ use casbin::Adapter;
 use casbin::Filter;
 use casbin::Model;
 use casbin::Result;
-use dashmap::DashMap;
+
 use database::collab::select_collab_member_access_level;
 use database::pg_row::AFCollabMemerAccessLevelRow;
 use database::pg_row::AFWorkspaceMemberPermRow;
@@ -18,31 +18,32 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_stream::StreamExt;
+use tracing::error;
 
 /// Implementation of [`casbin::Adapter`] for access control authorisation.
 /// Access control policies that are managed by workspace and collab CRUD.
 pub struct PgAdapter {
   pg_pool: PgPool,
-  action_cache: Arc<DashMap<ActionCacheKey, String>>,
   access_control_metrics: Arc<AccessControlMetrics>,
+  enforce_cache: Arc<dyn AFEnforcerCache>,
 }
 
 impl PgAdapter {
   pub fn new(
     pg_pool: PgPool,
-    action_cache: Arc<DashMap<ActionCacheKey, String>>,
+    enforce_cache: Arc<dyn AFEnforcerCache>,
     access_control_metrics: Arc<AccessControlMetrics>,
   ) -> Self {
     Self {
       pg_pool,
-      action_cache,
+      enforce_cache,
       access_control_metrics,
     }
   }
 }
 
 async fn load_collab_policies(
-  action_cache: &Arc<DashMap<ActionCacheKey, String>>,
+  enforce_cache: &Arc<dyn AFEnforcerCache>,
   mut stream: BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
@@ -51,7 +52,12 @@ async fn load_collab_policies(
     let uid = member_access_lv.uid;
     let object_type = ObjectType::Collab(&member_access_lv.oid);
     let action = member_access_lv.access_level.to_action();
-    action_cache.insert(ActionCacheKey::new(&uid, &object_type), action.clone());
+    if let Err(err) = enforce_cache
+      .set_action(&ActionCacheKey::new(&uid, &object_type), action.clone())
+      .await
+    {
+      error!("{}", err)
+    }
 
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();
     policies.push(policy);
@@ -61,7 +67,7 @@ async fn load_collab_policies(
 }
 
 async fn load_workspace_policies(
-  action_cache: &Arc<DashMap<ActionCacheKey, String>>,
+  enforce_cache: &Arc<dyn AFEnforcerCache>,
   mut stream: BoxStream<'_, sqlx::Result<AFWorkspaceMemberPermRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
@@ -71,7 +77,12 @@ async fn load_workspace_policies(
     let workspace_id = member_permission.workspace_id.to_string();
     let object_type = ObjectType::Workspace(&workspace_id);
     let action = member_permission.role.to_action();
-    action_cache.insert(ActionCacheKey::new(&uid, &object_type), action.clone());
+    if let Err(err) = enforce_cache
+      .set_action(&ActionCacheKey::new(&uid, &object_type), action.clone())
+      .await
+    {
+      error!("{}", err);
+    }
 
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();
     policies.push(policy);
@@ -86,14 +97,14 @@ impl Adapter for PgAdapter {
     let start = Instant::now();
     let workspace_member_perm_stream = select_workspace_member_perm_stream(&self.pg_pool);
     let workspace_policies =
-      load_workspace_policies(&self.action_cache, workspace_member_perm_stream).await?;
+      load_workspace_policies(&self.enforce_cache, workspace_member_perm_stream).await?;
 
     // Policy definition `p` of type `p`. See `model.conf`
     model.add_policies("p", "p", workspace_policies);
 
     let collab_member_access_lv_stream = select_collab_member_access_level(&self.pg_pool);
     let collab_policies =
-      load_collab_policies(&self.action_cache, collab_member_access_lv_stream).await?;
+      load_collab_policies(&self.enforce_cache, collab_member_access_lv_stream).await?;
 
     // Policy definition `p` of type `p`. See `model.conf`
     model.add_policies("p", "p", collab_policies);

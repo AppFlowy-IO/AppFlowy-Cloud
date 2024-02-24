@@ -16,6 +16,7 @@ impl SnapshotCache {
   }
 
   /// Returns all existing keys start with `prefix`
+  #[allow(dead_code)]
   pub async fn keys(&self, prefix: &str) -> Result<Vec<String>, AppError> {
     let mut redis = self.redis_client.lock().await;
     let keys: Vec<String> = redis
@@ -34,23 +35,13 @@ impl SnapshotCache {
     Ok(())
   }
 
-  #[allow(dead_code)]
-  pub async fn get(&self, key: &str) -> Result<Vec<u8>, AppError> {
-    let mut redis = self.redis_client.lock().await;
-    let value = redis
-      .get::<_, Vec<u8>>(key)
-      .await
-      .map_err(|err| AppError::Internal(err.into()))?;
-    Ok(value)
-  }
-
-  pub async fn try_get(&self, key: &str) -> Result<Vec<u8>, AppError> {
+  pub async fn try_get(&self, key: &str) -> Result<Option<Vec<u8>>, AppError> {
     let mut redis = self
       .redis_client
       .try_lock()
       .map_err(|_| AppError::Internal(anyhow!("lock error")))?;
     let value = redis
-      .get::<_, Vec<u8>>(key)
+      .get::<_, Option<Vec<u8>>>(key)
       .await
       .map_err(|err| AppError::Internal(err.into()))?;
     Ok(value)

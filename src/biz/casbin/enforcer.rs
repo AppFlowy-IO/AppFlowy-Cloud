@@ -16,14 +16,14 @@ use crate::biz::casbin::metrics::AccessControlMetrics;
 
 use tokio::sync::RwLock;
 use tokio::time::interval;
-use tracing::{event, trace};
+use tracing::{error, event, trace};
 
 #[async_trait]
 pub trait AFEnforcerCache: Send + Sync {
-  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool);
+  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) -> Result<(), AppError>;
   async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool>;
   async fn remove_enforcer_result(&self, key: &PolicyCacheKey);
-  async fn set_action(&self, key: &ActionCacheKey, value: String);
+  async fn set_action(&self, key: &ActionCacheKey, value: String) -> Result<(), AppError>;
   async fn get_action(&self, key: &ActionCacheKey) -> Option<String>;
   async fn remove_action(&self, key: &ActionCacheKey);
 }
@@ -119,7 +119,9 @@ impl AFEnforcer {
     match &result {
       Ok(value) => {
         trace!("[access control]: add policy:{} => {}", policy_key.0, value);
-        self.cache.set_action(&object_key, act.to_action()).await;
+        if let Err(err) = self.cache.set_action(&object_key, act.to_action()).await {
+          error!("{}", err);
+        }
       },
       Err(err) => {
         trace!(
@@ -215,7 +217,9 @@ impl AFEnforcer {
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
 
     trace!("[access control]: policy:{} => {}", policy_key.0, result);
-    self.cache.set_enforcer_result(&policy_key, result).await;
+    if let Err(err) = self.cache.set_enforcer_result(&policy_key, result).await {
+      error!("{}", err)
+    }
     Ok(result)
   }
 
@@ -232,7 +236,7 @@ impl AFEnforcer {
 
     let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
     trace!("cache action: {}:{}", object_key.0, action.clone());
-    self.cache.set_action(&object_key, action.clone()).await;
+    let _ = self.cache.set_action(&object_key, action.clone()).await;
     Some(action)
   }
 }

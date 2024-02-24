@@ -338,8 +338,20 @@ where
     self.snapshot_control.queue_snapshot(params).await
   }
 
-  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
-    self.disk_cache.get_collab_snapshot(snapshot_id).await
+  async fn get_collab_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    snapshot_id: &i64,
+  ) -> DatabaseResult<SnapshotData> {
+    match self
+      .snapshot_control
+      .get_snapshot(workspace_id, object_id)
+      .await
+    {
+      None => self.disk_cache.get_collab_snapshot(snapshot_id).await,
+      Some(data) => Ok(data),
+    }
   }
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {

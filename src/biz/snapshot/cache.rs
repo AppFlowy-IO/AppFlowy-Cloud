@@ -16,6 +16,7 @@ impl SnapshotCache {
   }
 
   /// Returns all existing keys start with `prefix`
+  #[allow(dead_code)]
   pub async fn keys(&self, prefix: &str) -> Result<Vec<String>, AppError> {
     let mut redis = self.redis_client.lock().await;
     let keys: Vec<String> = redis

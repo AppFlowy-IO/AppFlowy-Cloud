@@ -44,48 +44,6 @@ async fn create_snapshot_test() {
 }
 
 #[tokio::test]
-async fn get_snapshot_list_test() {
-  let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.workspace_id().await;
-
-  let collab_type = CollabType::Document;
-  let object_id = Uuid::new_v4().to_string();
-  let (data, _) = test_collab_data(test_client.uid().await, &object_id);
-
-  test_client
-    .create_and_edit_collab_with_data(
-      object_id.clone(),
-      &workspace_id,
-      collab_type.clone(),
-      Some(data),
-    )
-    .await;
-
-  // By default, when create a collab, a snapshot will be created.
-  test_client
-    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 180)
-    .await
-    .unwrap();
-
-  let meta_1 = test_client
-    .create_snapshot(&workspace_id, &object_id, collab_type.clone())
-    .await
-    .unwrap();
-  let meta_2 = test_client
-    .create_snapshot(&workspace_id, &object_id, collab_type.clone())
-    .await
-    .unwrap();
-  let list = test_client
-    .get_snapshot_list(&workspace_id, &object_id)
-    .await
-    .unwrap()
-    .0;
-  assert_eq!(list.len(), 3);
-  assert_eq!(list[0].snapshot_id, meta_2.snapshot_id);
-  assert_eq!(list[1].snapshot_id, meta_1.snapshot_id);
-}
-
-#[tokio::test]
 async fn get_snapshot_data_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
@@ -103,12 +61,15 @@ async fn get_snapshot_data_test() {
     )
     .await;
 
-  let meta = test_client
+  let metas = test_client
     .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 180)
     .await
     .unwrap()
-    .0
-    .remove(0);
+    .0;
+
+  // when create a new collab, it will create a snapshot
+  assert_eq!(metas.len(), 1);
+  let meta = &metas[0];
 
   let data = test_client
     .get_snapshot(&workspace_id, &object_id, &meta.snapshot_id)

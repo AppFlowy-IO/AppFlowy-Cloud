@@ -584,7 +584,7 @@ pub async fn assert_server_snapshot(
        _ = tokio::time::sleep(Duration::from_secs(10)) => {
          panic!("Query snapshot timeout");
        },
-       result =client.get_snapshot(&workspace_id,&object_id,QuerySnapshotParams {snapshot_id: *snapshot_id },
+       result = client.get_snapshot(&workspace_id, &object_id, QuerySnapshotParams {snapshot_id: *snapshot_id },
         ) => {
         retry_count += 1;
         match &result {

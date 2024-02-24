@@ -1,6 +1,6 @@
 use actix_http::Method;
 use anyhow::{Context, Error};
-use app_error::ErrorCode;
+use app_error::{AppError, ErrorCode};
 use appflowy_cloud::biz::casbin::{
   AFEnforcerCache, ActionCacheKey, CollabAccessControlImpl, PolicyCacheKey,
   WorkspaceAccessControlImpl,
@@ -321,10 +321,11 @@ struct TestEnforcerCacheImpl {
 
 #[async_trait]
 impl AFEnforcerCache for TestEnforcerCacheImpl {
-  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) {
+  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) -> Result<(), AppError> {
     self
       .cache
       .insert(key.as_ref().to_string(), value.to_string());
+    Ok(())
   }
 
   async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool> {
@@ -338,8 +339,9 @@ impl AFEnforcerCache for TestEnforcerCacheImpl {
     self.cache.remove(key.as_ref());
   }
 
-  async fn set_action(&self, key: &ActionCacheKey, value: String) {
+  async fn set_action(&self, key: &ActionCacheKey, value: String) -> Result<(), AppError> {
     self.cache.insert(key.as_ref().to_string(), value);
+    Ok(())
   }
 
   async fn get_action(&self, key: &ActionCacheKey) -> Option<String> {

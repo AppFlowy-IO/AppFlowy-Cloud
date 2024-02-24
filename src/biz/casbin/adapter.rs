@@ -18,6 +18,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_stream::StreamExt;
+use tracing::error;
 
 /// Implementation of [`casbin::Adapter`] for access control authorisation.
 /// Access control policies that are managed by workspace and collab CRUD.
@@ -51,9 +52,12 @@ async fn load_collab_policies(
     let uid = member_access_lv.uid;
     let object_type = ObjectType::Collab(&member_access_lv.oid);
     let action = member_access_lv.access_level.to_action();
-    enforce_cache
+    if let Err(err) = enforce_cache
       .set_action(&ActionCacheKey::new(&uid, &object_type), action.clone())
-      .await;
+      .await
+    {
+      error!("{}", err)
+    }
 
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();
     policies.push(policy);
@@ -73,9 +77,12 @@ async fn load_workspace_policies(
     let workspace_id = member_permission.workspace_id.to_string();
     let object_type = ObjectType::Workspace(&workspace_id);
     let action = member_permission.role.to_action();
-    enforce_cache
+    if let Err(err) = enforce_cache
       .set_action(&ActionCacheKey::new(&uid, &object_type), action.clone())
-      .await;
+      .await
+    {
+      error!("{}", err);
+    }
 
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();
     policies.push(policy);

@@ -2,10 +2,15 @@ use crate::biz::casbin::enforcer::{AFEnforcerCache, ActionCacheKey, PolicyCacheK
 use crate::state::RedisClient;
 use redis::AsyncCommands;
 
+use anyhow::anyhow;
+use app_error::AppError;
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::error;
+
+/// Expire time for cache in seconds. When the cache is expired, the enforcer will re-evaluate the policy.
+const EXPIRE_TIME: u64 = 60 * 60 * 3;
 
 #[derive(Clone)]
 pub struct AFEnforcerCacheImpl {
@@ -22,16 +27,14 @@ impl AFEnforcerCacheImpl {
 
 #[async_trait]
 impl AFEnforcerCache for AFEnforcerCacheImpl {
-  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) {
-    if let Err(err) = self
+  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) -> Result<(), AppError> {
+    self
       .redis_client
       .lock()
       .await
-      .set::<&str, bool, ()>(key, value)
+      .set_ex::<&str, bool, ()>(key, value, EXPIRE_TIME)
       .await
-    {
-      error!("Failed to set enforcer result in cache: {}", err);
-    }
+      .map_err(|e| AppError::Internal(anyhow!("Failed to set enforcer result in redis: {}", e)))
   }
 
   async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool> {
@@ -52,20 +55,18 @@ impl AFEnforcerCache for AFEnforcerCacheImpl {
       .del::<&str, ()>(key.as_ref())
       .await
     {
-      error!("Failed to remove enforcer result from cache: {}", err);
+      error!("Failed to remove enforcer result from redis: {}", err);
     }
   }
 
-  async fn set_action(&self, key: &ActionCacheKey, value: String) {
-    if let Err(err) = self
+  async fn set_action(&self, key: &ActionCacheKey, value: String) -> Result<(), AppError> {
+    self
       .redis_client
       .lock()
       .await
-      .set::<&str, String, ()>(key, value)
+      .set_ex::<&str, String, ()>(key, value, EXPIRE_TIME)
       .await
-    {
-      error!("Failed to set action in cache: {}", err);
-    }
+      .map_err(|e| AppError::Internal(anyhow!("Failed to set action in redis: {}", e)))
   }
 
   async fn get_action(&self, key: &ActionCacheKey) -> Option<String> {

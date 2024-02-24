@@ -119,7 +119,12 @@ pub trait CollabStorage: Send + Sync + 'static {
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta>;
   async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()>;
 
-  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData>;
+  async fn get_collab_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    snapshot_id: &i64,
+  ) -> DatabaseResult<SnapshotData>;
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas>;
 }
@@ -194,8 +199,16 @@ where
     self.as_ref().queue_snapshot(params).await
   }
 
-  async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
-    self.as_ref().get_collab_snapshot(snapshot_id).await
+  async fn get_collab_snapshot(
+    &self,
+    workspace_id: &str,
+    object_id: &str,
+    snapshot_id: &i64,
+  ) -> DatabaseResult<SnapshotData> {
+    self
+      .as_ref()
+      .get_collab_snapshot(workspace_id, object_id, snapshot_id)
+      .await
   }
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {

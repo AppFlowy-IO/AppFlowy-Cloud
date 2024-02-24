@@ -1,5 +1,5 @@
 use crate::biz::casbin::collab_ac::CollabAccessControlImpl;
-use crate::biz::casbin::enforcer::AFEnforcer;
+use crate::biz::casbin::enforcer::{AFEnforcer, AFEnforcerCache};
 use crate::biz::casbin::pg_listen::*;
 use crate::biz::casbin::workspace_ac::WorkspaceAccessControlImpl;
 
@@ -11,8 +11,9 @@ use crate::biz::casbin::adapter::PgAdapter;
 use crate::biz::casbin::metrics::AccessControlMetrics;
 use actix_http::Method;
 use anyhow::anyhow;
-use dashmap::DashMap;
+
 use sqlx::PgPool;
+
 use std::sync::Arc;
 
 use tokio::sync::broadcast;
@@ -42,16 +43,14 @@ impl AccessControl {
     collab_listener: broadcast::Receiver<CollabMemberNotification>,
     workspace_listener: broadcast::Receiver<WorkspaceMemberNotification>,
     access_control_metrics: Arc<AccessControlMetrics>,
+    enforcer_cache: Arc<dyn AFEnforcerCache>,
   ) -> Result<Self, AppError> {
-    let enforcer_result_cache = Arc::new(DashMap::new());
-    let action_cache = Arc::new(DashMap::new());
-
     let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF)
       .await
       .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
     let access_control_adapter = PgAdapter::new(
       pg_pool.clone(),
-      action_cache.clone(),
+      enforcer_cache.clone(),
       access_control_metrics.clone(),
     );
     let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter)
@@ -62,8 +61,8 @@ impl AccessControl {
 
     let enforcer = Arc::new(AFEnforcer::new(
       enforcer,
-      enforcer_result_cache,
-      action_cache,
+      enforcer_cache,
+      access_control_metrics.clone(),
     ));
     spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
     spawn_listen_on_collab_member_change(pg_pool, collab_listener, enforcer.clone());

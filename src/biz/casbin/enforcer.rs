@@ -5,30 +5,66 @@ use crate::biz::casbin::access_control::{
 use anyhow::anyhow;
 use app_error::AppError;
 use casbin::{CoreApi, Enforcer, MgmtApi};
-use dashmap::DashMap;
 
+use async_trait::async_trait;
 use std::ops::Deref;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
+
+use crate::biz::casbin::metrics::AccessControlMetrics;
+
 use tokio::sync::RwLock;
-use tracing::{event, trace};
+use tokio::time::interval;
+use tracing::{error, event, trace};
+
+#[async_trait]
+pub trait AFEnforcerCache: Send + Sync {
+  async fn set_enforcer_result(&self, key: &PolicyCacheKey, value: bool) -> Result<(), AppError>;
+  async fn get_enforcer_result(&self, key: &PolicyCacheKey) -> Option<bool>;
+  async fn remove_enforcer_result(&self, key: &PolicyCacheKey);
+  async fn set_action(&self, key: &ActionCacheKey, value: String) -> Result<(), AppError>;
+  async fn get_action(&self, key: &ActionCacheKey) -> Option<String>;
+  async fn remove_action(&self, key: &ActionCacheKey);
+}
+
+pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
-  /// Cache for the result of the policy check. It's a memory cache for faster access.
-  enforcer_result_cache: Arc<DashMap<PolicyCacheKey, bool>>,
-  action_cache: Arc<DashMap<ActionCacheKey, String>>,
+  cache: Arc<dyn AFEnforcerCache>,
+  metrics_cal: MetricsCal,
 }
 
 impl AFEnforcer {
   pub fn new(
     enforcer: Enforcer,
-    enforcer_result_cache: Arc<DashMap<PolicyCacheKey, bool>>,
-    action_cache: Arc<DashMap<ActionCacheKey, String>>,
+    cache: Arc<dyn AFEnforcerCache>,
+    metrics: Arc<AccessControlMetrics>,
   ) -> Self {
+    let metrics_cal = MetricsCal::new();
+    let cloned_metrics_cal = metrics_cal.clone();
+
+    tokio::spawn(async move {
+      let mut interval = interval(ENFORCER_METRICS_TICK_INTERVAL);
+      loop {
+        interval.tick().await;
+
+        metrics.record_enforce_count(
+          cloned_metrics_cal
+            .total_read_enforce_result
+            .load(Ordering::Relaxed),
+          cloned_metrics_cal
+            .read_enforce_result_from_cache
+            .load(Ordering::Relaxed),
+        );
+      }
+    });
+
     Self {
       enforcer: RwLock::new(enforcer),
-      enforcer_result_cache,
-      action_cache,
+      cache,
+      metrics_cal,
     }
   }
 
@@ -65,8 +101,8 @@ impl AFEnforcer {
     let policy_key = PolicyCacheKey::new(&policy);
 
     // if the policy is already in the cache, return. Only update the policy if it's not in the cache.
-    if let Some(value) = self.enforcer_result_cache.get(&policy_key) {
-      return Ok(*value);
+    if let Some(value) = self.cache.get_enforcer_result(&policy_key).await {
+      return Ok(value);
     }
 
     // only one policy per user per object. So remove the old policy and add the new one.
@@ -83,7 +119,9 @@ impl AFEnforcer {
     match &result {
       Ok(value) => {
         trace!("[access control]: add policy:{} => {}", policy_key.0, value);
-        self.action_cache.insert(object_key, act.to_action());
+        if let Err(err) = self.cache.set_action(&object_key, act.to_action()).await {
+          error!("{}", err);
+        }
       },
       Err(err) => {
         trace!(
@@ -132,11 +170,12 @@ impl AFEnforcer {
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
 
     let object_key = ActionCacheKey::new(uid, object_type);
-    self.action_cache.remove(&object_key);
+    self.cache.remove_action(&object_key).await;
     for policy in &policies_for_user_on_object {
       self
-        .enforcer_result_cache
-        .remove(&PolicyCacheKey::new(policy));
+        .cache
+        .remove_enforcer_result(&PolicyCacheKey::new(policy))
+        .await;
     }
 
     Ok(policies_for_user_on_object)
@@ -146,10 +185,18 @@ impl AFEnforcer {
   where
     A: ToCasbinAction,
   {
+    self
+      .metrics_cal
+      .total_read_enforce_result
+      .fetch_add(1, Ordering::Relaxed);
     let policy = vec![uid.to_string(), obj.to_object_id(), act.to_action()];
     let policy_key = PolicyCacheKey::new(&policy);
-    if let Some(value) = self.enforcer_result_cache.get(&policy_key) {
-      return Ok(*value);
+    if let Some(value) = self.cache.get_enforcer_result(&policy_key).await {
+      self
+        .metrics_cal
+        .read_enforce_result_from_cache
+        .fetch_add(1, Ordering::Relaxed);
+      return Ok(value);
     }
 
     let policies_for_object = self
@@ -170,13 +217,15 @@ impl AFEnforcer {
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
 
     trace!("[access control]: policy:{} => {}", policy_key.0, result);
-    self.enforcer_result_cache.insert(policy_key, result);
+    if let Err(err) = self.cache.set_enforcer_result(&policy_key, result).await {
+      error!("{}", err)
+    }
     Ok(result)
   }
 
   pub async fn get_action(&self, uid: &i64, object_type: &ObjectType<'_>) -> Option<String> {
     let object_key = ActionCacheKey::new(uid, object_type);
-    if let Some(value) = self.action_cache.get(&object_key) {
+    if let Some(value) = self.cache.get_action(&object_key).await {
       return Some(value.clone());
     }
 
@@ -187,7 +236,7 @@ impl AFEnforcer {
 
     let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
     trace!("cache action: {}:{}", object_key.0, action.clone());
-    self.action_cache.insert(object_key, action.clone());
+    let _ = self.cache.set_action(&object_key, action.clone()).await;
     Some(action)
   }
 }
@@ -199,6 +248,10 @@ impl PolicyCacheKey {
   fn new(policy: &[String]) -> Self {
     Self(policy.join(":"))
   }
+
+  pub fn into_inner(self) -> String {
+    self.0
+  }
 }
 
 impl Deref for PolicyCacheKey {
@@ -208,8 +261,27 @@ impl Deref for PolicyCacheKey {
   }
 }
 
+impl AsRef<str> for PolicyCacheKey {
+  fn as_ref(&self) -> &str {
+    &self.0
+  }
+}
+
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct ActionCacheKey(String);
+
+impl AsRef<str> for ActionCacheKey {
+  fn as_ref(&self) -> &str {
+    &self.0
+  }
+}
+
+impl Deref for ActionCacheKey {
+  type Target = str;
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
 
 impl ActionCacheKey {
   pub(crate) fn new(uid: &i64, object_type: &ObjectType<'_>) -> Self {
@@ -226,5 +298,20 @@ fn validate_obj_action(obj: &ObjectType<'_>, act: &ActionType) -> Result<(), App
       obj,
       act
     ))),
+  }
+}
+
+#[derive(Clone)]
+struct MetricsCal {
+  total_read_enforce_result: Arc<AtomicI64>,
+  read_enforce_result_from_cache: Arc<AtomicI64>,
+}
+
+impl MetricsCal {
+  fn new() -> Self {
+    Self {
+      total_read_enforce_result: Arc::new(Default::default()),
+      read_enforce_result_from_cache: Arc::new(Default::default()),
+    }
   }
 }

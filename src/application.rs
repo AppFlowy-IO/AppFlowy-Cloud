@@ -5,6 +5,7 @@ use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::biz::casbin::access_control::AccessControl;
+use crate::biz::casbin::enforcer_cache::AFEnforcerCacheImpl;
 use crate::biz::collab::access_control::CollabHttpAccessControl;
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
@@ -183,11 +184,13 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!("Setting up access controls...");
+  let enforce_cache = Arc::new(AFEnforcerCacheImpl::new(redis_client.clone()));
   let access_control = AccessControl::new(
     pg_pool.clone(),
     collab_member_listener,
     workspace_member_listener,
     metrics.access_control_metrics.clone(),
+    enforce_cache,
   )
   .await?;
 

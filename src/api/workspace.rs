@@ -505,11 +505,13 @@ async fn get_collab_handler(
 #[instrument(level = "trace", skip_all, err)]
 async fn get_collab_snapshot_handler(
   payload: Json<QuerySnapshotParams>,
+  path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<SnapshotData>>> {
+  let (workspace_id, object_id) = path.into_inner();
   let data = state
     .collab_storage
-    .get_collab_snapshot(&payload.snapshot_id)
+    .get_collab_snapshot(&workspace_id.to_string(), &object_id, &payload.snapshot_id)
     .await
     .map_err(AppResponseError::from)?;
 

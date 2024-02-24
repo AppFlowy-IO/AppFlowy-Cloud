@@ -1,11 +1,11 @@
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::snapshot::cache::SnapshotCache;
-use crate::biz::snapshot::queue::{PendingItem, PendingQueue};
+use crate::biz::snapshot::queue::PendingQueue;
 use crate::state::RedisClient;
 use app_error::AppError;
 use async_stream::stream;
 use database::collab::{create_snapshot_and_maintain_limit, COLLAB_SNAPSHOT_LIMIT};
-use database_entity::dto::InsertSnapshotParams;
+use database_entity::dto::{InsertSnapshotParams, SnapshotData};
 use futures_util::StreamExt;
 
 use sqlx::PgPool;
@@ -15,13 +15,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
-use tracing::{error, trace};
+use tracing::{debug, error, trace, warn};
 use validator::Validate;
 
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
 pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
 
-pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(30);
+pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(10);
 
 pub enum SnapshotCommand {
   InsertSnapshot(InsertSnapshotParams),
@@ -30,6 +30,7 @@ pub enum SnapshotCommand {
 
 #[derive(Clone)]
 pub struct SnapshotControl {
+  cache: SnapshotCache,
   command_sender: SnapshotCommandSender,
 }
 
@@ -43,16 +44,7 @@ impl SnapshotControl {
     let (command_sender, rx) = tokio::sync::mpsc::channel(1000);
     let cache = SnapshotCache::new(redis_client);
 
-    // Load remaining items from cache
-    let remaining_item = cache
-      .keys(SNAPSHOT_PREFIX)
-      .await
-      .unwrap_or_default()
-      .into_iter()
-      .flat_map(|key| SnapshotKey(key).to_pending_item())
-      .collect::<Vec<_>>();
-
-    let runner = SnapshotCommandRunner::new(pg_pool, cache, rx, remaining_item);
+    let runner = SnapshotCommandRunner::new(pg_pool, cache.clone(), rx);
     tokio::spawn(runner.run());
 
     let cloned_sender = command_sender.clone();
@@ -74,7 +66,10 @@ impl SnapshotControl {
       }
     });
 
-    Self { command_sender }
+    Self {
+      cache,
+      command_sender,
+    }
   }
 
   pub async fn queue_snapshot(&self, params: InsertSnapshotParams) -> Result<(), AppError> {
@@ -87,6 +82,16 @@ impl SnapshotControl {
       .map_err(|err| AppError::Internal(err.into()))?;
     Ok(())
   }
+
+  pub async fn get_snapshot(&self, workspace_id: &str, object_id: &str) -> Option<SnapshotData> {
+    let key = SnapshotKey::from_object_id(object_id);
+    let encoded_collab_v1 = self.cache.try_get(&key.0).await.ok()??;
+    Some(SnapshotData {
+      encoded_collab_v1,
+      workspace_id: workspace_id.to_string(),
+      object_id: object_id.to_string(),
+    })
+  }
 }
 
 struct SnapshotCommandRunner {
@@ -98,16 +103,8 @@ struct SnapshotCommandRunner {
   total_attempts: AtomicU64,
 }
 impl SnapshotCommandRunner {
-  fn new(
-    pg_pool: PgPool,
-    cache: SnapshotCache,
-    recv: SnapshotCommandReceiver,
-    pending_item: Vec<PendingItem>,
-  ) -> Self {
-    let mut queue = PendingQueue::new();
-    for item in pending_item {
-      queue.push_item(item);
-    }
+  fn new(pg_pool: PgPool, cache: SnapshotCache, recv: SnapshotCommandReceiver) -> Self {
+    let queue = PendingQueue::new();
     Self {
       pg_pool,
       queue: RwLock::new(queue),
@@ -137,12 +134,8 @@ impl SnapshotCommandRunner {
     match command {
       SnapshotCommand::InsertSnapshot(params) => {
         let mut queue = self.queue.write().await;
-        let item = queue.generate_item(
-          params.workspace_id,
-          params.object_id,
-          params.encoded_collab_v1.len(),
-        );
-        let key = SnapshotKey::from_pending_item(&item);
+        let item = queue.generate_item(params.workspace_id, params.object_id);
+        let key = SnapshotKey::from_object_id(&item.object_id);
         queue.push_item(item);
         drop(queue);
 
@@ -169,9 +162,13 @@ impl SnapshotCommandRunner {
       None => return Ok(()), // No items to process
     };
 
-    let key = SnapshotKey::from_pending_item(&next_item);
-    let data = match self.cache.try_get(&key.0).await {
-      Ok(data) => data,
+    let key = SnapshotKey::from_object_id(&next_item.object_id);
+    let encoded_collab_v1 = match self.cache.try_get(&key.0).await {
+      Ok(Some(data)) => data,
+      Ok(None) => {
+        warn!("Failed to get snapshot from cache: {}", key.0);
+        return Ok(());
+      },
       Err(_) => {
         if cfg!(debug_assertions) {
           error!("Failed to get snapshot from cache: {}", key.0);
@@ -185,6 +182,7 @@ impl SnapshotCommandRunner {
     let transaction = match self.pg_pool.try_begin().await {
       Ok(Some(tx)) => tx,
       _ => {
+        debug!("Failed to start transaction to write snapshot, retrying later");
         self.queue.write().await.push_item(next_item);
         return Ok(());
       },
@@ -194,7 +192,7 @@ impl SnapshotCommandRunner {
       transaction,
       &next_item.workspace_id,
       &next_item.object_id,
-      &data,
+      &encoded_collab_v1,
       COLLAB_SNAPSHOT_LIMIT,
     )
     .await
@@ -221,33 +219,8 @@ const SNAPSHOT_PREFIX: &str = "full_snapshot";
 struct SnapshotKey(String);
 
 impl SnapshotKey {
-  // Constructs a SnapshotKey from InsertSnapshotParams and a sequence number.
-
-  fn from_pending_item(item: &PendingItem) -> Self {
-    Self(format!(
-      "{}:{}:{}:{}:{}",
-      SNAPSHOT_PREFIX, item.workspace_id, item.object_id, item.seq, item.data_len
-    ))
-  }
-
-  // Parses the SnapshotKey back into workspace_id, object_id, and seq.
-  fn to_pending_item(&self) -> Option<PendingItem> {
-    let parts: Vec<&str> = self.0.split(':').collect();
-    if parts.len() == 5 {
-      let workspace_id = parts[1].to_string();
-      let object_id = parts[2].to_string();
-      let seq = parts[3].parse::<i64>().unwrap_or(0);
-      let data_len = parts[4].parse::<usize>().unwrap_or(0);
-
-      Some(PendingItem {
-        workspace_id,
-        object_id,
-        seq,
-        data_len,
-      })
-    } else {
-      None
-    }
+  fn from_object_id(object_id: &str) -> Self {
+    Self(format!("{}:{}", SNAPSHOT_PREFIX, object_id))
   }
 }
 

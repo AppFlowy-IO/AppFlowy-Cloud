@@ -1,8 +1,5 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1.75.0 as chef
 
-# Build argument for features
-ARG FEATURES=""
-
 WORKDIR /app
 RUN apt update && apt install lld clang -y
 
@@ -12,6 +9,10 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef as builder
+
+# Specify a default value for FEATURES; it could be an empty string if no features are enabled by default
+ARG FEATURES=""
+
 COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies
 RUN cargo chef cook --release --recipe-path recipe.json
@@ -20,7 +21,7 @@ ENV SQLX_OFFLINE true
 
 # Build the project
 RUN echo "Building with features: ${FEATURES}"
-RUN cargo build --profile=profiling --features=${FEATURES} --bin appflowy_cloud
+RUN cargo build --profile=profiling --features "${FEATURES}" --bin appflowy_cloud
 
 
 FROM debian:bookworm-slim AS runtime

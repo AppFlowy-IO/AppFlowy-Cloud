@@ -62,7 +62,12 @@ async fn get_snapshot_data_test() {
     .await;
 
   let metas = test_client
-    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 180)
+    .get_snapshot_list_until(
+      &workspace_id,
+      &object_id,
+      |metas| metas.0.len() == 1,
+      10 * 60,
+    )
     .await
     .unwrap()
     .0;

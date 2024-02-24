@@ -29,7 +29,7 @@ impl SnapshotCache {
   pub async fn insert(&self, key: &str, value: Vec<u8>) -> Result<(), AppError> {
     let mut redis = self.redis_client.lock().await;
     redis
-      .set(key, value)
+      .set_ex(key, value, 60 * 60 * 24)
       .await
       .map_err(|err| AppError::Internal(err.into()))?;
     Ok(())

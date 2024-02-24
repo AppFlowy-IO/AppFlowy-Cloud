@@ -1,20 +1,21 @@
 use prometheus_client::metrics::gauge::Gauge;
-use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
+
 use prometheus_client::registry::Registry;
+use tracing::trace;
 
 #[derive(Clone)]
 pub struct AccessControlMetrics {
   load_all_policies: Gauge,
-  enforce_duration: Histogram,
+  total_read_enforce_count: Gauge,
+  read_enforce_from_cache_count: Gauge,
 }
 
 impl AccessControlMetrics {
   fn init() -> Self {
-    let buckets = exponential_buckets(0.005, 2.0, 6);
-    let enforce_duration = Histogram::new(buckets.into_iter());
     Self {
       load_all_policies: Gauge::default(),
-      enforce_duration,
+      total_read_enforce_count: Gauge::default(),
+      read_enforce_from_cache_count: Gauge::default(),
     }
   }
 
@@ -28,9 +29,15 @@ impl AccessControlMetrics {
     );
 
     realtime_registry.register(
-      "enforce_duration",
-      "Duration of enforce calls in milliseconds",
-      metrics.enforce_duration.clone(),
+      "total_read_enforce_count",
+      "total read enforce count",
+      metrics.total_read_enforce_count.clone(),
+    );
+
+    realtime_registry.register(
+      "read_enforce_from_cache_count",
+      "read enforce result from cache",
+      metrics.read_enforce_from_cache_count.clone(),
     );
 
     metrics
@@ -40,7 +47,13 @@ impl AccessControlMetrics {
     self.load_all_policies.set(millis as i64);
   }
 
-  pub fn record_enforce_duration(&self, duration: u64) {
-    self.enforce_duration.observe(duration as f64);
+  pub fn record_enforce_count(&self, total: i64, from_cache: i64) {
+    trace!(
+      "enforce_count: total: {}, from_cache: {}",
+      total,
+      from_cache
+    );
+    self.total_read_enforce_count.set(total);
+    self.read_enforce_from_cache_count.set(from_cache);
   }
 }

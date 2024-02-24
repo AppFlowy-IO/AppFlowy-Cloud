@@ -177,7 +177,7 @@ where
             object_id, err
           );
 
-          match get_latest_snapshot(object_id, &self.storage).await {
+          match get_latest_snapshot(&self.workspace_id, object_id, &self.storage).await {
             None => error!("No snapshot found for collab: {}", object_id),
             Some(encoded_collab) => match init_collab(object_id, &encoded_collab, doc).await {
               Ok(_) => info!("restore collab:{} with snapshot success", object_id),
@@ -284,13 +284,20 @@ where
   }
 }
 
-async fn get_latest_snapshot<S>(object_id: &str, storage: &S) -> Option<EncodedCollab>
+async fn get_latest_snapshot<S>(
+  workspace_id: &str,
+  object_id: &str,
+  storage: &S,
+) -> Option<EncodedCollab>
 where
   S: CollabStorage,
 {
   let metas = storage.get_collab_snapshot_list(object_id).await.ok()?;
   let meta = metas.0.first()?;
-  let snapshot_data = storage.get_collab_snapshot(&meta.snapshot_id).await.ok()?;
+  let snapshot_data = storage
+    .get_collab_snapshot(workspace_id, &meta.object_id, &meta.snapshot_id)
+    .await
+    .ok()?;
   EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).ok()
 }
 

@@ -279,7 +279,6 @@ impl WSClient {
           }
         }
       }
-      info!("exit websocket send loop");
     });
 
     Ok(())

@@ -16,12 +16,7 @@ impl PendingQueue {
     }
   }
 
-  pub(crate) fn generate_item(
-    &mut self,
-    workspace_id: String,
-    object_id: String,
-    data_len: usize,
-  ) -> PendingItem {
+  pub(crate) fn generate_item(&mut self, workspace_id: String, object_id: String) -> PendingItem {
     let seq = self
       .id_gen
       .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -29,7 +24,6 @@ impl PendingQueue {
       workspace_id,
       object_id,
       seq,
-      data_len,
     }
   }
 
@@ -56,7 +50,6 @@ pub(crate) struct PendingItem {
   pub(crate) workspace_id: String,
   pub(crate) object_id: String,
   pub(crate) seq: i64,
-  pub(crate) data_len: usize,
 }
 
 impl PartialEq<Self> for PendingItem {

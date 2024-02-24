@@ -63,16 +63,9 @@ async fn get_snapshot_list_test() {
 
   // By default, when create a collab, a snapshot will be created.
   test_client
-    .get_snapshot_list_until(
-      &workspace_id,
-      &object_id,
-      |metas| {
-        //
-        metas.0.len() == 1
-      },
-      60,
-    )
-    .await;
+    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 60)
+    .await
+    .unwrap();
 
   let meta_1 = test_client
     .create_snapshot(&workspace_id, &object_id, collab_type.clone())
@@ -93,7 +86,7 @@ async fn get_snapshot_list_test() {
 }
 
 #[tokio::test]
-async fn get_snapshot_date_test() {
+async fn get_snapshot_data_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
@@ -113,6 +106,7 @@ async fn get_snapshot_date_test() {
   let meta = test_client
     .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 60)
     .await
+    .unwrap()
     .0
     .remove(0);
 

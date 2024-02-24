@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::time::{timeout, Duration};
+use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -359,22 +359,25 @@ impl TestClient {
     &self,
     workspace_id: &str,
     object_id: &str,
-    f: impl Fn(&AFSnapshotMetas) -> bool,
+    f: impl Fn(&AFSnapshotMetas) -> bool + Send + Sync + 'static,
     timeout_secs: u64,
-  ) -> AFSnapshotMetas {
+  ) -> Result<AFSnapshotMetas, AppResponseError> {
     let duration = Duration::from_secs(timeout_secs);
-    let mut snapshot_metas = self
-      .get_snapshot_list(workspace_id, object_id)
-      .await
-      .unwrap();
-    while !f(&snapshot_metas) {
-      tokio::time::sleep(Duration::from_secs(1)).await;
-      snapshot_metas = timeout(duration, self.get_snapshot_list(workspace_id, object_id))
-        .await
-        .unwrap()
-        .unwrap();
+    match timeout(duration, async {
+      let mut snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
+
+      // Loop until the condition `f` returns true or the timeout is reached
+      while !f(&snapshot_metas) {
+        sleep(Duration::from_secs(5)).await;
+        snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
+      }
+      Ok(snapshot_metas)
+    })
+    .await
+    {
+      Ok(result) => result,
+      Err(_) => panic!("Operation timed out after {} seconds", timeout_secs),
     }
-    snapshot_metas
   }
 
   pub async fn create_collab_list(

@@ -21,7 +21,7 @@ use validator::Validate;
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
 pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
 
-pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(30);
+pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(15);
 
 pub enum SnapshotCommand {
   InsertSnapshot(InsertSnapshotParams),

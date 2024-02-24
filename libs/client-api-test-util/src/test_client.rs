@@ -365,7 +365,6 @@ impl TestClient {
     let duration = Duration::from_secs(timeout_secs);
     match timeout(duration, async {
       let mut snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
-
       // Loop until the condition `f` returns true or the timeout is reached
       while !f(&snapshot_metas) {
         sleep(Duration::from_secs(5)).await;

@@ -62,7 +62,7 @@ where
       let client_info = get_client_info(&req);
       let span = span!(Level::INFO, "request",
         request_id = %request_id,
-        path = %req.path(),
+        path = %req.match_pattern().unwrap_or_default(),
         method = %req.method(),
         client_version = client_info.client_version,
         payload_size = client_info.payload_size

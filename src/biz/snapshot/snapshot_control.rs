@@ -15,13 +15,13 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::interval;
-use tracing::{error, trace, warn};
+use tracing::{debug, error, trace, warn};
 use validator::Validate;
 
 pub type SnapshotCommandReceiver = tokio::sync::mpsc::Receiver<SnapshotCommand>;
 pub type SnapshotCommandSender = tokio::sync::mpsc::Sender<SnapshotCommand>;
 
-pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(15);
+pub const SNAPSHOT_TICK_INTERVAL: Duration = Duration::from_secs(10);
 
 pub enum SnapshotCommand {
   InsertSnapshot(InsertSnapshotParams),
@@ -189,6 +189,7 @@ impl SnapshotCommandRunner {
     let transaction = match self.pg_pool.try_begin().await {
       Ok(Some(tx)) => tx,
       _ => {
+        debug!("Failed to start transaction to write snapshot, retrying later");
         self.queue.write().await.push_item(next_item);
         return Ok(());
       },

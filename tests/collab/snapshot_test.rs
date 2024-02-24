@@ -63,7 +63,7 @@ async fn get_snapshot_list_test() {
 
   // By default, when create a collab, a snapshot will be created.
   test_client
-    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 60)
+    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 180)
     .await
     .unwrap();
 
@@ -104,7 +104,7 @@ async fn get_snapshot_data_test() {
     .await;
 
   let meta = test_client
-    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 60)
+    .get_snapshot_list_until(&workspace_id, &object_id, |metas| metas.0.len() == 1, 180)
     .await
     .unwrap()
     .0

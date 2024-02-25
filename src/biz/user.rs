@@ -83,6 +83,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
 /// Create a workspace for a user.
 /// This function generates a workspace along with its templates and stores them in the database.
 /// Each template is stored as an individual collaborative object.
+#[instrument(level = "debug", skip_all, err)]
 async fn create_workspace_for_user<T>(
   new_uid: i64,
   workspace_id: &str,

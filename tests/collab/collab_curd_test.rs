@@ -11,7 +11,7 @@ use reqwest::Method;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::collab::util::generate_random_bytes;
+use crate::collab::util::{generate_random_string, test_encode_collab_v1};
 use client_api_test_util::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
@@ -35,17 +35,17 @@ async fn batch_insert_collab_success_test() {
   let workspace_id = test_client.workspace_id().await;
 
   let mock_encoded_collab_v1 = vec![
-    generate_random_bytes(100 * 1024),
-    generate_random_bytes(300 * 1024),
-    generate_random_bytes(600 * 1024),
-    generate_random_bytes(800 * 1024),
-    generate_random_bytes(1024 * 1024),
+    test_encode_collab_v1("1", "title", &generate_random_string(1024)),
+    test_encode_collab_v1("2", "title", &generate_random_string(3 * 1024)),
+    test_encode_collab_v1("3", "title", &generate_random_string(600 * 1024)),
+    test_encode_collab_v1("4", "title", &generate_random_string(800 * 1024)),
+    test_encode_collab_v1("5", "title", &generate_random_string(1024 * 1024)),
   ];
 
   let params_list = (0..5)
     .map(|i| CollabParams {
       object_id: Uuid::new_v4().to_string(),
-      encoded_collab_v1: mock_encoded_collab_v1[i].clone(),
+      encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap(),
       collab_type: CollabType::Document,
       override_if_exist: false,
     })
@@ -128,7 +128,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     api_client.base_url, workspace_id, &object_id
   );
 
-  let encoded_collab = EncodedCollab::new_v1(vec![0, 1, 2, 3, 4, 5, 6], vec![7, 8, 9, 10]);
+  let encoded_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   let params = OldCreateCollabParams {
     inner: CollabParams {
       object_id: object_id.clone(),
@@ -184,7 +184,7 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
     api_client.base_url, workspace_id,
   );
 
-  let encoded_collab = EncodedCollab::new_v1(vec![0, 1, 2, 3, 4, 5, 6], vec![7, 8, 9, 10]);
+  let encoded_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   let params = BatchCreateCollabParams {
     workspace_id: workspace_id.to_string(),
     params_list: vec![CollabParams {

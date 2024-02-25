@@ -17,6 +17,8 @@ use crate::state::RedisClient;
 use anyhow::Context;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use dashmap::DashMap;
 use sqlx::{PgPool, Transaction};
 use std::ops::DerefMut;
@@ -196,6 +198,16 @@ where
     self
       .check_collab_permission(workspace_id, uid, &params, transaction)
       .await?;
+
+    // Check if the data can be decoded into collab
+    if let Err(err) = check_encoded_collab_data(&params.object_id, &params.encoded_collab_v1) {
+      let msg = format!(
+        "Can not decode the data into collab:{}, {}",
+        params.object_id, err
+      );
+      return Err(AppError::InvalidRequest(msg));
+    }
+
     let object_id = params.object_id.clone();
     let encoded_collab = params.encoded_collab_v1.clone();
     self
@@ -205,7 +217,7 @@ where
 
     self
       .mem_cache
-      .cache_encoded_collab_bytes(object_id, encoded_collab)
+      .insert_encode_collab_bytes(object_id, encoded_collab)
       .await;
     Ok(())
   }
@@ -257,7 +269,7 @@ where
         let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
         self
           .mem_cache
-          .cache_encoded_collab(object_id, &encoded_collab)
+          .insert_encode_collab(object_id, &encoded_collab)
           .await;
         Ok(encoded_collab)
       },
@@ -323,6 +335,8 @@ where
         uid, object_id
       )));
     }
+    self.opened_collab_by_object_id.remove(object_id);
+    self.mem_cache.remove_encoded_collab(object_id).await;
     self.disk_cache.delete_collab(uid, object_id).await
   }
 
@@ -357,4 +371,15 @@ where
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
     self.disk_cache.get_collab_snapshot_list(oid).await
   }
+}
+
+pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), anyhow::Error> {
+  let encoded_collab = EncodedCollab::decode_from_bytes(data)?;
+  let _ = Collab::new_with_doc_state(
+    CollabOrigin::Empty,
+    object_id,
+    encoded_collab.doc_state.to_vec(),
+    vec![],
+  )?;
+  Ok(())
 }

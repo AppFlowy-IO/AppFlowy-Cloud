@@ -10,6 +10,8 @@ use futures_util::StreamExt;
 
 use sqlx::PgPool;
 
+use crate::biz::collab::storage::check_encoded_collab_data;
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,7 +43,7 @@ impl SnapshotControl {
     collab_metrics: Arc<CollabMetrics>,
   ) -> Self {
     let redis_client = Arc::new(Mutex::new(redis_client));
-    let (command_sender, rx) = tokio::sync::mpsc::channel(1000);
+    let (command_sender, rx) = tokio::sync::mpsc::channel(2000);
     let cache = SnapshotCache::new(redis_client);
 
     let runner = SnapshotCommandRunner::new(pg_pool, cache.clone(), rx);
@@ -163,8 +165,22 @@ impl SnapshotCommandRunner {
     };
 
     let key = SnapshotKey::from_object_id(&next_item.object_id);
+    self.total_attempts.fetch_add(1, Ordering::Relaxed);
     let encoded_collab_v1 = match self.cache.try_get(&key.0).await {
-      Ok(Some(data)) => data,
+      Ok(Some(data)) => {
+        // This step is not necessary, but use it to check if the data is valid. Will be removed
+        // in the future.
+        match check_encoded_collab_data(&next_item.object_id, &data) {
+          Ok(_) => data,
+          Err(err) => {
+            error!(
+              "Can not decode the data into collab when writing snapshot: {}, {}",
+              next_item.object_id, err
+            );
+            return Ok(());
+          },
+        }
+      },
       Ok(None) => {
         warn!("Failed to get snapshot from cache: {}", key.0);
         return Ok(());
@@ -178,7 +194,6 @@ impl SnapshotCommandRunner {
       },
     };
 
-    self.total_attempts.fetch_add(1, Ordering::Relaxed);
     let transaction = match self.pg_pool.try_begin().await {
       Ok(Some(tx)) => tx,
       _ => {

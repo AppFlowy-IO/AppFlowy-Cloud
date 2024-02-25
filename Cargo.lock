@@ -321,7 +321,7 @@ dependencies = [
  "askama",
  "axum",
  "axum-extra",
- "dotenv",
+ "dotenvy",
  "gotrue",
  "gotrue-entity",
  "jwt",
@@ -1290,7 +1290,7 @@ dependencies = [
  "collab-entity",
  "collab-folder",
  "database-entity",
- "dotenv",
+ "dotenvy",
  "futures",
  "gotrue",
  "image",
@@ -1315,7 +1315,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=35c649ea201e12bf40f5352a8bf9c46141e013a5#35c649ea201e12bf40f5352a8bf9c46141e013a5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f8a8443b7368b7872add5128fabd45ef80ebba8#0f8a8443b7368b7872add5128fabd45ef80ebba8"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1337,7 +1337,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=35c649ea201e12bf40f5352a8bf9c46141e013a5#35c649ea201e12bf40f5352a8bf9c46141e013a5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f8a8443b7368b7872add5128fabd45ef80ebba8#0f8a8443b7368b7872add5128fabd45ef80ebba8"
 dependencies = [
  "anyhow",
  "collab",
@@ -1356,7 +1356,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=35c649ea201e12bf40f5352a8bf9c46141e013a5#35c649ea201e12bf40f5352a8bf9c46141e013a5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f8a8443b7368b7872add5128fabd45ef80ebba8#0f8a8443b7368b7872add5128fabd45ef80ebba8"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1371,7 +1371,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=35c649ea201e12bf40f5352a8bf9c46141e013a5#35c649ea201e12bf40f5352a8bf9c46141e013a5"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=0f8a8443b7368b7872add5128fabd45ef80ebba8#0f8a8443b7368b7872add5128fabd45ef80ebba8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1870,12 +1870,6 @@ name = "dlv-list"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0688c2a7f92e427f44895cd63841bff7b29f8d7a1648b9e7e07a4a365b2e1257"
-
-[[package]]
-name = "dotenv"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "dotenvy"
@@ -2652,9 +2646,9 @@ dependencies = [
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.59"
+version = "0.1.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6a67363e2aa4443928ce15e57ebae94fd8949958fd1223c4cfc0cd473ad7539"
+checksum = "e7ffbb5a1b541ea2561f8c41c087286cc091e21e556a4f09a8f6cbf17b69b141"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys",
@@ -4118,7 +4112,9 @@ dependencies = [
  "bytes",
  "chrono",
  "collab",
+ "collab-document",
  "collab-entity",
+ "collab-folder",
  "dashmap",
  "database",
  "database-entity",

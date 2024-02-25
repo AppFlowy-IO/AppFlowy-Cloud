@@ -83,7 +83,7 @@ impl WSClient {
     let ping = Arc::new(Mutex::new(None));
     let http_sender = Arc::new(http_sender);
     let (user_channel, _) = channel(1);
-    let rate_limiter = gen_rate_limiter(10);
+    let rate_limiter = gen_rate_limiter(20);
     WSClient {
       addr: Arc::new(parking_lot::Mutex::new(None)),
       config,

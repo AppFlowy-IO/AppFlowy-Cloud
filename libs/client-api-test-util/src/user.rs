@@ -1,13 +1,12 @@
 use crate::client::{localhost_client, LOCALHOST_GOTRUE};
 use crate::log::setup_log;
 use client_api::Client;
-use dotenv::dotenv;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
 lazy_static! {
   pub static ref ADMIN_USER: User = {
-    dotenv().ok();
+    dotenvy::dotenv().ok();
     User {
       email: std::env::var("GOTRUE_ADMIN_EMAIL").unwrap_or("admin@example.com".to_string()),
       password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap_or("password".to_string()),

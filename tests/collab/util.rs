@@ -1,3 +1,4 @@
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use rand::distributions::Alphanumeric;
@@ -26,4 +27,10 @@ pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> V
   let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![]);
   collab.insert(key, value);
   collab.encode_collab_v1().doc_state.to_vec()
+}
+
+pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> EncodedCollab {
+  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![]);
+  collab.insert(key, value);
+  collab.encode_collab_v1()
 }

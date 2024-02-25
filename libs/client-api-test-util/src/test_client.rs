@@ -626,48 +626,56 @@ pub async fn assert_server_collab(
   client: &mut client_api::Client,
   object_id: &str,
   collab_type: &CollabType,
-  secs: u64,
+  timeout_secs: u64,
   expected: Value,
 ) {
+  let duration = Duration::from_secs(timeout_secs);
   let collab_type = collab_type.clone();
   let object_id = object_id.to_string();
-  let mut retry_count = 0;
 
-  loop {
-    tokio::select! {
-       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
-         panic!("Query collab timeout");
-       },
-       result = client.get_collab(QueryCollabParams::new(
-        &object_id,
-        collab_type.clone(),
-        workspace_id,
-       )) => {
-        retry_count += 1;
-        match &result {
-          Ok(data) => {
-            let json = Collab::new_with_doc_state(CollabOrigin::Empty, &object_id, data.doc_state.to_vec(), vec![]).unwrap().to_json_value();
-            if retry_count > 10 {
-              dbg!(workspace_id, object_id);
-              assert_json_eq!(json, expected);
-              break;
-            }
+  // Use tokio::time::timeout to apply a timeout to the entire operation
+  let operation = async {
+    loop {
+      let result = client
+        .get_collab(QueryCollabParams::new(
+          &object_id,
+          collab_type.clone(),
+          workspace_id,
+        ))
+        .await;
 
-
-            if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
-              break;
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-          },
-          Err(e) => {
-            if retry_count > 10 {
-              panic!("Query collab failed: {}", e);
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+      match &result {
+        Ok(data) => {
+          let json = Collab::new_with_doc_state(
+            CollabOrigin::Empty,
+            &object_id,
+            data.doc_state.to_vec(),
+            vec![],
+          )
+          .unwrap()
+          .to_json_value();
+          if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive))
+            .is_ok()
+          {
+            return;
           }
-        }
-       },
+        },
+        Err(e) => {
+          // Instead of panicking immediately, log or handle the error and continue the loop
+          // until the timeout is reached.
+          eprintln!("Query collab failed: {}", e);
+        },
+      }
+
+      // Sleep before retrying. Adjust the sleep duration as needed.
+      tokio::time::sleep(Duration::from_millis(1000)).await;
     }
+  };
+
+  // Apply the timeout to the operation
+  match timeout(duration, operation).await {
+    Ok(_) => {}, // Operation completed within the timeout
+    Err(_) => panic!("Query collab timeout after {} seconds", timeout_secs),
   }
 }
 

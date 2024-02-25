@@ -62,7 +62,13 @@ jobs:
 
       - name: Run tests
         run: |
-          cargo test
+          cargo test collab_snapshot
+          cargo test access_control
+          cargo test collab 
+          cargo test gotrue 
+          cargo test user 
+          cargo test websocket 
+          cargo test workspace
 
       - name: Install Node.js
         uses: actions/setup-node@v2

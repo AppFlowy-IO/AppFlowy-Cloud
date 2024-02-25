@@ -88,13 +88,13 @@ impl CollabMemCache {
     }
   }
 
-  // Helper function to set bytes in Redis.
+  /// Set bytes in redis with a 3 day expiration.
   async fn set_bytes_in_redis(&self, object_id: String, bytes: Vec<u8>) -> redis::RedisResult<()> {
     self
       .redis_client
       .lock()
       .await
-      .set::<_, Vec<u8>, ()>(object_id, bytes)
+      .set_ex::<_, Vec<u8>, ()>(object_id, bytes, 259200)
       .await
   }
 

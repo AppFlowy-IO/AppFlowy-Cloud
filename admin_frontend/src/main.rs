@@ -22,7 +22,7 @@ use crate::config::Config;
 #[tokio::main]
 async fn main() {
   // load from .env
-  dotenv::dotenv().ok();
+  dotenvy::dotenv().ok();
 
   // set up tracing
   tracing_subscriber::fmt()

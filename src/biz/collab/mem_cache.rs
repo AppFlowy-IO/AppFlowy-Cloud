@@ -22,6 +22,18 @@ impl CollabMemCache {
     }
   }
 
+  pub async fn remove_encoded_collab(&self, object_id: &str) {
+    if let Err(err) = self
+      .redis_client
+      .lock()
+      .await
+      .del::<&str, ()>(object_id)
+      .await
+    {
+      error!("Failed to remove encoded collab from redis: {:?}", err);
+    }
+  }
+
   pub async fn get_encoded_collab(&self, object_id: &str) -> Option<EncodedCollab> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     let result = self
@@ -57,7 +69,7 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn cache_encoded_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
+  pub async fn insert_encode_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
     match encoded_collab.encode_to_bytes() {
       Ok(bytes) => {
         if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {
@@ -70,19 +82,19 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn cache_encoded_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
+  pub async fn insert_encode_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
     if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {
       error!("Failed to cache encoded collab bytes: {:?}", err);
     }
   }
 
-  // Helper function to set bytes in Redis.
+  /// Set bytes in redis with a 3 day expiration.
   async fn set_bytes_in_redis(&self, object_id: String, bytes: Vec<u8>) -> redis::RedisResult<()> {
     self
       .redis_client
       .lock()
       .await
-      .set::<_, Vec<u8>, ()>(object_id, bytes)
+      .set_ex::<_, Vec<u8>, ()>(object_id, bytes, 259200)
       .await
   }
 

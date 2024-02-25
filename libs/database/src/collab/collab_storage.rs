@@ -17,7 +17,7 @@ use tokio::time::sleep;
 use tracing::{debug, event, warn, Level};
 use validator::Validate;
 
-pub const COLLAB_SNAPSHOT_LIMIT: i64 = 15;
+pub const COLLAB_SNAPSHOT_LIMIT: i64 = 30;
 pub const SNAPSHOT_PER_HOUR: i64 = 6;
 pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 
@@ -126,6 +126,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     snapshot_id: &i64,
   ) -> DatabaseResult<SnapshotData>;
 
+  /// Returns list of snapshots for given object_id in descending order of creation time.
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas>;
 }
 
@@ -381,6 +382,7 @@ impl CollabStoragePgImpl {
     }
   }
 
+  /// Returns list of snapshots for given object_id in descending order of creation time.
   pub async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
     let metas = collab_db_ops::get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
     Ok(metas)

@@ -396,6 +396,7 @@ pub async fn select_snapshot(
   Ok(row)
 }
 
+/// Returns list of snapshots for given object_id in descending order of creation time.
 pub async fn get_all_collab_snapshot_meta(
   pg_pool: &PgPool,
   object_id: &str,

@@ -1,4 +1,6 @@
+use crate::collab::util::test_encode_collab_v1;
 use client_api_test_util::{generate_unique_registered_user_client, workspace_id_from_client};
+
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, CollabMemberIdentify, CreateCollabParams, InsertCollabMemberParams,
@@ -9,14 +11,16 @@ use uuid::Uuid;
 #[tokio::test]
 async fn collab_owner_permission_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
   let uid = c.get_profile().await.unwrap().uid;
+  let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
+    .encode_to_bytes()
+    .unwrap();
 
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
-    encoded_collab_v1: raw_data.clone(),
+    encoded_collab_v1: encode_collab,
     collab_type: CollabType::Document,
     override_if_exist: false,
     workspace_id: workspace_id.clone(),
@@ -39,14 +43,16 @@ async fn collab_owner_permission_test() {
 #[tokio::test]
 async fn update_collab_member_permission_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let raw_data = "hello world".to_string().as_bytes().to_vec();
   let workspace_id = workspace_id_from_client(&c).await;
   let object_id = Uuid::new_v4().to_string();
+  let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
+    .encode_to_bytes()
+    .unwrap();
   let uid = c.get_profile().await.unwrap().uid;
 
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
-    encoded_collab_v1: raw_data.clone(),
+    encoded_collab_v1: encode_collab.clone(),
     collab_type: CollabType::Document,
     override_if_exist: false,
     workspace_id: workspace_id.clone(),
@@ -80,10 +86,11 @@ async fn add_collab_member_test() {
   let (c_1, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c_1).await;
   let object_id = Uuid::new_v4().to_string();
+  let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   c_1
     .create_collab(CreateCollabParams {
       object_id: object_id.clone(),
-      encoded_collab_v1: vec![0; 10],
+      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
       collab_type: CollabType::Document,
       override_if_exist: false,
       workspace_id: workspace_id.clone(),
@@ -126,10 +133,11 @@ async fn add_collab_member_then_remove_test() {
   let (c_1, _user) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c_1).await;
   let object_id = Uuid::new_v4().to_string();
+  let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   c_1
     .create_collab(CreateCollabParams {
       object_id: object_id.clone(),
-      encoded_collab_v1: vec![0; 10],
+      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
       collab_type: CollabType::Document,
       override_if_exist: false,
       workspace_id: workspace_id.clone(),

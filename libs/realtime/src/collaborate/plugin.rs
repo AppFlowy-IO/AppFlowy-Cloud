@@ -12,7 +12,9 @@ use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::{Collab, CollabPlugin, Doc, TransactionMut};
+use collab_document::document::check_document_is_valid;
 use collab_entity::CollabType;
+use collab_folder::check_folder_is_valid;
 use database::collab::CollabStorage;
 use database_entity::dto::{
   AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
@@ -22,7 +24,7 @@ use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 
-use tracing::{debug, error, event, info, instrument, trace, warn};
+use tracing::{debug, error, event, info, instrument, span, trace, warn, Instrument, Level};
 
 use crate::collaborate::group_control::CollabGroup;
 use yrs::updates::decoder::Decode;
@@ -113,7 +115,7 @@ async fn init_collab(
 
   // Can turn off INFO level into DEBUG. For now, just to see the log
   event!(
-    tracing::Level::DEBUG,
+    Level::DEBUG,
     "start decoding:{} state len: {}, sv len: {}, v: {:?}",
     oid,
     encoded_collab.doc_state.len(),
@@ -147,8 +149,7 @@ where
             let cloned_workspace_id = self.workspace_id.clone();
             let cloned_object_id = object_id.to_string();
             let storage = self.storage.clone();
-
-            event!(tracing::Level::DEBUG, "Creating collab snapshot");
+            event!(Level::DEBUG, "Creating collab snapshot");
             let _ = tokio::task::spawn_blocking(move || {
               let params = InsertSnapshotParams {
                 object_id: cloned_object_id,
@@ -157,10 +158,6 @@ where
               };
 
               tokio::spawn(async move {
-                // FIXME(nathan): There is a potential issue when concurrently spawning tasks to create snapshots. A subsequent
-                // task for creating a snapshot might write to the database before a previous task completes. To address
-                // this, consider using `stream!` to queue these tasks, ensuring they are executed in the order they were
-                // spawned.
                 if let Err(err) = storage.queue_snapshot(params).await {
                   error!("create snapshot {:?}", err);
                 }
@@ -170,25 +167,27 @@ where
           }
         },
         Err(err) => {
-          // When initializing a collaboration object, if the 'init_collab_with_raw_data' operation fails, attempt to
-          // restore the collaboration object from the latest snapshot.
-          error!(
-            "init collab:{} error: {:?}, try to restore from snapshot",
-            object_id, err
-          );
-
-          match get_latest_snapshot(&self.workspace_id, object_id, &self.storage).await {
-            None => error!("No snapshot found for collab: {}", object_id),
-            Some(encoded_collab) => match init_collab(object_id, &encoded_collab, doc).await {
-              Ok(_) => info!("restore collab:{} with snapshot success", object_id),
-              Err(err) => {
-                error!(
-                  "restore collab:{} with snapshot failed: {:?}",
-                  object_id, err
-                );
+          let span = span!(Level::ERROR, "restore_collab_from_snapshot", object_id = %object_id, error = %err);
+          async {
+            match get_latest_snapshot(
+              &self.workspace_id,
+              object_id,
+              &self.storage,
+              &self.collab_type,
+            )
+            .await
+            {
+              None => error!("No snapshot found for collab"),
+              Some(encoded_collab) => match init_collab(object_id, &encoded_collab, doc).await {
+                Ok(_) => info!("Restore collab with snapshot success"),
+                Err(err) => {
+                  error!("Restore collab with snapshot failed: {:?}", err);
+                },
               },
-            },
+            }
           }
+          .instrument(span)
+          .await;
         },
       },
       Err(err) => match &err {
@@ -196,7 +195,7 @@ where
           // When attempting to retrieve collaboration data from the disk and a 'Record Not Found' error is returned,
           // this indicates that the collaboration is new. Therefore, the current collaboration data should be saved to disk.
           event!(
-            tracing::Level::INFO,
+            Level::INFO,
             "Create new collab:{} from realtime editing",
             object_id
           );
@@ -288,17 +287,45 @@ async fn get_latest_snapshot<S>(
   workspace_id: &str,
   object_id: &str,
   storage: &S,
+  collab_type: &CollabType,
 ) -> Option<EncodedCollab>
 where
   S: CollabStorage,
 {
-  let metas = storage.get_collab_snapshot_list(object_id).await.ok()?;
-  let meta = metas.0.first()?;
-  let snapshot_data = storage
-    .get_collab_snapshot(workspace_id, &meta.object_id, &meta.snapshot_id)
-    .await
-    .ok()?;
-  EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).ok()
+  let metas = storage.get_collab_snapshot_list(object_id).await.ok()?.0;
+  for meta in metas {
+    let snapshot_data = storage
+      .get_collab_snapshot(workspace_id, &meta.object_id, &meta.snapshot_id)
+      .await
+      .ok()?;
+    if let Ok(encoded_collab) = EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1) {
+      if let Ok(collab) = Collab::new_with_doc_state(
+        CollabOrigin::Empty,
+        object_id,
+        encoded_collab.doc_state.to_vec(),
+        vec![],
+      ) {
+        match collab_type {
+          CollabType::Document => {
+            if check_document_is_valid(&collab).is_ok() {
+              return Some(encoded_collab);
+            }
+          },
+          CollabType::Database => {},
+          CollabType::WorkspaceDatabase => {},
+          CollabType::Folder => {
+            if check_folder_is_valid(&collab).is_ok() {
+              return Some(encoded_collab);
+            }
+          },
+          CollabType::DatabaseRow => {},
+          CollabType::UserAwareness => {},
+        }
+      }
+    }
+  }
+
+  None
 }
 
 struct CollabEditState {

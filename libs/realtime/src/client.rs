@@ -223,6 +223,7 @@ where
       RealtimeMessage::Collab(_) => ctx.binary(msg),
       RealtimeMessage::User(_) => ctx.binary(msg),
       RealtimeMessage::System(_) => ctx.binary(msg),
+      RealtimeMessage::MultipleCollab(_) => ctx.binary(msg),
     }
   }
 }

@@ -1,6 +1,6 @@
+use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use crate::collab_sync::{CollabSink, CollabSinkRunner, SinkState, SyncError, SyncObject};
-use crate::platform_spawn;
 use bytes::Bytes;
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
@@ -24,7 +24,7 @@ use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
-pub const DEFAULT_SYNC_TIMEOUT: u64 = 4;
+pub const DEFAULT_SYNC_TIMEOUT: u64 = 6;
 pub const NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC: u32 = 5;
 
 const DEBOUNCE_DURATION: Duration = Duration::from_secs(10);
@@ -81,7 +81,7 @@ where
       sink_config,
       pause,
     ));
-    platform_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
+    af_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
 
     // Create the observe collab stream.
     let _cloned_protocol = protocol.clone();
@@ -97,7 +97,7 @@ where
     let weak_sync_state = Arc::downgrade(&sync_state);
     let mut sink_state_stream = WatchStream::new(sink_state_rx);
     // Subscribe the sink state stream and update the sync state in the background.
-    platform_spawn(async move {
+    af_spawn(async move {
       while let Some(collab_state) = sink_state_stream.next().await {
         if let Some(sync_state) = weak_sync_state.upgrade() {
           match collab_state {
@@ -227,7 +227,7 @@ where
     let last_init_sync = LastSyncTime::new();
     let object_id = object.object_id.clone();
     let cloned_weak_collab = weak_collab.clone();
-    platform_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
+    af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
       origin,
       object,
       stream,

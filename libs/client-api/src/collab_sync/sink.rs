@@ -7,12 +7,12 @@ use crate::collab_sync::sink_pending_queue::{MessageState, SinkPendingQueue};
 use crate::collab_sync::{SyncError, SyncObject};
 use futures_util::SinkExt;
 
+use crate::af_spawn;
 use crate::collab_sync::sink_config::{SinkConfig, SinkStrategy};
-use crate::platform_spawn;
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage, MsgId};
 use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{interval, Instant, Interval};
-use tracing::{debug, error, event, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug)]
 pub enum SinkState {
@@ -91,7 +91,7 @@ where
       let weak_notifier = Arc::downgrade(&notifier);
       let (tx, rx) = mpsc::channel(1);
       interval_runner_stop_tx = Some(tx);
-      platform_spawn(IntervalRunner::new(*duration).run(weak_notifier, rx));
+      af_spawn(IntervalRunner::new(*duration).run(weak_notifier, rx));
     }
     Self {
       uid,
@@ -304,15 +304,6 @@ where
       let _ = self.state_notifier.send(SinkState::Syncing);
       let collab_msg = sending_msg.get_msg().clone();
       pending_msg_queue.push(sending_msg);
-
-      if !merged_msg.is_empty() {
-        event!(
-          tracing::Level::DEBUG,
-          "merge: {:?}, len: {}",
-          merged_msg,
-          collab_msg.payload_len()
-        );
-      }
       collab_msg
     };
 
@@ -378,7 +369,7 @@ where
 }
 
 fn retry_later(weak_notifier: Weak<watch::Sender<bool>>) {
-  platform_spawn(async move {
+  af_spawn(async move {
     interval(Duration::from_millis(100)).tick().await;
     if let Some(notifier) = weak_notifier.upgrade() {
       let _ = notifier.send(false);

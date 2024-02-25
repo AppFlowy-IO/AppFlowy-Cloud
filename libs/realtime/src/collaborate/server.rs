@@ -18,8 +18,7 @@ use futures_util::future::BoxFuture;
 use realtime_entity::collab_msg::CollabMessage;
 use realtime_entity::message::SystemMessage;
 use std::collections::HashSet;
-use std::future::Future;
-use std::pin::Pin;
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
@@ -330,15 +329,25 @@ where
     let groups = self.groups.clone();
     let edit_collab_by_user = self.editing_collab_by_user.clone();
     let access_control = self.access_control.clone();
-    Self::process_realtime_message(
-      user,
-      group_sender_by_object_id,
-      client_stream_by_user,
-      groups,
-      edit_collab_by_user,
-      access_control,
-      message,
-    )
+
+    Box::pin(async move {
+      for collab_message in message.collab_messages() {
+        if let Err(err) = Self::process_collab_message(
+          &user,
+          &group_sender_by_object_id,
+          &client_stream_by_user,
+          &groups,
+          &edit_collab_by_user,
+          &access_control,
+          collab_message,
+        )
+        .await
+        {
+          error!("process collab message error: {}", err);
+        }
+      }
+      Ok(())
+    })
   }
 }
 
@@ -365,36 +374,34 @@ where
 
     Box::pin(async move {
       if let Some(message) = stream.next().await {
-        // client doesn't send the device_id through the http request header before the 0.4.6
-        // so, try to get the device_id from the message
-        if device_id.is_empty() {
-          if let Some(msg_device_id) = message.device_id() {
-            device_id = msg_device_id;
+        for collab_message in message.collab_messages() {
+          // client doesn't send the device_id through the http request header before the 0.4.6
+          // so, try to get the device_id from the message
+          if device_id.is_empty() {
+            if let Some(msg_device_id) = collab_message.device_id() {
+              device_id = msg_device_id;
+            }
           }
-        }
-        let device_user = UserDevice { device_id, uid };
-        let entry = user_by_device.get(&device_user);
-        match entry {
-          None => Err(RealtimeError::UserNotFound(format!(
-            "Can't find the user:{} device_id:{} from client stream message",
-            uid, device_user.device_id
-          ))),
-          Some(entry) => {
-            Self::process_realtime_message(
-              entry.value().clone(),
-              group_sender_by_object_id,
-              client_stream_by_user,
-              groups,
-              edit_collab_by_user,
-              access_control,
-              message,
+
+          let device_user = UserDevice::new(&device_id, uid);
+          if let Some(entry) = user_by_device.get(&device_user) {
+            if let Err(err) = Self::process_collab_message(
+              entry.value(),
+              &group_sender_by_object_id,
+              &client_stream_by_user,
+              &groups,
+              &edit_collab_by_user,
+              &access_control,
+              collab_message,
             )
             .await
-          },
+            {
+              error!("process collab message error: {}", err);
+            }
+          }
         }
-      } else {
-        Ok(())
       }
+      Ok(())
     })
   }
 }
@@ -541,6 +548,15 @@ impl CollabClientStream {
 struct UserDevice {
   device_id: String,
   uid: i64,
+}
+
+impl UserDevice {
+  fn new(device_id: &str, uid: i64) -> Self {
+    Self {
+      device_id: device_id.to_string(),
+      uid,
+    }
+  }
 }
 
 impl<T> From<&T> for UserDevice

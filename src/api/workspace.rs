@@ -50,7 +50,7 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
       .route(web::post().to(create_workpace_handler))
-      .route(web::patch().to(patch_workpace_handler))
+      .route(web::patch().to(patch_workspace_handler))
     )
     .service(web::resource("/{workspace_id}")
       .route(web::delete().to(delete_workspace_handler))
@@ -132,12 +132,18 @@ async fn create_workpace_handler(
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
   let new_workspace =
     workspace::ops::create_workspace_for_user(&state.pg_pool, &uuid, &workspace_name).await?;
+
+  let uid = state.users.get_user_uid(&uuid).await?;
+  state
+    .workspace_access_control
+    .insert_workspace_role(&uid, &new_workspace.workspace_id, AFRole::Owner)
+    .await?;
   Ok(AppResponse::Ok().with_data(new_workspace).into())
 }
 
 // Adds a workspace for user, if success, return the workspace id
 #[instrument(skip_all, err)]
-async fn patch_workpace_handler(
+async fn patch_workspace_handler(
   _uuid: UserUuid,
   state: Data<AppState>,
   params: Json<PatchWorkspaceParam>,
@@ -330,7 +336,13 @@ async fn create_collab_handler(
   };
 
   params.validate().map_err(AppError::from)?;
+  let object_id = params.object_id.clone();
   state.collab_storage.upsert_collab(&uid, params).await?;
+  state
+    .collab_access_control
+    .update_member(&uid, &object_id, AFAccessLevel::FullAccess)
+    .await;
+
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -409,10 +421,16 @@ async fn batch_create_collab_handler(
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
   for params in collab_params_list {
+    let object_id = params.object_id.clone();
     state
       .collab_storage
       .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
       .await?;
+
+    state
+      .collab_access_control
+      .update_member(&uid, &object_id, AFAccessLevel::FullAccess)
+      .await;
   }
 
   transaction
@@ -469,10 +487,16 @@ async fn create_collab_list_handler(
     .map_err(AppError::from)?;
 
   for params in params_list {
+    let object_id = params.object_id.clone();
     state
       .collab_storage
       .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
       .await?;
+
+    state
+      .collab_access_control
+      .update_member(&uid, &object_id, AFAccessLevel::FullAccess)
+      .await;
   }
 
   transaction
@@ -611,7 +635,21 @@ async fn delete_collab_handler(
   payload: Json<DeleteCollabParams>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  biz::collab::ops::delete_collab(&state.pg_pool, &user_uuid, &payload.into_inner()).await?;
+  let payload = payload.into_inner();
+  payload.validate().map_err(AppError::from)?;
+
+  let uid = state
+    .users
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  state
+    .collab_storage
+    .delete_collab(&uid, &payload.object_id)
+    .await
+    .map_err(AppResponseError::from)?;
+
   Ok(AppResponse::Ok().into())
 }
 

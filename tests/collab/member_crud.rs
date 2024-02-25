@@ -1,6 +1,6 @@
 use crate::collab::util::test_encode_collab_v1;
 use client_api_test_util::{generate_unique_registered_user_client, workspace_id_from_client};
-use collab::core::collab_plugin::EncodedCollab;
+
 use collab_entity::CollabType;
 use database_entity::dto::{
   AFAccessLevel, CollabMemberIdentify, CreateCollabParams, InsertCollabMemberParams,

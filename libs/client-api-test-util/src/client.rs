@@ -1,5 +1,4 @@
 use client_api::{Client, ClientConfiguration};
-use dotenv::dotenv;
 use lazy_static::lazy_static;
 use std::borrow::Cow;
 use std::env;
@@ -27,7 +26,7 @@ lazy_static! {
 
 #[allow(dead_code)]
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {
-  dotenv().ok();
+  dotenvy::dotenv().ok();
   match env::var(key) {
     Ok(value) => Cow::Owned(value),
     Err(_) => {

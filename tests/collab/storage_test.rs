@@ -1,7 +1,7 @@
 use crate::collab::util::test_encode_collab_v1;
 use app_error::ErrorCode;
 use client_api_test_util::*;
-use collab::core::collab_plugin::EncodedCollab;
+
 use collab_entity::CollabType;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
@@ -58,7 +58,7 @@ async fn success_batch_get_collab_test() {
   ];
 
   let mut expected_results = HashMap::new();
-  for (_, query) in queries.iter().enumerate() {
+  for query in queries.iter() {
     let object_id = query.object_id.clone();
     let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world")
       .encode_to_bytes()

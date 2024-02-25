@@ -43,7 +43,7 @@ impl SnapshotControl {
     collab_metrics: Arc<CollabMetrics>,
   ) -> Self {
     let redis_client = Arc::new(Mutex::new(redis_client));
-    let (command_sender, rx) = tokio::sync::mpsc::channel(1000);
+    let (command_sender, rx) = tokio::sync::mpsc::channel(2000);
     let cache = SnapshotCache::new(redis_client);
 
     let runner = SnapshotCommandRunner::new(pg_pool, cache.clone(), rx);

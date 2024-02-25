@@ -4,6 +4,7 @@ use collab::preclude::Collab;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
+#[allow(dead_code)]
 pub fn generate_random_bytes(size: usize) -> Vec<u8> {
   let s: String = thread_rng()
     .sample_iter(&Alphanumeric)

@@ -137,7 +137,7 @@ impl WSClient {
       match weak_state_notify.upgrade() {
         None => error!("websocket state_notify is dropped"),
         Some(state_notify) => match &error {
-          WSError::TungsteniteError(err) => {},
+          WSError::TungsteniteError(_) => {},
           WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Closed),
           WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
           WSError::Internal(_) => {},

@@ -10,6 +10,7 @@ use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use anyhow::Result;
+use collab::core::collab_plugin::EncodedCollab;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
@@ -27,7 +28,7 @@ use tokio_stream::StreamExt;
 use tracing::{error, event, info, instrument, trace, warn};
 
 #[derive(Clone)]
-pub struct CollabServer<S, U, AC> {
+pub struct RealtimeServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
@@ -54,7 +55,7 @@ pub struct CollabServer<S, U, AC> {
   metrics: Arc<RealtimeMetrics>,
 }
 
-impl<S, U, AC> CollabServer<S, U, AC>
+impl<S, U, AC> RealtimeServer<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
@@ -64,6 +65,7 @@ where
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<RealtimeMetrics>,
+    mut command_recv: RealtimeServerCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
     let groups = Arc::new(CollabGroupControl::new(
@@ -80,7 +82,29 @@ where
     let cloned_client_stream_by_user = client_stream_by_user.clone();
     let cloned_storage = storage.clone();
     let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
+
     tokio::spawn(async move {
+      while let Some(cmd) = command_recv.recv().await {
+        match cmd {
+          RealtimeServerCommand::GetEncodeCollab { object_id, ret } => {
+            match cloned_group_sender_by_object_id.get(&object_id) {
+              Some(sender) => {
+                let _ = sender.send(GroupCommand::EncodeCollab {
+                  object_id: object_id.clone(),
+                  ret,
+                });
+              },
+              None => {
+                let _ = ret.send(None);
+              },
+            }
+          },
+        }
+      }
+    });
+
+    let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
+    tokio::task::spawn_local(async move {
       let mut interval = interval(Duration::from_secs(60));
       loop {
         interval.tick().await;
@@ -192,7 +216,7 @@ async fn remove_user<S, U, AC>(
   }
 }
 
-impl<S, U, AC> Actor for CollabServer<S, U, AC>
+impl<S, U, AC> Actor for RealtimeServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
@@ -205,7 +229,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<Connect<U>> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<Connect<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -244,7 +268,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<Disconnect<U>> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<Disconnect<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -286,7 +310,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<ClientMessage<U>> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<ClientMessage<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -313,7 +337,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<ClientStreamMessage> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<ClientStreamMessage> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -412,13 +436,13 @@ async fn remove_user_from_group<S, U, AC>(
   }
 }
 
-impl<S, U, AC> actix::Supervised for CollabServer<S, U, AC>
+impl<S, U, AC> actix::Supervised for RealtimeServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
   AC: CollabAccessControl + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, AC>>) {
+  fn restarting(&mut self, _ctx: &mut Context<RealtimeServer<S, U, AC>>) {
     warn!("restarting");
   }
 }
@@ -429,7 +453,7 @@ pub struct CollabClientStream {
   /// will broadcast the message to all connected clients.
   ///
   /// The message flow:
-  /// ClientSession(websocket) -> [CollabServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
+  /// ClientSession(websocket) -> [RealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
   pub(crate) stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
 }
 
@@ -524,4 +548,15 @@ where
       uid: user.uid(),
     }
   }
+}
+
+pub type RealtimeServerCommandSender = tokio::sync::mpsc::Sender<RealtimeServerCommand>;
+pub type RealtimeServerCommandReceiver = tokio::sync::mpsc::Receiver<RealtimeServerCommand>;
+
+pub type EncodeCollabSender = tokio::sync::oneshot::Sender<Option<EncodedCollab>>;
+pub enum RealtimeServerCommand {
+  GetEncodeCollab {
+    object_id: String,
+    ret: EncodeCollabSender,
+  },
 }

@@ -1,19 +1,18 @@
 use crate::collaborate::{CollabAccessControl, CollabBroadcast, CollabStoragePlugin, Subscription};
 use crate::entities::RealtimeUser;
 use anyhow::Error;
-use collab::core::collab::MutexCollab;
-
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
-
+use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::CollabMessage;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
-use tokio::task::spawn_blocking;
-
+use crate::collaborate::group::GroupControlCommandSender;
 use tracing::{debug, error, event, instrument, trace};
 
 pub struct CollabGroupControl<S, U, AC> {
@@ -96,7 +95,6 @@ where
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
     }
-    self.storage.remove_collab_cache(object_id).await;
   }
 
   pub async fn create_group(
@@ -122,11 +120,16 @@ where
     collab_type: CollabType,
   ) -> Arc<CollabGroup<U>> {
     event!(tracing::Level::TRACE, "New group:{}", object_id);
-    let collab = Arc::new(MutexCollab::new(CollabOrigin::Server, object_id, vec![]));
+    let collab = Arc::new(Mutex::new(Collab::new_with_origin(
+      CollabOrigin::Server,
+      object_id,
+      vec![],
+    )));
     let broadcast = CollabBroadcast::new(object_id, 10);
 
     // The lifecycle of the collab is managed by the group.
     let group = Arc::new(CollabGroup::new(
+      object_id.to_string(),
       collab_type.clone(),
       collab.clone(),
       broadcast,
@@ -136,17 +139,14 @@ where
       workspace_id,
       collab_type,
       self.storage.clone(),
-      Arc::downgrade(&group),
       self.access_control.clone(),
     );
-    collab.lock().add_plugin(Box::new(plugin));
-    event!(tracing::Level::TRACE, "Init group collab:{}", object_id);
-    collab.lock_arc().initialize().await;
+    {
+      let mut lock_guard = collab.lock().await;
+      lock_guard.add_plugin(Box::new(plugin));
+      lock_guard.initialize().await;
+    }
 
-    self
-      .storage
-      .cache_collab(object_id, Arc::downgrade(&collab))
-      .await;
     group.observe_collab(&collab).await;
     group
   }
@@ -158,7 +158,8 @@ where
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
-  collab: Arc<MutexCollab>,
+  object_id: String,
+  collab: Arc<Mutex<Collab>>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -171,7 +172,7 @@ pub struct CollabGroup<U> {
 
 impl<U> Drop for CollabGroup<U> {
   fn drop(&mut self) {
-    trace!("Drop collab group:{}", self.collab.lock().object_id);
+    trace!("Drop collab group:{}", self.object_id);
   }
 }
 
@@ -180,11 +181,13 @@ where
   U: RealtimeUser,
 {
   pub fn new(
+    object_id: String,
     collab_type: CollabType,
-    collab: Arc<MutexCollab>,
+    collab: Arc<Mutex<Collab>>,
     broadcast: CollabBroadcast,
   ) -> Self {
     Self {
+      object_id,
       collab_type,
       collab,
       broadcast,
@@ -193,7 +196,11 @@ where
     }
   }
 
-  pub async fn observe_collab(&self, collab: &Arc<MutexCollab>) {
+  pub async fn encode_collab(&self) -> EncodedCollab {
+    self.collab.lock().await.encode_collab_v1()
+  }
+
+  pub async fn observe_collab(&self, collab: &Arc<Mutex<Collab>>) {
     self.broadcast.observe_collab_changes(collab).await;
   }
 
@@ -332,11 +339,7 @@ where
   /// Flush the [Collab] to the storage.
   /// When there is no subscriber, perform the flush in a blocking task.
   pub async fn flush_collab(&self) {
-    let collab = self.collab.clone();
-    let _ = spawn_blocking(move || {
-      collab.lock().flush();
-    })
-    .await;
+    self.collab.lock().await.flush();
   }
 
   /// Returns the timeout duration in seconds for different collaboration types.

@@ -2,17 +2,19 @@ use crate::collab::{collab_db_ops, is_collab_exists};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
-use collab::core::collab::MutexCollab;
+
 use collab::core::collab_plugin::EncodedCollab;
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
   InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
+use collab::preclude::Collab;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 use tracing::{debug, event, warn, Level};
 use validator::Validate;
@@ -59,10 +61,6 @@ pub trait CollabStorage: Send + Sync + 'static {
   fn config(&self) -> &WriteConfig;
 
   fn encode_collab_mem_hit_rate(&self) -> f64;
-
-  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
-
-  async fn remove_collab_cache(&self, object_id: &str);
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
 
@@ -141,14 +139,6 @@ where
 
   fn encode_collab_mem_hit_rate(&self) -> f64 {
     self.as_ref().encode_collab_mem_hit_rate()
-  }
-
-  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    self.as_ref().cache_collab(object_id, collab).await
-  }
-
-  async fn remove_collab_cache(&self, object_id: &str) {
-    self.as_ref().remove_collab_cache(object_id).await
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {

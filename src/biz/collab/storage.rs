@@ -26,13 +26,17 @@ use std::{
   collections::HashMap,
   sync::{Arc, Weak},
 };
+use tokio::sync::Mutex;
 
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::snapshot::SnapshotControl;
+use realtime::collaborate::{
+  RealtimeServerCommand, RealtimeServerCommandReceiver, RealtimeServerCommandSender,
+};
 use tracing::{event, instrument};
 use validator::Validate;
 
-pub type CollabPostgresDBStorage = CollabStorageController<
+pub type CollabStorageImpl = CollabStoragePostgresImpl<
   CollabStorageAccessControlImpl<CollabAccessControlImpl, WorkspaceAccessControlImpl>,
 >;
 
@@ -42,7 +46,8 @@ pub async fn init_collab_storage(
   collab_access_control: CollabAccessControlImpl,
   workspace_access_control: WorkspaceAccessControlImpl,
   collab_metrics: Arc<CollabMetrics>,
-) -> CollabPostgresDBStorage {
+  realtime_server_command_sender: RealtimeServerCommandSender,
+) -> CollabStorageImpl {
   let access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.into(),
     workspace_access_control: workspace_access_control.into(),
@@ -50,22 +55,27 @@ pub async fn init_collab_storage(
   let disk_cache = CollabStoragePgImpl::new(pg_pool.clone());
   let mem_cache = CollabMemCache::new(redis_client.clone());
   let snapshot_control = SnapshotControl::new(redis_client, pg_pool, collab_metrics).await;
-  CollabStorageController::new(disk_cache, mem_cache, access_control, snapshot_control)
+  CollabStoragePostgresImpl::new(
+    disk_cache,
+    mem_cache,
+    access_control,
+    snapshot_control,
+    realtime_server_command_sender,
+  )
 }
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
-pub struct CollabStorageController<AC> {
+pub struct CollabStoragePostgresImpl<AC> {
   disk_cache: CollabStoragePgImpl,
   mem_cache: CollabMemCache,
   /// access control for collab object. Including read/write
   access_control: AC,
-  /// cache opened collab by object_id. The collab will be removed from the cache when it's closed.
-  opened_collab_by_object_id: Arc<DashMap<String, Weak<MutexCollab>>>,
   snapshot_control: SnapshotControl,
+  rt_cmd_sender: RealtimeServerCommandSender,
 }
 
-impl<AC> CollabStorageController<AC>
+impl<AC> CollabStoragePostgresImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
@@ -73,15 +83,15 @@ where
     disk_cache: CollabStoragePgImpl,
     mem_cache: CollabMemCache,
     access_control: AC,
-
     snapshot_control: SnapshotControl,
+    rt_cmd_sender: RealtimeServerCommandSender,
   ) -> Self {
     Self {
       disk_cache,
       mem_cache,
       access_control,
-      opened_collab_by_object_id: Arc::new(DashMap::new()),
       snapshot_control,
+      rt_cmd_sender,
     }
   }
 
@@ -141,7 +151,7 @@ where
 }
 
 #[async_trait]
-impl<AC> CollabStorage for CollabStorageController<AC>
+impl<AC> CollabStorage for CollabStoragePostgresImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
@@ -151,18 +161,6 @@ where
 
   fn encode_collab_mem_hit_rate(&self) -> f64 {
     self.mem_cache.get_hit_rate()
-  }
-
-  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    tracing::trace!("cache opened collab:{}", object_id);
-    self
-      .opened_collab_by_object_id
-      .insert(object_id.to_string(), collab);
-  }
-
-  async fn remove_collab_cache(&self, object_id: &str) {
-    tracing::trace!("remove opened collab:{} cache", object_id);
-    self.opened_collab_by_object_id.remove(object_id);
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
@@ -234,26 +232,34 @@ where
       .await?;
     let object_id = params.object_id.clone();
 
+    // let (ret, rx) = tokio::sync::oneshot::channel();
+    // self.rt_cmd_sender.send(RealtimeServerCommand::GetEncodeCollab {
+    //   object_id: object_id.clone(),
+    //   ret,
+    // }).await;
+    //
+    // let encode_collab = rx.await;
+
     // Attempt to retrieve from the opened collab cache
-    if let Some(collab_weak_ref) = self
-      .opened_collab_by_object_id
-      .get(&params.object_id)
-      .and_then(|entry| entry.value().upgrade())
-    {
-      event!(
-        tracing::Level::DEBUG,
-        "Get encoded collab:{} from memory",
-        params.object_id
-      );
-      let data = collab_weak_ref.encode_collab_v1();
-      return Ok(data);
-    }
+    // if let Some(collab_weak_ref) = self
+    //   .opened_collab_by_object_id
+    //   .get(&params.object_id)
+    //   .and_then(|entry| entry.value().upgrade())
+    // {
+    //   event!(
+    //     tracing::Level::DEBUG,
+    //     "Get encoded collab:{} from memory",
+    //     params.object_id
+    //   );
+    //   let data = collab_weak_ref.encode_collab_v1();
+    //   return Ok(data);
+    // }
 
     // Attempt to retrieve from memory cache if not found then try
     // to retrieve from disk cache
     match self
       .mem_cache
-      .get_encoded_collab(&params.inner.object_id)
+      .get_encode_collab(&params.inner.object_id)
       .await
     {
       Some(encoded_collab) => {
@@ -281,42 +287,40 @@ where
     uid: &i64,
     queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
-    let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
-      queries
-        .into_iter()
-        .partition_map(|params| match params.validate() {
-          Ok(_) => Either::Left(params),
-          Err(err) => Either::Right((
-            params.object_id,
-            QueryCollabResult::Failed {
-              error: err.to_string(),
-            },
-          )),
-        });
-
-    let (results_from_memory, queries): (HashMap<_, _>, Vec<_>) =
-      valid_queries.into_iter().partition_map(|params| {
-        match self
-          .opened_collab_by_object_id
-          .get(&params.object_id)
-          .and_then(|entry| entry.value().upgrade())
-        {
-          Some(collab) => match collab.encode_collab_v1().encode_to_bytes() {
-            Ok(bytes) => Either::Left((
-              params.object_id,
-              QueryCollabResult::Success {
-                encode_collab_v1: bytes,
-              },
-            )),
-            Err(_) => Either::Right(params),
-          },
-          None => Either::Right(params),
-        }
-      });
-
-    results.extend(results_from_memory);
-    results.extend(self.disk_cache.batch_get_collab(uid, queries).await);
-    results
+    todo!()
+    // let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
+    //   queries
+    //     .into_iter()
+    //     .partition_map(|params| match params.validate() {
+    //       Ok(_) => Either::Left(params),
+    //       Err(err) => Either::Right((
+    //         params.object_id,
+    //         QueryCollabResult::Failed {
+    //           error: err.to_string(),
+    //         },
+    //       )),
+    //     });
+    //
+    // let (results_from_cache, queries): (HashMap<_, _>, Vec<_>) =
+    //   valid_queries.into_iter().partition_map(|params| async {
+    //     match self
+    //       .mem_cache
+    //       .get_encode_collab_bytes(&params.object_id)
+    //       .await
+    //     {
+    //       None => Either::Right(params),
+    //       Some(data) => Either::Left((
+    //         params.object_id,
+    //         QueryCollabResult::Success {
+    //           encode_collab_v1: data,
+    //         },
+    //       )),
+    //     }
+    //   });
+    //
+    // results.extend(results_from_cache);
+    // results.extend(self.disk_cache.batch_get_collab(uid, valid_queries).await);
+    // results
   }
 
   async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
@@ -335,8 +339,7 @@ where
         uid, object_id
       )));
     }
-    self.opened_collab_by_object_id.remove(object_id);
-    self.mem_cache.remove_encoded_collab(object_id).await;
+    self.mem_cache.remove_encode_collab(object_id).await;
     self.disk_cache.delete_collab(uid, object_id).await
   }
 

@@ -1,8 +1,9 @@
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab::core::awareness;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
-use collab::core::collab::MutexCollab;
+
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
@@ -68,9 +69,9 @@ impl CollabBroadcast {
     }
   }
 
-  pub async fn observe_collab_changes(&self, collab: &Arc<MutexCollab>) {
+  pub async fn observe_collab_changes(&self, collab: &Arc<Mutex<Collab>>) {
     let (doc_sub, awareness_sub) = {
-      let mut mutex_collab = collab.lock();
+      let mut mutex_collab = collab.lock().await;
 
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
@@ -168,7 +169,7 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
-    collab: Weak<MutexCollab>,
+    collab: Weak<Mutex<Collab>>,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
@@ -260,10 +261,10 @@ async fn handle_client_collab_message<Sink>(
   object_id: &str,
   sink: &mut Sink,
   collab_msg: &CollabMessage,
-  collab: &MutexCollab,
+  collab: &Mutex<Collab>,
 ) where
-  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
-  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+  Sink: SinkExt<CollabMessage> + Unpin + 'static,
+  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
   match collab_msg.payload() {
     None => {},
@@ -275,7 +276,7 @@ async fn handle_client_collab_message<Sink>(
         match msg {
           Ok(msg) => {
             let mut resps = vec![];
-            if let Some(mut collab) = collab.try_lock() {
+            if let Ok(mut collab) = collab.try_lock() {
               let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
               if let Some(msg_id) = collab_msg.msg_id() {
                 match result {

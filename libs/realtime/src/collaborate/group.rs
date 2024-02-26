@@ -1,22 +1,27 @@
-use crate::collaborate::group_control::CollabGroupControl;
+use crate::collaborate::group_control::{CollabGroup, CollabGroupControl};
 use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::collaborate::{broadcast_message, CollabAccessControl, CollabClientStream};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::RealtimeError;
 use anyhow::anyhow;
 use async_stream::stream;
+use collab::core::collab_plugin::EncodedCollab;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 pub enum GroupCommand<U> {
   HandleCollabMessage {
     user: U,
     collab_message: CollabMessage,
+  },
+  EncodeCollab {
+    object_id: String,
+    ret: tokio::sync::oneshot::Sender<Option<EncodedCollab>>,
   },
 }
 
@@ -55,6 +60,17 @@ where
           } => {
             if let Err(err) = self.handle_collab_message(user, collab_message).await {
               error!("Failed to handle collab message: {}", err);
+            }
+          },
+          GroupCommand::EncodeCollab { object_id, ret } => {
+            let group = self.group_control.get_group(&object_id).await;
+            let encode_collab = match group {
+              None => None,
+              Some(group) => Some(group.encode_collab().await),
+            };
+
+            if let Err(err) = ret.send(encode_collab) {
+              warn!("Send encode collab fail");
             }
           },
         }

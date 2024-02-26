@@ -1,4 +1,4 @@
-use crate::collaborate::{CollabAccessControl, CollabServer};
+use crate::collaborate::{CollabAccessControl, RealtimeServer};
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
 use crate::error::RealtimeError;
 use actix::{
@@ -21,7 +21,7 @@ use tracing::{debug, error, trace, warn};
 const MAX_MESSAGES_PER_INTERVAL: usize = 10;
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
-pub struct ClientSession<
+pub struct RealtimeClient<
   U: Unpin + RealtimeUser,
   S: Unpin + 'static,
   AC: Unpin + CollabAccessControl,
@@ -29,7 +29,7 @@ pub struct ClientSession<
   session_id: String,
   user: U,
   hb: Instant,
-  pub server: Addr<CollabServer<S, U, AC>>,
+  pub server: Addr<RealtimeServer<S, U, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
@@ -37,7 +37,7 @@ pub struct ClientSession<
   interval_start: Instant,
 }
 
-impl<U, S, AC> ClientSession<U, S, AC>
+impl<U, S, AC> RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
@@ -46,7 +46,7 @@ where
   pub fn new(
     user: U,
     user_change_recv: tokio::sync::mpsc::Receiver<AFUserNotification>,
-    server: Addr<CollabServer<S, U, AC>>,
+    server: Addr<RealtimeServer<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
   ) -> Self {
@@ -88,7 +88,7 @@ where
 
   async fn forward_binary(
     user: U,
-    server: Addr<CollabServer<S, U, AC>>,
+    server: Addr<RealtimeServer<S, U, AC>>,
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
     let message = tokio::task::spawn_blocking(move || {
@@ -129,7 +129,7 @@ where
   }
 }
 
-impl<U, S, P> Actor for ClientSession<U, S, P>
+impl<U, S, P> Actor for RealtimeClient<U, S, P>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
@@ -210,7 +210,7 @@ where
   }
 }
 
-impl<U, S, AC> Handler<RealtimeMessage> for ClientSession<U, S, AC>
+impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
@@ -228,7 +228,7 @@ where
 }
 
 /// Handle the messages sent from the client
-impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientSession<U, S, AC>
+impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,

@@ -5,10 +5,10 @@ use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use std::sync::Arc;
 
-use realtime::client::ClientSession;
-use realtime::collaborate::CollabServer;
+use realtime::client::RealtimeClient;
+use realtime::collaborate::RealtimeServer;
 
-use crate::biz::collab::storage::CollabPostgresDBStorage;
+use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
@@ -23,7 +23,7 @@ pub fn ws_scope() -> Scope {
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 pub type CollabServerImpl =
-  Addr<CollabServer<CollabPostgresDBStorage, Arc<RealtimeUserImpl>, CollabAccessControlImpl>>;
+  Addr<RealtimeServer<CollabStorageImpl, Arc<RealtimeUserImpl>, CollabAccessControlImpl>>;
 
 #[instrument(skip_all, err)]
 #[get("/{token}/{device_id}")]
@@ -48,7 +48,7 @@ pub async fn establish_ws_connection(
       );
 
       let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
-      let client = ClientSession::new(
+      let client = RealtimeClient::new(
         realtime_user,
         user_change_recv,
         server.get_ref().clone(),

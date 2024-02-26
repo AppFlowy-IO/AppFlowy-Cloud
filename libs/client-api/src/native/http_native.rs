@@ -156,7 +156,7 @@ impl WSClientHttpSender for Client {
     self
       .post_realtime_msg(device_id, message)
       .await
-      .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
+      .map_err(|err| WSError::Http(err.to_string()))
   }
 }
 

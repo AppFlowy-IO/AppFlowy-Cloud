@@ -12,8 +12,17 @@ pub enum WSError {
   #[error("Auth error: {0}")]
   AuthError(String),
 
+  #[error("Fail to send message via http: {0}")]
+  Http(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
+}
+
+impl WSError {
+  pub fn is_lost_connection(&self) -> bool {
+    matches!(self, WSError::LostConnection(_))
+  }
 }
 
 impl From<Error> for WSError {

@@ -440,9 +440,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   sleep(Duration::from_secs(5)).await;
 
   // all the clients should have the same collab object
-  assert_json_include!(
-    actual: json!(expected_json),
-    expected: arc_owner
+  assert_json_eq!(
+    json!(expected_json),
+    arc_owner
       .collab_by_object_id
       .get(&object_id)
       .unwrap()
@@ -452,8 +452,8 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
 
   for client in clients {
     assert_json_include!(
-      expected: json!(expected_json),
-      actual: client
+      actual: json!(expected_json),
+      expected: client
         .collab_by_object_id
         .get(&object_id)
         .unwrap()

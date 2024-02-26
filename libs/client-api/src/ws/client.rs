@@ -102,6 +102,11 @@ impl WSClient {
   }
 
   pub async fn connect(&self, addr: String, device_id: &str) -> Result<(), WSError> {
+    if self.get_state().is_connecting() {
+      info!("websocket is connecting, skip connect request");
+      return Ok(());
+    }
+
     self.set_state(ConnectState::Connecting).await;
 
     // stop receiving message from client
@@ -136,6 +141,7 @@ impl WSClient {
           WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Closed),
           WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
           WSError::Internal(_) => {},
+          WSError::Http(_) => {},
         },
       }
     };
@@ -233,10 +239,12 @@ impl WSClient {
           },
           Message::Close(close) => {
             info!("websocket close: {:?}", close);
+            break;
           },
           Message::Pong(_) => {
             if let Err(err) = pong_tx.send(()).await {
               error!("failed to receive server pong: {}", err);
+              break;
             }
           },
           _ => warn!("received unexpected message from websocket: {:?}", ws_msg),
@@ -272,9 +280,11 @@ impl WSClient {
                  error!("The HTTP sender has been dropped, unable to send message.");
                  continue;
               }
-            } else if let Err(err) = sink.send(msg).await.map_err(WSError::from){
-              handle_ws_error(&err);
-              break;
+            } else if let Err(err) = sink.send(msg).await.map_err(WSError::from) {
+                if err.is_lost_connection() {
+                  break;
+                }
+                handle_ws_error(&err);
             }
           }
         }

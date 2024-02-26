@@ -71,7 +71,7 @@ pub async fn retry_connect(
 ) -> Result<WebSocketStream, WSError> {
   let connecting_addr = addr.to_owned();
   let stream = RetryIf::spawn(
-    FixedInterval::new(Duration::from_secs(6)),
+    FixedInterval::new(Duration::from_secs(10)),
     ConnectAction::new(connecting_addr.clone()),
     RetryCondition {
       connecting_addr,

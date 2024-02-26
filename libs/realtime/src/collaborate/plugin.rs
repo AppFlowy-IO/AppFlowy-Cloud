@@ -226,7 +226,7 @@ where
 
       let object_id = object_id.to_string();
       let weak_group = self.group.clone();
-      tokio::spawn(async move {
+      tokio::task::spawn_local(async move {
         match weak_group.upgrade() {
           None => warn!("{}: Group is dropped, skip flush collab", object_id),
           Some(group) => {

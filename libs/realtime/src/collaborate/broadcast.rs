@@ -217,7 +217,7 @@ impl CollabBroadcast {
       // the stream will continue to receive messages from the client and it will stop if the stop_rx
       // receives a message. If the client's message alter the document state, it will trigger the
       // document observer and broadcast the update to all connected subscribers. Check out the [observe_update_v1] and [sink_task] above.
-      tokio::spawn(async move {
+      tokio::task::spawn_local(async move {
         loop {
           select! {
             _ = stop_rx.recv() => break,
@@ -274,28 +274,29 @@ async fn handle_client_collab_message<Sink>(
       for msg in reader {
         match msg {
           Ok(msg) => {
-            let cloned_collab = collab.clone();
-            let result = handle_collab_message(&origin, &ServerSyncProtocol, &cloned_collab, msg);
-            if let Some(msg_id) = collab_msg.msg_id() {
-              match result {
-                Ok(payload) => {
-                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                    .with_payload(payload.unwrap_or_default());
+            let mut resps = vec![];
+            if let Some(mut collab) = collab.try_lock() {
+              let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
+              if let Some(msg_id) = collab_msg.msg_id() {
+                match result {
+                  Ok(payload) => {
+                    let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
+                      .with_payload(payload.unwrap_or_default());
+                    resps.push(resp);
+                  },
+                  Err(err) => {
+                    error!("handle collab:{} message error:{}", object_id, err);
+                    let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
+                      .with_code(ack_code_from_error(&err));
+                    resps.push(resp);
+                  },
+                }
+              }
+            }
 
-                  trace!("Send response to client: {}", resp);
-                  if let Err(err) = sink.send(resp.into()).await {
-                    trace!("fail to send response to client: {}", err);
-                  }
-                },
-                Err(err) => {
-                  error!("handle collab:{} message error:{}", object_id, err);
-                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                    .with_code(ack_code_from_error(&err));
-
-                  if let Err(err) = sink.send(resp.into()).await {
-                    trace!("fail to send response to client: {}", err);
-                  }
-                },
+            for resp in resps {
+              if let Err(err) = sink.send(resp.into()).await {
+                trace!("fail to send response to client: {}", err);
               }
             }
           },

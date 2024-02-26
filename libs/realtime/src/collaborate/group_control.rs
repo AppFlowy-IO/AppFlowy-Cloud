@@ -214,7 +214,7 @@ where
   pub fn unsubscribe(&self, user: &U) {
     if let Some(subscription) = self.subscribers.remove(user) {
       let mut subscriber = subscription.1;
-      tokio::spawn(async move {
+      tokio::task::spawn_local(async move {
         subscriber.stop().await;
       });
     }

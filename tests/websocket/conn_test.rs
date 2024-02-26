@@ -1,4 +1,5 @@
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+use tokio::time::timeout;
 
 use client_api::ws::{ConnectState, WSClient, WSClientConfig};
 use client_api_test_util::generate_unique_registered_user_client;
@@ -9,16 +10,25 @@ async fn realtime_connect_test() {
   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
   let device_id = "fake_device_id";
-  loop {
-    tokio::select! {
-        _ = ws_client.connect(c.ws_url(device_id).await.unwrap(), device_id) => {},
-       value = state.recv() => {
-        let new_state = value.unwrap();
-        if new_state == ConnectState::Connected {
-          break;
-        }
-      },
+
+  tokio::spawn(async move {
+    ws_client
+      .connect(c.ws_url(device_id).await.unwrap(), device_id)
+      .await
+  });
+
+  let connect_future = async {
+    while let Ok(state) = state.recv().await {
+      if state == ConnectState::Connected {
+        break;
+      }
     }
+  };
+
+  // Apply the timeout
+  match timeout(Duration::from_secs(10), connect_future).await {
+    Ok(_) => {},
+    Err(_) => panic!("Connection timeout."),
   }
 }
 
@@ -35,16 +45,25 @@ async fn realtime_connect_after_token_exp_test() {
   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
   let device_id = "fake_device_id";
-  loop {
-    tokio::select! {
-        _ = ws_client.connect(c.ws_url(device_id).await.unwrap(), device_id) => {},
-       value = state.recv() => {
-        let new_state = value.unwrap();
-        if new_state == ConnectState::Connected {
-          break;
-        }
-      },
+
+  tokio::spawn(async move {
+    ws_client
+      .connect(c.ws_url(device_id).await.unwrap(), device_id)
+      .await
+  });
+
+  let connect_future = async {
+    while let Ok(state) = state.recv().await {
+      if state == ConnectState::Connected {
+        break;
+      }
     }
+  };
+
+  // Apply the timeout
+  match timeout(Duration::from_secs(10), connect_future).await {
+    Ok(_) => {},
+    Err(_) => panic!("Connection timeout."),
   }
 }
 

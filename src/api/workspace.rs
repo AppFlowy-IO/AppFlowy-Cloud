@@ -153,6 +153,7 @@ async fn patch_workspace_handler(
     &state.pg_pool,
     &params.workspace_id,
     params.workspace_name.as_deref(),
+    params.workspace_icon.as_deref(),
   )
   .await?;
   Ok(AppResponse::Ok().into())

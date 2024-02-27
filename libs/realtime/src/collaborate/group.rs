@@ -10,9 +10,7 @@ use std::rc::Rc;
 
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::CollabMessage;
-
 use tokio::sync::Mutex;
-
 use tracing::trace;
 
 /// A group used to manage a single [Collab] object

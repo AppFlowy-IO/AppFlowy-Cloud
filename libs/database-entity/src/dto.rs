@@ -444,6 +444,7 @@ pub struct AFWorkspace {
   pub workspace_type: i32,
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,
+  pub icon: String,
 }
 
 #[derive(Serialize, Deserialize)]

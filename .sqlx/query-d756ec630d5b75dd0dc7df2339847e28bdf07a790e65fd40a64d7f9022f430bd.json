@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE public.af_workspace\n      SET icon = $1\n      WHERE workspace_id = $2\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d756ec630d5b75dd0dc7df2339847e28bdf07a790e65fd40a64d7f9022f430bd"
+}

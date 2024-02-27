@@ -22,7 +22,7 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn remove_encoded_collab(&self, object_id: &str) {
+  pub async fn remove_encode_collab(&self, object_id: &str) {
     if let Err(err) = self
       .redis_client
       .lock()
@@ -34,7 +34,7 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn get_encoded_collab(&self, object_id: &str) -> Option<EncodedCollab> {
+  pub async fn get_encode_collab_bytes(&self, object_id: &str) -> Option<Vec<u8>> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     let result = self
       .redis_client
@@ -42,9 +42,21 @@ impl CollabMemCache {
       .await
       .get::<_, Option<Vec<u8>>>(object_id)
       .await;
-
     match result {
-      Ok(Some(bytes)) => match EncodedCollab::decode_from_bytes(&bytes) {
+      Ok(bytes) => {
+        self.hits.fetch_add(1, Ordering::Relaxed);
+        bytes
+      },
+      Err(err) => {
+        error!("Failed to get encoded collab from redis: {:?}", err);
+        None
+      },
+    }
+  }
+
+  pub async fn get_encode_collab(&self, object_id: &str) -> Option<EncodedCollab> {
+    match self.get_encode_collab_bytes(object_id).await {
+      Some(bytes) => match EncodedCollab::decode_from_bytes(&bytes) {
         Ok(encoded_collab) => {
           self.hits.fetch_add(1, Ordering::Relaxed);
           Some(encoded_collab)
@@ -54,16 +66,11 @@ impl CollabMemCache {
           None
         },
       },
-      Ok(None) => {
+      None => {
         trace!(
           "No encoded collab found in cache for object_id: {}",
           object_id
         );
-
-        None
-      },
-      Err(err) => {
-        error!("Failed to get encoded collab from redis: {:?}", err);
         None
       },
     }
@@ -88,7 +95,7 @@ impl CollabMemCache {
     }
   }
 
-  /// Set bytes in redis with a 3 day expiration.
+  /// Set bytes in redis with a 3 days expiration.
   async fn set_bytes_in_redis(&self, object_id: String, bytes: Vec<u8>) -> redis::RedisResult<()> {
     self
       .redis_client

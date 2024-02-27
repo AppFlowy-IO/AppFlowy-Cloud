@@ -75,7 +75,7 @@ async fn add_and_delete_workspace_for_non_owner_user() {
 }
 
 #[tokio::test]
-async fn test_workspace_rename() {
+async fn test_workspace_rename_and_icon_change() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = c
     .get_workspaces()
@@ -91,6 +91,7 @@ async fn test_workspace_rename() {
     c.patch_workspace(PatchWorkspaceParam {
       workspace_id,
       workspace_name: Some(desired_new_name.to_string()),
+      ..Default::default()
     })
     .await
     .expect("Failed to rename workspace");
@@ -108,6 +109,7 @@ async fn test_workspace_rename() {
     c.patch_workspace(PatchWorkspaceParam {
       workspace_id,
       workspace_name: None,
+      ..Default::default()
     })
     .await
     .expect("Failed to rename workspace");
@@ -118,5 +120,33 @@ async fn test_workspace_rename() {
       .expect("No workspace found")
       .workspace_name;
     assert_eq!(actual_new_name, desired_new_name);
+  }
+  {
+    c.patch_workspace(PatchWorkspaceParam {
+      workspace_id,
+      workspace_icon: Some("icon123".to_string()),
+      ..Default::default()
+    })
+    .await
+    .expect("Failed to change icon");
+    let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
+    let icon = &workspaces.0.first().expect("No workspace found").icon;
+    assert_eq!(icon, "icon123");
+  }
+  {
+    c.patch_workspace(PatchWorkspaceParam {
+      workspace_id,
+      workspace_name: Some("new_name456".to_string()),
+      workspace_icon: Some("new_icon456".to_string()),
+    })
+    .await
+    .expect("Failed to change icon");
+    let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
+    let workspace = workspaces.0.first().expect("No workspace found");
+
+    let icon = workspace.icon.as_str();
+    let name = workspace.workspace_name.as_str();
+    assert_eq!(icon, "new_icon456");
+    assert_eq!(name, "new_name456");
   }
 }

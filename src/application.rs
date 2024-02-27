@@ -28,7 +28,7 @@ use anyhow::{Context, Error};
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
-use realtime::collaborate::CollabServer;
+use realtime::collaborate::{RTCommandReceiver, RTCommandSender, RealtimeServer};
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -44,11 +44,15 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build(config: Config, state: AppState) -> Result<Self, anyhow::Error> {
+  pub async fn build(
+    config: Config,
+    state: AppState,
+    rt_cmd_recv: RTCommandReceiver,
+  ) -> Result<Self, anyhow::Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config).await?;
+    let server = run(listener, state, config, rt_cmd_recv).await?;
 
     Ok(Self { port, server })
   }
@@ -66,6 +70,7 @@ pub async fn run(
   listener: TcpListener,
   state: AppState,
   config: Config,
+  rt_cmd_recv: RTCommandReceiver,
 ) -> Result<Server, anyhow::Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
@@ -94,11 +99,11 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-
-  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
+  let realtime_server = RealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.clone(),
     state.collab_access_control.clone(),
     state.metrics.realtime_metrics.clone(),
+    rt_cmd_recv,
   )
   .unwrap()
   .start();
@@ -127,7 +132,7 @@ pub async fn run(
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
       .app_data(Data::new(state.metrics.access_control_metrics.clone()))
-      .app_data(Data::new(collab_server.clone()))
+      .app_data(Data::new(realtime_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
   });
@@ -150,7 +155,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<AppState, Error> {
   // Print the feature flags
   if cfg!(feature = "disable_access_control") {
     info!("Access control is disabled");
@@ -204,6 +209,7 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
       collab_access_control.clone(),
       workspace_access_control.clone(),
       metrics.collab_metrics.clone(),
+      rt_cmd_tx,
     )
     .await,
   );

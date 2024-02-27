@@ -1,13 +1,14 @@
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab::core::awareness;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
-use collab::core::collab::MutexCollab;
+use std::rc::{Rc, Weak};
+
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -36,9 +37,9 @@ pub struct CollabBroadcast {
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
-  broadcast_seq_num_counter: Arc<AtomicU32>,
+  broadcast_seq_num_counter: Rc<AtomicU32>,
   /// The last modified time of the document.
-  pub modified_at: Arc<parking_lot::Mutex<Instant>>,
+  pub modified_at: Rc<parking_lot::Mutex<Instant>>,
 }
 
 impl Drop for CollabBroadcast {
@@ -63,15 +64,13 @@ impl CollabBroadcast {
       sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
-      broadcast_seq_num_counter: Arc::new(Default::default()),
-      modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
+      broadcast_seq_num_counter: Rc::new(Default::default()),
+      modified_at: Rc::new(parking_lot::Mutex::new(Instant::now())),
     }
   }
 
-  pub async fn observe_collab_changes(&self, collab: &Arc<MutexCollab>) {
+  pub async fn observe_collab_changes(&self, collab: &mut Collab) {
     let (doc_sub, awareness_sub) = {
-      let mut mutex_collab = collab.lock();
-
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
       let broadcast_sink = self.sender.clone();
@@ -82,7 +81,7 @@ impl CollabBroadcast {
       // sends an update to the document that alters its state, the document observer will trigger
       // an update event. This event is then broadcast to all connected clients. After broadcasting, all
       // connected clients will receive the update and apply it to their local document state.
-      let doc_sub = mutex_collab
+      let doc_sub = collab
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
@@ -109,7 +108,7 @@ impl CollabBroadcast {
       let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
-      let awareness_sub = mutex_collab
+      let awareness_sub = collab
         .get_mut_awareness()
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
@@ -168,7 +167,7 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
-    collab: Weak<MutexCollab>,
+    collab: Weak<Mutex<Collab>>,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
@@ -217,7 +216,7 @@ impl CollabBroadcast {
       // the stream will continue to receive messages from the client and it will stop if the stop_rx
       // receives a message. If the client's message alter the document state, it will trigger the
       // document observer and broadcast the update to all connected subscribers. Check out the [observe_update_v1] and [sink_task] above.
-      tokio::spawn(async move {
+      tokio::task::spawn_local(async move {
         loop {
           select! {
             _ = stop_rx.recv() => break,
@@ -260,10 +259,10 @@ async fn handle_client_collab_message<Sink>(
   object_id: &str,
   sink: &mut Sink,
   collab_msg: &CollabMessage,
-  collab: &MutexCollab,
+  collab: &Mutex<Collab>,
 ) where
-  Sink: SinkExt<CollabMessage> + Send + Sync + Unpin + 'static,
-  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
+  Sink: SinkExt<CollabMessage> + Unpin + 'static,
+  <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
   match collab_msg.payload() {
     None => {},
@@ -274,28 +273,29 @@ async fn handle_client_collab_message<Sink>(
       for msg in reader {
         match msg {
           Ok(msg) => {
-            let cloned_collab = collab.clone();
-            let result = handle_collab_message(&origin, &ServerSyncProtocol, &cloned_collab, msg);
-            if let Some(msg_id) = collab_msg.msg_id() {
-              match result {
-                Ok(payload) => {
-                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                    .with_payload(payload.unwrap_or_default());
+            let mut resps = vec![];
+            if let Ok(mut collab) = collab.try_lock() {
+              let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
+              if let Some(msg_id) = collab_msg.msg_id() {
+                match result {
+                  Ok(payload) => {
+                    let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
+                      .with_payload(payload.unwrap_or_default());
+                    resps.push(resp);
+                  },
+                  Err(err) => {
+                    error!("handle collab:{} message error:{}", object_id, err);
+                    let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
+                      .with_code(ack_code_from_error(&err));
+                    resps.push(resp);
+                  },
+                }
+              }
+            }
 
-                  trace!("Send response to client: {}", resp);
-                  if let Err(err) = sink.send(resp.into()).await {
-                    trace!("fail to send response to client: {}", err);
-                  }
-                },
-                Err(err) => {
-                  error!("handle collab:{} message error:{}", object_id, err);
-                  let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                    .with_code(ack_code_from_error(&err));
-
-                  if let Err(err) = sink.send(resp.into()).await {
-                    trace!("fail to send response to client: {}", err);
-                  }
-                },
+            for resp in resps {
+              if let Err(err) = sink.send(resp.into()).await {
+                trace!("fail to send response to client: {}", err);
               }
             }
           },

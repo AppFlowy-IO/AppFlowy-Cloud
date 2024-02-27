@@ -1,4 +1,3 @@
-use crate::entities::RealtimeUser;
 use crate::error::RealtimeError;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -22,29 +21,26 @@ use database_entity::dto::{
 use md5::Digest;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
-use tracing::{debug, error, event, info, instrument, span, trace, warn, Instrument, Level};
+use tracing::{debug, error, event, info, instrument, span, trace, Instrument, Level};
 
-use crate::collaborate::group_control::CollabGroup;
 use yrs::updates::decoder::Decode;
 use yrs::{Transact, Update};
 
-pub struct CollabStoragePlugin<S, U, AC> {
+pub struct CollabStoragePlugin<S, AC> {
   uid: i64,
   workspace_id: String,
   storage: Arc<S>,
   edit_state: Arc<CollabEditState>,
-  group: Weak<CollabGroup<U>>,
   collab_type: CollabType,
   access_control: Arc<AC>,
   latest_collab_md5: Mutex<Option<Digest>>,
 }
 
-impl<S, U, AC> CollabStoragePlugin<S, U, AC>
+impl<S, AC> CollabStoragePlugin<S, AC>
 where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: CollabAccessControl,
 {
   pub fn new(
@@ -52,7 +48,6 @@ where
     workspace_id: &str,
     collab_type: CollabType,
     storage: S,
-    group: Weak<CollabGroup<U>>,
     access_control: Arc<AC>,
   ) -> Self {
     let storage = Arc::new(storage);
@@ -63,7 +58,6 @@ where
       workspace_id,
       storage,
       edit_state,
-      group,
       collab_type,
       access_control,
       latest_collab_md5: Default::default(),
@@ -131,15 +125,18 @@ async fn init_collab(
 }
 
 #[async_trait]
-impl<S, U, AC> CollabPlugin for CollabStoragePlugin<S, U, AC>
+impl<S, AC> CollabPlugin for CollabStoragePlugin<S, AC>
 where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: CollabAccessControl,
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
-    match self.storage.get_collab_encoded(&self.uid, params).await {
+    match self
+      .storage
+      .get_collab_encoded(&self.uid, params, true)
+      .await
+    {
       Ok(encoded_collab_v1) => match init_collab(object_id, &encoded_collab_v1, doc).await {
         Ok(_) => {
           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
@@ -223,21 +220,20 @@ where
       .should_flush(self.storage.config().flush_per_update, 3 * 60)
     {
       self.edit_state.tick();
-
-      let object_id = object_id.to_string();
-      let weak_group = self.group.clone();
-      tokio::spawn(async move {
-        match weak_group.upgrade() {
-          None => warn!("{}: Group is dropped, skip flush collab", object_id),
-          Some(group) => {
-            info!(
-              "{}: number of updates reach flush_per_update, start flushing",
-              object_id
-            );
-            group.flush_collab().await;
-          },
-        }
-      });
+      let _object_id = object_id.to_string();
+      // let weak_group = self.group.clone();
+      // tokio::task::spawn_local(async move {
+      //   match weak_group.upgrade() {
+      //     None => warn!("{}: Group is dropped, skip flush collab", object_id),
+      //     Some(group) => {
+      //       info!(
+      //         "{}: number of updates reach flush_per_update, start flushing",
+      //         object_id
+      //       );
+      //       group.flush_collab().await;
+      //     },
+      //   }
+      // });
     }
   }
 

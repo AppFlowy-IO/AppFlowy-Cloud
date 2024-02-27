@@ -1,5 +1,15 @@
+use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
+use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
+use crate::biz::collab::mem_cache::CollabMemCache;
+use crate::state::RedisClient;
+use anyhow::Context;
+use app_error::AppError;
 use async_trait::async_trait;
-use collab::core::collab::MutexCollab;
+
+use collab::core::collab_plugin::EncodedCollab;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
+
 use database::collab::{
   is_collab_exists, CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult,
   WriteConfig,
@@ -8,31 +18,22 @@ use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
   InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
+use futures::stream::{self, StreamExt};
 use itertools::{Either, Itertools};
-
-use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
-use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
-use crate::biz::collab::mem_cache::CollabMemCache;
-use crate::state::RedisClient;
-use anyhow::Context;
-use app_error::AppError;
-use collab::core::collab_plugin::EncodedCollab;
-use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
-use dashmap::DashMap;
 use sqlx::{PgPool, Transaction};
 use std::ops::DerefMut;
-use std::{
-  collections::HashMap,
-  sync::{Arc, Weak},
-};
+use std::time::Duration;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::oneshot;
+use tokio::time::timeout;
 
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::snapshot::SnapshotControl;
-use tracing::{event, instrument};
+use realtime::collaborate::{RTCommand, RTCommandSender};
+use tracing::{error, event, instrument, Level};
 use validator::Validate;
 
-pub type CollabPostgresDBStorage = CollabStorageController<
+pub type CollabStorageImpl = CollabStoragePostgresImpl<
   CollabStorageAccessControlImpl<CollabAccessControlImpl, WorkspaceAccessControlImpl>,
 >;
 
@@ -42,7 +43,8 @@ pub async fn init_collab_storage(
   collab_access_control: CollabAccessControlImpl,
   workspace_access_control: WorkspaceAccessControlImpl,
   collab_metrics: Arc<CollabMetrics>,
-) -> CollabPostgresDBStorage {
+  realtime_server_command_sender: RTCommandSender,
+) -> CollabStorageImpl {
   let access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.into(),
     workspace_access_control: workspace_access_control.into(),
@@ -50,22 +52,27 @@ pub async fn init_collab_storage(
   let disk_cache = CollabStoragePgImpl::new(pg_pool.clone());
   let mem_cache = CollabMemCache::new(redis_client.clone());
   let snapshot_control = SnapshotControl::new(redis_client, pg_pool, collab_metrics).await;
-  CollabStorageController::new(disk_cache, mem_cache, access_control, snapshot_control)
+  CollabStoragePostgresImpl::new(
+    disk_cache,
+    mem_cache,
+    access_control,
+    snapshot_control,
+    realtime_server_command_sender,
+  )
 }
 
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
-pub struct CollabStorageController<AC> {
+pub struct CollabStoragePostgresImpl<AC> {
   disk_cache: CollabStoragePgImpl,
   mem_cache: CollabMemCache,
   /// access control for collab object. Including read/write
   access_control: AC,
-  /// cache opened collab by object_id. The collab will be removed from the cache when it's closed.
-  opened_collab_by_object_id: Arc<DashMap<String, Weak<MutexCollab>>>,
   snapshot_control: SnapshotControl,
+  rt_cmd: RTCommandSender,
 }
 
-impl<AC> CollabStorageController<AC>
+impl<AC> CollabStoragePostgresImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
@@ -73,15 +80,15 @@ where
     disk_cache: CollabStoragePgImpl,
     mem_cache: CollabMemCache,
     access_control: AC,
-
     snapshot_control: SnapshotControl,
+    rt_cmd_sender: RTCommandSender,
   ) -> Self {
     Self {
       disk_cache,
       mem_cache,
       access_control,
-      opened_collab_by_object_id: Arc::new(DashMap::new()),
       snapshot_control,
+      rt_cmd: rt_cmd_sender,
     }
   }
 
@@ -138,10 +145,43 @@ where
 
     Ok(())
   }
+
+  async fn get_encode_collab_from_editing(&self, object_id: &str) -> Option<EncodedCollab> {
+    let object_id = object_id.to_string();
+    let (ret, rx) = oneshot::channel();
+    let timeout_duration = Duration::from_secs(5);
+
+    // Attempt to send the command to the realtime server
+    if let Err(err) = self
+      .rt_cmd
+      .send(RTCommand::GetEncodeCollab { object_id, ret })
+      .await
+    {
+      error!(
+        "Failed to send get encode collab command to realtime server: {}",
+        err
+      );
+      return None;
+    }
+
+    // Await the response from the realtime server with a timeout
+    match timeout(timeout_duration, rx).await {
+      Ok(Ok(Some(encode_collab))) => Some(encode_collab),
+      Ok(Ok(None)) => None,
+      Ok(Err(err)) => {
+        error!("Failed to get encode collab from realtime server: {}", err);
+        None
+      },
+      Err(_) => {
+        error!("Timeout waiting for encode collab from realtime server");
+        None
+      },
+    }
+  }
 }
 
 #[async_trait]
-impl<AC> CollabStorage for CollabStorageController<AC>
+impl<AC> CollabStorage for CollabStoragePostgresImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
@@ -151,18 +191,6 @@ where
 
   fn encode_collab_mem_hit_rate(&self) -> f64 {
     self.mem_cache.get_hit_rate()
-  }
-
-  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    tracing::trace!("cache opened collab:{}", object_id);
-    self
-      .opened_collab_by_object_id
-      .insert(object_id.to_string(), collab);
-  }
-
-  async fn remove_collab_cache(&self, object_id: &str) {
-    tracing::trace!("remove opened collab:{} cache", object_id);
-    self.opened_collab_by_object_id.remove(object_id);
   }
 
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
@@ -226,54 +254,44 @@ where
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    is_collab_init: bool,
   ) -> DatabaseResult<EncodedCollab> {
     params.validate()?;
     self
       .access_control
       .get_or_refresh_collab_access_level(uid, &params.object_id, &self.disk_cache.pg_pool)
       .await?;
-    let object_id = params.object_id.clone();
 
-    // Attempt to retrieve from the opened collab cache
-    if let Some(collab_weak_ref) = self
-      .opened_collab_by_object_id
-      .get(&params.object_id)
-      .and_then(|entry| entry.value().upgrade())
-    {
-      event!(
-        tracing::Level::DEBUG,
-        "Get encoded collab:{} from memory",
-        params.object_id
-      );
-      let data = collab_weak_ref.encode_collab_v1();
-      return Ok(data);
+    // Early return if editing collab is initialized, as it indicates no need to query further.
+    if !is_collab_init {
+      // Attempt to retrieve encoded collab from the editing collab
+      if let Some(value) = self.get_encode_collab_from_editing(&params.object_id).await {
+        return Ok(value);
+      }
     }
 
-    // Attempt to retrieve from memory cache if not found then try
-    // to retrieve from disk cache
-    match self
+    // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
+    if let Some(encoded_collab) = self
       .mem_cache
-      .get_encoded_collab(&params.inner.object_id)
+      .get_encode_collab(&params.inner.object_id)
       .await
     {
-      Some(encoded_collab) => {
-        event!(
-          tracing::Level::DEBUG,
-          "Get encoded collab:{} from cache",
-          params.object_id
-        );
-        Ok(encoded_collab)
-      },
-      None => {
-        // Fallback to disk cache if not in memory cache
-        let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
-        self
-          .mem_cache
-          .insert_encode_collab(object_id, &encoded_collab)
-          .await;
-        Ok(encoded_collab)
-      },
+      event!(
+        Level::DEBUG,
+        "Get encoded collab:{} from cache",
+        params.object_id
+      );
+      return Ok(encoded_collab);
     }
+
+    // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
+    let object_id = params.object_id.clone();
+    let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
+    self
+      .mem_cache
+      .insert_encode_collab(object_id, &encoded_collab)
+      .await;
+    Ok(encoded_collab)
   }
 
   async fn batch_get_collab(
@@ -281,6 +299,7 @@ where
     uid: &i64,
     queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
+    // 1. Partition queries based on validation into valid queries and errors (with associated error messages).
     let (valid_queries, mut results): (Vec<_>, HashMap<_, _>) =
       queries
         .into_iter()
@@ -294,28 +313,36 @@ where
           )),
         });
 
-    let (results_from_memory, queries): (HashMap<_, _>, Vec<_>) =
-      valid_queries.into_iter().partition_map(|params| {
-        match self
-          .opened_collab_by_object_id
-          .get(&params.object_id)
-          .and_then(|entry| entry.value().upgrade())
-        {
-          Some(collab) => match collab.encode_collab_v1().encode_to_bytes() {
-            Ok(bytes) => Either::Left((
-              params.object_id,
+    // 2. Processes valid queries against the in-memory cache to retrieve cached values.
+    //    - Queries not found in the cache are earmarked for disk retrieval.
+    let (disk_queries, values_from_mem_cache): (Vec<_>, HashMap<_, _>) =
+      stream::iter(valid_queries)
+        .then(|params| async move {
+          match self
+            .mem_cache
+            .get_encode_collab_bytes(&params.object_id)
+            .await
+          {
+            None => Either::Left(params),
+            Some(data) => Either::Right((
+              params.object_id.clone(),
               QueryCollabResult::Success {
-                encode_collab_v1: bytes,
+                encode_collab_v1: data,
               },
             )),
-            Err(_) => Either::Right(params),
-          },
-          None => Either::Right(params),
-        }
-      });
+          }
+        })
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .partition_map(|either| either);
+    results.extend(values_from_mem_cache);
 
-    results.extend(results_from_memory);
-    results.extend(self.disk_cache.batch_get_collab(uid, queries).await);
+    // 3. Retrieves remaining values from the disk cache for queries not satisfied by the memory cache.
+    //    - These values are then merged into the final result set.
+    let values_from_disk_cache = self.disk_cache.batch_get_collab(uid, disk_queries).await;
+    results.extend(values_from_disk_cache);
+
     results
   }
 
@@ -335,8 +362,7 @@ where
         uid, object_id
       )));
     }
-    self.opened_collab_by_object_id.remove(object_id);
-    self.mem_cache.remove_encoded_collab(object_id).await;
+    self.mem_cache.remove_encode_collab(object_id).await;
     self.disk_cache.delete_collab(uid, object_id).await
   }
 

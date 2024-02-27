@@ -520,7 +520,7 @@ async fn get_collab_handler(
     .map_err(AppResponseError::from)?;
   let data = state
     .collab_storage
-    .get_collab_encoded(&uid, payload.into_inner())
+    .get_collab_encoded(&uid, payload.into_inner(), false)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -562,6 +562,7 @@ async fn create_collab_snapshot_handler(
     .get_collab_encoded(
       &uid,
       QueryCollabParams::new(&object_id, collab_type, &workspace_id),
+      false,
     )
     .await?
     .encode_to_bytes()

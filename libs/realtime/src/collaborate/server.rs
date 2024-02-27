@@ -1,6 +1,6 @@
 use crate::client::ClientWSSink;
-use crate::collaborate::group::{GroupCommand, GroupCommandRunner, GroupControlCommandSender};
-use crate::collaborate::group_control::CollabGroupControl;
+use crate::collaborate::all_group::AllCollabGroup;
+use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::collaborate::permission::CollabAccessControl;
 use crate::collaborate::RealtimeMetrics;
 use crate::entities::{
@@ -10,6 +10,7 @@ use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use anyhow::Result;
+use collab::core::collab_plugin::EncodedCollab;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
@@ -27,11 +28,11 @@ use tokio_stream::StreamExt;
 use tracing::{error, event, info, instrument, trace, warn};
 
 #[derive(Clone)]
-pub struct CollabServer<S, U, AC> {
+pub struct RealtimeServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
-  groups: Arc<CollabGroupControl<S, U, AC>>,
+  groups: Arc<AllCollabGroup<S, U, AC>>,
   user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
@@ -48,13 +49,13 @@ pub struct CollabServer<S, U, AC> {
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
   client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-  group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
+  group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
 }
 
-impl<S, U, AC> CollabServer<S, U, AC>
+impl<S, U, AC> RealtimeServer<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
@@ -64,15 +65,13 @@ where
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<RealtimeMetrics>,
+    mut command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
-    let groups = Arc::new(CollabGroupControl::new(
-      storage.clone(),
-      access_control.clone(),
-    ));
+    let groups = Arc::new(AllCollabGroup::new(storage.clone(), access_control.clone()));
     let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
-    let group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>> =
+    let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
       Arc::new(Default::default());
 
     let weak_groups = Arc::downgrade(&groups);
@@ -80,8 +79,39 @@ where
     let cloned_client_stream_by_user = client_stream_by_user.clone();
     let cloned_storage = storage.clone();
     let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
+
     tokio::spawn(async move {
-      let mut interval = interval(Duration::from_secs(60));
+      while let Some(cmd) = command_recv.recv().await {
+        match cmd {
+          RTCommand::GetEncodeCollab { object_id, ret } => {
+            match cloned_group_sender_by_object_id.get(&object_id) {
+              Some(sender) => {
+                if let Err(err) = sender
+                  .send(GroupCommand::EncodeCollab {
+                    object_id: object_id.clone(),
+                    ret,
+                  })
+                  .await
+                {
+                  error!("Send group command error: {}", err);
+                }
+              },
+              None => {
+                let _ = ret.send(None);
+              },
+            }
+          },
+        }
+      }
+    });
+
+    let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
+    tokio::task::spawn_local(async move {
+      let mut interval = if cfg!(debug_assertions) {
+        interval(Duration::from_secs(10))
+      } else {
+        interval(Duration::from_secs(60))
+      };
       loop {
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {
@@ -115,15 +145,14 @@ where
 
   fn process_realtime_message(
     user: U,
-    group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
+    group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
     client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-    groups: Arc<CollabGroupControl<S, U, AC>>,
+    groups: Arc<AllCollabGroup<S, U, AC>>,
     edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
     access_control: Arc<AC>,
     realtime_msg: RealtimeMessage,
   ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>> {
     Box::pin(async move {
-      trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
       match realtime_msg {
         RealtimeMessage::Collab(collab_message) => {
           let old_sender = group_sender_by_object_id
@@ -139,7 +168,7 @@ where
                 Entry::Vacant(entry) => {
                   let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
                   let runner = GroupCommandRunner {
-                    group_control: groups.clone(),
+                    all_groups: groups.clone(),
                     client_stream_by_user: client_stream_by_user.clone(),
                     edit_collab_by_user: edit_collab_by_user.clone(),
                     access_control: access_control.clone(),
@@ -154,7 +183,7 @@ where
               }
             },
           };
-
+          trace!("Receive client:{} message:{}", user.uid(), collab_message);
           if let Err(err) = sender
             .send(GroupCommand::HandleCollabMessage {
               user,
@@ -176,7 +205,7 @@ where
 }
 
 async fn remove_user<S, U, AC>(
-  groups: &Arc<CollabGroupControl<S, U, AC>>,
+  groups: &Arc<AllCollabGroup<S, U, AC>>,
   editing_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
   user: &U,
 ) where
@@ -192,7 +221,7 @@ async fn remove_user<S, U, AC>(
   }
 }
 
-impl<S, U, AC> Actor for CollabServer<S, U, AC>
+impl<S, U, AC> Actor for RealtimeServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
@@ -205,7 +234,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<Connect<U>> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<Connect<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -244,7 +273,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<Disconnect<U>> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<Disconnect<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -286,7 +315,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<ClientMessage<U>> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<ClientMessage<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -313,7 +342,7 @@ where
   }
 }
 
-impl<S, U, AC> Handler<ClientStreamMessage> for CollabServer<S, U, AC>
+impl<S, U, AC> Handler<ClientStreamMessage> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
@@ -393,7 +422,7 @@ pub async fn broadcast_message<U>(
 #[instrument(level = "debug", skip_all)]
 async fn remove_user_from_group<S, U, AC>(
   user: &U,
-  groups: &Arc<CollabGroupControl<S, U, AC>>,
+  groups: &Arc<AllCollabGroup<S, U, AC>>,
   editing: &Editing,
 ) where
   S: CollabStorage,
@@ -412,13 +441,13 @@ async fn remove_user_from_group<S, U, AC>(
   }
 }
 
-impl<S, U, AC> actix::Supervised for CollabServer<S, U, AC>
+impl<S, U, AC> actix::Supervised for RealtimeServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
   AC: CollabAccessControl + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<CollabServer<S, U, AC>>) {
+  fn restarting(&mut self, _ctx: &mut Context<RealtimeServer<S, U, AC>>) {
     warn!("restarting");
   }
 }
@@ -429,7 +458,7 @@ pub struct CollabClientStream {
   /// will broadcast the message to all connected clients.
   ///
   /// The message flow:
-  /// ClientSession(websocket) -> [CollabServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
+  /// ClientSession(websocket) -> [RealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
   pub(crate) stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
 }
 
@@ -524,4 +553,15 @@ where
       uid: user.uid(),
     }
   }
+}
+
+pub type RTCommandSender = tokio::sync::mpsc::Sender<RTCommand>;
+pub type RTCommandReceiver = tokio::sync::mpsc::Receiver<RTCommand>;
+
+pub type EncodeCollabSender = tokio::sync::oneshot::Sender<Option<EncodedCollab>>;
+pub enum RTCommand {
+  GetEncodeCollab {
+    object_id: String,
+    ret: EncodeCollabSender,
+  },
 }

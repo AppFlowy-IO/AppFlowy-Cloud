@@ -1,5 +1,5 @@
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
-use crate::biz::collab::storage::CollabPostgresDBStorage;
+use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 
 use crate::config::config::Config;
@@ -31,7 +31,7 @@ pub struct AppState {
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: RedisClient,
-  pub collab_storage: Arc<CollabPostgresDBStorage>,
+  pub collab_storage: Arc<CollabStorageImpl>,
   pub collab_access_control: CollabAccessControlImpl,
   pub workspace_access_control: WorkspaceAccessControlImpl,
   pub bucket_storage: Arc<S3BucketStorage>,

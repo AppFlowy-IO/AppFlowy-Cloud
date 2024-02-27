@@ -2,7 +2,7 @@ use crate::collab::{collab_db_ops, is_collab_exists};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
-use collab::core::collab::MutexCollab;
+
 use collab::core::collab_plugin::EncodedCollab;
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
@@ -11,8 +11,9 @@ use database_entity::dto::{
 
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
+
 use tokio::time::sleep;
 use tracing::{debug, event, warn, Level};
 use validator::Validate;
@@ -60,10 +61,6 @@ pub trait CollabStorage: Send + Sync + 'static {
 
   fn encode_collab_mem_hit_rate(&self) -> f64;
 
-  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>);
-
-  async fn remove_collab_cache(&self, object_id: &str);
-
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
 
   /// Insert/update a new collaboration in the storage.
@@ -96,6 +93,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    is_collab_init: bool,
   ) -> DatabaseResult<EncodedCollab>;
 
   async fn batch_get_collab(
@@ -143,14 +141,6 @@ where
     self.as_ref().encode_collab_mem_hit_rate()
   }
 
-  async fn cache_collab(&self, object_id: &str, collab: Weak<MutexCollab>) {
-    self.as_ref().cache_collab(object_id, collab).await
-  }
-
-  async fn remove_collab_cache(&self, object_id: &str) {
-    self.as_ref().remove_collab_cache(object_id).await
-  }
-
   async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
     self.as_ref().upsert_collab(uid, params).await
   }
@@ -172,8 +162,12 @@ where
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    is_collab_init: bool,
   ) -> DatabaseResult<EncodedCollab> {
-    self.as_ref().get_collab_encoded(uid, params).await
+    self
+      .as_ref()
+      .get_collab_encoded(uid, params, is_collab_init)
+      .await
   }
 
   async fn batch_get_collab(

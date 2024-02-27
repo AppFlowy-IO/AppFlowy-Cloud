@@ -107,7 +107,11 @@ where
 
     let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
     tokio::task::spawn_local(async move {
-      let mut interval = interval(Duration::from_secs(60));
+      let mut interval = if cfg!(debug_assertions) {
+        interval(Duration::from_secs(10))
+      } else {
+        interval(Duration::from_secs(60))
+      };
       loop {
         interval.tick().await;
         if let Some(groups) = weak_groups.upgrade() {

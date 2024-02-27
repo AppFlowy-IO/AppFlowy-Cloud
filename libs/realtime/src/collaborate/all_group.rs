@@ -99,10 +99,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) {
-    event!(tracing::Level::TRACE, "New group:{}", object_id);
     let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![]);
-
-    // The lifecycle of the collab is managed by the group.
     let plugin = CollabStoragePlugin::new(
       uid,
       workspace_id,
@@ -113,6 +110,7 @@ where
     collab.add_plugin(Box::new(plugin));
     collab.initialize().await;
 
+    // The lifecycle of the collab is managed by the group.
     let group = Arc::new(CollabGroup::new(object_id.to_string(), collab_type, collab).await);
     debug!("[realtime]: {} create group:{}", uid, object_id);
     self.group_by_object_id.insert(object_id.to_string(), group);

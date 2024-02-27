@@ -4,7 +4,7 @@ use database::collab::upsert_collab_member_with_txn;
 use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use database::user::select_uid_from_email;
 use database::workspace::{
-  delete_from_workspace, delete_workspace_members, insert_user_workspace,
+  change_workspace_icon, delete_from_workspace, delete_workspace_members, insert_user_workspace,
   insert_workspace_member_with_txn, rename_workspace, select_all_user_workspaces, select_workspace,
   select_workspace_member_list, update_updated_at_of_workspace, upsert_workspace_member,
 };
@@ -39,10 +39,14 @@ pub async fn patch_workspace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   workspace_name: Option<&str>,
+  workspace_icon: Option<&str>,
 ) -> Result<(), AppResponseError> {
   let mut tx = pg_pool.begin().await?;
   if let Some(workspace_name) = workspace_name {
     rename_workspace(&mut tx, workspace_id, workspace_name).await?;
+  }
+  if let Some(workspace_icon) = workspace_icon {
+    change_workspace_icon(&mut tx, workspace_id, workspace_icon).await?;
   }
   tx.commit().await?;
   Ok(())

@@ -9,12 +9,11 @@ use database_entity::dto::{
   InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
-use collab::preclude::Collab;
 use sqlx::{Executor, PgPool, Postgres, Transaction};
 use std::collections::HashMap;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
+
 use tokio::time::sleep;
 use tracing::{debug, event, warn, Level};
 use validator::Validate;
@@ -94,6 +93,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    is_collab_init: bool,
   ) -> DatabaseResult<EncodedCollab>;
 
   async fn batch_get_collab(
@@ -162,8 +162,12 @@ where
     &self,
     uid: &i64,
     params: QueryCollabParams,
+    is_collab_init: bool,
   ) -> DatabaseResult<EncodedCollab> {
-    self.as_ref().get_collab_encoded(uid, params).await
+    self
+      .as_ref()
+      .get_collab_encoded(uid, params, is_collab_init)
+      .await
   }
 
   async fn batch_get_collab(

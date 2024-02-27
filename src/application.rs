@@ -28,9 +28,7 @@ use anyhow::{Context, Error};
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
-use realtime::collaborate::{
-  RealtimeServer, RealtimeServerCommandReceiver, RealtimeServerCommandSender,
-};
+use realtime::collaborate::{RTCommandReceiver, RTCommandSender, RealtimeServer};
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -49,7 +47,7 @@ impl Application {
   pub async fn build(
     config: Config,
     state: AppState,
-    rt_cmd_recv: RealtimeServerCommandReceiver,
+    rt_cmd_recv: RTCommandReceiver,
   ) -> Result<Self, anyhow::Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
@@ -72,7 +70,7 @@ pub async fn run(
   listener: TcpListener,
   state: AppState,
   config: Config,
-  rt_cmd_recv: RealtimeServerCommandReceiver,
+  rt_cmd_recv: RTCommandReceiver,
 ) -> Result<Server, anyhow::Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
@@ -157,10 +155,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(
-  config: &Config,
-  rt_cmd_tx: RealtimeServerCommandSender,
-) -> Result<AppState, Error> {
+pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<AppState, Error> {
   // Print the feature flags
   if cfg!(feature = "disable_access_control") {
     info!("Access control is disabled");

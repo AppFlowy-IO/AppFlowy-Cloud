@@ -1,4 +1,4 @@
-use crate::collaborate::group_control::{CollabGroup, CollabGroupControl};
+use crate::collaborate::group_control::CollabGroupControl;
 use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::collaborate::{broadcast_message, CollabAccessControl, CollabClientStream};
 use crate::entities::{Editing, RealtimeUser};
@@ -12,7 +12,7 @@ use futures_util::StreamExt;
 use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
 use std::collections::HashSet;
 use std::sync::Arc;
-use tracing::{error, trace, warn};
+use tracing::{error, info, instrument, trace, warn};
 
 pub enum GroupCommand<U> {
   HandleCollabMessage {
@@ -25,15 +25,21 @@ pub enum GroupCommand<U> {
   },
 }
 
-pub type GroupControlCommandSender<U> = tokio::sync::mpsc::Sender<GroupCommand<U>>;
-pub type GroupControlCommandReceiver<U> = tokio::sync::mpsc::Receiver<GroupCommand<U>>;
+pub type GroupCommandSender<U> = tokio::sync::mpsc::Sender<GroupCommand<U>>;
+pub type GroupCommandReceiver<U> = tokio::sync::mpsc::Receiver<GroupCommand<U>>;
 
 pub struct GroupCommandRunner<S, U, AC> {
   pub group_control: Arc<CollabGroupControl<S, U, AC>>,
   pub client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
   pub edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   pub access_control: Arc<AC>,
-  pub recv: Option<GroupControlCommandReceiver<U>>,
+  pub recv: Option<GroupCommandReceiver<U>>,
+}
+
+impl<S, U, AC> Drop for GroupCommandRunner<S, U, AC> {
+  fn drop(&mut self) {
+    info!("GroupCommandRunner drop");
+  }
 }
 
 impl<S, U, AC> GroupCommandRunner<S, U, AC>
@@ -64,12 +70,10 @@ where
           },
           GroupCommand::EncodeCollab { object_id, ret } => {
             let group = self.group_control.get_group(&object_id).await;
-            let encode_collab = match group {
-              None => None,
-              Some(group) => Some(group.encode_collab().await),
-            };
-
-            if let Err(err) = ret.send(encode_collab) {
+            if let Err(_err) = match group {
+              None => ret.send(None),
+              Some(group) => ret.send(Some(group.encode_collab().await)),
+            } {
               warn!("Send encode collab fail");
             }
           },
@@ -90,6 +94,7 @@ where
   ///      - If the group exists: The message is sent to the group for synchronization as per [CollabSyncProtocol].
   ///      - If the group does not exist: The client is prompted to send an 'init sync' message first.
 
+  #[instrument(level = "trace", skip_all)]
   async fn handle_collab_message(
     &self,
     user: U,

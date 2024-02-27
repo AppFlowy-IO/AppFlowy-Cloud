@@ -12,7 +12,6 @@ use realtime_entity::collab_msg::CollabMessage;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::collaborate::group::GroupControlCommandSender;
 use tracing::{debug, error, event, instrument, trace};
 
 pub struct CollabGroupControl<S, U, AC> {
@@ -104,51 +103,23 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) {
-    let group = self
-      .init_group(uid, workspace_id, object_id, collab_type)
-      .await;
-    debug!("[realtime]: {} create group:{}", uid, object_id);
-    self.group_by_object_id.insert(object_id.to_string(), group);
-  }
-
-  #[tracing::instrument(level = "trace", skip(self))]
-  async fn init_group(
-    &self,
-    uid: i64,
-    workspace_id: &str,
-    object_id: &str,
-    collab_type: CollabType,
-  ) -> Arc<CollabGroup<U>> {
     event!(tracing::Level::TRACE, "New group:{}", object_id);
-    let collab = Arc::new(Mutex::new(Collab::new_with_origin(
-      CollabOrigin::Server,
-      object_id,
-      vec![],
-    )));
-    let broadcast = CollabBroadcast::new(object_id, 10);
+    let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![]);
 
     // The lifecycle of the collab is managed by the group.
-    let group = Arc::new(CollabGroup::new(
-      object_id.to_string(),
-      collab_type.clone(),
-      collab.clone(),
-      broadcast,
-    ));
     let plugin = CollabStoragePlugin::new(
       uid,
       workspace_id,
-      collab_type,
+      collab_type.clone(),
       self.storage.clone(),
       self.access_control.clone(),
     );
-    {
-      let mut lock_guard = collab.lock().await;
-      lock_guard.add_plugin(Box::new(plugin));
-      lock_guard.initialize().await;
-    }
+    collab.add_plugin(Box::new(plugin));
+    collab.initialize().await;
 
-    group.observe_collab(&collab).await;
-    group
+    let group = Arc::new(CollabGroup::new(object_id.to_string(), collab_type, collab).await);
+    debug!("[realtime]: {} create group:{}", uid, object_id);
+    self.group_by_object_id.insert(object_id.to_string(), group);
   }
 
   pub async fn number_of_groups(&self) -> usize {
@@ -180,16 +151,13 @@ impl<U> CollabGroup<U>
 where
   U: RealtimeUser,
 {
-  pub fn new(
-    object_id: String,
-    collab_type: CollabType,
-    collab: Arc<Mutex<Collab>>,
-    broadcast: CollabBroadcast,
-  ) -> Self {
+  pub async fn new(object_id: String, collab_type: CollabType, mut collab: Collab) -> Self {
+    let broadcast = CollabBroadcast::new(&object_id, 10);
+    broadcast.observe_collab_changes(&mut collab).await;
     Self {
       object_id,
       collab_type,
-      collab,
+      collab: Arc::new(Mutex::new(collab)),
       broadcast,
       subscribers: Default::default(),
       user_by_user_device: Default::default(),
@@ -198,10 +166,6 @@ where
 
   pub async fn encode_collab(&self) -> EncodedCollab {
     self.collab.lock().await.encode_collab_v1()
-  }
-
-  pub async fn observe_collab(&self, collab: &Arc<Mutex<Collab>>) {
-    self.broadcast.observe_collab_changes(collab).await;
   }
 
   pub fn contains_user(&self, user: &U) -> bool {

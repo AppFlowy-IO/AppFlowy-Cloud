@@ -1,5 +1,5 @@
 use crate::client::ClientWSSink;
-use crate::collaborate::group::{GroupCommand, GroupCommandRunner, GroupControlCommandSender};
+use crate::collaborate::group::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::collaborate::group_control::CollabGroupControl;
 use crate::collaborate::permission::CollabAccessControl;
 use crate::collaborate::RealtimeMetrics;
@@ -49,7 +49,7 @@ pub struct RealtimeServer<S, U, AC> {
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
   client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-  group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
+  group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
@@ -65,7 +65,7 @@ where
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<RealtimeMetrics>,
-    mut command_recv: RealtimeServerCommandReceiver,
+    mut command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
     let groups = Arc::new(CollabGroupControl::new(
@@ -74,7 +74,7 @@ where
     ));
     let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
-    let group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>> =
+    let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
       Arc::new(Default::default());
 
     let weak_groups = Arc::downgrade(&groups);
@@ -86,13 +86,18 @@ where
     tokio::spawn(async move {
       while let Some(cmd) = command_recv.recv().await {
         match cmd {
-          RealtimeServerCommand::GetEncodeCollab { object_id, ret } => {
+          RTCommand::GetEncodeCollab { object_id, ret } => {
             match cloned_group_sender_by_object_id.get(&object_id) {
               Some(sender) => {
-                let _ = sender.send(GroupCommand::EncodeCollab {
-                  object_id: object_id.clone(),
-                  ret,
-                });
+                if let Err(err) = sender
+                  .send(GroupCommand::EncodeCollab {
+                    object_id: object_id.clone(),
+                    ret,
+                  })
+                  .await
+                {
+                  error!("Send group command error: {}", err);
+                }
               },
               None => {
                 let _ = ret.send(None);
@@ -139,7 +144,7 @@ where
 
   fn process_realtime_message(
     user: U,
-    group_sender_by_object_id: Arc<DashMap<String, GroupControlCommandSender<U>>>,
+    group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
     client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
     groups: Arc<CollabGroupControl<S, U, AC>>,
     edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
@@ -147,7 +152,6 @@ where
     realtime_msg: RealtimeMessage,
   ) -> Pin<Box<impl Future<Output = Result<(), RealtimeError>>>> {
     Box::pin(async move {
-      trace!("Receive client:{} message:{}", user.uid(), realtime_msg);
       match realtime_msg {
         RealtimeMessage::Collab(collab_message) => {
           let old_sender = group_sender_by_object_id
@@ -178,7 +182,7 @@ where
               }
             },
           };
-
+          trace!("Receive client:{} message:{}", user.uid(), collab_message);
           if let Err(err) = sender
             .send(GroupCommand::HandleCollabMessage {
               user,
@@ -550,11 +554,11 @@ where
   }
 }
 
-pub type RealtimeServerCommandSender = tokio::sync::mpsc::Sender<RealtimeServerCommand>;
-pub type RealtimeServerCommandReceiver = tokio::sync::mpsc::Receiver<RealtimeServerCommand>;
+pub type RTCommandSender = tokio::sync::mpsc::Sender<RTCommand>;
+pub type RTCommandReceiver = tokio::sync::mpsc::Receiver<RTCommand>;
 
 pub type EncodeCollabSender = tokio::sync::oneshot::Sender<Option<EncodedCollab>>;
-pub enum RealtimeServerCommand {
+pub enum RTCommand {
   GetEncodeCollab {
     object_id: String,
     ret: EncodeCollabSender,

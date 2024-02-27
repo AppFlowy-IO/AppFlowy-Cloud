@@ -69,10 +69,8 @@ impl CollabBroadcast {
     }
   }
 
-  pub async fn observe_collab_changes(&self, collab: &Arc<Mutex<Collab>>) {
+  pub async fn observe_collab_changes(&self, collab: &mut Collab) {
     let (doc_sub, awareness_sub) = {
-      let mut mutex_collab = collab.lock().await;
-
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
       let broadcast_sink = self.sender.clone();
@@ -83,7 +81,7 @@ impl CollabBroadcast {
       // sends an update to the document that alters its state, the document observer will trigger
       // an update event. This event is then broadcast to all connected clients. After broadcasting, all
       // connected clients will receive the update and apply it to their local document state.
-      let doc_sub = mutex_collab
+      let doc_sub = collab
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
@@ -110,7 +108,7 @@ impl CollabBroadcast {
       let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
-      let awareness_sub = mutex_collab
+      let awareness_sub = collab
         .get_mut_awareness()
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {

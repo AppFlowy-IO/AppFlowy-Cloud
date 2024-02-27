@@ -374,29 +374,24 @@ where
     sink: &Arc<CollabSink<Sink, CollabMessage>>,
     _broadcast_seq_num: &Arc<AtomicU32>,
   ) -> Result<(), SyncError> {
-    let mut decoder = DecoderV1::new(Cursor::new(payload));
-    let reader = MessageReader::new(&mut decoder);
-    for msg in reader {
-      let msg = msg?;
-      trace!(" {}", msg);
-      let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-      if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, collab, msg)? {
-        if is_sync_step_1 {
-          // flush
-          match collab.try_lock() {
-            None => warn!("Failed to acquire lock for flushing collab"),
-            Some(collab_guard) => collab_guard.flush(),
-          }
+    if let Some(mut collab) = collab.try_lock() {
+      let mut decoder = DecoderV1::new(Cursor::new(payload));
+      let reader = MessageReader::new(&mut decoder);
+      for msg in reader {
+        let msg = msg?;
+        trace!(" {}", msg);
+        let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+        if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, &mut collab, msg)?
+        {
+          let object_id = object_id.to_string();
+          sink.queue_msg(|msg_id| {
+            if is_sync_step_1 {
+              ServerInit::new(origin.clone(), object_id, payload, msg_id).into()
+            } else {
+              UpdateSync::new(origin.clone(), object_id, payload, msg_id).into()
+            }
+          });
         }
-
-        let object_id = object_id.to_string();
-        sink.queue_msg(|msg_id| {
-          if is_sync_step_1 {
-            ServerInit::new(origin.clone(), object_id, payload, msg_id).into()
-          } else {
-            UpdateSync::new(origin.clone(), object_id, payload, msg_id).into()
-          }
-        });
       }
     }
     Ok(())

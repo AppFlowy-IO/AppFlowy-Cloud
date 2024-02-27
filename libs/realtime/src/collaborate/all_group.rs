@@ -8,7 +8,7 @@ use collab_entity::CollabType;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use std::sync::Arc;
-use tracing::{debug, error, event, instrument};
+use tracing::{debug, error, instrument};
 
 pub struct AllCollabGroup<S, U, AC> {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,

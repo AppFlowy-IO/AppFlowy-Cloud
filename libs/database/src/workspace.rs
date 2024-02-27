@@ -73,6 +73,33 @@ pub async fn rename_workspace(
   Ok(())
 }
 
+#[inline]
+pub async fn change_workspace_icon(
+  tx: &mut Transaction<'_, sqlx::Postgres>,
+  workspace_id: &Uuid,
+  icon: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE public.af_workspace
+      SET icon = $1
+      WHERE workspace_id = $2
+    "#,
+    icon,
+    workspace_id,
+  )
+  .execute(tx.deref_mut())
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to change workspace icon, workspace_id: {}",
+      workspace_id
+    );
+  }
+  Ok(())
+}
+
 /// Checks whether a user, identified by a UUID, is an 'Owner' of a workspace, identified by its
 /// workspace_id.
 #[inline]

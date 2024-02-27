@@ -16,6 +16,7 @@ pub struct AFWorkspaceRow {
   pub workspace_type: i32,
   pub deleted_at: Option<DateTime<Utc>>,
   pub workspace_name: Option<String>,
+  pub icon: Option<String>,
 }
 
 impl TryFrom<AFWorkspaceRow> for AFWorkspace {
@@ -31,6 +32,7 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
 
     let workspace_name = value.workspace_name.unwrap_or_default();
     let created_at = value.created_at.unwrap_or_else(Utc::now);
+    let icon = value.icon.unwrap_or_default();
 
     Ok(Self {
       workspace_id: value.workspace_id,
@@ -39,6 +41,7 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
       workspace_type: value.workspace_type,
       workspace_name,
       created_at,
+      icon,
     })
   }
 }

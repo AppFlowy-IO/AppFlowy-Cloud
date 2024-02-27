@@ -6,10 +6,11 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
+use std::rc::Rc;
 
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::CollabMessage;
-use std::sync::Arc;
+
 use tokio::sync::Mutex;
 
 use tracing::trace;
@@ -17,7 +18,7 @@ use tracing::trace;
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
   object_id: String,
-  collab: Arc<Mutex<Collab>>,
+  collab: Rc<Mutex<Collab>>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -44,7 +45,7 @@ where
     Self {
       object_id,
       collab_type,
-      collab: Arc::new(Mutex::new(collab)),
+      collab: Rc::new(Mutex::new(collab)),
       broadcast,
       subscribers: Default::default(),
       user_by_user_device: Default::default(),
@@ -136,12 +137,10 @@ where
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {
-    let sub = self.broadcast.subscribe(
-      subscriber_origin,
-      sink,
-      stream,
-      Arc::downgrade(&self.collab),
-    );
+    let sub =
+      self
+        .broadcast
+        .subscribe(subscriber_origin, sink, stream, Rc::downgrade(&self.collab));
 
     // Remove the old user if it exists
     let user_device = user.user_device();

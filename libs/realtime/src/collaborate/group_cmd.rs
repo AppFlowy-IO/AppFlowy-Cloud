@@ -36,12 +36,6 @@ pub struct GroupCommandRunner<S, U, AC> {
   pub recv: Option<GroupCommandReceiver<U>>,
 }
 
-impl<S, U, AC> Drop for GroupCommandRunner<S, U, AC> {
-  fn drop(&mut self) {
-    info!("GroupCommandRunner drop");
-  }
-}
-
 impl<S, U, AC> GroupCommandRunner<S, U, AC>
 where
   S: CollabStorage,

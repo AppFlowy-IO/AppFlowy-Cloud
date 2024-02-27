@@ -1,6 +1,7 @@
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab::core::awareness;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
+use std::rc::{Rc, Weak};
 
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -8,7 +9,6 @@ use futures_util::{SinkExt, StreamExt};
 use realtime_protocol::{handle_collab_message, Error};
 use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -37,9 +37,9 @@ pub struct CollabBroadcast {
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
-  broadcast_seq_num_counter: Arc<AtomicU32>,
+  broadcast_seq_num_counter: Rc<AtomicU32>,
   /// The last modified time of the document.
-  pub modified_at: Arc<parking_lot::Mutex<Instant>>,
+  pub modified_at: Rc<parking_lot::Mutex<Instant>>,
 }
 
 impl Drop for CollabBroadcast {
@@ -64,8 +64,8 @@ impl CollabBroadcast {
       sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
-      broadcast_seq_num_counter: Arc::new(Default::default()),
-      modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
+      broadcast_seq_num_counter: Rc::new(Default::default()),
+      modified_at: Rc::new(parking_lot::Mutex::new(Instant::now())),
     }
   }
 

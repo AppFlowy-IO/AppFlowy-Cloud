@@ -69,15 +69,6 @@ where
     self.subscribers.len()
   }
 
-  pub fn unsubscribe(&self, user: &U) {
-    if let Some(subscription) = self.subscribers.remove(user) {
-      let mut subscriber = subscription.1;
-      tokio::task::spawn_local(async move {
-        subscriber.stop().await;
-      });
-    }
-  }
-
   /// Subscribes a new connection to the broadcast group for collaborative activities.
   ///
   /// This method establishes a new subscription for a user, represented by a `sink`/`stream` pair.
@@ -164,10 +155,6 @@ where
       .user_by_user_device
       .insert(user_device, (*user).clone());
     self.subscribers.insert((*user).clone(), sub);
-  }
-
-  pub async fn is_empty(&self) -> bool {
-    self.subscribers.is_empty()
   }
 
   /// Check if the group is active. A group is considered active if it has at least one

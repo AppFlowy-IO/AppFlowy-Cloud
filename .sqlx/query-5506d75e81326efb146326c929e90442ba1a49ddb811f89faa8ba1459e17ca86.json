@@ -37,6 +37,11 @@
         "ordinal": 6,
         "name": "workspace_name",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "icon",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -52,7 +57,8 @@
       true,
       false,
       true,
-      true
+      true,
+      false
     ]
   },
   "hash": "5506d75e81326efb146326c929e90442ba1a49ddb811f89faa8ba1459e17ca86"

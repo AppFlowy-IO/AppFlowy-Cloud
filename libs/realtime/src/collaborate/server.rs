@@ -1,6 +1,6 @@
 use crate::client::ClientWSSink;
-use crate::collaborate::group::{GroupCommand, GroupCommandRunner, GroupCommandSender};
-use crate::collaborate::group_control::CollabGroupControl;
+use crate::collaborate::all_group::AllCollabGroup;
+use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::collaborate::permission::CollabAccessControl;
 use crate::collaborate::RealtimeMetrics;
 use crate::entities::{
@@ -32,7 +32,7 @@ pub struct RealtimeServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
-  groups: Arc<CollabGroupControl<S, U, AC>>,
+  groups: Arc<AllCollabGroup<S, U, AC>>,
   user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
@@ -68,10 +68,7 @@ where
     mut command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
-    let groups = Arc::new(CollabGroupControl::new(
-      storage.clone(),
-      access_control.clone(),
-    ));
+    let groups = Arc::new(AllCollabGroup::new(storage.clone(), access_control.clone()));
     let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
@@ -146,7 +143,7 @@ where
     user: U,
     group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
     client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-    groups: Arc<CollabGroupControl<S, U, AC>>,
+    groups: Arc<AllCollabGroup<S, U, AC>>,
     edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
     access_control: Arc<AC>,
     realtime_msg: RealtimeMessage,
@@ -167,7 +164,7 @@ where
                 Entry::Vacant(entry) => {
                   let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
                   let runner = GroupCommandRunner {
-                    group_control: groups.clone(),
+                    all_groups: groups.clone(),
                     client_stream_by_user: client_stream_by_user.clone(),
                     edit_collab_by_user: edit_collab_by_user.clone(),
                     access_control: access_control.clone(),
@@ -204,7 +201,7 @@ where
 }
 
 async fn remove_user<S, U, AC>(
-  groups: &Arc<CollabGroupControl<S, U, AC>>,
+  groups: &Arc<AllCollabGroup<S, U, AC>>,
   editing_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
   user: &U,
 ) where
@@ -421,7 +418,7 @@ pub async fn broadcast_message<U>(
 #[instrument(level = "debug", skip_all)]
 async fn remove_user_from_group<S, U, AC>(
   user: &U,
-  groups: &Arc<CollabGroupControl<S, U, AC>>,
+  groups: &Arc<AllCollabGroup<S, U, AC>>,
   editing: &Editing,
 ) where
   S: CollabStorage,

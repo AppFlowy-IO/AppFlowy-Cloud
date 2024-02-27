@@ -1,4 +1,4 @@
-use crate::collaborate::group_control::CollabGroupControl;
+use crate::collaborate::all_group::AllCollabGroup;
 use crate::collaborate::{CollabAccessControl, CollabClientStream};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::StreamError;
@@ -20,7 +20,7 @@ pub(crate) struct CollabUserMessage<'a, U> {
 
 pub(crate) struct SubscribeGroup<'a, S, U, AC> {
   pub(crate) message: &'a CollabUserMessage<'a, U>,
-  pub(crate) groups: &'a Arc<CollabGroupControl<S, U, AC>>,
+  pub(crate) groups: &'a Arc<AllCollabGroup<S, U, AC>>,
   pub(crate) edit_collab_by_user: &'a Arc<DashMap<U, HashSet<Editing>>>,
   pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream>>,
   pub(crate) access_control: &'a Arc<AC>,

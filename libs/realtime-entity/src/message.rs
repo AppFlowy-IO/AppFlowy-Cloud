@@ -1,4 +1,4 @@
-use crate::collab_msg::CollabMessage;
+use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -26,33 +26,39 @@ pub enum RealtimeMessage {
   Collab(CollabMessage),
   User(UserMessage),
   System(SystemMessage),
-  MultipleCollab(Vec<CollabMessage>),
+  ClientCollabV1(Vec<ClientCollabMessage>),
+  ServerCollabV1(Vec<ServerCollabMessage>),
 }
 
 impl RealtimeMessage {
-  pub fn collab_messages(self) -> Vec<CollabMessage> {
-    match self {
-      RealtimeMessage::Collab(msg) => vec![msg],
-      RealtimeMessage::MultipleCollab(msgs) => msgs,
-      RealtimeMessage::User(_) => vec![],
-      RealtimeMessage::System(_) => vec![],
-    }
-  }
-
   pub fn size(&self) -> usize {
     match self {
       RealtimeMessage::Collab(msg) => msg.len(),
-      RealtimeMessage::MultipleCollab(msgs) => msgs.iter().map(|msg| msg.len()).sum(),
       RealtimeMessage::User(_) => 1,
       RealtimeMessage::System(_) => 1,
+      RealtimeMessage::ClientCollabV1(msgs) => msgs.iter().map(|msg| msg.size()).sum(),
+      RealtimeMessage::ServerCollabV1(msgs) => msgs.iter().map(|msg| msg.size()).sum(),
     }
   }
 
   pub fn is_collab_message(&self) -> bool {
     matches!(
       self,
-      RealtimeMessage::Collab(_) | RealtimeMessage::MultipleCollab(_)
+      RealtimeMessage::Collab(_) | RealtimeMessage::ClientCollabV1(_)
     )
+  }
+
+  pub fn into_client_collab_message(self) -> Vec<ClientCollabMessage> {
+    match self {
+      RealtimeMessage::Collab(collab_message) => {
+        match ClientCollabMessage::try_from(collab_message) {
+          Ok(msg) => vec![msg],
+          Err(_) => vec![],
+        }
+      },
+      RealtimeMessage::ClientCollabV1(collab_messages) => collab_messages,
+      _ => vec![],
+    }
   }
 }
 
@@ -62,7 +68,8 @@ impl Display for RealtimeMessage {
       RealtimeMessage::Collab(msg) => f.write_fmt(format_args!("Collab:{}", msg)),
       RealtimeMessage::User(_) => f.write_fmt(format_args!("User")),
       RealtimeMessage::System(_) => f.write_fmt(format_args!("System")),
-      RealtimeMessage::MultipleCollab(_) => f.write_fmt(format_args!("MultipleCollab")),
+      RealtimeMessage::ClientCollabV1(_) => f.write_fmt(format_args!("ClientCollabV1")),
+      RealtimeMessage::ServerCollabV1(_) => f.write_fmt(format_args!("ServerCollabV1")),
     }
   }
 }

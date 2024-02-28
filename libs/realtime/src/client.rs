@@ -219,12 +219,7 @@ where
   type Result = ();
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
-    match &msg {
-      RealtimeMessage::Collab(_) => ctx.binary(msg),
-      RealtimeMessage::User(_) => ctx.binary(msg),
-      RealtimeMessage::System(_) => ctx.binary(msg),
-      RealtimeMessage::MultipleCollab(_) => ctx.binary(msg),
-    }
+    ctx.binary(msg);
   }
 }
 

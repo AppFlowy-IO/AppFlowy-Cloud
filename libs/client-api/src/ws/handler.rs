@@ -1,5 +1,6 @@
 use crate::af_spawn;
 use futures_util::Sink;
+use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::RealtimeMessage;
 use std::fmt::Debug;
 use std::pin::Pin;
@@ -11,7 +12,7 @@ use tracing::{trace, warn};
 
 pub struct WebSocketChannel<T> {
   object_id: String,
-  rt_msg_sender: Sender<RealtimeMessage>,
+  rt_msg_sender: Sender<ClientCollabMessage>,
   receiver: Sender<T>,
 }
 
@@ -25,7 +26,7 @@ impl<T> WebSocketChannel<T>
 where
   T: Into<RealtimeMessage> + Clone + Send + Sync + 'static,
 {
-  pub fn new(object_id: &str, rt_msg_sender: Sender<RealtimeMessage>) -> Self {
+  pub fn new(object_id: &str, rt_msg_sender: Sender<ClientCollabMessage>) -> Self {
     let object_id = object_id.to_string();
     let (receiver, _) = channel(1000);
     Self {
@@ -44,14 +45,13 @@ where
   }
 
   /// Use to send message to server via WebSocket.
-  pub fn sink(&self) -> BroadcastSink<T> {
-    let (tx, mut rx) = unbounded_channel::<T>();
+  pub fn sink(&self) -> BroadcastSink<ClientCollabMessage> {
+    let (tx, mut rx) = unbounded_channel::<ClientCollabMessage>();
     let cloned_sender = self.rt_msg_sender.clone();
     let object_id = self.object_id.clone();
     af_spawn(async move {
       while let Some(msg) = rx.recv().await {
-        let realtime_msg: RealtimeMessage = msg.into();
-        let _ = cloned_sender.send(realtime_msg);
+        let _ = cloned_sender.send(msg);
       }
       trace!("WebSocketChannel {} sink closed", object_id);
     });

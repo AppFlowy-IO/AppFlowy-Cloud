@@ -6,7 +6,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::{CollabObject, CollabType};
 use futures_util::SinkExt;
-use realtime_entity::collab_msg::{CollabMessage, UpdateSync};
+use realtime_entity::collab_msg::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use realtime_protocol::{Message, SyncMessage};
 use tokio_stream::StreamExt;
 
@@ -36,8 +36,8 @@ impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
 impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
-  Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
   #[allow(clippy::too_many_arguments)]
@@ -122,8 +122,8 @@ where
 impl<E, Sink, Stream, C> CollabPlugin for SyncPlugin<Sink, Stream, C>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
-  Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
   fn did_init(&self, collab: &Collab, _object_id: &str, _last_sync_at: i64) {
@@ -134,13 +134,16 @@ where
     let weak_sync_queue = Arc::downgrade(&self.sync_queue);
     let update = update.to_vec();
     let object_id = self.object.object_id.clone();
+    let collab_type = self.object.collab_type.clone();
     let cloned_origin = origin.clone();
 
     af_spawn(async move {
       if let Some(sync_queue) = weak_sync_queue.upgrade() {
         let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
-        sync_queue
-          .queue_msg(|msg_id| UpdateSync::new(cloned_origin, object_id, payload, msg_id).into());
+        sync_queue.queue_msg(|msg_id| {
+          let update_sync = UpdateSync::new(cloned_origin, object_id, payload, msg_id, collab_type);
+          ClientCollabMessage::new_update_sync(update_sync)
+        });
       }
     });
   }

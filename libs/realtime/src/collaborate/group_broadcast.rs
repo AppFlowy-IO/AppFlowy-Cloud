@@ -21,7 +21,7 @@ use yrs::UpdateSubscription;
 
 use crate::error::RealtimeError;
 use realtime_entity::collab_msg::{
-  AckCode, CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage,
+  AckCode, ClientCollabMessage, CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage,
 };
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
@@ -171,7 +171,7 @@ impl CollabBroadcast {
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<anyhow::Error> + Send + Sync + 'static,
   {
@@ -227,7 +227,7 @@ impl CollabBroadcast {
                     None => break, // break the loop if the collab is dropped
                     Some(collab) => {
                       // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
-                      if object_id == collab_msg.object_id() && collab_msg.payload().is_some() {
+                      if object_id == collab_msg.object_id() {
                         handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
                       } else {
                         warn!("Invalid collab message: {:?}", collab_msg);
@@ -258,57 +258,52 @@ impl CollabBroadcast {
 async fn handle_client_collab_message<Sink>(
   object_id: &str,
   sink: &mut Sink,
-  collab_msg: &CollabMessage,
+  collab_msg: &ClientCollabMessage,
   collab: &Mutex<Collab>,
 ) where
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
-  match collab_msg.payload() {
-    None => {},
-    Some(payload) => {
-      let mut decoder = DecoderV1::from(payload.as_ref());
-      let origin = collab_msg.origin().clone();
-      let reader = MessageReader::new(&mut decoder);
-      for msg in reader {
-        match msg {
-          Ok(msg) => {
-            let mut resps = vec![];
-            if let Ok(mut collab) = collab.try_lock() {
-              let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
-              if let Some(msg_id) = collab_msg.msg_id() {
-                match result {
-                  Ok(payload) => {
-                    let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                      .with_payload(payload.unwrap_or_default());
-                    resps.push(resp);
-                  },
-                  Err(err) => {
-                    error!("handle collab:{} message error:{}", object_id, err);
-                    let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                      .with_code(ack_code_from_error(&err));
-                    resps.push(resp);
-                  },
-                }
-              }
+  let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
+  let origin = collab_msg.origin().clone();
+  let reader = MessageReader::new(&mut decoder);
+  for msg in reader {
+    match msg {
+      Ok(msg) => {
+        let mut resps = vec![];
+        if let Ok(mut collab) = collab.try_lock() {
+          let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
+          if let Some(msg_id) = collab_msg.msg_id() {
+            match result {
+              Ok(payload) => {
+                let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
+                  .with_payload(payload.unwrap_or_default());
+                resps.push(resp);
+              },
+              Err(err) => {
+                error!("handle collab:{} message error:{}", object_id, err);
+                let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
+                  .with_code(ack_code_from_error(&err));
+                resps.push(resp);
+              },
             }
-
-            for resp in resps {
-              if let Err(err) = sink.send(resp.into()).await {
-                trace!("fail to send response to client: {}", err);
-              }
-            }
-          },
-          Err(e) => {
-            error!(
-              "object id:{} => parser sync message failed: {:?}",
-              object_id, e
-            );
-            break;
-          },
+          }
         }
-      }
-    },
+
+        for resp in resps {
+          if let Err(err) = sink.send(resp.into()).await {
+            trace!("fail to send response to client: {}", err);
+          }
+        }
+      },
+      Err(e) => {
+        error!(
+          "object id:{} => parser sync message failed: {:?}",
+          object_id, e
+        );
+        break;
+      },
+    }
   }
 }
 

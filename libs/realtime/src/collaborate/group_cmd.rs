@@ -9,15 +9,15 @@ use collab::core::collab_plugin::EncodedCollab;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
-use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
 
 pub enum GroupCommand<U> {
-  HandleCollabMessage {
+  HandleClientCollabMessage {
     user: U,
-    collab_message: CollabMessage,
+    collab_message: ClientCollabMessage,
   },
   EncodeCollab {
     object_id: String,
@@ -54,7 +54,7 @@ where
     stream
       .for_each(|command| async {
         match command {
-          GroupCommand::HandleCollabMessage {
+          GroupCommand::HandleClientCollabMessage {
             user,
             collab_message,
           } => {
@@ -92,7 +92,7 @@ where
   async fn handle_collab_message(
     &self,
     user: U,
-    collab_message: CollabMessage,
+    collab_message: ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
     // 1.Check the client is connected with the websocket server.
     if self.client_stream_by_user.get(&user).is_none() {
@@ -139,7 +139,7 @@ where
   async fn subscribe_group(
     &self,
     user: &U,
-    collab_message: &CollabMessage,
+    collab_message: &ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
     SubscribeGroup {
       message: &CollabUserMessage {
@@ -155,11 +155,11 @@ where
     .await;
     Ok(())
   }
-  async fn create_group(&self, collab_message: &CollabMessage) -> Result<(), RealtimeError> {
+  async fn create_group(&self, collab_message: &ClientCollabMessage) -> Result<(), RealtimeError> {
     let object_id = collab_message.object_id();
     match collab_message {
-      CollabMessage::ClientInitSync(client_init) => {
-        let uid = client_init
+      ClientCollabMessage::ClientInitSync { data, .. } => {
+        let uid = data
           .origin
           .client_user_id()
           .ok_or(RealtimeError::ExpectInitSync(
@@ -168,12 +168,7 @@ where
 
         self
           .all_groups
-          .create_group(
-            uid,
-            &client_init.workspace_id,
-            object_id,
-            client_init.collab_type.clone(),
-          )
+          .create_group(uid, &data.workspace_id, object_id, data.collab_type.clone())
           .await;
 
         Ok(())

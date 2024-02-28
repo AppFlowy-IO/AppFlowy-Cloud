@@ -9,7 +9,7 @@ use dashmap::DashMap;
 use std::rc::Rc;
 
 use futures_util::{SinkExt, StreamExt};
-use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -131,7 +131,7 @@ where
     stream: Stream,
   ) where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {

@@ -265,8 +265,8 @@ impl InitSync {
 impl Display for InitSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client init: [{}|oid:{}|msg_id:{}|len:{}]",
-      self.origin,
+      "client init: [type:{}|oid:{}|msg_id:{}|len:{}]",
+      self.collab_type,
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -295,15 +295,23 @@ pub struct ServerInit {
   ///   }
   /// ```
   pub payload: Bytes,
+  pub collab_type: CollabType,
 }
 
 impl ServerInit {
-  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, msg_id: MsgId) -> Self {
+  pub fn new(
+    origin: CollabOrigin,
+    object_id: String,
+    payload: Vec<u8>,
+    msg_id: MsgId,
+    collab_type: CollabType,
+  ) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
       msg_id,
+      collab_type,
     }
   }
 }
@@ -344,15 +352,23 @@ pub struct UpdateSync {
   /// ```
   ///  
   pub payload: Bytes,
+  pub collab_type: CollabType,
 }
 
 impl UpdateSync {
-  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, msg_id: MsgId) -> Self {
+  pub fn new(
+    origin: CollabOrigin,
+    object_id: String,
+    payload: Vec<u8>,
+    msg_id: MsgId,
+    collab_type: CollabType,
+  ) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
       msg_id,
+      collab_type,
     }
   }
 
@@ -390,8 +406,8 @@ impl From<UpdateSync> for CollabMessage {
 impl Display for UpdateSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update sync: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "client update sync: [type:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.collab_type,
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -526,5 +542,307 @@ pub struct CloseCollabData {
 impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
     Self::Collab(msg)
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum Version {
+  V0 = 0,
+  V1 = 1,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ClientCollabMessage {
+  ClientInitSync { v: Version, data: InitSync },
+  ClientUpdateSync { v: Version, data: UpdateSync },
+  ServerInitSync(ServerInit),
+}
+
+impl ClientCollabMessage {
+  pub fn new_init_sync(data: InitSync) -> Self {
+    Self::ClientInitSync {
+      v: Version::V1,
+      data,
+    }
+  }
+
+  pub fn new_update_sync(data: UpdateSync) -> Self {
+    Self::ClientUpdateSync {
+      v: Version::V1,
+      data,
+    }
+  }
+
+  pub fn new_server_init_sync(data: ServerInit) -> Self {
+    Self::ServerInitSync(data)
+  }
+
+  pub fn version(&self) -> Version {
+    match self {
+      ClientCollabMessage::ClientInitSync { v, .. } => v.clone(),
+      ClientCollabMessage::ClientUpdateSync { v, .. } => v.clone(),
+      ClientCollabMessage::ServerInitSync(_) => Version::V1,
+    }
+  }
+
+  pub fn size(&self) -> usize {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => data.payload.len(),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => data.payload.len(),
+      ClientCollabMessage::ServerInitSync(msg) => msg.payload.len(),
+    }
+  }
+  pub fn object_id(&self) -> &str {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => &data.object_id,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => &data.object_id,
+      ClientCollabMessage::ServerInitSync(msg) => &msg.object_id,
+    }
+  }
+
+  pub fn origin(&self) -> &CollabOrigin {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => &data.origin,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => &data.origin,
+      ClientCollabMessage::ServerInitSync(msg) => &msg.origin,
+    }
+  }
+  pub fn payload(&self) -> &Bytes {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => &data.payload,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => &data.payload,
+      ClientCollabMessage::ServerInitSync(msg) => &msg.payload,
+    }
+  }
+  pub fn device_id(&self) -> Option<String> {
+    match self.origin() {
+      CollabOrigin::Client(origin) => Some(origin.device_id.clone()),
+      _ => None,
+    }
+  }
+
+  pub fn msg_id(&self) -> Option<MsgId> {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => Some(data.msg_id),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => Some(data.msg_id),
+      ClientCollabMessage::ServerInitSync(value) => Some(value.msg_id),
+    }
+  }
+}
+
+impl Display for ClientCollabMessage {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => Display::fmt(&data, f),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => Display::fmt(&data, f),
+      ClientCollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+    }
+  }
+}
+
+impl TryFrom<CollabMessage> for ClientCollabMessage {
+  type Error = Error;
+
+  fn try_from(value: CollabMessage) -> Result<Self, Self::Error> {
+    match value {
+      CollabMessage::ClientInitSync(msg) => Ok(ClientCollabMessage::ClientInitSync {
+        v: Version::V0,
+        data: msg,
+      }),
+      CollabMessage::ClientUpdateSync(msg) => Ok(ClientCollabMessage::ClientUpdateSync {
+        v: Version::V0,
+        data: msg,
+      }),
+      _ => Err(anyhow!("Invalid collab message type.")),
+    }
+  }
+}
+
+impl From<ClientCollabMessage> for CollabMessage {
+  fn from(value: ClientCollabMessage) -> Self {
+    match value {
+      ClientCollabMessage::ClientInitSync { data, .. } => CollabMessage::ClientInitSync(data),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => CollabMessage::ClientUpdateSync(data),
+      ClientCollabMessage::ServerInitSync(data) => CollabMessage::ServerInitSync(data),
+    }
+  }
+}
+
+impl From<ClientCollabMessage> for RealtimeMessage {
+  fn from(msg: ClientCollabMessage) -> Self {
+    Self::ClientCollabV1(vec![msg])
+  }
+}
+
+impl CollabSinkMessage for ClientCollabMessage {
+  fn collab_object_id(&self) -> &str {
+    self.object_id()
+  }
+
+  fn payload_len(&self) -> usize {
+    self.size()
+  }
+
+  fn can_merge(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
+  }
+
+  fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error> {
+    match (self, other) {
+      (
+        ClientCollabMessage::ClientUpdateSync { data, .. },
+        ClientCollabMessage::ClientUpdateSync { data: other, .. },
+      ) => {
+        if &data.payload.len() > maximum_payload_size {
+          Ok(false)
+        } else {
+          data.merge_payload(other)
+        }
+      },
+      _ => Ok(false),
+    }
+  }
+
+  fn is_init_msg(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientInitSync { .. })
+  }
+}
+
+impl Eq for ClientCollabMessage {}
+
+impl PartialEq for ClientCollabMessage {
+  fn eq(&self, other: &Self) -> bool {
+    self.msg_id() == other.msg_id()
+  }
+}
+
+impl PartialOrd for ClientCollabMessage {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for ClientCollabMessage {
+  fn cmp(&self, other: &Self) -> Ordering {
+    match (&self, &other) {
+      (
+        ClientCollabMessage::ClientInitSync { data: left, .. },
+        ClientCollabMessage::ClientInitSync { data: right, .. },
+      ) => {
+        match (&left.collab_type, &right.collab_type) {
+          // document
+          (CollabType::Document, _) => Ordering::Greater,
+          (_, CollabType::Document) => Ordering::Less,
+          // database
+          (CollabType::WorkspaceDatabase, _) => Ordering::Greater,
+          (_, CollabType::WorkspaceDatabase) => Ordering::Less,
+          // folder
+          (_, CollabType::Folder) => Ordering::Greater,
+          (CollabType::Folder, _) => Ordering::Less,
+          // awareness
+          (CollabType::UserAwareness, _) => Ordering::Greater,
+          (_, CollabType::UserAwareness) => Ordering::Less,
+          _ => Ordering::Equal,
+        }
+      },
+      (ClientCollabMessage::ClientInitSync { .. }, _) => Ordering::Greater,
+      (_, ClientCollabMessage::ClientInitSync { .. }) => Ordering::Less,
+      (ClientCollabMessage::ServerInitSync(_), ClientCollabMessage::ServerInitSync(_)) => {
+        Ordering::Equal
+      },
+      (ClientCollabMessage::ServerInitSync { .. }, _) => Ordering::Greater,
+      (_, ClientCollabMessage::ServerInitSync { .. }) => Ordering::Less,
+      _ => self.msg_id().cmp(&other.msg_id()).reverse(),
+    }
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ServerCollabMessage {
+  ClientAck(CollabAck),
+  ServerInitSync(ServerInit),
+  AwarenessSync(CollabAwareness),
+  ServerBroadcast(CollabBroadcastData),
+}
+
+impl ServerCollabMessage {
+  pub fn object_id(&self) -> &str {
+    match self {
+      ServerCollabMessage::ClientAck(value) => &value.object_id,
+      ServerCollabMessage::ServerInitSync(value) => &value.object_id,
+      ServerCollabMessage::AwarenessSync(value) => &value.object_id,
+      ServerCollabMessage::ServerBroadcast(value) => &value.object_id,
+    }
+  }
+
+  pub fn seq_num(&self) -> Option<u32> {
+    match self {
+      ServerCollabMessage::ServerBroadcast(data) => Some(data.seq_num),
+      _ => None,
+    }
+  }
+
+  pub fn msg_id(&self) -> Option<MsgId> {
+    match self {
+      ServerCollabMessage::ClientAck(value) => Some(value.source.msg_id),
+      ServerCollabMessage::ServerInitSync(value) => Some(value.msg_id),
+      ServerCollabMessage::AwarenessSync(_) => None,
+      ServerCollabMessage::ServerBroadcast(_) => None,
+    }
+  }
+
+  pub fn payload(&self) -> &Bytes {
+    match self {
+      ServerCollabMessage::ClientAck(value) => &value.payload,
+      ServerCollabMessage::ServerInitSync(value) => &value.payload,
+      ServerCollabMessage::AwarenessSync(value) => &value.payload,
+      ServerCollabMessage::ServerBroadcast(value) => &value.payload,
+    }
+  }
+
+  pub fn size(&self) -> usize {
+    match self {
+      ServerCollabMessage::ClientAck(msg) => msg.payload.len(),
+      ServerCollabMessage::ServerInitSync(msg) => msg.payload.len(),
+      ServerCollabMessage::AwarenessSync(msg) => msg.payload.len(),
+      ServerCollabMessage::ServerBroadcast(msg) => msg.payload.len(),
+    }
+  }
+}
+
+impl Display for ServerCollabMessage {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ServerCollabMessage::ClientAck(value) => Display::fmt(&value, f),
+      ServerCollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+      ServerCollabMessage::AwarenessSync(value) => Display::fmt(&value, f),
+      ServerCollabMessage::ServerBroadcast(value) => Display::fmt(&value, f),
+    }
+  }
+}
+
+impl TryFrom<CollabMessage> for ServerCollabMessage {
+  type Error = Error;
+
+  fn try_from(value: CollabMessage) -> Result<Self, Self::Error> {
+    match value {
+      CollabMessage::ClientAck(msg) => Ok(ServerCollabMessage::ClientAck(msg)),
+      CollabMessage::ServerInitSync(msg) => Ok(ServerCollabMessage::ServerInitSync(msg)),
+      CollabMessage::AwarenessSync(msg) => Ok(ServerCollabMessage::AwarenessSync(msg)),
+      CollabMessage::ServerBroadcast(msg) => Ok(ServerCollabMessage::ServerBroadcast(msg)),
+      _ => Err(anyhow!("Invalid collab message type.")),
+    }
+  }
+}
+
+impl From<ServerCollabMessage> for RealtimeMessage {
+  fn from(msg: ServerCollabMessage) -> Self {
+    Self::ServerCollabV1(vec![msg])
+  }
+}
+
+impl From<ServerInit> for ServerCollabMessage {
+  fn from(value: ServerInit) -> Self {
+    ServerCollabMessage::ServerInitSync(value)
   }
 }

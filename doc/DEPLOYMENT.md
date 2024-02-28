@@ -6,8 +6,8 @@
 - Minimum 2GB Ram (4GB Recommended)
 - Ports 80/443 available
 - Because AppFlowy-Cloud will have to be running persistently (or at least whenever users need access),
-it's probably a good idea to run it on a non-end user device. It is best if you already have a home server(check software requirements),
-but if you don't, you can also deploy it on a cloud compute services as host server such as
+it's probably a good idea to run it on a non-end user device. It is best if you already have a home server (check software requirements),
+but if you don't, you can also deploy it on a cloud compute service as host server such as
     - [Amazon EC2](https://aws.amazon.com/ec2/) or
     - [Azure Virtual Machines](https://azure.microsoft.com/en-gb/products/virtual-machines/)
 
@@ -25,7 +25,7 @@ Once you have it installed, you can check by running the command:
 docker compose version
 # Docker Compose version 2.23.3
 ```
-Note: `docker-compose` (with the hyphen) may not be supported. You are advise to use `docker compose`(without hyphen) instead.
+Note: `docker-compose` (with the hyphen) may not be supported. You are advised to use `docker compose` (without hyphen) instead.
 
 ## Steps
 
@@ -80,7 +80,7 @@ GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI=http://your-host/gotrue/callback
 ### 3. Running the services
 
 #### Start and run AppFlowy-Cloud
-- The following command will build and start the AppFlowy-Cloud.
+- The following command will build and start AppFlowy-Cloud.
 
 ```bash
 docker compose up -d
@@ -91,17 +91,18 @@ docker ps -a
 ```
 
 ### 4. Optional Services
-There are optional services that are non essential in core functionalities of AppFlowy Cloud, there can be useful for administrative or debugging purpose.
-The files containing these services are in `docker-compose-extra.yml`.
-- `pgadmin` (Web UI configured easy view into deployed postgres database)
-- `portainer`/`portainer_init` (Web UI for providing some monitoring and ease of container management)
-- `tunnel` (cloud flare tunnel: provide secure way to connect appflowy to Cloudflare without a publicly routable IP address)
-- `admin_frontend` (admin portal to manage accounts and adding authentication method, recommended to keep)
-If you wish to deploy those, edit this file accordingly and do:
+We have provided optional services in the file `docker-compose-extra.yml`. 
+You do not need them for a fully functional installation of AppFlowy Cloud, but they could be helpful for various admin/debug tasks.
+
+- `pgadmin` (Web UI to visualize the provided postgres database)
+- `portainer`/`portainer_init` (Web UI to provide some monitoring and ease of container management)
+- `tunnel` (Cloudflare tunnel to provide a secure way to connect AppFlowy to Cloudflare without a publicly routable IP address)
+- `admin_frontend` (admin portal to manage accounts and add authentication methods. We recommend to keep this)
+If you wish to deploy those, edit the file accordingly and do:
 ```
 docker compose --file docker-compose-extras.yml up -d
 ```
-You may ignore the orphan containers warning message from docker
+You may ignore the orphan containers warning message that docker will output.
 
 
 > When using the `docker compose up -d` command without specifying a tag, Docker Compose will pull the `latest`
@@ -113,23 +114,23 @@ defaults to using the `latest` tag.
 - If you find a particular service not working properly, you can inspect the logs:
 ```bash
 # Getting logs for a particular docker compose service
-# You can obtain name by `docker ps -a`
+# You can obtain its name by running `docker ps -a`
 docker logs <NAME>
 # e.g. docker logs appflowy-cloud-admin_frontend-1
 ```
 
 ### 5. Reconfiguring and redeployment
-- It is very common to reconfigure and restart. To do so, simply edit the `.env` and do `docker compose up -d` again
+- It is very common to reconfigure and restart. To do so, simply edit the `.env` and run `docker compose up -d` again
 
 ## Ports
 - After Deployment, you should see that AppFlowy-Cloud is serving 2 ports
 - `443` (https)
 - `80`  (http)
-- Your host server need to expose either of the port
+- Your host server need to expose either of these ports.
 
 ## SSL Certificate
-- To use your own SSL certications for https, replace `certificate.crt` and `private_key.key`
-with your own in `nginx/ssl/` directory
+- To use your own SSL certificates for https, replace `certificate.crt` and `private_key.key`
+with your own in `nginx/ssl/` directory.
 
 ## Usage of AppFlowy Application with AppFlowy Cloud
 - [AppFlowy with AppFlowyCloud](https://docs.appflowy.io/docs/guides/appflowy/self-hosting-appflowy)

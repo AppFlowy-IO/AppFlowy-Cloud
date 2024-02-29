@@ -500,6 +500,8 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   owner
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
+
+  sleep(Duration::from_secs(3)).await;
   let arc_owner = Arc::new(owner);
 
   for i in 0..5 {

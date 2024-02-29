@@ -1,20 +1,9 @@
 use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
+use bincode::{DefaultOptions, Options};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use websocket::Message;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-  feature = "actix_message",
-  derive(actix::Message),
-  rtype(result = "()")
-)]
-pub enum RealtimeMessageV1 {
-  Collab(CollabMessage),
-  User(UserMessage),
-  System(SystemMessage),
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -39,13 +28,6 @@ impl RealtimeMessage {
       RealtimeMessage::ClientCollabV1(msgs) => msgs.iter().map(|msg| msg.size()).sum(),
       RealtimeMessage::ServerCollabV1(msgs) => msgs.iter().map(|msg| msg.size()).sum(),
     }
-  }
-
-  pub fn is_collab_message(&self) -> bool {
-    matches!(
-      self,
-      RealtimeMessage::Collab(_) | RealtimeMessage::ClientCollabV1(_)
-    )
   }
 
   pub fn into_client_collab_message(self) -> Vec<ClientCollabMessage> {
@@ -76,30 +58,19 @@ impl Display for RealtimeMessage {
 
 impl From<RealtimeMessage> for Bytes {
   fn from(msg: RealtimeMessage) -> Self {
-    let bytes = bincode::serialize(&msg).unwrap_or_default();
-    Bytes::from(bytes)
+    let data: Vec<u8> = msg.into();
+    Bytes::from(data)
   }
 }
 
 impl From<RealtimeMessage> for Vec<u8> {
   fn from(msg: RealtimeMessage) -> Self {
-    bincode::serialize(&msg).unwrap_or_default()
-  }
-}
-
-impl TryFrom<Bytes> for RealtimeMessage {
-  type Error = bincode::Error;
-
-  fn try_from(value: Bytes) -> Result<Self, Self::Error> {
-    bincode::deserialize(&value)
-  }
-}
-
-impl TryFrom<&[u8]> for RealtimeMessage {
-  type Error = bincode::Error;
-
-  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-    bincode::deserialize(value)
+    DefaultOptions::new()
+      .with_fixint_encoding()
+      .allow_trailing_bytes()
+        .with_limit( 2 * 1024 * 1024) // 2 MB
+      .serialize(&msg)
+      .unwrap_or_default()
   }
 }
 
@@ -107,15 +78,19 @@ impl TryFrom<&Vec<u8>> for RealtimeMessage {
   type Error = bincode::Error;
 
   fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
-    bincode::deserialize(value)
+    Self::try_from(value.as_slice())
   }
 }
 
-impl TryFrom<Vec<u8>> for RealtimeMessage {
+impl TryFrom<&[u8]> for RealtimeMessage {
   type Error = bincode::Error;
 
-  fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-    bincode::deserialize(&value)
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    DefaultOptions::new()
+        .with_fixint_encoding()
+        .allow_trailing_bytes()
+        .with_limit( 2 * 1024 * 1024) // 2 MB
+        .deserialize(value)
   }
 }
 
@@ -126,7 +101,9 @@ impl TryFrom<&Message> for RealtimeMessage {
 
   fn try_from(value: &Message) -> Result<Self, Self::Error> {
     match value {
-      Message::Binary(bytes) => RealtimeMessage::try_from(bytes).map_err(anyhow::Error::from),
+      Message::Binary(bytes) => {
+        RealtimeMessage::try_from(bytes.as_slice()).map_err(anyhow::Error::from)
+      },
       _ => Err(anyhow::anyhow!("Unsupported message type")),
     }
   }
@@ -137,7 +114,9 @@ impl TryFrom<Message> for RealtimeMessage {
 
   fn try_from(value: Message) -> Result<Self, Self::Error> {
     match value {
-      Message::Binary(bytes) => RealtimeMessage::try_from(bytes).map_err(anyhow::Error::from),
+      Message::Binary(bytes) => {
+        RealtimeMessage::try_from(bytes.as_slice()).map_err(anyhow::Error::from)
+      },
       _ => Err(anyhow::anyhow!("Unsupported message type")),
     }
   }
@@ -145,8 +124,8 @@ impl TryFrom<Message> for RealtimeMessage {
 
 impl From<RealtimeMessage> for Message {
   fn from(msg: RealtimeMessage) -> Self {
-    let bytes = bincode::serialize(&msg).unwrap_or_default();
-    Message::Binary(bytes)
+    let data: Vec<u8> = msg.into();
+    Message::Binary(data)
   }
 }
 
@@ -158,10 +137,25 @@ pub enum SystemMessage {
 
 #[cfg(test)]
 mod tests {
+
   use crate::collab_msg::{CollabMessage, InitSync};
-  use crate::message::{RealtimeMessage, RealtimeMessageV1};
+  use crate::message::{RealtimeMessage, SystemMessage};
+  use crate::user::UserMessage;
   use collab::core::origin::CollabOrigin;
   use collab_entity::CollabType;
+  use serde::{Deserialize, Serialize};
+
+  #[derive(Debug, Clone, Serialize, Deserialize)]
+  #[cfg_attr(
+    feature = "actix_message",
+    derive(actix::Message),
+    rtype(result = "()")
+  )]
+  pub enum RealtimeMessageV1 {
+    Collab(CollabMessage),
+    User(UserMessage),
+    System(SystemMessage),
+  }
 
   #[test]
   fn decode_version_1_with_version_2_struct_test() {
@@ -175,7 +169,7 @@ mod tests {
     )));
 
     let version_1_bytes = bincode::serialize(&version_1).unwrap();
-    let version_2: RealtimeMessage = bincode::deserialize(&version_1_bytes).unwrap();
+    let version_2 = RealtimeMessage::try_from(&version_1_bytes).unwrap();
 
     match (version_1, version_2) {
       (
@@ -199,7 +193,7 @@ mod tests {
       vec![0u8, 3],
     )));
 
-    let version_2_bytes = bincode::serialize(&version_2).unwrap();
+    let version_2_bytes: Vec<u8> = version_2.clone().into();
     let version_1: RealtimeMessageV1 = bincode::deserialize(&version_2_bytes).unwrap();
 
     match (version_1, version_2) {

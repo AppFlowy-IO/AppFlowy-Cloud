@@ -15,7 +15,7 @@ use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::future::BoxFuture;
-use realtime_entity::collab_msg::{ClientCollabMessage, Version};
+use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::SystemMessage;
 use std::collections::HashSet;
 
@@ -400,7 +400,7 @@ where
 }
 
 #[inline]
-pub async fn broadcast_message<U>(
+pub async fn broadcast_client_collab_message<U>(
   user: &U,
   collab_message: ClientCollabMessage,
   client_streams: &Arc<DashMap<U, CollabClientStream>>,
@@ -409,15 +409,9 @@ pub async fn broadcast_message<U>(
 {
   if let Some(client_stream) = client_streams.get(user) {
     trace!("[realtime]: receives collab message: {}", collab_message);
-    let v = collab_message.version();
-    let err = match v {
-      Version::V0 => client_stream
-        .stream_tx
-        .send(Ok(RealtimeMessage::Collab(collab_message.into()))),
-      Version::V1 => client_stream
-        .stream_tx
-        .send(Ok(RealtimeMessage::ClientCollabV1(vec![collab_message]))),
-    };
+    let err = client_stream
+      .stream_tx
+      .send(Ok(RealtimeMessage::ClientCollabV1(vec![collab_message])));
     if let Err(err) = err {
       error!("Send message to client error: {}", err);
     }

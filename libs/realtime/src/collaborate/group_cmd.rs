@@ -1,6 +1,8 @@
 use crate::collaborate::all_group::AllCollabGroup;
 use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
-use crate::collaborate::{broadcast_message, CollabAccessControl, CollabClientStream};
+use crate::collaborate::{
+  broadcast_client_collab_message, CollabAccessControl, CollabClientStream,
+};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::RealtimeError;
 use anyhow::anyhow;
@@ -122,13 +124,14 @@ where
       if !is_user_subscribed {
         self.subscribe_group(&user, &collab_message).await?;
       }
-      broadcast_message(&user, collab_message, &self.client_stream_by_user).await;
+      broadcast_client_collab_message(&user, collab_message, &self.client_stream_by_user).await;
     } else {
       // If there is no existing group for the given object_id and the message is an 'init message',
       // then create a new group and add the user as a subscriber to this group.
       if collab_message.is_init_msg() {
         self.create_group(&collab_message).await?;
         self.subscribe_group(&user, &collab_message).await?;
+        broadcast_client_collab_message(&user, collab_message, &self.client_stream_by_user).await;
       } else {
         // TODO(nathan): ask the client to send the init message first
       }

@@ -7,7 +7,7 @@ use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_entity::CollabType;
+
 use futures_util::{SinkExt, StreamExt};
 use log::trace;
 use realtime_entity::collab_msg::{
@@ -364,7 +364,6 @@ where
       &object.object_id,
       collab,
       sink,
-      object.collab_type.clone(),
     )
     .await?;
     trace!("end process message: {:?}", msg.msg_id());
@@ -377,7 +376,6 @@ where
     object_id: &str,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
-    collab_type: CollabType,
   ) -> Result<(), SyncError> {
     if let Some(mut collab) = collab.try_lock() {
       let mut decoder = DecoderV1::new(Cursor::new(payload));
@@ -396,7 +394,6 @@ where
                 object_id,
                 payload,
                 msg_id,
-                collab_type.clone(),
               ))
             } else {
               ClientCollabMessage::new_update_sync(UpdateSync::new(
@@ -404,7 +401,6 @@ where
                 object_id,
                 payload,
                 msg_id,
-                collab_type.clone(),
               ))
             }
           });

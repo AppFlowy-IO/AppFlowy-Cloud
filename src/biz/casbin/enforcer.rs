@@ -68,24 +68,6 @@ impl AFEnforcer {
     }
   }
 
-  pub async fn policies_for_user_with_given_object(
-    &self,
-    uid: &i64,
-    object_type: &ObjectType<'_>,
-  ) -> Vec<Vec<String>> {
-    let object_type_id = object_type.to_object_id();
-    let policies_related_to_object = self
-      .enforcer
-      .read()
-      .await
-      .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![object_type_id]);
-
-    policies_related_to_object
-      .into_iter()
-      .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
-      .collect::<Vec<_>>()
-  }
-
   /// Update permission for a user.
   ///
   /// [`ObjectType::Workspace`] has to be paired with [`ActionType::Role`],
@@ -106,16 +88,17 @@ impl AFEnforcer {
     }
 
     // only one policy per user per object. So remove the old policy and add the new one.
-    let _remove_policies = self.remove(uid, obj).await?;
-    let object_key = ActionCacheKey::new(uid, obj);
-    let result = self
-      .enforcer
-      .write()
-      .await
+    let mut write_guard = self.enforcer.write().await;
+    let _remove_policies = self
+      .remove_with_enforcer(uid, obj, &mut write_guard)
+      .await?;
+    let result = write_guard
       .add_policy(policy)
       .await
       .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")));
+    drop(write_guard);
 
+    let object_key = ActionCacheKey::new(uid, obj);
     match &result {
       Ok(value) => {
         trace!("[access control]: add policy:{} => {}", policy_key.0, value);
@@ -141,9 +124,20 @@ impl AFEnforcer {
     uid: &i64,
     object_type: &ObjectType<'_>,
   ) -> Result<Vec<Vec<String>>, AppError> {
-    let policies_for_user_on_object = self
-      .policies_for_user_with_given_object(uid, object_type)
-      .await;
+    let mut enforcer = self.enforcer.write().await;
+    self
+      .remove_with_enforcer(uid, object_type, &mut enforcer)
+      .await
+  }
+
+  pub async fn remove_with_enforcer(
+    &self,
+    uid: &i64,
+    object_type: &ObjectType<'_>,
+    enforcer: &mut Enforcer,
+  ) -> Result<Vec<Vec<String>>, AppError> {
+    let policies_for_user_on_object =
+      policies_for_user_with_given_object(uid, object_type, enforcer).await;
 
     // if there are no policies for the user on the object, return early.
     if policies_for_user_on_object.is_empty() {
@@ -161,10 +155,7 @@ impl AFEnforcer {
       policies_for_user_on_object.len() == 1,
       "only one policy per user per object"
     );
-    self
-      .enforcer
-      .write()
-      .await
+    enforcer
       .remove_policies(policies_for_user_on_object.clone())
       .await
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
@@ -199,22 +190,17 @@ impl AFEnforcer {
       return Ok(value);
     }
 
-    let policies_for_object = self
-      .enforcer
-      .read()
-      .await
-      .get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj.to_object_id()]);
-
+    let read_guard = self.enforcer.read().await;
+    let policies_for_object =
+      read_guard.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![obj.to_object_id()]);
     if policies_for_object.is_empty() {
       return Ok(true);
     }
 
-    let result = self
-      .enforcer
-      .read()
-      .await
+    let result = read_guard
       .enforce(policy)
       .map_err(|e| AppError::Internal(anyhow!("error enforce: {e:?}")))?;
+    drop(read_guard);
 
     trace!("[access control]: policy:{} => {}", policy_key.0, result);
     if let Err(err) = self.cache.set_enforcer_result(&policy_key, result).await {
@@ -230,9 +216,8 @@ impl AFEnforcer {
     }
 
     // There should only be one entry per user per object, which is enforced in [AccessControl], so just take one using next.
-    let policies = self
-      .policies_for_user_with_given_object(uid, object_type)
-      .await;
+    let policies =
+      policies_for_user_with_given_object(uid, object_type, &*self.enforcer.read().await).await;
 
     let action = policies.first()?[POLICY_FIELD_INDEX_ACTION].clone();
     trace!("cache action: {}:{}", object_key.0, action.clone());
@@ -299,6 +284,21 @@ fn validate_obj_action(obj: &ObjectType<'_>, act: &ActionType) -> Result<(), App
       act
     ))),
   }
+}
+#[inline]
+async fn policies_for_user_with_given_object(
+  uid: &i64,
+  object_type: &ObjectType<'_>,
+  enforcer: &Enforcer,
+) -> Vec<Vec<String>> {
+  let object_type_id = object_type.to_object_id();
+  let policies_related_to_object =
+    enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![object_type_id]);
+
+  policies_related_to_object
+    .into_iter()
+    .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
+    .collect::<Vec<_>>()
 }
 
 #[derive(Clone)]

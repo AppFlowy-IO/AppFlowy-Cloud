@@ -155,8 +155,8 @@ impl WSClient {
     // 5. start pinging
     let pong_tx = self.start_ping().await;
 
-    // 6. start handling server messages.
-    self.handle_server_message(
+    // 6. spawn a task that continuously receives messages from the server
+    self.spawn_recv_server_message(
       stream,
       Arc::downgrade(&self.channels),
       self.ws_msg_sender.clone(),
@@ -166,16 +166,16 @@ impl WSClient {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     self.aggregate_queue.set_sender(tx).await;
 
-    // 7. start handling client messages.
-    self.handle_client_message(sink, device_id, stop_ws_msg_loop_rx, rx);
+    // 7. spawn a task that continuously sending client message.
+    self.spawn_send_client_message(sink, device_id, stop_ws_msg_loop_rx, rx);
 
     // 8. start aggregating messages
     // combine multiple messages into one message to reduce the number of messages sent over the network
-    self.aggregate_rt_message();
+    self.spawn_aggregate_message();
     Ok(())
   }
 
-  fn aggregate_rt_message(&self) {
+  fn spawn_aggregate_message(&self) {
     let mut rx = self.rt_msg_sender.subscribe();
     let weak_aggregate_queue = Arc::downgrade(&self.aggregate_queue);
     af_spawn(async move {
@@ -202,7 +202,8 @@ impl WSClient {
     pong_tx
   }
 
-  fn handle_client_message(
+  // When
+  fn spawn_send_client_message(
     &self,
     mut sink: SplitSink<WebSocketStream, Message>,
     device_id: &str,
@@ -243,7 +244,6 @@ impl WSClient {
               }
            }
            Some(msg) = rx_2.recv() => {
-              trace!("receive message from aggregate queue");
               if let Err(err) = send_message(&mut sink, &device_id, msg, &weak_http_sender).await {
                 if err.is_lost_connection() {
                   break;
@@ -256,7 +256,7 @@ impl WSClient {
     });
   }
 
-  fn handle_server_message(
+  fn spawn_recv_server_message(
     &self,
     mut stream: SplitStream<WebSocketStream>,
     weak_collab_channels: Weak<RwLock<ChannelByObjectId>>,
@@ -391,8 +391,6 @@ impl WSClient {
     if let Some(old_ping) = self.ping.lock().await.as_ref() {
       old_ping.stop().await;
     }
-
-    self.aggregate_queue.clean().await;
   }
 
   pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {
@@ -427,7 +425,7 @@ fn handle_collab_message(
               warn!("channel is dropped");
             },
             Some(channel) => {
-              trace!("receive remote message: {}", collab_msg);
+              trace!("receive server message: {}", collab_msg);
               channel.forward_to_stream(collab_msg.clone());
             },
           }

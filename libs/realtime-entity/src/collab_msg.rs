@@ -106,13 +106,6 @@ impl CollabMessage {
     matches!(self, CollabMessage::ServerInitSync(_))
   }
 
-  pub fn broadcase_seq_num(&self) -> Option<u32> {
-    match self {
-      CollabMessage::ServerBroadcast(data) => Some(data.seq_num),
-      _ => None,
-    }
-  }
-
   pub fn type_str(&self) -> String {
     match self {
       CollabMessage::ClientInitSync(_) => "ClientInitSync".to_string(),
@@ -295,23 +288,15 @@ pub struct ServerInit {
   ///   }
   /// ```
   pub payload: Bytes,
-  pub collab_type: CollabType,
 }
 
 impl ServerInit {
-  pub fn new(
-    origin: CollabOrigin,
-    object_id: String,
-    payload: Vec<u8>,
-    msg_id: MsgId,
-    collab_type: CollabType,
-  ) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, msg_id: MsgId) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
       msg_id,
-      collab_type,
     }
   }
 }
@@ -352,23 +337,15 @@ pub struct UpdateSync {
   /// ```
   ///  
   pub payload: Bytes,
-  pub collab_type: CollabType,
 }
 
 impl UpdateSync {
-  pub fn new(
-    origin: CollabOrigin,
-    object_id: String,
-    payload: Vec<u8>,
-    msg_id: MsgId,
-    collab_type: CollabType,
-  ) -> Self {
+  pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, msg_id: MsgId) -> Self {
     Self {
       origin,
       object_id,
       payload: Bytes::from(payload),
       msg_id,
-      collab_type,
     }
   }
 
@@ -406,8 +383,8 @@ impl From<UpdateSync> for CollabMessage {
 impl Display for UpdateSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update sync: [type:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.collab_type,
+      "client update sync: [{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin,
       self.object_id,
       self.msg_id,
       self.payload.len(),

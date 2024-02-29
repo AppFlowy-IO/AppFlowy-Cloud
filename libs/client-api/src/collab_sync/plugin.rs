@@ -134,14 +134,13 @@ where
     let weak_sync_queue = Arc::downgrade(&self.sync_queue);
     let update = update.to_vec();
     let object_id = self.object.object_id.clone();
-    let collab_type = self.object.collab_type.clone();
     let cloned_origin = origin.clone();
 
     af_spawn(async move {
       if let Some(sync_queue) = weak_sync_queue.upgrade() {
         let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
         sync_queue.queue_msg(|msg_id| {
-          let update_sync = UpdateSync::new(cloned_origin, object_id, payload, msg_id, collab_type);
+          let update_sync = UpdateSync::new(cloned_origin, object_id, payload, msg_id);
           ClientCollabMessage::new_update_sync(update_sync)
         });
       }

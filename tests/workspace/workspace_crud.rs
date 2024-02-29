@@ -30,7 +30,6 @@ async fn add_and_delete_workspace_for_user() {
 
   // Workspace need to have at least one collab
   let workspace_id = newly_added_workspace.workspace_id.to_string();
-  println!("Workspace ID: {}", workspace_id);
   let _ = c
     .get_collab(QueryCollabParams::new(
       &workspace_id,
@@ -40,9 +39,7 @@ async fn add_and_delete_workspace_for_user() {
     .await
     .unwrap();
 
-  c.delete_workspace(&newly_added_workspace.workspace_id.to_string())
-    .await
-    .unwrap();
+  c.delete_workspace(&workspace_id).await.unwrap();
   let workspaces = c.get_workspaces().await.unwrap();
   assert_eq!(workspaces.0.len(), 1);
 }

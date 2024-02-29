@@ -297,11 +297,15 @@ impl WSClient {
                   },
                   SystemMessage::KickOff => {},
                 },
-                RealtimeMessage::ClientCollabV1(_messages) => {
-                  // TODO(nathan): handle ClientCollabV1
-                },
                 RealtimeMessage::ServerCollabV1(collab_messages) => {
                   handle_collab_message(&weak_collab_channels, collab_messages);
+                },
+                RealtimeMessage::ClientCollabV1(_) => {
+                  // The message from server should not be collab message.
+                  error!(
+                    "received unexpected collab message from websocket: {:?}",
+                    msg
+                  );
                 },
               },
               Err(err) => {

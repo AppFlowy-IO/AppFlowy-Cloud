@@ -191,6 +191,13 @@ impl Display for CollabMessage {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CollabAwareness {
   object_id: String,
@@ -223,6 +230,14 @@ impl Display for CollabAwareness {
     ))
   }
 }
+
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct InitSync {
@@ -273,6 +288,13 @@ impl From<InitSync> for CollabMessage {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ServerInit {
   pub origin: CollabOrigin,
@@ -319,6 +341,13 @@ impl Display for ServerInit {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct UpdateSync {
   pub origin: CollabOrigin,
@@ -401,6 +430,13 @@ pub enum AckCode {
   Internal = 3,
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CollabAck {
   pub origin: CollabOrigin,
@@ -461,6 +497,13 @@ impl Display for CollabAck {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CollabBroadcastData {
   origin: CollabOrigin,

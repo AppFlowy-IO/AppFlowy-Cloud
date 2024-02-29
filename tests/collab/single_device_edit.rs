@@ -8,6 +8,7 @@ use serde_json::json;
 use std::time::Duration;
 use tokio::time::sleep;
 
+use realtime_entity::message::MAXIMUM_REALTIME_MESSAGE_SIZE;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -101,7 +102,7 @@ async fn write_big_chunk_data_init_sync_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4().to_string();
-  let big_text = generate_random_string(1024 * 1024 * 2);
+  let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
   let collab_type = CollabType::Document;
   let doc_state = make_big_collab_doc_state(&object_id, "big_text", big_text.clone());
 
@@ -515,7 +516,7 @@ async fn simulate_multiple_user_edit_collab_test() {
 #[tokio::test]
 async fn post_realtime_message_test() {
   let mut tasks = Vec::new();
-  let big_text = generate_random_string(1024 * 1024 * 3);
+  let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
 
   for i in 0..20 {
     let cloned_text = big_text.clone();

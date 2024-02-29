@@ -6,6 +6,14 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use websocket::Message;
 
+/// Maximum allowable size for a realtime message.
+///
+/// This sets the largest size a message can be for server processing in real-time communications.
+/// If a message goes over this size, it won't be processed and will trigger a parser error.
+/// This limit helps prevent server issues like overloads and denial-of-service attacks by rejecting
+/// overly large messages.
+pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 1024 * 1024; // 1 MB
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
   feature = "actix_message",
@@ -74,7 +82,7 @@ impl From<RealtimeMessage> for Vec<u8> {
     DefaultOptions::new()
       .with_fixint_encoding()
       .allow_trailing_bytes()
-        .with_limit( 2 * 1024 * 1024) // 2 MB
+      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
       .serialize(&msg)
       .unwrap_or_default()
   }
@@ -93,10 +101,10 @@ impl TryFrom<&[u8]> for RealtimeMessage {
 
   fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
     DefaultOptions::new()
-        .with_fixint_encoding()
-        .allow_trailing_bytes()
-        .with_limit( 2 * 1024 * 1024) // 2 MB
-        .deserialize(value)
+      .with_fixint_encoding()
+      .allow_trailing_bytes()
+      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .deserialize(value)
   }
 }
 

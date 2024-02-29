@@ -578,11 +578,11 @@ impl ClientCollabMessage {
     }
   }
 
-  pub fn msg_id(&self) -> Option<MsgId> {
+  pub fn msg_id(&self) -> MsgId {
     match self {
-      ClientCollabMessage::ClientInitSync { data, .. } => Some(data.msg_id),
-      ClientCollabMessage::ClientUpdateSync { data, .. } => Some(data.msg_id),
-      ClientCollabMessage::ServerInitSync(value) => Some(value.msg_id),
+      ClientCollabMessage::ClientInitSync { data, .. } => data.msg_id,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => data.msg_id,
+      ClientCollabMessage::ServerInitSync(value) => value.msg_id,
     }
   }
 }

@@ -273,20 +273,18 @@ async fn handle_client_collab_message<Sink>(
         let mut resps = vec![];
         if let Ok(mut collab) = collab.try_lock() {
           let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
-          if let Some(msg_id) = collab_msg.msg_id() {
-            match result {
-              Ok(payload) => {
-                let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                  .with_payload(payload.unwrap_or_default());
-                resps.push(resp);
-              },
-              Err(err) => {
-                error!("handle collab:{} message error:{}", object_id, err);
-                let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id)
-                  .with_code(ack_code_from_error(&err));
-                resps.push(resp);
-              },
-            }
+          match result {
+            Ok(payload) => {
+              let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())
+                .with_payload(payload.unwrap_or_default());
+              resps.push(resp);
+            },
+            Err(err) => {
+              error!("handle collab:{} message error:{}", object_id, err);
+              let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())
+                .with_code(ack_code_from_error(&err));
+              resps.push(resp);
+            },
           }
         }
 

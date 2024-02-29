@@ -1,5 +1,5 @@
 use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use bincode::{DefaultOptions, Options};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -42,7 +42,10 @@ impl RealtimeMessage {
         Ok(vec![collab_message])
       },
       RealtimeMessage::ClientCollabV1(collab_messages) => Ok(collab_messages),
-      _ => vec![],
+      _ => Err(anyhow!(
+        "Failed to convert RealtimeMessage:{} to ClientCollabMessage",
+        self
+      )),
     }
   }
 }

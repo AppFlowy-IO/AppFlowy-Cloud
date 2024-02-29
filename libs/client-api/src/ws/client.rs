@@ -390,6 +390,8 @@ impl WSClient {
     if let Some(old_ping) = self.ping.lock().await.as_ref() {
       old_ping.stop().await;
     }
+
+    self.aggregate_queue.clear().await;
   }
 
   pub fn send<M: Into<Message>>(&self, msg: M) -> Result<(), WSError> {

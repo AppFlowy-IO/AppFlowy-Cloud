@@ -9,7 +9,7 @@ use crate::entities::{
 use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
-use anyhow::{Error, Result};
+use anyhow::Result;
 use collab::core::collab_plugin::EncodedCollab;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
@@ -341,7 +341,9 @@ where
           }
         },
         Err(err) => {
-          error!("parse client message error: {}", err);
+          if cfg!(debug_assertions) {
+            error!("parse client message error: {}", err);
+          }
         },
       }
       Ok(())
@@ -402,7 +404,9 @@ where
             }
           },
           Err(err) => {
-            error!("parse client message error: {}", err);
+            if cfg!(debug_assertions) {
+              error!("parse client message error: {}", err);
+            }
           },
         }
       }
@@ -530,13 +534,22 @@ impl CollabClientStream {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(Ok(realtime_msg))) = stream_rx.next().await {
-        for msg in realtime_msg.try_into_client_collab_message() {
-          if stream_filter(&cloned_object_id, &msg).await {
-            let _ = tx.send(Ok(msg)).await;
-          } else {
-            // when then client is not allowed to send messages
-            tokio::time::sleep(Duration::from_secs(2)).await;
-          }
+        match realtime_msg.try_into_client_collab_message() {
+          Ok(collab_messages) => {
+            for msg in collab_messages {
+              if stream_filter(&cloned_object_id, &msg).await {
+                let _ = tx.send(Ok(msg)).await;
+              } else {
+                // when then client is not allowed to send messages
+                tokio::time::sleep(Duration::from_secs(2)).await;
+              }
+            }
+          },
+          Err(err) => {
+            if cfg!(debug_assertions) {
+              error!("parse client message error: {}", err);
+            }
+          },
         }
       }
     });

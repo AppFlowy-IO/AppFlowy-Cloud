@@ -1,7 +1,10 @@
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
+use database::file::bucket_s3_impl::BucketClientS3Impl;
+use database::file::BucketStorage;
 use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
+use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, insert_user_workspace,
@@ -14,14 +17,34 @@ use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
+  bucket_storage: &Arc<BucketStorage<BucketClientS3Impl>>,
 ) -> Result<(), AppResponseError> {
+  // remove files from s3
+
+  let blob_metadatas = get_all_workspace_blob_metadata(pg_pool, workspace_id)
+    .await
+    .context("Get all workspace blob metadata")?;
+
+  for blob_metadata in blob_metadatas {
+    bucket_storage
+      .delete_blob(workspace_id, blob_metadata.file_id.as_str())
+      .await
+      .context("Delete blob from s3")?;
+  }
+
+  // remove from postgres
   delete_from_workspace(pg_pool, workspace_id).await?;
+
+  // TODO: There can be a rare case where user uploads while workspace is being deleted.
+  // We need some routine job to clean up these orphaned files.
+
   Ok(())
 }
 

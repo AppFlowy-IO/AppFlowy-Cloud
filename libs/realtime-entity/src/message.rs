@@ -1,11 +1,12 @@
 use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
 use anyhow::{anyhow, Error};
 use bincode::{DefaultOptions, Options};
-use bytes::Bytes;
+
+use brotli::{CompressorReader, Decompressor};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use std::io::Read;
 use websocket::Message;
-
 /// Maximum allowable size for a realtime message.
 ///
 /// This sets the largest size a message can be for server processing in real-time communications.
@@ -13,6 +14,9 @@ use websocket::Message;
 /// This limit helps prevent server issues like overloads and denial-of-service attacks by rejecting
 /// overly large messages.
 pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 1024 * 1024; // 1 MB
+
+/// 1 for using brotli compression
+const COMPRESSED_PREFIX: &[u8] = b"COMPRESSED:1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -56,6 +60,42 @@ impl RealtimeMessage {
       )),
     }
   }
+
+  pub fn encode(&self) -> Result<Vec<u8>, Error> {
+    let data = DefaultOptions::new()
+      .with_fixint_encoding()
+      .allow_trailing_bytes()
+      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .serialize(self)?;
+
+    let mut compressor = CompressorReader::new(&*data, 4096, 4, 22);
+    let mut compressed_data = Vec::new();
+    compressor.read_to_end(&mut compressed_data)?;
+
+    let mut result = Vec::new();
+    result.extend_from_slice(COMPRESSED_PREFIX);
+    result.extend(compressed_data);
+    Ok(result)
+  }
+
+  pub fn decode(data: &[u8]) -> Result<Self, Error> {
+    let decompressed_data = if data.starts_with(COMPRESSED_PREFIX) {
+      let data_without_prefix = &data[COMPRESSED_PREFIX.len()..];
+      let mut decompressor = Decompressor::new(data_without_prefix, 4096);
+      let mut decompressed_data = Vec::new();
+      decompressor.read_to_end(&mut decompressed_data)?;
+      decompressed_data
+    } else {
+      data.to_vec()
+    };
+
+    let message = DefaultOptions::new()
+      .with_fixint_encoding()
+      .allow_trailing_bytes()
+      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .deserialize(&decompressed_data)?;
+    Ok(message)
+  }
 }
 
 impl Display for RealtimeMessage {
@@ -70,44 +110,6 @@ impl Display for RealtimeMessage {
   }
 }
 
-impl From<RealtimeMessage> for Bytes {
-  fn from(msg: RealtimeMessage) -> Self {
-    let data: Vec<u8> = msg.into();
-    Bytes::from(data)
-  }
-}
-
-impl From<RealtimeMessage> for Vec<u8> {
-  fn from(msg: RealtimeMessage) -> Self {
-    DefaultOptions::new()
-      .with_fixint_encoding()
-      .allow_trailing_bytes()
-      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .serialize(&msg)
-      .unwrap_or_default()
-  }
-}
-
-impl TryFrom<&Vec<u8>> for RealtimeMessage {
-  type Error = bincode::Error;
-
-  fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
-    Self::try_from(value.as_slice())
-  }
-}
-
-impl TryFrom<&[u8]> for RealtimeMessage {
-  type Error = bincode::Error;
-
-  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-    DefaultOptions::new()
-      .with_fixint_encoding()
-      .allow_trailing_bytes()
-      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .deserialize(value)
-  }
-}
-
 use crate::user::UserMessage;
 
 impl TryFrom<&Message> for RealtimeMessage {
@@ -116,7 +118,7 @@ impl TryFrom<&Message> for RealtimeMessage {
   fn try_from(value: &Message) -> Result<Self, Self::Error> {
     match value {
       Message::Binary(bytes) => {
-        RealtimeMessage::try_from(bytes.as_slice()).map_err(anyhow::Error::from)
+        RealtimeMessage::decode(bytes.as_slice()).map_err(anyhow::Error::from)
       },
       _ => Err(anyhow::anyhow!("Unsupported message type")),
     }
@@ -129,7 +131,7 @@ impl TryFrom<Message> for RealtimeMessage {
   fn try_from(value: Message) -> Result<Self, Self::Error> {
     match value {
       Message::Binary(bytes) => {
-        RealtimeMessage::try_from(bytes.as_slice()).map_err(anyhow::Error::from)
+        RealtimeMessage::decode(bytes.as_slice()).map_err(anyhow::Error::from)
       },
       _ => Err(anyhow::anyhow!("Unsupported message type")),
     }
@@ -138,7 +140,7 @@ impl TryFrom<Message> for RealtimeMessage {
 
 impl From<RealtimeMessage> for Message {
   fn from(msg: RealtimeMessage) -> Self {
-    let data: Vec<u8> = msg.into();
+    let data = msg.encode().unwrap_or_default();
     Message::Binary(data)
   }
 }
@@ -183,7 +185,7 @@ mod tests {
     )));
 
     let version_1_bytes = bincode::serialize(&version_1).unwrap();
-    let version_2 = RealtimeMessage::try_from(&version_1_bytes).unwrap();
+    let version_2 = RealtimeMessage::decode(&version_1_bytes).unwrap();
 
     match (version_1, version_2) {
       (
@@ -207,7 +209,7 @@ mod tests {
       vec![0u8, 3],
     )));
 
-    let version_2_bytes: Vec<u8> = version_2.clone().into();
+    let version_2_bytes = version_2.encode().unwrap();
     let version_1: RealtimeMessageV1 = bincode::deserialize(&version_2_bytes).unwrap();
 
     match (version_1, version_2) {

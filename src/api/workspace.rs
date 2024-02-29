@@ -813,7 +813,7 @@ async fn parser_realtime_msg(
   match message {
     Message::Binary(bytes) => {
       let realtime_msg = tokio::task::spawn_blocking(move || {
-        RealtimeMessage::try_from(&bytes).map_err(|err| {
+        RealtimeMessage::decode(&bytes).map_err(|err| {
           AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
         })
       })

@@ -75,9 +75,16 @@ impl AggregateMessageQueue {
 
               debug!("Aggregate messages len: {}", messages.len());
               let rt_message = RealtimeMessage::ClientCollabV1(messages);
-              if let Err(e) = sender.send(Message::Binary(rt_message.into())).await {
-                error!("Failed to send message: {}", e);
-                break;
+              match rt_message.encode() {
+                Ok(data) => {
+                  if let Err(e) = sender.send(Message::Binary(data)).await {
+                    error!("Failed to send message: {}", e);
+                    break;
+                  }
+                }
+                Err(err) => {
+                  error!("Failed to RealtimeMessage: {}", err);
+                }
               }
             } else {
               break;

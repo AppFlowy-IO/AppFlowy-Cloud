@@ -4153,6 +4153,7 @@ dependencies = [
  "actix",
  "anyhow",
  "bincode",
+ "brotli",
  "bytes",
  "collab",
  "collab-entity",

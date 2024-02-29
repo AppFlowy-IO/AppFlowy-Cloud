@@ -24,6 +24,7 @@ thiserror = "1.0.56"
 realtime-protocol.workspace = true
 websocket.workspace = true
 serde_repr = "0.1"
+brotli = "3.4.0"
 
 [build-dependencies]
 protoc-bin-vendored = { version = "3.0" }

@@ -20,6 +20,13 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
+use workspace_template::document::get_started::GetStartedDocumentTemplate;
+
+use crate::biz::casbin::WorkspaceAccessControlImpl;
+use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::user::initialize_workspace_for_user;
+
+use super::access_control::WorkspaceAccessControl;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
@@ -50,11 +57,32 @@ pub async fn delete_workspace_for_user(
 
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
+  workspace_access_control: &WorkspaceAccessControlImpl,
+  collab_storage: &Arc<CollabStorageImpl>,
   user_uuid: &Uuid,
+  user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name).await?;
+  let mut txn = pg_pool.begin().await?;
+
+  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
+
+  workspace_access_control
+    .insert_workspace_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
+    .await?;
+
+  // add create initial collab for user
+  initialize_workspace_for_user(
+    user_uid,
+    new_workspace.workspace_id.to_string().as_str(),
+    &mut txn,
+    vec![GetStartedDocumentTemplate],
+    collab_storage,
+  )
+  .await?;
+
+  txn.commit().await?;
   Ok(new_workspace)
 }
 

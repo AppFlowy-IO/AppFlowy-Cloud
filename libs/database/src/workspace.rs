@@ -29,7 +29,7 @@ pub async fn delete_from_workspace(pg_pool: &PgPool, workspace_id: &Uuid) -> Res
 
 #[inline]
 pub async fn insert_user_workspace(
-  pg_pool: &PgPool,
+  tx: &mut Transaction<'_, sqlx::Postgres>,
   user_uuid: &Uuid,
   workspace_name: &str,
 ) -> Result<AFWorkspaceRow, AppError> {
@@ -43,7 +43,7 @@ pub async fn insert_user_workspace(
     user_uuid,
     workspace_name,
   )
-  .fetch_one(pg_pool)
+  .fetch_one(tx.deref_mut())
   .await?;
 
   Ok(workspace)

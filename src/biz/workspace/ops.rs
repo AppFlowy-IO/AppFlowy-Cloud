@@ -68,6 +68,10 @@ pub async fn create_workspace_for_user(
   let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
 
+  workspace_access_control
+    .insert_workspace_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
+    .await?;
+
   // add create initial collab for user
   initialize_workspace_for_user(
     user_uid,
@@ -77,10 +81,6 @@ pub async fn create_workspace_for_user(
     collab_storage,
   )
   .await?;
-
-  workspace_access_control
-    .insert_workspace_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
-    .await?;
 
   txn.commit().await?;
   Ok(new_workspace)

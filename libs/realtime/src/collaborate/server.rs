@@ -9,7 +9,7 @@ use crate::entities::{
 use crate::error::{RealtimeError, StreamError};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
-use anyhow::Result;
+use anyhow::{Error, Result};
 use collab::core::collab_plugin::EncodedCollab;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
@@ -322,21 +322,27 @@ where
     let access_control = self.access_control.clone();
 
     Box::pin(async move {
-      let collab_messages = message.into_client_collab_message();
-      for collab_message in collab_messages {
-        if let Err(err) = Self::process_client_collab_message(
-          &user,
-          &group_sender_by_object_id,
-          &client_stream_by_user,
-          &groups,
-          &edit_collab_by_user,
-          &access_control,
-          collab_message,
-        )
-        .await
-        {
-          error!("process collab message error: {}", err);
-        }
+      match message.try_into_client_collab_message() {
+        Ok(collab_messages) => {
+          for collab_message in collab_messages {
+            if let Err(err) = Self::process_client_collab_message(
+              &user,
+              &group_sender_by_object_id,
+              &client_stream_by_user,
+              &groups,
+              &edit_collab_by_user,
+              &access_control,
+              collab_message,
+            )
+            .await
+            {
+              error!("process collab message error: {}", err);
+            }
+          }
+        },
+        Err(err) => {
+          error!("parse client message error: {}", err);
+        },
       }
       Ok(())
     })
@@ -366,32 +372,38 @@ where
 
     Box::pin(async move {
       if let Some(message) = stream.next().await {
-        let collab_messages = message.into_client_collab_message();
-        for collab_message in collab_messages {
-          // client doesn't send the device_id through the http request header before the 0.4.6
-          // so, try to get the device_id from the message
-          if device_id.is_empty() {
-            if let Some(msg_device_id) = collab_message.device_id() {
-              device_id = msg_device_id;
-            }
-          }
+        match message.try_into_client_collab_message() {
+          Ok(collab_messages) => {
+            for collab_message in collab_messages {
+              // client doesn't send the device_id through the http request header before the 0.4.6
+              // so, try to get the device_id from the message
+              if device_id.is_empty() {
+                if let Some(msg_device_id) = collab_message.device_id() {
+                  device_id = msg_device_id;
+                }
+              }
 
-          let device_user = UserDevice::new(&device_id, uid);
-          if let Some(entry) = user_by_device.get(&device_user) {
-            if let Err(err) = Self::process_client_collab_message(
-              entry.value(),
-              &group_sender_by_object_id,
-              &client_stream_by_user,
-              &groups,
-              &edit_collab_by_user,
-              &access_control,
-              collab_message,
-            )
-            .await
-            {
-              error!("process collab message error: {}", err);
+              let device_user = UserDevice::new(&device_id, uid);
+              if let Some(entry) = user_by_device.get(&device_user) {
+                if let Err(err) = Self::process_client_collab_message(
+                  entry.value(),
+                  &group_sender_by_object_id,
+                  &client_stream_by_user,
+                  &groups,
+                  &edit_collab_by_user,
+                  &access_control,
+                  collab_message,
+                )
+                .await
+                {
+                  error!("process collab message error: {}", err);
+                }
+              }
             }
-          }
+          },
+          Err(err) => {
+            error!("parse client message error: {}", err);
+          },
         }
       }
       Ok(())
@@ -518,7 +530,7 @@ impl CollabClientStream {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(Ok(realtime_msg))) = stream_rx.next().await {
-        for msg in realtime_msg.into_client_collab_message() {
+        for msg in realtime_msg.try_into_client_collab_message() {
           if stream_filter(&cloned_object_id, &msg).await {
             let _ = tx.send(Ok(msg)).await;
           } else {

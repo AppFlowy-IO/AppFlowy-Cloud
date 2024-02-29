@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::FutureExt;
 use std::num::NonZeroU32;
-use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -80,7 +79,7 @@ pub struct WSClient {
   aggregate_queue: Arc<AggregateMessageQueue>,
 
   #[cfg(debug_assertions)]
-  skip_realtime_message: Arc<AtomicBool>,
+  skip_realtime_message: Arc<std::sync::atomic::AtomicBool>,
 }
 impl WSClient {
   pub fn new<H>(config: WSClientConfig, http_sender: H) -> Self

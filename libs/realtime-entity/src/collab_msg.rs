@@ -523,43 +523,23 @@ impl From<CollabMessage> for RealtimeMessage {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum Version {
-  V0 = 0,
-  V1 = 1,
-}
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientCollabMessage {
-  ClientInitSync { v: Version, data: InitSync },
-  ClientUpdateSync { v: Version, data: UpdateSync },
+  ClientInitSync { data: InitSync },
+  ClientUpdateSync { data: UpdateSync },
   ServerInitSync(ServerInit),
 }
 
 impl ClientCollabMessage {
   pub fn new_init_sync(data: InitSync) -> Self {
-    Self::ClientInitSync {
-      v: Version::V1,
-      data,
-    }
+    Self::ClientInitSync { data }
   }
 
   pub fn new_update_sync(data: UpdateSync) -> Self {
-    Self::ClientUpdateSync {
-      v: Version::V1,
-      data,
-    }
+    Self::ClientUpdateSync { data }
   }
 
   pub fn new_server_init_sync(data: ServerInit) -> Self {
     Self::ServerInitSync(data)
-  }
-
-  pub fn version(&self) -> Version {
-    match self {
-      ClientCollabMessage::ClientInitSync { v, .. } => v.clone(),
-      ClientCollabMessage::ClientUpdateSync { v, .. } => v.clone(),
-      ClientCollabMessage::ServerInitSync(_) => Version::V1,
-    }
   }
 
   pub fn size(&self) -> usize {
@@ -622,15 +602,15 @@ impl TryFrom<CollabMessage> for ClientCollabMessage {
 
   fn try_from(value: CollabMessage) -> Result<Self, Self::Error> {
     match value {
-      CollabMessage::ClientInitSync(msg) => Ok(ClientCollabMessage::ClientInitSync {
-        v: Version::V0,
-        data: msg,
-      }),
-      CollabMessage::ClientUpdateSync(msg) => Ok(ClientCollabMessage::ClientUpdateSync {
-        v: Version::V0,
-        data: msg,
-      }),
-      _ => Err(anyhow!("Invalid collab message type.")),
+      CollabMessage::ClientInitSync(msg) => Ok(ClientCollabMessage::ClientInitSync { data: msg }),
+      CollabMessage::ClientUpdateSync(msg) => {
+        Ok(ClientCollabMessage::ClientUpdateSync { data: msg })
+      },
+      CollabMessage::ServerInitSync(msg) => Ok(ClientCollabMessage::ServerInitSync(msg)),
+      _ => Err(anyhow!(
+        "Can't convert to ClientCollabMessage for given collab message:{}",
+        value
+      )),
     }
   }
 }

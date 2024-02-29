@@ -1,4 +1,5 @@
 use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
+use anyhow::Error;
 use bincode::{DefaultOptions, Options};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -30,15 +31,17 @@ impl RealtimeMessage {
     }
   }
 
-  pub fn into_client_collab_message(self) -> Vec<ClientCollabMessage> {
+  /// Convert RealtimeMessage to ClientCollabMessage
+  /// If the message is not a collab message, it will return an empty vec
+  /// If the message is a collab message, it will return a vec with one element
+  /// If the message is a ClientCollabV1, it will return list of collab messages
+  pub fn try_into_client_collab_message(self) -> Result<Vec<ClientCollabMessage>, Error> {
     match self {
       RealtimeMessage::Collab(collab_message) => {
-        match ClientCollabMessage::try_from(collab_message) {
-          Ok(msg) => vec![msg],
-          Err(_) => vec![],
-        }
+        let collab_message = ClientCollabMessage::try_from(collab_message)?;
+        Ok(vec![collab_message])
       },
-      RealtimeMessage::ClientCollabV1(collab_messages) => collab_messages,
+      RealtimeMessage::ClientCollabV1(collab_messages) => Ok(collab_messages),
       _ => vec![],
     }
   }

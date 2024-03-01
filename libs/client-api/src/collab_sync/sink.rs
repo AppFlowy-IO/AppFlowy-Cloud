@@ -38,7 +38,6 @@ impl SinkState {
 pub enum SinkSignal {
   Stop,
   Proceed,
-  ProceedImmediately,
 }
 
 const SEND_INTERVAL: Duration = Duration::from_secs(10);
@@ -61,7 +60,6 @@ pub struct CollabSink<Sink, Msg> {
   state_notifier: Arc<watch::Sender<SinkState>>,
   pause: AtomicBool,
   object: SyncObject,
-  instant: Mutex<Instant>,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
@@ -121,7 +119,6 @@ where
       config,
       pause: AtomicBool::new(pause),
       object,
-      instant,
     }
   }
 
@@ -146,8 +143,6 @@ where
     };
 
     if send_immediately {
-      let _ = self.notifier.send(SinkSignal::ProceedImmediately);
-    } else {
       let _ = self.notifier.send(SinkSignal::Proceed);
     }
   }
@@ -175,7 +170,7 @@ where
       drop(msg_queue);
     }
 
-    let _ = self.notifier.send(SinkSignal::ProceedImmediately);
+    let _ = self.notifier.send(SinkSignal::Proceed);
   }
 
   pub fn can_queue_init_sync(&self) -> bool {
@@ -207,7 +202,7 @@ where
   pub async fn ack_msg(&self, msg: &ServerCollabMessage) -> bool {
     if msg.msg_id().is_none() {
       // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
-      self.send_msg_immediately().await;
+      self.process_next_msg().await;
       return true;
     }
 
@@ -242,32 +237,19 @@ where
     }
     // If the message is valid, notify the sink to process the next message.
     if is_valid {
-      self.send_msg_immediately().await;
+      self.process_next_msg().await;
     }
     is_valid
   }
 
-  async fn process_next_msg(&self, immediately: bool) -> Result<(), SyncError> {
+  async fn process_next_msg(&self) {
     if self.pause.load(Ordering::SeqCst) {
-      return Ok(());
+      return;
     }
-
-    if immediately {
-      self.send_msg_immediately().await;
-    } else {
-      let elapsed = self.instant.lock().await.elapsed();
-      // If the elapsed time is less than the fixed interval or if the remaining time until the fixed
-      // interval is less than the send timeout, return.
-      if elapsed < SEND_INTERVAL {
-        return Ok(());
-      }
-      self.send_msg_immediately().await;
-    }
-    Ok(())
+    self.send_msg_immediately().await;
   }
 
   async fn send_msg_immediately(&self) -> Option<()> {
-    *self.instant.lock().await = Instant::now();
     let collab_msg = {
       let (mut msg_queue, mut queue_item) = match self.message_queue.try_lock() {
         None => {
@@ -331,7 +313,7 @@ fn retry_later(weak_notifier: Weak<watch::Sender<SinkSignal>>) {
   af_spawn(async move {
     interval(Duration::from_millis(300)).tick().await;
     if let Some(notifier) = weak_notifier.upgrade() {
-      let _ = notifier.send(SinkSignal::ProceedImmediately);
+      let _ = notifier.send(SinkSignal::Proceed);
     }
   });
 }
@@ -361,10 +343,7 @@ impl<Msg> CollabSinkRunner<Msg> {
         match value {
           SinkSignal::Stop => break,
           SinkSignal::Proceed => {
-            let _ = sync_sink.process_next_msg(false).await;
-          },
-          SinkSignal::ProceedImmediately => {
-            let _ = sync_sink.process_next_msg(true).await;
+            sync_sink.process_next_msg().await;
           },
         }
       } else {

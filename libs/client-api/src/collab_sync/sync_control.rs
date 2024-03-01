@@ -317,7 +317,7 @@ where
       return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
     }
 
-    if let Some(msg_seq_num) = msg.broadcase_seq_num() {
+    if let Some(msg_seq_num) = msg.broadcast_seq_num() {
       let prev_seq_num = broadcast_seq_num.load(Ordering::SeqCst);
       broadcast_seq_num.store(msg_seq_num, Ordering::SeqCst);
 

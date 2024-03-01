@@ -106,7 +106,7 @@ impl CollabMessage {
     matches!(self, CollabMessage::ServerInitSync(_))
   }
 
-  pub fn broadcase_seq_num(&self) -> Option<u32> {
+  pub fn broadcast_seq_num(&self) -> Option<u32> {
     match self {
       CollabMessage::ServerBroadcast(data) => Some(data.seq_num),
       _ => None,

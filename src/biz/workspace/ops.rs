@@ -1,3 +1,4 @@
+use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -12,6 +13,7 @@ use database::workspace::{
   select_workspace_member_list, update_updated_at_of_workspace, upsert_workspace_member,
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
+use realtime::collaborate::CollabAccessControl;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
@@ -22,11 +24,8 @@ use tracing::instrument;
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
-use crate::biz::casbin::WorkspaceAccessControlImpl;
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::user::initialize_workspace_for_user;
-
-use super::access_control::WorkspaceAccessControl;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
@@ -57,14 +56,14 @@ pub async fn delete_workspace_for_user(
 
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
-  workspace_access_control: &WorkspaceAccessControlImpl,
+  workspace_access_control: &impl WorkspaceAccessControl,
+  collab_access_control: &impl CollabAccessControl,
   collab_storage: &Arc<CollabStorageImpl>,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
   let mut txn = pg_pool.begin().await?;
-
   let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
 
@@ -72,6 +71,13 @@ pub async fn create_workspace_for_user(
     .insert_workspace_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
     .await?;
 
+  collab_access_control
+    .insert_collab_access_level(
+      &user_uid,
+      &new_workspace.workspace_id.to_string(),
+      AFAccessLevel::FullAccess,
+    )
+    .await?;
   // add create initial collab for user
   initialize_workspace_for_user(
     user_uid,
@@ -155,7 +161,8 @@ pub async fn add_workspace_members(
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
   members: Vec<CreateWorkspaceMember>,
-) -> Result<HashMap<i64, AFRole>, AppError> {
+  workspace_access_control: &impl WorkspaceAccessControl,
+) -> Result<(), AppError> {
   let mut txn = pg_pool
     .begin()
     .await
@@ -180,11 +187,16 @@ pub async fn add_workspace_members(
     role_by_uid.insert(uid, member.role);
   }
 
+  for (uid, role) in role_by_uid {
+    workspace_access_control
+      .insert_workspace_role(&uid, workspace_id, role)
+      .await?;
+  }
   txn
     .commit()
     .await
     .context("Commit transaction to insert workspace members")?;
-  Ok(role_by_uid)
+  Ok(())
 }
 
 pub async fn remove_workspace_members(

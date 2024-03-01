@@ -26,7 +26,6 @@ pub async fn select_recent_collab_with_limit(
   Ok(recents)
 }
 
-// TODO(nathan): Create
 /// Insert a recent collab into the database. Update the record if it already exists.
 pub async fn insert_or_update_recent_collab(
   pg_pool: &PgPool,

@@ -9,7 +9,7 @@ use dashmap::DashMap;
 use std::rc::Rc;
 
 use futures_util::{SinkExt, StreamExt};
-use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -131,7 +131,7 @@ where
     stream: Stream,
   ) where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
     E: Into<Error> + Send + Sync + 'static,
   {
@@ -155,13 +155,13 @@ where
   }
 
   /// Check if the group is active. A group is considered active if it has at least one
-  /// subscriber or has been modified within the last 10 minutes.
+  /// subscriber
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.broadcast.modified_at.lock();
     if cfg!(debug_assertions) {
-      modified_at.elapsed().as_secs() > 60
+      modified_at.elapsed().as_secs() > 60 && self.subscribers.is_empty()
     } else {
-      modified_at.elapsed().as_secs() > self.timeout_secs()
+      modified_at.elapsed().as_secs() > self.timeout_secs() && self.subscribers.is_empty()
     }
   }
 

@@ -24,7 +24,6 @@ use tracing::instrument;
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
-use crate::biz::casbin::WorkspaceAccessControlImpl;
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::user::initialize_workspace_for_user;
 

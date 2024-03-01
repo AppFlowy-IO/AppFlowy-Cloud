@@ -243,6 +243,10 @@ async fn edit_collab_with_read_and_write_permission_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   let expected = json!({
     "name": "AppFlowy"
@@ -300,6 +304,10 @@ async fn edit_collab_with_full_access_permission_test() {
   let expected = json!({
     "name": "AppFlowy"
   });
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
   assert_client_collab_within_30_secs(&mut client_2, &object_id, "name", expected.clone()).await;
 
   assert_server_collab(

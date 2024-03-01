@@ -90,7 +90,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap()
     .collab
     .lock()
-    .insert("name", "work");
+    .insert("name", "workspace1");
   client_1
     .wait_object_sync_complete(&object_id)
     .await
@@ -111,7 +111,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap()
     .collab
     .lock()
-    .insert("name", "workspace");
+    .insert("name", "workspace2");
 
   client_2.reconnect().await;
   client_2
@@ -120,7 +120,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap();
 
   let expected_json = json!({
-    "name": "workspace"
+    "name": "workspace2"
   });
   assert_client_collab_within_30_secs(&mut client_1, &object_id, "name", expected_json.clone())
     .await;

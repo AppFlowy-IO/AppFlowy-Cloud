@@ -130,6 +130,10 @@ where
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> Msg) {
+    if !self.state_notifier.borrow().is_syncing() {
+      let _ = self.state_notifier.send(SinkState::Syncing);
+    }
+
     let send_immediately = {
       let mut msg_queue = self.message_queue.lock();
       let msg_id = self.msg_id_counter.next();
@@ -150,6 +154,10 @@ where
   /// When queue the init message, the sink will clear all the pending messages and send the init
   /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> Msg) {
+    if !self.state_notifier.borrow().is_syncing() {
+      let _ = self.state_notifier.send(SinkState::Syncing);
+    }
+
     // When the client is connected, remove all pending messages and send the init message.
     {
       let mut msg_queue = self.message_queue.lock();
@@ -217,6 +225,12 @@ where
           current_item.set_state(MessageState::Done)
         }
 
+        trace!(
+          "{:?}: Pending message len: {}",
+          self.object.object_id,
+          lock_guard.len()
+        );
+
         if lock_guard.is_empty() {
           if let Err(e) = self.state_notifier.send(SinkState::Finished) {
             error!("send sink state failed: {}", e);
@@ -235,11 +249,6 @@ where
   async fn process_next_msg(&self, immediately: bool) -> Result<(), SyncError> {
     if self.pause.load(Ordering::SeqCst) {
       return Ok(());
-    }
-
-    // If the sink is not syncing, notify the state_notifier to change the state to syncing.
-    if !self.state_notifier.borrow().is_syncing() {
-      let _ = self.state_notifier.send(SinkState::Syncing);
     }
 
     if immediately {
@@ -268,12 +277,6 @@ where
         Some(mut msg_queue) => msg_queue.pop().map(|sending_msg| (msg_queue, sending_msg)),
       }?;
 
-      // Do nothing if the message is still processing.
-      if queue_item.state().is_processing() {
-        msg_queue.push(queue_item);
-        return None;
-      }
-
       let mut merged_msg = vec![];
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
@@ -298,11 +301,6 @@ where
       queue_item.set_state(MessageState::Processing);
       let collab_msg = queue_item.get_msg().clone();
       msg_queue.push(queue_item);
-      trace!(
-        "{:?}: Pending message len: {}",
-        collab_msg.collab_object_id(),
-        msg_queue.len()
-      );
       drop(msg_queue);
       collab_msg
     };

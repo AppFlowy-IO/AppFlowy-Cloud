@@ -92,7 +92,12 @@ where
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
     let message = tokio::task::spawn_blocking(move || {
-      RealtimeMessage::try_from(bytes).map_err(|err| RealtimeError::Internal(err.into()))
+      RealtimeMessage::decode(bytes.as_ref()).map_err(|err| {
+        RealtimeError::Internal(anyhow!(
+          "Fail to deserialize the bytes into RealtimeMessage: {:?}",
+          err
+        ))
+      })
     })
     .await
     .map_err(|err| RealtimeError::Internal(err.into()))??;
@@ -210,6 +215,7 @@ where
   }
 }
 
+/// Handle message sent from the server
 impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser,
@@ -219,11 +225,8 @@ where
   type Result = ();
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
-    match &msg {
-      RealtimeMessage::Collab(_) => ctx.binary(msg),
-      RealtimeMessage::User(_) => ctx.binary(msg),
-      RealtimeMessage::System(_) => ctx.binary(msg),
-    }
+    let data = msg.encode().unwrap_or_default();
+    ctx.binary(Bytes::from(data));
   }
 }
 

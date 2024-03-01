@@ -6,7 +6,7 @@ use crate::util::channel_ext::UnboundedSenderSink;
 use collab::core::origin::CollabOrigin;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage, CollabSinkMessage};
 use std::collections::HashSet;
 use std::future;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use tracing::{error, trace, warn};
 
 pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) user: &'a U,
-  pub(crate) collab_message: &'a CollabMessage,
+  pub(crate) collab_message: &'a ClientCollabMessage,
 }
 
 pub(crate) struct SubscribeGroup<'a, S, U, AC> {
@@ -32,7 +32,7 @@ where
   S: CollabStorage,
   AC: CollabAccessControl,
 {
-  fn get_origin(collab_message: &CollabMessage) -> &CollabOrigin {
+  fn get_origin(collab_message: &ClientCollabMessage) -> &CollabOrigin {
     collab_message.origin()
   }
 
@@ -44,7 +44,7 @@ where
     stream_permission_service: Arc<AC>,
   ) -> (
     UnboundedSenderSink<CollabMessage>,
-    ReceiverStream<Result<CollabMessage, StreamError>>,
+    ReceiverStream<Result<ClientCollabMessage, StreamError>>,
   )
   where
     'a: 'b,
@@ -94,7 +94,7 @@ where
           return Box::pin(future::ready(false));
         }
 
-        let is_init = msg.is_client_init();
+        let is_init = msg.is_init_msg();
         let object_id = object_id.to_string();
         let cloned_stream_permission_service = stream_permission_service.clone();
 

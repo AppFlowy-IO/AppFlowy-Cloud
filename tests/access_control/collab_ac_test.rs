@@ -6,15 +6,18 @@ use appflowy_cloud::biz::casbin::access_control::{Action, ActionType, ObjectType
 
 use database_entity::dto::{AFAccessLevel, AFRole};
 use realtime::collaborate::CollabAccessControl;
+use serial_test::serial;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
   let collab_access_control = access_control.new_collab_access_control();
+  let workspace_access_control = access_control.new_workspace_access_control();
 
   let user = create_user(&pool).await?;
   let owner = create_user(&pool).await?;
@@ -42,10 +45,15 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
       role: AFRole::Guest,
     },
   ];
-  let _ =
-    biz::workspace::ops::add_workspace_members(&pool, &user.uuid, &workspace.workspace_id, members)
-      .await
-      .context("adding users to workspace")?;
+  biz::workspace::ops::add_workspace_members(
+    &pool,
+    &user.uuid,
+    &workspace.workspace_id,
+    members,
+    &workspace_access_control,
+  )
+  .await
+  .context("adding users to workspace")?;
 
   // user that created the workspace should have full access
   assert_access_level(
@@ -118,6 +126,7 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
 }
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
   let collab_access_control = access_control.new_collab_access_control();
@@ -133,9 +142,11 @@ async fn test_collab_access_control_when_obj_not_exist(pool: PgPool) -> anyhow::
 }
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
   let collab_access_control = access_control.new_collab_access_control();
+  let workspace_access_control = access_control.new_workspace_access_control();
 
   let user = create_user(&pool).await?;
   let guest = create_user(&pool).await?;
@@ -148,7 +159,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let _ = biz::workspace::ops::add_workspace_members(
+  biz::workspace::ops::add_workspace_members(
     &pool,
     &guest.uuid,
     &workspace.workspace_id,
@@ -156,6 +167,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
       email: guest.email,
       role: AFRole::Guest,
     }],
+    &workspace_access_control,
   )
   .await
   .context("adding users to workspace")
@@ -228,9 +240,11 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
 }
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
   let collab_access_control = access_control.new_collab_access_control();
+  let workspace_access_control = access_control.new_workspace_access_control();
 
   let user = create_user(&pool).await?;
   let guest = create_user(&pool).await?;
@@ -243,7 +257,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let _ = biz::workspace::ops::add_workspace_members(
+  biz::workspace::ops::add_workspace_members(
     &pool,
     &guest.uuid,
     &workspace.workspace_id,
@@ -251,6 +265,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
       email: guest.email,
       role: AFRole::Guest,
     }],
+    &workspace_access_control,
   )
   .await
   .context("adding users to workspace")?;
@@ -302,6 +317,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
 }
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
   let collab_access_control = access_control.new_collab_access_control();
@@ -334,6 +350,7 @@ async fn test_collab_access_control_cache_collab_access_level(pool: PgPool) -> a
 }
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_casbin_access_control_update_remove(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
 

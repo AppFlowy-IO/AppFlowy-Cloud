@@ -4,14 +4,14 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::collab_sync::sink_queue::{MessageState, SinkQueue};
-use crate::collab_sync::{SyncError, SyncObject};
+use crate::collab_sync::SyncObject;
 use futures_util::SinkExt;
 
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
 use tokio::sync::{watch, Mutex};
-use tokio::time::{interval, Instant};
+use tokio::time::interval;
 use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug)]
@@ -91,7 +91,6 @@ where
     let msg_queue = SinkQueue::new(uid);
     let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
-    let instant = Mutex::new(Instant::now());
 
     let mut interval = interval(SEND_INTERVAL);
     let weak_notifier = Arc::downgrade(&notifier);

@@ -10,7 +10,7 @@ use futures_util::SinkExt;
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
-use tokio::sync::{oneshot, watch, Mutex};
+use tokio::sync::{watch, Mutex};
 use tokio::time::{interval, Instant};
 use tracing::{debug, error, trace, warn};
 
@@ -45,6 +45,7 @@ const SEND_INTERVAL: Duration = Duration::from_secs(6);
 
 /// Use to sync the [Msg] to the remote.
 pub struct CollabSink<Sink, Msg> {
+  #[allow(dead_code)]
   uid: i64,
   /// The [Sink] is used to send the messages to the remote. It might be a websocket sink or
   /// other sink that implements the [SinkExt] trait.

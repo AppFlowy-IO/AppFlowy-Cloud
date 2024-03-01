@@ -501,9 +501,6 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
-  // TODO(nathan): remove this sleep by make sure the collab was inserted into database
-  // before adding collab member
-  sleep(Duration::from_secs(3)).await;
   let arc_owner = Arc::new(owner);
 
   for i in 0..5 {

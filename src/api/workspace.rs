@@ -130,14 +130,19 @@ async fn create_workpace_handler(
     .into_inner()
     .workspace_name
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
-  let new_workspace =
-    workspace::ops::create_workspace_for_user(&state.pg_pool, &uuid, &workspace_name).await?;
 
   let uid = state.users.get_user_uid(&uuid).await?;
-  state
-    .workspace_access_control
-    .insert_workspace_role(&uid, &new_workspace.workspace_id, AFRole::Owner)
-    .await?;
+  let new_workspace = workspace::ops::create_workspace_for_user(
+    &state.pg_pool,
+    &state.workspace_access_control,
+    &state.collab_access_control,
+    &state.collab_storage,
+    &uuid,
+    uid,
+    &workspace_name,
+  )
+  .await?;
+
   Ok(AppResponse::Ok().with_data(new_workspace).into())
 }
 
@@ -164,8 +169,10 @@ async fn delete_workspace_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
+  let bucket_storage = &state.bucket_storage;
+
   // TODO: add permission for workspace deletion
-  workspace::ops::delete_workspace_for_user(&state.pg_pool, &workspace_id).await?;
+  workspace::ops::delete_workspace_for_user(&state.pg_pool, &workspace_id, bucket_storage).await?;
   Ok(AppResponse::Ok().into())
 }
 

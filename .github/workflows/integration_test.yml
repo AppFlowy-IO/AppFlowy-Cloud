@@ -40,14 +40,14 @@ jobs:
           sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
           sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
           sed -i 's/API_EXTERNAL_URL=http:\/\/your-host/API_EXTERNAL_URL=http:\/\/localhost/' .env
-          # expose port for sqlx tests
+          # expose port for tests (postgres, minio)
           sed -i '38s/$/\n    ports:\n      - 5432:5432/' docker-compose.yml
+          sed -i '26s/$/\n    ports:\n      - 9000:9000/' docker-compose.yml
 
       - name: Update Nginx Configuration
         run: |
           # the wasm-pack headless tests will run on random ports, so we need to allow all origins
           sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
-        
 
       - name: Disable appflowyinc images
         run: |
@@ -71,7 +71,6 @@ jobs:
 
       - name: Run WASM tests
         working-directory: ./libs/wasm-test
-        run: | 
+        run: |
           cargo install wasm-pack
           wasm-pack test --headless --firefox
-          

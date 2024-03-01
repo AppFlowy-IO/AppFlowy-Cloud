@@ -15,14 +15,13 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use casbin::{CoreApi, DefaultModel, Enforcer};
 use dashmap::DashMap;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::{interval, timeout};
 
-use appflowy_cloud::biz::casbin::access_control::{AccessControl, MODEL_CONF};
-use appflowy_cloud::biz::casbin::adapter::PgAdapter;
+use appflowy_cloud::biz::casbin::access_control::AccessControl;
+
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use appflowy_cloud::state::AppMetrics;
 use uuid::Uuid;

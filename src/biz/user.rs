@@ -15,10 +15,13 @@ use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool, Transaction};
 use std::fmt::{Display, Formatter};
 use std::ops::DerefMut;
+use std::sync::Arc;
 use tracing::{debug, event, instrument};
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
+
+use super::collab::storage::CollabStorageImpl;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
 /// Return true if the user is a new user
@@ -64,12 +67,12 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       .await?;
 
     // Create a workspace with the GetStarted template
-    create_workspace_for_user(
+    initialize_workspace_for_user(
       new_uid,
       &workspace_id,
       &mut txn,
       vec![GetStartedDocumentTemplate],
-      state,
+      &state.collab_storage,
     )
     .await?;
   }
@@ -80,26 +83,26 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
   Ok(is_new)
 }
 
-/// Create a workspace for a user.
-/// This function generates a workspace along with its templates and stores them in the database.
+/// This function generates templates for a workspace and stores them in the database.
 /// Each template is stored as an individual collaborative object.
 #[instrument(level = "debug", skip_all, err)]
-async fn create_workspace_for_user<T>(
-  new_uid: i64,
+pub async fn initialize_workspace_for_user<T>(
+  uid: i64,
   workspace_id: &str,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
-  state: &AppState,
+  // state: &AppState,
+  collab_storage: &Arc<CollabStorageImpl>,
 ) -> Result<(), AppError>
 where
   T: WorkspaceTemplate + Send + Sync + 'static,
 {
-  let templates = WorkspaceTemplateBuilder::new(new_uid, workspace_id)
+  let templates = WorkspaceTemplateBuilder::new(uid, workspace_id)
     .with_templates(templates)
     .build()
     .await?;
 
-  debug!("create {} templates for user:{}", templates.len(), new_uid);
+  debug!("create {} templates for user:{}", templates.len(), uid);
   for template in templates {
     let object_id = template.object_id;
     let encoded_collab_v1 = template
@@ -107,11 +110,10 @@ where
       .encode_to_bytes()
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
-    state
-      .collab_storage
+    collab_storage
       .upsert_collab_with_transaction(
         workspace_id,
-        &new_uid,
+        &uid,
         CollabParams {
           object_id,
           encoded_collab_v1,

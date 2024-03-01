@@ -2,7 +2,10 @@ use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
+use database::file::bucket_s3_impl::BucketClientS3Impl;
+use database::file::BucketStorage;
 use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
+use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, insert_user_workspace,
@@ -10,29 +13,83 @@ use database::workspace::{
   select_workspace_member_list, update_updated_at_of_workspace, upsert_workspace_member,
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
+use realtime::collaborate::CollabAccessControl;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use tracing::instrument;
 use uuid::Uuid;
+use workspace_template::document::get_started::GetStartedDocumentTemplate;
+
+use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::user::initialize_workspace_for_user;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
+  bucket_storage: &Arc<BucketStorage<BucketClientS3Impl>>,
 ) -> Result<(), AppResponseError> {
+  // remove files from s3
+
+  let blob_metadatas = get_all_workspace_blob_metadata(pg_pool, workspace_id)
+    .await
+    .context("Get all workspace blob metadata")?;
+
+  for blob_metadata in blob_metadatas {
+    bucket_storage
+      .delete_blob(workspace_id, blob_metadata.file_id.as_str())
+      .await
+      .context("Delete blob from s3")?;
+  }
+
+  // remove from postgres
   delete_from_workspace(pg_pool, workspace_id).await?;
+
+  // TODO: There can be a rare case where user uploads while workspace is being deleted.
+  // We need some routine job to clean up these orphaned files.
+
   Ok(())
 }
 
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
+  workspace_access_control: &impl WorkspaceAccessControl,
+  collab_access_control: &impl CollabAccessControl,
+  collab_storage: &Arc<CollabStorageImpl>,
   user_uuid: &Uuid,
+  user_uid: i64,
   workspace_name: &str,
 ) -> Result<AFWorkspace, AppResponseError> {
-  let new_workspace_row = insert_user_workspace(pg_pool, user_uuid, workspace_name).await?;
+  let mut txn = pg_pool.begin().await?;
+  let new_workspace_row = insert_user_workspace(&mut txn, user_uuid, workspace_name).await?;
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
+
+  workspace_access_control
+    .insert_workspace_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
+    .await?;
+
+  collab_access_control
+    .insert_collab_access_level(
+      &user_uid,
+      &new_workspace.workspace_id.to_string(),
+      AFAccessLevel::FullAccess,
+    )
+    .await?;
+
+  // add create initial collab for user
+  initialize_workspace_for_user(
+    user_uid,
+    new_workspace.workspace_id.to_string().as_str(),
+    &mut txn,
+    vec![GetStartedDocumentTemplate],
+    collab_storage,
+  )
+  .await?;
+
+  txn.commit().await?;
   Ok(new_workspace)
 }
 

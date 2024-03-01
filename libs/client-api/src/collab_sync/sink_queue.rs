@@ -4,8 +4,8 @@ use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
-use tokio::sync::oneshot;
-use tracing::{trace, warn};
+
+use tracing::trace;
 
 pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]
@@ -54,7 +54,6 @@ pub(crate) struct QueueItem<Msg> {
   msg: Msg,
   msg_id: MsgId,
   state: MessageState,
-  tx: Option<oneshot::Sender<MsgId>>,
 }
 
 impl<Msg> QueueItem<Msg>
@@ -66,16 +65,11 @@ where
       msg,
       msg_id,
       state: MessageState::Pending,
-      tx: None,
     }
   }
 
   pub fn get_msg(&self) -> &Msg {
     &self.msg
-  }
-
-  pub fn state(&self) -> &MessageState {
-    &self.state
   }
 
   pub fn set_state(&mut self, new_state: MessageState) {
@@ -142,14 +136,4 @@ pub(crate) enum MessageState {
   Pending,
   Processing,
   Done,
-  Timeout,
-}
-
-impl MessageState {
-  pub fn is_done(&self) -> bool {
-    matches!(self, MessageState::Done)
-  }
-  pub fn is_processing(&self) -> bool {
-    matches!(self, MessageState::Processing)
-  }
 }

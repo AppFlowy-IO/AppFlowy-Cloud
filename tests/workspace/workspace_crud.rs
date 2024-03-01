@@ -1,5 +1,7 @@
 use client_api_test_util::generate_unique_registered_user_client;
+use collab_entity::CollabType;
 use database_entity::dto::AFRole;
+use database_entity::dto::QueryCollabParams;
 use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
 use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
@@ -26,9 +28,18 @@ async fn add_and_delete_workspace_for_user() {
     })
     .unwrap();
 
-  c.delete_workspace(&newly_added_workspace.workspace_id.to_string())
+  // Workspace need to have at least one collab
+  let workspace_id = newly_added_workspace.workspace_id.to_string();
+  let _ = c
+    .get_collab(QueryCollabParams::new(
+      &workspace_id,
+      CollabType::Folder,
+      &workspace_id,
+    ))
     .await
     .unwrap();
+
+  c.delete_workspace(&workspace_id).await.unwrap();
   let workspaces = c.get_workspaces().await.unwrap();
   assert_eq!(workspaces.0.len(), 1);
 }

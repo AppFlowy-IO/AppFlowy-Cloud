@@ -57,10 +57,7 @@ impl CollabMemCache {
   pub async fn get_encode_collab(&self, object_id: &str) -> Option<EncodedCollab> {
     match self.get_encode_collab_bytes(object_id).await {
       Some(bytes) => match EncodedCollab::decode_from_bytes(&bytes) {
-        Ok(encoded_collab) => {
-          self.hits.fetch_add(1, Ordering::Relaxed);
-          Some(encoded_collab)
-        },
+        Ok(encoded_collab) => Some(encoded_collab),
         Err(err) => {
           error!("Failed to decode collab from redis cache bytes: {:?}", err);
           None

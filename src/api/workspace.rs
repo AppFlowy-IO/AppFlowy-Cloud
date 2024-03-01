@@ -135,6 +135,7 @@ async fn create_workpace_handler(
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
     &state.workspace_access_control,
+    &state.collab_access_control,
     &state.collab_storage,
     &uuid,
     uid,
@@ -207,20 +208,15 @@ async fn add_workspace_members_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let create_members = payload.into_inner();
-  let role_by_uid = workspace::ops::add_workspace_members(
+  workspace::ops::add_workspace_members(
     &state.pg_pool,
     &user_uuid,
     &workspace_id,
     create_members.0,
+    &state.workspace_access_control,
   )
   .await?;
 
-  for (uid, role) in role_by_uid {
-    state
-      .workspace_access_control
-      .insert_workspace_role(&uid, &workspace_id, role)
-      .await?;
-  }
   Ok(AppResponse::Ok().into())
 }
 
@@ -819,7 +815,7 @@ async fn parser_realtime_msg(
   match message {
     Message::Binary(bytes) => {
       let realtime_msg = tokio::task::spawn_blocking(move || {
-        RealtimeMessage::try_from(bytes).map_err(|err| {
+        RealtimeMessage::decode(&bytes).map_err(|err| {
           AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err))
         })
       })

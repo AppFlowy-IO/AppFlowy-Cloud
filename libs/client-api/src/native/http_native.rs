@@ -56,7 +56,7 @@ impl Client {
       .into_iter()
       .map(|params| {
         let config = self.config.clone();
-        platform_spawn(async move {
+        af_spawn(async move {
           let data = params.to_bytes().map_err(AppError::from)?;
           spawn_blocking_brotli_compress(
             data,
@@ -161,7 +161,7 @@ impl WSClientHttpSender for Client {
 }
 
 // TODO(nathan): spawn for wasm
-pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+pub fn af_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + Send + 'static,
   T::Output: Send + 'static,

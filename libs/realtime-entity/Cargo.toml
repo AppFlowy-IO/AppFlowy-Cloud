@@ -24,6 +24,7 @@ thiserror = "1.0.56"
 realtime-protocol.workspace = true
 websocket.workspace = true
 serde_repr = "0.1"
+brotli = { version = "3.4.0", optional = true }
 
 [build-dependencies]
 protoc-bin-vendored = { version = "3.0" }
@@ -32,3 +33,4 @@ prost-build = "0.12.3"
 [features]
 actix_message = ["actix"]
 tungstenite = ["tokio-tungstenite"]
+rt_compress = ["brotli"]

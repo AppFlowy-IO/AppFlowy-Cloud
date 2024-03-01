@@ -4,12 +4,14 @@ use crate::access_control::{
 use anyhow::{anyhow, Context};
 use app_error::ErrorCode;
 use appflowy_cloud::biz;
+use serial_test::serial;
 
 use database_entity::dto::AFRole;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
+#[serial]
 async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<()> {
   let access_control = setup_access_control(&pool).await?;
   let workspace_access_control = access_control.new_workspace_access_control();
@@ -33,7 +35,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   .await;
 
   let member = create_user(&pool).await?;
-  let _ = biz::workspace::ops::add_workspace_members(
+  biz::workspace::ops::add_workspace_members(
     &pool,
     &member.uuid,
     &workspace.workspace_id,
@@ -41,6 +43,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
       email: member.email.clone(),
       role: AFRole::Member,
     }],
+    &workspace_access_control,
   )
   .await
   .context("adding users to workspace")?;

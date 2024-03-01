@@ -15,14 +15,13 @@ use sqlx::PgPool;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use casbin::{CoreApi, DefaultModel, Enforcer};
 use dashmap::DashMap;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::{interval, timeout};
 
-use appflowy_cloud::biz::casbin::access_control::{AccessControl, MODEL_CONF};
-use appflowy_cloud::biz::casbin::adapter::PgAdapter;
+use appflowy_cloud::biz::casbin::access_control::AccessControl;
+
 use appflowy_cloud::biz::pg_listener::PgListeners;
 use appflowy_cloud::state::AppMetrics;
 use uuid::Uuid;
@@ -50,22 +49,6 @@ pub async fn setup_access_control(pool: &PgPool) -> anyhow::Result<AccessControl
       listeners.subscribe_workspace_member_change(),
       metrics.access_control_metrics,
       enforcer_cache,
-    )
-    .await
-    .unwrap(),
-  )
-}
-
-pub async fn setup_enforcer(pool: &PgPool) -> anyhow::Result<Enforcer> {
-  let metrics = AppMetrics::new();
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer_cache = Arc::new(TestEnforcerCacheImpl {
-    cache: DashMap::new(),
-  });
-  Ok(
-    Enforcer::new(
-      model,
-      PgAdapter::new(pool.clone(), enforcer_cache, metrics.access_control_metrics),
     )
     .await
     .unwrap(),

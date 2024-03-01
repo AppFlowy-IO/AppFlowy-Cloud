@@ -41,7 +41,7 @@ pub enum SinkSignal {
   ProceedImmediately,
 }
 
-const SEND_INTERVAL: Duration = Duration::from_secs(6);
+const SEND_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Use to sync the [Msg] to the remote.
 pub struct CollabSink<Sink, Msg> {
@@ -175,7 +175,7 @@ where
       drop(msg_queue);
     }
 
-    self.notify();
+    let _ = self.notifier.send(SinkSignal::ProceedImmediately);
   }
 
   pub fn can_queue_init_sync(&self) -> bool {

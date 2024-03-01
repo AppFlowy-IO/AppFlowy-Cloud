@@ -73,10 +73,7 @@ where
     oid: &str,
     executor: E,
   ) -> Result<AFAccessLevel, AppError> {
-    let access_level_result = self
-      .collab_access_control
-      .get_collab_access_level(uid, oid)
-      .await;
+    let access_level_result = self.collab_access_control.get_access_level(uid, oid).await;
 
     if let Ok(level) = access_level_result {
       return Ok(level);
@@ -88,7 +85,7 @@ where
       let member = database::collab::select_collab_member(uid, oid, executor).await?;
       self
         .collab_access_control
-        .insert_collab_access_level(uid, oid, member.permission.access_level)
+        .insert_access_level(uid, oid, member.permission.access_level)
         .await?;
 
       Ok(member.permission.access_level)
@@ -105,7 +102,7 @@ where
   ) -> Result<(), AppError> {
     self
       .collab_access_control
-      .insert_collab_access_level(uid, oid, level)
+      .insert_access_level(uid, oid, level)
       .await
   }
 
@@ -117,7 +114,7 @@ where
   ) -> Result<AFRole, AppError> {
     self
       .workspace_access_control
-      .get_workspace_role(uid, &workspace_id.parse()?, executor)
+      .get_role(uid, &workspace_id.parse()?, executor)
       .await
   }
 }

@@ -518,7 +518,8 @@ impl CollabClientStream {
         let can_sink = sink_filter(&cloned_object_id, &msg).await;
         if can_sink {
           // Send the message to websocket client actor
-          client_ws_sink.do_send(msg.into());
+          let rt_msg = msg.into();
+          client_ws_sink.do_send(rt_msg);
         } else {
           // when then client is not allowed to receive messages
           tokio::time::sleep(Duration::from_secs(2)).await;
@@ -541,8 +542,9 @@ impl CollabClientStream {
               } else {
                 // when then client is not allowed to send messages
                 trace!(
-                  "client:{} is not allowed to send messages",
-                  msg.origin().client_user_id().unwrap_or(0)
+                  "client:{} is not allowed to update object:{}",
+                  msg.origin().client_user_id().unwrap_or(0),
+                  msg.object_id(),
                 );
                 tokio::time::sleep(Duration::from_secs(2)).await;
               }

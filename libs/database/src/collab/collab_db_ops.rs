@@ -472,11 +472,15 @@ pub async fn insert_collab_member(
   Ok(())
 }
 
-pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Result<(), AppError> {
+pub async fn delete_collab_member(
+  uid: i64,
+  oid: &str,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<(), AppError> {
   sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
     .bind(uid)
     .bind(oid)
-    .execute(pg_pool)
+    .execute(txn.deref_mut())
     .await?;
   Ok(())
 }

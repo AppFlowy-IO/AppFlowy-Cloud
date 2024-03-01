@@ -27,14 +27,16 @@ impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
 #[async_trait]
 pub trait CollabAccessControl: Sync + Send + 'static {
   /// Return the access level of the user in the collab
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
+  async fn get_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
 
-  async fn insert_collab_access_level(
+  async fn insert_access_level(
     &self,
     uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError>;
+
+  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
 
   /// Return true if the user from the HTTP request is allowed to access the collab object.
   /// This function will be called very frequently, so it should be very fast.
@@ -68,20 +70,21 @@ where
   T: CollabAccessControl,
 {
   #[instrument(level = "debug", skip_all)]
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    self.as_ref().get_collab_access_level(uid, oid).await
+  async fn get_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
+    self.as_ref().get_access_level(uid, oid).await
   }
 
-  async fn insert_collab_access_level(
+  async fn insert_access_level(
     &self,
     uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError> {
-    self
-      .as_ref()
-      .insert_collab_access_level(uid, oid, level)
-      .await
+    self.as_ref().insert_access_level(uid, oid, level).await
+  }
+
+  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
+    self.as_ref().remove_access_level(uid, oid).await
   }
 
   async fn can_access_http_method(

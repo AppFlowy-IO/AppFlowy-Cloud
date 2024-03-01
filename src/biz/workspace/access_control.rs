@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_workspace_role<'a, E>(
+  async fn get_role<'a, E>(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
@@ -29,12 +29,8 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   where
     E: Executor<'a, Database = Postgres>;
 
-  async fn insert_workspace_role(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-    role: AFRole,
-  ) -> Result<(), AppError>;
+  async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
+    -> Result<(), AppError>;
 
   async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
 }
@@ -63,7 +59,7 @@ where
     trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
     let role = self
       .access_control
-      .get_workspace_role(uid, workspace_id, &self.pg_pool)
+      .get_role(uid, workspace_id, &self.pg_pool)
       .await
       .map_err(|err| {
         AppError::NotEnoughPermissions(format!(

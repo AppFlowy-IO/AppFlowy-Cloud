@@ -4,7 +4,7 @@ use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
 
-use database_entity::dto::AFRole;
+use database_entity::dto::{AFAccessLevel, AFRole};
 use sqlx::{Executor, Postgres};
 
 use tracing::instrument;
@@ -23,7 +23,7 @@ impl WorkspaceAccessControlImpl {
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn get_workspace_role<'a, E>(
+  async fn get_role<'a, E>(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
@@ -46,13 +46,14 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn insert_workspace_role(
+  async fn insert_role(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
-    let _ = self
+    let access_level = AFAccessLevel::from(&role);
+    self
       .access_control
       .update(
         uid,
@@ -60,14 +61,27 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
         &ActionType::Role(role),
       )
       .await?;
+    self
+      .access_control
+      .update(
+        uid,
+        &ObjectType::Collab(&workspace_id.to_string()),
+        &ActionType::Level(access_level),
+      )
+      .await?;
     Ok(())
   }
 
   #[instrument(level = "info", skip_all)]
   async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
-    let _ = self
+    self
       .access_control
       .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
+      .await?;
+
+    self
+      .access_control
+      .remove(uid, &ObjectType::Collab(&workspace_id.to_string()))
       .await?;
     Ok(())
   }

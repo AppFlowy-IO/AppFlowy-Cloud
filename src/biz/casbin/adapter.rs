@@ -18,7 +18,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_stream::StreamExt;
-use tracing::error;
+use tracing::{error, info};
 
 /// Implementation of [`casbin::Adapter`] for access control authorisation.
 /// Access control policies that are managed by workspace and collab CRUD.
@@ -62,6 +62,8 @@ async fn load_collab_policies(
     let policy = [uid.to_string(), object_type.to_object_id(), action].to_vec();
     policies.push(policy);
   }
+
+  info!("load_collab_policies: {:?}", policies);
 
   Ok(policies)
 }

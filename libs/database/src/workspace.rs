@@ -204,7 +204,7 @@ pub async fn select_user_can_edit_collab(
 }
 
 #[inline]
-pub async fn insert_workspace_member_with_txn(
+pub async fn upsert_workspace_member_with_txn(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &uuid::Uuid,
   member_email: &str,
@@ -237,12 +237,8 @@ pub async fn upsert_workspace_member(
   pool: &PgPool,
   workspace_id: &Uuid,
   email: &str,
-  role: Option<AFRole>,
+  role: AFRole,
 ) -> Result<(), sqlx::Error> {
-  if role.is_none() {
-    return Ok(());
-  }
-
   event!(
     tracing::Level::TRACE,
     "update workspace member: workspace_id:{}, uid {:?}, role:{:?}",
@@ -251,7 +247,7 @@ pub async fn upsert_workspace_member(
     role
   );
 
-  let role_id: i32 = role.unwrap().into();
+  let role_id: i32 = role.into();
   sqlx::query!(
     r#"
         UPDATE af_workspace_member
@@ -273,7 +269,6 @@ pub async fn upsert_workspace_member(
 
 #[inline]
 pub async fn delete_workspace_members(
-  _user_uuid: &Uuid,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
   member_email: &str,

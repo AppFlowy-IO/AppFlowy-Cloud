@@ -18,28 +18,11 @@ impl CollabAccessControlImpl {
   pub fn new(access_control: AccessControl) -> Self {
     Self { access_control }
   }
-  #[instrument(level = "info", skip_all)]
-  pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
-    let _ = self
-      .access_control
-      .update(
-        uid,
-        &ObjectType::Collab(oid),
-        &ActionType::Level(access_level),
-      )
-      .await;
-  }
-  pub async fn remove_member(&self, uid: &i64, oid: &str) {
-    let _ = self
-      .access_control
-      .remove(uid, &ObjectType::Collab(oid))
-      .await;
-  }
 }
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
+  async fn get_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
     self
       .access_control
       .get_access_level(uid, oid)
@@ -52,8 +35,8 @@ impl CollabAccessControl for CollabAccessControlImpl {
       })
   }
 
-  #[instrument(level = "trace", skip_all)]
-  async fn insert_collab_access_level(
+  #[instrument(level = "info", skip_all)]
+  async fn insert_access_level(
     &self,
     uid: &i64,
     oid: &str,
@@ -64,6 +47,15 @@ impl CollabAccessControl for CollabAccessControlImpl {
       .update(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
       .await?;
 
+    Ok(())
+  }
+
+  #[instrument(level = "info", skip_all)]
+  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
+    self
+      .access_control
+      .remove(uid, &ObjectType::Collab(oid))
+      .await?;
     Ok(())
   }
 

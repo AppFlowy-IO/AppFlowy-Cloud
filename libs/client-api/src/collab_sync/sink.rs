@@ -11,7 +11,7 @@ use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
 use tokio::sync::{oneshot, watch, Mutex};
-use tokio::time::interval;
+use tokio::time::{interval, Instant};
 use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug)]
@@ -28,7 +28,20 @@ impl SinkState {
   pub fn is_init(&self) -> bool {
     matches!(self, SinkState::Init)
   }
+
+  pub fn is_syncing(&self) -> bool {
+    matches!(self, SinkState::Syncing)
+  }
 }
+
+#[derive(Clone)]
+pub enum SinkSignal {
+  Stop,
+  Proceed,
+  ProceedImmediately,
+}
+
+const SEND_INTERVAL: Duration = Duration::from_secs(6);
 
 /// Use to sync the [Msg] to the remote.
 pub struct CollabSink<Sink, Msg> {
@@ -42,17 +55,18 @@ pub struct CollabSink<Sink, Msg> {
   msg_id_counter: Arc<DefaultMsgIdCounter>,
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
-  notifier: Arc<watch::Sender<bool>>,
+  notifier: Arc<watch::Sender<SinkSignal>>,
   config: SinkConfig,
   state_notifier: Arc<watch::Sender<SinkState>>,
   pause: AtomicBool,
   object: SyncObject,
+  instant: Mutex<Instant>,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
   fn drop(&mut self) {
     trace!("Drop CollabSink {}", self.object.object_id);
-    let _ = self.notifier.send(true);
+    let _ = self.notifier.send(SinkSignal::Stop);
   }
 }
 
@@ -66,7 +80,7 @@ where
     uid: i64,
     object: SyncObject,
     sink: Sink,
-    notifier: watch::Sender<bool>,
+    notifier: watch::Sender<SinkSignal>,
     sync_state_tx: watch::Sender<SinkState>,
     config: SinkConfig,
     pause: bool,
@@ -78,6 +92,24 @@ where
     let msg_queue = SinkQueue::new(uid);
     let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
+    let instant = Mutex::new(Instant::now());
+
+    let mut interval = interval(SEND_INTERVAL);
+    let weak_notifier = Arc::downgrade(&notifier);
+    af_spawn(async move {
+      loop {
+        interval.tick().await;
+        match weak_notifier.upgrade() {
+          Some(notifier) => {
+            if notifier.send(SinkSignal::Proceed).is_err() {
+              break;
+            }
+          },
+          None => break,
+        }
+      }
+    });
+
     Self {
       uid,
       sender,
@@ -88,6 +120,7 @@ where
       config,
       pause: AtomicBool::new(pause),
       object,
+      instant,
     }
   }
 
@@ -97,15 +130,21 @@ where
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> Msg) {
-    {
+    let send_immediately = {
       let mut msg_queue = self.message_queue.lock();
       let msg_id = self.msg_id_counter.next();
       let msg = f(msg_id);
+      let send_immediately = msg_queue.is_empty();
       msg_queue.push_msg(msg_id, msg);
       drop(msg_queue);
-    }
+      send_immediately
+    };
 
-    self.notify();
+    if send_immediately {
+      let _ = self.notifier.send(SinkSignal::ProceedImmediately);
+    } else {
+      let _ = self.notifier.send(SinkSignal::Proceed);
+    }
   }
 
   /// When queue the init message, the sink will clear all the pending messages and send the init
@@ -155,45 +194,72 @@ where
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
+  /// Returns bool value to indicate whether the message is valid.
   pub async fn ack_msg(&self, msg: &ServerCollabMessage) -> bool {
-    // the msg_id will be None if the message is [ServerBroadcast] or [ServerAwareness]
-    match msg.msg_id() {
-      None => true,
-      Some(msg_id) => {
-        match self.message_queue.lock().peek_mut() {
-          None => false,
-          Some(mut pending_msg) => {
-            // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
-            // due to network issues, the client might send multiple messages with the same msg_id.
-            // Therefore, the msg_id might not always match the msg_id of the pending_msg.
-            if pending_msg.msg_id() != msg_id {
-              return false;
-            }
-
-            let is_done = pending_msg.set_state(self.uid, MessageState::Done);
-            if is_done {
-              self.notify();
-            }
-            is_done
-          },
-        }
-      },
+    if msg.msg_id().is_none() {
+      // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
+      self.send_msg_immediately().await;
+      return true;
     }
+
+    // safety: msg_id is not None
+    let msg_id = msg.msg_id().unwrap();
+    let mut is_valid = false;
+    {
+      let mut lock_guard = self.message_queue.lock();
+      if let Some(mut current_item) = lock_guard.pop() {
+        // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
+        // due to network issues, the client might send multiple messages with the same msg_id.
+        // Therefore, the msg_id might not always match the msg_id of the pending_msg.
+        if current_item.msg_id() != msg_id {
+          lock_guard.push(current_item);
+        } else {
+          current_item.set_state(MessageState::Done)
+        }
+
+        if lock_guard.is_empty() {
+          if let Err(e) = self.state_notifier.send(SinkState::Finished) {
+            error!("send sink state failed: {}", e);
+          }
+        }
+        is_valid = true;
+      }
+    }
+    // If the message is valid, notify the sink to process the next message.
+    if is_valid {
+      self.send_msg_immediately().await;
+    }
+    is_valid
   }
 
-  async fn process_next_msg(&self) -> Result<(), SyncError> {
+  async fn process_next_msg(&self, immediately: bool) -> Result<(), SyncError> {
     if self.pause.load(Ordering::SeqCst) {
       return Ok(());
     }
 
-    self.send_msg_immediately().await;
+    // If the sink is not syncing, notify the state_notifier to change the state to syncing.
+    if !self.state_notifier.borrow().is_syncing() {
+      let _ = self.state_notifier.send(SinkState::Syncing);
+    }
+
+    if immediately {
+      self.send_msg_immediately().await;
+    } else {
+      let elapsed = self.instant.lock().await.elapsed();
+      // If the elapsed time is less than the fixed interval or if the remaining time until the fixed
+      // interval is less than the send timeout, return.
+      if elapsed < SEND_INTERVAL {
+        return Ok(());
+      }
+      self.send_msg_immediately().await;
+    }
     Ok(())
   }
 
   async fn send_msg_immediately(&self) -> Option<()> {
-    let (tx, rx) = oneshot::channel();
+    *self.instant.lock().await = Instant::now();
     let collab_msg = {
-      let (mut msg_queue, mut sending_msg) = match self.message_queue.try_lock() {
+      let (mut msg_queue, mut queue_item) = match self.message_queue.try_lock() {
         None => {
           // If acquire the lock failed, try to notify again after 100ms
           retry_later(Arc::downgrade(&self.notifier));
@@ -201,24 +267,20 @@ where
         },
         Some(mut msg_queue) => msg_queue.pop().map(|sending_msg| (msg_queue, sending_msg)),
       }?;
-      if sending_msg.state().is_done() {
-        // Notify to process the next pending message
-        self.notify();
-        return None;
-      }
 
       // Do nothing if the message is still processing.
-      if sending_msg.state().is_processing() {
+      if queue_item.state().is_processing() {
+        msg_queue.push(queue_item);
         return None;
       }
 
       let mut merged_msg = vec![];
       // If the message can merge other messages, try to merge the next message until the
       // message is not mergeable.
-      if sending_msg.can_merge() {
+      if queue_item.can_merge() {
         while let Some(pending_msg) = msg_queue.pop() {
           // If the message is not mergeable, push the message back to the queue and break the loop.
-          match sending_msg.merge(&pending_msg, &self.config.maximum_payload_size) {
+          match queue_item.merge(&pending_msg, &self.config.maximum_payload_size) {
             Ok(continue_merge) => {
               merged_msg.push(pending_msg.msg_id());
               if !continue_merge {
@@ -233,66 +295,28 @@ where
           }
         }
       }
-
-      sending_msg.set_ret(tx);
-      sending_msg.set_state(self.uid, MessageState::Processing);
-
-      let _ = self.state_notifier.send(SinkState::Syncing);
-      let collab_msg = sending_msg.get_msg().clone();
-      msg_queue.push(sending_msg);
+      queue_item.set_state(MessageState::Processing);
+      let collab_msg = queue_item.get_msg().clone();
+      msg_queue.push(queue_item);
+      trace!(
+        "{:?}: Pending message len: {}",
+        collab_msg.collab_object_id(),
+        msg_queue.len()
+      );
+      drop(msg_queue);
       collab_msg
     };
 
-    let payload_len = collab_msg.payload_len();
     match self.sender.try_lock() {
       Ok(mut sender) => {
         debug!("Sending {}", collab_msg);
         if let Err(err) = sender.send(collab_msg).await {
           error!("Failed to send error: {:?}", err.into());
-          return None;
         }
       },
       Err(_) => {
         warn!("Failed to acquire the lock of the sink, retry later");
         retry_later(Arc::downgrade(&self.notifier));
-        return None;
-      },
-    }
-    let timeout_duration = calculate_timeout(payload_len, self.config.send_timeout);
-    // Wait for the message to be acked.
-    // If the message is not acked within the timeout, resend the message.
-    match tokio::time::timeout(timeout_duration, rx).await {
-      Ok(result) => {
-        match result {
-          Ok(_) => match self.message_queue.try_lock() {
-            None => warn!("Failed to acquire the lock of the msg_queue"),
-            Some(mut msg_queue) => {
-              let msg = msg_queue.pop();
-              trace!(
-                "{:?}: Pending messages: {}",
-                msg.map(|msg| msg.object_id().to_owned()),
-                msg_queue.len()
-              );
-              if msg_queue.is_empty() {
-                if let Err(e) = self.state_notifier.send(SinkState::Finished) {
-                  error!("send sink state failed: {}", e);
-                }
-              }
-            },
-          },
-          Err(err) => {
-            // the error might be caused by the sending message was removed from the queue.
-            trace!("pending message oneshot channel error: {}", err)
-          },
-        }
-
-        self.notify()
-      },
-      Err(_) => {
-        if let Some(mut pending_msg) = self.message_queue.lock().peek_mut() {
-          pending_msg.set_state(self.uid, MessageState::Timeout);
-        }
-        self.notify();
       },
     }
     None
@@ -300,15 +324,15 @@ where
 
   /// Notify the sink to process the next message.
   pub(crate) fn notify(&self) {
-    let _ = self.notifier.send(false);
+    let _ = self.notifier.send(SinkSignal::Proceed);
   }
 }
 
-fn retry_later(weak_notifier: Weak<watch::Sender<bool>>) {
+fn retry_later(weak_notifier: Weak<watch::Sender<SinkSignal>>) {
   af_spawn(async move {
-    interval(Duration::from_millis(100)).tick().await;
+    interval(Duration::from_millis(300)).tick().await;
     if let Some(notifier) = weak_notifier.upgrade() {
-      let _ = notifier.send(false);
+      let _ = notifier.send(SinkSignal::ProceedImmediately);
     }
   });
 }
@@ -319,7 +343,7 @@ impl<Msg> CollabSinkRunner<Msg> {
   /// The runner will stop if the [CollabSink] was dropped or the notifier was closed.
   pub async fn run<E, Sink>(
     weak_sink: Weak<CollabSink<Sink, Msg>>,
-    mut notifier: watch::Receiver<bool>,
+    mut notifier: watch::Receiver<SinkSignal>,
   ) where
     E: Into<anyhow::Error> + Send + Sync + 'static,
     Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
@@ -333,28 +357,21 @@ impl<Msg> CollabSinkRunner<Msg> {
       if notifier.changed().await.is_err() {
         break;
       }
-
-      // stops the runner if the value of notifier is `true`
-      if *notifier.borrow() {
-        break;
-      }
-
       if let Some(sync_sink) = weak_sink.upgrade() {
-        let _ = sync_sink.process_next_msg().await;
+        let value = notifier.borrow().clone();
+        match value {
+          SinkSignal::Stop => break,
+          SinkSignal::Proceed => {
+            let _ = sync_sink.process_next_msg(false).await;
+          },
+          SinkSignal::ProceedImmediately => {
+            let _ = sync_sink.process_next_msg(true).await;
+          },
+        }
       } else {
         break;
       }
     }
-  }
-}
-
-fn calculate_timeout(payload_len: usize, default: Duration) -> Duration {
-  match payload_len {
-    0..=40959 => default,
-    40960..=1048576 => Duration::from_secs(10),
-    1048577..=2097152 => Duration::from_secs(20),
-    2097153..=4194304 => Duration::from_secs(50),
-    _ => Duration::from_secs(160),
   }
 }
 

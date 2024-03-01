@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
+use tracing::trace;
 use uuid::Uuid;
 
 use crate::user::{generate_unique_registered_user, User};
@@ -97,7 +98,10 @@ impl TestClient {
 
   pub async fn new_user() -> Self {
     let registered_user = generate_unique_registered_user().await;
-    Self::new(registered_user, true).await
+    let this = Self::new(registered_user, true).await;
+    let uid = this.uid().await;
+    trace!("🤖New user created: {}", uid);
+    this
   }
 
   pub async fn new_user_without_ws_conn() -> Self {

@@ -133,6 +133,11 @@ where
         self.subscribe_group(&user, &collab_message).await?;
         broadcast_client_collab_message(&user, collab_message, &self.client_stream_by_user).await;
       } else {
+        warn!(
+          "The group:{} is not found, the client:{} should send the init message first",
+          collab_message.object_id(),
+          user
+        );
         // TODO(nathan): ask the client to send the init message first
       }
     }

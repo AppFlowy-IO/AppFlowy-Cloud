@@ -21,7 +21,7 @@ use yrs::UpdateSubscription;
 
 use crate::error::RealtimeError;
 use realtime_entity::collab_msg::{
-  AckCode, ClientCollabMessage, CollabAck, CollabAwareness, CollabBroadcastData, CollabMessage,
+  AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
@@ -90,7 +90,7 @@ impl CollabBroadcast {
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = CollabBroadcastData::new(origin, cloned_oid.clone(), payload, value + 1);
+          let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, value + 1);
 
           match broadcast_sink.send(msg.into()) {
             Ok(_) => trace!("observe doc update with len:{}", update_len),
@@ -113,7 +113,7 @@ impl CollabBroadcast {
         .on_update(move |awareness, event| {
           if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
             let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = CollabAwareness::new(cloned_oid.clone(), payload);
+            let msg = AwarenessSync::new(cloned_oid.clone(), payload);
             if let Err(_e) = broadcast_sink.send(msg.into()) {
               trace!("Broadcast group is closed");
             }
@@ -129,7 +129,7 @@ impl CollabBroadcast {
   /// Broadcasts user message to all active subscribers. Returns error if message could not have
   /// been broadcast.
   #[allow(clippy::result_large_err)]
-  pub fn broadcast_awareness(&self, msg: CollabAwareness) -> Result<(), SendError<CollabMessage>> {
+  pub fn broadcast_awareness(&self, msg: AwarenessSync) -> Result<(), SendError<CollabMessage>> {
     self.sender.send(msg.into())?;
     Ok(())
   }
@@ -195,7 +195,7 @@ impl CollabBroadcast {
                     continue;
                   }
 
-                  trace!("[realtime]: broadcast message to client: {}", message);
+                  trace!("[realtime]: send {}", message);
                   if let Err(err) = sink.send(message).await {
                     error!("fail to broadcast message:{}", err);
                   }
@@ -267,17 +267,22 @@ async fn handle_client_collab_message<Sink>(
   let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
   let origin = collab_msg.origin().clone();
   let reader = MessageReader::new(&mut decoder);
+  let mut resps = vec![];
   for msg in reader {
     match msg {
       Ok(msg) => {
-        let mut resps = vec![];
         if let Ok(mut collab) = collab.try_lock() {
           let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
           match result {
             Ok(payload) => {
               let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())
                 .with_payload(payload.unwrap_or_default());
-              resps.push(resp);
+
+              // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
+              // send one ack back to the client.
+              if resps.is_empty() {
+                resps.push(resp);
+              }
             },
             Err(err) => {
               error!("handle collab:{} message error:{}", object_id, err);
@@ -285,12 +290,6 @@ async fn handle_client_collab_message<Sink>(
                 .with_code(ack_code_from_error(&err));
               resps.push(resp);
             },
-          }
-        }
-
-        for resp in resps {
-          if let Err(err) = sink.send(resp.into()).await {
-            trace!("fail to send response to client: {}", err);
           }
         }
       },
@@ -301,6 +300,12 @@ async fn handle_client_collab_message<Sink>(
         );
         break;
       },
+    }
+  }
+  for resp in resps {
+    trace!("[realtime]: send {}", resp);
+    if let Err(err) = sink.send(resp.into()).await {
+      trace!("fail to send response to client: {}", err);
     }
   }
 }

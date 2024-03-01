@@ -56,22 +56,6 @@ pub async fn setup_access_control(pool: &PgPool) -> anyhow::Result<AccessControl
   )
 }
 
-pub async fn setup_enforcer(pool: &PgPool) -> anyhow::Result<Enforcer> {
-  let metrics = AppMetrics::new();
-  let model = DefaultModel::from_str(MODEL_CONF).await?;
-  let enforcer_cache = Arc::new(TestEnforcerCacheImpl {
-    cache: DashMap::new(),
-  });
-  Ok(
-    Enforcer::new(
-      model,
-      PgAdapter::new(pool.clone(), enforcer_cache, metrics.access_control_metrics),
-    )
-    .await
-    .unwrap(),
-  )
-}
-
 pub async fn setup_db(pool: &PgPool) -> anyhow::Result<()> {
   setup_log();
   // Have to manually manage schema and tables managed by gotrue but referenced by our

@@ -2,11 +2,14 @@ use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage}
 use anyhow::{anyhow, Error};
 use bincode::{DefaultOptions, Options};
 
+use crate::user::UserMessage;
+#[cfg(feature = "rt_compress")]
 use brotli::{CompressorReader, Decompressor};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+#[cfg(feature = "rt_compress")]
 use std::io::Read;
-use websocket::Message;
+
 /// Maximum allowable size for a realtime message.
 ///
 /// This sets the largest size a message can be for server processing in real-time communications.
@@ -16,6 +19,7 @@ use websocket::Message;
 pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 1024 * 1024; // 1 MB
 
 /// 1 for using brotli compression
+#[cfg(feature = "rt_compress")]
 const COMPRESSED_PREFIX: &[u8] = b"COMPRESSED:1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +65,7 @@ impl RealtimeMessage {
     }
   }
 
+  #[cfg(feature = "rt_compress")]
   pub fn encode(&self) -> Result<Vec<u8>, Error> {
     let data = DefaultOptions::new()
       .with_fixint_encoding()
@@ -71,15 +76,25 @@ impl RealtimeMessage {
     let mut compressor = CompressorReader::new(&*data, 4096, 4, 22);
     let mut compressed_data = Vec::new();
     compressor.read_to_end(&mut compressed_data)?;
-
-    let mut result = Vec::new();
-    result.extend_from_slice(COMPRESSED_PREFIX);
-    result.extend(compressed_data);
-    Ok(result)
+    let mut data = Vec::new();
+    data.extend_from_slice(COMPRESSED_PREFIX);
+    data.extend(compressed_data);
+    Ok(data)
   }
 
+  #[cfg(not(feature = "rt_compress"))]
+  pub fn encode(&self) -> Result<Vec<u8>, Error> {
+    let data = DefaultOptions::new()
+      .with_fixint_encoding()
+      .allow_trailing_bytes()
+      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .serialize(self)?;
+    Ok(data)
+  }
+
+  #[cfg(feature = "rt_compress")]
   pub fn decode(data: &[u8]) -> Result<Self, Error> {
-    let decompressed_data = if data.starts_with(COMPRESSED_PREFIX) {
+    if data.starts_with(COMPRESSED_PREFIX) {
       let data_without_prefix = &data[COMPRESSED_PREFIX.len()..];
       let mut decompressor = Decompressor::new(data_without_prefix, 4096);
       let mut decompressed_data = Vec::new();
@@ -87,13 +102,23 @@ impl RealtimeMessage {
       decompressed_data
     } else {
       data.to_vec()
-    };
+    }
 
     let message = DefaultOptions::new()
       .with_fixint_encoding()
       .allow_trailing_bytes()
       .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
-      .deserialize(&decompressed_data)?;
+      .deserialize(&data)?;
+    Ok(message)
+  }
+
+  #[cfg(not(feature = "rt_compress"))]
+  pub fn decode(data: &[u8]) -> Result<Self, Error> {
+    let message = DefaultOptions::new()
+      .with_fixint_encoding()
+      .allow_trailing_bytes()
+      .with_limit(MAXIMUM_REALTIME_MESSAGE_SIZE)
+      .deserialize(data)?;
     Ok(message)
   }
 }
@@ -107,41 +132,6 @@ impl Display for RealtimeMessage {
       RealtimeMessage::ClientCollabV1(_) => f.write_fmt(format_args!("ClientCollabV1")),
       RealtimeMessage::ServerCollabV1(_) => f.write_fmt(format_args!("ServerCollabV1")),
     }
-  }
-}
-
-use crate::user::UserMessage;
-
-impl TryFrom<&Message> for RealtimeMessage {
-  type Error = anyhow::Error;
-
-  fn try_from(value: &Message) -> Result<Self, Self::Error> {
-    match value {
-      Message::Binary(bytes) => {
-        RealtimeMessage::decode(bytes.as_slice()).map_err(anyhow::Error::from)
-      },
-      _ => Err(anyhow::anyhow!("Unsupported message type")),
-    }
-  }
-}
-
-impl TryFrom<Message> for RealtimeMessage {
-  type Error = anyhow::Error;
-
-  fn try_from(value: Message) -> Result<Self, Self::Error> {
-    match value {
-      Message::Binary(bytes) => {
-        RealtimeMessage::decode(bytes.as_slice()).map_err(anyhow::Error::from)
-      },
-      _ => Err(anyhow::anyhow!("Unsupported message type")),
-    }
-  }
-}
-
-impl From<RealtimeMessage> for Message {
-  fn from(msg: RealtimeMessage) -> Self {
-    let data = msg.encode().unwrap_or_default();
-    Message::Binary(data)
   }
 }
 

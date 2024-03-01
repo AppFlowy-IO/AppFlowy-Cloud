@@ -1,3 +1,4 @@
+use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -104,7 +105,8 @@ pub async fn add_workspace_members(
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
   members: Vec<CreateWorkspaceMember>,
-) -> Result<HashMap<i64, AFRole>, AppError> {
+  workspace_access_control: &impl WorkspaceAccessControl,
+) -> Result<(), AppError> {
   let mut txn = pg_pool
     .begin()
     .await
@@ -129,11 +131,16 @@ pub async fn add_workspace_members(
     role_by_uid.insert(uid, member.role);
   }
 
+  for (uid, role) in role_by_uid {
+    workspace_access_control
+      .insert_workspace_role(&uid, workspace_id, role)
+      .await?;
+  }
   txn
     .commit()
     .await
     .context("Commit transaction to insert workspace members")?;
-  Ok(role_by_uid)
+  Ok(())
 }
 
 pub async fn remove_workspace_members(

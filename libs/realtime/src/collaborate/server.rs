@@ -151,7 +151,6 @@ where
     access_control: &Arc<AC>,
     collab_message: ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
-    trace!("Receive client:{} message:{}", user.uid(), collab_message);
     let old_sender = group_sender_by_object_id
       .get(collab_message.object_id())
       .map(|entry| entry.value().clone());
@@ -424,7 +423,7 @@ pub async fn broadcast_client_collab_message<U>(
   U: RealtimeUser,
 {
   if let Some(client_stream) = client_streams.get(user) {
-    trace!("[realtime]: receives collab message: {}", collab_message);
+    trace!("[realtime]: receive:{}", collab_message);
     let err = client_stream
       .stream_tx
       .send(Ok(RealtimeMessage::ClientCollabV1(vec![collab_message])));
@@ -541,6 +540,10 @@ impl CollabClientStream {
                 let _ = tx.send(Ok(msg)).await;
               } else {
                 // when then client is not allowed to send messages
+                trace!(
+                  "client:{} is not allowed to send messages",
+                  msg.origin().client_user_id().unwrap_or(0)
+                );
                 tokio::time::sleep(Duration::from_secs(2)).await;
               }
             }

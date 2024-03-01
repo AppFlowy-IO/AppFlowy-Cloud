@@ -155,13 +155,13 @@ where
   }
 
   /// Check if the group is active. A group is considered active if it has at least one
-  /// subscriber or has been modified within the last 10 minutes.
+  /// subscriber
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.broadcast.modified_at.lock();
     if cfg!(debug_assertions) {
-      modified_at.elapsed().as_secs() > 60
+      modified_at.elapsed().as_secs() > 60 && self.subscribers.is_empty()
     } else {
-      modified_at.elapsed().as_secs() > self.timeout_secs()
+      modified_at.elapsed().as_secs() > self.timeout_secs() && self.subscribers.is_empty()
     }
   }
 

@@ -405,8 +405,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let collab_type = CollabType::Document;
   let workspace_id = owner.workspace_id().await;
   owner
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .create_and_edit_collab_with_data(object_id.clone(), &workspace_id, collab_type.clone(), None)
     .await;
+
   let arc_owner = Arc::new(owner);
 
   // simulate multiple users edit the same collab. All of them have read and write permission
@@ -494,13 +495,14 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
 async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
-  let object_id = Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
   let workspace_id = owner.workspace_id().await;
-  owner
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
+  let object_id = owner
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
+  // TODO(nathan): remove this sleep by make sure the collab was inserted into database
+  // before adding collab member
   sleep(Duration::from_secs(3)).await;
   let arc_owner = Arc::new(owner);
 

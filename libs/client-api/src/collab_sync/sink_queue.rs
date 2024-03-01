@@ -10,7 +10,7 @@ use tracing::{trace, warn};
 pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]
   uid: i64,
-  queue: BinaryHeap<SinkQueueMessage<Msg>>,
+  queue: BinaryHeap<QueueItem<Msg>>,
 }
 
 impl<Msg> SinkQueue<Msg>
@@ -25,7 +25,7 @@ where
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
-    self.queue.push(SinkQueueMessage::new(msg, msg_id));
+    self.queue.push(QueueItem::new(msg, msg_id));
   }
 }
 
@@ -33,7 +33,7 @@ impl<Msg> Deref for SinkQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {
-  type Target = BinaryHeap<SinkQueueMessage<Msg>>;
+  type Target = BinaryHeap<QueueItem<Msg>>;
 
   fn deref(&self) -> &Self::Target {
     &self.queue
@@ -50,14 +50,14 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct SinkQueueMessage<Msg> {
+pub(crate) struct QueueItem<Msg> {
   msg: Msg,
   msg_id: MsgId,
   state: MessageState,
   tx: Option<oneshot::Sender<MsgId>>,
 }
 
-impl<Msg> SinkQueueMessage<Msg>
+impl<Msg> QueueItem<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -70,10 +70,6 @@ where
     }
   }
 
-  pub fn object_id(&self) -> &str {
-    self.msg.collab_object_id()
-  }
-
   pub fn get_msg(&self) -> &Msg {
     &self.msg
   }
@@ -82,7 +78,7 @@ where
     &self.state
   }
 
-  pub fn set_state(&mut self, _uid: i64, new_state: MessageState) -> bool {
+  pub fn set_state(&mut self, new_state: MessageState) {
     if self.state != new_state {
       self.state = new_state;
 
@@ -93,28 +89,6 @@ where
         self.state
       );
     }
-
-    if self.state.is_done() {
-      match self.tx.take() {
-        None => false,
-        Some(tx) => {
-          // Notify that the message with given id was received
-          match tx.send(self.msg_id) {
-            Ok(_) => true,
-            Err(err) => {
-              warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
-              false
-            },
-          }
-        },
-      }
-    } else {
-      false
-    }
-  }
-
-  pub fn set_ret(&mut self, tx: oneshot::Sender<MsgId>) {
-    self.tx = Some(tx);
   }
 
   pub fn msg_id(&self) -> MsgId {
@@ -122,7 +96,7 @@ where
   }
 }
 
-impl<Msg> SinkQueueMessage<Msg>
+impl<Msg> QueueItem<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -134,9 +108,9 @@ where
   }
 }
 
-impl<Msg> Eq for SinkQueueMessage<Msg> where Msg: Eq {}
+impl<Msg> Eq for QueueItem<Msg> where Msg: Eq {}
 
-impl<Msg> PartialEq for SinkQueueMessage<Msg>
+impl<Msg> PartialEq for QueueItem<Msg>
 where
   Msg: PartialEq,
 {
@@ -145,7 +119,7 @@ where
   }
 }
 
-impl<Msg> PartialOrd for SinkQueueMessage<Msg>
+impl<Msg> PartialOrd for QueueItem<Msg>
 where
   Msg: PartialOrd + Ord,
 {
@@ -154,7 +128,7 @@ where
   }
 }
 
-impl<Msg> Ord for SinkQueueMessage<Msg>
+impl<Msg> Ord for QueueItem<Msg>
 where
   Msg: Ord,
 {

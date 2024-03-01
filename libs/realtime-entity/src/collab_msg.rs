@@ -33,8 +33,8 @@ pub enum CollabMessage {
   ClientUpdateSync(UpdateSync),
   ClientAck(CollabAck),
   ServerInitSync(ServerInit),
-  AwarenessSync(CollabAwareness),
-  ServerBroadcast(CollabBroadcastData),
+  AwarenessSync(AwarenessSync),
+  ServerBroadcast(BroadcastSync),
 }
 
 impl CollabSinkMessage for CollabMessage {
@@ -199,13 +199,13 @@ impl Display for CollabMessage {
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct CollabAwareness {
+pub struct AwarenessSync {
   object_id: String,
   payload: Bytes,
   origin: CollabOrigin,
 }
 
-impl CollabAwareness {
+impl AwarenessSync {
   pub fn new(object_id: String, payload: Vec<u8>) -> Self {
     Self {
       object_id,
@@ -215,13 +215,13 @@ impl CollabAwareness {
   }
 }
 
-impl From<CollabAwareness> for CollabMessage {
-  fn from(value: CollabAwareness) -> Self {
+impl From<AwarenessSync> for CollabMessage {
+  fn from(value: AwarenessSync) -> Self {
     CollabMessage::AwarenessSync(value)
   }
 }
 
-impl Display for CollabAwareness {
+impl Display for AwarenessSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "awareness: [oid:{}|len:{}]",
@@ -273,8 +273,8 @@ impl InitSync {
 impl Display for InitSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client init: [type:{}|oid:{}|msg_id:{}|len:{}]",
-      self.collab_type,
+      "client init: [uid:{}|oid:{}|msg_id:{}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -332,8 +332,8 @@ impl From<ServerInit> for CollabMessage {
 impl Display for ServerInit {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "server init: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "server init: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -412,8 +412,8 @@ impl From<UpdateSync> for CollabMessage {
 impl Display for UpdateSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update sync: [{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "update: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -488,8 +488,8 @@ impl From<CollabAck> for CollabMessage {
 impl Display for CollabAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "ack: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "ack: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.source.msg_id,
       self.payload.len(),
@@ -505,7 +505,7 @@ impl Display for CollabAck {
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct CollabBroadcastData {
+pub struct BroadcastSync {
   origin: CollabOrigin,
   object_id: String,
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
@@ -514,7 +514,7 @@ pub struct CollabBroadcastData {
   seq_num: u32,
 }
 
-impl CollabBroadcastData {
+impl BroadcastSync {
   pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, seq_num: u32) -> Self {
     Self {
       origin,
@@ -525,19 +525,19 @@ impl CollabBroadcastData {
   }
 }
 
-impl Display for CollabBroadcastData {
+impl Display for BroadcastSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "server broadcast: [{}|oid:{}|len:{}]",
-      self.origin,
+      "broadcast: [uid:{}|oid:{}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.payload.len(),
     ))
   }
 }
 
-impl From<CollabBroadcastData> for CollabMessage {
-  fn from(value: CollabBroadcastData) -> Self {
+impl From<BroadcastSync> for CollabMessage {
+  fn from(value: BroadcastSync) -> Self {
     CollabMessage::ServerBroadcast(value)
   }
 }
@@ -761,8 +761,8 @@ impl Ord for ClientCollabMessage {
 pub enum ServerCollabMessage {
   ClientAck(CollabAck),
   ServerInitSync(ServerInit),
-  AwarenessSync(CollabAwareness),
-  ServerBroadcast(CollabBroadcastData),
+  AwarenessSync(AwarenessSync),
+  ServerBroadcast(BroadcastSync),
 }
 
 impl ServerCollabMessage {

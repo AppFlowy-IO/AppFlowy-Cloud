@@ -1,6 +1,8 @@
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
-use crate::collab_sync::{CollabSink, CollabSinkRunner, SinkState, SyncError, SyncObject};
+use crate::collab_sync::{
+  CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncError, SyncObject,
+};
 use bytes::Bytes;
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
@@ -69,7 +71,7 @@ where
     pause: bool,
   ) -> Self {
     let protocol = ClientSyncProtocol;
-    let (notifier, notifier_rx) = watch::channel(false);
+    let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
     let sync_state = Arc::new(watch::channel(SyncState::InitSyncBegin).0);
     let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
     debug_assert!(origin.client_user_id().is_some());
@@ -342,7 +344,8 @@ where
     }
 
     // Check if the message is acknowledged by the sink. If not, return.
-    if !sink.ack_msg(&msg).await {
+    let is_valid = sink.ack_msg(&msg).await;
+    if !is_valid {
       return Ok(());
     }
 
@@ -382,7 +385,6 @@ where
       let reader = MessageReader::new(&mut decoder);
       for msg in reader {
         let msg = msg?;
-        trace!(" {}", msg);
         let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
         if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, &mut collab, msg)?
         {

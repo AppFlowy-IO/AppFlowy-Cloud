@@ -269,14 +269,14 @@ impl WSClient {
     af_spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
         match ws_msg {
-          Message::Binary(_) => {
+          Message::Binary(data) => {
             #[cfg(debug_assertions)]
             {
               if cloned_skip_realtime_message.load(std::sync::atomic::Ordering::SeqCst) {
                 continue;
               }
             }
-            match RealtimeMessage::try_from(&ws_msg) {
+            match RealtimeMessage::decode(&data) {
               Ok(msg) => match msg {
                 RealtimeMessage::Collab(collab_msg) => {
                   match ServerCollabMessage::try_from(collab_msg) {

@@ -215,6 +215,7 @@ where
   }
 }
 
+/// Handle message sent from the server
 impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser,

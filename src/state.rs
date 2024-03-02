@@ -1,5 +1,5 @@
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
-use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::pg_listener::PgListeners;
 
 use crate::config::config::Config;
@@ -15,6 +15,7 @@ use realtime::collaborate::RealtimeMetrics;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 
+use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::metrics::CollabMetrics;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -31,7 +32,8 @@ pub struct AppState {
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: RedisClient,
-  pub collab_storage: Arc<CollabStorageImpl>,
+  pub collab_cache: CollabCache,
+  pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub collab_access_control: CollabAccessControlImpl,
   pub workspace_access_control: WorkspaceAccessControlImpl,
   pub bucket_storage: Arc<S3BucketStorage>,

@@ -1,5 +1,5 @@
 use crate::collaborate::group::CollabGroup;
-use crate::collaborate::{CollabStoragePlugin, RealtimeCollabAccessControl};
+use crate::collaborate::{CollabStoragePlugin, RealtimeAccessControl};
 use crate::entities::RealtimeUser;
 use anyhow::Error;
 use collab::core::origin::CollabOrigin;
@@ -20,7 +20,7 @@ impl<S, U, AC> AllCollabGroup<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
-  AC: RealtimeCollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Self {
     Self {

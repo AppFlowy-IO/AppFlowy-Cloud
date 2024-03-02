@@ -20,19 +20,6 @@ use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, event, instrument};
 use uuid::Uuid;
 
-#[inline]
-pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
-  let result = sqlx::query_scalar!(
-    r#"
-        SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
-        "#,
-    &oid,
-  )
-  .fetch_one(pg_pool)
-  .await;
-  transform_record_not_found_error(result)
-}
-
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
 /// provided `object_id`.Additionally, if the row is being inserted for the first time, a corresponding
 /// entry will be added to the `af_collab_member` table.

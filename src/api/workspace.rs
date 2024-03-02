@@ -33,7 +33,7 @@ use sqlx::types::uuid;
 use tokio::time::{sleep, Instant};
 
 use crate::biz::collab::access_control::CollabAccessControl;
-use realtime::collaborate::RealtimeCollabAccessControl;
+
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
@@ -140,7 +140,7 @@ async fn create_workspace_handler(
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
     &state.workspace_access_control,
-    &state.collab_storage,
+    &state.collab_access_control_storage,
     &uuid,
     uid,
     &workspace_name,
@@ -353,7 +353,10 @@ async fn create_collab_handler(
     .collab_access_control
     .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
     .await?;
-  state.collab_storage.upsert_collab(&uid, params).await?;
+  state
+    .collab_access_control_storage
+    .insert_collab(&uid, params, false)
+    .await?;
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -435,8 +438,8 @@ async fn batch_create_collab_handler(
   for params in collab_params_list {
     let object_id = params.object_id.clone();
     state
-      .collab_storage
-      .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .collab_access_control_storage
+      .insert_or_update_collab(&workspace_id, &uid, params, &mut transaction)
       .await?;
 
     state
@@ -501,8 +504,8 @@ async fn create_collab_list_handler(
   for params in params_list {
     let object_id = params.object_id.clone();
     state
-      .collab_storage
-      .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .collab_access_control_storage
+      .insert_or_update_collab(&workspace_id, &uid, params, &mut transaction)
       .await?;
 
     state
@@ -530,7 +533,7 @@ async fn get_collab_handler(
     .await
     .map_err(AppResponseError::from)?;
   let data = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_encoded(&uid, payload.into_inner(), false)
     .await
     .map_err(AppResponseError::from)?;
@@ -546,7 +549,7 @@ async fn get_collab_snapshot_handler(
 ) -> Result<Json<AppResponse<SnapshotData>>> {
   let (workspace_id, object_id) = path.into_inner();
   let data = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_snapshot(&workspace_id.to_string(), &object_id, &payload.snapshot_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -569,7 +572,7 @@ async fn create_collab_snapshot_handler(
     .await
     .map_err(AppResponseError::from)?;
   let encoded_collab_v1 = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_encoded(
       &uid,
       QueryCollabParams::new(&object_id, collab_type, &workspace_id),
@@ -580,7 +583,7 @@ async fn create_collab_snapshot_handler(
     .unwrap();
 
   let meta = state
-    .collab_storage
+    .collab_access_control_storage
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
@@ -598,7 +601,7 @@ async fn get_all_collab_snapshot_list_handler(
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
   let (_, object_id) = path.into_inner();
   let data = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_snapshot_list(&object_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -618,7 +621,7 @@ async fn batch_get_collab_handler(
     .map_err(AppResponseError::from)?;
   let result = BatchQueryCollabResult(
     state
-      .collab_storage
+      .collab_access_control_storage
       .batch_get_collab(&uid, payload.into_inner().0)
       .await,
   );
@@ -636,8 +639,8 @@ async fn update_collab_handler(
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
   state
-    .collab_storage
-    .upsert_collab(&uid, create_params)
+    .collab_access_control_storage
+    .insert_collab(&uid, create_params, false)
     .await?;
   Ok(AppResponse::Ok().into())
 }
@@ -658,7 +661,7 @@ async fn delete_collab_handler(
     .map_err(AppResponseError::from)?;
 
   state
-    .collab_storage
+    .collab_access_control_storage
     .delete_collab(&uid, &payload.object_id)
     .await
     .map_err(AppResponseError::from)?;

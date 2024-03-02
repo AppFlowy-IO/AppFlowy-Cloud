@@ -1,4 +1,4 @@
-use crate::api::workspace::{COLLAB_PATTERN, WORKSPACE_MEMBER_PATTERN};
+use crate::api::workspace::COLLAB_PATTERN;
 use crate::biz::casbin::access_control::Action;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
@@ -6,10 +6,11 @@ use actix_router::{Path, ResourceDef, Url};
 use actix_web::http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
-use database::collab::{is_collab_exists, CollabStorageAccessControl};
+use database::collab::CollabStorageAccessControl;
 use database_entity::dto::{AFAccessLevel, AFRole};
-use realtime::collaborate::RealtimeCollabAccessControl;
-use sqlx::PgPool;
+
+use crate::biz::collab::cache::CollabCache;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{instrument, trace};
@@ -38,7 +39,7 @@ pub trait CollabAccessControl: Sync + Send + 'static {
 #[derive(Clone)]
 pub struct CollabMiddlewareAccessControl<AC: CollabAccessControl> {
   pub access_control: Arc<AC>,
-  pg_pool: PgPool,
+  collab_cache: CollabCache,
   skip_resources: Vec<(Method, ResourceDef)>,
   require_access_levels: Vec<(ResourceDef, HashMap<Method, AFAccessLevel>)>,
 }
@@ -47,7 +48,7 @@ impl<AC> CollabMiddlewareAccessControl<AC>
 where
   AC: CollabAccessControl,
 {
-  pub fn new(access_control: Arc<AC>, pg_pool: PgPool) -> Self {
+  pub fn new(access_control: Arc<AC>, collab_cache: CollabCache) -> Self {
     Self {
       skip_resources: vec![
         // Skip access control when trying to create a collab
@@ -62,7 +63,7 @@ where
         .into(),
       )],
       access_control,
-      pg_pool,
+      collab_cache,
     }
   }
 
@@ -108,8 +109,7 @@ where
       trace!("Skip access control for the request");
       return Ok(());
     }
-
-    let collab_exists = is_collab_exists(oid, &self.pg_pool).await?;
+    let collab_exists = self.collab_cache.is_exist(oid).await?;
     if !collab_exists {
       return Err(AppError::RecordNotFound(format!(
         "Collab not exist in db. {}",
@@ -153,7 +153,7 @@ where
 pub struct CollabStorageAccessControlImpl<CollabAC, WorkspaceAC> {
   pub(crate) collab_access_control: Arc<CollabAC>,
   pub(crate) workspace_access_control: Arc<WorkspaceAC>,
-  pub(crate) pg_pool: PgPool,
+  pub(crate) cache: CollabCache,
 }
 
 #[async_trait]
@@ -176,7 +176,7 @@ where
   }
 
   async fn enforce_read_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    let collab_exists = is_collab_exists(oid, &self.pg_pool).await?;
+    let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       return Err(AppError::RecordNotFound(format!(
         "Collab not exist in db. {}",
@@ -190,7 +190,7 @@ where
   }
 
   async fn enforce_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    let collab_exists = is_collab_exists(oid, &self.pg_pool).await?;
+    let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       return Err(AppError::RecordNotFound(format!(
         "Collab not exist in db. {}",

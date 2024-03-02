@@ -1,13 +1,10 @@
 use crate::biz::casbin::access_control::{AccessControl, Action};
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
-use actix_http::Method;
+use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
-
-use database_entity::dto::{AFAccessLevel, AFRole};
-use realtime::collaborate::RealtimeCollabAccessControl;
-
-use crate::biz::collab::access_control::CollabAccessControl;
+use database_entity::dto::AFAccessLevel;
+use realtime::collaborate::RealtimeAccessControl;
 use tracing::instrument;
 
 #[derive(Clone)]
@@ -79,22 +76,7 @@ impl RealtimeCollabAccessControlImpl {
 }
 
 #[async_trait]
-impl RealtimeCollabAccessControl for RealtimeCollabAccessControlImpl {
-  #[instrument(level = "info", skip_all)]
-  async fn update_access_level_policy(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError> {
-    self
-      .access_control
-      .update_policy(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
-      .await?;
-
-    Ok(())
-  }
-
+impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     if cfg!(feature = "disable_access_control") {
       Ok(true)

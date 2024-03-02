@@ -39,11 +39,14 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  fn config(&self) -> &WriteConfig;
-
   fn encode_collab_mem_hit_rate(&self) -> f64;
 
-  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()>;
+  async fn insert_collab(
+    &self,
+    uid: &i64,
+    params: CreateCollabParams,
+    is_new: bool,
+  ) -> DatabaseResult<()>;
 
   /// Insert/update a new collaboration in the storage.
   ///
@@ -54,7 +57,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn upsert_collab_with_transaction(
+  async fn insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -115,19 +118,20 @@ impl<T> CollabStorage for Arc<T>
 where
   T: CollabStorage,
 {
-  fn config(&self) -> &WriteConfig {
-    self.as_ref().config()
-  }
-
   fn encode_collab_mem_hit_rate(&self) -> f64 {
     self.as_ref().encode_collab_mem_hit_rate()
   }
 
-  async fn upsert_collab(&self, uid: &i64, params: CreateCollabParams) -> DatabaseResult<()> {
-    self.as_ref().upsert_collab(uid, params).await
+  async fn insert_collab(
+    &self,
+    uid: &i64,
+    params: CreateCollabParams,
+    is_new: bool,
+  ) -> DatabaseResult<()> {
+    self.as_ref().insert_collab(uid, params, is_new).await
   }
 
-  async fn upsert_collab_with_transaction(
+  async fn insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -136,7 +140,7 @@ where
   ) -> DatabaseResult<()> {
     self
       .as_ref()
-      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
+      .insert_or_update_collab(workspace_id, uid, params, transaction)
       .await
   }
 
@@ -190,18 +194,6 @@ where
 
   async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
     self.as_ref().get_collab_snapshot_list(oid).await
-  }
-}
-#[derive(Debug, Clone)]
-pub struct WriteConfig {
-  pub flush_per_update: u32,
-}
-
-impl Default for WriteConfig {
-  fn default() -> Self {
-    Self {
-      flush_per_update: 100,
-    }
   }
 }
 //

@@ -9,7 +9,7 @@ use database_entity::dto::{
 };
 
 use crate::biz::collab::access_control::CollabAccessControl;
-use realtime::collaborate::RealtimeCollabAccessControl;
+
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;

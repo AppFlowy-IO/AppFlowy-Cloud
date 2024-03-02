@@ -2,45 +2,28 @@ use anyhow::anyhow;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use database::collab::{
-  batch_select_collab_blob, collab_exists, create_snapshot_and_maintain_limit, delete_collab,
-  get_all_collab_snapshot_meta, insert_into_af_collab, is_collab_exists,
-  select_blob_from_af_collab, select_snapshot, should_create_snapshot, DatabaseResult,
-  COLLAB_SNAPSHOT_LIMIT,
+  batch_select_collab_blob, delete_collab, insert_into_af_collab, is_collab_exists,
+  select_blob_from_af_collab, DatabaseResult,
 };
-use database_entity::dto::{
-  AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
-  QueryCollabParams, QueryCollabResult, SnapshotData,
-};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, event, warn, Level};
-use validator::Validate;
+use tracing::{event, Level};
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
   pub pg_pool: PgPool,
-  config: database::collab::WriteConfig,
 }
 
 impl CollabDiskCache {
   pub fn new(pg_pool: PgPool) -> Self {
-    let config = database::collab::WriteConfig::default();
-    Self { pg_pool, config }
-  }
-  pub fn config(&self) -> &database::collab::WriteConfig {
-    &self.config
+    Self { pg_pool }
   }
 
-  pub async fn is_exist(&self, object_id: &str) -> bool {
-    collab_exists(&self.pg_pool, object_id)
-      .await
-      .unwrap_or(false)
-  }
-
-  pub async fn is_collab_exist(&self, oid: &str) -> DatabaseResult<bool> {
-    let is_exist = is_collab_exists(oid, &self.pg_pool).await?;
+  pub async fn is_exist(&self, object_id: &str) -> DatabaseResult<bool> {
+    let is_exist = is_collab_exists(object_id, &self.pg_pool).await?;
     Ok(is_exist)
   }
 
@@ -110,65 +93,8 @@ impl CollabDiskCache {
     batch_select_collab_blob(&self.pg_pool, queries).await
   }
 
-  pub async fn delete_collab(&self, _uid: &i64, object_id: &str) -> DatabaseResult<()> {
+  pub async fn delete_collab(&self, object_id: &str) -> DatabaseResult<()> {
     delete_collab(&self.pg_pool, object_id).await?;
     Ok(())
-  }
-
-  pub async fn should_create_snapshot(&self, oid: &str) -> bool {
-    if oid.is_empty() {
-      warn!("unexpected empty object id when checking should_create_snapshot");
-      return false;
-    }
-
-    should_create_snapshot(oid, &self.pg_pool)
-      .await
-      .unwrap_or(false)
-  }
-
-  pub async fn create_snapshot(
-    &self,
-    params: InsertSnapshotParams,
-  ) -> DatabaseResult<AFSnapshotMeta> {
-    params.validate()?;
-
-    debug!("create snapshot for object:{}", params.object_id);
-    match self.pg_pool.try_begin().await {
-      Ok(Some(transaction)) => {
-        let meta = create_snapshot_and_maintain_limit(
-          transaction,
-          &params.workspace_id,
-          &params.object_id,
-          &params.encoded_collab_v1,
-          COLLAB_SNAPSHOT_LIMIT,
-        )
-        .await?;
-        Ok(meta)
-      },
-      _ => Err(AppError::Internal(anyhow!(
-        "fail to acquire transaction to create snapshot for object:{}",
-        params.object_id,
-      ))),
-    }
-  }
-
-  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
-    match select_snapshot(&self.pg_pool, snapshot_id).await? {
-      None => Err(AppError::RecordNotFound(format!(
-        "Can't find the snapshot with id:{}",
-        snapshot_id
-      ))),
-      Some(row) => Ok(SnapshotData {
-        object_id: row.oid,
-        encoded_collab_v1: row.blob,
-        workspace_id: row.workspace_id.to_string(),
-      }),
-    }
-  }
-
-  /// Returns list of snapshots for given object_id in descending order of creation time.
-  pub async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
-    let metas = get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
-    Ok(metas)
   }
 }

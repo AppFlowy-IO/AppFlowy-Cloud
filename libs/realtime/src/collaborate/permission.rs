@@ -1,7 +1,5 @@
 use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::dto::AFAccessLevel;
-use reqwest::Method;
 
 #[derive(Debug)]
 pub enum CollabUserId<'a> {
@@ -22,14 +20,7 @@ impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
 }
 
 #[async_trait]
-pub trait RealtimeCollabAccessControl: Sync + Send + 'static {
-  async fn update_access_level_policy(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError>;
-
+pub trait RealtimeAccessControl: Sync + Send + 'static {
   /// Return true if the user is allowed to send the message.
   /// This function will be called very frequently, so it should be very fast.
   ///

@@ -24,7 +24,7 @@ use tracing::instrument;
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
-use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::initialize_workspace_for_user;
 
 pub async fn delete_workspace_for_user(
@@ -57,7 +57,7 @@ pub async fn delete_workspace_for_user(
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   workspace_access_control: &impl WorkspaceAccessControl,
-  collab_storage: &Arc<CollabStorageImpl>,
+  collab_storage: &Arc<CollabAccessControlStorage>,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,

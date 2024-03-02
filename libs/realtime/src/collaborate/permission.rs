@@ -22,31 +22,13 @@ impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
 }
 
 #[async_trait]
-pub trait CollabAccessControl: Sync + Send + 'static {
-  async fn enforce_read(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
-
-  async fn enforce_write(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
-
-  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
-  /// Return the access level of the user in the collab
+pub trait RealtimeCollabAccessControl: Sync + Send + 'static {
   async fn update_access_level_policy(
     &self,
     uid: &i64,
     oid: &str,
     level: AFAccessLevel,
   ) -> Result<(), AppError>;
-
-  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
-
-  /// Return true if the user from the HTTP request is allowed to access the collab object.
-  /// This function will be called very frequently, so it should be very fast.
-  ///  
-  async fn can_access_http_method(
-    &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError>;
 
   /// Return true if the user is allowed to send the message.
   /// This function will be called very frequently, so it should be very fast.

@@ -11,8 +11,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 
 use database::collab::{
-  is_collab_exists, CollabDiskCache, CollabStorage, CollabStorageAccessControl, DatabaseResult,
-  WriteConfig,
+  is_collab_exists, CollabStorage, CollabStorageAccessControl, DatabaseResult, WriteConfig,
 };
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
@@ -27,6 +26,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
+use crate::biz::collab::disk_cache::CollabDiskCache;
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::snapshot::SnapshotControl;
 use realtime::collaborate::{RTCommand, RTCommandSender};
@@ -352,11 +352,7 @@ where
   }
 
   async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
-    if !self
-      .access_control
-      .enforce_delete_delete(uid, object_id)
-      .await?
-    {
+    if !self.access_control.enforce_delete(uid, object_id).await? {
       return Err(AppError::NotEnoughPermissions {
         user: uid.to_string(),
         action: format!("delete collab:{}", object_id),

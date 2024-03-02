@@ -3,7 +3,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 use std::fmt::Display;
 
-use crate::collaborate::CollabAccessControl;
+use crate::collaborate::RealtimeCollabAccessControl;
 use anyhow::anyhow;
 
 use collab::core::collab::TransactionMutExt;
@@ -41,7 +41,7 @@ pub struct CollabStoragePlugin<S, AC> {
 impl<S, AC> CollabStoragePlugin<S, AC>
 where
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   pub fn new(
     uid: i64,
@@ -128,7 +128,7 @@ async fn init_collab(
 impl<S, AC> CollabPlugin for CollabStoragePlugin<S, AC>
 where
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);

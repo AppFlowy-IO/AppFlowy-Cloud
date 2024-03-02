@@ -68,10 +68,12 @@ impl AFEnforcer {
     }
   }
 
-  /// Update permission for a user.
+  /// Update policy for a user.
+  /// If the policy is already exist, then it will return Ok(false).
   ///
   /// [`ObjectType::Workspace`] has to be paired with [`ActionType::Role`],
   /// [`ObjectType::Collab`] has to be paired with [`ActionType::Level`],
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn update_policy(
     &self,
     uid: &i64,

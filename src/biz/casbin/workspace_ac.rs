@@ -20,17 +20,27 @@ impl WorkspaceAccessControlImpl {
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn enforce_write(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
+  async fn enforce_role(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+    role: AFRole,
+  ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Workspace(workspace_id), Action::Write)
+      .enforce(uid, &ObjectType::Workspace(workspace_id), role)
       .await
   }
 
-  async fn enforce_read(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
+  async fn enforce_action(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+    action: Action,
+  ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Workspace(workspace_id), Action::Read)
+      .enforce(uid, &ObjectType::Workspace(workspace_id), action)
       .await
   }
 

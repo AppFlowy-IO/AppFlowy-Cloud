@@ -4,9 +4,10 @@ use actix_http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
 
-use database_entity::dto::AFAccessLevel;
-use realtime::collaborate::CollabAccessControl;
+use database_entity::dto::{AFAccessLevel, AFRole};
+use realtime::collaborate::RealtimeCollabAccessControl;
 
+use crate::biz::collab::access_control::CollabAccessControl;
 use tracing::instrument;
 
 #[derive(Clone)]
@@ -22,24 +23,22 @@ impl CollabAccessControlImpl {
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  async fn enforce_read(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn enforce_action(&self, uid: &i64, oid: &str, action: Action) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Read)
+      .enforce(uid, &ObjectType::Collab(oid), action)
       .await
   }
 
-  async fn enforce_write(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn enforce_access_level(
+    &self,
+    uid: &i64,
+    oid: &str,
+    access_level: AFAccessLevel,
+  ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Write)
-      .await
-  }
-
-  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), Action::Delete)
+      .enforce(uid, &ObjectType::Collab(oid), access_level)
       .await
   }
 
@@ -66,18 +65,34 @@ impl CollabAccessControl for CollabAccessControlImpl {
       .await?;
     Ok(())
   }
+}
 
-  async fn can_access_http_method(
+#[derive(Clone)]
+pub struct RealtimeCollabAccessControlImpl {
+  access_control: AccessControl,
+}
+
+impl RealtimeCollabAccessControlImpl {
+  pub fn new(access_control: AccessControl) -> Self {
+    Self { access_control }
+  }
+}
+
+#[async_trait]
+impl RealtimeCollabAccessControl for RealtimeCollabAccessControlImpl {
+  #[instrument(level = "info", skip_all)]
+  async fn update_access_level_policy(
     &self,
     uid: &i64,
     oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError> {
-    let action = Action::from(method);
+    level: AFAccessLevel,
+  ) -> Result<(), AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), action)
-      .await
+      .update_policy(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
+      .await?;
+
+    Ok(())
   }
 
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {

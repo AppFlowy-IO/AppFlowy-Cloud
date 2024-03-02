@@ -6,6 +6,7 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::biz::casbin::access_control::AccessControl;
 use crate::biz::casbin::enforcer_cache::AFEnforcerCacheImpl;
+use crate::biz::casbin::RealtimeCollabAccessControlImpl;
 use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
@@ -102,7 +103,7 @@ pub async fn run(
   // Initialize metrics that which are registered in the registry.
   let realtime_server = RealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.clone(),
-    state.collab_access_control.clone(),
+    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
   )

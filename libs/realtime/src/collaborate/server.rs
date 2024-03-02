@@ -1,7 +1,7 @@
 use crate::client::ClientWSSink;
 use crate::collaborate::all_group::AllCollabGroup;
 use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
-use crate::collaborate::permission::CollabAccessControl;
+use crate::collaborate::permission::RealtimeCollabAccessControl;
 use crate::collaborate::RealtimeMetrics;
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
@@ -58,7 +58,7 @@ impl<S, U, AC> RealtimeServer<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   pub fn new(
     storage: Arc<S>,
@@ -200,7 +200,7 @@ async fn remove_user<S, U, AC>(
 ) where
   S: CollabStorage,
   U: RealtimeUser,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   let entry = editing_collab_by_user.remove(user);
   if let Some(entry) = entry {
@@ -214,7 +214,7 @@ impl<S, U, AC> Actor for RealtimeServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeCollabAccessControl + Unpin,
 {
   type Context = Context<Self>;
 
@@ -227,7 +227,7 @@ impl<S, U, AC> Handler<Connect<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeCollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -266,7 +266,7 @@ impl<S, U, AC> Handler<Disconnect<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeCollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
   /// Handles the disconnection of a user from the collaboration server.
@@ -308,7 +308,7 @@ impl<S, U, AC> Handler<ClientMessage<U>> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeCollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -354,7 +354,7 @@ impl<S, U, AC> Handler<ClientStreamMessage> for RealtimeServer<S, U, AC>
 where
   U: RealtimeUser + Unpin,
   S: CollabStorage + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeCollabAccessControl + Unpin,
 {
   type Result = ResponseFuture<Result<(), RealtimeError>>;
 
@@ -442,7 +442,7 @@ async fn remove_user_from_group<S, U, AC>(
 ) where
   S: CollabStorage,
   U: RealtimeUser,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   let _ = groups.remove_user(&editing.object_id, user).await;
   if let Some(group) = groups.get_group(&editing.object_id).await {
@@ -460,7 +460,7 @@ impl<S, U, AC> actix::Supervised for RealtimeServer<S, U, AC>
 where
   S: 'static + Unpin,
   U: RealtimeUser + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeCollabAccessControl + Unpin,
 {
   fn restarting(&mut self, _ctx: &mut Context<RealtimeServer<S, U, AC>>) {
     warn!("restarting");

@@ -1,3 +1,5 @@
+use crate::api::workspace::{COLLAB_PATTERN, WORKSPACE_MEMBER_PATTERN};
+use crate::biz::casbin::access_control::Action;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use actix_router::{Path, ResourceDef, Url};
@@ -5,21 +7,40 @@ use actix_web::http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
 use database::collab::{is_collab_exists, CollabStorageAccessControl};
-
-use database_entity::dto::AFAccessLevel;
-use realtime::collaborate::CollabAccessControl;
-
-use crate::api::workspace::COLLAB_PATTERN;
-use crate::biz::collab::mem_cache::CollabMemCache;
+use database_entity::dto::{AFAccessLevel, AFRole};
+use realtime::collaborate::RealtimeCollabAccessControl;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
+#[async_trait]
+pub trait CollabAccessControl: Sync + Send + 'static {
+  async fn enforce_action(&self, uid: &i64, oid: &str, action: Action) -> Result<bool, AppError>;
+
+  async fn enforce_access_level(
+    &self,
+    uid: &i64,
+    oid: &str,
+    access_level: AFAccessLevel,
+  ) -> Result<bool, AppError>;
+
+  /// Return the access level of the user in the collab
+  async fn update_access_level_policy(
+    &self,
+    uid: &i64,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError>;
+
+  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
+}
 #[derive(Clone)]
 pub struct CollabMiddlewareAccessControl<AC: CollabAccessControl> {
   pub access_control: Arc<AC>,
   pg_pool: PgPool,
   skip_resources: Vec<(Method, ResourceDef)>,
+  require_access_levels: Vec<(ResourceDef, HashMap<Method, AFAccessLevel>)>,
 }
 
 impl<AC> CollabMiddlewareAccessControl<AC>
@@ -29,9 +50,17 @@ where
   pub fn new(access_control: Arc<AC>, pg_pool: PgPool) -> Self {
     Self {
       skip_resources: vec![
-        // Skip access control when the request is a POST request and the path is matched with the COLLAB_PATTERN,
+        // Skip access control when trying to create a collab
         (Method::POST, ResourceDef::new(COLLAB_PATTERN)),
       ],
+      require_access_levels: vec![(
+        ResourceDef::new(COLLAB_PATTERN),
+        [
+          // Only the user with FullAccess can delete the collab
+          (Method::DELETE, AFAccessLevel::FullAccess),
+        ]
+        .into(),
+      )],
       access_control,
       pg_pool,
     }
@@ -44,6 +73,16 @@ where
       }
 
       r.is_match(path.as_str())
+    })
+  }
+
+  fn require_access_level(&self, method: &Method, path: &Path<Url>) -> Option<AFAccessLevel> {
+    self.require_access_levels.iter().find_map(|(r, roles)| {
+      if r.is_match(path.as_str()) {
+        roles.get(method).cloned()
+      } else {
+        None
+      }
     })
   }
 }
@@ -66,6 +105,7 @@ where
     path: &Path<Url>,
   ) -> Result<(), AppError> {
     if self.should_skip(&method, path) {
+      trace!("Skip access control for the request");
       return Ok(());
     }
 
@@ -77,11 +117,23 @@ where
       )));
     }
 
-    if self
-      .access_control
-      .can_access_http_method(uid, oid, &method)
-      .await?
-    {
+    let access_level = self.require_access_level(&method, path);
+    let result = match access_level {
+      None => {
+        self
+          .access_control
+          .enforce_action(uid, oid, Action::from(&method))
+          .await?
+      },
+      Some(access_level) => {
+        self
+          .access_control
+          .enforce_access_level(uid, oid, access_level)
+          .await?
+      },
+    };
+
+    if result {
       Ok(())
     } else {
       Err(AppError::NotEnoughPermissions {
@@ -131,7 +183,10 @@ where
         oid
       )));
     }
-    self.collab_access_control.enforce_read(uid, oid).await
+    self
+      .collab_access_control
+      .enforce_action(uid, oid, Action::Read)
+      .await
   }
 
   async fn enforce_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
@@ -142,17 +197,23 @@ where
         oid
       )));
     }
-    self.collab_access_control.enforce_write(uid, oid).await
+    self
+      .collab_access_control
+      .enforce_action(uid, oid, Action::Write)
+      .await
   }
 
-  async fn enforce_delete_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.collab_access_control.enforce_delete(uid, oid).await
+  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    self
+      .collab_access_control
+      .enforce_access_level(uid, oid, AFAccessLevel::FullAccess)
+      .await
   }
 
   async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
     self
       .workspace_access_control
-      .enforce_write(uid, workspace_id)
+      .enforce_role(uid, workspace_id, AFRole::Owner)
       .await
   }
 }

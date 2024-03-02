@@ -1,5 +1,5 @@
 use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::{CollabAccessControl, CollabClientStream};
+use crate::collaborate::{CollabClientStream, RealtimeCollabAccessControl};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::StreamError;
 use crate::util::channel_ext::UnboundedSenderSink;
@@ -30,7 +30,7 @@ impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   fn get_origin(collab_message: &ClientCollabMessage) -> &CollabOrigin {
     collab_message.origin()
@@ -139,7 +139,7 @@ impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeCollabAccessControl,
 {
   pub(crate) async fn run(self) {
     let CollabUserMessage {

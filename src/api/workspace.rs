@@ -32,7 +32,8 @@ use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
 use tokio::time::{sleep, Instant};
 
-use realtime::collaborate::CollabAccessControl;
+use crate::biz::collab::access_control::CollabAccessControl;
+use realtime::collaborate::RealtimeCollabAccessControl;
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
@@ -43,6 +44,7 @@ pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
 pub const WORKSPACE_PATTERN: &str = "/api/workspace";
+pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
 
 pub fn workspace_scope() -> Scope {
@@ -63,7 +65,7 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))
-        .route(web::post().to(add_workspace_members_handler))
+        .route(web::post().to(create_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
     )
@@ -203,7 +205,7 @@ async fn list_workspace_handler(
 }
 
 #[instrument(skip(payload, state), err)]
-async fn add_workspace_members_handler(
+async fn create_workspace_members_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   payload: Json<CreateWorkspaceMembers>,

@@ -12,7 +12,7 @@ use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
-use crate::biz::casbin::CollabAccessControlImpl;
+use crate::biz::casbin::{CollabAccessControlImpl, RealtimeCollabAccessControlImpl};
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::{info, instrument};
@@ -23,7 +23,7 @@ pub fn ws_scope() -> Scope {
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 pub type CollabServerImpl =
-  Addr<RealtimeServer<CollabStorageImpl, Arc<RealtimeUserImpl>, CollabAccessControlImpl>>;
+  Addr<RealtimeServer<CollabStorageImpl, Arc<RealtimeUserImpl>, RealtimeCollabAccessControlImpl>>;
 
 #[instrument(skip_all, err)]
 #[get("/{token}/{device_id}")]

@@ -174,16 +174,12 @@ where
           let uid = uid.await?;
           // check workspace permission
           if let Some(workspace_id) = workspace_id {
-            if let Some(acs) = services.get(&AccessResource::Workspace) {
-              if let Err(err) = acs
+            if let Some(workspace_ac) = services.get(&AccessResource::Workspace) {
+              if let Err(err) = workspace_ac
                 .check_resource_permission(&uid, &workspace_id.to_string(), method.clone(), &path)
                 .await
               {
-                error!(
-                  "workspace access control: {}, with path:{}",
-                  err,
-                  path.as_str()
-                );
+                error!("workspace access control: {}", err,);
                 return Err(Error::from(err));
               }
             };
@@ -191,8 +187,8 @@ where
 
           // check collab permission
           if let Some(collab_object_id) = object_id {
-            if let Some(acs) = services.get(&AccessResource::Collab) {
-              if let Err(err) = acs
+            if let Some(collab_ac) = services.get(&AccessResource::Collab) {
+              if let Err(err) = collab_ac
                 .check_resource_permission(&uid, &collab_object_id, method, &path)
                 .await
               {

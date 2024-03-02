@@ -270,7 +270,7 @@ where
         action: format!("delete collab:{}", object_id),
       });
     }
-    self.cache.remove_collab(object_id).await;
+    self.cache.remove_collab(object_id).await?;
     Ok(())
   }
 

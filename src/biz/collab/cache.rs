@@ -13,7 +13,7 @@ use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::{error, event, Level};
+use tracing::{event, Level};
 
 #[derive(Clone)]
 pub struct CollabCache {

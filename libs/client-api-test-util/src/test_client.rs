@@ -21,7 +21,8 @@ use database_entity::dto::{
 use mime::Mime;
 use serde_json::Value;
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceSpaceUsage,
+  BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
+  WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
@@ -177,8 +178,17 @@ impl TestClient {
     let email = other_client.email().await;
     self
       .api_client
-      .add_workspace_members(workspace_id, vec![CreateWorkspaceMember { email, role }])
-      .await
+      .invite_workspace_members(
+        workspace_id,
+        vec![WorkspaceMemberInvitation { email, role }],
+      )
+      .await?;
+
+
+    // self
+    //   .api_client
+    //   .add_workspace_members(workspace_id, vec![CreateWorkspaceMember { email, role }])
+    //   .await
   }
 
   pub async fn try_remove_workspace_member(

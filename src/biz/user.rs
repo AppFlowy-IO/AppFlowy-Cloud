@@ -91,7 +91,6 @@ pub async fn initialize_workspace_for_user<T>(
   workspace_id: &str,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
-  // state: &AppState,
   collab_storage: &Arc<CollabStorageImpl>,
 ) -> Result<(), AppError>
 where

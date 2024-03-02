@@ -70,7 +70,7 @@ where
       Ok(encoded_collab_v1) => {
         let _ = self
           .access_control
-          .insert_access_level(&self.uid, object_id, AFAccessLevel::FullAccess)
+          .update_access_level_policy(&self.uid, object_id, AFAccessLevel::FullAccess)
           .await;
 
         let params = CreateCollabParams {

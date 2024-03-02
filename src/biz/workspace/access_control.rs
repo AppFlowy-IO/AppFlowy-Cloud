@@ -1,6 +1,6 @@
 #![allow(unused)]
 use crate::component::auth::jwt::UserUuid;
-use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
+use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use actix_http::Method;
 use async_trait::async_trait;
 use database::user::select_uid_from_uuid;
@@ -9,7 +9,9 @@ use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use actix_router::{Path, Url};
+use crate::api::workspace::WORKSPACE_PATTERN;
+use crate::state::UserCache;
+use actix_router::{Path, ResourceDef, Url};
 use anyhow::anyhow;
 use app_error::AppError;
 use database_entity::dto::AFRole;
@@ -20,14 +22,9 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_role<'a, E>(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-    executor: E,
-  ) -> Result<AFRole, AppError>
-  where
-    E: Executor<'a, Database = Postgres>;
+  async fn enforce_write(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
+
+  async fn enforce_read(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
 
   async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
     -> Result<(), AppError>;
@@ -36,12 +33,40 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
 }
 
 #[derive(Clone)]
-pub struct WorkspaceHttpAccessControl<AC: WorkspaceAccessControl> {
+pub struct WorkspaceMiddlewareAccessControl<AC: WorkspaceAccessControl> {
   pub pg_pool: PgPool,
   pub access_control: Arc<AC>,
+  skip_resources: Vec<(Method, ResourceDef)>,
 }
+
+impl<AC> WorkspaceMiddlewareAccessControl<AC>
+where
+  AC: WorkspaceAccessControl,
+{
+  pub fn new(pg_pool: PgPool, access_control: Arc<AC>) -> Self {
+    Self {
+      pg_pool,
+      skip_resources: vec![
+        // Skip access control when the request is a POST request and the path is matched with the WORKSPACE_PATTERN,
+        (Method::POST, ResourceDef::new(WORKSPACE_PATTERN)),
+      ],
+      access_control,
+    }
+  }
+
+  fn should_skip(&self, method: &Method, path: &Path<Url>) -> bool {
+    self.skip_resources.iter().any(|(m, r)| {
+      if m != method {
+        return false;
+      }
+
+      r.is_match(path.as_str())
+    })
+  }
+}
+
 #[async_trait]
-impl<AC> HttpAccessControlService for WorkspaceHttpAccessControl<AC>
+impl<AC> MiddlewareAccessControl for WorkspaceMiddlewareAccessControl<AC>
 where
   AC: WorkspaceAccessControl,
 {
@@ -49,47 +74,36 @@ where
     AccessResource::Workspace
   }
 
-  #[instrument(level = "trace", skip_all, err)]
-  async fn check_workspace_permission(
+  #[instrument(name = "check_workspace_permission", level = "trace", skip_all)]
+  async fn check_resource_permission(
     &self,
-    workspace_id: &Uuid,
     uid: &i64,
-    method: Method,
-  ) -> Result<(), AppError> {
-    trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
-    let role = self
-      .access_control
-      .get_role(uid, workspace_id, &self.pg_pool)
-      .await
-      .map_err(|err| {
-        AppError::NotEnoughPermissions(format!(
-          "Can't find the role of the user:{:?} in the workspace:{:?}. error: {}",
-          uid, workspace_id, err
-        ))
-      })?;
-
-    match method {
-      Method::DELETE | Method::POST | Method::PUT => match role {
-        AFRole::Owner => return Ok(()),
-        _ => {
-          return Err(AppError::NotEnoughPermissions(format!(
-            "User:{:?} doesn't have the enough permission to access workspace:{}",
-            uid, workspace_id
-          )))
-        },
-      },
-      _ => Ok(()),
-    }
-  }
-
-  async fn check_collab_permission(
-    &self,
-    oid: &str,
-    uid: &i64,
+    resource_id: &str,
     method: Method,
     path: &Path<Url>,
   ) -> Result<(), AppError> {
-    error!("The check_collab_permission is not implemented");
-    Ok(())
+    if self.should_skip(&method, path) {
+      return Ok(());
+    }
+
+    let result = match method {
+      Method::DELETE | Method::POST | Method::PUT => {
+        self.access_control.enforce_write(uid, resource_id).await
+      },
+      _ => self.access_control.enforce_read(uid, resource_id).await,
+    }?;
+
+    if result {
+      Ok(())
+    } else {
+      Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!(
+          "access workspace:{} with given url:{}",
+          resource_id,
+          path.as_str()
+        ),
+      })
+    }
   }
 }

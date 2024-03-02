@@ -57,8 +57,8 @@ pub enum AppError {
   #[error("Not Logged In:{0}")]
   NotLoggedIn(String),
 
-  #[error("Not Enough Permissions:{0}")]
-  NotEnoughPermissions(String),
+  #[error("{user}: do not have permissions to {action}")]
+  NotEnoughPermissions { user: String, action: String },
 
   #[cfg(feature = "s3_error")]
   #[error(transparent)]
@@ -110,7 +110,7 @@ pub enum AppError {
 
 impl AppError {
   pub fn is_not_enough_permissions(&self) -> bool {
-    matches!(self, AppError::NotEnoughPermissions(_))
+    matches!(self, AppError::NotEnoughPermissions { .. })
   }
 
   pub fn is_record_not_found(&self) -> bool {
@@ -142,7 +142,7 @@ impl AppError {
       AppError::InvalidOAuthProvider(_) => ErrorCode::InvalidOAuthProvider,
       AppError::InvalidRequest(_) => ErrorCode::InvalidRequest,
       AppError::NotLoggedIn(_) => ErrorCode::NotLoggedIn,
-      AppError::NotEnoughPermissions(_) => ErrorCode::NotEnoughPermissions,
+      AppError::NotEnoughPermissions { .. } => ErrorCode::NotEnoughPermissions,
       #[cfg(feature = "s3_error")]
       AppError::S3Error(_) => ErrorCode::S3Error,
       AppError::StorageSpaceNotEnough => ErrorCode::StorageSpaceNotEnough,

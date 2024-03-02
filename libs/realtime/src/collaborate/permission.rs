@@ -3,9 +3,6 @@ use async_trait::async_trait;
 use database_entity::dto::AFAccessLevel;
 use reqwest::Method;
 
-use std::sync::Arc;
-use tracing::instrument;
-
 #[derive(Debug)]
 pub enum CollabUserId<'a> {
   UserId(&'a i64),
@@ -26,10 +23,13 @@ impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
 
 #[async_trait]
 pub trait CollabAccessControl: Sync + Send + 'static {
-  /// Return the access level of the user in the collab
-  async fn get_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
+  async fn enforce_read(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
 
-  async fn insert_access_level(
+  async fn enforce_write(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+
+  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+  /// Return the access level of the user in the collab
+  async fn update_access_level_policy(
     &self,
     uid: &i64,
     oid: &str,
@@ -62,45 +62,4 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   ///
   /// The user can recv the message if the user is the member of the collab object
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
-}
-//
-#[async_trait]
-impl<T> CollabAccessControl for Arc<T>
-where
-  T: CollabAccessControl,
-{
-  #[instrument(level = "debug", skip_all)]
-  async fn get_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    self.as_ref().get_access_level(uid, oid).await
-  }
-
-  async fn insert_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError> {
-    self.as_ref().insert_access_level(uid, oid, level).await
-  }
-
-  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
-    self.as_ref().remove_access_level(uid, oid).await
-  }
-
-  async fn can_access_http_method(
-    &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError> {
-    self.as_ref().can_access_http_method(uid, oid, method).await
-  }
-
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.as_ref().can_send_collab_update(uid, oid).await
-  }
-
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.as_ref().can_receive_collab_update(uid, oid).await
-  }
 }

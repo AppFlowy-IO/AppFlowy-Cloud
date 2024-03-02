@@ -9,6 +9,5 @@ mod workspace_ac;
 
 pub use collab_ac::CollabAccessControlImpl;
 pub use enforcer::AFEnforcerCache;
-pub use enforcer::ActionCacheKey;
 pub use enforcer::PolicyCacheKey;
 pub use workspace_ac::WorkspaceAccessControlImpl;

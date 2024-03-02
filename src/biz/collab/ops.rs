@@ -68,7 +68,7 @@ pub async fn create_collab_member(
   .await?;
 
   collab_access_control
-    .insert_access_level(&params.uid, &params.object_id, params.access_level)
+    .update_access_level_policy(&params.uid, &params.object_id, params.access_level)
     .await?;
 
   transaction
@@ -98,7 +98,7 @@ pub async fn upsert_collab_member(
   }
 
   collab_access_control
-    .insert_access_level(&params.uid, &params.object_id, params.access_level)
+    .update_access_level_policy(&params.uid, &params.object_id, params.access_level)
     .await?;
 
   database::collab::insert_collab_member(

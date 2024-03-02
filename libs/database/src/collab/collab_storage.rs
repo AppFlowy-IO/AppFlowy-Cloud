@@ -5,11 +5,11 @@ use async_trait::async_trait;
 
 use collab::core::collab_plugin::EncodedCollab;
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
   InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
-use sqlx::{Executor, PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,29 +26,18 @@ pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
 /// of the Collab object.
 #[async_trait]
 pub trait CollabStorageAccessControl: Send + Sync + 'static {
-  /// Checks if the user with the given ID can access the [Collab] with the given ID.
-  async fn get_or_refresh_collab_access_level<'a, E: Executor<'a, Database = Postgres>>(
-    &self,
-    uid: &i64,
-    oid: &str,
-    executor: E,
-  ) -> Result<AFAccessLevel, AppError>;
-
   /// Updates the cache of the access level of the user for given collab object.
-  async fn cache_collab_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError>;
+  async fn update_policy(&self, uid: &i64, oid: &str, level: AFAccessLevel)
+    -> Result<(), AppError>;
+
+  async fn enforce_read_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+
+  async fn enforce_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+
+  async fn enforce_delete_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
 
   /// Returns the role of the user in the workspace.
-  async fn get_user_workspace_role<'a, E: Executor<'a, Database = Postgres>>(
-    &self,
-    uid: &i64,
-    workspace_id: &str,
-    executor: E,
-  ) -> Result<AFRole, AppError>;
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
 }
 
 /// Represents a storage mechanism for collaborations.
@@ -225,12 +214,12 @@ impl Default for WriteConfig {
 }
 
 #[derive(Clone)]
-pub struct CollabStoragePgImpl {
+pub struct CollabDiskCache {
   pub pg_pool: PgPool,
   config: WriteConfig,
 }
 
-impl CollabStoragePgImpl {
+impl CollabDiskCache {
   pub fn new(pg_pool: PgPool) -> Self {
     let config = WriteConfig::default();
     Self { pg_pool, config }

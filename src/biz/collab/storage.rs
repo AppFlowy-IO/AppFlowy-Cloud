@@ -11,7 +11,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 
 use database::collab::{
-  is_collab_exists, CollabStorage, CollabStorageAccessControl, CollabStoragePgImpl, DatabaseResult,
+  is_collab_exists, CollabDiskCache, CollabStorage, CollabStorageAccessControl, DatabaseResult,
   WriteConfig,
 };
 use database_entity::dto::{
@@ -48,9 +48,10 @@ pub async fn init_collab_storage(
   let access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.into(),
     workspace_access_control: workspace_access_control.into(),
+    pg_pool: pg_pool.clone(),
   };
-  let disk_cache = CollabStoragePgImpl::new(pg_pool.clone());
   let mem_cache = CollabMemCache::new(redis_client.clone());
+  let disk_cache = CollabDiskCache::new(pg_pool.clone());
   let snapshot_control = SnapshotControl::new(redis_client, pg_pool, collab_metrics).await;
   CollabStoragePostgresImpl::new(
     disk_cache,
@@ -64,7 +65,7 @@ pub async fn init_collab_storage(
 /// A wrapper around the actual storage implementation that provides access control and caching.
 #[derive(Clone)]
 pub struct CollabStoragePostgresImpl<AC> {
-  disk_cache: CollabStoragePgImpl,
+  disk_cache: CollabDiskCache,
   mem_cache: CollabMemCache,
   /// access control for collab object. Including read/write
   access_control: AC,
@@ -77,7 +78,7 @@ where
   AC: CollabStorageAccessControl,
 {
   pub fn new(
-    disk_cache: CollabStoragePgImpl,
+    disk_cache: CollabDiskCache,
     mem_cache: CollabMemCache,
     access_control: AC,
     snapshot_control: SnapshotControl,
@@ -107,39 +108,34 @@ where
       // If the collab already exists, check if the user has enough permissions to update collab
       let can_write = self
         .access_control
-        .get_or_refresh_collab_access_level(uid, &params.object_id, transaction.deref_mut())
-        .await
-        .context(format!(
-          "Can't find the access level when user:{} try to insert collab",
-          uid
-        ))?
-        .can_write();
+        .enforce_write_collab(uid, &params.object_id)
+        .await?;
+
       if !can_write {
-        return Err(AppError::NotEnoughPermissions(format!(
-          "user:{} doesn't have enough permissions to update collab {}",
-          uid, params.object_id
-        )));
+        return Err(AppError::NotEnoughPermissions {
+          user: uid.to_string(),
+          action: format!("update collab:{}", params.object_id),
+        });
       }
     } else {
       // If the collab doesn't exist, check if the user has enough permissions to create collab.
       // If the user is the owner or member of the workspace, the user can create collab.
       let can_write_workspace = self
         .access_control
-        .get_user_workspace_role(uid, workspace_id, transaction.deref_mut())
-        .await?
-        .can_create_collab();
+        .enforce_write_workspace(uid, workspace_id)
+        .await?;
 
       if !can_write_workspace {
-        return Err(AppError::NotEnoughPermissions(format!(
-          "user:{} doesn't have enough permissions to insert collab {}",
-          uid, params.object_id
-        )));
+        return Err(AppError::NotEnoughPermissions {
+          user: uid.to_string(),
+          action: format!("write workspace:{}", workspace_id),
+        });
       }
 
       // Cache the access level if the user has enough permissions to create collab.
       self
         .access_control
-        .cache_collab_access_level(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
 
@@ -257,10 +253,19 @@ where
     is_collab_init: bool,
   ) -> DatabaseResult<EncodedCollab> {
     params.validate()?;
-    self
+
+    // Check if the user has enough permissions to access the collab
+    let can_read = self
       .access_control
-      .get_or_refresh_collab_access_level(uid, &params.object_id, &self.disk_cache.pg_pool)
+      .enforce_read_collab(uid, &params.object_id)
       .await?;
+
+    if !can_read {
+      return Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!("read collab:{}", params.object_id),
+      });
+    }
 
     // Early return if editing collab is initialized, as it indicates no need to query further.
     if !is_collab_init {
@@ -349,19 +354,15 @@ where
   async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
     if !self
       .access_control
-      .get_or_refresh_collab_access_level(uid, object_id, &self.disk_cache.pg_pool)
-      .await
-      .context(format!(
-        "Can't find the access level when user:{} try to delete {}",
-        uid, object_id
-      ))?
-      .can_delete()
+      .enforce_delete_delete(uid, object_id)
+      .await?
     {
-      return Err(AppError::NotEnoughPermissions(format!(
-        "user:{} doesn't have enough permissions to delete collab {}",
-        uid, object_id
-      )));
+      return Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!("delete collab:{}", object_id),
+      });
     }
+
     self.mem_cache.remove_encode_collab(object_id).await;
     self.disk_cache.delete_collab(uid, object_id).await
   }

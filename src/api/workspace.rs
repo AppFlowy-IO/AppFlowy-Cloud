@@ -42,9 +42,11 @@ use validator::Validate;
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
+pub const WORKSPACE_PATTERN: &str = "/api/workspace";
+pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
+
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
-
     // deprecated, use the api below instead
     .service(web::resource("/list").route(web::get().to(list_workspace_handler)))
 
@@ -132,7 +134,7 @@ async fn create_workspace_handler(
     .workspace_name
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
 
-  let uid = state.users.get_user_uid(&uuid).await?;
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
     &state.workspace_access_control,
@@ -247,7 +249,7 @@ async fn remove_workspace_member_handler(
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let member_emails = payload
     .into_inner()
     .0
@@ -322,7 +324,7 @@ async fn create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => serde_json::from_slice::<CreateCollabParams>(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -347,7 +349,7 @@ async fn create_collab_handler(
   let object_id = params.object_id.clone();
   state
     .collab_access_control
-    .insert_access_level(&uid, &object_id, AFAccessLevel::FullAccess)
+    .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
     .await?;
   state.collab_storage.upsert_collab(&uid, params).await?;
 
@@ -362,7 +364,7 @@ async fn batch_create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
@@ -437,7 +439,7 @@ async fn batch_create_collab_handler(
 
     state
       .collab_access_control
-      .insert_access_level(&uid, &object_id, AFAccessLevel::FullAccess)
+      .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
       .await?;
   }
 
@@ -456,7 +458,7 @@ async fn create_collab_list_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -503,7 +505,7 @@ async fn create_collab_list_handler(
 
     state
       .collab_access_control
-      .insert_access_level(&uid, &object_id, AFAccessLevel::FullAccess)
+      .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
       .await?;
   }
 
@@ -521,7 +523,7 @@ async fn get_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<EncodedCollab>>> {
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
@@ -560,7 +562,7 @@ async fn create_collab_snapshot_handler(
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.into_inner();
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
@@ -608,7 +610,7 @@ async fn batch_get_collab_handler(
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
@@ -628,7 +630,7 @@ async fn update_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let (params, workspace_id) = payload.into_inner().split();
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
   state
@@ -648,7 +650,7 @@ async fn delete_collab_handler(
   payload.validate().map_err(AppError::from)?;
 
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
@@ -732,7 +734,7 @@ async fn post_realtime_message_stream_handler(
   // TODO(nathan): after upgrade the client application, then the device_id should not be empty
   let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;

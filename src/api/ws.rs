@@ -37,7 +37,7 @@ pub async fn establish_ws_connection(
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
-  let result = state.users.get_user_uid(&user_uuid).await;
+  let result = state.user_cache.get_user_uid(&user_uuid).await;
 
   match result {
     Ok(uid) => {

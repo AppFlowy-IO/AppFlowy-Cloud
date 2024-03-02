@@ -6,14 +6,14 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::biz::casbin::access_control::AccessControl;
 use crate::biz::casbin::enforcer_cache::AFEnforcerCacheImpl;
-use crate::biz::collab::access_control::CollabHttpAccessControl;
+use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::collab::storage::init_collab_storage;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::user::RealtimeUserImpl;
-use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
+use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
-use crate::middleware::access_control_mw::WorkspaceAccessControl;
+use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
@@ -89,13 +89,14 @@ pub async fn run(
 
   let storage = state.collab_storage.clone();
 
-  let access_control = WorkspaceAccessControl::new()
-    .with_acs(WorkspaceHttpAccessControl {
-      pg_pool: state.pg_pool.clone(),
-      access_control: state.workspace_access_control.clone().into(),
-    })
-    .with_acs(CollabHttpAccessControl(
+  let access_control = MiddlewareAccessControlTransform::new()
+    .with_acs(WorkspaceMiddlewareAccessControl::new(
+      state.pg_pool.clone(),
+      state.workspace_access_control.clone().into(),
+    ))
+    .with_acs(CollabMiddlewareAccessControl::new(
       state.collab_access_control.clone().into(),
+      state.pg_pool.clone(),
     ));
 
   // Initialize metrics that which are registered in the registry.
@@ -119,8 +120,8 @@ pub async fn run(
           .build(),
       )
       // .wrap(DecryptPayloadMiddleware)
-      .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())
+      .wrap(RequestIdMiddleware)
       .app_data(web::JsonConfig::default().limit(5 * 1024 * 1024))
       .service(user_scope())
       .service(workspace_scope())
@@ -189,7 +190,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!("Setting up access controls...");
-  let enforce_cache = Arc::new(AFEnforcerCacheImpl::new(redis_client.clone()));
+  let enforce_cache = AFEnforcerCacheImpl::new(redis_client.clone());
   let access_control = AccessControl::new(
     pg_pool.clone(),
     collab_member_listener,
@@ -199,6 +200,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   )
   .await?;
 
+  let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control = access_control.new_collab_access_control();
   let workspace_access_control = access_control.new_workspace_access_control();
 
@@ -213,13 +215,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     )
     .await,
   );
-  let users = UserCache::new(pg_pool.clone()).await;
 
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
-    users: Arc::new(users),
+    user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     redis_client,

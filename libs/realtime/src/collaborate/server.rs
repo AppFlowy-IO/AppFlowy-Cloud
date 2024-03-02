@@ -541,11 +541,6 @@ impl CollabClientStream {
                 let _ = tx.send(Ok(msg)).await;
               } else {
                 // when then client is not allowed to send messages
-                trace!(
-                  "client:{} is not allowed to update object:{}",
-                  msg.origin().client_user_id().unwrap_or(0),
-                  msg.object_id(),
-                );
                 tokio::time::sleep(Duration::from_secs(2)).await;
               }
             }

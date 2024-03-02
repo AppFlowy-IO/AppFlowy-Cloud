@@ -22,21 +22,29 @@ impl CollabAccessControlImpl {
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  async fn get_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
+  async fn enforce_read(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     self
       .access_control
-      .get_access_level(uid, oid)
+      .enforce(uid, &ObjectType::Collab(oid), Action::Read)
       .await
-      .ok_or_else(|| {
-        AppError::RecordNotFound(format!(
-          "can't find the access level for user:{} of {} in cache",
-          uid, oid
-        ))
-      })
+  }
+
+  async fn enforce_write(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Collab(oid), Action::Write)
+      .await
+  }
+
+  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Collab(oid), Action::Delete)
+      .await
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn insert_access_level(
+  async fn update_access_level_policy(
     &self,
     uid: &i64,
     oid: &str,
@@ -44,7 +52,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   ) -> Result<(), AppError> {
     self
       .access_control
-      .update(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
+      .update_policy(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
       .await?;
 
     Ok(())
@@ -54,7 +62,7 @@ impl CollabAccessControl for CollabAccessControlImpl {
   async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
     self
       .access_control
-      .remove(uid, &ObjectType::Collab(oid))
+      .remove_policy(uid, &ObjectType::Collab(oid))
       .await?;
     Ok(())
   }

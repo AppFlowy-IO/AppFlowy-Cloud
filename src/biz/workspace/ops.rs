@@ -7,12 +7,18 @@ use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
-  change_workspace_icon, delete_from_workspace, delete_workspace_members, insert_user_workspace,
-  insert_workspace_member_with_txn, rename_workspace, select_all_user_workspaces, select_workspace,
-  select_workspace_member_list, update_updated_at_of_workspace, upsert_workspace_member,
+  change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
+  insert_user_workspace, insert_workspace_invitation, insert_workspace_member_with_txn,
+  rename_workspace, select_all_user_workspaces, select_workspace,
+  select_workspace_invitations_for_user, select_workspace_member_list,
+  update_updated_at_of_workspace, update_workspace_invitation_set_invited, upsert_workspace_member,
 };
-use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
-use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
+use database_entity::dto::{
+  AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
+};
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
+};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
@@ -133,6 +139,60 @@ pub async fn open_workspace(
   Ok(workspace)
 }
 
+pub async fn accept_workspace_invite(
+  pg_pool: &PgPool,
+  workspace_access_control: &WorkspaceAccessControlImpl,
+  user_uuid: &Uuid,
+  invite_id: &Uuid,
+) -> Result<(), AppError> {
+  let mut txn = pg_pool.begin().await?;
+  update_workspace_invitation_set_invited(&mut txn, user_uuid, invite_id).await?;
+  let inv = get_invitation_by_id(&mut txn, invite_id).await?;
+  workspace_access_control
+    .insert_workspace_role(&inv.invitee_uid, &inv.workspace_id, inv.role)
+    .await?;
+  txn.commit().await?;
+  Ok(())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+pub async fn invite_workspace_members(
+  pg_pool: &PgPool,
+  inviter: &Uuid,
+  workspace_id: &Uuid,
+  invitations: Vec<WorkspaceMemberInvitation>,
+) -> Result<(), AppError> {
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to invite workspace members")?;
+
+  for invitation in invitations {
+    insert_workspace_invitation(
+      &mut txn,
+      workspace_id,
+      inviter,
+      invitation.email.as_str(),
+      invitation.role,
+    )
+    .await?;
+  }
+
+  txn.commit().await?;
+  Ok(())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+pub async fn list_workspace_invitations_for_user(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  status: Option<AFWorkspaceInvitationStatus>,
+) -> Result<Vec<AFWorkspaceInvitation>, AppError> {
+  let invis = select_workspace_invitations_for_user(pg_pool, user_uuid, status).await?;
+  Ok(invis)
+}
+
+/// TODO: mark as private
 /// Returns the list of uid of members that are added to the workspace.
 /// Adds members to a workspace.
 ///
@@ -155,7 +215,8 @@ pub async fn add_workspace_members(
   _user_uuid: &Uuid,
   workspace_id: &Uuid,
   members: Vec<CreateWorkspaceMember>,
-) -> Result<HashMap<i64, AFRole>, AppError> {
+  workspace_access_control: &WorkspaceAccessControlImpl,
+) -> Result<(), AppError> {
   let mut txn = pg_pool
     .begin()
     .await
@@ -180,11 +241,18 @@ pub async fn add_workspace_members(
     role_by_uid.insert(uid, member.role);
   }
 
+  for (uid, role) in role_by_uid {
+    workspace_access_control
+      .insert_workspace_role(&uid, &workspace_id, role)
+      .await?;
+  }
+
   txn
     .commit()
     .await
     .context("Commit transaction to insert workspace members")?;
-  Ok(role_by_uid)
+
+  Ok(())
 }
 
 pub async fn remove_workspace_members(

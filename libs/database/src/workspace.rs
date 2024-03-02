@@ -1,4 +1,4 @@
-use database_entity::dto::AFRole;
+use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus, AFWorkspaceInvitation};
 use futures_util::stream::BoxStream;
 use sqlx::{
   types::{uuid, Uuid},
@@ -8,7 +8,10 @@ use std::ops::DerefMut;
 use tracing::{event, instrument};
 
 use crate::pg_row::AFWorkspaceMemberPermRow;
-use crate::pg_row::{AFPermissionRow, AFUserProfileRow, AFWorkspaceMemberRow, AFWorkspaceRow};
+use crate::pg_row::{
+  AFPermissionRow, AFUserProfileRow, AFWorkspaceInvitationMinimal, AFWorkspaceMemberRow,
+  AFWorkspaceRow,
+};
 use crate::user::select_uid_from_email;
 use app_error::AppError;
 
@@ -229,6 +232,115 @@ pub async fn insert_workspace_member_with_txn(
   .await?;
 
   Ok(())
+}
+
+#[inline]
+pub async fn insert_workspace_invitation(
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+  workspace_id: &uuid::Uuid,
+  inviter_uuid: &Uuid,
+  invitee_email: &str,
+  invitee_role: AFRole,
+) -> Result<(), AppError> {
+  let role_id: i32 = invitee_role.into();
+  sqlx::query!(
+    r#"
+      INSERT INTO public.af_workspace_invitation (
+          workspace_id,
+          inviter,
+          invitee,
+          role_id
+      )
+      VALUES (
+        $1,
+        (SELECT uid FROM public.af_user WHERE uuid = $2),
+        (SELECT uid FROM public.af_user WHERE email = $3),
+        $4
+      )
+    "#,
+    workspace_id,
+    inviter_uuid,
+    invitee_email,
+    role_id
+  )
+  .execute(txn.deref_mut())
+  .await?;
+
+  Ok(())
+}
+
+pub async fn update_workspace_invitation_set_invited(
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+  user_uuid: &Uuid,
+  invite_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+    UPDATE public.af_workspace_invitation
+    SET status = 1
+    WHERE invitee = (SELECT uid FROM public.af_user WHERE uuid = $2)
+      AND id = $1
+    "#,
+    invite_id,
+    user_uuid
+  )
+  .execute(txn.deref_mut())
+  .await?;
+  assert_eq!(res.rows_affected(), 1);
+  Ok(())
+}
+
+pub async fn get_invitation_by_id(
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+  invite_id: &Uuid,
+) -> Result<AFWorkspaceInvitationMinimal, AppError> {
+  let res = sqlx::query_as!(
+    AFWorkspaceInvitationMinimal,
+    r#"
+    SELECT
+        workspace_id,
+        inviter AS inviter_uid,
+        invitee AS invitee_uid,
+        status,
+        role_id AS role
+    FROM
+    public.af_workspace_invitation
+    WHERE id = $1
+    "#,
+    invite_id,
+  )
+  .fetch_one(txn.deref_mut())
+  .await?;
+
+  Ok(res)
+}
+
+#[inline]
+pub async fn select_workspace_invitations_for_user(
+  pg_pool: &PgPool,
+  invitee_uuid: &Uuid,
+  status_filter: Option<AFWorkspaceInvitationStatus>,
+) -> Result<Vec<AFWorkspaceInvitation>, AppError> {
+  let res = sqlx::query_as!(
+    AFWorkspaceInvitation,
+    r#"
+    SELECT
+      id AS invite_id,
+      workspace_id,
+      (SELECT workspace_name FROM public.af_workspace WHERE workspace_id = af_workspace_invitation.workspace_id),
+      (SELECT email FROM public.af_user WHERE uid = af_workspace_invitation.inviter) AS inviter_email,
+      (SELECT name FROM public.af_user WHERE uid = af_workspace_invitation.inviter) AS inviter_name,
+      status,
+      updated_at
+    FROM
+      public.af_workspace_invitation
+    WHERE af_workspace_invitation.invitee = (SELECT uid FROM public.af_user WHERE uuid = $1)
+    AND ($2::SMALLINT IS NULL OR status = $2)
+    "#,
+    invitee_uuid,
+    status_filter.map(|s| s as i16)
+  ).fetch_all(pg_pool).await?;
+  Ok(res)
 }
 
 #[inline]

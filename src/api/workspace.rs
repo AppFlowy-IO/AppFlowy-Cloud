@@ -59,10 +59,22 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/member")
-        .route(web::get().to(get_workspace_members_handler))
+        .route(web::get().to(get_workspace_members_handler)) // deprecated
         .route(web::post().to(add_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/invite")
+        .route(web::post().to(post_workspace_invite_handler)) // invite members to workspace
+    )
+    .service(
+      web::resource("/invite")
+        .route(web::get().to(get_workspace_invite_handler)) // show invites for user
+    )
+    .service(
+      web::resource("/accept-invite/{invite_id}")
+        .route(web::post().to(post_accept_workspace_invite_handler)) // accept invitation to workspace
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}")
@@ -199,6 +211,7 @@ async fn list_workspace_handler(
   Ok(AppResponse::Ok().with_data(AFWorkspaces(workspaces)).into())
 }
 
+// Deprecated
 #[instrument(skip(payload, state), err)]
 async fn add_workspace_members_handler(
   user_uuid: UserUuid,
@@ -207,20 +220,60 @@ async fn add_workspace_members_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let create_members = payload.into_inner();
-  let role_by_uid = workspace::ops::add_workspace_members(
+  workspace::ops::add_workspace_members(
     &state.pg_pool,
     &user_uuid,
     &workspace_id,
     create_members.0,
+    &state.workspace_access_control,
   )
   .await?;
+  Ok(AppResponse::Ok().into())
+}
 
-  for (uid, role) in role_by_uid {
-    state
-      .workspace_access_control
-      .insert_workspace_role(&uid, &workspace_id, role)
+#[instrument(skip(payload, state), err)]
+async fn post_workspace_invite_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  payload: Json<Vec<WorkspaceMemberInvitation>>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let invited_members = payload.into_inner();
+  workspace::ops::invite_workspace_members(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    invited_members,
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
+}
+
+async fn get_workspace_invite_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  query: web::Query<WorkspaceInviteQuery>,
+) -> Result<JsonAppResponse<Vec<AFWorkspaceInvitation>>> {
+  let query = query.into_inner();
+  let res =
+    workspace::ops::list_workspace_invitations_for_user(&state.pg_pool, &user_uuid, query.status)
       .await?;
-  }
+  Ok(AppResponse::Ok().with_data(res).into())
+}
+
+async fn post_accept_workspace_invite_handler(
+  user_uuid: UserUuid,
+  invite_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<()>> {
+  let invite_id = invite_id.into_inner();
+  workspace::ops::accept_workspace_invite(
+    &state.pg_pool,
+    &state.workspace_access_control,
+    &invite_id,
+    &user_uuid,
+  )
+  .await?;
   Ok(AppResponse::Ok().into())
 }
 
@@ -297,6 +350,8 @@ async fn update_workspace_member_handler(
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
+  // TODO: only owner is allowed to update member role
+
   let workspace_id = workspace_id.into_inner();
   let changeset = payload.into_inner();
   workspace::ops::update_workspace_member(&state.pg_pool, &workspace_id, &changeset).await?;

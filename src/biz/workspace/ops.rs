@@ -183,7 +183,6 @@ pub async fn add_workspace_members(
 }
 
 pub async fn remove_workspace_members(
-  uid: &i64,
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   member_emails: &[String],
@@ -196,9 +195,14 @@ pub async fn remove_workspace_members(
 
   for email in member_emails {
     delete_workspace_members(&mut txn, workspace_id, email.as_str()).await?;
-    workspace_access_control
-      .remove_role(uid, workspace_id)
-      .await?;
+    if let Ok(uid) = select_uid_from_email(txn.deref_mut(), email)
+      .await
+      .map_err(AppResponseError::from)
+    {
+      workspace_access_control
+        .remove_role(&uid, workspace_id)
+        .await?;
+    }
   }
 
   txn

@@ -150,9 +150,10 @@ where
       Err(AppError::NotEnoughPermissions {
         user: uid.to_string(),
         action: format!(
-          "access workspace:{} with given url:{}",
+          "access workspace:{} with given url:{}, method: {}",
           resource_id,
-          path.as_str()
+          path.as_str(),
+          method,
         ),
       })
     }

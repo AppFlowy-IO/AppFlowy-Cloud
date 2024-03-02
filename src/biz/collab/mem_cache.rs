@@ -2,6 +2,8 @@ use crate::state::RedisClient;
 use collab::core::collab_plugin::EncodedCollab;
 use redis::AsyncCommands;
 
+use anyhow::anyhow;
+use app_error::AppError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, trace};
@@ -18,16 +20,19 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn remove_encode_collab(&self, object_id: &str) {
-    if let Err(err) = self
+  pub async fn remove_encode_collab(&self, object_id: &str) -> Result<(), AppError> {
+    self
       .redis_client
       .lock()
       .await
       .del::<&str, ()>(object_id)
       .await
-    {
-      error!("Failed to remove encoded collab from redis: {:?}", err);
-    }
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+          "Failed to remove encoded collab from redis: {:?}",
+          err
+        ))
+      })
   }
 
   pub async fn get_encode_collab_bytes(&self, object_id: &str) -> Option<Vec<u8>> {

@@ -66,6 +66,43 @@ impl CollabCache {
     Ok(encoded_collab)
   }
 
+  pub async fn batch_get_encode_collab(
+    &self,
+    uid: &i64,
+    queries: Vec<QueryCollab>,
+  ) -> HashMap<String, QueryCollabResult> {
+    let mut results = HashMap::new();
+    // 1. Processes valid queries against the in-memory cache to retrieve cached values.
+    //    - Queries not found in the cache are earmarked for disk retrieval.
+    let (disk_queries, values_from_mem_cache): (Vec<_>, HashMap<_, _>) = stream::iter(queries)
+      .then(|params| async move {
+        match self
+          .mem_cache
+          .get_encode_collab_bytes(&params.object_id)
+          .await
+        {
+          None => Either::Left(params),
+          Some(data) => Either::Right((
+            params.object_id.clone(),
+            QueryCollabResult::Success {
+              encode_collab_v1: data,
+            },
+          )),
+        }
+      })
+      .collect::<Vec<_>>()
+      .await
+      .into_iter()
+      .partition_map(|either| either);
+    results.extend(values_from_mem_cache);
+
+    // 2. Retrieves remaining values from the disk cache for queries not satisfied by the memory cache.
+    //    - These values are then merged into the final result set.
+    let values_from_disk_cache = self.disk_cache.batch_get_collab(uid, disk_queries).await;
+    results.extend(values_from_disk_cache);
+    results
+  }
+
   pub async fn insert_collab_encoded(
     &self,
     workspace_id: &str,
@@ -106,53 +143,15 @@ impl CollabCache {
     }
   }
 
-  pub async fn remove_collab(&self, object_id: &str) {
-    self.mem_cache.remove_encode_collab(object_id).await;
-    if let Err(err) = self.disk_cache.delete_collab(object_id).await {
-      error!("Failed to remove collab from disk: {:?}", err);
-    }
+  pub async fn remove_collab(&self, object_id: &str) -> Result<(), AppError> {
+    self.mem_cache.remove_encode_collab(object_id).await?;
+    self.disk_cache.delete_collab(object_id).await?;
+    Ok(())
   }
 
   pub async fn is_exist(&self, oid: &str) -> Result<bool, AppError> {
     let is_exist = self.disk_cache.is_exist(oid).await?;
     Ok(is_exist)
-  }
-
-  pub async fn batch_get_encode_collab(
-    &self,
-    uid: &i64,
-    queries: Vec<QueryCollab>,
-  ) -> HashMap<String, QueryCollabResult> {
-    let mut results = HashMap::new();
-    // 1. Processes valid queries against the in-memory cache to retrieve cached values.
-    //    - Queries not found in the cache are earmarked for disk retrieval.
-    let (disk_queries, values_from_mem_cache): (Vec<_>, HashMap<_, _>) = stream::iter(queries)
-      .then(|params| async move {
-        match self
-          .mem_cache
-          .get_encode_collab_bytes(&params.object_id)
-          .await
-        {
-          None => Either::Left(params),
-          Some(data) => Either::Right((
-            params.object_id.clone(),
-            QueryCollabResult::Success {
-              encode_collab_v1: data,
-            },
-          )),
-        }
-      })
-      .collect::<Vec<_>>()
-      .await
-      .into_iter()
-      .partition_map(|either| either);
-    results.extend(values_from_mem_cache);
-
-    // 2. Retrieves remaining values from the disk cache for queries not satisfied by the memory cache.
-    //    - These values are then merged into the final result set.
-    let values_from_disk_cache = self.disk_cache.batch_get_collab(uid, disk_queries).await;
-    results.extend(values_from_disk_cache);
-    results
   }
 
   pub fn pg_pool(&self) -> &sqlx::PgPool {

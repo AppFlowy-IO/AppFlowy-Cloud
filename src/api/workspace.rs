@@ -2,7 +2,7 @@ use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
 use crate::biz::workspace;
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
+
 use crate::component::auth::jwt::UserUuid;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
@@ -246,12 +246,11 @@ async fn get_workspace_members_handler(
 
 #[instrument(skip_all, err)]
 async fn remove_workspace_member_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   payload: Json<WorkspaceMembers>,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<()>> {
-  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let member_emails = payload
     .into_inner()
     .0
@@ -259,25 +258,12 @@ async fn remove_workspace_member_handler(
     .map(|member| member.0)
     .collect::<Vec<String>>();
   workspace::ops::remove_workspace_members(
-    &uid,
     &state.pg_pool,
     &workspace_id,
     &member_emails,
     &state.workspace_access_control,
   )
   .await?;
-
-  for email in member_emails {
-    if let Ok(uid) = select_uid_from_email(&state.pg_pool, &email)
-      .await
-      .map_err(AppResponseError::from)
-    {
-      state
-        .workspace_access_control
-        .remove_role(&uid, &workspace_id)
-        .await?;
-    }
-  }
 
   Ok(AppResponse::Ok().into())
 }

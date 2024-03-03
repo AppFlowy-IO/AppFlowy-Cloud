@@ -3,7 +3,7 @@ mod error;
 mod plugin;
 mod sink;
 mod sink_config;
-mod sink_pending_queue;
+mod sink_queue;
 mod sync_control;
 
 pub use channel::*;

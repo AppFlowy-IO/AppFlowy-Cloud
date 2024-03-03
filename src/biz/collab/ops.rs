@@ -8,6 +8,8 @@ use database_entity::dto::{
   QueryCollabMembers, UpdateCollabMemberParams,
 };
 
+use crate::biz::collab::access_control::CollabAccessControl;
+
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;
@@ -28,6 +30,7 @@ pub async fn delete_collab(
 pub async fn create_collab_member(
   pg_pool: &PgPool,
   params: &InsertCollabMemberParams,
+  collab_access_control: &impl CollabAccessControl,
 ) -> Result<(), AppError> {
   params.validate()?;
 
@@ -65,6 +68,10 @@ pub async fn create_collab_member(
   )
   .await?;
 
+  collab_access_control
+    .update_access_level_policy(&params.uid, &params.object_id, params.access_level)
+    .await?;
+
   transaction
     .commit()
     .await
@@ -76,6 +83,7 @@ pub async fn upsert_collab_member(
   pg_pool: &PgPool,
   _user_uuid: &Uuid,
   params: &UpdateCollabMemberParams,
+  collab_access_control: &impl CollabAccessControl,
 ) -> Result<(), AppError> {
   params.validate()?;
   let mut transaction = pg_pool
@@ -89,6 +97,10 @@ pub async fn upsert_collab_member(
       params.object_id
     )));
   }
+
+  collab_access_control
+    .update_access_level_policy(&params.uid, &params.object_id, params.access_level)
+    .await?;
 
   database::collab::insert_collab_member(
     params.uid,
@@ -118,15 +130,29 @@ pub async fn get_collab_member(
 pub async fn delete_collab_member(
   pg_pool: &PgPool,
   params: &CollabMemberIdentify,
+  collab_access_control: &impl CollabAccessControl,
 ) -> Result<(), AppError> {
   params.validate()?;
+  let mut transaction = pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to remove collab member")?;
   event!(
     tracing::Level::DEBUG,
     "Deleting member:{} from {}",
     params.uid,
     params.object_id
   );
-  database::collab::delete_collab_member(params.uid, &params.object_id, pg_pool).await?;
+  database::collab::delete_collab_member(params.uid, &params.object_id, &mut transaction).await?;
+
+  collab_access_control
+    .remove_access_level(&params.uid, &params.object_id)
+    .await?;
+
+  transaction
+    .commit()
+    .await
+    .context("fail to commit the transaction to remove collab member")?;
   Ok(())
 }
 pub async fn get_collab_member_list(

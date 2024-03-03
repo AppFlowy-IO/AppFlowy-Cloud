@@ -33,8 +33,8 @@ pub enum CollabMessage {
   ClientUpdateSync(UpdateSync),
   ClientAck(CollabAck),
   ServerInitSync(ServerInit),
-  AwarenessSync(CollabAwareness),
-  ServerBroadcast(CollabBroadcastData),
+  AwarenessSync(AwarenessSync),
+  ServerBroadcast(BroadcastSync),
 }
 
 impl CollabSinkMessage for CollabMessage {
@@ -104,13 +104,6 @@ impl CollabMessage {
   }
   pub fn is_server_init(&self) -> bool {
     matches!(self, CollabMessage::ServerInitSync(_))
-  }
-
-  pub fn broadcase_seq_num(&self) -> Option<u32> {
-    match self {
-      CollabMessage::ServerBroadcast(data) => Some(data.seq_num),
-      _ => None,
-    }
   }
 
   pub fn type_str(&self) -> String {
@@ -198,14 +191,21 @@ impl Display for CollabMessage {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct CollabAwareness {
+pub struct AwarenessSync {
   object_id: String,
   payload: Bytes,
   origin: CollabOrigin,
 }
 
-impl CollabAwareness {
+impl AwarenessSync {
   pub fn new(object_id: String, payload: Vec<u8>) -> Self {
     Self {
       object_id,
@@ -215,13 +215,13 @@ impl CollabAwareness {
   }
 }
 
-impl From<CollabAwareness> for CollabMessage {
-  fn from(value: CollabAwareness) -> Self {
+impl From<AwarenessSync> for CollabMessage {
+  fn from(value: AwarenessSync) -> Self {
     CollabMessage::AwarenessSync(value)
   }
 }
 
-impl Display for CollabAwareness {
+impl Display for AwarenessSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "awareness: [oid:{}|len:{}]",
@@ -230,6 +230,14 @@ impl Display for CollabAwareness {
     ))
   }
 }
+
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct InitSync {
@@ -265,8 +273,8 @@ impl InitSync {
 impl Display for InitSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client init: [{}|oid:{}|msg_id:{}|len:{}]",
-      self.origin,
+      "client init: [uid:{}|oid:{}|msg_id:{}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -280,6 +288,13 @@ impl From<InitSync> for CollabMessage {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct ServerInit {
   pub origin: CollabOrigin,
@@ -317,8 +332,8 @@ impl From<ServerInit> for CollabMessage {
 impl Display for ServerInit {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "server init: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "server init: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -326,6 +341,13 @@ impl Display for ServerInit {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct UpdateSync {
   pub origin: CollabOrigin,
@@ -390,8 +412,8 @@ impl From<UpdateSync> for CollabMessage {
 impl Display for UpdateSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "client update sync: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "update: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.msg_id,
       self.payload.len(),
@@ -408,6 +430,13 @@ pub enum AckCode {
   Internal = 3,
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CollabAck {
   pub origin: CollabOrigin,
@@ -459,8 +488,8 @@ impl From<CollabAck> for CollabMessage {
 impl Display for CollabAck {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "ack: [origin:{}|oid:{}|msg_id:{:?}|len:{}]",
-      self.origin,
+      "ack: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.source.msg_id,
       self.payload.len(),
@@ -468,8 +497,15 @@ impl Display for CollabAck {
   }
 }
 
+///  ⚠️ ⚠️ ⚠️Compatibility Warning:
+///
+/// The structure of this struct is integral to maintaining compatibility with existing messages.
+/// Therefore, adding or removing any properties (fields) from this struct could disrupt the
+/// compatibility. Such changes may lead to issues in processing existing messages that expect
+/// the struct to have a specific format. It's crucial to carefully consider the implications
+/// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
-pub struct CollabBroadcastData {
+pub struct BroadcastSync {
   origin: CollabOrigin,
   object_id: String,
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
@@ -478,7 +514,7 @@ pub struct CollabBroadcastData {
   seq_num: u32,
 }
 
-impl CollabBroadcastData {
+impl BroadcastSync {
   pub fn new(origin: CollabOrigin, object_id: String, payload: Vec<u8>, seq_num: u32) -> Self {
     Self {
       origin,
@@ -489,19 +525,19 @@ impl CollabBroadcastData {
   }
 }
 
-impl Display for CollabBroadcastData {
+impl Display for BroadcastSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "server broadcast: [{}|oid:{}|len:{}]",
-      self.origin,
+      "broadcast: [uid:{}|oid:{}|len:{}]",
+      self.origin.client_user_id().unwrap_or(0),
       self.object_id,
       self.payload.len(),
     ))
   }
 }
 
-impl From<CollabBroadcastData> for CollabMessage {
-  fn from(value: CollabBroadcastData) -> Self {
+impl From<BroadcastSync> for CollabMessage {
+  fn from(value: BroadcastSync) -> Self {
     CollabMessage::ServerBroadcast(value)
   }
 }
@@ -526,5 +562,287 @@ pub struct CloseCollabData {
 impl From<CollabMessage> for RealtimeMessage {
   fn from(msg: CollabMessage) -> Self {
     Self::Collab(msg)
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ClientCollabMessage {
+  ClientInitSync { data: InitSync },
+  ClientUpdateSync { data: UpdateSync },
+  ServerInitSync(ServerInit),
+}
+
+impl ClientCollabMessage {
+  pub fn new_init_sync(data: InitSync) -> Self {
+    Self::ClientInitSync { data }
+  }
+
+  pub fn new_update_sync(data: UpdateSync) -> Self {
+    Self::ClientUpdateSync { data }
+  }
+
+  pub fn new_server_init_sync(data: ServerInit) -> Self {
+    Self::ServerInitSync(data)
+  }
+
+  pub fn size(&self) -> usize {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => data.payload.len(),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => data.payload.len(),
+      ClientCollabMessage::ServerInitSync(msg) => msg.payload.len(),
+    }
+  }
+  pub fn object_id(&self) -> &str {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => &data.object_id,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => &data.object_id,
+      ClientCollabMessage::ServerInitSync(msg) => &msg.object_id,
+    }
+  }
+
+  pub fn origin(&self) -> &CollabOrigin {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => &data.origin,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => &data.origin,
+      ClientCollabMessage::ServerInitSync(msg) => &msg.origin,
+    }
+  }
+  pub fn payload(&self) -> &Bytes {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => &data.payload,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => &data.payload,
+      ClientCollabMessage::ServerInitSync(msg) => &msg.payload,
+    }
+  }
+  pub fn device_id(&self) -> Option<String> {
+    match self.origin() {
+      CollabOrigin::Client(origin) => Some(origin.device_id.clone()),
+      _ => None,
+    }
+  }
+
+  pub fn msg_id(&self) -> MsgId {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => data.msg_id,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => data.msg_id,
+      ClientCollabMessage::ServerInitSync(value) => value.msg_id,
+    }
+  }
+}
+
+impl Display for ClientCollabMessage {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => Display::fmt(&data, f),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => Display::fmt(&data, f),
+      ClientCollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+    }
+  }
+}
+
+impl TryFrom<CollabMessage> for ClientCollabMessage {
+  type Error = Error;
+
+  fn try_from(value: CollabMessage) -> Result<Self, Self::Error> {
+    match value {
+      CollabMessage::ClientInitSync(msg) => Ok(ClientCollabMessage::ClientInitSync { data: msg }),
+      CollabMessage::ClientUpdateSync(msg) => {
+        Ok(ClientCollabMessage::ClientUpdateSync { data: msg })
+      },
+      CollabMessage::ServerInitSync(msg) => Ok(ClientCollabMessage::ServerInitSync(msg)),
+      _ => Err(anyhow!(
+        "Can't convert to ClientCollabMessage for given collab message:{}",
+        value
+      )),
+    }
+  }
+}
+
+impl From<ClientCollabMessage> for CollabMessage {
+  fn from(value: ClientCollabMessage) -> Self {
+    match value {
+      ClientCollabMessage::ClientInitSync { data, .. } => CollabMessage::ClientInitSync(data),
+      ClientCollabMessage::ClientUpdateSync { data, .. } => CollabMessage::ClientUpdateSync(data),
+      ClientCollabMessage::ServerInitSync(data) => CollabMessage::ServerInitSync(data),
+    }
+  }
+}
+
+impl From<ClientCollabMessage> for RealtimeMessage {
+  fn from(msg: ClientCollabMessage) -> Self {
+    Self::ClientCollabV1(vec![msg])
+  }
+}
+
+impl CollabSinkMessage for ClientCollabMessage {
+  fn collab_object_id(&self) -> &str {
+    self.object_id()
+  }
+
+  fn payload_len(&self) -> usize {
+    self.size()
+  }
+
+  fn can_merge(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
+  }
+
+  fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error> {
+    match (self, other) {
+      (
+        ClientCollabMessage::ClientUpdateSync { data, .. },
+        ClientCollabMessage::ClientUpdateSync { data: other, .. },
+      ) => {
+        if &data.payload.len() > maximum_payload_size {
+          Ok(false)
+        } else {
+          data.merge_payload(other)
+        }
+      },
+      _ => Ok(false),
+    }
+  }
+
+  fn is_init_msg(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientInitSync { .. })
+  }
+}
+
+impl Eq for ClientCollabMessage {}
+
+impl PartialEq for ClientCollabMessage {
+  fn eq(&self, other: &Self) -> bool {
+    self.msg_id() == other.msg_id()
+  }
+}
+
+impl PartialOrd for ClientCollabMessage {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for ClientCollabMessage {
+  fn cmp(&self, other: &Self) -> Ordering {
+    match (&self, &other) {
+      (
+        ClientCollabMessage::ClientInitSync { data: left, .. },
+        ClientCollabMessage::ClientInitSync { data: right, .. },
+      ) => {
+        match (&left.collab_type, &right.collab_type) {
+          // document
+          (CollabType::Document, _) => Ordering::Greater,
+          (_, CollabType::Document) => Ordering::Less,
+          // database
+          (CollabType::WorkspaceDatabase, _) => Ordering::Greater,
+          (_, CollabType::WorkspaceDatabase) => Ordering::Less,
+          // folder
+          (_, CollabType::Folder) => Ordering::Greater,
+          (CollabType::Folder, _) => Ordering::Less,
+          // awareness
+          (CollabType::UserAwareness, _) => Ordering::Greater,
+          (_, CollabType::UserAwareness) => Ordering::Less,
+          _ => Ordering::Equal,
+        }
+      },
+      (ClientCollabMessage::ClientInitSync { .. }, _) => Ordering::Greater,
+      (_, ClientCollabMessage::ClientInitSync { .. }) => Ordering::Less,
+      (ClientCollabMessage::ServerInitSync(_), ClientCollabMessage::ServerInitSync(_)) => {
+        Ordering::Equal
+      },
+      (ClientCollabMessage::ServerInitSync { .. }, _) => Ordering::Greater,
+      (_, ClientCollabMessage::ServerInitSync { .. }) => Ordering::Less,
+      _ => self.msg_id().cmp(&other.msg_id()).reverse(),
+    }
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ServerCollabMessage {
+  ClientAck(CollabAck),
+  ServerInitSync(ServerInit),
+  AwarenessSync(AwarenessSync),
+  ServerBroadcast(BroadcastSync),
+}
+
+impl ServerCollabMessage {
+  pub fn object_id(&self) -> &str {
+    match self {
+      ServerCollabMessage::ClientAck(value) => &value.object_id,
+      ServerCollabMessage::ServerInitSync(value) => &value.object_id,
+      ServerCollabMessage::AwarenessSync(value) => &value.object_id,
+      ServerCollabMessage::ServerBroadcast(value) => &value.object_id,
+    }
+  }
+
+  pub fn seq_num(&self) -> Option<u32> {
+    match self {
+      ServerCollabMessage::ServerBroadcast(data) => Some(data.seq_num),
+      _ => None,
+    }
+  }
+
+  pub fn msg_id(&self) -> Option<MsgId> {
+    match self {
+      ServerCollabMessage::ClientAck(value) => Some(value.source.msg_id),
+      ServerCollabMessage::ServerInitSync(value) => Some(value.msg_id),
+      ServerCollabMessage::AwarenessSync(_) => None,
+      ServerCollabMessage::ServerBroadcast(_) => None,
+    }
+  }
+
+  pub fn payload(&self) -> &Bytes {
+    match self {
+      ServerCollabMessage::ClientAck(value) => &value.payload,
+      ServerCollabMessage::ServerInitSync(value) => &value.payload,
+      ServerCollabMessage::AwarenessSync(value) => &value.payload,
+      ServerCollabMessage::ServerBroadcast(value) => &value.payload,
+    }
+  }
+
+  pub fn size(&self) -> usize {
+    match self {
+      ServerCollabMessage::ClientAck(msg) => msg.payload.len(),
+      ServerCollabMessage::ServerInitSync(msg) => msg.payload.len(),
+      ServerCollabMessage::AwarenessSync(msg) => msg.payload.len(),
+      ServerCollabMessage::ServerBroadcast(msg) => msg.payload.len(),
+    }
+  }
+}
+
+impl Display for ServerCollabMessage {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ServerCollabMessage::ClientAck(value) => Display::fmt(&value, f),
+      ServerCollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+      ServerCollabMessage::AwarenessSync(value) => Display::fmt(&value, f),
+      ServerCollabMessage::ServerBroadcast(value) => Display::fmt(&value, f),
+    }
+  }
+}
+
+impl TryFrom<CollabMessage> for ServerCollabMessage {
+  type Error = Error;
+
+  fn try_from(value: CollabMessage) -> Result<Self, Self::Error> {
+    match value {
+      CollabMessage::ClientAck(msg) => Ok(ServerCollabMessage::ClientAck(msg)),
+      CollabMessage::ServerInitSync(msg) => Ok(ServerCollabMessage::ServerInitSync(msg)),
+      CollabMessage::AwarenessSync(msg) => Ok(ServerCollabMessage::AwarenessSync(msg)),
+      CollabMessage::ServerBroadcast(msg) => Ok(ServerCollabMessage::ServerBroadcast(msg)),
+      _ => Err(anyhow!("Invalid collab message type.")),
+    }
+  }
+}
+
+impl From<ServerCollabMessage> for RealtimeMessage {
+  fn from(msg: ServerCollabMessage) -> Self {
+    Self::ServerCollabV1(vec![msg])
+  }
+}
+
+impl From<ServerInit> for ServerCollabMessage {
+  fn from(value: ServerInit) -> Self {
+    ServerCollabMessage::ServerInitSync(value)
   }
 }

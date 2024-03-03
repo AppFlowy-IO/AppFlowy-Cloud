@@ -14,6 +14,7 @@ use anyhow::anyhow;
 
 use sqlx::PgPool;
 
+use redis::{ErrorKind, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use std::sync::Arc;
 
 use tokio::sync::broadcast;
@@ -43,16 +44,12 @@ impl AccessControl {
     collab_listener: broadcast::Receiver<CollabMemberNotification>,
     workspace_listener: broadcast::Receiver<WorkspaceMemberNotification>,
     access_control_metrics: Arc<AccessControlMetrics>,
-    enforcer_cache: Arc<dyn AFEnforcerCache>,
+    enforcer_cache: impl AFEnforcerCache + 'static,
   ) -> Result<Self, AppError> {
     let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF)
       .await
       .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
-    let access_control_adapter = PgAdapter::new(
-      pg_pool.clone(),
-      enforcer_cache.clone(),
-      access_control_metrics.clone(),
-    );
+    let access_control_adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
     let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter)
       .await
       .map_err(|e| {
@@ -79,7 +76,7 @@ impl AccessControl {
     WorkspaceAccessControlImpl::new(self.clone())
   }
 
-  pub async fn update(
+  pub async fn update_policy(
     &self,
     uid: &i64,
     obj: &ObjectType<'_>,
@@ -88,53 +85,27 @@ impl AccessControl {
     if cfg!(feature = "disable_access_control") {
       Ok(true)
     } else {
-      self.enforcer.update(uid, obj, act).await
+      self.enforcer.update_policy(uid, obj, act).await
     }
   }
 
-  pub async fn remove(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
+  pub async fn remove_policy(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
     if cfg!(feature = "disable_access_control") {
       Ok(())
     } else {
-      self.enforcer.remove(uid, obj).await?;
+      self.enforcer.remove_policy(uid, obj).await?;
       Ok(())
     }
   }
 
   pub async fn enforce<A>(&self, uid: &i64, obj: &ObjectType<'_>, act: A) -> Result<bool, AppError>
   where
-    A: ToCasbinAction,
+    A: ToACAction,
   {
     if cfg!(feature = "disable_access_control") {
       Ok(true)
     } else {
-      self.enforcer.enforce(uid, obj, act).await
-    }
-  }
-
-  pub async fn get_access_level(&self, uid: &i64, oid: &str) -> Option<AFAccessLevel> {
-    if cfg!(feature = "disable_access_control") {
-      Some(AFAccessLevel::FullAccess)
-    } else {
-      let collab_id = ObjectType::Collab(oid);
-      self
-        .enforcer
-        .get_action(uid, &collab_id)
-        .await
-        .map(|value| AFAccessLevel::from_action(&value))
-    }
-  }
-
-  pub async fn get_role(&self, uid: &i64, workspace_id: &str) -> Option<AFRole> {
-    if cfg!(feature = "disable_access_control") {
-      Some(AFRole::Owner)
-    } else {
-      let workspace_id = ObjectType::Workspace(workspace_id);
-      self
-        .enforcer
-        .get_action(uid, &workspace_id)
-        .await
-        .map(|value| AFRole::from_action(&value))
+      self.enforcer.enforce_policy(uid, obj, act).await
     }
   }
 }
@@ -231,8 +202,8 @@ pub enum ActionType {
   Level(AFAccessLevel),
 }
 
-impl ToCasbinAction for ActionType {
-  fn to_action(&self) -> String {
+impl ToACAction for ActionType {
+  fn to_action(&self) -> &str {
     match self {
       ActionType::Role(role) => role.to_action(),
       ActionType::Level(level) => level.to_action(),
@@ -241,26 +212,41 @@ impl ToCasbinAction for ActionType {
 }
 
 /// Represents the actions that can be performed on objects.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Action {
   Read,
   Write,
   Delete,
 }
 
-impl ToCasbinAction for Action {
-  fn to_action(&self) -> String {
-    match self {
-      Action::Read => "read".to_owned(),
-      Action::Write => "write".to_owned(),
-      Action::Delete => "delete".to_owned(),
+impl ToRedisArgs for Action {
+  fn write_redis_args<W>(&self, out: &mut W)
+  where
+    W: ?Sized + RedisWrite,
+  {
+    self.to_action().write_redis_args(out)
+  }
+}
+
+impl FromRedisValue for Action {
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    let s: String = FromRedisValue::from_redis_value(v)?;
+    match s.as_str() {
+      "read" => Ok(Action::Read),
+      "write" => Ok(Action::Write),
+      "delete" => Ok(Action::Delete),
+      _ => Err(RedisError::from((ErrorKind::TypeError, "invalid action"))),
     }
   }
 }
 
-impl From<Method> for Action {
-  fn from(method: Method) -> Self {
-    Self::from(&method)
+impl ToACAction for Action {
+  fn to_action(&self) -> &str {
+    match self {
+      Action::Read => "read",
+      Action::Write => "write",
+      Action::Delete => "delete",
+    }
   }
 }
 
@@ -275,31 +261,40 @@ impl From<&Method> for Action {
   }
 }
 
-pub trait ToCasbinAction {
-  fn to_action(&self) -> String;
+pub trait ToACAction {
+  fn to_action(&self) -> &str;
 }
-pub trait FromCasbinAction {
+pub trait FromACAction {
   fn from_action(action: &str) -> Self;
 }
 
-impl ToCasbinAction for AFAccessLevel {
-  fn to_action(&self) -> String {
-    i32::from(self).to_string()
+impl ToACAction for AFAccessLevel {
+  fn to_action(&self) -> &str {
+    match self {
+      AFAccessLevel::ReadOnly => "10",
+      AFAccessLevel::ReadAndComment => "20",
+      AFAccessLevel::ReadAndWrite => "30",
+      AFAccessLevel::FullAccess => "50",
+    }
   }
 }
 
-impl FromCasbinAction for AFAccessLevel {
+impl FromACAction for AFAccessLevel {
   fn from_action(action: &str) -> Self {
     Self::from(action)
   }
 }
 
-impl ToCasbinAction for AFRole {
-  fn to_action(&self) -> String {
-    i32::from(self).to_string()
+impl ToACAction for AFRole {
+  fn to_action(&self) -> &str {
+    match self {
+      AFRole::Owner => "1",
+      AFRole::Member => "2",
+      AFRole::Guest => "3",
+    }
   }
 }
-impl FromCasbinAction for AFRole {
+impl FromACAction for AFRole {
   fn from_action(action: &str) -> Self {
     Self::from(action)
   }

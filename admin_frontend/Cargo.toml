@@ -17,7 +17,7 @@ askama = "0.12.1"
 axum-extra = { version = "0.9.2", features = ["cookie"] }
 serde.workspace = true
 serde_json.workspace = true
-redis = { version = "0.23.3", features = [ "aio", "tokio-comp", "connection-manager"] }
+redis = { version = "0.24.0", features = [ "aio", "tokio-comp", "connection-manager"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 dotenvy = "0.15.7"
 reqwest = "0.11.23"

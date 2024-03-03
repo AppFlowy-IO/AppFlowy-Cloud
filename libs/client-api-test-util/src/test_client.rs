@@ -1,4 +1,5 @@
 use crate::{localhost_client_with_device_id, setup_log};
+use anyhow::{anyhow, Error};
 use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
@@ -31,6 +32,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
+use tracing::trace;
 use uuid::Uuid;
 
 use crate::user::{generate_unique_registered_user, User};
@@ -97,7 +99,10 @@ impl TestClient {
 
   pub async fn new_user() -> Self {
     let registered_user = generate_unique_registered_user().await;
-    Self::new(registered_user, true).await
+    let this = Self::new(registered_user, true).await;
+    let uid = this.uid().await;
+    trace!("🤖New user created: {}", uid);
+    this
   }
 
   pub async fn new_user_without_ws_conn() -> Self {
@@ -257,13 +262,17 @@ impl TestClient {
       .unwrap();
   }
 
-  pub async fn wait_object_sync_complete(&self, object_id: &str) {
+  pub async fn wait_object_sync_complete(&self, object_id: &str) -> Result<(), Error> {
     self
-      .wait_object_sync_complete_with_secs(object_id, 20)
-      .await;
+      .wait_object_sync_complete_with_secs(object_id, 30)
+      .await
   }
 
-  pub async fn wait_object_sync_complete_with_secs(&self, object_id: &str, secs: u64) {
+  pub async fn wait_object_sync_complete_with_secs(
+    &self,
+    object_id: &str,
+    secs: u64,
+  ) -> Result<(), Error> {
     let mut sync_state = self
       .collab_by_object_id
       .get(object_id)
@@ -275,11 +284,13 @@ impl TestClient {
     let duration = Duration::from_secs(secs);
     while let Ok(Some(state)) = timeout(duration, sync_state.next()).await {
       if state == SyncState::SyncFinished {
-        return;
+        return Ok(());
       }
     }
 
-    panic!("Timeout or SyncState stream ended before reaching SyncFinished");
+    Err(anyhow!(
+      "Timeout or SyncState stream ended before reaching SyncFinished"
+    ))
   }
 
   #[allow(dead_code)]
@@ -486,7 +497,7 @@ impl TestClient {
       .collab_by_object_id
       .insert(object_id.clone(), test_collab);
 
-    self.wait_object_sync_complete(&object_id).await;
+    self.wait_object_sync_complete(&object_id).await.unwrap();
   }
 
   pub async fn open_workspace_collab(&mut self, workspace_id: &str) {
@@ -644,7 +655,7 @@ pub async fn assert_server_collab(
   collab_type: &CollabType,
   timeout_secs: u64,
   expected: Value,
-) {
+) -> Result<(), Error> {
   let duration = Duration::from_secs(timeout_secs);
   let collab_type = collab_type.clone();
   let object_id = object_id.to_string();
@@ -688,11 +699,8 @@ pub async fn assert_server_collab(
     }
   };
 
-  // Apply the timeout to the operation
-  match timeout(duration, operation).await {
-    Ok(_) => {}, // Operation completed within the timeout
-    Err(_) => panic!("Query collab timeout after {} seconds", timeout_secs),
-  }
+  timeout(duration, operation).await?;
+  Ok(())
 }
 
 pub async fn assert_client_collab_within_30_secs(
@@ -736,14 +744,14 @@ pub async fn assert_client_collab_include_value_within_30_secs(
   client: &mut TestClient,
   object_id: &str,
   expected: Value,
-) {
+) -> Result<(), Error> {
   let secs = 30;
   let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {
     tokio::select! {
        _ = tokio::time::sleep(Duration::from_secs(secs)) => {
-         panic!("timeout");
+        return Err(anyhow!("timeout"));
        },
        json = async {
         client
@@ -757,10 +765,10 @@ pub async fn assert_client_collab_include_value_within_30_secs(
         retry_count += 1;
         if retry_count > 30 {
           assert_json_include!(actual: json, expected: expected);
-            break;
+          return Ok(());
           }
         if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
-          break;
+          return Ok(());
         }
         tokio::time::sleep(Duration::from_millis(1000)).await;
       }

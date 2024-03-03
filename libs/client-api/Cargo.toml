@@ -44,7 +44,6 @@ database-entity.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
 governor = { version = "0.6.0" }
-log = "0.4.20"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"
@@ -67,7 +66,3 @@ again = "0.1.2"
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
-
-
-[profile.dev]
-debug = true

@@ -1,12 +1,10 @@
 use crate::biz::casbin::access_control::{AccessControl, Action};
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
-use actix_http::Method;
+use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
-
 use database_entity::dto::AFAccessLevel;
-use realtime::collaborate::CollabAccessControl;
-
+use realtime::collaborate::RealtimeAccessControl;
 use tracing::instrument;
 
 #[derive(Clone)]
@@ -18,42 +16,31 @@ impl CollabAccessControlImpl {
   pub fn new(access_control: AccessControl) -> Self {
     Self { access_control }
   }
-  #[instrument(level = "info", skip_all)]
-  pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
-    let _ = self
-      .access_control
-      .update(
-        uid,
-        &ObjectType::Collab(oid),
-        &ActionType::Level(access_level),
-      )
-      .await;
-  }
-  pub async fn remove_member(&self, uid: &i64, oid: &str) {
-    let _ = self
-      .access_control
-      .remove(uid, &ObjectType::Collab(oid))
-      .await;
-  }
 }
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
+  async fn enforce_action(&self, uid: &i64, oid: &str, action: Action) -> Result<bool, AppError> {
     self
       .access_control
-      .get_access_level(uid, oid)
+      .enforce(uid, &ObjectType::Collab(oid), action)
       .await
-      .ok_or_else(|| {
-        AppError::RecordNotFound(format!(
-          "can't find the access level for user:{} of {} in cache",
-          uid, oid
-        ))
-      })
   }
 
-  #[instrument(level = "trace", skip_all)]
-  async fn insert_collab_access_level(
+  async fn enforce_access_level(
+    &self,
+    uid: &i64,
+    oid: &str,
+    access_level: AFAccessLevel,
+  ) -> Result<bool, AppError> {
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Collab(oid), access_level)
+      .await
+  }
+
+  #[instrument(level = "info", skip_all)]
+  async fn update_access_level_policy(
     &self,
     uid: &i64,
     oid: &str,
@@ -61,25 +48,35 @@ impl CollabAccessControl for CollabAccessControlImpl {
   ) -> Result<(), AppError> {
     self
       .access_control
-      .update(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
+      .update_policy(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
       .await?;
 
     Ok(())
   }
 
-  async fn can_access_http_method(
-    &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError> {
-    let action = Action::from(method);
+  #[instrument(level = "info", skip_all)]
+  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), action)
-      .await
+      .remove_policy(uid, &ObjectType::Collab(oid))
+      .await?;
+    Ok(())
   }
+}
 
+#[derive(Clone)]
+pub struct RealtimeCollabAccessControlImpl {
+  access_control: AccessControl,
+}
+
+impl RealtimeCollabAccessControlImpl {
+  pub fn new(access_control: AccessControl) -> Self {
+    Self { access_control }
+  }
+}
+
+#[async_trait]
+impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
   async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     if cfg!(feature = "disable_access_control") {
       Ok(true)

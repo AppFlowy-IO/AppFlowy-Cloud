@@ -168,7 +168,6 @@ where
         Box::pin(async move {
           // If the workspace_id or collab_object_id is not present, skip the access control
           if workspace_id.is_none() && object_id.is_none() {
-            println!("-------- Skip access control for the request");
             return fut.await;
           }
 

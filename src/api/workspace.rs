@@ -45,6 +45,7 @@ pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
 pub const WORKSPACE_PATTERN: &str = "/api/workspace";
 pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member";
+pub const WORKSPACE_INVITE_PATTERN: &str = "/api/workspace/{workspace_id}/invite";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
 
 pub fn workspace_scope() -> Scope {
@@ -56,6 +57,10 @@ pub fn workspace_scope() -> Scope {
       .route(web::get().to(list_workspace_handler))
       .route(web::post().to(create_workspace_handler))
       .route(web::patch().to(patch_workspace_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/invite")
+        .route(web::post().to(post_workspace_invite_handler)) // invite members to workspace
     )
     .service(
       web::resource("/invite")
@@ -74,11 +79,7 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_workspace_members_handler))
         .route(web::post().to(create_workspace_members_handler)) // deprecated, use invite flow instead
         .route(web::put().to(update_workspace_member_handler))
-        .route(web::delete().to(remove_workspace_member_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/invite")
-        .route(web::post().to(post_workspace_invite_handler)) // invite members to workspace
+        .route(web::delete().to(remove_workspace_member_handler))
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}")

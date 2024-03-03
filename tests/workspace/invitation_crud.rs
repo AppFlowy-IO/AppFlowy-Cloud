@@ -4,7 +4,7 @@ use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
 
 #[tokio::test]
 async fn invite_workspace_crud() {
-  let (alice_client, alice) = generate_unique_registered_user_client().await;
+  let (alice_client, _alice) = generate_unique_registered_user_client().await;
   let alice_workspace_id = alice_client
     .get_workspaces()
     .await

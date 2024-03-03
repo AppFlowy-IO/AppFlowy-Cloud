@@ -120,8 +120,10 @@ where
   ) -> Result<(), AppError> {
     if self.should_skip(&method, path) {
       trace!("Skip access control for the request");
+      println!("------- Skip access control for the request");
       return Ok(());
     }
+    println!("----- Check access control for the request");
 
     // For some specific resources, we require a specific role to access them instead of the action.
     // For example, Both AFRole::Owner and AFRole::Member have the write permission to the workspace,
@@ -147,6 +149,8 @@ where
     if result {
       Ok(())
     } else {
+      println!("------------------------------ Not enough permissions");
+
       Err(AppError::NotEnoughPermissions {
         user: uid.to_string(),
         action: format!(

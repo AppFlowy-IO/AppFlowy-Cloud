@@ -52,10 +52,17 @@ pub fn workspace_scope() -> Scope {
       .route(web::post().to(create_workpace_handler))
       .route(web::patch().to(patch_workspace_handler))
     )
+    .service(
+      web::resource("/invite")
+        .route(web::get().to(get_workspace_invite_handler)) // show invites for user
+    )
+    .service(
+      web::resource("/accept-invite/{invite_id}")
+        .route(web::post().to(post_accept_workspace_invite_handler)) // accept invitation to workspace
+    )
     .service(web::resource("/{workspace_id}")
       .route(web::delete().to(delete_workspace_handler))
     )
-
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/member")
@@ -67,14 +74,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/invite")
         .route(web::post().to(post_workspace_invite_handler)) // invite members to workspace
-    )
-    .service(
-      web::resource("/invite")
-        .route(web::get().to(get_workspace_invite_handler)) // show invites for user
-    )
-    .service(
-      web::resource("/accept-invite/{invite_id}")
-        .route(web::post().to(post_accept_workspace_invite_handler)) // accept invitation to workspace
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}")
@@ -270,8 +269,8 @@ async fn post_accept_workspace_invite_handler(
   workspace::ops::accept_workspace_invite(
     &state.pg_pool,
     &state.workspace_access_control,
-    &invite_id,
     &user_uuid,
+    &invite_id,
   )
   .await?;
   Ok(AppResponse::Ok().into())

@@ -33,7 +33,7 @@ async fn test_workspace_access_control_get_role(pool: PgPool) -> anyhow::Result<
   .await;
 
   let member = create_user(&pool).await?;
-  let _ = biz::workspace::ops::add_workspace_members(
+  let _ = biz::workspace::ops::add_workspace_members_db_only(
     &pool,
     &member.uuid,
     &workspace.workspace_id,

@@ -1,4 +1,4 @@
-use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus, AFWorkspaceInvitation};
+use database_entity::dto::{AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus};
 use futures_util::stream::BoxStream;
 use sqlx::{
   types::{uuid, Uuid},
@@ -274,15 +274,18 @@ pub async fn update_workspace_invitation_set_invited(
   user_uuid: &Uuid,
   invite_id: &Uuid,
 ) -> Result<(), AppError> {
+  println!("--------- user_uuid: {:?}", user_uuid);
+  println!("--------- invite_id: {:?}", invite_id);
+
   let res = sqlx::query_scalar!(
     r#"
     UPDATE public.af_workspace_invitation
     SET status = 1
-    WHERE invitee = (SELECT uid FROM public.af_user WHERE uuid = $2)
-      AND id = $1
+    WHERE invitee = (SELECT uid FROM public.af_user WHERE uuid = $1)
+      AND id = $2
     "#,
+    user_uuid,
     invite_id,
-    user_uuid
   )
   .execute(txn.deref_mut())
   .await?;

@@ -12,10 +12,11 @@ use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
-  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceMember, AFWorkspaces,
-  BatchQueryCollabParams, BatchQueryCollabResult, CollabMemberIdentify, CreateCollabParams,
-  DeleteCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
+  AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult,
+  CollabMemberIdentify, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams,
+  QueryCollab, QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -623,13 +624,14 @@ impl Client {
 
   pub async fn list_workspace_invitations(
     &self,
+    status: Option<AFWorkspaceInvitationStatus>,
   ) -> Result<Vec<AFWorkspaceInvitation>, AppResponseError> {
     let url = format!("{}/api/workspace/invite", self.base_url);
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
+    let mut builder = self.http_client_with_auth(Method::GET, &url).await?;
+    if let Some(status) = status {
+      builder = builder.query(&[("status", status)])
+    }
+    let resp = builder.send().await?;
     log_request_id(&resp);
     let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
     Ok(res.into_data()?)
@@ -637,11 +639,11 @@ impl Client {
 
   pub async fn accept_workspace_invitation(
     &self,
-    workspace_id: &str,
+    invitation_id: &str,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/accept-invite/{}",
-      self.base_url, workspace_id
+      self.base_url, invitation_id
     );
     let resp = self
       .http_client_with_auth(Method::POST, &url)

@@ -42,10 +42,14 @@ async fn test_collab_access_control(pool: PgPool) -> anyhow::Result<()> {
       role: AFRole::Guest,
     },
   ];
-  let _ =
-    biz::workspace::ops::add_workspace_members(&pool, &user.uuid, &workspace.workspace_id, members)
-      .await
-      .context("adding users to workspace")?;
+  let _ = biz::workspace::ops::add_workspace_members_db_only(
+    &pool,
+    &user.uuid,
+    &workspace.workspace_id,
+    members,
+  )
+  .await
+  .context("adding users to workspace")?;
 
   // user that created the workspace should have full access
   assert_access_level(
@@ -148,7 +152,7 @@ async fn test_collab_access_control_access_http_method(pool: PgPool) -> anyhow::
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let _ = biz::workspace::ops::add_workspace_members(
+  let _ = biz::workspace::ops::add_workspace_members_db_only(
     &pool,
     &guest.uuid,
     &workspace.workspace_id,
@@ -243,7 +247,7 @@ async fn test_collab_access_control_send_receive_collab_update(pool: PgPool) -> 
     .next()
     .ok_or(anyhow!("workspace should be created"))?;
 
-  let _ = biz::workspace::ops::add_workspace_members(
+  let _ = biz::workspace::ops::add_workspace_members_db_only(
     &pool,
     &guest.uuid,
     &workspace.workspace_id,

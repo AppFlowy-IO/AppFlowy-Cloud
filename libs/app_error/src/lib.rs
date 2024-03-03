@@ -3,7 +3,7 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
-use actix_web::http::StatusCode;
+use reqwest::StatusCode;
 use serde::Serialize;
 use thiserror::Error;
 

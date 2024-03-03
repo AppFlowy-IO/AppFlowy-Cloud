@@ -111,6 +111,10 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn can_merge(&self) -> bool {
+    if self.is_processing() {
+      return false;
+    }
+
     self.msg.can_merge()
   }
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {

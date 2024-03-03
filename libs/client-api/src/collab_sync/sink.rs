@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use crate::collab_sync::sink_queue::{MessageState, SinkQueue};
+use crate::collab_sync::sink_queue::{MessageState, QueueItem, SinkQueue};
 use crate::collab_sync::SyncObject;
 use futures_util::SinkExt;
 
@@ -13,7 +13,7 @@ use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage}
 
 use tokio::sync::{oneshot, watch, Mutex};
 
-use tokio::time::interval;
+use tokio::time::{interval, sleep};
 use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug)]
@@ -40,6 +40,7 @@ impl SinkState {
 pub enum SinkSignal {
   Stop,
   Proceed,
+  ProcessAfterMillis(u64),
 }
 
 const SEND_INTERVAL: Duration = Duration::from_secs(6);
@@ -133,19 +134,20 @@ where
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
 
-    let send_immediately = {
-      let mut msg_queue = self.message_queue.lock();
-      let msg_id = self.msg_id_counter.next();
-      let msg = f(msg_id);
-      let send_immediately = msg_queue.is_empty();
-      msg_queue.push_msg(msg_id, msg);
-      drop(msg_queue);
-      send_immediately
-    };
+    let mut msg_queue = self.message_queue.lock();
+    let msg_id = self.msg_id_counter.next();
+    let msg = f(msg_id);
+    msg_queue.push_msg(msg_id, msg);
 
-    if send_immediately {
-      let _ = self.notifier.send(SinkSignal::Proceed);
+    // If the next message can be merged, try to merge the next message.
+    if let Some(mut next) = msg_queue.pop() {
+      self.merge_items_into_next(&mut next, &mut msg_queue);
+      msg_queue.push(next);
     }
+    drop(msg_queue);
+
+    // Notify the sink to process the next message after 300ms.
+    let _ = self.notifier.send(SinkSignal::ProcessAfterMillis(300));
   }
 
   /// When queue the init message, the sink will clear all the pending messages and send the init
@@ -158,12 +160,6 @@ where
     // When the client is connected, remove all pending messages and send the init message.
     {
       let mut msg_queue = self.message_queue.lock();
-      // if there is an init message in the queue, return;
-      if let Some(msg) = msg_queue.peek() {
-        if msg.get_msg().is_init_msg() {
-          return;
-        }
-      }
       msg_queue.clear();
       let msg_id = self.msg_id_counter.next();
       let msg = f(msg_id);
@@ -253,7 +249,7 @@ where
   async fn send_msg_immediately(&self) -> Option<()> {
     let (tx, rx) = oneshot::channel();
     let collab_msg = {
-      let (mut msg_queue, mut queue_item) = match self.message_queue.try_lock() {
+      let (mut msg_queue, mut next) = match self.message_queue.try_lock() {
         None => {
           // If acquire the lock failed, try to notify again after 100ms
           retry_later(Arc::downgrade(&self.notifier));
@@ -263,37 +259,15 @@ where
       }?;
 
       //
-      if queue_item.is_processing() {
+      if next.is_processing() {
         return None;
       }
 
-      let mut merged_msg = vec![];
-      // If the message can merge other messages, try to merge the next message until the
-      // message is not mergeable.
-      if queue_item.can_merge() {
-        while let Some(pending_msg) = msg_queue.pop() {
-          // If the message is not mergeable, push the message back to the queue and break the loop.
-          match queue_item.merge(&pending_msg, &self.config.maximum_payload_size) {
-            Ok(continue_merge) => {
-              merged_msg.push(pending_msg.msg_id());
-              if !continue_merge {
-                break;
-              }
-            },
-            Err(err) => {
-              msg_queue.push(pending_msg);
-              error!("Failed to merge message: {}", err);
-              break;
-            },
-          }
-        }
-      }
-
-      queue_item.set_ret(tx);
-      queue_item.set_state(MessageState::Processing);
-      let collab_msg = queue_item.get_msg().clone();
-      msg_queue.push(queue_item);
-      drop(msg_queue);
+      self.merge_items_into_next(&mut next, &mut msg_queue);
+      next.set_ret(tx);
+      next.set_state(MessageState::Processing);
+      let collab_msg = next.get_msg().clone();
+      msg_queue.push(next);
       collab_msg
     };
 
@@ -320,6 +294,31 @@ where
       self.notify();
     }
     None
+  }
+
+  /// Merge the next message with the subsequent messages if possible.
+  fn merge_items_into_next(&self, next: &mut QueueItem<Msg>, msg_queue: &mut SinkQueue<Msg>) {
+    // Proceed only if the next message is eligible for merging.
+    if !next.can_merge() {
+      return;
+    }
+
+    // Attempt to merge subsequent messages until it's no longer possible or advisable.
+    while let Some(pending_msg) = msg_queue.pop() {
+      // Attempt to merge the current message with the next one.
+      // If merging is not successful or not advisable, push the unmerged message back and exit.
+      if let Err(err) = next.merge(&pending_msg, &self.config.maximum_payload_size) {
+        msg_queue.push(pending_msg); // Requeue the message that couldn't be merged.
+        error!("Failed to merge message: {}", err);
+        break;
+      } else if !next
+        .merge(&pending_msg, &self.config.maximum_payload_size)
+        .unwrap()
+      {
+        // If merging was successful but further merging is not advised, stop.
+        break;
+      }
+    }
   }
 
   /// Notify the sink to process the next message.
@@ -362,6 +361,10 @@ impl<Msg> CollabSinkRunner<Msg> {
         match value {
           SinkSignal::Stop => break,
           SinkSignal::Proceed => {
+            sync_sink.process_next_msg().await;
+          },
+          SinkSignal::ProcessAfterMillis(millis) => {
+            sleep(Duration::from_millis(millis)).await;
             sync_sink.process_next_msg().await;
           },
         }

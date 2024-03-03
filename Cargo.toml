@@ -99,7 +99,6 @@ opener = "0.6.1"
 image = "0.23.14"
 collab-folder = { version = "0.1.0" }
 websocket.workspace = true
-serial_test = "3.0"
 
 #criterion = { version = "0.5", features = ["async_tokio"] }
 

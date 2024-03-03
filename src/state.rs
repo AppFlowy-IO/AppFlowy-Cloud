@@ -1,5 +1,5 @@
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
-use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::pg_listener::PgListeners;
 
 use crate::config::config::Config;
@@ -15,6 +15,7 @@ use realtime::collaborate::RealtimeMetrics;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 
+use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::metrics::CollabMetrics;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -27,11 +28,12 @@ pub type RedisClient = redis::aio::ConnectionManager;
 pub struct AppState {
   pub pg_pool: PgPool,
   pub config: Arc<Config>,
-  pub users: Arc<UserCache>,
+  pub user_cache: UserCache,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
   pub redis_client: RedisClient,
-  pub collab_storage: Arc<CollabStorageImpl>,
+  pub collab_cache: CollabCache,
+  pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub collab_access_control: CollabAccessControlImpl,
   pub workspace_access_control: WorkspaceAccessControlImpl,
   pub bucket_storage: Arc<S3BucketStorage>,
@@ -56,9 +58,10 @@ pub struct AuthenticateUser {
 
 pub const EXPIRED_DURATION_DAYS: i64 = 30;
 
+#[derive(Clone)]
 pub struct UserCache {
   pool: PgPool,
-  users: DashMap<Uuid, AuthenticateUser>,
+  users: Arc<DashMap<Uuid, AuthenticateUser>>,
 }
 
 impl UserCache {
@@ -78,7 +81,10 @@ impl UserCache {
       users
     };
 
-    Self { pool, users }
+    Self {
+      pool,
+      users: Arc::new(users),
+    }
   }
 
   /// Get the user's uid from the cache or the database.

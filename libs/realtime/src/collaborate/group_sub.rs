@@ -1,5 +1,5 @@
 use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::{CollabAccessControl, CollabClientStream};
+use crate::collaborate::{CollabClientStream, RealtimeAccessControl};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::StreamError;
 use crate::util::channel_ext::UnboundedSenderSink;
@@ -30,7 +30,7 @@ impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   fn get_origin(collab_message: &ClientCollabMessage) -> &CollabOrigin {
     collab_message.origin()
@@ -40,8 +40,7 @@ where
     object_id: &'b str,
     client_stream: &'b mut CollabClientStream,
     client_uid: i64,
-    sink_permission_service: Arc<AC>,
-    stream_permission_service: Arc<AC>,
+    access_control: Arc<AC>,
   ) -> (
     UnboundedSenderSink<CollabMessage>,
     ReceiverStream<Result<ClientCollabMessage, StreamError>>,
@@ -49,6 +48,8 @@ where
   where
     'a: 'b,
   {
+    let sink_access_control = access_control.clone();
+    let stream_access_control = access_control.clone();
     let (sink, stream) = client_stream.client_channel::<CollabMessage, _, _>(
       object_id,
       move |object_id, msg| {
@@ -62,9 +63,9 @@ where
         }
 
         let object_id = object_id.to_string();
-        let permission_service = sink_permission_service.clone();
+        let clone_sink_access_control = sink_access_control.clone();
         Box::pin(async move {
-          match permission_service
+          match clone_sink_access_control
             .can_receive_collab_update(&client_uid, &object_id)
             .await
           {
@@ -96,22 +97,22 @@ where
 
         let is_init = msg.is_init_msg();
         let object_id = object_id.to_string();
-        let cloned_stream_permission_service = stream_permission_service.clone();
+        let cloned_stream_access_control = stream_access_control.clone();
 
         Box::pin(async move {
-          // If the message is init sync, and it's allow the send to the group.
+          // If the message is init sync, and it's allow to send to the group.
           if is_init {
             return true;
           }
 
-          match cloned_stream_permission_service
+          match cloned_stream_access_control
             .can_send_collab_update(&client_uid, &object_id)
             .await
           {
             Ok(is_allowed) => {
               if !is_allowed {
                 trace!(
-                  "client:{} is not allowed to send {} updates",
+                  "client:{} is not allowed to edit {} updates",
                   client_uid,
                   object_id,
                 );
@@ -138,7 +139,7 @@ impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   pub(crate) async fn run(self) {
     let CollabUserMessage {
@@ -171,7 +172,6 @@ where
             object_id,
             client_stream.value_mut(),
             client_uid,
-            self.access_control.clone(),
             self.access_control.clone(),
           );
           collab_group

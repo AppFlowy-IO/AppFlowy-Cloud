@@ -1,4 +1,4 @@
-use crate::collaborate::{RealtimeAccessControl, RealtimeServer};
+use crate::core::RealtimeAccessControl;
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
 use crate::error::RealtimeError;
 use actix::{
@@ -15,9 +15,11 @@ use std::ops::Deref;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
+use crate::server::RealtimeServer;
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::{debug, error, trace, warn};
+
 const MAX_MESSAGES_PER_INTERVAL: usize = 10;
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 

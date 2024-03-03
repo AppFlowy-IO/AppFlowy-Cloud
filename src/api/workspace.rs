@@ -1,5 +1,5 @@
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
-use crate::api::ws::CollabServerImpl;
+use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::workspace;
 
@@ -718,7 +718,7 @@ async fn get_collab_member_list_handler(
 async fn post_realtime_message_stream_handler(
   user_uuid: UserUuid,
   mut payload: Payload,
-  server: Data<CollabServerImpl>,
+  server: Data<RealtimeServerAddr>,
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {

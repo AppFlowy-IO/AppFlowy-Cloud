@@ -1,17 +1,15 @@
-mod group;
-mod group_broadcast;
-mod group_cmd;
+pub(crate) mod group;
+pub(crate) mod group_broadcast;
+pub(crate) mod group_cmd;
 mod group_sub;
 mod metrics;
 mod permission;
 mod plugin;
 // mod retry;
-mod all_group;
-mod server;
-mod sync_protocol;
+pub(crate) mod all_group;
+pub(crate) mod sync_protocol;
 
 pub use group_broadcast::*;
 pub use metrics::*;
 pub use permission::*;
 pub use plugin::*;
-pub use server::*;

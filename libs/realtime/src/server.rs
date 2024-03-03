@@ -1,8 +1,5 @@
 use crate::client::ClientWSSink;
-use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
-use crate::collaborate::permission::RealtimeAccessControl;
-use crate::collaborate::RealtimeMetrics;
+use crate::core::{RealtimeAccessControl, RealtimeMetrics};
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
 };
@@ -19,6 +16,8 @@ use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::SystemMessage;
 use std::collections::HashSet;
 
+use crate::core::all_group::AllCollabGroup;
+use crate::core::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;

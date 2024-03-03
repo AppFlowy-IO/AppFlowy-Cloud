@@ -1,4 +1,4 @@
-use crate::collaborate::{CollabBroadcast, Subscription};
+use crate::core::{CollabBroadcast, Subscription};
 use crate::entities::RealtimeUser;
 use anyhow::Error;
 use collab::core::collab_plugin::EncodedCollab;

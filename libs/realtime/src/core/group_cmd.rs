@@ -1,10 +1,9 @@
-use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
-use crate::collaborate::{
-  broadcast_client_collab_message, CollabClientStream, RealtimeAccessControl,
-};
+use crate::core::all_group::AllCollabGroup;
+use crate::core::group_sub::{CollabUserMessage, SubscribeGroup};
+use crate::core::RealtimeAccessControl;
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::RealtimeError;
+use crate::server::{broadcast_client_collab_message, CollabClientStream};
 use anyhow::anyhow;
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;

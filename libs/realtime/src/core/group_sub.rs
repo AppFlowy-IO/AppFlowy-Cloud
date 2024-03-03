@@ -1,7 +1,8 @@
-use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::{CollabClientStream, RealtimeAccessControl};
+use crate::core::all_group::AllCollabGroup;
+use crate::core::RealtimeAccessControl;
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::StreamError;
+use crate::server::CollabClientStream;
 use crate::util::channel_ext::UnboundedSenderSink;
 use collab::core::origin::CollabOrigin;
 use dashmap::DashMap;

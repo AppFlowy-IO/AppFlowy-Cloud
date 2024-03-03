@@ -1,5 +1,5 @@
-use crate::collaborate::group::CollabGroup;
-use crate::collaborate::{CollabStoragePlugin, RealtimeAccessControl};
+use crate::core::group::CollabGroup;
+use crate::core::{CollabStoragePlugin, RealtimeAccessControl};
 use crate::entities::RealtimeUser;
 use anyhow::Error;
 use collab::core::origin::CollabOrigin;

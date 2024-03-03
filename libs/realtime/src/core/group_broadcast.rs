@@ -1,4 +1,4 @@
-use crate::collaborate::sync_protocol::ServerSyncProtocol;
+use crate::core::sync_protocol::ServerSyncProtocol;
 use collab::core::awareness;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use std::rc::{Rc, Weak};

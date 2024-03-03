@@ -96,7 +96,7 @@ async fn test_add_users_to_workspace(pool: PgPool) -> anyhow::Result<()> {
       role: AFRole::Guest,
     },
   ];
-  let _ = biz::workspace::ops::add_workspace_members(
+  let _ = biz::workspace::ops::add_workspace_members_db_only(
     &pool,
     &user_main.uuid,
     &workspace.workspace_id,
@@ -232,7 +232,8 @@ async fn test_reload_policy_after_adding_user_to_workspace(pool: PgPool) -> anyh
     email: user_member.email.clone(),
     role: AFRole::Member,
   }];
-  let _ = biz::workspace::ops::add_workspace_members(
+
+  let _ = biz::workspace::ops::add_workspace_members_db_only(
     &pool,
     &user_owner.uuid,
     &workspace.workspace_id,

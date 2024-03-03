@@ -465,7 +465,7 @@ pub struct AFWorkspaceMember {
   pub avatar_url: Option<String>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct AFWorkspaceInvitation {
   pub invite_id: Uuid,
   pub workspace_id: Uuid,

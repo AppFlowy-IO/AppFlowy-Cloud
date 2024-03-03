@@ -255,6 +255,39 @@ pub async fn add_workspace_members(
   Ok(())
 }
 
+// use in tests only
+pub async fn add_workspace_members_db_only(
+  pg_pool: &PgPool,
+  _user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  members: Vec<CreateWorkspaceMember>,
+) -> Result<(), AppError> {
+  let mut txn = pg_pool
+    .begin()
+    .await
+    .context("Begin transaction to insert workspace members")?;
+
+  for member in members.into_iter() {
+    let access_level = match &member.role {
+      AFRole::Owner => AFAccessLevel::FullAccess,
+      AFRole::Member => AFAccessLevel::ReadAndWrite,
+      AFRole::Guest => AFAccessLevel::ReadOnly,
+    };
+
+    let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
+    insert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
+      .await?;
+    upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
+  }
+
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to insert workspace members")?;
+
+  Ok(())
+}
+
 pub async fn remove_workspace_members(
   user_uuid: &Uuid,
   pg_pool: &PgPool,

@@ -38,6 +38,7 @@ BEGIN
     VALUES (NEW.workspace_id, NEW.invitee, NEW.role_id)
     ON CONFLICT (workspace_id, uid) DO NOTHING;
   END IF;
+  RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 

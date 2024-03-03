@@ -3,6 +3,7 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
+use actix_web::http::StatusCode;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -179,7 +180,11 @@ impl From<reqwest::Error> for AppError {
     }
 
     if error.is_request() {
-      return AppError::InvalidRequest(error.to_string());
+      return if error.status() == Some(StatusCode::PAYLOAD_TOO_LARGE) {
+        AppError::PayloadTooLarge(error.to_string())
+      } else {
+        AppError::InvalidRequest(error.to_string())
+      };
     }
     AppError::Unhandled(error.to_string())
   }

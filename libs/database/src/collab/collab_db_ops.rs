@@ -495,10 +495,16 @@ pub async fn select_collab_members(
 ) -> Result<Vec<AFCollabMember>, AppError> {
   let members = sqlx::query(
     r#"
-      SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
+      SELECT af_collab_member.uid, 
+             af_collab_member.oid, 
+             af_permissions.id, 
+             af_permissions.name, 
+             af_permissions.access_level, 
+             af_permissions.description
       FROM af_collab_member
       JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
       WHERE af_collab_member.oid = $1
+      ORDER BY af_collab_member.created_at ASC
       "#,
   )
   .bind(oid)

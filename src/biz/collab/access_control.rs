@@ -97,7 +97,7 @@ where
     AccessResource::Collab
   }
 
-  #[instrument(name = "check_collab_permission", level = "trace", skip_all, err)]
+  #[instrument(name = "check_collab_permission", level = "trace", skip_all)]
   async fn check_resource_permission(
     &self,
     uid: &i64,

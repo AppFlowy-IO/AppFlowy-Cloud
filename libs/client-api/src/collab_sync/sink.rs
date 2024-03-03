@@ -10,7 +10,9 @@ use futures_util::SinkExt;
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
-use tokio::sync::{watch, Mutex};
+use tokio::sync::oneshot::error::RecvError;
+use tokio::sync::{oneshot, watch, Mutex};
+use tokio::time::error::Elapsed;
 use tokio::time::interval;
 use tracing::{debug, error, trace, warn};
 
@@ -40,7 +42,7 @@ pub enum SinkSignal {
   Proceed,
 }
 
-const SEND_INTERVAL: Duration = Duration::from_secs(10);
+const SEND_INTERVAL: Duration = Duration::from_secs(6);
 
 /// Use to sync the [Msg] to the remote.
 pub struct CollabSink<Sink, Msg> {
@@ -249,6 +251,7 @@ where
   }
 
   async fn send_msg_immediately(&self) -> Option<()> {
+    let (tx, rx) = oneshot::channel();
     let collab_msg = {
       let (mut msg_queue, mut queue_item) = match self.message_queue.try_lock() {
         None => {
@@ -258,6 +261,11 @@ where
         },
         Some(mut msg_queue) => msg_queue.pop().map(|sending_msg| (msg_queue, sending_msg)),
       }?;
+
+      //
+      if queue_item.is_processing() {
+        return None;
+      }
 
       let mut merged_msg = vec![];
       // If the message can merge other messages, try to merge the next message until the
@@ -280,6 +288,8 @@ where
           }
         }
       }
+
+      queue_item.set_ret(tx);
       queue_item.set_state(MessageState::Processing);
       let collab_msg = queue_item.get_msg().clone();
       msg_queue.push(queue_item);
@@ -298,6 +308,13 @@ where
         warn!("Failed to acquire the lock of the sink, retry later");
         retry_later(Arc::downgrade(&self.notifier));
       },
+    }
+
+    if let Err(_) = tokio::time::timeout(Duration::from_secs(4), rx).await {
+      if let Some(mut pending_msg) = self.message_queue.lock().peek_mut() {
+        pending_msg.set_state(MessageState::Timeout);
+      }
+      self.notify();
     }
     None
   }

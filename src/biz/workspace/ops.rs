@@ -9,11 +9,11 @@ use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, insert_user_workspace,
-  insert_workspace_member_with_txn, rename_workspace, select_all_user_workspaces, select_workspace,
-  select_workspace_member_list, update_updated_at_of_workspace, upsert_workspace_member,
+  rename_workspace, select_all_user_workspaces, select_workspace, select_workspace_member_list,
+  update_updated_at_of_workspace, upsert_workspace_member, upsert_workspace_member_with_txn,
 };
 use database_entity::dto::{AFAccessLevel, AFRole, AFWorkspace};
-use realtime::collaborate::CollabAccessControl;
+
 use shared_entity::dto::workspace_dto::{CreateWorkspaceMember, WorkspaceMemberChangeset};
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool};
@@ -24,7 +24,7 @@ use tracing::instrument;
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
-use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::initialize_workspace_for_user;
 
 pub async fn delete_workspace_for_user(
@@ -57,8 +57,7 @@ pub async fn delete_workspace_for_user(
 pub async fn create_workspace_for_user(
   pg_pool: &PgPool,
   workspace_access_control: &impl WorkspaceAccessControl,
-  collab_access_control: &impl CollabAccessControl,
-  collab_storage: &Arc<CollabStorageImpl>,
+  collab_storage: &Arc<CollabAccessControlStorage>,
   user_uuid: &Uuid,
   user_uid: i64,
   workspace_name: &str,
@@ -68,16 +67,9 @@ pub async fn create_workspace_for_user(
   let new_workspace = AFWorkspace::try_from(new_workspace_row)?;
 
   workspace_access_control
-    .insert_workspace_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
+    .insert_role(&user_uid, &new_workspace.workspace_id, AFRole::Owner)
     .await?;
 
-  collab_access_control
-    .insert_collab_access_level(
-      &user_uid,
-      &new_workspace.workspace_id.to_string(),
-      AFAccessLevel::FullAccess,
-    )
-    .await?;
   // add create initial collab for user
   initialize_workspace_for_user(
     user_uid,
@@ -170,18 +162,9 @@ pub async fn add_workspace_members(
 
   let mut role_by_uid = HashMap::new();
   for member in members.into_iter() {
-    let access_level = match &member.role {
-      AFRole::Owner => AFAccessLevel::FullAccess,
-      AFRole::Member => AFAccessLevel::ReadAndWrite,
-      AFRole::Guest => AFAccessLevel::ReadOnly,
-    };
-
+    let access_level = AFAccessLevel::from(&member.role);
     let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
-    // .context(format!(
-    //   "Failed to get uid from email {} when adding workspace members",
-    //   member.email
-    // ))?;
-    insert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
+    upsert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
       .await?;
     upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
     role_by_uid.insert(uid, member.role);
@@ -189,7 +172,7 @@ pub async fn add_workspace_members(
 
   for (uid, role) in role_by_uid {
     workspace_access_control
-      .insert_workspace_role(&uid, workspace_id, role)
+      .insert_role(&uid, workspace_id, role)
       .await?;
   }
   txn
@@ -200,10 +183,10 @@ pub async fn add_workspace_members(
 }
 
 pub async fn remove_workspace_members(
-  user_uuid: &Uuid,
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   member_emails: &[String],
+  workspace_access_control: &impl WorkspaceAccessControl,
 ) -> Result<(), AppResponseError> {
   let mut txn = pg_pool
     .begin()
@@ -211,7 +194,15 @@ pub async fn remove_workspace_members(
     .context("Begin transaction to delete workspace members")?;
 
   for email in member_emails {
-    delete_workspace_members(user_uuid, &mut txn, workspace_id, email.as_str()).await?;
+    delete_workspace_members(&mut txn, workspace_id, email.as_str()).await?;
+    if let Ok(uid) = select_uid_from_email(txn.deref_mut(), email)
+      .await
+      .map_err(AppResponseError::from)
+    {
+      workspace_access_control
+        .remove_role(&uid, workspace_id)
+        .await?;
+    }
   }
 
   txn
@@ -230,16 +221,18 @@ pub async fn get_workspace_members(
 }
 
 pub async fn update_workspace_member(
+  uid: &i64,
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   changeset: &WorkspaceMemberChangeset,
+  workspace_access_control: &impl WorkspaceAccessControl,
 ) -> Result<(), AppError> {
-  upsert_workspace_member(
-    pg_pool,
-    workspace_id,
-    &changeset.email,
-    changeset.role.clone(),
-  )
-  .await?;
+  if let Some(role) = &changeset.role {
+    upsert_workspace_member(pg_pool, workspace_id, &changeset.email, role.clone()).await?;
+    workspace_access_control
+      .insert_role(uid, workspace_id, role.clone())
+      .await?;
+  }
+
   Ok(())
 }

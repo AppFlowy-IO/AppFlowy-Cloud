@@ -20,19 +20,6 @@ use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, event, instrument};
 use uuid::Uuid;
 
-#[inline]
-pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
-  let result = sqlx::query_scalar!(
-    r#"
-        SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
-        "#,
-    &oid,
-  )
-  .fetch_one(pg_pool)
-  .await;
-  transform_record_not_found_error(result)
-}
-
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
 /// provided `object_id`.Additionally, if the row is being inserted for the first time, a corresponding
 /// entry will be added to the `af_collab_member` table.
@@ -472,11 +459,15 @@ pub async fn insert_collab_member(
   Ok(())
 }
 
-pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Result<(), AppError> {
+pub async fn delete_collab_member(
+  uid: i64,
+  oid: &str,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<(), AppError> {
   sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
     .bind(uid)
     .bind(oid)
-    .execute(pg_pool)
+    .execute(txn.deref_mut())
     .await?;
   Ok(())
 }
@@ -504,10 +495,16 @@ pub async fn select_collab_members(
 ) -> Result<Vec<AFCollabMember>, AppError> {
   let members = sqlx::query(
     r#"
-      SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
+      SELECT af_collab_member.uid, 
+             af_collab_member.oid, 
+             af_permissions.id, 
+             af_permissions.name, 
+             af_permissions.access_level, 
+             af_permissions.description
       FROM af_collab_member
       JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
       WHERE af_collab_member.oid = $1
+      ORDER BY af_collab_member.created_at ASC
       "#,
   )
   .bind(oid)

@@ -11,7 +11,6 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 
 use futures_util::{SinkExt, StreamExt};
-use log::trace;
 use realtime_entity::collab_msg::{
   AckCode, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit, UpdateSync,
 };
@@ -24,7 +23,7 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use tokio::sync::{watch, Mutex};
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};

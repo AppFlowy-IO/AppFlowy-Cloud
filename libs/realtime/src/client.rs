@@ -1,4 +1,4 @@
-use crate::collaborate::{CollabAccessControl, RealtimeServer};
+use crate::collaborate::{RealtimeAccessControl, RealtimeServer};
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
 use crate::error::RealtimeError;
 use actix::{
@@ -24,7 +24,7 @@ const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 pub struct RealtimeClient<
   U: Unpin + RealtimeUser,
   S: Unpin + 'static,
-  AC: Unpin + CollabAccessControl,
+  AC: Unpin + RealtimeAccessControl,
 > {
   session_id: String,
   user: U,
@@ -41,7 +41,7 @@ impl<U, S, AC> RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeAccessControl + Unpin,
 {
   pub fn new(
     user: U,
@@ -138,7 +138,7 @@ impl<U, S, P> Actor for RealtimeClient<U, S, P>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
-  P: CollabAccessControl + Unpin,
+  P: RealtimeAccessControl + Unpin,
 {
   type Context = ws::WebsocketContext<Self>;
 
@@ -220,7 +220,7 @@ impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeAccessControl + Unpin,
 {
   type Result = ();
 
@@ -235,7 +235,7 @@ impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for Realtim
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
-  AC: CollabAccessControl + Unpin,
+  AC: RealtimeAccessControl + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let now = Instant::now();

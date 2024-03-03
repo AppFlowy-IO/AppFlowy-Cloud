@@ -1,7 +1,7 @@
 use crate::collaborate::all_group::AllCollabGroup;
 use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::collaborate::{
-  broadcast_client_collab_message, CollabAccessControl, CollabClientStream,
+  broadcast_client_collab_message, CollabClientStream, RealtimeAccessControl,
 };
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::RealtimeError;
@@ -42,7 +42,7 @@ impl<S, U, AC> GroupCommandRunner<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
-  AC: CollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   pub async fn run(mut self, object_id: String) {
     let mut receiver = self.recv.take().expect("Only take once");

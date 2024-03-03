@@ -6,6 +6,7 @@ use client_api_test_util::{
 };
 use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, AFRole};
+
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,7 +38,10 @@ async fn recv_updates_without_permission_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
   assert_client_collab_within_30_secs(&mut client_2, &object_id, "name", json!({})).await;
 }
 
@@ -74,7 +78,10 @@ async fn recv_remote_updates_with_readonly_permission_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   let expected = json!({
     "name": "AppFlowy"
@@ -88,7 +95,8 @@ async fn recv_remote_updates_with_readonly_permission_test() {
     10,
     expected,
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -108,7 +116,10 @@ async fn init_sync_with_readonly_permission_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   //
   let expected = json!({
@@ -122,7 +133,8 @@ async fn init_sync_with_readonly_permission_test() {
     10,
     expected.clone(),
   )
-  .await;
+  .await
+  .unwrap();
 
   // Add client 2 as the member of the collab with readonly permission.
   // client 2 can pull the latest updates via the init sync. But it's not allowed to send local changes.
@@ -137,7 +149,9 @@ async fn init_sync_with_readonly_permission_test() {
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  assert_client_collab_include_value_within_30_secs(&mut client_2, &object_id, expected).await;
+  assert_client_collab_include_value_within_30_secs(&mut client_2, &object_id, expected)
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -181,7 +195,8 @@ async fn edit_collab_with_readonly_permission_test() {
       "name": "AppFlowy"
     }),
   )
-  .await;
+  .await
+  .unwrap();
 
   assert_server_collab(
     &workspace_id,
@@ -191,7 +206,8 @@ async fn edit_collab_with_readonly_permission_test() {
     5,
     json!({}),
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -227,12 +243,17 @@ async fn edit_collab_with_read_and_write_permission_test() {
     .collab
     .lock()
     .insert("name", "AppFlowy");
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   let expected = json!({
     "name": "AppFlowy"
   });
   assert_client_collab_include_value_within_30_secs(&mut client_2, &object_id, expected.clone())
-    .await;
+    .await
+    .unwrap();
 
   assert_server_collab(
     &workspace_id,
@@ -242,7 +263,8 @@ async fn edit_collab_with_read_and_write_permission_test() {
     5,
     expected,
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -282,6 +304,10 @@ async fn edit_collab_with_full_access_permission_test() {
   let expected = json!({
     "name": "AppFlowy"
   });
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
   assert_client_collab_within_30_secs(&mut client_2, &object_id, "name", expected.clone()).await;
 
   assert_server_collab(
@@ -292,7 +318,8 @@ async fn edit_collab_with_full_access_permission_test() {
     5,
     expected,
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -328,7 +355,10 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .collab
       .lock()
       .insert("title", "hello world");
-    client_2.wait_object_sync_complete(&object_id).await;
+    client_2
+      .wait_object_sync_complete(&object_id)
+      .await
+      .unwrap();
   }
 
   // update the permission from full access to readonly, then the server will reject the subsequent
@@ -359,7 +389,8 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       "subtitle": "Writing Rust, fun"
     }),
   )
-  .await;
+  .await
+  .unwrap();
   assert_server_collab(
     &workspace_id,
     &mut client_1.api_client,
@@ -370,7 +401,8 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       "title": "hello world"
     }),
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -381,8 +413,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let collab_type = CollabType::Document;
   let workspace_id = owner.workspace_id().await;
   owner
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .create_and_edit_collab_with_data(object_id.clone(), &workspace_id, collab_type.clone(), None)
     .await;
+
   let arc_owner = Arc::new(owner);
 
   // simulate multiple users edit the same collab. All of them have read and write permission
@@ -421,7 +454,10 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
         .collab
         .lock()
         .insert(&i.to_string(), random_str.clone());
-      new_user.wait_object_sync_complete(&object_id).await;
+      new_user
+        .wait_object_sync_complete(&object_id)
+        .await
+        .unwrap();
       (random_str, new_user)
     });
     tasks.push(task);
@@ -467,12 +503,12 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
 async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
-  let object_id = Uuid::new_v4().to_string();
   let collab_type = CollabType::Document;
   let workspace_id = owner.workspace_id().await;
-  owner
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
+  let object_id = owner
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
+
   let arc_owner = Arc::new(owner);
 
   for i in 0..5 {

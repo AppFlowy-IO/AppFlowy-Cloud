@@ -6,7 +6,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::{CollabObject, CollabType};
 use futures_util::SinkExt;
-use realtime_entity::collab_msg::{CollabMessage, UpdateSync};
+use realtime_entity::collab_msg::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use realtime_protocol::{Message, SyncMessage};
 use tokio_stream::StreamExt;
 
@@ -14,8 +14,8 @@ use crate::collab_sync::SyncControl;
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
+use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
-use crate::platform_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
@@ -36,8 +36,8 @@ impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
 impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
-  Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
   #[allow(clippy::too_many_arguments)]
@@ -64,7 +64,7 @@ where
     );
 
     let mut sync_state_stream = WatchStream::new(sync_queue.subscribe_sync_state());
-    platform_spawn(async move {
+    af_spawn(async move {
       while let Some(new_state) = sync_state_stream.next().await {
         if let Some(local_collab) = weak_local_collab.upgrade() {
           if let Some(local_collab) = local_collab.try_lock() {
@@ -77,7 +77,7 @@ where
     let sync_queue = Arc::new(sync_queue);
     let weak_local_collab = collab;
     let weak_sync_queue = Arc::downgrade(&sync_queue);
-    platform_spawn(async move {
+    af_spawn(async move {
       while let Ok(connect_state) = ws_connect_state.recv().await {
         match connect_state {
           ConnectState::Connected => {
@@ -122,8 +122,8 @@ where
 impl<E, Sink, Stream, C> CollabPlugin for SyncPlugin<Sink, Stream, C>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
-  Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
   fn did_init(&self, collab: &Collab, _object_id: &str, _last_sync_at: i64) {
@@ -136,11 +136,13 @@ where
     let object_id = self.object.object_id.clone();
     let cloned_origin = origin.clone();
 
-    platform_spawn(async move {
+    af_spawn(async move {
       if let Some(sync_queue) = weak_sync_queue.upgrade() {
         let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
-        sync_queue
-          .queue_msg(|msg_id| UpdateSync::new(cloned_origin, object_id, payload, msg_id).into());
+        sync_queue.queue_msg(|msg_id| {
+          let update_sync = UpdateSync::new(cloned_origin, object_id, payload, msg_id);
+          ClientCollabMessage::new_update_sync(update_sync)
+        });
       }
     });
   }

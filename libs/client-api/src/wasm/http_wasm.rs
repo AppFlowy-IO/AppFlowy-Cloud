@@ -63,7 +63,7 @@ impl Client {
   }
 }
 
-pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+pub fn af_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + 'static,
   T::Output: Send + 'static,

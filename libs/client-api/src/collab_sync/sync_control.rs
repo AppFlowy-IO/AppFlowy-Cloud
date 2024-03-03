@@ -1,15 +1,19 @@
+use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
-use crate::collab_sync::{CollabSink, CollabSinkRunner, SinkState, SyncError, SyncObject};
-use crate::platform_spawn;
+use crate::collab_sync::{
+  CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncError, SyncObject,
+};
 use bytes::Bytes;
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
+
 use futures_util::{SinkExt, StreamExt};
-use log::trace;
-use realtime_entity::collab_msg::{AckCode, CollabMessage, InitSync, ServerInit, UpdateSync};
+use realtime_entity::collab_msg::{
+  AckCode, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit, UpdateSync,
+};
 use realtime_protocol::{handle_collab_message, ClientSyncProtocol, CollabSyncProtocol};
 use realtime_protocol::{Message, MessageReader, SyncMessage};
 use std::marker::PhantomData;
@@ -19,12 +23,12 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use tokio::sync::{watch, Mutex};
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, info, warn};
+use tracing::{error, info, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
-pub const DEFAULT_SYNC_TIMEOUT: u64 = 4;
+pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 pub const NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC: u32 = 5;
 
 const DEBOUNCE_DURATION: Duration = Duration::from_secs(10);
@@ -35,7 +39,7 @@ pub struct SyncControl<Sink, Stream> {
   /// The [CollabSink] is used to send the updates to the remote. It will send the current
   /// update periodically if the timeout is reached or it will send the next update if
   /// it receive previous ack from the remote.
-  sink: Arc<CollabSink<Sink, CollabMessage>>,
+  sink: Arc<CollabSink<Sink, ClientCollabMessage>>,
   /// The [ObserveCollab] will be spawned in a separate task It continuously receive
   /// the updates from the remote.
   #[allow(dead_code)]
@@ -52,8 +56,8 @@ impl<Sink, Stream> Drop for SyncControl<Sink, Stream> {
 impl<E, Sink, Stream> SyncControl<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
-  Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
   #[allow(clippy::too_many_arguments)]
   pub fn new(
@@ -66,7 +70,7 @@ where
     pause: bool,
   ) -> Self {
     let protocol = ClientSyncProtocol;
-    let (notifier, notifier_rx) = watch::channel(false);
+    let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
     let sync_state = Arc::new(watch::channel(SyncState::InitSyncBegin).0);
     let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
     debug_assert!(origin.client_user_id().is_some());
@@ -81,7 +85,7 @@ where
       sink_config,
       pause,
     ));
-    platform_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
+    af_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
 
     // Create the observe collab stream.
     let _cloned_protocol = protocol.clone();
@@ -97,7 +101,7 @@ where
     let weak_sync_state = Arc::downgrade(&sync_state);
     let mut sink_state_stream = WatchStream::new(sink_state_rx);
     // Subscribe the sink state stream and update the sync state in the background.
-    platform_spawn(async move {
+    af_spawn(async move {
       while let Some(collab_state) = sink_state_stream.next().await {
         if let Some(sync_state) = weak_sync_state.upgrade() {
           match collab_state {
@@ -164,23 +168,23 @@ pub fn _init_sync<E, Sink>(
   origin: CollabOrigin,
   sync_object: &SyncObject,
   collab: &Collab,
-  sink: &Arc<CollabSink<Sink, CollabMessage>>,
+  sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
 ) where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
 {
   let awareness = collab.get_awareness();
   if let Some(payload) = doc_init_state(awareness, &ClientSyncProtocol) {
     sink.queue_init_sync(|msg_id| {
-      InitSync::new(
+      let init_sync = InitSync::new(
         origin,
         sync_object.object_id.clone(),
         sync_object.collab_type.clone(),
         sync_object.workspace_id.clone(),
         msg_id,
         payload,
-      )
-      .into()
+      );
+      ClientCollabMessage::new_init_sync(init_sync)
     })
   } else {
     sink.notify();
@@ -188,7 +192,7 @@ pub fn _init_sync<E, Sink>(
 }
 
 impl<Sink, Stream> Deref for SyncControl<Sink, Stream> {
-  type Target = Arc<CollabSink<Sink, CollabMessage>>;
+  type Target = Arc<CollabSink<Sink, ClientCollabMessage>>;
 
   fn deref(&self) -> &Self::Target {
     &self.sink
@@ -213,21 +217,21 @@ impl<Sink, Stream> Drop for ObserveCollab<Sink, Stream> {
 impl<E, Sink, Stream> ObserveCollab<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<CollabMessage, Error = E> + Send + Sync + Unpin + 'static,
-  Stream: StreamExt<Item = Result<CollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
   pub fn new(
     origin: CollabOrigin,
     object: SyncObject,
     stream: Stream,
     weak_collab: Weak<MutexCollab>,
-    sink: Weak<CollabSink<Sink, CollabMessage>>,
+    sink: Weak<CollabSink<Sink, ClientCollabMessage>>,
   ) -> Self {
     let seq_num = Arc::new(AtomicU32::new(0));
     let last_init_sync = LastSyncTime::new();
     let object_id = object.object_id.clone();
     let cloned_weak_collab = weak_collab.clone();
-    platform_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
+    af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
       origin,
       object,
       stream,
@@ -250,7 +254,7 @@ where
     object: SyncObject,
     mut stream: Stream,
     weak_collab: Weak<MutexCollab>,
-    weak_sink: Weak<CollabSink<Sink, CollabMessage>>,
+    weak_sink: Weak<CollabSink<Sink, ClientCollabMessage>>,
     seq_num: Arc<AtomicU32>,
     last_init_sync: LastSyncTime,
   ) {
@@ -306,18 +310,19 @@ where
     origin: &CollabOrigin,
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink, CollabMessage>>,
-    msg: CollabMessage,
+    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+    msg: ServerCollabMessage,
     broadcast_seq_num: &Arc<AtomicU32>,
     last_sync_time: &LastSyncTime,
   ) -> Result<(), SyncError> {
     // If server return the AckCode::ApplyInternalError, which means the server can not apply the
     // update
-    if matches!(msg, CollabMessage::ClientAck(ref ack) if ack.code == AckCode::CannotApplyUpdate) {
+    if matches!(msg, ServerCollabMessage::ClientAck(ref ack) if ack.code == AckCode::CannotApplyUpdate)
+    {
       return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
     }
 
-    if let Some(msg_seq_num) = msg.broadcase_seq_num() {
+    if let Some(msg_seq_num) = msg.seq_num() {
       let prev_seq_num = broadcast_seq_num.load(Ordering::SeqCst);
       broadcast_seq_num.store(msg_seq_num, Ordering::SeqCst);
 
@@ -338,20 +343,22 @@ where
     }
 
     // Check if the message is acknowledged by the sink. If not, return.
-    if !sink.ack_msg(&msg).await {
+    let is_valid = sink.ack_msg(&msg).await;
+    if !is_valid {
       return Ok(());
     }
 
     // If there's no payload or the payload is empty, return.
-    let payload = match msg.payload() {
-      Some(payload) if !payload.is_empty() => payload,
-      _ => return Ok(()),
+    let payload = if msg.payload().is_empty() {
+      return Ok(());
+    } else {
+      msg.payload()
     };
 
     trace!(
       "start process message:{:?}, len:{}",
       msg.msg_id(),
-      msg.len()
+      msg.size()
     );
     ObserveCollab::<Sink, Stream>::process_payload(
       origin,
@@ -359,7 +366,6 @@ where
       &object.object_id,
       collab,
       sink,
-      broadcast_seq_num,
     )
     .await?;
     trace!("end process message: {:?}", msg.msg_id());
@@ -371,24 +377,32 @@ where
     payload: &Bytes,
     object_id: &str,
     collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink, CollabMessage>>,
-    _broadcast_seq_num: &Arc<AtomicU32>,
+    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
   ) -> Result<(), SyncError> {
     if let Some(mut collab) = collab.try_lock() {
       let mut decoder = DecoderV1::new(Cursor::new(payload));
       let reader = MessageReader::new(&mut decoder);
       for msg in reader {
         let msg = msg?;
-        trace!(" {}", msg);
         let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
         if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, &mut collab, msg)?
         {
           let object_id = object_id.to_string();
           sink.queue_msg(|msg_id| {
             if is_sync_step_1 {
-              ServerInit::new(origin.clone(), object_id, payload, msg_id).into()
+              ClientCollabMessage::new_server_init_sync(ServerInit::new(
+                origin.clone(),
+                object_id,
+                payload,
+                msg_id,
+              ))
             } else {
-              UpdateSync::new(origin.clone(), object_id, payload, msg_id).into()
+              ClientCollabMessage::new_update_sync(UpdateSync::new(
+                origin.clone(),
+                object_id,
+                payload,
+                msg_id,
+              ))
             }
           });
         }

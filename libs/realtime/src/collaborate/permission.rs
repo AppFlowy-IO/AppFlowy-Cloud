@@ -1,10 +1,5 @@
 use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::dto::AFAccessLevel;
-use reqwest::Method;
-
-use std::sync::Arc;
-use tracing::instrument;
 
 #[derive(Debug)]
 pub enum CollabUserId<'a> {
@@ -25,27 +20,7 @@ impl<'a> From<&'a uuid::Uuid> for CollabUserId<'a> {
 }
 
 #[async_trait]
-pub trait CollabAccessControl: Sync + Send + 'static {
-  /// Return the access level of the user in the collab
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError>;
-
-  async fn insert_collab_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError>;
-
-  /// Return true if the user from the HTTP request is allowed to access the collab object.
-  /// This function will be called very frequently, so it should be very fast.
-  ///  
-  async fn can_access_http_method(
-    &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError>;
-
+pub trait RealtimeAccessControl: Sync + Send + 'static {
   /// Return true if the user is allowed to send the message.
   /// This function will be called very frequently, so it should be very fast.
   ///
@@ -60,44 +35,4 @@ pub trait CollabAccessControl: Sync + Send + 'static {
   ///
   /// The user can recv the message if the user is the member of the collab object
   async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
-}
-//
-#[async_trait]
-impl<T> CollabAccessControl for Arc<T>
-where
-  T: CollabAccessControl,
-{
-  #[instrument(level = "debug", skip_all)]
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    self.as_ref().get_collab_access_level(uid, oid).await
-  }
-
-  async fn insert_collab_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError> {
-    self
-      .as_ref()
-      .insert_collab_access_level(uid, oid, level)
-      .await
-  }
-
-  async fn can_access_http_method(
-    &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError> {
-    self.as_ref().can_access_http_method(uid, oid, method).await
-  }
-
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.as_ref().can_send_collab_update(uid, oid).await
-  }
-
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.as_ref().can_receive_collab_update(uid, oid).await
-  }
 }

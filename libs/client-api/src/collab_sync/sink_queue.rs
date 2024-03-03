@@ -4,16 +4,16 @@ use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
-use tokio::sync::oneshot;
-use tracing::{trace, warn};
 
-pub(crate) struct SinkPendingQueue<Msg> {
+use tracing::trace;
+
+pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]
   uid: i64,
-  queue: BinaryHeap<PendingMessage<Msg>>,
+  queue: BinaryHeap<QueueItem<Msg>>,
 }
 
-impl<Msg> SinkPendingQueue<Msg>
+impl<Msg> SinkQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -25,22 +25,22 @@ where
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
-    self.queue.push(PendingMessage::new(msg, msg_id));
+    self.queue.push(QueueItem::new(msg, msg_id));
   }
 }
 
-impl<Msg> Deref for SinkPendingQueue<Msg>
+impl<Msg> Deref for SinkQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {
-  type Target = BinaryHeap<PendingMessage<Msg>>;
+  type Target = BinaryHeap<QueueItem<Msg>>;
 
   fn deref(&self) -> &Self::Target {
     &self.queue
   }
 }
 
-impl<Msg> DerefMut for SinkPendingQueue<Msg>
+impl<Msg> DerefMut for SinkQueue<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -50,14 +50,13 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct PendingMessage<Msg> {
+pub(crate) struct QueueItem<Msg> {
   msg: Msg,
   msg_id: MsgId,
   state: MessageState,
-  tx: Option<oneshot::Sender<MsgId>>,
 }
 
-impl<Msg> PendingMessage<Msg>
+impl<Msg> QueueItem<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -66,23 +65,14 @@ where
       msg,
       msg_id,
       state: MessageState::Pending,
-      tx: None,
     }
-  }
-
-  pub fn object_id(&self) -> &str {
-    self.msg.collab_object_id()
   }
 
   pub fn get_msg(&self) -> &Msg {
     &self.msg
   }
 
-  pub fn state(&self) -> &MessageState {
-    &self.state
-  }
-
-  pub fn set_state(&mut self, _uid: i64, new_state: MessageState) -> bool {
+  pub fn set_state(&mut self, new_state: MessageState) {
     if self.state != new_state {
       self.state = new_state;
 
@@ -93,28 +83,6 @@ where
         self.state
       );
     }
-
-    if self.state.is_done() {
-      match self.tx.take() {
-        None => false,
-        Some(tx) => {
-          // Notify that the message with given id was received
-          match tx.send(self.msg_id) {
-            Ok(_) => true,
-            Err(err) => {
-              warn!("Failed to send msg_id: {}, err: {}", self.msg_id, err);
-              false
-            },
-          }
-        },
-      }
-    } else {
-      false
-    }
-  }
-
-  pub fn set_ret(&mut self, tx: oneshot::Sender<MsgId>) {
-    self.tx = Some(tx);
   }
 
   pub fn msg_id(&self) -> MsgId {
@@ -122,7 +90,7 @@ where
   }
 }
 
-impl<Msg> PendingMessage<Msg>
+impl<Msg> QueueItem<Msg>
 where
   Msg: CollabSinkMessage,
 {
@@ -134,9 +102,9 @@ where
   }
 }
 
-impl<Msg> Eq for PendingMessage<Msg> where Msg: Eq {}
+impl<Msg> Eq for QueueItem<Msg> where Msg: Eq {}
 
-impl<Msg> PartialEq for PendingMessage<Msg>
+impl<Msg> PartialEq for QueueItem<Msg>
 where
   Msg: PartialEq,
 {
@@ -145,7 +113,7 @@ where
   }
 }
 
-impl<Msg> PartialOrd for PendingMessage<Msg>
+impl<Msg> PartialOrd for QueueItem<Msg>
 where
   Msg: PartialOrd + Ord,
 {
@@ -154,7 +122,7 @@ where
   }
 }
 
-impl<Msg> Ord for PendingMessage<Msg>
+impl<Msg> Ord for QueueItem<Msg>
 where
   Msg: Ord,
 {
@@ -168,14 +136,4 @@ pub(crate) enum MessageState {
   Pending,
   Processing,
   Done,
-  Timeout,
-}
-
-impl MessageState {
-  pub fn is_done(&self) -> bool {
-    matches!(self, MessageState::Done)
-  }
-  pub fn is_processing(&self) -> bool {
-    matches!(self, MessageState::Processing)
-  }
 }

@@ -72,7 +72,7 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))
-        .route(web::post().to(create_workspace_members_handler)) // deprecated
+        .route(web::post().to(create_workspace_members_handler)) // deprecated, use invite flow instead
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
     )

@@ -202,11 +202,6 @@ pub async fn list_workspace_invitations_for_user(
 ///    - Determines the access level based on the member's role.
 ///    - If the member exists (based on their email), inserts them into the workspace and updates their collaboration access level.
 /// 3. Commits the database transaction.
-///
-/// # Returns
-/// - A `Result` containing a `HashMap` where the key is the user ID (`uid`) and the value is the role (`AFRole`) assigned to the user in the workspace.
-///   If there's an error during the operation, an `AppError` is returned.
-///
 #[instrument(level = "debug", skip_all, err)]
 pub async fn add_workspace_members(
   pg_pool: &PgPool,

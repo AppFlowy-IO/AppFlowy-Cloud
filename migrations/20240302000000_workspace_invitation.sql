@@ -34,9 +34,23 @@ CREATE OR REPLACE FUNCTION add_to_af_workspace_member()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.status = 1 THEN
+    -- workspace permission
     INSERT INTO af_workspace_member (workspace_id, uid, role_id)
     VALUES (NEW.workspace_id, NEW.invitee, NEW.role_id)
     ON CONFLICT (workspace_id, uid) DO NOTHING;
+
+    -- collab permission
+    INSERT INTO af_collab_member (uid, oid, permission_id)
+    VALUES (
+      NEW.invitee,
+      NEW.workspace_id,
+      (SELECT permission_id
+       FROM public.af_role_permissions
+       WHERE public.af_role_permissions.role_id = NEW.role_id)
+    )
+    ON CONFLICT (uid, oid)
+    DO UPDATE
+      SET permission_id = excluded.permission_id;
   END IF;
   RETURN NEW;
 END;

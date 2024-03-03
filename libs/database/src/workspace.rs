@@ -271,12 +271,9 @@ pub async fn insert_workspace_invitation(
 
 pub async fn update_workspace_invitation_set_invited(
   txn: &mut Transaction<'_, sqlx::Postgres>,
-  user_uuid: &Uuid,
+  invitee_uuid: &Uuid,
   invite_id: &Uuid,
 ) -> Result<(), AppError> {
-  println!("--------- user_uuid: {:?}", user_uuid);
-  println!("--------- invite_id: {:?}", invite_id);
-
   let res = sqlx::query_scalar!(
     r#"
     UPDATE public.af_workspace_invitation
@@ -284,7 +281,7 @@ pub async fn update_workspace_invitation_set_invited(
     WHERE invitee = (SELECT uid FROM public.af_user WHERE uuid = $1)
       AND id = $2
     "#,
-    user_uuid,
+    invitee_uuid,
     invite_id,
   )
   .execute(txn.deref_mut())

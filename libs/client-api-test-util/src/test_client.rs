@@ -15,9 +15,9 @@ use collab_entity::CollabType;
 use collab_folder::Folder;
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo, AFWorkspace,
-  AFWorkspaceMember, BatchQueryCollabResult, CollabParams, CreateCollabParams,
-  InsertCollabMemberParams, QueryCollab, QueryCollabParams, QuerySnapshotParams, SnapshotData,
-  UpdateCollabMemberParams,
+  AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
+  CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
+  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use mime::Mime;
 use serde_json::Value;
@@ -121,7 +121,7 @@ impl TestClient {
     role: AFRole,
   ) {
     self
-      .try_add_workspace_member(workspace_id, other_client, role)
+      .invite_and_accepted_workspace_member(workspace_id, other_client, role)
       .await
       .unwrap();
   }
@@ -174,13 +174,19 @@ impl TestClient {
       .await
   }
 
-  pub async fn try_add_workspace_member(
+  pub async fn invite_and_accepted_workspace_member(
     &self,
     workspace_id: &str,
     other_client: &TestClient,
     role: AFRole,
   ) -> Result<(), AppResponseError> {
     let email = other_client.email().await;
+
+    // self
+    //   .api_client
+    //   .add_workspace_members(workspace_id, vec![CreateWorkspaceMember { email, role }])
+    //   .await
+
     self
       .api_client
       .invite_workspace_members(
@@ -189,17 +195,21 @@ impl TestClient {
       )
       .await?;
 
-    todo!()
-    // let invis = other_client.api_client.list_workspace_invitations().await?;
-    // let invis = invis
-    //   .iter()
-    //   .filter(|inv| inv.email == email)
-    //   .collect::<Vec<_>>();
+    let invitations = other_client
+      .api_client
+      .list_workspace_invitations(Some(AFWorkspaceInvitationStatus::Pending))
+      .await
+      .unwrap();
 
-    // self
-    //   .api_client
-    //   .add_workspace_members(workspace_id, vec![CreateWorkspaceMember { email, role }])
-    //   .await
+    let target_invitation = invitations
+      .iter()
+      .find(|inv| inv.workspace_id.to_string().as_str() == workspace_id)
+      .unwrap();
+
+    other_client
+      .api_client
+      .accept_workspace_invitation(&target_invitation.invite_id.to_string().as_str())
+      .await
   }
 
   pub async fn try_remove_workspace_member(

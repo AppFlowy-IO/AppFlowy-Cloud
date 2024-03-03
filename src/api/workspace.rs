@@ -2,7 +2,7 @@ use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::CollabServerImpl;
 use crate::biz;
 use crate::biz::workspace;
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
+
 use crate::component::auth::jwt::UserUuid;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
@@ -32,6 +32,8 @@ use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
 use tokio::time::{sleep, Instant};
 
+use crate::biz::collab::access_control::CollabAccessControl;
+
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{event, instrument};
@@ -41,15 +43,18 @@ use validator::Validate;
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
 
+pub const WORKSPACE_PATTERN: &str = "/api/workspace";
+pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member";
+pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
+
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
-
     // deprecated, use the api below instead
     .service(web::resource("/list").route(web::get().to(list_workspace_handler)))
 
     .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
-      .route(web::post().to(create_workpace_handler))
+      .route(web::post().to(create_workspace_handler))
       .route(web::patch().to(patch_workspace_handler))
     )
     .service(web::resource("/{workspace_id}")
@@ -60,7 +65,7 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))
-        .route(web::post().to(add_workspace_members_handler))
+        .route(web::post().to(create_workspace_members_handler))
         .route(web::put().to(update_workspace_member_handler))
         .route(web::delete().to(remove_workspace_member_handler)),
     )
@@ -121,7 +126,7 @@ pub fn collab_scope() -> Scope {
 
 // Adds a workspace for user, if success, return the workspace id
 #[instrument(skip_all, err)]
-async fn create_workpace_handler(
+async fn create_workspace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
   create_workspace_param: Json<CreateWorkspaceParam>,
@@ -131,12 +136,11 @@ async fn create_workpace_handler(
     .workspace_name
     .unwrap_or_else(|| format!("workspace_{}", chrono::Utc::now().timestamp()));
 
-  let uid = state.users.get_user_uid(&uuid).await?;
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
   let new_workspace = workspace::ops::create_workspace_for_user(
     &state.pg_pool,
     &state.workspace_access_control,
-    &state.collab_access_control,
-    &state.collab_storage,
+    &state.collab_access_control_storage,
     &uuid,
     uid,
     &workspace_name,
@@ -201,7 +205,7 @@ async fn list_workspace_handler(
 }
 
 #[instrument(skip(payload, state), err)]
-async fn add_workspace_members_handler(
+async fn create_workspace_members_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<Uuid>,
   payload: Json<CreateWorkspaceMembers>,
@@ -242,7 +246,7 @@ async fn get_workspace_members_handler(
 
 #[instrument(skip_all, err)]
 async fn remove_workspace_member_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   payload: Json<WorkspaceMembers>,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
@@ -254,24 +258,12 @@ async fn remove_workspace_member_handler(
     .map(|member| member.0)
     .collect::<Vec<String>>();
   workspace::ops::remove_workspace_members(
-    &user_uuid,
     &state.pg_pool,
     &workspace_id,
     &member_emails,
+    &state.workspace_access_control,
   )
   .await?;
-
-  for email in member_emails {
-    if let Ok(uid) = select_uid_from_email(&state.pg_pool, &email)
-      .await
-      .map_err(AppResponseError::from)
-    {
-      state
-        .workspace_access_control
-        .remove_role(&uid, &workspace_id)
-        .await?;
-    }
-  }
 
   Ok(AppResponse::Ok().into())
 }
@@ -295,16 +287,19 @@ async fn update_workspace_member_handler(
 ) -> Result<JsonAppResponse<()>> {
   let workspace_id = workspace_id.into_inner();
   let changeset = payload.into_inner();
-  workspace::ops::update_workspace_member(&state.pg_pool, &workspace_id, &changeset).await?;
 
-  if let Some(role) = changeset.role {
+  if changeset.role.is_some() {
     let uid = select_uid_from_email(&state.pg_pool, &changeset.email)
       .await
       .map_err(AppResponseError::from)?;
-    state
-      .workspace_access_control
-      .insert_workspace_role(&uid, &workspace_id, role)
-      .await?;
+    workspace::ops::update_workspace_member(
+      &uid,
+      &state.pg_pool,
+      &workspace_id,
+      &changeset,
+      &state.workspace_access_control,
+    )
+    .await?;
   }
 
   Ok(AppResponse::Ok().into())
@@ -317,7 +312,7 @@ async fn create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => serde_json::from_slice::<CreateCollabParams>(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -340,11 +335,14 @@ async fn create_collab_handler(
 
   params.validate().map_err(AppError::from)?;
   let object_id = params.object_id.clone();
-  state.collab_storage.upsert_collab(&uid, params).await?;
   state
     .collab_access_control
-    .update_member(&uid, &object_id, AFAccessLevel::FullAccess)
-    .await;
+    .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
+    .await?;
+  state
+    .collab_access_control_storage
+    .insert_collab(&uid, params, false)
+    .await?;
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -357,7 +355,7 @@ async fn batch_create_collab_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let mut collab_params_list = vec![];
   let workspace_id = workspace_id.into_inner().to_string();
   let compress_type = compress_type_from_header_value(req.headers())?;
@@ -426,14 +424,14 @@ async fn batch_create_collab_handler(
   for params in collab_params_list {
     let object_id = params.object_id.clone();
     state
-      .collab_storage
-      .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .collab_access_control_storage
+      .insert_or_update_collab(&workspace_id, &uid, params, &mut transaction)
       .await?;
 
     state
       .collab_access_control
-      .update_member(&uid, &object_id, AFAccessLevel::FullAccess)
-      .await;
+      .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
+      .await?;
   }
 
   transaction
@@ -451,7 +449,7 @@ async fn create_collab_list_handler(
   state: Data<AppState>,
   req: HttpRequest,
 ) -> Result<Json<AppResponse<()>>> {
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let params = match req.headers().get(X_COMPRESSION_TYPE) {
     None => BatchCreateCollabParams::from_bytes(&payload).map_err(|err| {
       AppError::InvalidRequest(format!(
@@ -492,14 +490,14 @@ async fn create_collab_list_handler(
   for params in params_list {
     let object_id = params.object_id.clone();
     state
-      .collab_storage
-      .upsert_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .collab_access_control_storage
+      .insert_or_update_collab(&workspace_id, &uid, params, &mut transaction)
       .await?;
 
     state
       .collab_access_control
-      .update_member(&uid, &object_id, AFAccessLevel::FullAccess)
-      .await;
+      .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
+      .await?;
   }
 
   transaction
@@ -516,12 +514,12 @@ async fn get_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<EncodedCollab>>> {
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let data = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_encoded(&uid, payload.into_inner(), false)
     .await
     .map_err(AppResponseError::from)?;
@@ -537,7 +535,7 @@ async fn get_collab_snapshot_handler(
 ) -> Result<Json<AppResponse<SnapshotData>>> {
   let (workspace_id, object_id) = path.into_inner();
   let data = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_snapshot(&workspace_id.to_string(), &object_id, &payload.snapshot_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -555,12 +553,12 @@ async fn create_collab_snapshot_handler(
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = payload.into_inner();
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let encoded_collab_v1 = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_encoded(
       &uid,
       QueryCollabParams::new(&object_id, collab_type, &workspace_id),
@@ -571,7 +569,7 @@ async fn create_collab_snapshot_handler(
     .unwrap();
 
   let meta = state
-    .collab_storage
+    .collab_access_control_storage
     .create_snapshot(InsertSnapshotParams {
       object_id,
       workspace_id,
@@ -589,7 +587,7 @@ async fn get_all_collab_snapshot_list_handler(
 ) -> Result<Json<AppResponse<AFSnapshotMetas>>> {
   let (_, object_id) = path.into_inner();
   let data = state
-    .collab_storage
+    .collab_access_control_storage
     .get_collab_snapshot_list(&object_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -603,13 +601,13 @@ async fn batch_get_collab_handler(
   payload: Json<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
   let result = BatchQueryCollabResult(
     state
-      .collab_storage
+      .collab_access_control_storage
       .batch_get_collab(&uid, payload.into_inner().0)
       .await,
   );
@@ -623,12 +621,12 @@ async fn update_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let (params, workspace_id) = payload.into_inner().split();
-  let uid = state.users.get_user_uid(&user_uuid).await?;
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
   state
-    .collab_storage
-    .upsert_collab(&uid, create_params)
+    .collab_access_control_storage
+    .insert_collab(&uid, create_params, false)
     .await?;
   Ok(AppResponse::Ok().into())
 }
@@ -643,13 +641,13 @@ async fn delete_collab_handler(
   payload.validate().map_err(AppError::from)?;
 
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
 
   state
-    .collab_storage
+    .collab_access_control_storage
     .delete_collab(&uid, &payload.object_id)
     .await
     .map_err(AppResponseError::from)?;
@@ -663,11 +661,8 @@ async fn add_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  biz::collab::ops::create_collab_member(&state.pg_pool, &payload).await?;
-  state
-    .collab_access_control
-    .update_member(&payload.uid, &payload.object_id, payload.access_level)
-    .await;
+  biz::collab::ops::create_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -678,13 +673,13 @@ async fn update_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  biz::collab::ops::upsert_collab_member(&state.pg_pool, &user_uuid, &payload).await?;
-
-  state
-    .collab_access_control
-    .update_member(&payload.uid, &payload.object_id, payload.access_level)
-    .await;
-
+  biz::collab::ops::upsert_collab_member(
+    &state.pg_pool,
+    &user_uuid,
+    &payload,
+    &state.collab_access_control,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 #[instrument(level = "debug", skip(state, payload), err)]
@@ -703,11 +698,8 @@ async fn remove_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
-  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload).await?;
-  state
-    .collab_access_control
-    .remove_member(&payload.uid, &payload.object_id)
-    .await;
+  biz::collab::ops::delete_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
+    .await?;
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -733,7 +725,7 @@ async fn post_realtime_message_stream_handler(
   // TODO(nathan): after upgrade the client application, then the device_id should not be empty
   let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
   let uid = state
-    .users
+    .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;

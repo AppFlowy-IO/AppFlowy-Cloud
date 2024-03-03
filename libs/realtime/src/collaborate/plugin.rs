@@ -3,7 +3,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 use std::fmt::Display;
 
-use crate::collaborate::CollabAccessControl;
+use crate::collaborate::RealtimeAccessControl;
 use anyhow::anyhow;
 
 use collab::core::collab::TransactionMutExt;
@@ -15,9 +15,7 @@ use collab_document::document::check_document_is_valid;
 use collab_entity::CollabType;
 use collab_folder::check_folder_is_valid;
 use database::collab::CollabStorage;
-use database_entity::dto::{
-  AFAccessLevel, CreateCollabParams, InsertSnapshotParams, QueryCollabParams,
-};
+use database_entity::dto::{CreateCollabParams, InsertSnapshotParams, QueryCollabParams};
 use md5::Digest;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
@@ -34,6 +32,7 @@ pub struct CollabStoragePlugin<S, AC> {
   storage: Arc<S>,
   edit_state: Arc<CollabEditState>,
   collab_type: CollabType,
+  #[allow(dead_code)]
   access_control: Arc<AC>,
   latest_collab_md5: Mutex<Option<Digest>>,
 }
@@ -41,7 +40,7 @@ pub struct CollabStoragePlugin<S, AC> {
 impl<S, AC> CollabStoragePlugin<S, AC>
 where
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   pub fn new(
     uid: i64,
@@ -68,11 +67,6 @@ where
   async fn insert_new_collab(&self, doc: &Doc, object_id: &str) -> Result<(), AppError> {
     match doc.get_encoded_collab_v1().encode_to_bytes() {
       Ok(encoded_collab_v1) => {
-        let _ = self
-          .access_control
-          .insert_collab_access_level(&self.uid, object_id, AFAccessLevel::FullAccess)
-          .await;
-
         let params = CreateCollabParams {
           object_id: object_id.to_string(),
           encoded_collab_v1,
@@ -83,7 +77,7 @@ where
 
         self
           .storage
-          .upsert_collab(&self.uid, params)
+          .insert_collab(&self.uid, params, true)
           .await
           .map_err(|err| {
             error!("fail to create new collab in plugin: {:?}", err);
@@ -128,7 +122,7 @@ async fn init_collab(
 impl<S, AC> CollabPlugin for CollabStoragePlugin<S, AC>
 where
   S: CollabStorage,
-  AC: CollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   async fn init(&self, object_id: &str, _origin: &CollabOrigin, doc: &Doc) {
     let params = QueryCollabParams::new(object_id, self.collab_type.clone(), &self.workspace_id);
@@ -215,10 +209,7 @@ where
     }
 
     trace!("{} edit state:{}", object_id, self.edit_state);
-    if self
-      .edit_state
-      .should_flush(self.storage.config().flush_per_update, 3 * 60)
-    {
+    if self.edit_state.should_flush(100, 3 * 60) {
       self.edit_state.tick();
       let _object_id = object_id.to_string();
       // let weak_group = self.group.clone();
@@ -271,7 +262,7 @@ where
     let uid = self.uid;
     tokio::spawn(async move {
       info!("[realtime] flush collab: {}", params.object_id);
-      match storage.upsert_collab(&uid, params).await {
+      match storage.insert_collab(&uid, params, false).await {
         Ok(_) => {},
         Err(err) => error!("Failed to save collab: {:?}", err),
       }

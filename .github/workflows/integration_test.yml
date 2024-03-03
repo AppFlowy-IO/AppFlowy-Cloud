@@ -62,7 +62,7 @@ jobs:
 
       - name: Run tests
         run: |
-          cargo test
+          RUST_LOG="info" cargo test
 
       - name: Install Node.js
         uses: actions/setup-node@v2

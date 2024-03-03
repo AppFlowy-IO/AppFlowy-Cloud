@@ -6,14 +6,20 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::biz::casbin::access_control::AccessControl;
 use crate::biz::casbin::enforcer_cache::AFEnforcerCacheImpl;
-use crate::biz::collab::access_control::CollabHttpAccessControl;
-use crate::biz::collab::storage::init_collab_storage;
+use crate::biz::casbin::RealtimeCollabAccessControlImpl;
+use crate::biz::collab::access_control::{
+  CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
+};
+use crate::biz::collab::cache::CollabCache;
+
+use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
+use crate::biz::snapshot::SnapshotControl;
 use crate::biz::user::RealtimeUserImpl;
-use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
+use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
 use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
-use crate::middleware::access_control_mw::WorkspaceAccessControl;
+use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
@@ -87,21 +93,21 @@ pub async fn run(
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let storage = state.collab_storage.clone();
-
-  let access_control = WorkspaceAccessControl::new()
-    .with_acs(WorkspaceHttpAccessControl {
-      pg_pool: state.pg_pool.clone(),
-      access_control: state.workspace_access_control.clone().into(),
-    })
-    .with_acs(CollabHttpAccessControl(
+  let storage = state.collab_access_control_storage.clone();
+  let access_control = MiddlewareAccessControlTransform::new()
+    .with_acs(WorkspaceMiddlewareAccessControl::new(
+      state.pg_pool.clone(),
+      state.workspace_access_control.clone().into(),
+    ))
+    .with_acs(CollabMiddlewareAccessControl::new(
       state.collab_access_control.clone().into(),
+      state.collab_cache.clone(),
     ));
 
   // Initialize metrics that which are registered in the registry.
   let realtime_server = RealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.clone(),
-    state.collab_access_control.clone(),
+    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
   )
@@ -119,8 +125,8 @@ pub async fn run(
           .build(),
       )
       // .wrap(DecryptPayloadMiddleware)
-      .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())
+      .wrap(RequestIdMiddleware)
       .app_data(web::JsonConfig::default().limit(5 * 1024 * 1024))
       .service(user_scope())
       .service(workspace_scope())
@@ -189,7 +195,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!("Setting up access controls...");
-  let enforce_cache = Arc::new(AFEnforcerCacheImpl::new(redis_client.clone()));
+  let enforce_cache = AFEnforcerCacheImpl::new(redis_client.clone());
   let access_control = AccessControl::new(
     pg_pool.clone(),
     collab_member_listener,
@@ -199,31 +205,39 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   )
   .await?;
 
+  let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control = access_control.new_collab_access_control();
   let workspace_access_control = access_control.new_workspace_access_control();
+  let collab_cache = CollabCache::new(redis_client.clone(), pg_pool.clone());
 
-  let collab_storage = Arc::new(
-    init_collab_storage(
-      pg_pool.clone(),
-      redis_client.clone(),
-      collab_access_control.clone(),
-      workspace_access_control.clone(),
-      metrics.collab_metrics.clone(),
-      rt_cmd_tx,
-    )
-    .await,
-  );
-  let users = UserCache::new(pg_pool.clone()).await;
+  let collab_storage_access_control = CollabStorageAccessControlImpl {
+    collab_access_control: collab_access_control.clone().into(),
+    workspace_access_control: workspace_access_control.clone().into(),
+    cache: collab_cache.clone(),
+  };
+  let snapshot_control = SnapshotControl::new(
+    redis_client.clone(),
+    pg_pool.clone(),
+    metrics.collab_metrics.clone(),
+  )
+  .await;
+  let collab_storage = Arc::new(CollabStorageImpl::new(
+    collab_cache.clone(),
+    collab_storage_access_control,
+    snapshot_control,
+    rt_cmd_tx,
+  ));
 
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
-    users: Arc::new(users),
+    user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     redis_client,
-    collab_storage,
+    collab_cache,
+    collab_access_control_storage: collab_storage,
     collab_access_control,
     workspace_access_control,
     bucket_storage,

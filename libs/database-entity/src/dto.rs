@@ -382,6 +382,22 @@ impl AFAccessLevel {
   }
 }
 
+impl From<&AFRole> for AFAccessLevel {
+  fn from(value: &AFRole) -> Self {
+    match value {
+      AFRole::Owner => AFAccessLevel::FullAccess,
+      AFRole::Member => AFAccessLevel::ReadAndWrite,
+      AFRole::Guest => AFAccessLevel::ReadOnly,
+    }
+  }
+}
+
+impl From<AFRole> for AFAccessLevel {
+  fn from(value: AFRole) -> Self {
+    AFAccessLevel::from(&value)
+  }
+}
+
 impl From<i32> for AFAccessLevel {
   fn from(value: i32) -> Self {
     // Can't modify the value of the enum

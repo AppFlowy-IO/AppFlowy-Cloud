@@ -42,7 +42,7 @@ async fn main() {
 
   let redis_client = redis::Client::open(config.redis_url)
     .expect("failed to create redis client")
-    .get_tokio_connection_manager()
+    .get_connection_manager()
     .await
     .expect("failed to get redis connection manager");
   info!("Redis client initialized.");

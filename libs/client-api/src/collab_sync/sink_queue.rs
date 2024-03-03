@@ -90,12 +90,9 @@ where
       );
     }
 
-    if self.state.is_done() {
-      match self.tx.take() {
-        None => false,
-        Some(tx) => {
-          let _ = tx.send(());
-        },
+    if matches!(self.state, MessageState::Done) {
+      if let Some(tx) = self.tx.take() {
+        let _ = tx.send(());
       }
     }
   }

@@ -10,9 +10,9 @@ use futures_util::SinkExt;
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
-use tokio::sync::oneshot::error::RecvError;
+
 use tokio::sync::{oneshot, watch, Mutex};
-use tokio::time::error::Elapsed;
+
 use tokio::time::interval;
 use tracing::{debug, error, trace, warn};
 
@@ -310,7 +310,10 @@ where
       },
     }
 
-    if let Err(_) = tokio::time::timeout(Duration::from_secs(4), rx).await {
+    if tokio::time::timeout(Duration::from_secs(4), rx)
+      .await
+      .is_err()
+    {
       if let Some(mut pending_msg) = self.message_queue.lock().peek_mut() {
         pending_msg.set_state(MessageState::Timeout);
       }

@@ -4,7 +4,7 @@ use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::dto::AFAccessLevel;
-use realtime::collaborate::RealtimeAccessControl;
+use realtime::server::RealtimeAccessControl;
 use tracing::instrument;
 
 #[derive(Clone)]

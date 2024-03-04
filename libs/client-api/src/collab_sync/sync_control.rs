@@ -29,7 +29,7 @@ use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
-pub const NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC: u32 = 5;
+pub const NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC: u32 = 1;
 
 const DEBOUNCE_DURATION: Duration = Duration::from_secs(10);
 
@@ -255,7 +255,7 @@ where
     mut stream: Stream,
     weak_collab: Weak<MutexCollab>,
     weak_sink: Weak<CollabSink<Sink, ClientCollabMessage>>,
-    seq_num: Arc<AtomicU32>,
+    broadcast_seq_num: Arc<AtomicU32>,
     last_init_sync: LastSyncTime,
   ) {
     while let Some(collab_message_result) = stream.next().await {
@@ -286,7 +286,7 @@ where
         &collab,
         &sink,
         msg,
-        &seq_num,
+        &broadcast_seq_num,
         &last_init_sync,
       )
       .await
@@ -322,19 +322,34 @@ where
       return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
     }
 
-    if let Some(msg_seq_num) = msg.seq_num() {
+    if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
       let prev_seq_num = broadcast_seq_num.load(Ordering::SeqCst);
-      broadcast_seq_num.store(msg_seq_num, Ordering::SeqCst);
+      broadcast_seq_num.store(data.seq_num, Ordering::SeqCst);
+
+      // In the debug mode, we use a shorter debounce duration to speed up the test.
+      let debounce_duration = if cfg!(debug_assertions) {
+        Duration::from_secs(2)
+      } else {
+        DEBOUNCE_DURATION
+      };
+
+      trace!(
+        "receive {} broadcast data, current: {}, prev: {}",
+        object.object_id,
+        data.seq_num,
+        prev_seq_num
+      );
 
       // Check if the received seq_num indicates missing updates.
-      if msg_seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
+      if data.seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
         && sink.can_queue_init_sync()
-        && last_sync_time.should_sync(DEBOUNCE_DURATION).await
+        && last_sync_time.should_sync(debounce_duration).await
       {
         if let Some(lock_guard) = collab.try_lock() {
           info!(
-            "collab:{} missing updates, start init sync",
-            object.object_id
+            "{} missing updates len: {}, start init sync",
+            object.object_id,
+            data.seq_num - prev_seq_num,
           );
           _init_sync(origin.clone(), object, &lock_guard, sink);
           return Ok(());

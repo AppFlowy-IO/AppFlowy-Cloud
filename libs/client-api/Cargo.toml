@@ -65,4 +65,5 @@ again = "0.1.2"
 [features]
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
+disable_multi_msg_merge = []
 template = ["workspace-template"]

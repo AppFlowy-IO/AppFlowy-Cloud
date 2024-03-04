@@ -175,17 +175,6 @@ pub struct AFSnapshotRow {
   pub workspace_id: Uuid,
 }
 
-// #[derive(FromRow, Deserialize, Serialize)]
-// pub struct AFWorkspaceInvitation {
-//   pub invite_id: Uuid,
-//   pub workspace_id: Uuid,
-//   pub workspace_name: Option<String>,
-//   pub inviter_email: Option<String>,
-//   pub inviter_name: Option<String>,
-//   pub status: AFWorkspaceInvitationStatus,
-//   pub updated_at: DateTime<Utc>,
-// }
-
 #[derive(FromRow, Deserialize, Serialize)]
 pub struct AFWorkspaceInvitationMinimal {
   pub workspace_id: Uuid,

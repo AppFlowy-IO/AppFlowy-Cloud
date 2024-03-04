@@ -22,8 +22,7 @@ use database_entity::dto::{
 use mime::Mime;
 use serde_json::Value;
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
-  WorkspaceSpaceUsage,
+  BlobMetadata, WorkspaceMemberChangeset, WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
@@ -182,11 +181,6 @@ impl TestClient {
   ) -> Result<(), AppResponseError> {
     let email = other_client.email().await;
 
-    // self
-    //   .api_client
-    //   .add_workspace_members(workspace_id, vec![CreateWorkspaceMember { email, role }])
-    //   .await
-
     self
       .api_client
       .invite_workspace_members(
@@ -208,7 +202,7 @@ impl TestClient {
 
     other_client
       .api_client
-      .accept_workspace_invitation(&target_invitation.invite_id.to_string().as_str())
+      .accept_workspace_invitation(target_invitation.invite_id.to_string().as_str())
       .await
   }
 

@@ -86,6 +86,7 @@ app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "to
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 realtime-entity.workspace = true
+semver = "1.0.22"
 
 
 [dev-dependencies]

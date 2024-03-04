@@ -1,9 +1,10 @@
+use http::HeaderMap;
 use std::{cell::RefCell, collections::VecDeque, rc::Rc, task::Waker};
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
-pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
-  WebSocketStream::new(url).await
+pub async fn connect_async(url: &str, header_map: HeaderMap) -> crate::Result<WebSocketStream> {
+  WebSocketStream::new(url, header_map).await
 }
 
 pub struct WebSocketStream {

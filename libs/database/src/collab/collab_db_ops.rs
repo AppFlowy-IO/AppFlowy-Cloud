@@ -6,7 +6,7 @@ use database_entity::dto::{
 };
 
 use crate::collab::SNAPSHOT_PER_HOUR;
-use crate::pg_row::AFCollabMemerAccessLevelRow;
+use crate::pg_row::AFCollabMemberAccessLevelRow;
 use crate::pg_row::AFSnapshotRow;
 use app_error::AppError;
 use chrono::{Duration, Utc};
@@ -474,9 +474,9 @@ pub async fn delete_collab_member(
 
 pub fn select_collab_member_access_level(
   pg_pool: &PgPool,
-) -> BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>> {
+) -> BoxStream<'_, sqlx::Result<AFCollabMemberAccessLevelRow>> {
   sqlx::query_as!(
-    AFCollabMemerAccessLevelRow,
+    AFCollabMemberAccessLevelRow,
     r#"
       SELECT
           uid, oid, access_level

@@ -9,7 +9,7 @@ use casbin::Model;
 use casbin::Result;
 
 use database::collab::select_collab_member_access_level;
-use database::pg_row::AFCollabMemerAccessLevelRow;
+use database::pg_row::AFCollabMemberAccessLevelRow;
 use database::pg_row::AFWorkspaceMemberPermRow;
 use database::workspace::select_workspace_member_perm_stream;
 use database_entity::dto::{AFAccessLevel, AFRole};
@@ -36,7 +36,7 @@ impl PgAdapter {
 }
 
 async fn load_collab_policies(
-  mut stream: BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>>,
+  mut stream: BoxStream<'_, sqlx::Result<AFCollabMemberAccessLevelRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();
 

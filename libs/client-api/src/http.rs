@@ -634,7 +634,7 @@ impl Client {
     let resp = builder.send().await?;
     log_request_id(&resp);
     let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
-    Ok(res.into_data()?)
+    res.into_data()
   }
 
   pub async fn accept_workspace_invitation(

@@ -1,6 +1,6 @@
-use crate::collaborate::{RealtimeAccessControl, RealtimeServer};
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
 use crate::error::RealtimeError;
+use crate::server::RealtimeAccessControl;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   MailboxError, Recipient, Running, StreamHandler, WrapFuture,
@@ -11,13 +11,15 @@ use bytes::Bytes;
 use database::collab::CollabStorage;
 
 use anyhow::anyhow;
-use std::ops::Deref;
+
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
+use crate::server::RealtimeServer;
 use database::pg_row::AFUserNotification;
 use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::{debug, error, trace, warn};
+
 const MAX_MESSAGES_PER_INTERVAL: usize = 10;
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -86,7 +88,7 @@ where
     });
   }
 
-  async fn forward_binary(
+  async fn send_binary_to_server(
     user: U,
     server: Addr<RealtimeServer<S, U, AC>>,
     bytes: Bytes,
@@ -268,7 +270,7 @@ where
       ws::Message::Pong(_) => self.hb = Instant::now(),
       ws::Message::Text(_) => {},
       ws::Message::Binary(bytes) => {
-        let fut = Self::forward_binary(self.user.clone(), self.server.clone(), bytes);
+        let fut = Self::send_binary_to_server(self.user.clone(), self.server.clone(), bytes);
         let act_fut = fut::wrap_future::<_, Self>(fut);
         ctx.spawn(act_fut.map(|res, _act, _ctx| {
           if let Err(e) = res {
@@ -291,11 +293,4 @@ where
   }
 }
 
-/// A helper struct that wraps the [Recipient] type to implement the [Sink] trait
-pub struct ClientWSSink(pub Recipient<RealtimeMessage>);
-impl Deref for ClientWSSink {
-  type Target = Recipient<RealtimeMessage>;
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
+pub type RealtimeClientWebsocketSink = Recipient<RealtimeMessage>;

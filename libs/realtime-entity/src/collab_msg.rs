@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Error};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 use crate::message::RealtimeMessage;
 use bytes::Bytes;
@@ -68,11 +69,21 @@ impl CollabSinkMessage for CollabMessage {
   }
 }
 
+impl Hash for CollabMessage {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.origin().hash(state);
+    self.msg_id().hash(state);
+    self.object_id().hash(state);
+  }
+}
+
 impl Eq for CollabMessage {}
 
 impl PartialEq for CollabMessage {
   fn eq(&self, other: &Self) -> bool {
     self.msg_id() == other.msg_id()
+      && self.origin() == other.origin()
+      && self.object_id() == other.object_id()
   }
 }
 
@@ -198,7 +209,7 @@ impl Display for CollabMessage {
 /// compatibility. Such changes may lead to issues in processing existing messages that expect
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct AwarenessSync {
   object_id: String,
   payload: Bytes,
@@ -295,7 +306,7 @@ impl From<InitSync> for CollabMessage {
 /// compatibility. Such changes may lead to issues in processing existing messages that expect
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct ServerInit {
   pub origin: CollabOrigin,
   pub object_id: String,
@@ -421,7 +432,7 @@ impl Display for UpdateSync {
   }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Deserialize_repr, Hash)]
 #[repr(u8)]
 pub enum AckCode {
   Success = 0,
@@ -437,7 +448,7 @@ pub enum AckCode {
 /// compatibility. Such changes may lead to issues in processing existing messages that expect
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct CollabAck {
   pub origin: CollabOrigin,
   pub object_id: String,
@@ -446,7 +457,7 @@ pub struct CollabAck {
   pub code: AckCode,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct AckSource {
   #[serde(rename = "sync_verbose")]
   pub verbose: String,
@@ -504,7 +515,7 @@ impl Display for CollabAck {
 /// compatibility. Such changes may lead to issues in processing existing messages that expect
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct BroadcastSync {
   origin: CollabOrigin,
   object_id: String,
@@ -708,6 +719,14 @@ impl CollabSinkMessage for ClientCollabMessage {
   }
 }
 
+impl Hash for ClientCollabMessage {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.origin().hash(state);
+    self.msg_id().hash(state);
+    self.object_id().hash(state);
+  }
+}
+
 impl Eq for ClientCollabMessage {}
 
 impl PartialEq for ClientCollabMessage {
@@ -757,7 +776,7 @@ impl Ord for ClientCollabMessage {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
 pub enum ServerCollabMessage {
   ClientAck(CollabAck),
   ServerInitSync(ServerInit),

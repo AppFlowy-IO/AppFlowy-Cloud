@@ -1,5 +1,5 @@
 pub mod client;
-pub mod collaborate;
 pub mod entities;
 mod error;
+pub mod server;
 mod util;

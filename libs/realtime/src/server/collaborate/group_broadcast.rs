@@ -1,4 +1,3 @@
-use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab::core::awareness;
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use std::rc::{Rc, Weak};
@@ -20,6 +19,7 @@ use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
 use crate::error::RealtimeError;
+use crate::server::collaborate::sync_protocol::ServerSyncProtocol;
 use realtime_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
@@ -129,6 +129,7 @@ impl CollabBroadcast {
   /// Broadcasts user message to all active subscribers. Returns error if message could not have
   /// been broadcast.
   #[allow(clippy::result_large_err)]
+  #[allow(dead_code)]
   pub fn broadcast_awareness(&self, msg: AwarenessSync) -> Result<(), SendError<CollabMessage>> {
     self.sender.send(msg.into())?;
     Ok(())

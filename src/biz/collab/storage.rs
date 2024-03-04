@@ -27,7 +27,7 @@ use tokio::time::timeout;
 use crate::biz::collab::cache::CollabCache;
 
 use crate::biz::snapshot::SnapshotControl;
-use realtime::collaborate::{RTCommand, RTCommandSender};
+use realtime::server::{RTCommand, RTCommandSender};
 use tracing::{error, instrument};
 use validator::Validate;
 

@@ -204,6 +204,9 @@ impl TestClient {
       .api_client
       .accept_workspace_invitation(target_invitation.invite_id.to_string().as_str())
       .await
+      .unwrap();
+
+    Ok(())
   }
 
   pub async fn try_remove_workspace_member(

@@ -303,6 +303,10 @@ where
 
   /// Merge the next message with the subsequent messages if possible.
   fn merge_items_into_next(&self, next: &mut QueueItem<Msg>, msg_queue: &mut SinkQueue<Msg>) {
+    if cfg!(feature = "disable_multi_msg_merge") {
+      return;
+    }
+
     // Proceed only if the next message is eligible for merging.
     if !next.can_merge() {
       return;
@@ -312,16 +316,17 @@ where
     while let Some(pending_msg) = msg_queue.pop() {
       // Attempt to merge the current message with the next one.
       // If merging is not successful or not advisable, push the unmerged message back and exit.
-      if let Err(err) = next.merge(&pending_msg, &self.config.maximum_payload_size) {
-        msg_queue.push(pending_msg); // Requeue the message that couldn't be merged.
-        error!("Failed to merge message: {}", err);
-        break;
-      } else if !next
-        .merge(&pending_msg, &self.config.maximum_payload_size)
-        .unwrap()
-      {
-        // If merging was successful but further merging is not advised, stop.
-        break;
+      match next.merge(&pending_msg, &self.config.maximum_payload_size) {
+        Ok(can_merge) => {
+          if !can_merge {
+            break;
+          }
+        },
+        Err(err) => {
+          msg_queue.push(pending_msg); // Requeue the message that couldn't be merged.
+          error!("Failed to merge message: {}", err);
+          break;
+        },
       }
     }
   }

@@ -1,5 +1,5 @@
 use crate::collab::util::generate_random_string;
-use client_api::collab_sync::{COLLAB_SINK_DELAY_MILLIS, NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC};
+use client_api::collab_sync::NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC;
 use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
@@ -353,7 +353,6 @@ async fn init_sync_when_missing_updates_test() {
       .collab
       .lock()
       .insert("2", text.clone());
-    sleep(Duration::from_millis(COLLAB_SINK_DELAY_MILLIS + 200)).await;
   }
   client_1
     .wait_object_sync_complete(&object_id)
@@ -396,7 +395,7 @@ async fn init_sync_when_missing_updates_test() {
   // less than the sequence number of the sync message from Client 1, this condition triggers an
   // initialization sync for Client 2.
   //
-  // This process ensures that all clients are synchronized and have the latest information, with the initiation sync being triggered based on the comparison of sequence numbers to maintain consistency across the system.
+  // This ensures that all clients are synchronized and have the latest information, with the initiation sync being triggered based on the comparison of sequence numbers to maintain consistency across the system.
   client_2.ws_client.enable_receive_message();
   client_1
     .collab_by_object_id

@@ -2,6 +2,7 @@ use anyhow::Error;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
+use tokio::sync::oneshot;
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 
@@ -54,6 +55,7 @@ pub(crate) struct QueueItem<Msg> {
   msg: Msg,
   msg_id: MsgId,
   state: MessageState,
+  tx: Option<oneshot::Sender<()>>,
 }
 
 impl<Msg> QueueItem<Msg>
@@ -65,7 +67,11 @@ where
       msg,
       msg_id,
       state: MessageState::Pending,
+      tx: None,
     }
+  }
+  pub fn set_ret(&mut self, tx: oneshot::Sender<()>) {
+    self.tx = Some(tx);
   }
 
   pub fn get_msg(&self) -> &Msg {
@@ -83,10 +89,20 @@ where
         self.state
       );
     }
+
+    if matches!(self.state, MessageState::Done) {
+      if let Some(tx) = self.tx.take() {
+        let _ = tx.send(());
+      }
+    }
   }
 
   pub fn msg_id(&self) -> MsgId {
     self.msg_id
+  }
+
+  pub fn is_processing(&self) -> bool {
+    self.state == MessageState::Processing
   }
 }
 
@@ -95,6 +111,10 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn can_merge(&self) -> bool {
+    if self.is_processing() {
+      return false;
+    }
+
     self.msg.can_merge()
   }
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
@@ -136,4 +156,5 @@ pub(crate) enum MessageState {
   Pending,
   Processing,
   Done,
+  Timeout,
 }

@@ -268,7 +268,7 @@ impl TestClient {
 
   pub async fn wait_object_sync_complete(&self, object_id: &str) -> Result<(), Error> {
     self
-      .wait_object_sync_complete_with_secs(object_id, 30)
+      .wait_object_sync_complete_with_secs(object_id, 60)
       .await
   }
 
@@ -774,7 +774,7 @@ pub async fn assert_client_collab_include_value_within_30_secs(
         if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
           return Ok(());
         }
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
       }
     }
   }

@@ -9,6 +9,7 @@ pub async fn retry_connect(
   _state_notify: Weak<StateNotify>,
   _current_addr: Weak<CurrentConnInfo>,
 ) -> Result<WebSocketStream, WSError> {
+  trace!("retry_connect: url: {}, connect info: {:?}", url, info);
   let headers: HeaderMap = info.into();
   let stream = connect_async(url, headers).await?;
   Ok(stream)

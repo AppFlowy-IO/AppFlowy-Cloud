@@ -495,7 +495,7 @@ async fn send_message(
   Ok(())
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ConnectInfo {
   pub access_token: String,
   pub client_version: Version,

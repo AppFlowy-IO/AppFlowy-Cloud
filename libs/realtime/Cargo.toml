@@ -17,7 +17,7 @@ tracing = "0.1.40"
 futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
-tokio = { version = "1.35.1", features = ["net", "sync", "macros"] }
+tokio = { workspace = true, features = ["net", "sync", "macros"] }
 async-trait = "0.1.77"
 anyhow = "1.0.79"
 serde_repr = "0.1.18"
@@ -42,6 +42,7 @@ uuid = { version = "1", features = ["v4"] }
 md5 = "0.7"
 prometheus-client = "0.22.1"
 indexmap = "2.2.5"
+semver = "1.0.22"
 
 [dev-dependencies]
 actix = "0.13"

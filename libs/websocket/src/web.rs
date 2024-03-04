@@ -1,9 +1,11 @@
+use http::HeaderMap;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::{cell::RefCell, collections::VecDeque, rc::Rc, task::Waker};
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{CloseEvent, ErrorEvent, MessageEvent, WebSocket};
 
-pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
-  WebSocketStream::new(url).await
+pub async fn connect_async(url: &str, header_map: HeaderMap) -> crate::Result<WebSocketStream> {
+  WebSocketStream::new(url, header_map).await
 }
 
 pub struct WebSocketStream {
@@ -16,8 +18,11 @@ pub struct WebSocketStream {
 }
 
 impl WebSocketStream {
-  async fn new(url: &str) -> crate::Result<Self> {
-    match web_sys::WebSocket::new(url) {
+  async fn new(url: &str, headers: HeaderMap) -> crate::Result<Self> {
+    let query_string = header_map_to_query_string(&headers);
+    // Construct the full WebSocket URL with query parameters
+    let conn_url = format!("{}?{}", url, query_string);
+    match web_sys::WebSocket::new(&conn_url) {
       Err(_err) => Err(crate::Error::Url(
         crate::error::UrlError::UnsupportedUrlScheme,
       )),
@@ -243,4 +248,23 @@ impl std::convert::TryFrom<web_sys::MessageEvent> for crate::Message {
       _ => Err(crate::Error::UnknownFormat),
     }
   }
+}
+
+fn header_map_to_query_string(headers: &HeaderMap) -> String {
+  headers
+    .iter()
+    .filter_map(|(name, value)| {
+      // Convert the header name and value to string
+      let name = name.as_str();
+      let value = value.to_str().ok()?;
+      Some((name, value))
+    })
+    .map(|(name, value)| {
+      // Percent-encode the name and value to ensure they are URL-safe
+      let name_encoded = utf8_percent_encode(name, NON_ALPHANUMERIC).to_string();
+      let value_encoded = utf8_percent_encode(value, NON_ALPHANUMERIC).to_string();
+      format!("{}={}", name_encoded, value_encoded)
+    })
+    .collect::<Vec<_>>()
+    .join("&")
 }

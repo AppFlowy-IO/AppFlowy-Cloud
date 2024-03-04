@@ -10,11 +10,11 @@ use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
 use crate::biz::casbin::RealtimeCollabAccessControlImpl;
+use realtime::client::rt_client::RealtimeClient;
 use realtime::server::RealtimeServer;
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::{info, instrument};
-use realtime::client::rt_client::RealtimeClient;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(establish_ws_connection)

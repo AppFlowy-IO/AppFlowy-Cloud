@@ -286,8 +286,20 @@ pub async fn update_workspace_invitation_set_invited(
   )
   .execute(txn.deref_mut())
   .await?;
-  assert_eq!(res.rows_affected(), 1);
-  Ok(())
+  match res.rows_affected() {
+    0 => Err(AppError::RecordNotFound(format!(
+      "Invitation not found, invitee_uuid: {}, invite_id: {}",
+      invitee_uuid, invite_id
+    ))),
+    1 => Ok(()),
+    x => Err(
+      anyhow::anyhow!(
+        "Expected 1 row to be affected, but {} rows were affected",
+        x
+      )
+      .into(),
+    ),
+  }
 }
 
 pub async fn get_invitation_by_id(

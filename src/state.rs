@@ -11,7 +11,7 @@ use crate::biz::casbin::metrics::AccessControlMetrics;
 use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
-use realtime::collaborate::RealtimeMetrics;
+use realtime::server::RealtimeMetrics;
 use snowflake::Snowflake;
 use sqlx::PgPool;
 

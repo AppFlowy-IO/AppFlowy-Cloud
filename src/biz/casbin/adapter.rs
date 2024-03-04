@@ -36,7 +36,6 @@ impl PgAdapter {
 }
 
 async fn load_collab_policies(
-  enforce_cache: &Arc<dyn AFEnforcerCache>,
   mut stream: BoxStream<'_, sqlx::Result<AFCollabMemberAccessLevelRow>>,
 ) -> Result<Vec<Vec<String>>> {
   let mut policies: Vec<Vec<String>> = Vec::new();

@@ -190,7 +190,7 @@ pub async fn list_workspace_invitations_for_user(
   Ok(invis)
 }
 
-/// TODO: mark as private
+/// Deprecated: use invitation workflow instead
 /// Returns the list of uid of members that are added to the workspace.
 /// Adds members to a workspace.
 ///

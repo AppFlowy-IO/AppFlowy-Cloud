@@ -1,8 +1,11 @@
 use crate::notify::ClientToken;
-use crate::ws::{ConnectState, ConnectStateNotify, CurrentAddr, StateNotify, WSError};
+use crate::ws::{
+  ConnectInfo, ConnectState, ConnectStateNotify, CurrentConnInfo, StateNotify, WSError,
+};
 use app_error::gotrue::GoTrueError;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
+use reqwest::header::HeaderMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
@@ -65,17 +68,17 @@ impl Condition<GoTrueError> for RefreshTokenRetryCondition {
 }
 
 pub async fn retry_connect(
-  addr: &str,
+  url: String,
+  info: ConnectInfo,
   state_notify: Weak<StateNotify>,
-  current_addr: Weak<CurrentAddr>,
+  current_addr: Weak<CurrentConnInfo>,
 ) -> Result<WebSocketStream, WSError> {
-  let connecting_addr = addr.to_owned();
   let stream = RetryIf::spawn(
     FixedInterval::new(Duration::from_secs(10)),
-    ConnectAction::new(connecting_addr.clone()),
+    ConnectAction::new(url, info.clone()),
     RetryCondition {
-      connecting_addr,
-      current_addr,
+      connect_info: info,
+      current_connect_info: current_addr,
       state_notify,
     },
   )
@@ -84,12 +87,13 @@ pub async fn retry_connect(
 }
 
 struct ConnectAction {
-  addr: String,
+  url: String,
+  connect_info: ConnectInfo,
 }
 
 impl ConnectAction {
-  fn new(addr: String) -> Self {
-    Self { addr }
+  fn new(url: String, connect_info: ConnectInfo) -> Self {
+    Self { url, connect_info }
   }
 }
 
@@ -99,10 +103,11 @@ impl Action for ConnectAction {
   type Error = WSError;
 
   fn run(&mut self) -> Self::Future {
-    let cloned_addr = self.addr.clone();
+    let url = self.url.clone();
+    let headers: HeaderMap = self.connect_info.clone().into();
     Box::pin(async move {
       info!("🔵websocket start connecting");
-      match connect_async(&cloned_addr).await {
+      match connect_async(&url, headers).await {
         Ok(stream) => {
           info!("🟢websocket connect success");
           Ok(stream)
@@ -114,8 +119,8 @@ impl Action for ConnectAction {
 }
 
 struct RetryCondition {
-  connecting_addr: String,
-  current_addr: Weak<parking_lot::Mutex<Option<String>>>,
+  connect_info: ConnectInfo,
+  current_connect_info: Weak<parking_lot::Mutex<Option<ConnectInfo>>>,
   state_notify: Weak<parking_lot::Mutex<ConnectStateNotify>>,
 }
 impl Condition<WSError> for RetryCondition {
@@ -130,13 +135,13 @@ impl Condition<WSError> for RetryCondition {
     }
 
     let should_retry = self
-      .current_addr
+      .current_connect_info
       .upgrade()
       .map(|addr| match addr.try_lock() {
         None => false,
         Some(addr) => match &*addr {
           None => false,
-          Some(addr) => addr == &self.connecting_addr,
+          Some(addr) => addr == &self.connect_info,
         },
       })
       .unwrap_or(false);

@@ -6,6 +6,7 @@ mod native;
 mod web;
 
 pub use error::{Error, Result};
+use http::HeaderMap;
 pub use message::coding::*;
 pub use message::CloseFrame;
 pub use message::Message;
@@ -15,6 +16,6 @@ use native as ws;
 use web as ws;
 pub use ws::WebSocketStream;
 
-pub async fn connect_async<S: AsRef<str>>(url: S) -> Result<WebSocketStream> {
-  ws::connect_async(url.as_ref()).await
+pub async fn connect_async<S: AsRef<str>>(url: S, headers: HeaderMap) -> Result<WebSocketStream> {
+  ws::connect_async(url.as_ref(), headers).await
 }

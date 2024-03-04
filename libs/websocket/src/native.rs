@@ -1,6 +1,8 @@
 use futures_util::{Sink, Stream, StreamExt};
+use http::HeaderMap;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::{
   tungstenite::{
     error::*,
@@ -10,8 +12,11 @@ use tokio_tungstenite::{
   MaybeTlsStream,
 };
 
-pub async fn connect_async(url: &str) -> crate::Result<WebSocketStream> {
-  let (inner, _response) = tokio_tungstenite::connect_async(url).await?;
+pub async fn connect_async(url: &str, header_map: HeaderMap) -> crate::Result<WebSocketStream> {
+  let mut request = url.into_client_request()?;
+  request.headers_mut().extend(header_map);
+
+  let (inner, _response) = tokio_tungstenite::connect_async(request).await?;
   let inner = inner.filter_map(to_fut_message as fn(_) -> _);
   Ok(WebSocketStream { inner })
 }

@@ -52,7 +52,7 @@ pub fn localhost_client_with_device_id(device_id: &str) -> Client {
     &LOCALHOST_GOTRUE,
     device_id,
     ClientConfiguration::default(),
-    "test",
+    "0.5.0",
   )
 }
 

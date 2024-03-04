@@ -1,6 +1,5 @@
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.af_user TO supabase_auth_admin;
 
--- Trigger Function to delete a user from the public.af_user table
 -- when a user is deleted from auth.users table (with matching uuid) field
 CREATE OR REPLACE FUNCTION public.delete_user()
 RETURNS TRIGGER AS $$
@@ -14,7 +13,6 @@ CREATE TRIGGER delete_user_trigger
 AFTER DELETE ON auth.users
 FOR EACH ROW EXECUTE FUNCTION public.delete_user();
 
--- Trigger Function to update the 'deleted_at' field in the public.af_user table
 -- (Soft Delete)
 CREATE OR REPLACE FUNCTION public.update_af_user_deleted_at()
 RETURNS TRIGGER AS $$

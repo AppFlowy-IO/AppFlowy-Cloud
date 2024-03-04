@@ -25,7 +25,7 @@ pub(crate) fn spawn_listen_on_collab_member_change(
             let permission_row = select_permission(&pg_pool, &member_row.permission_id).await;
             if let Ok(Some(row)) = permission_row {
               if let Err(err) = enforcer
-                .update(
+                .update_policy(
                   &member_row.uid,
                   &ObjectType::Collab(&member_row.oid),
                   &ActionType::Level(row.access_level),
@@ -44,7 +44,7 @@ pub(crate) fn spawn_listen_on_collab_member_change(
         },
         CollabMemberAction::DELETE => {
           if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
-            if let Err(err) = enforcer.remove(uid, &ObjectType::Collab(oid)).await {
+            if let Err(err) = enforcer.remove_policy(uid, &ObjectType::Collab(oid)).await {
               warn!(
                 "Failed to remove the user:{} collab{} access control, error: {}",
                 uid, oid, err
@@ -72,7 +72,7 @@ pub(crate) fn spawn_listen_on_workspace_member_change(
           },
           Some(member_row) => {
             if let Err(err) = enforcer
-              .update(
+              .update_policy(
                 &member_row.uid,
                 &ObjectType::Workspace(&member_row.workspace_id.to_string()),
                 &ActionType::Role(AFRole::from(member_row.role_id as i32)),
@@ -90,7 +90,7 @@ pub(crate) fn spawn_listen_on_workspace_member_change(
           None => warn!("The workspace member change can't be None when the action is DELETE"),
           Some(member_row) => {
             if let Err(err) = enforcer
-              .remove(
+              .remove_policy(
                 &member_row.uid,
                 &ObjectType::Workspace(&member_row.workspace_id.to_string()),
               )

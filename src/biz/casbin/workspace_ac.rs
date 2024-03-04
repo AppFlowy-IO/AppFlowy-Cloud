@@ -1,12 +1,9 @@
-use crate::biz::casbin::access_control::AccessControl;
+use crate::biz::casbin::access_control::{AccessControl, Action};
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
-
-use database_entity::dto::AFRole;
-use sqlx::{Executor, Postgres};
-
+use database_entity::dto::{AFAccessLevel, AFRole};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -23,41 +20,52 @@ impl WorkspaceAccessControlImpl {
 
 #[async_trait]
 impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
-  async fn get_workspace_role<'a, E>(
+  async fn enforce_role(
     &self,
     uid: &i64,
-    workspace_id: &Uuid,
-    _executor: E,
-  ) -> Result<AFRole, AppError>
-  where
-    E: Executor<'a, Database = Postgres>,
-  {
-    let workspace_id = workspace_id.to_string();
+    workspace_id: &str,
+    role: AFRole,
+  ) -> Result<bool, AppError> {
     self
       .access_control
-      .get_role(uid, &workspace_id)
+      .enforce(uid, &ObjectType::Workspace(workspace_id), role)
       .await
-      .ok_or_else(|| {
-        AppError::RecordNotFound(format!(
-          "can't find the role for user:{} workspace:{}",
-          uid, workspace_id
-        ))
-      })
+  }
+
+  async fn enforce_action(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+    action: Action,
+  ) -> Result<bool, AppError> {
+    self
+      .access_control
+      .enforce(uid, &ObjectType::Workspace(workspace_id), action)
+      .await
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn insert_workspace_role(
+  async fn insert_role(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
-    let _ = self
+    let access_level = AFAccessLevel::from(&role);
+    self
       .access_control
-      .update(
+      .update_policy(
         uid,
         &ObjectType::Workspace(&workspace_id.to_string()),
         &ActionType::Role(role),
+      )
+      .await?;
+    self
+      .access_control
+      .update_policy(
+        uid,
+        &ObjectType::Collab(&workspace_id.to_string()),
+        &ActionType::Level(access_level),
       )
       .await?;
     Ok(())
@@ -65,9 +73,14 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
 
   #[instrument(level = "info", skip_all)]
   async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
-    let _ = self
+    self
       .access_control
-      .remove(uid, &ObjectType::Workspace(&workspace_id.to_string()))
+      .remove_policy(uid, &ObjectType::Workspace(&workspace_id.to_string()))
+      .await?;
+
+    self
+      .access_control
+      .remove_policy(uid, &ObjectType::Collab(&workspace_id.to_string()))
       .await?;
     Ok(())
   }

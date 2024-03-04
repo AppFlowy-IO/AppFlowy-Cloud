@@ -47,7 +47,10 @@ async fn sync_collab_content_after_reconnect_test() {
   // After reconnect the collab should be synced to the server.
   test_client.reconnect().await;
   // Wait for the messages to be sent
-  test_client.wait_object_sync_complete(&object_id).await;
+  test_client
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   assert_server_collab(
     &workspace_id,
@@ -64,7 +67,8 @@ async fn sync_collab_content_after_reconnect_test() {
       "5": "5",
     }),
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -86,8 +90,11 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap()
     .collab
     .lock()
-    .insert("name", "work");
-  client_1.wait_object_sync_complete(&object_id).await;
+    .insert("name", "workspace1");
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
@@ -104,13 +111,17 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .unwrap()
     .collab
     .lock()
-    .insert("name", "workspace");
+    .insert("name", "workspace2");
 
   client_2.reconnect().await;
-  client_2.wait_object_sync_complete(&object_id).await;
+
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   let expected_json = json!({
-    "name": "workspace"
+    "name": "workspace2"
   });
   assert_client_collab_within_30_secs(&mut client_1, &object_id, "name", expected_json.clone())
     .await;
@@ -143,7 +154,10 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .collab
     .lock()
     .insert("name", "object 1");
-  device_1.wait_object_sync_complete(&object_id_1).await;
+  device_1
+    .wait_object_sync_complete(&object_id_1)
+    .await
+    .unwrap();
 
   // client 2 edit the collab with object_id_2
   device_2
@@ -153,7 +167,10 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .collab
     .lock()
     .insert("name", "object 2");
-  device_2.wait_object_sync_complete(&object_id_2).await;
+  device_2
+    .wait_object_sync_complete(&object_id_2)
+    .await
+    .unwrap();
 
   // client1 open the collab with object_id_2
   device_1
@@ -232,10 +249,12 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   }
 
   tokio::join!(client_1.reconnect(), client_2.reconnect());
-  tokio::join!(
+  let (left, right) = tokio::join!(
     client_1.wait_object_sync_complete(&object_id),
     client_2.wait_object_sync_complete(&object_id)
   );
+  assert!(left.is_ok());
+  assert!(right.is_ok());
 
   let expected_json = json!({
     "0": "Task 0",
@@ -254,13 +273,15 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     &object_id,
     expected_json.clone(),
   )
-  .await;
+  .await
+  .unwrap();
   assert_client_collab_include_value_within_30_secs(
     &mut client_2,
     &object_id,
     expected_json.clone(),
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
@@ -292,13 +313,19 @@ async fn init_sync_when_missing_updates_test() {
     .collab
     .lock()
     .insert("1", "task 1");
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   // Client_2 opens the collaboration, triggering an initial sync to receive "task 1".
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  client_2.wait_object_sync_complete(&object_id).await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   // Validate both clients have "task 1" after the initial sync.
   assert_eq!(
@@ -312,10 +339,13 @@ async fn init_sync_when_missing_updates_test() {
 
   // Simulate client_2 missing updates by enabling skip_realtime_message.
   client_2.ws_client.disable_receive_message();
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   // Client_1 inserts "task 2", which client_2 misses due to skipping realtime messages.
-  for _ in 0..NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
+  for _ in 0..2 * NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
     client_1
       .collab_by_object_id
       .get_mut(&object_id)
@@ -325,7 +355,10 @@ async fn init_sync_when_missing_updates_test() {
       .insert("2", text.clone());
     sleep(Duration::from_millis(300)).await;
   }
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   client_2
     .collab_by_object_id
@@ -334,7 +367,10 @@ async fn init_sync_when_missing_updates_test() {
     .collab
     .lock()
     .insert("3", "task 3");
-  client_2.wait_object_sync_complete(&object_id).await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   // Validate client_1's view includes "task 2", and "task 3", while client_2 missed key2 and key3.
   assert_client_collab_include_value_within_30_secs(
@@ -342,14 +378,25 @@ async fn init_sync_when_missing_updates_test() {
     &object_id,
     json!({ "1": "task 1", "2": text.clone(), "3": "task 3" }),
   )
-  .await;
+  .await
+  .unwrap();
   assert_eq!(
     client_2.get_edit_collab_json(&object_id).await,
     json!({ "1": "task 1", "3": "task 3" })
   );
 
   // client_2 resumes receiving messages
-  // client_1 triggers a sync that will trigger broadcast message to client_2
+  //
+  // 1. **Client 1 Initiates a Sync**: This action sends a sync message to the server.
+  // 2. **Server Broadcasts to Client 2**: The server, upon receiving the sync message
+  // from Client 1, broadcasts a message to Client 2.
+  // 3. **Sequence Number Check**: The sequence number (seq num) of the broadcast message received
+  // by Client 2 is checked against the sequence number of the sync message from Client 1.
+  // 4. **Condition for Init Sync**: If the sequence number of Client 2's broadcast message is
+  // less than the sequence number of the sync message from Client 1, this condition triggers an
+  // initialization sync for Client 2.
+  //
+  // This process ensures that all clients are synchronized and have the latest information, with the initiation sync being triggered based on the comparison of sequence numbers to maintain consistency across the system.
   client_2.ws_client.enable_receive_message();
   client_1
     .collab_by_object_id
@@ -358,12 +405,16 @@ async fn init_sync_when_missing_updates_test() {
     .collab
     .lock()
     .insert("4", "task 4");
-  client_1.wait_object_sync_complete(&object_id).await;
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   assert_client_collab_include_value_within_30_secs(
     &mut client_2,
     &object_id,
     json!({ "1": "task 1", "2": text.clone(), "3": "task 3", "4": "task 4" }),
   )
-  .await;
+  .await
+  .unwrap();
 }

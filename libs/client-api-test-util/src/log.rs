@@ -8,7 +8,7 @@ use {
 pub fn setup_log() {
   static START: Once = Once::new();
   START.call_once(|| {
-    let level = "info";
+    let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());
     let mut filters = vec![];
     filters.push(format!("client_api={}", level));
     filters.push(format!("appflowy_cloud={}", level));

@@ -1,6 +1,8 @@
 use crate::collaborate::all_group::AllCollabGroup;
 use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
-use crate::collaborate::{broadcast_message, CollabAccessControl, CollabClientStream};
+use crate::collaborate::{
+  broadcast_client_collab_message, CollabClientStream, RealtimeAccessControl,
+};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::RealtimeError;
 use anyhow::anyhow;
@@ -9,15 +11,15 @@ use collab::core::collab_plugin::EncodedCollab;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
-use realtime_entity::collab_msg::{CollabMessage, CollabSinkMessage};
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
 
 pub enum GroupCommand<U> {
-  HandleCollabMessage {
+  HandleClientCollabMessage {
     user: U,
-    collab_message: CollabMessage,
+    collab_message: ClientCollabMessage,
   },
   EncodeCollab {
     object_id: String,
@@ -40,7 +42,7 @@ impl<S, U, AC> GroupCommandRunner<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
-  AC: CollabAccessControl,
+  AC: RealtimeAccessControl,
 {
   pub async fn run(mut self, object_id: String) {
     let mut receiver = self.recv.take().expect("Only take once");
@@ -54,7 +56,7 @@ where
     stream
       .for_each(|command| async {
         match command {
-          GroupCommand::HandleCollabMessage {
+          GroupCommand::HandleClientCollabMessage {
             user,
             collab_message,
           } => {
@@ -92,7 +94,7 @@ where
   async fn handle_collab_message(
     &self,
     user: U,
-    collab_message: CollabMessage,
+    collab_message: ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
     // 1.Check the client is connected with the websocket server.
     if self.client_stream_by_user.get(&user).is_none() {
@@ -122,14 +124,20 @@ where
       if !is_user_subscribed {
         self.subscribe_group(&user, &collab_message).await?;
       }
-      broadcast_message(&user, collab_message, &self.client_stream_by_user).await;
+      broadcast_client_collab_message(&user, collab_message, &self.client_stream_by_user).await;
     } else {
       // If there is no existing group for the given object_id and the message is an 'init message',
       // then create a new group and add the user as a subscriber to this group.
       if collab_message.is_init_msg() {
         self.create_group(&collab_message).await?;
         self.subscribe_group(&user, &collab_message).await?;
+        broadcast_client_collab_message(&user, collab_message, &self.client_stream_by_user).await;
       } else {
+        warn!(
+          "The group:{} is not found, the client:{} should send the init message first",
+          collab_message.object_id(),
+          user
+        );
         // TODO(nathan): ask the client to send the init message first
       }
     }
@@ -139,7 +147,7 @@ where
   async fn subscribe_group(
     &self,
     user: &U,
-    collab_message: &CollabMessage,
+    collab_message: &ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
     SubscribeGroup {
       message: &CollabUserMessage {
@@ -155,11 +163,11 @@ where
     .await;
     Ok(())
   }
-  async fn create_group(&self, collab_message: &CollabMessage) -> Result<(), RealtimeError> {
+  async fn create_group(&self, collab_message: &ClientCollabMessage) -> Result<(), RealtimeError> {
     let object_id = collab_message.object_id();
     match collab_message {
-      CollabMessage::ClientInitSync(client_init) => {
-        let uid = client_init
+      ClientCollabMessage::ClientInitSync { data, .. } => {
+        let uid = data
           .origin
           .client_user_id()
           .ok_or(RealtimeError::ExpectInitSync(
@@ -168,12 +176,7 @@ where
 
         self
           .all_groups
-          .create_group(
-            uid,
-            &client_init.workspace_id,
-            object_id,
-            client_init.collab_type.clone(),
-          )
+          .create_group(uid, &data.workspace_id, object_id, data.collab_type.clone())
           .await;
 
         Ok(())

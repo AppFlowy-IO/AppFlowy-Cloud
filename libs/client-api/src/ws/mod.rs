@@ -1,6 +1,7 @@
 mod client;
 mod error;
 mod handler;
+mod msg_queue;
 mod state;
 
 pub use client::*;

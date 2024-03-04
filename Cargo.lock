@@ -325,7 +325,7 @@ dependencies = [
  "gotrue",
  "gotrue-entity",
  "jwt",
- "redis 0.23.3",
+ "redis 0.24.0",
  "reqwest",
  "serde",
  "serde_json",
@@ -468,9 +468,9 @@ checksum = "7079075b41f533b8c61d2a4d073c4676e1f8b249ff94a393b0595db304e0dd87"
 
 [[package]]
 name = "anyhow"
-version = "1.0.79"
+version = "1.0.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
+checksum = "5ad32ce52e4161730f7098c077cd2ed6229b5804ccf99e5366be1ab72a98b4e1"
 
 [[package]]
 name = "app-error"
@@ -1253,7 +1253,6 @@ dependencies = [
  "gotrue",
  "gotrue-entity",
  "governor",
- "log",
  "mime",
  "mime_guess",
  "parking_lot 0.12.1",
@@ -1283,6 +1282,7 @@ dependencies = [
 name = "client-api-test-util"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "assert-json-diff",
  "bytes",
  "client-api",
@@ -4152,6 +4152,7 @@ dependencies = [
  "actix",
  "anyhow",
  "bincode",
+ "brotli",
  "bytes",
  "collab",
  "collab-entity",
@@ -4198,8 +4199,6 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "ryu",
- "sha1_smol",
- "socket2 0.4.10",
  "tokio",
  "tokio-native-tls",
  "tokio-retry",

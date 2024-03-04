@@ -21,7 +21,7 @@ use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
-use super::collab::storage::CollabStorageImpl;
+use super::collab::storage::CollabAccessControlStorage;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
 /// Return true if the user is a new user
@@ -59,7 +59,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
     // It's essential to cache the user's role because subsequent actions will rely on this cached information.
     state
       .workspace_access_control
-      .insert_workspace_role(
+      .insert_role(
         &new_uid,
         &Uuid::parse_str(&workspace_id).unwrap(),
         AFRole::Owner,
@@ -72,7 +72,7 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       &workspace_id,
       &mut txn,
       vec![GetStartedDocumentTemplate],
-      &state.collab_storage,
+      &state.collab_access_control_storage,
     )
     .await?;
   }
@@ -91,8 +91,7 @@ pub async fn initialize_workspace_for_user<T>(
   workspace_id: &str,
   txn: &mut Transaction<'_, sqlx::Postgres>,
   templates: Vec<T>,
-  // state: &AppState,
-  collab_storage: &Arc<CollabStorageImpl>,
+  collab_storage: &Arc<CollabAccessControlStorage>,
 ) -> Result<(), AppError>
 where
   T: WorkspaceTemplate + Send + Sync + 'static,
@@ -111,7 +110,7 @@ where
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
     collab_storage
-      .upsert_collab_with_transaction(
+      .insert_or_update_collab(
         workspace_id,
         &uid,
         CollabParams {

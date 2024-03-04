@@ -3,7 +3,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 use std::fmt::Display;
 
-use crate::collaborate::RealtimeAccessControl;
+use crate::server::RealtimeAccessControl;
 use anyhow::anyhow;
 
 use collab::core::collab::TransactionMutExt;

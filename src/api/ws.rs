@@ -5,14 +5,13 @@ use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use std::sync::Arc;
 
-use realtime::client::RealtimeClient;
-use realtime::collaborate::RealtimeServer;
-
 use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
 use crate::biz::casbin::RealtimeCollabAccessControlImpl;
+use realtime::client::rt_client::RealtimeClient;
+use realtime::server::RealtimeServer;
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::{info, instrument};
@@ -22,7 +21,7 @@ pub fn ws_scope() -> Scope {
 }
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
-pub type CollabServerImpl = Addr<
+pub type RealtimeServerAddr = Addr<
   RealtimeServer<
     CollabAccessControlStorage,
     Arc<RealtimeUserImpl>,
@@ -37,7 +36,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
-  server: Data<CollabServerImpl>,
+  server: Data<RealtimeServerAddr>,
 ) -> Result<HttpResponse> {
   let (token, device_id) = path.into_inner();
   let auth = authorization_from_token(token.as_str(), &state)?;

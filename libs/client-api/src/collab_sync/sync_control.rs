@@ -322,9 +322,9 @@ where
       return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
     }
 
-    if let Some(msg_seq_num) = msg.seq_num() {
+    if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
       let prev_seq_num = broadcast_seq_num.load(Ordering::SeqCst);
-      broadcast_seq_num.store(msg_seq_num, Ordering::SeqCst);
+      broadcast_seq_num.store(data.seq_num, Ordering::SeqCst);
 
       // In the debug mode, we use a shorter debounce duration to speed up the test.
       let debounce_duration = if cfg!(debug_assertions) {
@@ -334,13 +334,14 @@ where
       };
 
       trace!(
-        "current_seq_num: {}, prev_seq_num: {}",
-        msg_seq_num,
+        "receive {} broadcast data, current: {}, prev: {}",
+        object.object_id,
+        data.seq_num,
         prev_seq_num
       );
 
       // Check if the received seq_num indicates missing updates.
-      if msg_seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
+      if data.seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
         && sink.can_queue_init_sync()
         && last_sync_time.should_sync(debounce_duration).await
       {
@@ -348,7 +349,7 @@ where
           info!(
             "{} missing updates len: {}, start init sync",
             object.object_id,
-            msg_seq_num - prev_seq_num,
+            data.seq_num - prev_seq_num,
           );
           _init_sync(origin.clone(), object, &lock_guard, sink);
           return Ok(());

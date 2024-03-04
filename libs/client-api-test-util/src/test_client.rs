@@ -754,7 +754,7 @@ pub async fn assert_client_collab_include_value_within_30_secs(
         if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive)).is_ok() {
           return Ok(());
         }
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
       }
     }
   }

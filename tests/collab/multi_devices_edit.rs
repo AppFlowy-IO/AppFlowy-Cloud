@@ -396,6 +396,7 @@ async fn init_sync_when_missing_updates_test() {
   // initialization sync for Client 2.
   //
   // This ensures that all clients are synchronized and have the latest information, with the initiation sync being triggered based on the comparison of sequence numbers to maintain consistency across the system.
+  println!("client_2 enable_receive_message");
   client_2.ws_client.enable_receive_message();
   client_1
     .collab_by_object_id

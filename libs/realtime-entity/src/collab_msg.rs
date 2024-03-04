@@ -522,7 +522,7 @@ pub struct BroadcastSync {
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))
   payload: Bytes,
-  seq_num: u32,
+  pub seq_num: u32,
 }
 
 impl BroadcastSync {
@@ -791,13 +791,6 @@ impl ServerCollabMessage {
       ServerCollabMessage::ServerInitSync(value) => &value.object_id,
       ServerCollabMessage::AwarenessSync(value) => &value.object_id,
       ServerCollabMessage::ServerBroadcast(value) => &value.object_id,
-    }
-  }
-
-  pub fn seq_num(&self) -> Option<u32> {
-    match self {
-      ServerCollabMessage::ServerBroadcast(data) => Some(data.seq_num),
-      _ => None,
     }
   }
 

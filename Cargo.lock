@@ -6255,6 +6255,7 @@ dependencies = [
  "http 0.2.11",
  "httparse",
  "js-sys",
+ "percent-encoding",
  "thiserror",
  "tokio",
  "tokio-tungstenite",

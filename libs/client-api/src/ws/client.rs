@@ -59,14 +59,14 @@ type AFRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMidd
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub(crate) type StateNotify = parking_lot::Mutex<ConnectStateNotify>;
-pub(crate) type CurrentAddr = parking_lot::Mutex<Option<ConnectInfo>>;
+pub(crate) type CurrentConnInfo = parking_lot::Mutex<Option<ConnectInfo>>;
 
 /// The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
 /// 50960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
 const MAXIMUM_MESSAGE_SIZE: usize = 40960;
 const MAXIMUM_BATCH_MESSAGE_SIZE: usize = 30960;
 pub struct WSClient {
-  addr: Arc<CurrentAddr>,
+  current_conn_info: Arc<CurrentConnInfo>,
   config: WSClientConfig,
   state_notify: Arc<StateNotify>,
   /// Sender used to send messages to the websocket.
@@ -98,7 +98,7 @@ impl WSClient {
     let (rt_msg_sender, _) = channel(config.buffer_capacity);
     let aggregate_queue = Arc::new(AggregateMessageQueue::new(MAXIMUM_BATCH_MESSAGE_SIZE));
     WSClient {
-      addr: Arc::new(parking_lot::Mutex::new(None)),
+      current_conn_info: Arc::new(parking_lot::Mutex::new(None)),
       config,
       state_notify,
       ws_msg_sender,
@@ -128,14 +128,14 @@ impl WSClient {
     self.set_state(ConnectState::Connecting).await;
     let (stop_ws_msg_loop_tx, stop_ws_msg_loop_rx) = oneshot::channel();
     *self.stop_ws_msg_loop_tx.lock().await = Some(stop_ws_msg_loop_tx);
-    *self.addr.lock() = Some(connect_info.clone());
+    *self.current_conn_info.lock() = Some(connect_info.clone());
 
     // 2. start connecting
     let conn_result = retry_connect(
       url.to_string(),
       connect_info,
       Arc::downgrade(&self.state_notify),
-      Arc::downgrade(&self.addr),
+      Arc::downgrade(&self.current_conn_info),
     )
     .await;
 
@@ -386,7 +386,7 @@ impl WSClient {
       reason: Cow::from("client disconnect"),
     })));
 
-    *self.addr.lock() = None;
+    *self.current_conn_info.lock() = None;
     self.set_state(ConnectState::Closed).await;
   }
 

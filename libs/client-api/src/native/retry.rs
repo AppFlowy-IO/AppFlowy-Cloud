@@ -1,5 +1,7 @@
 use crate::notify::ClientToken;
-use crate::ws::{ConnectInfo, ConnectState, ConnectStateNotify, CurrentAddr, StateNotify, WSError};
+use crate::ws::{
+  ConnectInfo, ConnectState, ConnectStateNotify, CurrentConnInfo, StateNotify, WSError,
+};
 use app_error::gotrue::GoTrueError;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
@@ -69,7 +71,7 @@ pub async fn retry_connect(
   url: String,
   info: ConnectInfo,
   state_notify: Weak<StateNotify>,
-  current_addr: Weak<CurrentAddr>,
+  current_addr: Weak<CurrentConnInfo>,
 ) -> Result<WebSocketStream, WSError> {
   let stream = RetryIf::spawn(
     FixedInterval::new(Duration::from_secs(10)),

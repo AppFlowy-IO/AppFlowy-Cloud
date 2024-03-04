@@ -6,6 +6,7 @@ use governor::{Quota, RateLimiter};
 use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::FutureExt;
@@ -131,7 +132,7 @@ impl WSClient {
     *self.current_conn_info.lock() = Some(connect_info.clone());
 
     // 2. start connecting
-    trace!("start connecting to {}, {:?}", url, connect_info);
+    trace!("start connecting to {}, {}", url, connect_info);
     let conn_result = retry_connect(
       url.to_string(),
       connect_info,
@@ -496,11 +497,20 @@ async fn send_message(
   Ok(())
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ConnectInfo {
   pub access_token: String,
   pub client_version: Version,
   pub device_id: String,
+}
+
+impl Display for ConnectInfo {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "access_token: xx, client_version: {}, device_id: {}",
+      self.client_version, self.device_id
+    ))
+  }
 }
 
 impl From<ConnectInfo> for HeaderMap {

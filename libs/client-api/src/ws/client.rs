@@ -131,6 +131,7 @@ impl WSClient {
     *self.current_conn_info.lock() = Some(connect_info.clone());
 
     // 2. start connecting
+    trace!("start connecting to {}, {:?}", url, connect_info);
     let conn_result = retry_connect(
       url.to_string(),
       connect_info,

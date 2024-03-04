@@ -22,7 +22,6 @@ impl WebSocketStream {
     let query_string = header_map_to_query_string(&headers);
     // Construct the full WebSocket URL with query parameters
     let conn_url = format!("{}?{}", url, query_string);
-    web_sys::console::log_1(&format!("Connecting to {}", conn_url).into());
     match web_sys::WebSocket::new(&conn_url) {
       Err(_err) => Err(crate::Error::Url(
         crate::error::UrlError::UnsupportedUrlScheme,

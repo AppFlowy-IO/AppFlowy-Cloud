@@ -1,12 +1,8 @@
-use crate::client::ClientWSSink;
-use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
-use crate::collaborate::permission::RealtimeAccessControl;
-use crate::collaborate::RealtimeMetrics;
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
 };
 use crate::error::{RealtimeError, StreamError};
+use crate::server::{RealtimeAccessControl, RealtimeMetrics};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
 use anyhow::Result;
@@ -19,6 +15,9 @@ use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::SystemMessage;
 use std::collections::HashSet;
 
+use crate::client::rt_client::RealtimeClientWebsocketSink;
+use crate::server::collaborate::all_group::AllGroup;
+use crate::server::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
@@ -31,7 +30,7 @@ pub struct RealtimeServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
-  groups: Arc<AllCollabGroup<S, U, AC>>,
+  groups: Arc<AllGroup<S, U, AC>>,
   user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
@@ -67,7 +66,7 @@ where
     mut command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
-    let groups = Arc::new(AllCollabGroup::new(storage.clone(), access_control.clone()));
+    let groups = Arc::new(AllGroup::new(storage.clone(), access_control.clone()));
     let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
@@ -146,7 +145,7 @@ where
     user: &U,
     group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender<U>>>,
     client_stream_by_user: &Arc<DashMap<U, CollabClientStream>>,
-    groups: &Arc<AllCollabGroup<S, U, AC>>,
+    groups: &Arc<AllGroup<S, U, AC>>,
     edit_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
     access_control: &Arc<AC>,
     collab_message: ClientCollabMessage,
@@ -194,7 +193,7 @@ where
 }
 
 async fn remove_user<S, U, AC>(
-  groups: &Arc<AllCollabGroup<S, U, AC>>,
+  groups: &Arc<AllGroup<S, U, AC>>,
   editing_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
   user: &U,
 ) where
@@ -233,7 +232,7 @@ where
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
-    let client_stream = CollabClientStream::new(ClientWSSink(new_conn.socket));
+    let client_stream = CollabClientStream::new(new_conn.socket);
     let groups = self.groups.clone();
     let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
@@ -437,7 +436,7 @@ pub async fn broadcast_client_collab_message<U>(
 #[instrument(level = "debug", skip_all)]
 async fn remove_user_from_group<S, U, AC>(
   user: &U,
-  groups: &Arc<AllCollabGroup<S, U, AC>>,
+  groups: &Arc<AllGroup<S, U, AC>>,
   editing: &Editing,
 ) where
   S: CollabStorage,
@@ -468,7 +467,7 @@ where
 }
 
 pub struct CollabClientStream {
-  sink: ClientWSSink,
+  sink: RealtimeClientWebsocketSink,
   /// Used to receive messages from the collab server. The message will forward to the [CollabBroadcast] which
   /// will broadcast the message to all connected clients.
   ///
@@ -478,7 +477,7 @@ pub struct CollabClientStream {
 }
 
 impl CollabClientStream {
-  pub fn new(sink: ClientWSSink) -> Self {
+  pub fn new(sink: RealtimeClientWebsocketSink) -> Self {
     // When receive a new connection, create a new [ClientStream] that holds the connection's websocket
     let (stream_tx, _) = tokio::sync::broadcast::channel(1000);
     Self { sink, stream_tx }

@@ -1,4 +1,3 @@
-use crate::collaborate::{CollabBroadcast, Subscription};
 use crate::entities::RealtimeUser;
 use anyhow::Error;
 use collab::core::collab_plugin::EncodedCollab;
@@ -8,6 +7,7 @@ use collab_entity::CollabType;
 use dashmap::DashMap;
 use std::rc::Rc;
 
+use crate::server::collaborate::group_broadcast::{CollabBroadcast, Subscription};
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
 use tokio::sync::Mutex;

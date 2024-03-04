@@ -34,7 +34,7 @@ use anyhow::{Context, Error};
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
-use realtime::collaborate::{RTCommandReceiver, RTCommandSender, RealtimeServer};
+use realtime::server::{RTCommandReceiver, RTCommandSender, RealtimeServer};
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};

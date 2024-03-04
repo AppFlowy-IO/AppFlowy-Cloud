@@ -1,6 +1,7 @@
-use crate::collaborate::group::CollabGroup;
-use crate::collaborate::{CollabStoragePlugin, RealtimeAccessControl};
 use crate::entities::RealtimeUser;
+use crate::server::collaborate::group::CollabGroup;
+use crate::server::collaborate::plugin::CollabStoragePlugin;
+use crate::server::RealtimeAccessControl;
 use anyhow::Error;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -10,13 +11,13 @@ use database::collab::CollabStorage;
 use std::sync::Arc;
 use tracing::{debug, error, instrument};
 
-pub struct AllCollabGroup<S, U, AC> {
+pub struct AllGroup<S, U, AC> {
   group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,
   storage: Arc<S>,
   access_control: Arc<AC>,
 }
 
-impl<S, U, AC> AllCollabGroup<S, U, AC>
+impl<S, U, AC> AllGroup<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,

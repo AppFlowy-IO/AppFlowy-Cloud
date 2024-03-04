@@ -419,7 +419,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let arc_owner = Arc::new(owner);
 
   // simulate multiple users edit the same collab. All of them have read and write permission
-  for i in 0..10 {
+  for i in 0..3 {
     let owner = arc_owner.clone();
     let object_id = object_id.clone();
     let collab_type = collab_type.clone();

@@ -1,10 +1,9 @@
-use crate::collaborate::all_group::AllCollabGroup;
-use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
-use crate::collaborate::{
-  broadcast_client_collab_message, CollabClientStream, RealtimeAccessControl,
-};
 use crate::entities::{Editing, RealtimeUser};
 use crate::error::RealtimeError;
+use crate::server::collaborate::all_group::AllGroup;
+use crate::server::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
+use crate::server::RealtimeAccessControl;
+use crate::server::{broadcast_client_collab_message, CollabClientStream};
 use anyhow::anyhow;
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
@@ -31,7 +30,7 @@ pub type GroupCommandSender<U> = tokio::sync::mpsc::Sender<GroupCommand<U>>;
 pub type GroupCommandReceiver<U> = tokio::sync::mpsc::Receiver<GroupCommand<U>>;
 
 pub struct GroupCommandRunner<S, U, AC> {
-  pub all_groups: Arc<AllCollabGroup<S, U, AC>>,
+  pub all_groups: Arc<AllGroup<S, U, AC>>,
   pub client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
   pub edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   pub access_control: Arc<AC>,

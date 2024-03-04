@@ -43,7 +43,9 @@ pub enum SinkSignal {
   ProcessAfterMillis(u64),
 }
 
-const SEND_INTERVAL: Duration = Duration::from_secs(10);
+const SEND_INTERVAL: Duration = Duration::from_secs(8);
+
+pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
 
 /// Use to sync the [Msg] to the remote.
 pub struct CollabSink<Sink, Msg> {
@@ -147,7 +149,9 @@ where
     drop(msg_queue);
 
     // Notify the sink to process the next message after 500ms.
-    let _ = self.notifier.send(SinkSignal::ProcessAfterMillis(500));
+    let _ = self
+      .notifier
+      .send(SinkSignal::ProcessAfterMillis(COLLAB_SINK_DELAY_MILLIS));
   }
 
   /// When queue the init message, the sink will clear all the pending messages and send the init

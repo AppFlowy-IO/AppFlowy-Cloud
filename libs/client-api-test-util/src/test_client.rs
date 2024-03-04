@@ -248,7 +248,7 @@ impl TestClient {
 
   pub async fn wait_object_sync_complete(&self, object_id: &str) -> Result<(), Error> {
     self
-      .wait_object_sync_complete_with_secs(object_id, 30)
+      .wait_object_sync_complete_with_secs(object_id, 60)
       .await
   }
 

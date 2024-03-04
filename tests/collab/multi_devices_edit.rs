@@ -1,5 +1,5 @@
 use crate::collab::util::generate_random_string;
-use client_api::collab_sync::NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC;
+use client_api::collab_sync::{COLLAB_SINK_DELAY_MILLIS, NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC};
 use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
@@ -353,7 +353,7 @@ async fn init_sync_when_missing_updates_test() {
       .collab
       .lock()
       .insert("2", text.clone());
-    sleep(Duration::from_millis(300)).await;
+    sleep(Duration::from_millis(COLLAB_SINK_DELAY_MILLIS + 200)).await;
   }
   client_1
     .wait_object_sync_complete(&object_id)

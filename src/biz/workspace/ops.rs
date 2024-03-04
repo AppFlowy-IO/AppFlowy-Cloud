@@ -176,7 +176,10 @@ pub async fn invite_workspace_members(
     .await?;
   }
 
-  txn.commit().await?;
+  txn
+    .commit()
+    .await
+    .context("Commit transaction to invite workspace members")?;
   Ok(())
 }
 

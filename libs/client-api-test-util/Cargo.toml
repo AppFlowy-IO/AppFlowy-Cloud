@@ -9,7 +9,7 @@ edition = "2021"
 bytes = "1.5.0"
 mime = "0.3.17"
 serde_json = "1.0.111"
-tokio = { version = "1.0", features = ["sync"] }
+tokio = { workspace = true, features = ["sync"] }
 tokio-stream = "0.1.14"
 tracing.workspace = true
 collab-folder.workspace = true

@@ -13,7 +13,7 @@ serde_json.workspace = true
 futures-util = "0.3.30"
 anyhow = "1.0.79"
 reqwest = { version = "0.11.23", default-features = false, features = ["json", "rustls-tls", "cookies"] }
-tokio = { version = "1.35.1", features = ["sync", "macros"] }
+tokio = { workspace = true, features = ["sync", "macros"] }
 infra = { path = "../infra" }
 gotrue-entity = { path = "../gotrue-entity" }
 tracing = "0.1"

@@ -22,7 +22,7 @@ pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 1024 * 1024; // 1 MB
 #[cfg(feature = "rt_compress")]
 const COMPRESSED_PREFIX: &[u8] = b"COMPRESSED:1";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 #[cfg_attr(
   feature = "actix_message",
   derive(actix::Message),
@@ -135,7 +135,7 @@ impl Display for RealtimeMessage {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub enum SystemMessage {
   RateLimit(u32),
   KickOff,

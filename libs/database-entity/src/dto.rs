@@ -294,7 +294,7 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 #[repr(i32)]
 pub enum AFRole {
   Owner = 1,
@@ -473,7 +473,7 @@ pub struct AFUserWorkspaceInfo {
   pub workspaces: Vec<AFWorkspace>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct AFWorkspaceMember {
   pub name: String,
   pub email: String,

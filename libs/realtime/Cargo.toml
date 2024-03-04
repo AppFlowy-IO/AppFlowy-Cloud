@@ -41,6 +41,7 @@ realtime-protocol.workspace = true
 uuid = { version = "1", features = ["v4"] }
 md5 = "0.7"
 prometheus-client = "0.22.1"
+indexmap = "2.2.5"
 
 [dev-dependencies]
 actix = "0.13"

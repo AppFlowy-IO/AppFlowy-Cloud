@@ -33,6 +33,7 @@ use collab_entity::CollabType;
 use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;
+use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
@@ -46,6 +47,7 @@ use std::time::Duration;
 use tracing::{error, event, info, instrument, trace, warn};
 use url::Url;
 
+use crate::ws::ConnectInfo;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 
@@ -109,7 +111,7 @@ pub struct Client {
   pub base_url: String,
   ws_addr: String,
   pub device_id: String,
-  pub client_id: String,
+  pub client_version: Version,
   pub(crate) token: Arc<RwLock<ClientToken>>,
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
@@ -137,6 +139,7 @@ impl Client {
     client_id: &str,
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
+    let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 5, 0));
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
@@ -147,7 +150,7 @@ impl Client {
       refresh_ret_txs: Default::default(),
       config,
       device_id: device_id.to_string(),
-      client_id: client_id.to_string(),
+      client_version,
     }
   }
 
@@ -1063,13 +1066,20 @@ impl Client {
       .into_data()
   }
 
-  pub async fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
+  pub fn ws_url(&self) -> String {
+    format!("{}/v1", self.ws_addr)
+  }
+
+  pub async fn ws_connect_info(&self) -> Result<ConnectInfo, AppResponseError> {
     self
       .refresh_if_expired(chrono::Local::now().timestamp())
       .await?;
 
-    let access_token = self.access_token()?;
-    Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
+    Ok(ConnectInfo {
+      access_token: self.access_token()?,
+      client_version: self.client_version.clone(),
+      device_id: self.device_id.clone(),
+    })
   }
 
   pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
@@ -1256,7 +1266,7 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", self.client_id.clone())
+      .header("client-version", self.client_version.to_string())
       .header("client-timestamp", ts_now.to_string())
       .header("device_id", self.device_id.clone())
       .bearer_auth(access_token);

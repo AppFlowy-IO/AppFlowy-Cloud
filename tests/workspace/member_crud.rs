@@ -49,7 +49,7 @@ async fn add_workspace_members_not_enough_permission() {
 
   // client 2 add client 3 to client 1's workspace but permission denied
   let error = member_1
-    .try_add_workspace_member(&workspace_id, &member_2, AFRole::Member)
+    .invite_and_accepted_workspace_member(&workspace_id, &member_2, AFRole::Member)
     .await
     .unwrap_err();
   assert_eq!(error.code, ErrorCode::NotEnoughPermissions);

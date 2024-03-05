@@ -305,7 +305,7 @@ pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<bool, sqlx::Error> {
   let hours = Utc::now() - Duration::hours(SNAPSHOT_PER_HOUR);
   let latest_snapshot_time: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
-    "SELECT created_at FROM af_collab_snapshot 
+    "SELECT created_at FROM af_collab_snapshot
          WHERE oid = $1 ORDER BY created_at DESC LIMIT 1",
   )
   .bind(oid)
@@ -332,7 +332,7 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMeta,
     r#"
-      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id) 
+      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING sid AS snapshot_id, oid AS object_id, created_at
     "#,
@@ -348,7 +348,7 @@ pub async fn create_snapshot_and_maintain_limit<'a>(
   // When a new snapshot is created that surpasses the preset limit, older snapshots will be deleted to maintain the limit
   sqlx::query(
     r#"
-       DELETE FROM af_collab_snapshot 
+       DELETE FROM af_collab_snapshot
        WHERE oid = $1 AND sid NOT IN ( SELECT sid FROM af_collab_snapshot WHERE oid = $1 ORDER BY created_at DESC LIMIT $2)
       "#,
     )
@@ -392,7 +392,7 @@ pub async fn get_all_collab_snapshot_meta(
     AFSnapshotMeta,
     r#"
     SELECT sid as "snapshot_id", oid as "object_id", created_at
-    FROM af_collab_snapshot 
+    FROM af_collab_snapshot
     WHERE oid = $1 AND deleted_at IS NULL
     ORDER BY created_at DESC;
     "#,

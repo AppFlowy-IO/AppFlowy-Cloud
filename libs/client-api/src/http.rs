@@ -2,7 +2,9 @@ use crate::notify::{ClientToken, TokenStateReceiver};
 use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
-use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceParam, PatchWorkspaceParam, WorkspaceMemberInvitation,
+};
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 
@@ -10,10 +12,11 @@ use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
-  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
-  BatchQueryCollabResult, CollabMemberIdentify, CreateCollabParams, DeleteCollabParams,
-  InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
+  AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult,
+  CollabMemberIdentify, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams,
+  QueryCollab, QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::Grant;
@@ -605,6 +608,58 @@ impl Client {
       .into_data()
   }
 
+  pub async fn invite_workspace_members(
+    &self,
+    workspace_id: &str,
+    invitations: Vec<WorkspaceMemberInvitation>,
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/invite", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&invitations)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  pub async fn list_workspace_invitations(
+    &self,
+    status: Option<AFWorkspaceInvitationStatus>,
+  ) -> Result<Vec<AFWorkspaceInvitation>, AppResponseError> {
+    let url = format!("{}/api/workspace/invite", self.base_url);
+    let mut builder = self.http_client_with_auth(Method::GET, &url).await?;
+    if let Some(status) = status {
+      builder = builder.query(&[("status", status)])
+    }
+    let resp = builder.send().await?;
+    log_request_id(&resp);
+    let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
+    res.into_data()
+  }
+
+  pub async fn accept_workspace_invitation(
+    &self,
+    invitation_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/accept-invite/{}",
+      self.base_url, invitation_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&())
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  // deprecated
   #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,

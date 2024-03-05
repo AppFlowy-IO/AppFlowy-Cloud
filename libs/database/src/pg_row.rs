@@ -1,7 +1,9 @@
 use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
-use database_entity::dto::{AFAccessLevel, AFRole, AFUserProfile, AFWorkspace};
+use database_entity::dto::{
+  AFAccessLevel, AFRole, AFUserProfile, AFWorkspace, AFWorkspaceInvitationStatus,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -171,4 +173,13 @@ pub struct AFSnapshotRow {
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: DateTime<Utc>,
   pub workspace_id: Uuid,
+}
+
+#[derive(FromRow, Deserialize, Serialize)]
+pub struct AFWorkspaceInvitationMinimal {
+  pub workspace_id: Uuid,
+  pub inviter_uid: i64,
+  pub invitee_uid: i64,
+  pub status: AFWorkspaceInvitationStatus,
+  pub role: AFRole,
 }

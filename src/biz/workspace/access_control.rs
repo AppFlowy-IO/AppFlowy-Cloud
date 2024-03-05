@@ -9,7 +9,9 @@ use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::api::workspace::{WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN};
+use crate::api::workspace::{
+  WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
+};
 use crate::biz::casbin::access_control::Action;
 use crate::state::UserCache;
 use actix_router::{Path, ResourceDef, Url};
@@ -75,6 +77,11 @@ where
             (Method::GET, AFRole::Owner),
           ]
           .into(),
+        ),
+        (
+          // Only the Owner can invite a user to the workspace
+          ResourceDef::new(WORKSPACE_INVITE_PATTERN),
+          [(Method::POST, AFRole::Owner)].into(),
         ),
       ],
       access_control,

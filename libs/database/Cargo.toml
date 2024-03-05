@@ -12,7 +12,7 @@ validator = { version = "0.16", features = ["validator_derive", "derive"] }
 database-entity.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "validation_error", "s3_error"] }
 
-tokio = { version = "1.35", features = ["sync"] }
+tokio = { workspace = true, features = ["sync"] }
 async-trait = "0.1.77"
 anyhow = "1.0.79"
 serde.workspace = true

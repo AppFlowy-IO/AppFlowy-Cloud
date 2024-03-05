@@ -551,6 +551,7 @@ dependencies = [
  "rust-s3",
  "scraper",
  "secrecy",
+ "semver",
  "serde",
  "serde_json",
  "shared-entity",
@@ -1261,6 +1262,7 @@ dependencies = [
  "realtime-protocol",
  "reqwest",
  "scraper",
+ "semver",
  "serde",
  "serde_json",
  "serde_repr",
@@ -3115,9 +3117,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "log",
@@ -4128,6 +4130,7 @@ dependencies = [
  "realtime-entity",
  "realtime-protocol",
  "reqwest",
+ "semver",
  "serde",
  "serde-aux",
  "serde_json",
@@ -4781,9 +4784,9 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "1.0.21"
+version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97ed7a9823b74f99c7742f5336af7be5ecd3eeafcb1507d1fa93347b1d589b0"
+checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
 
 [[package]]
 name = "serde"
@@ -5556,9 +5559,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.35.1"
+version = "1.36.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c89b4efa943be685f629b149f53829423f8f5531ea21249408e8e2f8671ec104"
+checksum = "61285f6515fa018fb2d1e46eb21223fff441ee8db5d0f1435e8ab4f5cdb80931"
 dependencies = [
  "backtrace",
  "bytes",
@@ -6252,6 +6255,7 @@ dependencies = [
  "http 0.2.11",
  "httparse",
  "js-sys",
+ "percent-encoding",
  "thiserror",
  "tokio",
  "tokio-tungstenite",

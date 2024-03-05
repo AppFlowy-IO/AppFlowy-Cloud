@@ -47,7 +47,6 @@ impl RealtimeMetrics {
   }
 
   pub fn record_encode_collab_mem_hit_rate(&self, rate: f64) {
-    trace!("[metrics]: encode collab hit rate: {}", rate);
     self.encode_collab_mem_hit_rate.set(rate);
   }
 

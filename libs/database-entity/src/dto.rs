@@ -481,4 +481,35 @@ pub struct AFWorkspaceMember {
   pub avatar_url: Option<String>,
 }
 
-// pub type AFBlobMetadata = AFBlobMetadataRow;
+#[derive(Deserialize, Serialize, Debug)]
+pub struct AFWorkspaceInvitation {
+  pub invite_id: Uuid,
+  pub workspace_id: Uuid,
+  pub workspace_name: Option<String>,
+  pub inviter_email: Option<String>,
+  pub inviter_name: Option<String>,
+  pub status: AFWorkspaceInvitationStatus,
+  pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[repr(i16)]
+pub enum AFWorkspaceInvitationStatus {
+  Pending = 0,
+  Accepted = 1,
+  Rejected = 2,
+}
+
+impl From<i16> for AFWorkspaceInvitationStatus {
+  fn from(value: i16) -> Self {
+    match value {
+      0 => AFWorkspaceInvitationStatus::Pending,
+      1 => AFWorkspaceInvitationStatus::Accepted,
+      2 => AFWorkspaceInvitationStatus::Rejected,
+      _ => {
+        error!("Invalid role id: {}", value);
+        AFWorkspaceInvitationStatus::Pending
+      },
+    }
+  }
+}

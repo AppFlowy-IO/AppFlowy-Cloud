@@ -433,8 +433,13 @@ struct LastSyncTime {
 
 impl LastSyncTime {
   fn new() -> Self {
+    let now = Instant::now();
+    let one_hour = Duration::from_secs(3600);
+    // Use checked_sub to safely attempt subtraction, falling back to 'now' if underflow would occur
+    let one_hour_ago = now.checked_sub(one_hour).unwrap_or(now);
+
     LastSyncTime {
-      last_sync: Mutex::new(Instant::now() - Duration::from_secs(3600)),
+      last_sync: Mutex::new(one_hour_ago),
     }
   }
 

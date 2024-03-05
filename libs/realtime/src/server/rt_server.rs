@@ -427,7 +427,7 @@ pub async fn broadcast_client_collab_message<U>(
       .stream_tx
       .send(Ok(RealtimeMessage::ClientCollabV1(vec![collab_message])));
     if let Err(err) = err {
-      error!("Send message to client error: {}", err);
+      warn!("Send message to client error: {}", err);
     }
   }
 }

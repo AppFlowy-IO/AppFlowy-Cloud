@@ -12,6 +12,7 @@ use database::collab::CollabStorage;
 
 use anyhow::anyhow;
 
+use semver::Version;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -37,6 +38,8 @@ pub struct RealtimeClient<
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
   message_count: usize,
   interval_start: Instant,
+  #[allow(dead_code)]
+  client_version: Version,
 }
 
 impl<U, S, AC> RealtimeClient<U, S, AC>
@@ -51,6 +54,7 @@ where
     server: Addr<RealtimeServer<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
+    client_version: Version,
   ) -> Self {
     Self {
       user,
@@ -62,6 +66,7 @@ where
       session_id: uuid::Uuid::new_v4().to_string(),
       message_count: 0,
       interval_start: Instant::now(),
+      client_version,
     }
   }
 

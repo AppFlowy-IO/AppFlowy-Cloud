@@ -17,7 +17,7 @@ use realtime::client::rt_client::RealtimeClient;
 use realtime::server::RealtimeServer;
 
 use semver::Version;
-use serde::Deserialize;
+
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::{debug, error, instrument, trace};
@@ -133,7 +133,7 @@ async fn start_connect(
       {
         Ok(response) => Ok(response),
         Err(e) => {
-          tracing::error!("🔴ws connection error: {:?}", e);
+          error!("🔴ws connection error: {:?}", e);
           Err(e)
         },
       }
@@ -192,7 +192,6 @@ impl ExtractParameter for HttpRequest {
 }
 
 impl ConnectInfo {
-  // Generic constructor using the ExtractParameter trait
   fn parse_from<T: ExtractParameter>(source: &T) -> Result<Self, AppError> {
     let access_token = source.extract_param(AUTHORIZATION.as_str())?;
     let client_version_str = source.extract_param(CLIENT_VERSION)?;

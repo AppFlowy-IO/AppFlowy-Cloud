@@ -6,9 +6,12 @@ use governor::{Quota, RateLimiter};
 use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::FutureExt;
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use semver::Version;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -57,14 +60,14 @@ type AFRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMidd
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub(crate) type StateNotify = parking_lot::Mutex<ConnectStateNotify>;
-pub(crate) type CurrentAddr = parking_lot::Mutex<Option<String>>;
+pub(crate) type CurrentConnInfo = parking_lot::Mutex<Option<ConnectInfo>>;
 
 /// The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
 /// 50960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
 const MAXIMUM_MESSAGE_SIZE: usize = 40960;
 const MAXIMUM_BATCH_MESSAGE_SIZE: usize = 30960;
 pub struct WSClient {
-  addr: Arc<CurrentAddr>,
+  current_conn_info: Arc<CurrentConnInfo>,
   config: WSClientConfig,
   state_notify: Arc<StateNotify>,
   /// Sender used to send messages to the websocket.
@@ -96,7 +99,7 @@ impl WSClient {
     let (rt_msg_sender, _) = channel(config.buffer_capacity);
     let aggregate_queue = Arc::new(AggregateMessageQueue::new(MAXIMUM_BATCH_MESSAGE_SIZE));
     WSClient {
-      addr: Arc::new(parking_lot::Mutex::new(None)),
+      current_conn_info: Arc::new(parking_lot::Mutex::new(None)),
       config,
       state_notify,
       ws_msg_sender,
@@ -114,7 +117,8 @@ impl WSClient {
     }
   }
 
-  pub async fn connect(&self, addr: String, device_id: &str) -> Result<(), WSError> {
+  pub async fn connect(&self, url: &str, connect_info: ConnectInfo) -> Result<(), WSError> {
+    let device_id = connect_info.device_id.clone();
     if self.get_state().is_connecting() {
       info!("websocket is connecting, skip connect request");
       return Ok(());
@@ -125,13 +129,15 @@ impl WSClient {
     self.set_state(ConnectState::Connecting).await;
     let (stop_ws_msg_loop_tx, stop_ws_msg_loop_rx) = oneshot::channel();
     *self.stop_ws_msg_loop_tx.lock().await = Some(stop_ws_msg_loop_tx);
-    *self.addr.lock() = Some(addr.clone());
+    *self.current_conn_info.lock() = Some(connect_info.clone());
 
     // 2. start connecting
+    trace!("start connecting to {}, {}", url, connect_info);
     let conn_result = retry_connect(
-      &addr,
+      url.to_string(),
+      connect_info,
       Arc::downgrade(&self.state_notify),
-      Arc::downgrade(&self.addr),
+      Arc::downgrade(&self.current_conn_info),
     )
     .await;
 
@@ -166,7 +172,7 @@ impl WSClient {
     self.aggregate_queue.set_sender(tx).await;
 
     // 7. spawn a task that continuously sending client message.
-    self.spawn_send_client_message(sink, device_id, stop_ws_msg_loop_rx, rx);
+    self.spawn_send_client_message(sink, &device_id, stop_ws_msg_loop_rx, rx);
 
     // 8. start aggregating messages
     // combine multiple messages into one message to reduce the number of messages sent over the network
@@ -207,9 +213,9 @@ impl WSClient {
     mut sink: SplitSink<WebSocketStream, Message>,
     device_id: &str,
     mut stop_ws_msg_loop_rx: oneshot::Receiver<()>,
-    mut rx_2: AggregateMessagesReceiver,
+    mut aggregate_msg_rx: AggregateMessagesReceiver,
   ) {
-    let mut rx_1 = self.ws_msg_sender.subscribe();
+    let mut ws_msg_rx = self.ws_msg_sender.subscribe();
     let weak_state_notify = Arc::downgrade(&self.state_notify);
     let weak_http_sender = Arc::downgrade(&self.http_sender);
     let rate_limiter = self.rate_limiter.clone();
@@ -233,8 +239,7 @@ impl WSClient {
       loop {
         tokio::select! {
            _ = &mut stop_ws_msg_loop_rx => break,
-           Ok(msg) = rx_1.recv() => {
-              rate_limiter.read().await.until_ready().fuse().await;
+           Ok(msg) = ws_msg_rx.recv() => {
               if let Err(err) = send_message(&mut sink, &device_id, msg, &weak_http_sender).await {
                 if err.is_lost_connection() {
                   break;
@@ -242,7 +247,8 @@ impl WSClient {
                 handle_error(err);
               }
            }
-           Some(msg) = rx_2.recv() => {
+           Some(msg) = aggregate_msg_rx.recv() => {
+              rate_limiter.read().await.until_ready().fuse().await;
               if let Err(err) = send_message(&mut sink, &device_id, msg, &weak_http_sender).await {
                 if err.is_lost_connection() {
                   break;
@@ -382,7 +388,7 @@ impl WSClient {
       reason: Cow::from("client disconnect"),
     })));
 
-    *self.addr.lock() = None;
+    *self.current_conn_info.lock() = None;
     self.set_state(ConnectState::Closed).await;
   }
 
@@ -489,4 +495,40 @@ async fn send_message(
   }
 
   Ok(())
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ConnectInfo {
+  pub access_token: String,
+  pub client_version: Version,
+  pub device_id: String,
+}
+
+impl Display for ConnectInfo {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "access_token: xx, client_version: {}, device_id: {}",
+      self.client_version, self.device_id
+    ))
+  }
+}
+
+impl From<ConnectInfo> for HeaderMap {
+  fn from(info: ConnectInfo) -> Self {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+      "device-id",
+      HeaderValue::from_str(&info.device_id).unwrap_or(HeaderValue::from_static("")),
+    );
+    headers.insert(
+      "client-version",
+      HeaderValue::from_str(&info.client_version.to_string())
+        .unwrap_or(HeaderValue::from_static("unknown_client")),
+    );
+    headers.insert(
+      AUTHORIZATION,
+      HeaderValue::from_str(&info.access_token).unwrap_or(HeaderValue::from_static("")),
+    );
+    headers
+  }
 }

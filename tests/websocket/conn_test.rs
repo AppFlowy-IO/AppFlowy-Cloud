@@ -9,14 +9,8 @@ async fn realtime_connect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
-  let device_id = "fake_device_id";
-
-  tokio::spawn(async move {
-    ws_client
-      .connect(c.ws_url(device_id).await.unwrap(), device_id)
-      .await
-  });
-
+  let connect_info = c.ws_connect_info().await.unwrap();
+  tokio::spawn(async move { ws_client.connect(&c.ws_url(), connect_info).await });
   let connect_future = async {
     while let Ok(state) = state.recv().await {
       if state == ConnectState::Connected {
@@ -44,13 +38,8 @@ async fn realtime_connect_after_token_exp_test() {
 
   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
-  let device_id = "fake_device_id";
-
-  tokio::spawn(async move {
-    ws_client
-      .connect(c.ws_url(device_id).await.unwrap(), device_id)
-      .await
-  });
+  let connect_info = c.ws_connect_info().await.unwrap();
+  tokio::spawn(async move { ws_client.connect(&c.ws_url(), connect_info).await });
 
   let connect_future = async {
     while let Ok(state) = state.recv().await {
@@ -71,11 +60,8 @@ async fn realtime_connect_after_token_exp_test() {
 async fn realtime_disconnect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
-  let device_id = "fake_device_id";
-  ws_client
-    .connect(c.ws_url(device_id).await.unwrap(), device_id)
-    .await
-    .unwrap();
+  let connect_info = c.ws_connect_info().await.unwrap();
+  ws_client.connect(&c.ws_url(), connect_info).await.unwrap();
 
   let mut state = ws_client.subscribe_connect_state();
   loop {

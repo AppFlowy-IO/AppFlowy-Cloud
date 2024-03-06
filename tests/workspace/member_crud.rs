@@ -1,7 +1,7 @@
 use app_error::ErrorCode;
-use client_api_test_util::TestClient;
+use client_api_test_util::{api_client_with_email, TestClient};
 use database_entity::dto::{AFAccessLevel, AFRole, QueryCollabMembers};
-use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
+use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
 
 #[tokio::test]
 async fn get_workspace_owner_after_sign_up_test() {
@@ -73,20 +73,34 @@ async fn add_not_exist_workspace_members() {
   let c1 = TestClient::new_user_without_ws_conn().await;
   let workspace_id = c1.workspace_id().await;
   let email = format!("{}@appflowy.io", uuid::Uuid::new_v4());
-  let err = c1
-    .api_client
-    .add_workspace_members(
-      workspace_id,
-      vec![CreateWorkspaceMember {
-        email,
+  c1.api_client
+    .invite_workspace_members(
+      &workspace_id,
+      vec![WorkspaceMemberInvitation {
+        email: email.clone(),
         role: AFRole::Member,
       }],
     )
     .await
-    .unwrap_err();
+    .unwrap();
 
-  assert_eq!(err.code, ErrorCode::RecordNotFound);
+  let invited_client = api_client_with_email(&email).await;
+  let invite_id = invited_client
+    .list_workspace_invitations(None)
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .invite_id;
+  invited_client
+    .accept_workspace_invitation(invite_id.to_string().as_str())
+    .await
+    .unwrap();
+
+  let workspaces = invited_client.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.0.len(), 2);
 }
+
 #[tokio::test]
 async fn update_workspace_member_role_not_enough_permission() {
   let c1 = TestClient::new_user_without_ws_conn().await;

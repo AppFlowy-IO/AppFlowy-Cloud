@@ -246,6 +246,8 @@ async fn post_workspace_invite_handler(
   let invited_members = payload.into_inner();
   workspace::ops::invite_workspace_members(
     &state.pg_pool,
+    &state.gotrue_admin,
+    &state.gotrue_client,
     &user_uuid,
     &workspace_id,
     invited_members,

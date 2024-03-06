@@ -47,7 +47,7 @@ async fn admin_user_create_list_edit_delete() {
 
   // list users
   let users = gotrue_client
-    .admin_list_user(&admin_token.access_token)
+    .admin_list_user(&admin_token.access_token, None)
     .await
     .unwrap()
     .users;
@@ -94,7 +94,7 @@ async fn admin_user_create_list_edit_delete() {
     .unwrap();
 
   let users = gotrue_client
-    .admin_list_user(&admin_token.access_token)
+    .admin_list_user(&admin_token.access_token, None)
     .await
     .unwrap()
     .users;

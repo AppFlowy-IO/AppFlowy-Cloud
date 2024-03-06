@@ -8,6 +8,12 @@ pub struct AdminDeleteUserParams {
   pub should_soft_delete: bool,
 }
 
+#[derive(Default, Serialize)]
+pub struct InviteUserParams {
+  pub email: String,
+  pub data: serde_json::Value,
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct AdminUserParams {
   pub aud: String,

@@ -430,6 +430,19 @@ impl Client {
     )
   }
 
+  // filter is postgre sql like filter
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn admin_list_users(
+    &self,
+    filter: Option<&str>,
+  ) -> Result<Vec<User>, AppResponseError> {
+    let user = self
+      .gotrue_client
+      .admin_list_user(&self.access_token()?, filter)
+      .await?;
+    Ok(user.users)
+  }
+
   /// Only expose this method for testing
   #[cfg(debug_assertions)]
   pub fn token(&self) -> Arc<RwLock<ClientToken>> {

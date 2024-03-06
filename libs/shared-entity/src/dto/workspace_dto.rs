@@ -36,7 +36,7 @@ pub struct CreateWorkspaceMember {
   pub role: AFRole,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct WorkspaceMemberInvitation {
   pub email: String,
   pub role: AFRole,

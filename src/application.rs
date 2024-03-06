@@ -255,10 +255,7 @@ async fn setup_admin_account(
 ) -> Result<GoTrueAdmin, Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
-  let gotrue_admin = GoTrueAdmin {
-    admin_email: admin_email.to_owned(),
-    password: admin_email.to_owned().into(),
-  };
+  let gotrue_admin = GoTrueAdmin::new(admin_email.to_owned(), password.to_owned());
 
   let res_resp = gotrue_client.sign_up(admin_email, password, None).await;
   match res_resp {

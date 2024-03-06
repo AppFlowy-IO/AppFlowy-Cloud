@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("gotrue={}", level));
   let conf =
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
-  init_subscriber(&conf.app_env, filters);
+  // init_subscriber(&conf.app_env, filters);
 
   // If current build is debug and the feature "custom_env" is not enabled, load from .env
   // otherwise, load from .env.without_nginx.

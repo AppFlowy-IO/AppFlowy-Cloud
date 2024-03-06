@@ -58,7 +58,6 @@ impl ServerFixIntervalPing {
           _ = interval.tick() => {
             // send ping to server
             if let Err(err) = ping_sender.send(Message::Ping(vec![])) {
-              tracing::error!("ping send error: {}", err);
                if let Some(state) =weak_state.upgrade() {
                  state.lock().set_state(ConnectState::PingTimeout);
                }

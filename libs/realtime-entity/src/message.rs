@@ -139,6 +139,7 @@ impl Display for RealtimeMessage {
 pub enum SystemMessage {
   RateLimit(u32),
   KickOff,
+  DuplicateConnection,
 }
 
 #[cfg(test)]

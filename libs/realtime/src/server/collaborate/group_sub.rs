@@ -1,5 +1,5 @@
 use crate::entities::{Editing, RealtimeUser};
-use crate::error::StreamError;
+
 use crate::server::collaborate::all_group::AllGroup;
 use crate::server::CollabClientStream;
 use crate::server::RealtimeAccessControl;
@@ -44,7 +44,7 @@ where
     access_control: Arc<AC>,
   ) -> (
     UnboundedSenderSink<CollabMessage>,
-    ReceiverStream<Result<ClientCollabMessage, StreamError>>,
+    ReceiverStream<ClientCollabMessage>,
   )
   where
     'a: 'b,

@@ -163,7 +163,7 @@ impl CollabBroadcast {
   /// A `Subscription` instance that represents the active subscription. Dropping this structure or
   /// calling its `stop` method will unsubscribe the connection and cease all related activities.
   ///
-  pub fn subscribe<Sink, Stream, E>(
+  pub fn subscribe<Sink, Stream>(
     &self,
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
@@ -172,12 +172,10 @@ impl CollabBroadcast {
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = ClientCollabMessage> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
-    E: Into<anyhow::Error> + Send + Sync + 'static,
   {
     let cloned_origin = subscriber_origin.clone();
-    trace!("[realtime]: new subscriber: {}", subscriber_origin);
     let sink_stop_tx = {
       let mut sink = sink.clone();
       let (stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -223,7 +221,7 @@ impl CollabBroadcast {
             _ = stop_rx.recv() => break,
             result = stream.next() => {
               match result {
-                Some(Ok(collab_msg)) => {
+                Some(collab_msg) => {
                   match collab.upgrade() {
                     None => break, // break the loop if the collab is dropped
                     Some(collab) => {
@@ -236,7 +234,6 @@ impl CollabBroadcast {
                     }
                   }
                 },
-                Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
                 None => break,
               }
             }
@@ -265,6 +262,7 @@ async fn handle_client_collab_message<Sink>(
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
+  trace!("Applying client updates: {}", collab_msg);
   let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
   let origin = collab_msg.origin().clone();
   let reader = MessageReader::new(&mut decoder);
@@ -335,12 +333,18 @@ impl Subscription {
   pub async fn stop(&mut self) {
     if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
       if let Err(err) = sink_stop_tx.send(()).await {
-        error!("fail to stop sink:{}", err);
+        warn!(
+          "fail to stop sink:{}, the stream might be already stop",
+          err
+        );
       }
     }
     if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
       if let Err(err) = stream_stop_tx.send(()).await {
-        error!("fail to stop stream:{}", err);
+        warn!(
+          "fail to stop stream:{}, the stream might be already stop",
+          err
+        );
       }
     }
   }

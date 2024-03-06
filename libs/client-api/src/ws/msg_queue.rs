@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::interval;
-use tracing::{debug, error};
+use tracing::{debug, error, trace};
 use websocket::Message;
 
 pub type AggregateMessagesSender = mpsc::Sender<Message>;
@@ -95,7 +95,7 @@ impl AggregateMessageQueue {
               match rt_message.encode() {
                 Ok(data) => {
                   if let Err(e) = sender.send(Message::Binary(data)).await {
-                    error!("Failed to send message: {}", e);
+                    trace!("websocket channel close, stop sending messages");
                     break;
                   }
                 }

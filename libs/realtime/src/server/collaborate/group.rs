@@ -1,5 +1,4 @@
 use crate::entities::RealtimeUser;
-use anyhow::Error;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -123,7 +122,7 @@ where
   ///             | (3) Alter Document (if applicable)
   ///             V
   ///   Collaboration Group Updates (triggers Sink flow)
-  pub async fn subscribe<Sink, Stream, E>(
+  pub async fn subscribe<Sink, Stream>(
     &self,
     user: &U,
     subscriber_origin: CollabOrigin,
@@ -131,10 +130,15 @@ where
     stream: Stream,
   ) where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = ClientCollabMessage> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
-    E: Into<Error> + Send + Sync + 'static,
   {
+    trace!(
+      "[realtime]: new group subscriber: {}, connected members: {}",
+      subscriber_origin,
+      self.subscribers.len(),
+    );
+
     let sub =
       self
         .broadcast

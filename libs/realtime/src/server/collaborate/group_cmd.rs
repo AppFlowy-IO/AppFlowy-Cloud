@@ -4,7 +4,7 @@ use crate::server::collaborate::all_group::AllGroup;
 use crate::server::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::server::RealtimeAccessControl;
 use crate::server::{broadcast_client_collab_message, CollabClientStream};
-use anyhow::anyhow;
+
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
 use dashmap::DashMap;
@@ -60,7 +60,7 @@ where
             collab_message,
           } => {
             if let Err(err) = self.handle_collab_message(user, collab_message).await {
-              error!("Failed to handle collab message: {}", err);
+              error!("handle client message error: {}", err);
             }
           },
           GroupCommand::EncodeCollab { object_id, ret } => {
@@ -97,8 +97,14 @@ where
   ) -> Result<(), RealtimeError> {
     // 1.Check the client is connected with the websocket server.
     if self.client_stream_by_user.get(&user).is_none() {
-      let msg = anyhow!("The client stream: {} is not found, it should be created when the client is connected with this websocket server", user);
-      return Err(RealtimeError::Internal(msg));
+      // 1. **Client Not Connected**: This case occurs when there is an attempt to interact with a
+      // WebSocket server, but the client has not established a connection with the server. The action
+      // or message intended for the server cannot proceed because there is no active connection.
+      // 2. **Duplicate Connections from the Same Device**: When a client from the same device attempts
+      // to establish a new WebSocket connection while a previous connection from that device already
+      // exists, the new connection will supersede and replace the old one.
+      trace!("The client stream: {} is not found, it should be created when the client is connected with this websocket server", user);
+      return Ok(());
     }
 
     let is_group_exist = self

@@ -1,7 +1,7 @@
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
 };
-use crate::error::{RealtimeError, StreamError};
+use crate::error::RealtimeError;
 use crate::server::{RealtimeAccessControl, RealtimeMetrics};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
@@ -248,8 +248,13 @@ where
       if let Some(old_user) = old_user {
         if let Some(value) = client_stream_by_user.remove(&old_user) {
           let old_stream = value.1;
-          info!("same user connect again, remove the stream: {}", &old_user);
-          old_stream.disconnect();
+          info!(
+            "same user connect with the same device again, remove old stream: {}",
+            &old_user
+          );
+          old_stream
+            .sink
+            .do_send(RealtimeMessage::System(SystemMessage::DuplicateConnection));
         }
 
         // when a new connection is established, remove the old connection from all groups
@@ -427,7 +432,7 @@ pub async fn broadcast_client_collab_message<U>(
     let object_id = collab_message.object_id().to_string();
     let err = client_stream
       .stream_tx
-      .send(Ok(RealtimeMessage::ClientCollabV1(vec![collab_message])));
+      .send(RealtimeMessage::ClientCollabV1(vec![collab_message]));
     if let Err(err) = err {
       warn!(
         "Send user:{} message to group:{} error: {}",
@@ -435,6 +440,7 @@ pub async fn broadcast_client_collab_message<U>(
         err,
         object_id,
       );
+      client_streams.remove(user);
     }
   }
 }
@@ -480,7 +486,7 @@ pub struct CollabClientStream {
   ///
   /// The message flow:
   /// ClientSession(websocket) -> [RealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
-  stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
+  stream_tx: tokio::sync::broadcast::Sender<RealtimeMessage>,
 }
 
 impl CollabClientStream {
@@ -503,10 +509,7 @@ impl CollabClientStream {
     object_id: &str,
     sink_filter: SinkFilter,
     stream_filter: StreamFilter,
-  ) -> (
-    UnboundedSenderSink<T>,
-    ReceiverStream<Result<ClientCollabMessage, StreamError>>,
-  )
+  ) -> (UnboundedSenderSink<T>, ReceiverStream<ClientCollabMessage>)
   where
     T: Into<RealtimeMessage> + Send + Sync + 'static,
     SinkFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
@@ -538,12 +541,15 @@ impl CollabClientStream {
     let cloned_object_id = object_id.to_string();
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
-      while let Some(Ok(Ok(realtime_msg))) = stream_rx.next().await {
+      while let Some(Ok(realtime_msg)) = stream_rx.next().await {
         match realtime_msg.try_into_client_collab_message() {
           Ok(collab_messages) => {
             for msg in collab_messages {
               if stream_filter(&cloned_object_id, &msg).await {
-                let _ = tx.send(Ok(msg)).await;
+                // When the tx is closed, it means the group is removed, so the client should stop sending messages
+                if tx.send(msg).await.is_err() {
+                  break;
+                }
               } else {
                 // when then client is not allowed to send messages
                 tokio::time::sleep(Duration::from_secs(2)).await;
@@ -561,12 +567,6 @@ impl CollabClientStream {
     let client_stream = ReceiverStream::new(rx);
 
     (client_sink, client_stream)
-  }
-
-  pub fn disconnect(&self) {
-    self
-      .sink
-      .do_send(RealtimeMessage::System(SystemMessage::KickOff));
   }
 }
 

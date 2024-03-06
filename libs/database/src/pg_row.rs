@@ -175,11 +175,11 @@ pub struct AFSnapshotRow {
   pub workspace_id: Uuid,
 }
 
-#[derive(FromRow, Deserialize, Serialize)]
+#[derive(Debug, FromRow, Deserialize, Serialize)]
 pub struct AFWorkspaceInvitationMinimal {
   pub workspace_id: Uuid,
   pub inviter_uid: i64,
-  pub invitee_uid: i64,
+  pub invitee_uid: Option<i64>,
   pub status: AFWorkspaceInvitationStatus,
   pub role: AFRole,
 }

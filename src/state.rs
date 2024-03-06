@@ -4,6 +4,8 @@ use crate::biz::pg_listener::PgListeners;
 
 use crate::config::config::Config;
 use app_error::AppError;
+use gotrue::grant::{Grant, PasswordGrant};
+use secrecy::{ExposeSecret, Secret};
 
 use crate::api::metrics::RequestMetrics;
 use crate::biz::casbin::access_control::AccessControl;
@@ -40,6 +42,7 @@ pub struct AppState {
   pub pg_listeners: Arc<PgListeners>,
   pub access_control: AccessControl,
   pub metrics: AppMetrics,
+  pub gotrue_admin: GoTrueAdmin,
 }
 
 impl AppState {
@@ -130,5 +133,30 @@ impl AppMetrics {
       access_control_metrics,
       collab_metrics,
     }
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct GoTrueAdmin {
+  pub admin_email: String,
+  pub password: Secret<String>,
+}
+
+impl GoTrueAdmin {
+  pub fn new(admin_email: String, password: String) -> Self {
+    Self {
+      admin_email,
+      password: password.into(),
+    }
+  }
+
+  pub async fn token(&self, client: &gotrue::api::Client) -> Result<String, AppError> {
+    let token = client
+      .token(&Grant::Password(PasswordGrant {
+        email: self.admin_email.clone(),
+        password: self.password.expose_secret().clone(),
+      }))
+      .await?;
+    Ok(token.access_token)
   }
 }

@@ -11,8 +11,8 @@ use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
   insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
   select_workspace, select_workspace_invitations_for_user, select_workspace_member_list,
-  update_updated_at_of_workspace, update_workspace_invitation_set_invited, upsert_workspace_member,
-  upsert_workspace_member_with_txn,
+  update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
+  upsert_workspace_member, upsert_workspace_member_with_txn,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
@@ -144,10 +144,13 @@ pub async fn accept_workspace_invite(
   invite_id: &Uuid,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool.begin().await?;
-  update_workspace_invitation_set_invited(&mut txn, user_uuid, invite_id).await?;
+  update_workspace_invitation_set_status_accepted(&mut txn, user_uuid, invite_id).await?;
   let inv = get_invitation_by_id(&mut txn, invite_id).await?;
+  let invited_uid = inv
+    .invitee_uid
+    .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Invitee uid is missing for {:?}", inv)))?;
   workspace_access_control
-    .insert_role(&inv.invitee_uid, &inv.workspace_id, inv.role)
+    .insert_role(&invited_uid, &inv.workspace_id, inv.role)
     .await?;
   txn.commit().await?;
   Ok(())

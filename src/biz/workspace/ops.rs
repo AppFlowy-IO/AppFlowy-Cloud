@@ -1,4 +1,5 @@
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
+use crate::state::GoTrueAdmin;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -17,6 +18,8 @@ use database::workspace::{
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
 };
+
+use gotrue::params::InviteUserParams;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
@@ -26,7 +29,7 @@ use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::sync::Arc;
-use tracing::instrument;
+use tracing::{info, instrument};
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
@@ -159,6 +162,8 @@ pub async fn accept_workspace_invite(
 #[instrument(level = "debug", skip_all, err)]
 pub async fn invite_workspace_members(
   pg_pool: &PgPool,
+  gotrue_admin: &GoTrueAdmin,
+  gotrue_client: &gotrue::api::Client,
   inviter: &Uuid,
   workspace_id: &Uuid,
   invitations: Vec<WorkspaceMemberInvitation>,
@@ -168,7 +173,37 @@ pub async fn invite_workspace_members(
     .await
     .context("Begin transaction to invite workspace members")?;
 
+  let admin_token = gotrue_admin.token(gotrue_client).await?;
   for invitation in invitations {
+    match gotrue_client
+      .admin_invite_user(
+        &admin_token,
+        &InviteUserParams {
+          email: invitation.email.clone(),
+          ..Default::default()
+        },
+      )
+      .await
+    {
+      Ok(new_user) => {
+        info!(
+          "Invited new user: {:?} to workspace: {:?}",
+          new_user, workspace_id
+        );
+      },
+      Err(err) => match err {
+        app_error::gotrue::GoTrueError::Internal(ref err_serde) => {
+          match (err_serde.code, err_serde.msg.as_str()) {
+            (422, "A user with this email address has already been registered") => {
+              info!("User already exists, skipping invite");
+            },
+            _ => return Err(AppError::Internal(err.into())),
+          }
+        },
+        _ => return Err(err.into()),
+      },
+    }
+
     insert_workspace_invitation(
       &mut txn,
       workspace_id,

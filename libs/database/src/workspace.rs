@@ -248,13 +248,13 @@ pub async fn insert_workspace_invitation(
       INSERT INTO public.af_workspace_invitation (
           workspace_id,
           inviter,
-          invitee,
+          invitee_email,
           role_id
       )
       VALUES (
         $1,
         (SELECT uid FROM public.af_user WHERE uuid = $2),
-        (SELECT uid FROM public.af_user WHERE email = $3),
+        $3,
         $4
       )
     "#,
@@ -269,7 +269,7 @@ pub async fn insert_workspace_invitation(
   Ok(())
 }
 
-pub async fn update_workspace_invitation_set_invited(
+pub async fn update_workspace_invitation_set_status_accepted(
   txn: &mut Transaction<'_, sqlx::Postgres>,
   invitee_uuid: &Uuid,
   invite_id: &Uuid,
@@ -278,7 +278,7 @@ pub async fn update_workspace_invitation_set_invited(
     r#"
     UPDATE public.af_workspace_invitation
     SET status = 1
-    WHERE invitee = (SELECT uid FROM public.af_user WHERE uuid = $1)
+    WHERE invitee_email = (SELECT email FROM public.af_user WHERE uuid = $1)
       AND id = $2
     "#,
     invitee_uuid,
@@ -312,7 +312,7 @@ pub async fn get_invitation_by_id(
     SELECT
         workspace_id,
         inviter AS inviter_uid,
-        invitee AS invitee_uid,
+        (SELECT uid FROM public.af_user WHERE email = invitee_email) AS invitee_uid,
         status,
         role_id AS role
     FROM
@@ -346,7 +346,7 @@ pub async fn select_workspace_invitations_for_user(
       updated_at
     FROM
       public.af_workspace_invitation
-    WHERE af_workspace_invitation.invitee = (SELECT uid FROM public.af_user WHERE uuid = $1)
+    WHERE af_workspace_invitation.invitee_email = (SELECT email FROM public.af_user WHERE uuid = $1)
     AND ($2::SMALLINT IS NULL OR status = $2)
     "#,
     invitee_uuid,

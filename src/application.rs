@@ -23,7 +23,7 @@ use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::{AppMetrics, AppState, UserCache};
+use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
 use actix::Actor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
@@ -182,7 +182,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   // Gotrue
   info!("Connecting to GoTrue...");
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
-  setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
+  let gotrue_admin = setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
 
   // Redis
   info!("Connecting to Redis...");
@@ -244,6 +244,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     pg_listeners,
     access_control,
     metrics,
+    gotrue_admin,
   })
 }
 
@@ -251,9 +252,11 @@ async fn setup_admin_account(
   gotrue_client: &gotrue::api::Client,
   pg_pool: &PgPool,
   gotrue_setting: &GoTrueSetting,
-) -> Result<(), Error> {
+) -> Result<GoTrueAdmin, Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
   let password = gotrue_setting.admin_password.as_str();
+  let gotrue_admin = GoTrueAdmin::new(admin_email.to_owned(), password.to_owned());
+
   let res_resp = gotrue_client.sign_up(admin_email, password, None).await;
   match res_resp {
     Err(err) => {
@@ -261,7 +264,7 @@ async fn setup_admin_account(
         match (err.code, err.msg.as_str()) {
           (400, "User already registered") => {
             info!("Admin user already registered");
-            Ok(())
+            Ok(gotrue_admin)
           },
           _ => Err(err.into()),
         }
@@ -279,7 +282,7 @@ async fn setup_admin_account(
       match admin_user.role.as_str() {
         "supabase_admin" => {
           info!("Admin user already created and set role to supabase_admin");
-          Ok(())
+          Ok(gotrue_admin)
         },
         _ => {
           let user_id = admin_user.id.parse::<uuid::Uuid>()?;
@@ -298,7 +301,7 @@ async fn setup_admin_account(
           assert_eq!(result.rows_affected(), 1);
           info!("Admin user created and set role to supabase_admin");
 
-          Ok(())
+          Ok(gotrue_admin)
         },
       }
     },

@@ -1,7 +1,7 @@
 use crate::entities::{
   ClientMessage, ClientStreamMessage, Connect, Disconnect, Editing, RealtimeMessage, RealtimeUser,
 };
-use crate::error::{RealtimeError, StreamError};
+use crate::error::RealtimeError;
 use crate::server::{RealtimeAccessControl, RealtimeMetrics};
 use crate::util::channel_ext::UnboundedSenderSink;
 use actix::{Actor, Context, Handler, ResponseFuture};
@@ -10,9 +10,9 @@ use collab::core::collab_plugin::EncodedCollab;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use futures_util::future::BoxFuture;
-use realtime_entity::collab_msg::ClientCollabMessage;
-use realtime_entity::message::SystemMessage;
+
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
+use realtime_entity::message::{MessageByObjectId, SystemMessage};
 use std::collections::HashSet;
 
 use crate::client::rt_client::RealtimeClientWebsocketSink;
@@ -142,6 +142,8 @@ where
     })
   }
 
+  #[inline]
+  #[allow(clippy::too_many_arguments)]
   async fn process_client_collab_message(
     user: &U,
     group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender<U>>>,
@@ -149,41 +151,40 @@ where
     groups: &Arc<AllGroup<S, U, AC>>,
     edit_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
     access_control: &Arc<AC>,
-    collab_message: ClientCollabMessage,
+    object_id: String,
+    collab_messages: Vec<ClientCollabMessage>,
   ) -> Result<(), RealtimeError> {
     let old_sender = group_sender_by_object_id
-      .get(collab_message.object_id())
+      .get(&object_id)
       .map(|entry| entry.value().clone());
 
     let sender = match old_sender {
       Some(sender) => sender,
-      None => {
-        let object_id = collab_message.object_id().to_string();
-        match group_sender_by_object_id.entry(object_id) {
-          Entry::Occupied(entry) => entry.get().clone(),
-          Entry::Vacant(entry) => {
-            let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
-            let runner = GroupCommandRunner {
-              all_groups: groups.clone(),
-              client_stream_by_user: client_stream_by_user.clone(),
-              edit_collab_by_user: edit_collab_by_user.clone(),
-              access_control: access_control.clone(),
-              recv: Some(recv),
-            };
+      None => match group_sender_by_object_id.entry(object_id.clone()) {
+        Entry::Occupied(entry) => entry.get().clone(),
+        Entry::Vacant(entry) => {
+          let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+          let runner = GroupCommandRunner {
+            all_groups: groups.clone(),
+            client_stream_by_user: client_stream_by_user.clone(),
+            edit_collab_by_user: edit_collab_by_user.clone(),
+            access_control: access_control.clone(),
+            recv: Some(recv),
+          };
 
-            let object_id = entry.key().clone();
-            tokio::task::spawn_local(runner.run(object_id));
-            entry.insert(new_sender.clone());
-            new_sender
-          },
-        }
+          let object_id = entry.key().clone();
+          tokio::task::spawn_local(runner.run(object_id));
+          entry.insert(new_sender.clone());
+          new_sender
+        },
       },
     };
 
     if let Err(err) = sender
       .send(GroupCommand::HandleClientCollabMessage {
         user: user.clone(),
-        collab_message,
+        object_id,
+        collab_messages,
       })
       .await
     {
@@ -248,8 +249,13 @@ where
       if let Some(old_user) = old_user {
         if let Some(value) = client_stream_by_user.remove(&old_user) {
           let old_stream = value.1;
-          info!("same user connect again, remove the stream: {}", &old_user);
-          old_stream.disconnect();
+          info!(
+            "same user connect with the same device again, remove old stream: {}",
+            &old_user
+          );
+          old_stream
+            .sink
+            .do_send(RealtimeMessage::System(SystemMessage::DuplicateConnection));
         }
 
         // when a new connection is established, remove the old connection from all groups
@@ -321,9 +327,9 @@ where
     let access_control = self.access_control.clone();
 
     Box::pin(async move {
-      match message.try_into_client_collab_message() {
-        Ok(collab_messages) => {
-          for collab_message in collab_messages {
+      match message.try_into_message_by_object_id() {
+        Ok(map) => {
+          for (oid, collab_messages) in map {
             if let Err(err) = Self::process_client_collab_message(
               &user,
               &group_sender_by_object_id,
@@ -331,7 +337,8 @@ where
               &groups,
               &edit_collab_by_user,
               &access_control,
-              collab_message,
+              oid,
+              collab_messages,
             )
             .await
             {
@@ -373,13 +380,13 @@ where
 
     Box::pin(async move {
       if let Some(message) = stream.next().await {
-        match message.try_into_client_collab_message() {
+        match message.try_into_message_by_object_id() {
           Ok(collab_messages) => {
-            for collab_message in collab_messages {
+            for (oid, collab_messages) in collab_messages {
               // client doesn't send the device_id through the http request header before the 0.4.6
-              // so, try to get the device_id from the message
+              // so, try to get the device_id from messages.
               if device_id.is_empty() {
-                if let Some(msg_device_id) = collab_message.device_id() {
+                if let Some(msg_device_id) = collab_messages.first().and_then(|v| v.device_id()) {
                   device_id = msg_device_id;
                 }
               }
@@ -393,7 +400,8 @@ where
                   &groups,
                   &edit_collab_by_user,
                   &access_control,
-                  collab_message,
+                  oid,
+                  collab_messages,
                 )
                 .await
                 {
@@ -417,24 +425,29 @@ where
 #[inline]
 pub async fn broadcast_client_collab_message<U>(
   user: &U,
-  collab_message: ClientCollabMessage,
+  object_id: String,
+  collab_messages: Vec<ClientCollabMessage>,
   client_streams: &Arc<DashMap<U, CollabClientStream>>,
 ) where
   U: RealtimeUser,
 {
   if let Some(client_stream) = client_streams.get(user) {
-    trace!("[realtime]: receive:{}", collab_message);
-    let object_id = collab_message.object_id().to_string();
+    trace!(
+      "[realtime]: receive: uid:{} oid:{} {:?}",
+      user.uid(),
+      object_id,
+      collab_messages
+        .iter()
+        .map(|v| v.msg_id())
+        .collect::<Vec<_>>()
+    );
+    let pair = (object_id, collab_messages);
     let err = client_stream
       .stream_tx
-      .send(Ok(RealtimeMessage::ClientCollabV1(vec![collab_message])));
+      .send(RealtimeMessage::ClientCollabV1([pair].into()));
     if let Err(err) = err {
-      warn!(
-        "Send user:{} message to group:{} error: {}",
-        user.uid(),
-        err,
-        object_id,
-      );
+      warn!("Send user:{} message to group error: {}", user.uid(), err,);
+      client_streams.remove(user);
     }
   }
 }
@@ -480,7 +493,7 @@ pub struct CollabClientStream {
   ///
   /// The message flow:
   /// ClientSession(websocket) -> [RealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
-  stream_tx: tokio::sync::broadcast::Sender<Result<RealtimeMessage, StreamError>>,
+  stream_tx: tokio::sync::broadcast::Sender<RealtimeMessage>,
 }
 
 impl CollabClientStream {
@@ -497,56 +510,69 @@ impl CollabClientStream {
   /// [Stream] will be used to send changes to the collab object. Before sending the changes, the stream_filter
   /// will be used to check if the client is allowed to send the changes.
   ///
-  #[allow(clippy::type_complexity)]
-  pub fn client_channel<T, SinkFilter, StreamFilter>(
+  pub fn client_channel<T, AC>(
     &mut self,
+    uid: i64,
     object_id: &str,
-    sink_filter: SinkFilter,
-    stream_filter: StreamFilter,
-  ) -> (
-    UnboundedSenderSink<T>,
-    ReceiverStream<Result<ClientCollabMessage, StreamError>>,
-  )
+    access_control: Arc<AC>,
+  ) -> (UnboundedSenderSink<T>, ReceiverStream<MessageByObjectId>)
   where
     T: Into<RealtimeMessage> + Send + Sync + 'static,
-    SinkFilter: Fn(&str, &T) -> BoxFuture<'static, bool> + Sync + Send + 'static,
-    StreamFilter:
-      Fn(&str, &ClientCollabMessage) -> BoxFuture<'static, bool> + Sync + Send + 'static,
+    AC: RealtimeAccessControl,
   {
     let client_ws_sink = self.sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
     let cloned_object_id = object_id.to_string();
 
-    // Send the message to the connected websocket client
+    // Send the message to the connected websocket client. When the client receive the message,
+    // it will apply the changes.
     let (client_sink_tx, mut client_sink_rx) = tokio::sync::mpsc::unbounded_channel::<T>();
-    tokio::task::spawn(async move {
+    let sink_access_control = access_control.clone();
+    tokio::spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
-        let can_sink = sink_filter(&cloned_object_id, &msg).await;
-        if can_sink {
-          // Send the message to websocket client actor
-          let rt_msg = msg.into();
-          client_ws_sink.do_send(rt_msg);
-        } else {
-          // when then client is not allowed to receive messages
-          tokio::time::sleep(Duration::from_secs(2)).await;
+        let result = sink_access_control
+          .can_read_collab(&uid, &cloned_object_id)
+          .await;
+        match result {
+          Ok(is_allowed) => {
+            if is_allowed {
+              let rt_msg = msg.into();
+              client_ws_sink.do_send(rt_msg);
+            } else {
+              trace!(
+                "user:{} is not allow to observe {} changes",
+                uid,
+                cloned_object_id
+              );
+              // when then client is not allowed to receive messages
+              tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+          },
+          Err(err) => {
+            error!("user:{} fail to receive updates: {}", uid, err);
+            tokio::time::sleep(Duration::from_secs(1)).await;
+          },
         }
       }
     });
     let client_sink = UnboundedSenderSink::<T>::new(client_sink_tx);
 
     // forward the message to the stream that was subscribed by the broadcast group
-    let cloned_object_id = object_id.to_string();
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
-      while let Some(Ok(Ok(realtime_msg))) = stream_rx.next().await {
-        match realtime_msg.try_into_client_collab_message() {
-          Ok(collab_messages) => {
-            for msg in collab_messages {
-              if stream_filter(&cloned_object_id, &msg).await {
-                let _ = tx.send(Ok(msg)).await;
-              } else {
-                // when then client is not allowed to send messages
-                tokio::time::sleep(Duration::from_secs(2)).await;
+      while let Some(Ok(realtime_msg)) = stream_rx.next().await {
+        match realtime_msg.try_into_message_by_object_id() {
+          Ok(messages_by_oid) => {
+            for (object_id, messages) in messages_by_oid {
+              let messages =
+                Self::access_control(&uid, &object_id, &access_control, messages).await;
+              if messages.is_empty() {
+                continue;
+              }
+              if !messages.is_empty() {
+                if tx.send([(object_id, messages)].into()).await.is_err() {
+                  break;
+                }
               }
             }
           },
@@ -559,14 +585,40 @@ impl CollabClientStream {
       }
     });
     let client_stream = ReceiverStream::new(rx);
-
     (client_sink, client_stream)
   }
 
-  pub fn disconnect(&self) {
-    self
-      .sink
-      .do_send(RealtimeMessage::System(SystemMessage::KickOff));
+  async fn access_control<AC>(
+    uid: &i64,
+    object_id: &str,
+    access_control: &Arc<AC>,
+    messages: Vec<ClientCollabMessage>,
+  ) -> Vec<ClientCollabMessage>
+  where
+    AC: RealtimeAccessControl,
+  {
+    let can_write = access_control
+      .can_write_collab(uid, object_id)
+      .await
+      .unwrap_or(false);
+
+    let mut valid_messages = Vec::with_capacity(messages.len());
+    for message in messages {
+      if message.is_init_msg()
+        && access_control
+          .can_read_collab(uid, object_id)
+          .await
+          .unwrap_or(false)
+      {
+        valid_messages.push(message);
+        continue;
+      }
+
+      if can_write {
+        valid_messages.push(message);
+      }
+    }
+    valid_messages
   }
 }
 

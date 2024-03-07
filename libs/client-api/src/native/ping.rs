@@ -57,8 +57,8 @@ impl ServerFixIntervalPing {
         tokio::select! {
           _ = interval.tick() => {
             // send ping to server
-            if let Err(err) = ping_sender.send(Message::Ping(vec![])) {
-              tracing::error!("ping send error: {}", err);
+            // when the ping_sender return error which means the ping_receiver was dropped
+            if  ping_sender.send(Message::Ping(vec![])).is_err() {
                if let Some(state) =weak_state.upgrade() {
                  state.lock().set_state(ConnectState::PingTimeout);
                }

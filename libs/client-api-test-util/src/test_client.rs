@@ -20,7 +20,7 @@ use database_entity::dto::{
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use mime::Mime;
-use serde_json::Value;
+use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, WorkspaceMemberChangeset, WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
@@ -663,8 +664,10 @@ pub async fn assert_server_collab(
   let duration = Duration::from_secs(timeout_secs);
   let collab_type = collab_type.clone();
   let object_id = object_id.to_string();
+  let final_json = Arc::new(Mutex::new(json!({})));
 
   // Use tokio::time::timeout to apply a timeout to the entire operation
+  let cloned_final_json = final_json.clone();
   let operation = async {
     loop {
       let result = client
@@ -685,6 +688,8 @@ pub async fn assert_server_collab(
           )
           .unwrap()
           .to_json_value();
+
+          *cloned_final_json.lock().await = json.clone();
           if assert_json_matches_no_panic(&json, &expected, Config::new(CompareMode::Inclusive))
             .is_ok()
           {
@@ -703,7 +708,10 @@ pub async fn assert_server_collab(
     }
   };
 
-  timeout(duration, operation).await?;
+  if timeout(duration, operation).await.is_err() {
+    eprintln!("json : {}, expected: {}", final_json.lock().await, expected);
+    return Err(anyhow!("time out for the action"));
+  }
   Ok(())
 }
 

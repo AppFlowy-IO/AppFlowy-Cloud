@@ -212,19 +212,6 @@ where
     if self.edit_state.should_flush(100, 3 * 60) {
       self.edit_state.tick();
       let _object_id = object_id.to_string();
-      // let weak_group = self.group.clone();
-      // tokio::task::spawn_local(async move {
-      //   match weak_group.upgrade() {
-      //     None => warn!("{}: Group is dropped, skip flush collab", object_id),
-      //     Some(group) => {
-      //       info!(
-      //         "{}: number of updates reach flush_per_update, start flushing",
-      //         object_id
-      //       );
-      //       group.flush_collab().await;
-      //     },
-      //   }
-      // });
     }
   }
 

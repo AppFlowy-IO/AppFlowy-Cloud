@@ -232,43 +232,35 @@ async fn realtime_write_multiple_collab_test() {
   }
 }
 
-//
 #[tokio::test]
-async fn user_with_duplicate_devices_connect_edit_test() {
+async fn second_connect_override_first_connect_test() {
+  // Different TestClient with same device connect, the last one will
+  // take over the connection.
   let collab_type = CollabType::Document;
-  let mut old_client = TestClient::new_user().await;
-  let workspace_id = old_client.workspace_id().await;
+  let mut client = TestClient::new_user().await;
+  let workspace_id = client.workspace_id().await;
 
-  let object_id = old_client
+  let object_id = client
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
 
-  old_client
+  client
     .collab_by_object_id
     .get_mut(&object_id)
     .unwrap()
     .collab
     .lock()
     .insert("1", "a");
-  old_client
-    .collab_by_object_id
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("3", "c");
-  old_client
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
 
-  // The new_client will receive the old_client's edit
-  // The doc will be json!({
-  //   "1": "a",
-  //   "3": "c"
-  // })
+  // Sleep one second for the doc observer the update. Otherwise, the
+  // sync complete might be called before the update being schedule
+  sleep(Duration::from_secs(1)).await;
+  client.wait_object_sync_complete(&object_id).await.unwrap();
+
+  // the new_client connect with same device_id, so it will replace the existing client
+  // in the server. Which means the old client will not receive updates.
   let mut new_client =
-    TestClient::new_with_device_id(&old_client.device_id, old_client.user.clone(), true).await;
+    TestClient::new_with_device_id(&client.device_id, client.user.clone(), true).await;
   new_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
@@ -284,41 +276,73 @@ async fn user_with_duplicate_devices_connect_edit_test() {
     .await
     .unwrap();
 
-  // // Old client shouldn't receive the new client's edit
-  // assert_client_collab_include_value_within_30_secs(
-  //   &mut old_client,
-  //   &object_id,
-  //   json!({
-  //     "1": "a",
-  //     "3": "c"
-  //   }),
-  // )
-  // .await;
-  //
-  // assert_client_collab_include_value_within_30_secs(
-  //   &mut new_client,
-  //   &object_id,
-  //   json!({
-  //     "1": "a",
-  //     "3": "c",
-  //     "2": "b"
-  //   }),
-  // )
-  // .await;
-  //
-  // assert_server_collab(
-  //   &workspace_id,
-  //   &mut new_client.api_client,
-  //   &object_id,
-  //   &collab_type,
-  //   10,
-  //   json!({
-  //     "1": "a",
-  //     "2": "b",
-  //     "3": "c"
-  //   }),
-  // )
-  // .await;
+  assert_client_collab_include_value_within_30_secs(
+    &mut new_client,
+    &object_id,
+    json!({
+      "1": "a",
+      "2": "b"
+    }),
+  )
+  .await
+  .unwrap();
+
+  assert_server_collab(
+    &workspace_id,
+    &mut new_client.api_client,
+    &object_id,
+    &collab_type,
+    60,
+    json!({
+      "1": "a",
+      "2": "b",
+    }),
+  )
+  .await
+  .unwrap();
+}
+
+#[tokio::test]
+async fn same_device_multiple_connect_in_order_test() {
+  let collab_type = CollabType::Document;
+  let mut old_client = TestClient::new_user().await;
+  let workspace_id = old_client.workspace_id().await;
+
+  let object_id = old_client
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .await;
+  // simulate client try to connect the websocket server by three times
+  // each connect alter the document
+  for i in 0..3 {
+    let mut new_client =
+      TestClient::new_with_device_id(&old_client.device_id, old_client.user.clone(), true).await;
+    new_client
+      .open_collab(&workspace_id, &object_id, collab_type.clone())
+      .await;
+    new_client
+      .collab_by_object_id
+      .get_mut(&object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .insert(&i.to_string(), i);
+    sleep(Duration::from_millis(500)).await;
+    new_client
+      .wait_object_sync_complete(&object_id)
+      .await
+      .unwrap();
+  }
+
+  assert_server_collab(
+    &workspace_id,
+    &mut old_client.api_client,
+    &object_id,
+    &collab_type,
+    10,
+    json!({"0":0.0,"1":1.0,"2":2.0}),
+  )
+  .await
+  .unwrap();
 }
 
 #[tokio::test]

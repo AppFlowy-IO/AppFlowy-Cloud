@@ -6,7 +6,7 @@ use actix::{
   MailboxError, Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
-use actix_web_actors::ws::ProtocolError;
+use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError};
 use bytes::Bytes;
 use database::collab::CollabStorage;
 
@@ -18,6 +18,7 @@ use tokio::time::sleep;
 
 use crate::server::RealtimeServer;
 use database::pg_row::AFUserNotification;
+use realtime_entity::message::SystemMessage;
 use realtime_entity::user::{AFUserChange, UserMessage};
 use tracing::{debug, error, trace, warn};
 
@@ -232,8 +233,23 @@ where
   type Result = ();
 
   fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
-    let data = msg.encode().unwrap_or_default();
-    ctx.binary(Bytes::from(data));
+    if let RealtimeMessage::System(SystemMessage::DuplicateConnection) = &msg {
+      let reason = CloseReason {
+        code: CloseCode::Normal,
+        description: Some("Duplicate connection".to_string()),
+      };
+      ctx.close(Some(reason));
+      ctx.stop();
+    }
+
+    match msg.encode() {
+      Ok(data) => {
+        ctx.binary(Bytes::from(data));
+      },
+      Err(err) => {
+        error!("Error encoding message: {}", err);
+      },
+    }
   }
 }
 

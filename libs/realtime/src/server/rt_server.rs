@@ -444,7 +444,7 @@ pub async fn broadcast_client_collab_message<U>(
     let pair = (object_id, collab_messages);
     let err = client_stream
       .stream_tx
-      .send(RealtimeMessage::ClientCollabV1([pair].into()));
+      .send(RealtimeMessage::ClientCollabV2([pair].into()));
     if let Err(err) = err {
       warn!("Send user:{} message to group error: {}", user.uid(), err,);
       client_streams.remove(user);
@@ -569,10 +569,9 @@ impl CollabClientStream {
               if messages.is_empty() {
                 continue;
               }
-              if !messages.is_empty() {
-                if tx.send([(object_id, messages)].into()).await.is_err() {
-                  break;
-                }
+
+              if tx.send([(object_id, messages)].into()).await.is_err() {
+                break;
               }
             }
           },

@@ -184,31 +184,6 @@ mod tests {
   }
 
   #[test]
-  fn decode_046_realtime_message_test() {
-    let collab_init = read_message_from_file("migration/046/client_init").unwrap();
-    assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
-    if let RealtimeMessage::Collab(CollabMessage::ClientInitSync(init)) = collab_init {
-      assert_eq!(init.object_id, "object id 1");
-      assert_eq!(init.collab_type, CollabType::Document);
-      assert_eq!(init.workspace_id, "workspace id 1");
-      assert_eq!(init.msg_id, 1);
-      assert_eq!(init.payload, vec![1, 2, 3, 4]);
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
-    }
-
-    let collab_update = read_message_from_file("migration/046/collab_update").unwrap();
-    assert!(matches!(collab_update, RealtimeMessage::Collab(_)));
-    if let RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(update)) = collab_update {
-      assert_eq!(update.object_id, "object id 1");
-      assert_eq!(update.msg_id, 10);
-      assert_eq!(update.payload, Bytes::from(vec![5, 6, 7, 8]));
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
-    }
-  }
-
-  #[test]
   fn decode_021_realtime_message_test() {
     let collab_init = read_message_from_file("migration/021/client_init").unwrap();
     assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
@@ -246,6 +221,31 @@ mod tests {
       } else {
         panic!("Failed to decode RealtimeMessage from file");
       }
+    } else {
+      panic!("Failed to decode RealtimeMessage from file");
+    }
+  }
+
+  #[test]
+  fn decode_046_realtime_message_test() {
+    let collab_init = read_message_from_file("migration/0147/client_init").unwrap();
+    assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
+    if let RealtimeMessage::Collab(CollabMessage::ClientInitSync(init)) = collab_init {
+      assert_eq!(init.object_id, "object id 1");
+      assert_eq!(init.collab_type, CollabType::Document);
+      assert_eq!(init.workspace_id, "workspace id 1");
+      assert_eq!(init.msg_id, 1);
+      assert_eq!(init.payload, vec![1, 2, 3, 4]);
+    } else {
+      panic!("Failed to decode RealtimeMessage from file");
+    }
+
+    let collab_update = read_message_from_file("migration/0147/collab_update").unwrap();
+    assert!(matches!(collab_update, RealtimeMessage::Collab(_)));
+    if let RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(update)) = collab_update {
+      assert_eq!(update.object_id, "object id 1");
+      assert_eq!(update.msg_id, 10);
+      assert_eq!(update.payload, Bytes::from(vec![5, 6, 7, 8]));
     } else {
       panic!("Failed to decode RealtimeMessage from file");
     }

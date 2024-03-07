@@ -184,8 +184,8 @@ mod tests {
   }
 
   #[test]
-  fn decode_021_realtime_message_test() {
-    let collab_init = read_message_from_file("migration/021/client_init").unwrap();
+  fn decode_0149_realtime_message_test() {
+    let collab_init = read_message_from_file("migration/0149/client_init").unwrap();
     assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
     if let RealtimeMessage::Collab(CollabMessage::ClientInitSync(init)) = collab_init {
       assert_eq!(init.object_id, "object id 1");
@@ -197,7 +197,7 @@ mod tests {
       panic!("Failed to decode RealtimeMessage from file");
     }
 
-    let collab_update = read_message_from_file("migration/021/collab_update").unwrap();
+    let collab_update = read_message_from_file("migration/0149/collab_update").unwrap();
     assert!(matches!(collab_update, RealtimeMessage::Collab(_)));
     if let RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(update)) = collab_update {
       assert_eq!(update.object_id, "object id 1");
@@ -207,7 +207,7 @@ mod tests {
       panic!("Failed to decode RealtimeMessage from file");
     }
 
-    let client_collab_v1 = read_message_from_file("migration/021/client_collab_v1").unwrap();
+    let client_collab_v1 = read_message_from_file("migration/0149/client_collab_v1").unwrap();
     assert!(matches!(
       client_collab_v1,
       RealtimeMessage::ClientCollabV1(_)
@@ -227,7 +227,7 @@ mod tests {
   }
 
   #[test]
-  fn decode_046_realtime_message_test() {
+  fn decode_0147_realtime_message_test() {
     let collab_init = read_message_from_file("migration/0147/client_init").unwrap();
     assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
     if let RealtimeMessage::Collab(CollabMessage::ClientInitSync(init)) = collab_init {

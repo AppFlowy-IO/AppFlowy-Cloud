@@ -8,11 +8,11 @@ struct MessageQueue {
 }
 
 impl MessageQueue {
-  pub fn push_message(&mut self, msg: RealtimeMessage) {
-    if self.messages.contains(&msg) {
-      trace!("Receive duplicate message, skip it");
-    }
-
-    self.messages.insert(msg);
-  }
+  // pub fn push_message(&mut self, msg: RealtimeMessage) {
+  //   if self.messages.contains(&msg) {
+  //     trace!("Receive duplicate message, skip it");
+  //   }
+  //
+  //   self.messages.insert(msg);
+  // }
 }

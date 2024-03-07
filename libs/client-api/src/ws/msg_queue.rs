@@ -1,7 +1,7 @@
 use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::RealtimeMessage;
 
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -70,32 +70,36 @@ impl AggregateMessageQueue {
             if let (Some(queue), Some(seen)) = (weak_queue.upgrade(), weak_seen.upgrade()) {
               let mut lock_guard = queue.lock().await;
               let mut size = 0;
-              let mut messages = Vec::new();
+              let mut messages_map = HashMap::new();
               while let Some(msg) = lock_guard.pop() {
                 size += msg.size();
-                messages.push(msg);
+
+                messages_map.entry(msg.object_id().to_string()).or_insert(vec![]).push(msg);
+
                 if size > maximum_payload_size {
                   break;
                 }
               }
               drop(lock_guard);
-              if messages.is_empty() {
+              if messages_map.is_empty() {
                 continue;
               }
 
               {
                 let mut lock_guard = seen.lock().await;
-                for msg in &messages {
-                  lock_guard.remove(&msg_unique_id(msg));
+                for messages in messages_map.values() {
+                  for message in messages {
+                    lock_guard.remove(&msg_unique_id(message));
+                  }
                 }
               }
 
-              debug!("Aggregate messages len: {}", messages.len());
-              let rt_message = RealtimeMessage::ClientCollabV1(messages);
+              debug!("Aggregate messages len: {}", messages_map.len());
+              let rt_message = RealtimeMessage::ClientCollabV1(messages_map);
               match rt_message.encode() {
                 Ok(data) => {
                   if let Err(e) = sender.send(Message::Binary(data)).await {
-                    trace!("websocket channel close, stop sending messages");
+                    trace!("websocket channel close:{}, stop sending messages", e);
                     break;
                   }
                 }

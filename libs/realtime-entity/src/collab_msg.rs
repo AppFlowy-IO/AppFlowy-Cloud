@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Error};
 use std::cmp::Ordering;
+
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
@@ -681,7 +682,8 @@ impl From<ClientCollabMessage> for CollabMessage {
 
 impl From<ClientCollabMessage> for RealtimeMessage {
   fn from(msg: ClientCollabMessage) -> Self {
-    Self::ClientCollabV1(vec![msg])
+    let object_id = msg.object_id().to_string();
+    Self::ClientCollabV1([(object_id, vec![msg])].into())
   }
 }
 

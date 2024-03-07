@@ -8,7 +8,8 @@ use std::rc::Rc;
 
 use crate::server::collaborate::group_broadcast::{CollabBroadcast, Subscription};
 use futures_util::{SinkExt, StreamExt};
-use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
+use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::message::MessageByObjectId;
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -58,6 +59,7 @@ where
   }
 
   pub async fn remove_user(&self, user: &U) {
+    trace!("remove subscribe: {}", user);
     if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
       old_sub.stop().await;
     }
@@ -130,7 +132,7 @@ where
     stream: Stream,
   ) where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = ClientCollabMessage> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
     trace!(
@@ -147,6 +149,7 @@ where
     // Remove the old user if it exists
     let user_device = user.user_device();
     if let Some((_, old)) = self.user_by_user_device.remove(&user_device) {
+      trace!("remove subscriber: {}", old);
       if let Some((_, mut old_sub)) = self.subscribers.remove(&old) {
         old_sub.stop().await;
       }
@@ -155,6 +158,7 @@ where
     self
       .user_by_user_device
       .insert(user_device, (*user).clone());
+    trace!("insert subscriber: {}", user);
     self.subscribers.insert((*user).clone(), sub);
   }
 

@@ -33,10 +33,7 @@ impl From<Error> for WSError {
     match &value {
       Error::ConnectionClosed => WSError::LostConnection(value.to_string()),
       Error::AlreadyClosed => WSError::Close(value.to_string()),
-      Error::Protocol(protocol_error) => match protocol_error {
-        ProtocolError::SendAfterClosing => WSError::Close(value.to_string()),
-        _ => WSError::TungsteniteError(value),
-      },
+      Error::Protocol(ProtocolError::SendAfterClosing) => WSError::Close(value.to_string()),
       Error::Http(resp) => {
         let status = resp.status();
         if status == StatusCode::UNAUTHORIZED || status == StatusCode::NOT_FOUND {

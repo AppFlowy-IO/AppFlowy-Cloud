@@ -23,6 +23,7 @@ use crate::server::collaborate::sync_protocol::ServerSyncProtocol;
 use realtime_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
+use realtime_entity::message::MessageByObjectId;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 
@@ -172,7 +173,7 @@ impl CollabBroadcast {
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = ClientCollabMessage> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
     let cloned_origin = subscriber_origin.clone();
@@ -221,15 +222,17 @@ impl CollabBroadcast {
             _ = stop_rx.recv() => break,
             result = stream.next() => {
               match result {
-                Some(collab_msg) => {
+                Some(map) => {
                   match collab.upgrade() {
                     None => break, // break the loop if the collab is dropped
                     Some(collab) => {
-                      // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
-                      if object_id == collab_msg.object_id() {
-                        handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
-                      } else {
-                        warn!("Invalid collab message: {:?}", collab_msg);
+                      for (msg_oid, collab_messages) in map {
+                        // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
+                        if object_id == msg_oid {
+                            for collab_message in collab_messages {
+                              handle_client_collab_message(&object_id, &mut sink, &collab_message, &collab).await;
+                            }
+                        }
                       }
                     }
                   }

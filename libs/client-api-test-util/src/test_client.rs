@@ -708,7 +708,7 @@ pub async fn assert_server_collab(
     }
   };
 
-  if let Err(_) = timeout(duration, operation).await {
+  if timeout(duration, operation).await.is_err() {
     eprintln!("json : {}, expected: {}", final_json.lock().await, expected);
     return Err(anyhow!("time out for the action"));
   }

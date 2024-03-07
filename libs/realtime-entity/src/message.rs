@@ -1,6 +1,7 @@
 use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
 use anyhow::{anyhow, Error};
 use bincode::{DefaultOptions, Options};
+use std::collections::HashMap;
 
 use crate::user::UserMessage;
 #[cfg(feature = "rt_compress")]
@@ -22,7 +23,9 @@ pub const MAXIMUM_REALTIME_MESSAGE_SIZE: u64 = 10 * 1024 * 1024; // 10 MB
 #[cfg(feature = "rt_compress")]
 const COMPRESSED_PREFIX: &[u8] = b"COMPRESSED:1";
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+pub type MessageByObjectId = HashMap<String, Vec<ClientCollabMessage>>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
   feature = "actix_message",
   derive(actix::Message),
@@ -32,7 +35,7 @@ pub enum RealtimeMessage {
   Collab(CollabMessage),
   User(UserMessage),
   System(SystemMessage),
-  ClientCollabV1(Vec<ClientCollabMessage>),
+  ClientCollabV1(MessageByObjectId),
   ServerCollabV1(Vec<ServerCollabMessage>),
 }
 
@@ -42,7 +45,10 @@ impl RealtimeMessage {
       RealtimeMessage::Collab(msg) => msg.len(),
       RealtimeMessage::User(_) => 1,
       RealtimeMessage::System(_) => 1,
-      RealtimeMessage::ClientCollabV1(msgs) => msgs.iter().map(|msg| msg.size()).sum(),
+      RealtimeMessage::ClientCollabV1(msgs) => msgs
+        .iter()
+        .map(|(_, value)| value.iter().map(|v| v.size()).sum::<usize>())
+        .sum(),
       RealtimeMessage::ServerCollabV1(msgs) => msgs.iter().map(|msg| msg.size()).sum(),
     }
   }
@@ -51,11 +57,12 @@ impl RealtimeMessage {
   /// If the message is not a collab message, it will return an empty vec
   /// If the message is a collab message, it will return a vec with one element
   /// If the message is a ClientCollabV1, it will return list of collab messages
-  pub fn try_into_client_collab_message(self) -> Result<Vec<ClientCollabMessage>, Error> {
+  pub fn try_into_message_by_object_id(self) -> Result<MessageByObjectId, Error> {
     match self {
       RealtimeMessage::Collab(collab_message) => {
+        let object_id = collab_message.object_id().to_string();
         let collab_message = ClientCollabMessage::try_from(collab_message)?;
-        Ok(vec![collab_message])
+        Ok([(object_id, vec![collab_message])].into())
       },
       RealtimeMessage::ClientCollabV1(collab_messages) => Ok(collab_messages),
       _ => Err(anyhow!(
@@ -135,10 +142,11 @@ impl Display for RealtimeMessage {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum SystemMessage {
   RateLimit(u32),
   KickOff,
+  DuplicateConnection,
 }
 
 #[cfg(test)]

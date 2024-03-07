@@ -77,7 +77,7 @@ impl RealtimeCollabAccessControlImpl {
 
 #[async_trait]
 impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn can_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     if cfg!(feature = "disable_access_control") {
       Ok(true)
     } else {
@@ -88,7 +88,7 @@ impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
     }
   }
 
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn can_read_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
     if cfg!(feature = "disable_access_control") {
       Ok(true)
     } else {

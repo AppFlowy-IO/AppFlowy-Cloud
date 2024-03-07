@@ -41,9 +41,3 @@ pub enum RealtimeError {
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum StreamError {
-  #[error("Internal error:{0}")]
-  Internal(String),
-}

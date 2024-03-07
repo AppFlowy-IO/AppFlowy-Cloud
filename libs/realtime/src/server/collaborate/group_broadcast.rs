@@ -23,6 +23,7 @@ use crate::server::collaborate::sync_protocol::ServerSyncProtocol;
 use realtime_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
+use realtime_entity::message::MessageByObjectId;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 
@@ -163,7 +164,7 @@ impl CollabBroadcast {
   /// A `Subscription` instance that represents the active subscription. Dropping this structure or
   /// calling its `stop` method will unsubscribe the connection and cease all related activities.
   ///
-  pub fn subscribe<Sink, Stream, E>(
+  pub fn subscribe<Sink, Stream>(
     &self,
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
@@ -172,12 +173,10 @@ impl CollabBroadcast {
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
-    E: Into<anyhow::Error> + Send + Sync + 'static,
   {
     let cloned_origin = subscriber_origin.clone();
-    trace!("[realtime]: new subscriber: {}", subscriber_origin);
     let sink_stop_tx = {
       let mut sink = sink.clone();
       let (stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -223,20 +222,21 @@ impl CollabBroadcast {
             _ = stop_rx.recv() => break,
             result = stream.next() => {
               match result {
-                Some(Ok(collab_msg)) => {
+                Some(map) => {
                   match collab.upgrade() {
                     None => break, // break the loop if the collab is dropped
                     Some(collab) => {
-                      // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
-                      if object_id == collab_msg.object_id() {
-                        handle_client_collab_message(&object_id, &mut sink, &collab_msg, &collab).await;
-                      } else {
-                        warn!("Invalid collab message: {:?}", collab_msg);
+                      for (msg_oid, collab_messages) in map {
+                        // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
+                        if object_id == msg_oid {
+                            for collab_message in collab_messages {
+                              handle_client_collab_message(&object_id, &mut sink, &collab_message, &collab).await;
+                            }
+                        }
                       }
                     }
                   }
                 },
-                Some(Err(e)) => error!("Error receiving collab message: {:?}", e.into()),
                 None => break,
               }
             }
@@ -265,6 +265,7 @@ async fn handle_client_collab_message<Sink>(
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
+  trace!("Applying client updates: {}", collab_msg);
   let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
   let origin = collab_msg.origin().clone();
   let reader = MessageReader::new(&mut decoder);
@@ -335,12 +336,18 @@ impl Subscription {
   pub async fn stop(&mut self) {
     if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
       if let Err(err) = sink_stop_tx.send(()).await {
-        error!("fail to stop sink:{}", err);
+        warn!(
+          "fail to stop sink:{}, the stream might be already stop",
+          err
+        );
       }
     }
     if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
       if let Err(err) = stream_stop_tx.send(()).await {
-        error!("fail to stop stream:{}", err);
+        warn!(
+          "fail to stop stream:{}, the stream might be already stop",
+          err
+        );
       }
     }
   }

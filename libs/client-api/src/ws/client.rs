@@ -148,7 +148,7 @@ impl WSClient {
           .state_notify
           .lock()
           .set_state(ConnectState::Unauthorized),
-        _ => self.state_notify.lock().set_state(ConnectState::Closed),
+        _ => self.state_notify.lock().set_state(ConnectState::Lost),
       }
     }
 
@@ -226,11 +226,9 @@ impl WSClient {
       match weak_state_notify.upgrade() {
         None => error!("websocket state_notify is dropped"),
         Some(state_notify) => match &err {
-          WSError::TungsteniteError(_) => {},
-          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Closed),
+          WSError::LostConnection(_) => state_notify.lock().set_state(ConnectState::Lost),
           WSError::AuthError(_) => state_notify.lock().set_state(ConnectState::Unauthorized),
-          WSError::Internal(_) => {},
-          WSError::Http(_) => {},
+          _ => {},
         },
       }
     };
@@ -241,7 +239,7 @@ impl WSClient {
            _ = &mut stop_ws_msg_loop_rx => break,
            Ok(msg) = ws_msg_rx.recv() => {
               if let Err(err) = send_message(&mut sink, &device_id, msg, &weak_http_sender).await {
-                if err.is_lost_connection() {
+                if err.should_stop() {
                   break;
                 }
                 handle_error(err);
@@ -250,7 +248,7 @@ impl WSClient {
            Some(msg) = aggregate_msg_rx.recv() => {
               rate_limiter.read().await.until_ready().fuse().await;
               if let Err(err) = send_message(&mut sink, &device_id, msg, &weak_http_sender).await {
-                if err.is_lost_connection() {
+                if err.should_stop() {
                   break;
                 }
                 handle_error(err);
@@ -301,7 +299,13 @@ impl WSClient {
                   SystemMessage::RateLimit(limit) => {
                     *rate_limiter.write().await = gen_rate_limiter(limit);
                   },
-                  SystemMessage::KickOff => {},
+                  SystemMessage::KickOff => {
+                    break;
+                  },
+                  SystemMessage::DuplicateConnection => {
+                    trace!("detect same ws connect from this device, closing the connection");
+                    break;
+                  },
                 },
                 RealtimeMessage::ServerCollabV1(collab_messages) => {
                   handle_collab_message(&weak_collab_channels, collab_messages);
@@ -389,7 +393,7 @@ impl WSClient {
     })));
 
     *self.current_conn_info.lock() = None;
-    self.set_state(ConnectState::Closed).await;
+    self.set_state(ConnectState::Lost).await;
   }
 
   async fn clean(&self) {

@@ -1,18 +1,19 @@
 use crate::entities::{Editing, RealtimeUser};
-use crate::error::StreamError;
+
 use crate::server::collaborate::all_group::AllGroup;
 use crate::server::CollabClientStream;
 use crate::server::RealtimeAccessControl;
-use crate::util::channel_ext::UnboundedSenderSink;
+
 use collab::core::origin::CollabOrigin;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage, CollabSinkMessage};
+use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
+
 use std::collections::HashSet;
-use std::future;
+
 use std::sync::Arc;
-use tokio_stream::wrappers::ReceiverStream;
-use tracing::{error, trace, warn};
+
+use tracing::{trace, warn};
 
 pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) user: &'a U,
@@ -35,104 +36,6 @@ where
 {
   fn get_origin(collab_message: &ClientCollabMessage) -> &CollabOrigin {
     collab_message.origin()
-  }
-
-  fn make_channel<'b>(
-    object_id: &'b str,
-    client_stream: &'b mut CollabClientStream,
-    client_uid: i64,
-    access_control: Arc<AC>,
-  ) -> (
-    UnboundedSenderSink<CollabMessage>,
-    ReceiverStream<Result<ClientCollabMessage, StreamError>>,
-  )
-  where
-    'a: 'b,
-  {
-    let sink_access_control = access_control.clone();
-    let stream_access_control = access_control.clone();
-    let (sink, stream) = client_stream.client_channel::<CollabMessage, _, _>(
-      object_id,
-      move |object_id, msg| {
-        if msg.object_id() != object_id {
-          error!(
-            "The object id:{} from message is not matched with the object id:{} from sink",
-            msg.object_id(),
-            object_id
-          );
-          return Box::pin(future::ready(false));
-        }
-
-        let object_id = object_id.to_string();
-        let clone_sink_access_control = sink_access_control.clone();
-        Box::pin(async move {
-          match clone_sink_access_control
-            .can_receive_collab_update(&client_uid, &object_id)
-            .await
-          {
-            Ok(is_allowed) => {
-              if !is_allowed {
-                trace!(
-                  "user:{} is not allowed to receive {} updates",
-                  client_uid,
-                  object_id,
-                );
-              }
-              is_allowed
-            },
-            Err(err) => {
-              trace!(
-                "user:{} fail to receive updates by error: {}",
-                client_uid,
-                err
-              );
-              false
-            },
-          }
-        })
-      },
-      move |object_id, msg| {
-        if msg.object_id() != object_id {
-          return Box::pin(future::ready(false));
-        }
-
-        let is_init = msg.is_init_msg();
-        let object_id = object_id.to_string();
-        let cloned_stream_access_control = stream_access_control.clone();
-
-        Box::pin(async move {
-          // If the message is init sync, and it's allow to send to the group.
-          if is_init {
-            return true;
-          }
-
-          match cloned_stream_access_control
-            .can_send_collab_update(&client_uid, &object_id)
-            .await
-          {
-            Ok(is_allowed) => {
-              if !is_allowed {
-                trace!(
-                  "client:{} is not allowed to edit {} updates",
-                  client_uid,
-                  object_id,
-                );
-              }
-              is_allowed
-            },
-            Err(err) => {
-              trace!(
-                "client:{} can't  send update with error: {}",
-                client_uid,
-                err
-              );
-              false
-            },
-          }
-        })
-      },
-    );
-    (sink, stream)
   }
 }
 
@@ -169,12 +72,10 @@ where
               origin: origin.clone(),
             });
 
-          let (sink, stream) = Self::make_channel(
-            object_id,
-            client_stream.value_mut(),
-            client_uid,
-            self.access_control.clone(),
-          );
+          let (sink, stream) = client_stream
+            .value_mut()
+            .client_channel::<CollabMessage, _>(client_uid, object_id, self.access_control.clone());
+
           collab_group
             .subscribe(user, origin.clone(), sink, stream)
             .await;

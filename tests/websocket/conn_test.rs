@@ -69,7 +69,7 @@ async fn realtime_disconnect_test() {
         _ = ws_client.disconnect() => {},
        value = state.recv() => {
         let new_state = value.unwrap();
-        if new_state == ConnectState::Closed {
+        if new_state == ConnectState::Lost {
           break;
         }
       },

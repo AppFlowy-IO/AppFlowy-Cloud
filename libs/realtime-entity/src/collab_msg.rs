@@ -683,7 +683,7 @@ impl From<ClientCollabMessage> for CollabMessage {
 impl From<ClientCollabMessage> for RealtimeMessage {
   fn from(msg: ClientCollabMessage) -> Self {
     let object_id = msg.object_id().to_string();
-    Self::ClientCollabV1([(object_id, vec![msg])].into())
+    Self::ClientCollabV2([(object_id, vec![msg])].into())
   }
 }
 

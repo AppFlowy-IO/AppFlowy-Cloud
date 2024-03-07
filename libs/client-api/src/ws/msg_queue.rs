@@ -95,7 +95,7 @@ impl AggregateMessageQueue {
               }
 
               debug!("Aggregate messages len: {}", messages_map.len());
-              let rt_message = RealtimeMessage::ClientCollabV1(messages_map);
+              let rt_message = RealtimeMessage::ClientCollabV2(messages_map);
               match rt_message.encode() {
                 Ok(data) => {
                   if let Err(e) = sender.send(Message::Binary(data)).await {

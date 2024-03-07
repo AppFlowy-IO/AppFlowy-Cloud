@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Error};
 use std::cmp::Ordering;
+
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
@@ -250,7 +251,7 @@ impl Display for AwarenessSync {
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
 
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct InitSync {
   pub origin: CollabOrigin,
   pub object_id: String,
@@ -359,7 +360,7 @@ impl Display for ServerInit {
 /// compatibility. Such changes may lead to issues in processing existing messages that expect
 /// the struct to have a specific format. It's crucial to carefully consider the implications
 /// of modifying this struct's fields
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct UpdateSync {
   pub origin: CollabOrigin,
   pub object_id: String,
@@ -681,7 +682,8 @@ impl From<ClientCollabMessage> for CollabMessage {
 
 impl From<ClientCollabMessage> for RealtimeMessage {
   fn from(msg: ClientCollabMessage) -> Self {
-    Self::ClientCollabV1(vec![msg])
+    let object_id = msg.object_id().to_string();
+    Self::ClientCollabV1([(object_id, vec![msg])].into())
   }
 }
 
@@ -732,6 +734,8 @@ impl Eq for ClientCollabMessage {}
 impl PartialEq for ClientCollabMessage {
   fn eq(&self, other: &Self) -> bool {
     self.msg_id() == other.msg_id()
+      && self.object_id() == other.object_id()
+      && self.origin() == other.origin()
   }
 }
 
@@ -776,7 +780,7 @@ impl Ord for ClientCollabMessage {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Hash)]
+#[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum ServerCollabMessage {
   ClientAck(CollabAck),
   ServerInitSync(ServerInit),

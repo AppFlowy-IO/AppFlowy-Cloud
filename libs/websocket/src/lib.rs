@@ -5,7 +5,7 @@ mod native;
 #[cfg(target_arch = "wasm32")]
 mod web;
 
-pub use error::{Error, Result};
+pub use error::{Error, ProtocolError, Result};
 use http::HeaderMap;
 pub use message::coding::*;
 pub use message::CloseFrame;

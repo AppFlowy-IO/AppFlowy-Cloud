@@ -120,6 +120,7 @@ async fn init_sync_with_readonly_permission_test() {
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
+  sleep(Duration::from_secs(2)).await;
 
   //
   let expected = json!({

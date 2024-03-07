@@ -1,5 +1,4 @@
 use crate::entities::RealtimeUser;
-use anyhow::Error;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -9,7 +8,8 @@ use std::rc::Rc;
 
 use crate::server::collaborate::group_broadcast::{CollabBroadcast, Subscription};
 use futures_util::{SinkExt, StreamExt};
-use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
+use realtime_entity::collab_msg::CollabMessage;
+use realtime_entity::message::MessageByObjectId;
 use tokio::sync::Mutex;
 use tracing::trace;
 
@@ -59,6 +59,7 @@ where
   }
 
   pub async fn remove_user(&self, user: &U) {
+    trace!("remove subscribe: {}", user);
     if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
       old_sub.stop().await;
     }
@@ -123,7 +124,7 @@ where
   ///             | (3) Alter Document (if applicable)
   ///             V
   ///   Collaboration Group Updates (triggers Sink flow)
-  pub async fn subscribe<Sink, Stream, E>(
+  pub async fn subscribe<Sink, Stream>(
     &self,
     user: &U,
     subscriber_origin: CollabOrigin,
@@ -131,10 +132,15 @@ where
     stream: Stream,
   ) where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
-    Stream: StreamExt<Item = Result<ClientCollabMessage, E>> + Send + Sync + Unpin + 'static,
+    Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
-    E: Into<Error> + Send + Sync + 'static,
   {
+    trace!(
+      "[realtime]: new group subscriber: {}, connected members: {}",
+      subscriber_origin,
+      self.subscribers.len(),
+    );
+
     let sub =
       self
         .broadcast
@@ -143,6 +149,7 @@ where
     // Remove the old user if it exists
     let user_device = user.user_device();
     if let Some((_, old)) = self.user_by_user_device.remove(&user_device) {
+      trace!("remove subscriber: {}", old);
       if let Some((_, mut old_sub)) = self.subscribers.remove(&old) {
         old_sub.stop().await;
       }
@@ -151,6 +158,7 @@ where
     self
       .user_by_user_device
       .insert(user_device, (*user).clone());
+    trace!("insert subscriber: {}", user);
     self.subscribers.insert((*user).clone(), sub);
   }
 

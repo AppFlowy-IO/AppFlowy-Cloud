@@ -223,8 +223,8 @@ impl RealtimeUserImpl {
 impl Display for RealtimeUserImpl {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "uid:{}|device_id:{}",
-      self.uid, self.device_id,
+      "uid:{}|device_id:{}|connected_at:{}",
+      self.uid, self.device_id, self.timestamp,
     ))
   }
 }

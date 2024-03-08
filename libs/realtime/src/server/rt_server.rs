@@ -433,7 +433,7 @@ pub async fn broadcast_client_collab_message<U>(
 {
   if let Some(client_stream) = client_streams.get(user) {
     trace!(
-      "[realtime]: receive: uid:{} oid:{} {:?}",
+      "[realtime]: receive: uid:{} oid:{} msg ids: {:?}",
       user.uid(),
       object_id,
       collab_messages

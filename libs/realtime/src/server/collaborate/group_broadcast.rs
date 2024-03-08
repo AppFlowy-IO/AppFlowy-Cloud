@@ -221,11 +221,17 @@ impl CollabBroadcast {
                     None => break, // break the loop if the collab is dropped
                     Some(collab) => {
                       for (msg_oid, collab_messages) in map {
+                        if collab_messages.is_empty()  {
+                          warn!("collab messages is empty");
+                        }
+
                         // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
                         if object_id == msg_oid {
                             for collab_message in collab_messages {
                               handle_client_collab_message(&object_id, &mut sink, &collab_message, &collab).await;
                             }
+                        } else {
+                          warn!("Expect object id:{} but got:{}", object_id, msg_oid);
                         }
                       }
                     }

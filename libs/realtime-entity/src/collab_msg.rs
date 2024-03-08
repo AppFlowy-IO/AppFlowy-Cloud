@@ -236,7 +236,7 @@ impl From<AwarenessSync> for CollabMessage {
 impl Display for AwarenessSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "awareness: [oid:{}|len:{}]",
+      "awareness: [|oid:{}|len:{}]",
       self.object_id,
       self.payload.len(),
     ))

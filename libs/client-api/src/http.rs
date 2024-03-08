@@ -1,5 +1,4 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
-use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
 use shared_entity::dto::workspace_dto::{
@@ -19,8 +18,8 @@ use database_entity::dto::{
   UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
-use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
+use gotrue::grant::{Grant, RefreshTokenGrant};
 
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
@@ -200,56 +199,42 @@ impl Client {
     self.token.read().subscribe()
   }
 
-  /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
+  /// Attempts to sign in using a URL, extracting refresh_token from the URL.
   /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
   /// return a bool indicating if the user is new
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppResponseError> {
-    let mut access_token: Option<String> = None;
-    let mut token_type: Option<String> = None;
-    let mut expires_in: Option<i64> = None;
-    let mut expires_at: Option<i64> = None;
-    let mut refresh_token: Option<String> = None;
-    let mut provider_access_token: Option<String> = None;
-    let mut provider_refresh_token: Option<String> = None;
-
-    Url::parse(url)?
+    let parsed = Url::parse(url)?;
+    let key_value_pairs = parsed
       .fragment()
       .ok_or(url_missing_param("fragment"))?
-      .split('&')
-      .try_for_each(|f| -> Result<(), AppResponseError> {
-        let (k, v) = f.split_once('=').ok_or(url_missing_param("key=value"))?;
-        match k {
-          "access_token" => access_token = Some(v.to_string()),
-          "token_type" => token_type = Some(v.to_string()),
-          "expires_in" => expires_in = Some(v.parse::<i64>().context("parser expires_in failed")?),
-          "expires_at" => expires_at = Some(v.parse::<i64>().context("parser expires_at failed")?),
-          "refresh_token" => refresh_token = Some(v.to_string()),
-          "provider_access_token" => provider_access_token = Some(v.to_string()),
-          "provider_refresh_token" => provider_refresh_token = Some(v.to_string()),
-          x => tracing::warn!("unhandled param in url: {}", x),
-        };
-        Ok(())
-      })?;
+      .split('&');
 
-    let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    if access_token.is_empty() {
-      return Err(AppError::OAuthError("Empty access token".to_string()).into());
+    let mut refresh_token: Option<&str> = None;
+    for param in key_value_pairs {
+      match param.split_once('=') {
+        Some(pair) => {
+          let (k, v) = pair;
+          if k == "refresh_token" {
+            refresh_token = Some(v);
+            break;
+          }
+        },
+        None => warn!("param is not in key=value format: {}", param),
+      }
     }
+    let refresh_token = refresh_token.ok_or(url_missing_param("refresh_token"))?;
 
-    let (user, new) = self.verify_token(&access_token).await?;
-    self.token.write().set(GotrueTokenResponse {
-      access_token,
-      token_type: token_type.ok_or(url_missing_param("token_type"))?,
-      expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
-      expires_at: expires_at.ok_or(url_missing_param("expires_at"))?,
-      refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
-      user,
-      provider_access_token,
-      provider_refresh_token,
-    });
+    let new_token = self
+      .gotrue_client
+      .token(&Grant::RefreshToken(RefreshTokenGrant {
+        refresh_token: refresh_token.to_owned(),
+      }))
+      .await?;
 
+    let (_user, new) = self.verify_token(&new_token.access_token).await?;
+    self.token.write().set(new_token);
     Ok(new)
   }
 

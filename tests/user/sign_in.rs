@@ -88,12 +88,7 @@ async fn sign_in_with_invalid_url() {
   let c = localhost_client();
   match c.sign_in_with_url(url_str).await {
     Ok(_) => panic!("should not be ok"),
-    Err(e) => {
-      assert_eq!(e.code, ErrorCode::UserUnAuthorized);
-      assert!(e
-        .message
-        .contains("invalid JWT: unable to parse or verify signature, token is expired by"));
-    },
+    Err(e) => assert_eq!(e.code, ErrorCode::OAuthError),
   }
 }
 

@@ -1,3 +1,4 @@
+mod awareness_test;
 mod collab_curd_test;
 mod edit_permission;
 mod edit_workspace;

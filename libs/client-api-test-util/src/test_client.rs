@@ -41,7 +41,7 @@ pub struct TestClient {
   pub user: User,
   pub ws_client: WSClient,
   pub api_client: client_api::Client,
-  pub collab_by_object_id: HashMap<String, TestCollab>,
+  pub collabs: HashMap<String, TestCollab>,
   pub device_id: String,
 }
 pub struct TestCollab {
@@ -89,7 +89,7 @@ impl TestClient {
       user: registered_user,
       ws_client,
       api_client,
-      collab_by_object_id: Default::default(),
+      collabs: Default::default(),
       device_id,
     }
   }
@@ -105,6 +105,43 @@ impl TestClient {
   pub async fn new_user_without_ws_conn() -> Self {
     let registered_user = generate_unique_registered_user().await;
     Self::new(registered_user, false).await
+  }
+
+  pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
+    self
+      .collabs
+      .get(object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .get_awareness()
+      .get_states()
+      .iter()
+      .map(|(_a, json)| {
+        let uid = json.get("uid").unwrap().as_i64();
+        uid.unwrap()
+      })
+      .collect()
+  }
+
+  pub fn clean_awareness_state(&self, object_id: &str) {
+    self
+      .collabs
+      .get(object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .clean_awareness_state();
+  }
+
+  pub fn emit_awareness_state(&self, object_id: &str) {
+    self
+      .collabs
+      .get(object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .emit_awareness_state();
   }
 
   pub async fn user_with_new_device(registered_user: User) -> Self {
@@ -227,7 +264,7 @@ impl TestClient {
       .unwrap()
   }
 
-  pub async fn add_client_as_collab_member(
+  pub async fn add_collab_member(
     &self,
     workspace_id: &str,
     object_id: &str,
@@ -279,7 +316,7 @@ impl TestClient {
     secs: u64,
   ) -> Result<(), Error> {
     let mut sync_state = self
-      .collab_by_object_id
+      .collabs
       .get(object_id)
       .unwrap()
       .collab
@@ -498,9 +535,7 @@ impl TestClient {
     collab.lock().add_plugin(Box::new(sync_plugin));
     collab.lock().initialize().await;
     let test_collab = TestCollab { origin, collab };
-    self
-      .collab_by_object_id
-      .insert(object_id.clone(), test_collab);
+    self.collabs.insert(object_id.clone(), test_collab);
 
     self.wait_object_sync_complete(&object_id).await.unwrap();
   }
@@ -559,9 +594,7 @@ impl TestClient {
     collab.lock().add_plugin(Box::new(sync_plugin));
     futures::executor::block_on(collab.lock().initialize());
     let test_collab = TestCollab { origin, collab };
-    self
-      .collab_by_object_id
-      .insert(object_id.to_string(), test_collab);
+    self.collabs.insert(object_id.to_string(), test_collab);
   }
 
   #[cfg(not(target_arch = "wasm32"))]
@@ -592,7 +625,7 @@ impl TestClient {
 
   pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {
     self
-      .collab_by_object_id
+      .collabs
       .get(object_id)
       .unwrap()
       .collab
@@ -731,7 +764,7 @@ pub async fn assert_client_collab_within_30_secs(
        },
        json = async {
         client
-          .collab_by_object_id
+          .collabs
           .get_mut(&object_id)
           .unwrap()
           .collab
@@ -767,7 +800,7 @@ pub async fn assert_client_collab_include_value_within_30_secs(
        },
        json = async {
         client
-          .collab_by_object_id
+          .collabs
           .get_mut(&object_id)
           .unwrap()
           .collab

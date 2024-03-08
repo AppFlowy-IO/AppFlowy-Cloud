@@ -303,7 +303,7 @@ where
 
   /// Merge the next message with the subsequent messages if possible.
   fn merge_items_into_next(&self, next: &mut QueueItem<Msg>, msg_queue: &mut SinkQueue<Msg>) {
-    if cfg!(feature = "disable_multi_msg_merge") {
+    if self.config.disable_merge_message {
       return;
     }
 
@@ -317,8 +317,9 @@ where
       // Attempt to merge the current message with the next one.
       // If merging is not successful or not advisable, push the unmerged message back and exit.
       match next.merge(&pending_msg, &self.config.maximum_payload_size) {
-        Ok(can_merge) => {
-          if !can_merge {
+        Ok(success) => {
+          if !success {
+            msg_queue.push(pending_msg);
             break;
           }
         },

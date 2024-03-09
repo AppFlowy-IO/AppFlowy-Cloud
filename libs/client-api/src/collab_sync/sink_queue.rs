@@ -47,7 +47,7 @@ where
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct QueueItem<Msg> {
   inner: Msg,
   // TODO(nathan): user inner's msg_id

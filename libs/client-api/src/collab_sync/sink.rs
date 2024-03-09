@@ -41,7 +41,7 @@ pub enum SinkSignal {
   ProcessAfterMillis(u64),
 }
 
-const SEND_INTERVAL: Duration = Duration::from_secs(6);
+const SEND_INTERVAL: Duration = Duration::from_secs(8);
 
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
 
@@ -95,14 +95,23 @@ where
     let msg_queue = SinkQueue::new(uid);
     let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
+    let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
 
     let mut interval = interval(SEND_INTERVAL);
     let weak_notifier = Arc::downgrade(&notifier);
+    let weak_flying_messages = Arc::downgrade(&flying_messages);
     af_spawn(async move {
       loop {
         interval.tick().await;
         match weak_notifier.upgrade() {
           Some(notifier) => {
+            // Removing the flying messages allows for the re-sending of the top k messages in the message queue.
+            if let Some(flying_messages) = weak_flying_messages.upgrade() {
+              if let Some(mut flying_messages) = flying_messages.try_lock() {
+                flying_messages.clear();
+              }
+            }
+
             if notifier.send(SinkSignal::Proceed).is_err() {
               break;
             }
@@ -122,7 +131,7 @@ where
       config,
       pause: AtomicBool::new(pause),
       object,
-      flying_messages: Arc::new(Default::default()),
+      flying_messages,
     }
   }
 
@@ -297,7 +306,7 @@ where
   }
 
   async fn send_msg_immediately(&self) {
-    let (messages, message_ids) = {
+    let items = {
       let mut msg_queue = match self.message_queue.try_lock() {
         None => {
           // If acquire the lock failed, try later
@@ -307,8 +316,7 @@ where
         Some(msg_queue) => msg_queue,
       };
       let flying_messages = self.flying_messages.lock();
-      let mut message_ids = vec![];
-      let mut messages = vec![];
+      let mut items = vec![];
 
       let mut count = 0;
       let mut item_to_requeue = vec![];
@@ -318,25 +326,33 @@ where
           break;
         }
 
-        if !flying_messages.contains(&item.msg_id()) {
-          messages.push(item.message().clone());
-          message_ids.push(item.msg_id());
-          if item.message().is_client_init_sync() {
-            item_to_requeue.push(item);
-            break;
-          }
+        if flying_messages.contains(&item.msg_id()) {
+          item_to_requeue.push(item);
+          continue;
         }
+
+        let is_init_sync = item.message().is_client_init_sync();
+        items.push(item.clone());
         count += 1;
         item_to_requeue.push(item);
-      }
 
+        if is_init_sync {
+          break;
+        }
+      }
       msg_queue.extend(item_to_requeue);
-      (messages, message_ids)
+      items
     };
 
-    if messages.is_empty() {
+    if items.is_empty() {
       return;
     }
+
+    let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
+    let messages = items
+      .into_iter()
+      .map(|item| item.into_message())
+      .collect::<Vec<_>>();
     trace!(
       "🔥 sending {} messages {:?}",
       self.object.object_id,
@@ -358,20 +374,17 @@ where
 
   /// Merge the next message with the subsequent messages if possible.
   fn merge_items_into_next(&self, next: &mut QueueItem<Msg>, msg_queue: &mut SinkQueue<Msg>) {
-    if self.config.disable_merge_message {
+    if self.config.disable_merge_message || !next.can_merge() {
       return;
     }
 
-    // Proceed only if the next message is eligible for merging.
-    if !next.can_merge() {
-      return;
-    }
+    trace!("start merging message");
     let mut merged_ids = vec![];
-
     // Attempt to merge subsequent messages until it's no longer possible or advisable.
     let flying_messages = self.flying_messages.lock();
     while let Some(pending_msg) = msg_queue.pop() {
       if flying_messages.contains(&pending_msg.msg_id()) {
+        trace!("skip merging message: {:?}", pending_msg.msg_id());
         continue;
       }
 
@@ -395,7 +408,7 @@ where
     }
 
     trace!(
-      "Merged {:?} messages into one: {:?}",
+      "merged {:?} messages into one: {:?}",
       merged_ids,
       next.msg_id(),
     );

@@ -144,7 +144,7 @@ where
     if new_msg.is_server_init_sync() {
       // When the message is a server initialization sync, indicating the absence of a client
       // initialization sync in the queue, it means the server initialization sync contains the
-      // [Collab]'s latest state. Therefore, we can clear the Update messages in the queue.
+      // [Collab]'s latest updates. Therefore, we can clear the update sync messages in the queue.
       while let Some(item) = msg_queue.pop() {
         if !item.message().is_update_sync() {
           let msg_id = self.msg_id_counter.next();
@@ -156,10 +156,8 @@ where
       self.flying_messages.lock().clear();
     }
 
-    trace!("🔥queue {} message: {}", self.object.object_id, new_msg);
+    trace!("🔥 queue {}", new_msg);
     msg_queue.push_msg(msg_id, new_msg);
-
-    // requeue the items that are not update sync.
     if !requeue_items.is_empty() {
       trace!(
         "{} requeue items: {}",
@@ -178,7 +176,6 @@ where
       self.merge_items_into_next(&mut next, &mut msg_queue);
       msg_queue.push(next);
     }
-    drop(msg_queue);
 
     // Notify the sink to process the next message after 500ms.
     let _ = self
@@ -192,14 +189,14 @@ where
     if !self.state_notifier.borrow().is_syncing() {
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
+
+    // Clear all the pending messages and send the init message immediately.
     self.clear();
 
     // When the client is connected, remove all pending messages and send the init message.
     let mut msg_queue = self.message_queue.lock();
     let msg_id = self.msg_id_counter.next();
-    let msg = f(msg_id);
-    msg_queue.push_msg(msg_id, msg);
-    drop(msg_queue);
+    msg_queue.push_msg(msg_id, f(msg_id));
     let _ = self.notifier.send(SinkSignal::Proceed);
   }
 
@@ -249,6 +246,8 @@ where
     // safety: msg_id is not None
     let income_message_id = server_message.msg_id().unwrap();
     let mut flying_messages = self.flying_messages.lock();
+
+    // if the message id is not in the flying messages, it means the message is invalid.
     if !flying_messages.contains(&income_message_id) {
       return false;
     }
@@ -257,9 +256,6 @@ where
     let mut is_valid = false;
     // if flying_messages.contains(&income_message_id) {
     if let Some(current_item) = message_queue.pop() {
-      // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
-      // due to network issues, the client might send multiple messages with the same msg_id.
-      // Therefore, the msg_id might not always match the msg_id of the pending_msg.
       if current_item.msg_id() != income_message_id {
         error!(
           "{} expect message id:{}, but receive:{}",
@@ -342,7 +338,7 @@ where
       return;
     }
     trace!(
-      "🔥sending {} messages {:?}",
+      "🔥 sending {} messages {:?}",
       self.object.object_id,
       message_ids
     );

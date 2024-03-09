@@ -1,11 +1,8 @@
 use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::RealtimeMessage;
-
 use std::collections::{BinaryHeap, HashMap};
-
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::interval;
 use tracing::{debug, error, trace};
@@ -47,9 +44,9 @@ impl AggregateMessageQueue {
     }
     *self.stop_tx.lock().await = Some(tx);
 
+    let maximum_payload_size = self.maximum_payload_size;
     let weak_queue = Arc::downgrade(&self.queue);
     let mut interval = interval(Duration::from_secs(1));
-    let maximum_payload_size = self.maximum_payload_size;
 
     tokio::spawn(async move {
       loop {
@@ -57,42 +54,16 @@ impl AggregateMessageQueue {
           _ = rx.recv() => break,
           _ = interval.tick() => {
             if let Some(queue) = weak_queue.upgrade() {
-              let mut lock_guard = queue.lock().await;
-              let mut size = 0;
-              let mut messages_map = HashMap::new();
-              while let Some(msg) = lock_guard.pop() {
-                size += msg.size();
-                messages_map.entry(msg.object_id().to_string()).or_insert(vec![]).push(msg);
-                if size > maximum_payload_size {
-                  break;
-                }
-              }
-              drop(lock_guard);
+              let messages_map = next_batch_message(maximum_payload_size, &queue).await;
               if messages_map.is_empty() {
                 continue;
               }
 
               if cfg!(debug_assertions) {
-                let mut log_msg = String::new();
-                for (object_id, messages) in &messages_map {
-                    let part = format!("object_id:{}, num of messages:{}\n", object_id, messages.len());
-                    log_msg.push_str(&part);
-                }
-                debug!("Aggregate messages: {}", log_msg);
+                log_message_map(&messages_map);
               }
 
-              let rt_message = RealtimeMessage::ClientCollabV2(messages_map);
-              match rt_message.encode() {
-                Ok(data) => {
-                  if let Err(e) = sender.send(Message::Binary(data)).await {
-                    trace!("websocket channel close:{}, stop sending messages", e);
-                    break;
-                  }
-                }
-                Err(err) => {
-                  error!("Failed to RealtimeMessage: {}", err);
-                }
-              }
+              send_batch_message(&sender, messages_map).await;
             } else {
               break;
             }
@@ -101,4 +72,60 @@ impl AggregateMessageQueue {
       }
     });
   }
+}
+
+#[inline]
+async fn send_batch_message(
+  sender: &AggregateMessagesSender,
+  messages_map: HashMap<String, Vec<ClientCollabMessage>>,
+) {
+  match RealtimeMessage::ClientCollabV2(messages_map).encode() {
+    Ok(data) => {
+      if let Err(e) = sender.send(Message::Binary(data)).await {
+        trace!("websocket channel close:{}, stop sending messages", e);
+      }
+    },
+    Err(err) => {
+      error!("Failed to RealtimeMessage: {}", err);
+    },
+  }
+}
+
+#[inline]
+async fn next_batch_message(
+  maximum_payload_size: usize,
+  queue: &Arc<Mutex<BinaryHeap<ClientCollabMessage>>>,
+) -> HashMap<String, Vec<ClientCollabMessage>> {
+  let mut messages_map = HashMap::new();
+  let mut size = 0;
+  let mut lock_guard = queue.lock().await;
+  while let Some(msg) = lock_guard.pop() {
+    size += msg.size();
+    messages_map
+      .entry(msg.object_id().to_string())
+      .or_insert(vec![])
+      .push(msg);
+    if size > maximum_payload_size {
+      break;
+    }
+  }
+
+  messages_map
+}
+
+#[inline]
+fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
+  let log_msg = messages_map
+    .iter()
+    .map(|(object_id, messages)| {
+      format!(
+        "object_id:{}, num of messages:{}",
+        object_id,
+        messages.len()
+      )
+    })
+    .collect::<Vec<_>>()
+    .join("\n"); // Joining with newline character
+
+  debug!("Aggregate messages:\n{}", log_msg);
 }

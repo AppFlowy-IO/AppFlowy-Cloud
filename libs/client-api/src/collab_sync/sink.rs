@@ -406,16 +406,17 @@ where
         // 3. The last message's payload size is less than the maximum payload size.
         if let Some(last) = items.last_mut() {
           if !flying_messages.contains(&last.msg_id())
-            && last.can_merge()
             && last.message().payload_size() < self.config.maximum_payload_size
+            && last.mergeable()
+            && last.merge(&next, &self.config.maximum_payload_size).is_ok()
           {
-            if last.merge(&next, &self.config.maximum_payload_size).is_ok() {
-              merged_ids
-                .entry(last.msg_id())
-                .or_insert(vec![])
-                .push(next.msg_id());
-              continue;
-            }
+            merged_ids
+              .entry(last.msg_id())
+              .or_insert(vec![])
+              .push(next.msg_id());
+
+            // If the last message is merged with the next message, don't push the next message
+            continue;
           }
         }
         items.push(next);

@@ -79,7 +79,7 @@ impl<Msg> QueueItem<Msg>
 where
   Msg: CollabSinkMessage,
 {
-  pub fn can_merge(&self) -> bool {
+  pub fn mergeable(&self) -> bool {
     self.inner.mergeable()
   }
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {

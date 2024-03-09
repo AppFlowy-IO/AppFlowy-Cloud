@@ -25,7 +25,10 @@ pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
 
   fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error>;
 
-  fn is_init_msg(&self) -> bool;
+  fn is_client_init_sync(&self) -> bool;
+  fn is_server_init_sync(&self) -> bool;
+
+  fn is_update_sync(&self) -> bool;
 }
 
 pub type MsgId = u64;
@@ -65,8 +68,16 @@ impl CollabSinkMessage for CollabMessage {
     }
   }
 
-  fn is_init_msg(&self) -> bool {
+  fn is_client_init_sync(&self) -> bool {
     matches!(self, CollabMessage::ClientInitSync(_))
+  }
+
+  fn is_server_init_sync(&self) -> bool {
+    matches!(self, CollabMessage::ServerInitSync(_))
+  }
+
+  fn is_update_sync(&self) -> bool {
+    matches!(self, CollabMessage::ClientUpdateSync(_))
   }
 }
 
@@ -582,6 +593,7 @@ pub enum ClientCollabMessage {
   ClientInitSync { data: InitSync },
   ClientUpdateSync { data: UpdateSync },
   ServerInitSync(ServerInit),
+  ClientAwarenessSync(UpdateSync),
 }
 
 impl ClientCollabMessage {
@@ -597,11 +609,15 @@ impl ClientCollabMessage {
     Self::ServerInitSync(data)
   }
 
+  pub fn new_awareness_sync(data: UpdateSync) -> Self {
+    Self::ClientAwarenessSync(data)
+  }
   pub fn size(&self) -> usize {
     match self {
       ClientCollabMessage::ClientInitSync { data, .. } => data.payload.len(),
       ClientCollabMessage::ClientUpdateSync { data, .. } => data.payload.len(),
       ClientCollabMessage::ServerInitSync(msg) => msg.payload.len(),
+      ClientCollabMessage::ClientAwarenessSync(data) => data.payload.len(),
     }
   }
   pub fn object_id(&self) -> &str {
@@ -609,6 +625,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => &data.object_id,
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.object_id,
       ClientCollabMessage::ServerInitSync(msg) => &msg.object_id,
+      ClientCollabMessage::ClientAwarenessSync(data) => &data.object_id,
     }
   }
 
@@ -617,6 +634,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => &data.origin,
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.origin,
       ClientCollabMessage::ServerInitSync(msg) => &msg.origin,
+      ClientCollabMessage::ClientAwarenessSync(data) => &data.origin,
     }
   }
   pub fn payload(&self) -> &Bytes {
@@ -624,6 +642,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => &data.payload,
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.payload,
       ClientCollabMessage::ServerInitSync(msg) => &msg.payload,
+      ClientCollabMessage::ClientAwarenessSync(data) => &data.payload,
     }
   }
   pub fn device_id(&self) -> Option<String> {
@@ -638,6 +657,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => data.msg_id,
       ClientCollabMessage::ClientUpdateSync { data, .. } => data.msg_id,
       ClientCollabMessage::ServerInitSync(value) => value.msg_id,
+      ClientCollabMessage::ClientAwarenessSync(data) => data.msg_id,
     }
   }
 }
@@ -648,6 +668,7 @@ impl Display for ClientCollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => Display::fmt(&data, f),
       ClientCollabMessage::ClientUpdateSync { data, .. } => Display::fmt(&data, f),
       ClientCollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+      ClientCollabMessage::ClientAwarenessSync(data) => Display::fmt(&data, f),
     }
   }
 }
@@ -676,6 +697,7 @@ impl From<ClientCollabMessage> for CollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => CollabMessage::ClientInitSync(data),
       ClientCollabMessage::ClientUpdateSync { data, .. } => CollabMessage::ClientUpdateSync(data),
       ClientCollabMessage::ServerInitSync(data) => CollabMessage::ServerInitSync(data),
+      ClientCollabMessage::ClientAwarenessSync(data) => CollabMessage::ClientUpdateSync(data),
     }
   }
 }
@@ -716,8 +738,16 @@ impl CollabSinkMessage for ClientCollabMessage {
     }
   }
 
-  fn is_init_msg(&self) -> bool {
+  fn is_client_init_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientInitSync { .. })
+  }
+
+  fn is_server_init_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ServerInitSync { .. })
+  }
+
+  fn is_update_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
   }
 }
 
@@ -753,8 +783,8 @@ impl Ord for ClientCollabMessage {
       },
       (ClientCollabMessage::ClientInitSync { .. }, _) => Ordering::Greater,
       (_, ClientCollabMessage::ClientInitSync { .. }) => Ordering::Less,
-      (ClientCollabMessage::ServerInitSync(_), ClientCollabMessage::ServerInitSync(_)) => {
-        Ordering::Equal
+      (ClientCollabMessage::ServerInitSync(left), ClientCollabMessage::ServerInitSync(right)) => {
+        left.msg_id.cmp(&right.msg_id).reverse()
       },
       (ClientCollabMessage::ServerInitSync { .. }, _) => Ordering::Greater,
       (_, ClientCollabMessage::ServerInitSync { .. }) => Ordering::Less,

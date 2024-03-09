@@ -68,7 +68,7 @@ where
     }
   }
 
-  pub fn get_msg(&self) -> &Msg {
+  pub fn message(&self) -> &Msg {
     &self.msg
   }
 
@@ -88,10 +88,6 @@ where
   pub fn msg_id(&self) -> MsgId {
     self.msg_id
   }
-
-  pub fn is_processing(&self) -> bool {
-    self.state == MessageState::Processing
-  }
 }
 
 impl<Msg> QueueItem<Msg>
@@ -99,14 +95,10 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn can_merge(&self) -> bool {
-    if self.is_processing() {
-      return false;
-    }
-
     self.msg.can_merge()
   }
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
-    self.msg.merge(other.get_msg(), max_size)
+    self.msg.merge(other.message(), max_size)
   }
 }
 
@@ -143,4 +135,5 @@ where
 pub(crate) enum MessageState {
   Pending,
   Processing,
+  Done,
 }

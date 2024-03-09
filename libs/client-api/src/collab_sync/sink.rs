@@ -1,20 +1,17 @@
+use crate::af_spawn;
+use crate::collab_sync::sink_config::SinkConfig;
+use crate::collab_sync::sink_queue::{MessageState, QueueItem, SinkQueue};
+use crate::collab_sync::SyncObject;
+use futures_util::SinkExt;
+use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
+use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-
-use crate::collab_sync::sink_queue::{MessageState, QueueItem, SinkQueue};
-use crate::collab_sync::SyncObject;
-use futures_util::SinkExt;
-
-use crate::af_spawn;
-use crate::collab_sync::sink_config::SinkConfig;
-use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
-
 use tokio::sync::{watch, Mutex};
-
 use tokio::time::{interval, sleep};
-use tracing::{debug, error, trace, warn};
+use tracing::{error, trace, warn};
 
 #[derive(Clone, Debug)]
 pub enum SinkState {
@@ -43,7 +40,7 @@ pub enum SinkSignal {
   ProcessAfterMillis(u64),
 }
 
-const SEND_INTERVAL: Duration = Duration::from_secs(8);
+const SEND_INTERVAL: Duration = Duration::from_secs(10);
 
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
 
@@ -65,6 +62,7 @@ pub struct CollabSink<Sink, Msg> {
   state_notifier: Arc<watch::Sender<SinkState>>,
   pause: AtomicBool,
   object: SyncObject,
+  flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
 }
 
 impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
@@ -77,7 +75,7 @@ impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
 impl<E, Sink, Msg> CollabSink<Sink, Msg>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<Vec<Msg>, Error = E> + Send + Sync + Unpin + 'static,
   Msg: CollabSinkMessage,
 {
   pub fn new(
@@ -123,6 +121,7 @@ where
       config,
       pause: AtomicBool::new(pause),
       object,
+      flying_messages: Arc::new(Default::default()),
     }
   }
 
@@ -139,10 +138,17 @@ where
     let mut msg_queue = self.message_queue.lock();
     let msg_id = self.msg_id_counter.next();
     let msg = f(msg_id);
-    msg_queue.push_msg(msg_id, msg);
 
-    // If the next message can be merged, try to merge the next message.
+    if msg.is_server_init_sync() {
+      // When the message is a server initialization sync, indicating the absence of a client
+      // initialization sync in the queue, it means the server initialization sync contains the
+      // [Collab]'s latest state. Therefore, we can clear the Update messages in the queue.
+      msg_queue.retain(|item| !item.message().is_update_sync());
+    }
+
+    msg_queue.push_msg(msg_id, msg);
     if let Some(mut next) = msg_queue.pop() {
+      // If the next message can be merged, try to merge the next message.
       self.merge_items_into_next(&mut next, &mut msg_queue);
       msg_queue.push(next);
     }
@@ -160,11 +166,11 @@ where
     if !self.state_notifier.borrow().is_syncing() {
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
+    self.clear();
 
     // When the client is connected, remove all pending messages and send the init message.
     {
       let mut msg_queue = self.message_queue.lock();
-      msg_queue.clear();
       let msg_id = self.msg_id_counter.next();
       let msg = f(msg_id);
       msg_queue.push_msg(msg_id, msg);
@@ -177,7 +183,7 @@ where
   pub fn can_queue_init_sync(&self) -> bool {
     let msg_queue = self.message_queue.lock();
     if let Some(msg) = msg_queue.peek() {
-      if msg.get_msg().is_init_msg() {
+      if msg.message().is_client_init_sync() {
         return false;
       }
     }
@@ -186,6 +192,7 @@ where
 
   pub fn clear(&self) {
     self.message_queue.lock().clear();
+    self.flying_messages.lock().clear();
   }
 
   pub fn pause(&self) {
@@ -200,29 +207,38 @@ where
 
   /// Notify the sink to process the next message and mark the current message as done.
   /// Returns bool value to indicate whether the message is valid.
-  pub async fn ack_msg(&self, msg: &ServerCollabMessage) -> bool {
-    if msg.msg_id().is_none() {
+  pub async fn validate_server_message(&self, server_message: &ServerCollabMessage) -> bool {
+    if server_message.msg_id().is_none() {
       // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
       return true;
     }
 
     // safety: msg_id is not None
-    let msg_id = msg.msg_id().unwrap();
+    let income_message_id = server_message.msg_id().unwrap();
     let mut is_valid = false;
     {
+      let mut flying_messages = self.flying_messages.lock();
       let mut lock_guard = self.message_queue.lock();
-      if let Some(current_item) = lock_guard.pop() {
+      if let Some(mut current_item) = lock_guard.pop() {
         // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
         // due to network issues, the client might send multiple messages with the same msg_id.
         // Therefore, the msg_id might not always match the msg_id of the pending_msg.
-        if current_item.msg_id() != msg_id {
+        if current_item.msg_id() != income_message_id {
           lock_guard.push(current_item);
+        } else {
+          flying_messages.remove(&income_message_id);
+          current_item.set_state(MessageState::Done)
         }
 
         trace!(
-          "{:?}: Pending message len: {}",
+          "{:?}: Pending messages:{} ids:{}",
           self.object.object_id,
-          lock_guard.len()
+          lock_guard.len(),
+          lock_guard
+            .iter()
+            .map(|item| item.msg_id().to_string())
+            .collect::<Vec<_>>()
+            .join(",")
         );
 
         if lock_guard.is_empty() {
@@ -232,10 +248,7 @@ where
         }
         is_valid = true;
       }
-    }
-    // If the message is valid, notify the sink to process the next message.
-    if is_valid {
-      self.process_next_msg().await;
+      drop(lock_guard);
     }
     is_valid
   }
@@ -247,44 +260,56 @@ where
     self.send_msg_immediately().await;
   }
 
-  async fn send_msg_immediately(&self) -> Option<()> {
-    let collab_msg = {
-      let (mut msg_queue, mut next) = match self.message_queue.try_lock() {
+  async fn send_msg_immediately(&self) {
+    let (messages, message_ids) = {
+      let msg_queue = match self.message_queue.try_lock() {
         None => {
-          // If acquire the lock failed, try to notify again after 100ms
+          // If acquire the lock failed, try later
           retry_later(Arc::downgrade(&self.notifier));
-          None
+          return;
         },
-        Some(mut msg_queue) => msg_queue.pop().map(|sending_msg| (msg_queue, sending_msg)),
-      }?;
+        Some(msg_queue) => msg_queue,
+      };
+      let flying_messages = self.flying_messages.lock();
+      let mut message_ids = vec![];
+      let mut messages = vec![];
+      let iter = msg_queue
+        .iter()
+        .take(10)
+        .take_while(|item| !flying_messages.contains(&item.msg_id()))
+        .peekable();
 
-      //
-      if next.is_processing() {
-        msg_queue.push(next);
-        return None;
+      for item in iter {
+        messages.push(item.message().clone());
+        message_ids.push(item.msg_id());
+        trace!("🔥sending client messages {}", item.message());
+        if item.message().is_client_init_sync() {
+          break;
+        }
       }
 
-      self.merge_items_into_next(&mut next, &mut msg_queue);
-      next.set_state(MessageState::Processing);
-      let collab_msg = next.get_msg().clone();
-      msg_queue.push(next);
-      collab_msg
+      (messages, message_ids)
     };
+
+    if messages.is_empty() {
+      return;
+    }
 
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        debug!("Sending {}", collab_msg);
-        if let Err(err) = sender.send(collab_msg).await {
+        if let Err(err) = sender.send(messages).await {
           error!("Failed to send error: {:?}", err.into());
+        }
+        let mut flying_messages = self.flying_messages.lock();
+        for msg_id in message_ids {
+          flying_messages.insert(msg_id);
         }
       },
       Err(_) => {
-        warn!("Failed to acquire the lock of the sink, retry later");
+        warn!("failed to acquire the lock of the sink, retry later");
         retry_later(Arc::downgrade(&self.notifier));
       },
     }
-
-    None
   }
 
   /// Merge the next message with the subsequent messages if possible.
@@ -342,7 +367,7 @@ impl<Msg> CollabSinkRunner<Msg> {
     mut notifier: watch::Receiver<SinkSignal>,
   ) where
     E: Into<anyhow::Error> + Send + Sync + 'static,
-    Sink: SinkExt<Msg, Error = E> + Send + Sync + Unpin + 'static,
+    Sink: SinkExt<Vec<Msg>, Error = E> + Send + Sync + Unpin + 'static,
     Msg: CollabSinkMessage,
   {
     if let Some(sink) = weak_sink.upgrade() {

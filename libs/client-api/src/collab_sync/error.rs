@@ -24,6 +24,9 @@ pub enum SyncError {
   #[error("Workspace id is not found")]
   NoWorkspaceId,
 
+  #[error("Missing broadcast data:{0}")]
+  MissingBroadcast(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

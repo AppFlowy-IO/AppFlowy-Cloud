@@ -16,10 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
-  fn collab_object_id(&self) -> &str;
   /// Returns the length of the message in bytes.
-  fn payload_len(&self) -> usize;
-
   /// Returns true if the message can be merged with other messages.
   fn can_merge(&self) -> bool;
 
@@ -27,8 +24,11 @@ pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
 
   fn is_client_init_sync(&self) -> bool;
   fn is_server_init_sync(&self) -> bool;
-
   fn is_update_sync(&self) -> bool;
+
+  fn set_msg_id(&mut self, msg_id: MsgId);
+
+  fn get_msg_id(&self) -> Option<MsgId>;
 }
 
 pub type MsgId = u64;
@@ -43,14 +43,6 @@ pub enum CollabMessage {
 }
 
 impl CollabSinkMessage for CollabMessage {
-  fn collab_object_id(&self) -> &str {
-    self.object_id()
-  }
-
-  fn payload_len(&self) -> usize {
-    self.len()
-  }
-
   fn can_merge(&self) -> bool {
     matches!(self, CollabMessage::ClientUpdateSync(_))
   }
@@ -78,6 +70,21 @@ impl CollabSinkMessage for CollabMessage {
 
   fn is_update_sync(&self) -> bool {
     matches!(self, CollabMessage::ClientUpdateSync(_))
+  }
+
+  fn set_msg_id(&mut self, msg_id: MsgId) {
+    match self {
+      CollabMessage::ClientInitSync(value) => value.msg_id = msg_id,
+      CollabMessage::ClientUpdateSync(value) => value.msg_id = msg_id,
+      CollabMessage::ClientAck(value) => value.source.msg_id = msg_id,
+      CollabMessage::ServerInitSync(value) => value.msg_id = msg_id,
+      CollabMessage::ServerBroadcast(_) => {},
+      CollabMessage::AwarenessSync(_) => {},
+    }
+  }
+
+  fn get_msg_id(&self) -> Option<MsgId> {
+    self.msg_id()
   }
 }
 
@@ -710,14 +717,6 @@ impl From<ClientCollabMessage> for RealtimeMessage {
 }
 
 impl CollabSinkMessage for ClientCollabMessage {
-  fn collab_object_id(&self) -> &str {
-    self.object_id()
-  }
-
-  fn payload_len(&self) -> usize {
-    self.size()
-  }
-
   fn can_merge(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
   }
@@ -748,6 +747,19 @@ impl CollabSinkMessage for ClientCollabMessage {
 
   fn is_update_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
+  }
+
+  fn set_msg_id(&mut self, msg_id: MsgId) {
+    match self {
+      ClientCollabMessage::ClientInitSync { data, .. } => data.msg_id = msg_id,
+      ClientCollabMessage::ClientUpdateSync { data, .. } => data.msg_id = msg_id,
+      ClientCollabMessage::ServerInitSync(data) => data.msg_id = msg_id,
+      ClientCollabMessage::ClientAwarenessSync(data) => data.msg_id = msg_id,
+    }
+  }
+
+  fn get_msg_id(&self) -> Option<MsgId> {
+    Some(self.msg_id())
   }
 }
 

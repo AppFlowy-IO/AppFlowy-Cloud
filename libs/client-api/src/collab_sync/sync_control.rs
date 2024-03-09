@@ -350,8 +350,6 @@ where
     if is_valid {
       sink.notify();
     }
-
-    trace!("end process message: {:?}", msg.msg_id());
     Ok(())
   }
 
@@ -412,12 +410,12 @@ where
       let reader = MessageReader::new(&mut decoder);
       for msg in reader {
         let msg = msg?;
-        let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+        let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
         if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, &mut collab, msg)?
         {
           let object_id = object_id.to_string();
           sink.queue_msg(|msg_id| {
-            if is_sync_step_1 {
+            if is_server_sync_step_1 {
               ClientCollabMessage::new_server_init_sync(ServerInit::new(
                 origin.clone(),
                 object_id,

@@ -75,10 +75,9 @@ impl AggregateMessageQueue {
               if cfg!(debug_assertions) {
                 let mut log_msg = String::new();
                 for (object_id, messages) in &messages_map {
-                    let part = format!("object_id:{}, num of messages:{}; ", object_id, messages.len());
+                    let part = format!("object_id:{}, num of messages:{}\n", object_id, messages.len());
                     log_msg.push_str(&part);
                 }
-                let log_msg = log_msg.trim_end_matches("; ").to_string();
                 debug!("Aggregate messages: {}", log_msg);
               }
 

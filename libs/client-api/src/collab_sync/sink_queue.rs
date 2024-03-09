@@ -49,7 +49,8 @@ where
 
 #[derive(Debug)]
 pub(crate) struct QueueItem<Msg> {
-  msg: Msg,
+  inner: Msg,
+  // TODO(nathan): user inner's msg_id
   msg_id: MsgId,
 }
 
@@ -58,11 +59,15 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
-    Self { msg, msg_id }
+    Self { inner: msg, msg_id }
   }
 
   pub fn message(&self) -> &Msg {
-    &self.msg
+    &self.inner
+  }
+
+  pub fn into_message(self) -> Msg {
+    self.inner
   }
 
   pub fn msg_id(&self) -> MsgId {
@@ -75,10 +80,10 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn can_merge(&self) -> bool {
-    self.msg.can_merge()
+    self.inner.can_merge()
   }
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
-    self.msg.merge(other.message(), max_size)
+    self.inner.merge(other.message(), max_size)
   }
 }
 
@@ -89,7 +94,7 @@ where
   Msg: PartialEq,
 {
   fn eq(&self, other: &Self) -> bool {
-    self.msg == other.msg
+    self.inner == other.inner
   }
 }
 
@@ -107,6 +112,6 @@ where
   Msg: Ord,
 {
   fn cmp(&self, other: &Self) -> Ordering {
-    self.msg.cmp(&other.msg)
+    self.inner.cmp(&other.inner)
   }
 }

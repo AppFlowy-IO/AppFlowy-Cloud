@@ -5,7 +5,7 @@ use crate::collab_sync::SyncObject;
 use futures_util::SinkExt;
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
@@ -179,17 +179,13 @@ where
       );
       msg_queue.extend(requeue_items);
     }
-
-    if let Some(mut next) = msg_queue.pop() {
-      // If the next message can be merged, try to merge the next message.
-      self.merge_items_into_next(&mut next, &mut msg_queue);
-      msg_queue.push(next);
-    }
-
+    drop(msg_queue);
     // Notify the sink to process the next message after 500ms.
     let _ = self
       .notifier
       .send(SinkSignal::ProcessAfterMillis(COLLAB_SINK_DELAY_MILLIS));
+
+    self.merge();
   }
 
   /// When queue the init message, the sink will clear all the pending messages and send the init
@@ -315,7 +311,7 @@ where
         },
         Some(msg_queue) => msg_queue,
       };
-      let flying_messages = self.flying_messages.lock();
+      let mut flying_messages = self.flying_messages.lock();
       let mut items = vec![];
 
       let mut count = 0;
@@ -341,6 +337,10 @@ where
         }
       }
       msg_queue.extend(item_to_requeue);
+
+      let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
+      flying_messages.extend(message_ids);
+
       items
     };
 
@@ -353,65 +353,81 @@ where
       .into_iter()
       .map(|item| item.into_message())
       .collect::<Vec<_>>();
-    trace!(
-      "🔥 sending {} messages {:?}",
-      self.object.object_id,
-      message_ids
-    );
     match self.sender.try_lock() {
-      Ok(mut sender) => {
-        if let Err(err) = sender.send(messages).await {
+      Ok(mut sender) => match sender.send(messages).await {
+        Ok(_) => {
+          trace!(
+            "🔥 sending {} messages {:?}",
+            self.object.object_id,
+            message_ids
+          );
+        },
+        Err(err) => {
           error!("Failed to send error: {:?}", err.into());
-        }
-        self.flying_messages.lock().extend(message_ids);
+          self
+            .flying_messages
+            .lock()
+            .retain(|id| !message_ids.contains(id));
+        },
       },
       Err(_) => {
         warn!("failed to acquire the lock of the sink, retry later");
+        self
+          .flying_messages
+          .lock()
+          .retain(|id| !message_ids.contains(id));
         retry_later(Arc::downgrade(&self.notifier));
       },
     }
   }
 
-  /// Merge the next message with the subsequent messages if possible.
-  fn merge_items_into_next(&self, next: &mut QueueItem<Msg>, msg_queue: &mut SinkQueue<Msg>) {
-    if self.config.disable_merge_message || !next.can_merge() {
+  fn merge(&self) {
+    if self.config.disable_merge_message {
       return;
     }
 
-    trace!("start merging message");
-    let mut merged_ids = vec![];
-    // Attempt to merge subsequent messages until it's no longer possible or advisable.
-    let flying_messages = self.flying_messages.lock();
-    while let Some(pending_msg) = msg_queue.pop() {
-      if flying_messages.contains(&pending_msg.msg_id()) {
-        trace!("skip merging message: {:?}", pending_msg.msg_id());
-        continue;
-      }
+    if let (Some(flying_messages), Some(mut msg_queue)) = (
+      self.flying_messages.try_lock(),
+      self.message_queue.try_lock(),
+    ) {
+      let mut items: Vec<QueueItem<Msg>> = Vec::with_capacity(msg_queue.len());
+      let mut merged_ids = HashMap::new();
+      while let Some(next) = msg_queue.pop() {
+        // If the message is in the flying messages, it means the message is sending to the remote.
+        // So don't merge the message.
+        if flying_messages.contains(&next.msg_id()) {
+          items.push(next);
+          continue;
+        }
 
-      // Attempt to merge the current message with the next one.
-      // If merging is not successful or not advisable, push the unmerged message back and exit.
-      match next.merge(&pending_msg, &self.config.maximum_payload_size) {
-        Ok(success) => {
-          if success {
-            merged_ids.push(pending_msg.msg_id());
-          } else {
-            msg_queue.push(pending_msg);
-            break;
+        // Try to merge the next message with the last message. Only merge when:
+        // 1. The last message is not in the flying messages.
+        // 2. The last message can be merged.
+        // 3. The last message's payload size is less than the maximum payload size.
+        if let Some(last) = items.last_mut() {
+          if !flying_messages.contains(&last.msg_id())
+            && last.can_merge()
+            && last.message().payload_size() < self.config.maximum_payload_size
+          {
+            if last.merge(&next, &self.config.maximum_payload_size).is_ok() {
+              merged_ids
+                .entry(last.msg_id())
+                .or_insert(vec![])
+                .push(next.msg_id());
+              continue;
+            }
           }
-        },
-        Err(err) => {
-          msg_queue.push(pending_msg);
-          error!("Failed to merge message: {}", err);
-          break;
-        },
+        }
+        items.push(next);
       }
-    }
 
-    trace!(
-      "merged {:?} messages into one: {:?}",
-      merged_ids,
-      next.msg_id(),
-    );
+      if cfg!(debug_assertions) {
+        for (msg_id, merged_ids) in merged_ids {
+          trace!("merged {:?} messages into: {:?}", merged_ids, msg_id);
+        }
+      }
+      msg_queue.extend(items);
+    }
   }
 
   /// Notify the sink to process the next message.

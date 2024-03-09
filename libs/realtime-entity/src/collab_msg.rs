@@ -16,9 +16,8 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
-  /// Returns the length of the message in bytes.
-  /// Returns true if the message can be merged with other messages.
-  fn can_merge(&self) -> bool;
+  fn payload_size(&self) -> usize;
+  fn mergeable(&self) -> bool;
 
   fn merge(&mut self, other: &Self, maximum_payload_size: &usize) -> Result<bool, Error>;
 
@@ -43,7 +42,11 @@ pub enum CollabMessage {
 }
 
 impl CollabSinkMessage for CollabMessage {
-  fn can_merge(&self) -> bool {
+  fn payload_size(&self) -> usize {
+    self.len()
+  }
+
+  fn mergeable(&self) -> bool {
     matches!(self, CollabMessage::ClientUpdateSync(_))
   }
 
@@ -675,7 +678,13 @@ impl Display for ClientCollabMessage {
       ClientCollabMessage::ClientInitSync { data, .. } => Display::fmt(&data, f),
       ClientCollabMessage::ClientUpdateSync { data, .. } => Display::fmt(&data, f),
       ClientCollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
-      ClientCollabMessage::ClientAwarenessSync(data) => Display::fmt(&data, f),
+      ClientCollabMessage::ClientAwarenessSync(data) => f.write_fmt(format_args!(
+        "awareness: [uid:{}|oid:{}|msg_id:{}|len:{}]",
+        data.origin.client_user_id().unwrap_or(0),
+        data.object_id,
+        data.msg_id,
+        data.payload.len(),
+      )),
     }
   }
 }
@@ -717,7 +726,11 @@ impl From<ClientCollabMessage> for RealtimeMessage {
 }
 
 impl CollabSinkMessage for ClientCollabMessage {
-  fn can_merge(&self) -> bool {
+  fn payload_size(&self) -> usize {
+    self.size()
+  }
+
+  fn mergeable(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
   }
 

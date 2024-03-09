@@ -141,7 +141,7 @@ where
         payload,
         msg_id,
       );
-      ClientCollabMessage::new_awareness_sync(update_sync)
+      ClientCollabMessage::new_update_sync(update_sync)
     });
   }
 

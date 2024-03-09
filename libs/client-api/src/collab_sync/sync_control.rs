@@ -315,6 +315,7 @@ where
     broadcast_seq_num: &Arc<AtomicU32>,
     last_sync_time: &LastSyncTime,
   ) -> Result<(), SyncError> {
+    trace!("start process message:{}", msg);
     // If server return the AckCode::ApplyInternalError, which means the server can not apply the
     // update
     if matches!(msg, ServerCollabMessage::ClientAck(ref ack) if ack.code == AckCode::CannotApplyUpdate)
@@ -370,11 +371,6 @@ where
       msg.payload()
     };
 
-    trace!(
-      "start process message:{:?}, len:{}",
-      msg.msg_id(),
-      msg.size()
-    );
     ObserveCollab::<Sink, Stream>::process_payload(
       origin,
       payload,

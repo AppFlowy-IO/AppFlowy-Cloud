@@ -1,3 +1,4 @@
+use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::{Arc, Weak};
 
 use collab::core::collab::MutexCollab;
@@ -131,19 +132,31 @@ where
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {
-    let weak_sync_queue = Arc::downgrade(&self.sync_queue);
     let update = update.to_vec();
-    let object_id = self.object.object_id.clone();
-    let cloned_origin = origin.clone();
+    let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
+    self.sync_queue.queue_msg(|msg_id| {
+      let update_sync = UpdateSync::new(
+        origin.clone(),
+        self.object.object_id.clone(),
+        payload,
+        msg_id,
+      );
+      ClientCollabMessage::new_update_sync(update_sync)
+    });
+  }
 
-    af_spawn(async move {
-      if let Some(sync_queue) = weak_sync_queue.upgrade() {
-        let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
-        sync_queue.queue_msg(|msg_id| {
-          let update_sync = UpdateSync::new(cloned_origin, object_id, payload, msg_id);
-          ClientCollabMessage::new_update_sync(update_sync)
-        });
-      }
+  fn receive_local_state(
+    &self,
+    origin: &CollabOrigin,
+    object_id: &str,
+    _event: &Event,
+    update: &AwarenessUpdate,
+  ) {
+    let payload = Message::Awareness(update.clone()).encode_v1();
+    self.sync_queue.queue_msg(|msg_id| {
+      let update_sync = UpdateSync::new(origin.clone(), object_id.to_string(), payload, msg_id);
+      trace!("queue local state: {}", update_sync);
+      ClientCollabMessage::new_update_sync(update_sync)
     });
   }
 

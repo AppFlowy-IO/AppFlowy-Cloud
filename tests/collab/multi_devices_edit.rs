@@ -24,7 +24,7 @@ async fn sync_collab_content_after_reconnect_test() {
   test_client.disconnect().await;
   for i in 0..=5 {
     test_client
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -85,7 +85,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
 
   // client 1 edit the collab
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -106,7 +106,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   sleep(Duration::from_millis(1000)).await;
 
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -148,7 +148,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
   // client 1 edit the collab with object_id_1
   device_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id_1)
     .unwrap()
     .collab
@@ -161,7 +161,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
   // client 2 edit the collab with object_id_2
   device_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id_2)
     .unwrap()
     .collab
@@ -214,7 +214,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
 
   // add client 2 as a member of the collab
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -231,7 +231,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   for i in 0..10 {
     if i % 2 == 0 {
       client_1
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
         .collab
@@ -239,7 +239,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
         .insert(&i.to_string(), format!("Task {}", i));
     } else {
       client_2
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
         .collab
@@ -297,7 +297,7 @@ async fn init_sync_when_missing_updates_test() {
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -307,7 +307,7 @@ async fn init_sync_when_missing_updates_test() {
 
   // Client_1 makes the first edit by inserting "task 1".
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -347,7 +347,7 @@ async fn init_sync_when_missing_updates_test() {
   // Client_1 inserts "task 2", which client_2 misses due to skipping realtime messages.
   for _ in 0..2 * NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
     client_1
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -360,7 +360,7 @@ async fn init_sync_when_missing_updates_test() {
     .unwrap();
 
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -399,7 +399,7 @@ async fn init_sync_when_missing_updates_test() {
   println!("client_2 enable_receive_message");
   client_2.ws_client.enable_receive_message();
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab

@@ -6,6 +6,7 @@ use std::fmt::Display;
 use crate::server::RealtimeAccessControl;
 use anyhow::anyhow;
 
+use collab::core::awareness::{AwarenessUpdate, Event};
 use collab::core::collab::TransactionMutExt;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
@@ -213,6 +214,16 @@ where
       self.edit_state.tick();
       let _object_id = object_id.to_string();
     }
+  }
+
+  fn receive_local_state(
+    &self,
+    _origin: &CollabOrigin,
+    _object_id: &str,
+    _event: &Event,
+    _update: &AwarenessUpdate,
+  ) {
+    // do nothing
   }
 
   fn flush(&self, object_id: &str, doc: &Doc) {

@@ -236,7 +236,7 @@ impl From<AwarenessSync> for CollabMessage {
 impl Display for AwarenessSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "awareness: [oid:{}|len:{}]",
+      "awareness: [|oid:{}|len:{}]",
       self.object_id,
       self.payload.len(),
     ))
@@ -748,25 +748,8 @@ impl PartialOrd for ClientCollabMessage {
 impl Ord for ClientCollabMessage {
   fn cmp(&self, other: &Self) -> Ordering {
     match (&self, &other) {
-      (
-        ClientCollabMessage::ClientInitSync { data: left, .. },
-        ClientCollabMessage::ClientInitSync { data: right, .. },
-      ) => {
-        match (&left.collab_type, &right.collab_type) {
-          // document
-          (CollabType::Document, _) => Ordering::Greater,
-          (_, CollabType::Document) => Ordering::Less,
-          // database
-          (CollabType::WorkspaceDatabase, _) => Ordering::Greater,
-          (_, CollabType::WorkspaceDatabase) => Ordering::Less,
-          // folder
-          (_, CollabType::Folder) => Ordering::Greater,
-          (CollabType::Folder, _) => Ordering::Less,
-          // awareness
-          (CollabType::UserAwareness, _) => Ordering::Greater,
-          (_, CollabType::UserAwareness) => Ordering::Less,
-          _ => Ordering::Equal,
-        }
+      (ClientCollabMessage::ClientInitSync { .. }, ClientCollabMessage::ClientInitSync { .. }) => {
+        Ordering::Equal
       },
       (ClientCollabMessage::ClientInitSync { .. }, _) => Ordering::Greater,
       (_, ClientCollabMessage::ClientInitSync { .. }) => Ordering::Less,

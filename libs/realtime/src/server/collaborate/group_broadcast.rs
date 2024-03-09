@@ -1,5 +1,4 @@
-use collab::core::awareness;
-use collab::core::awareness::{Awareness, AwarenessUpdate};
+use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
 use std::rc::{Rc, Weak};
 
 use collab::core::origin::CollabOrigin;
@@ -18,7 +17,6 @@ use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
-use crate::error::RealtimeError;
 use crate::server::collaborate::sync_protocol::ServerSyncProtocol;
 use realtime_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
@@ -34,7 +32,7 @@ use yrs::encoding::write::Write;
 pub struct CollabBroadcast {
   object_id: String,
   sender: Sender<CollabMessage>,
-  awareness_sub: Mutex<Option<awareness::UpdateSubscription>>,
+  awareness_sub: Mutex<Option<AwarenessUpdateSubscription>>,
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
@@ -93,12 +91,9 @@ impl CollabBroadcast {
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, value + 1);
 
-          match broadcast_sink.send(msg.into()) {
-            Ok(_) => trace!("observe doc update with len:{}", update_len),
-            Err(e) => error!(
-              "observe doc update with len:{} - broadcast sink fail: {}",
-              update_len, e
-            ),
+          trace!("observe doc update with len:{}", update_len);
+          if let Err(err) = broadcast_sink.send(msg.into()) {
+            trace!("fail to broadcast updates:{}", err);
           }
 
           *modified_at.lock() = Instant::now();
@@ -109,17 +104,16 @@ impl CollabBroadcast {
       let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
-      let awareness_sub = collab
-        .get_mut_awareness()
-        .on_update(move |awareness, event| {
-          if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
-            let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = AwarenessSync::new(cloned_oid.clone(), payload);
-            if let Err(_e) = broadcast_sink.send(msg.into()) {
-              trace!("Broadcast group is closed");
-            }
+      let awareness_sub = collab.observe_awareness(move |awareness, event| {
+        if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
+          trace!("observe awareness update:{}", awareness_update);
+          let payload = Message::Awareness(awareness_update).encode_v1();
+          let msg = AwarenessSync::new(cloned_oid.clone(), payload);
+          if let Err(err) = broadcast_sink.send(msg.into()) {
+            trace!("fail to broadcast awareness:{}", err);
           }
-        });
+        }
+      });
       (doc_sub, awareness_sub)
     };
 
@@ -227,11 +221,17 @@ impl CollabBroadcast {
                     None => break, // break the loop if the collab is dropped
                     Some(collab) => {
                       for (msg_oid, collab_messages) in map {
+                        if collab_messages.is_empty()  {
+                          warn!("collab messages is empty");
+                        }
+
                         // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
                         if object_id == msg_oid {
                             for collab_message in collab_messages {
                               handle_client_collab_message(&object_id, &mut sink, &collab_message, &collab).await;
                             }
+                        } else {
+                          warn!("Expect object id:{} but got:{}", object_id, msg_oid);
                         }
                       }
                     }
@@ -371,20 +371,4 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
   encoder.write_var(MSG_SYNC_UPDATE);
   encoder.write_buf(update);
   encoder.to_vec()
-}
-
-#[inline]
-fn gen_awareness_update_message(
-  awareness: &Awareness,
-  event: &awareness::Event,
-) -> Result<AwarenessUpdate, RealtimeError> {
-  let added = event.added();
-  let updated = event.updated();
-  let removed = event.removed();
-  let mut changed = Vec::with_capacity(added.len() + updated.len() + removed.len());
-  changed.extend_from_slice(added);
-  changed.extend_from_slice(updated);
-  changed.extend_from_slice(removed);
-  let update = awareness.update_with_clients(changed)?;
-  Ok(update)
 }

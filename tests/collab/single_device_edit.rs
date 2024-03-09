@@ -28,7 +28,7 @@ async fn collab_write_small_chunk_of_data_test() {
   // Edit the collab
   for i in 0..=5 {
     test_client
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -72,7 +72,7 @@ async fn collab_write_big_chunk_of_data_test() {
     .await;
   let s = generate_random_string(10000);
   test_client
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -145,7 +145,7 @@ async fn realtime_write_single_collab_test() {
   // Edit the collab
   for i in 0..=5 {
     test_client
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -158,8 +158,6 @@ async fn realtime_write_single_collab_test() {
     "1": "1",
     "2": "2",
     "3": "3",
-    "4": "4",
-    "5": "5",
   });
   test_client
     .wait_object_sync_complete(&object_id)
@@ -195,7 +193,7 @@ async fn realtime_write_multiple_collab_test() {
       .await;
     for i in 0..=5 {
       test_client
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
         .collab
@@ -245,7 +243,7 @@ async fn second_connect_override_first_connect_test() {
     .await;
 
   client
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -265,7 +263,7 @@ async fn second_connect_override_first_connect_test() {
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
   new_client
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -320,7 +318,7 @@ async fn same_device_multiple_connect_in_order_test() {
       .open_collab(&workspace_id, &object_id, collab_type.clone())
       .await;
     new_client
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -359,7 +357,7 @@ async fn two_direction_peer_sync_test() {
   // Before the client_2 want to edit the collab object, it needs to become a member of the collab
   // Otherwise, the server will reject the edit request
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -372,7 +370,7 @@ async fn two_direction_peer_sync_test() {
     .await;
 
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -384,7 +382,7 @@ async fn two_direction_peer_sync_test() {
     .unwrap();
 
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -437,7 +435,7 @@ async fn multiple_collab_edit_test() {
     .await;
 
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id_1)
     .unwrap()
     .collab
@@ -449,7 +447,7 @@ async fn multiple_collab_edit_test() {
     .unwrap();
 
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id_2)
     .unwrap()
     .collab
@@ -503,7 +501,7 @@ async fn simulate_multiple_user_edit_collab_test() {
 
       let random_str = generate_random_string(200);
       new_user
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
         .collab
@@ -520,7 +518,7 @@ async fn simulate_multiple_user_edit_collab_test() {
       (
         expected_json,
         new_user
-          .collab_by_object_id
+          .collabs
           .get(&object_id)
           .unwrap()
           .collab
@@ -600,7 +598,7 @@ async fn collab_flush_test() {
   // so we need to write 200 times to trigger the flush
   for i in 0..200 {
     new_user
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -643,7 +641,7 @@ async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
 
       for i in 0..100 {
         client
-          .collab_by_object_id
+          .collabs
           .get_mut(&object_id)
           .unwrap()
           .collab

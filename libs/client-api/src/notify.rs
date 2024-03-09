@@ -49,7 +49,6 @@ impl ClientToken {
     match &self.token {
       None => {
         self.token = Some(new_token);
-        tracing::trace!("Set new token");
         let _ = self.sender.send(TokenState::Refresh);
       },
       Some(old_token) => {

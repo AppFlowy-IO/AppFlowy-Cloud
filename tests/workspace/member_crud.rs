@@ -121,34 +121,36 @@ async fn update_workspace_member_role_not_enough_permission() {
 
 #[tokio::test]
 async fn update_workspace_member_role_from_guest_to_member() {
-  let c1 = TestClient::new_user_without_ws_conn().await;
-  let c2 = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = c1.workspace_id().await;
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let guest = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = owner.workspace_id().await;
 
   // add client 2 to client 1's workspace
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Guest)
+  owner
+    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
     .await;
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
-  assert_eq!(members[0].email, c1.email().await);
+  assert_eq!(members[0].email, owner.email().await);
   assert_eq!(members[0].role, AFRole::Owner);
-  assert_eq!(members[1].email, c2.email().await);
+  assert_eq!(members[1].email, guest.email().await);
   assert_eq!(members[1].role, AFRole::Guest);
 
-  c1.try_update_workspace_member(&workspace_id, &c2, AFRole::Member)
+  owner
+    .try_update_workspace_member(&workspace_id, &guest, AFRole::Member)
     .await
     .unwrap();
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
-  assert_eq!(members[0].email, c1.email().await);
+  assert_eq!(members[0].email, owner.email().await);
   assert_eq!(members[0].role, AFRole::Owner);
-  assert_eq!(members[1].email, c2.email().await);
+  assert_eq!(members[1].email, guest.email().await);
   assert_eq!(members[1].role, AFRole::Member);
 }
 

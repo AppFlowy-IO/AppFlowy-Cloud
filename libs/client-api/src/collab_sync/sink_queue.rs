@@ -5,8 +5,6 @@ use std::ops::{Deref, DerefMut};
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 
-use tracing::trace;
-
 pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]
   uid: i64,
@@ -53,7 +51,6 @@ where
 pub(crate) struct QueueItem<Msg> {
   msg: Msg,
   msg_id: MsgId,
-  state: MessageState,
 }
 
 impl<Msg> QueueItem<Msg>
@@ -61,28 +58,11 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
-    Self {
-      msg,
-      msg_id,
-      state: MessageState::Pending,
-    }
+    Self { msg, msg_id }
   }
 
   pub fn message(&self) -> &Msg {
     &self.msg
-  }
-
-  pub fn set_state(&mut self, new_state: MessageState) {
-    if self.state != new_state {
-      self.state = new_state;
-
-      trace!(
-        "oid:{}|msg_id:{},msg state:{:?}",
-        self.msg.collab_object_id(),
-        self.msg_id,
-        self.state
-      );
-    }
   }
 
   pub fn msg_id(&self) -> MsgId {
@@ -129,11 +109,4 @@ where
   fn cmp(&self, other: &Self) -> Ordering {
     self.msg.cmp(&other.msg)
   }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub(crate) enum MessageState {
-  Pending,
-  Processing,
-  Done,
 }

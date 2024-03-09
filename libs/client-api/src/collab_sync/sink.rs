@@ -1,6 +1,6 @@
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
-use crate::collab_sync::sink_queue::{MessageState, QueueItem, SinkQueue};
+use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::SyncObject;
 use futures_util::SinkExt;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
@@ -143,7 +143,7 @@ where
       // When the message is a server initialization sync, indicating the absence of a client
       // initialization sync in the queue, it means the server initialization sync contains the
       // [Collab]'s latest state. Therefore, we can clear the Update messages in the queue.
-      msg_queue.retain(|item| !item.message().is_update_sync());
+      // msg_queue.retain(|item| !item.message().is_update_sync());
     }
 
     msg_queue.push_msg(msg_id, msg);
@@ -219,7 +219,7 @@ where
     {
       let mut flying_messages = self.flying_messages.lock();
       let mut lock_guard = self.message_queue.lock();
-      if let Some(mut current_item) = lock_guard.pop() {
+      if let Some(current_item) = lock_guard.pop() {
         // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
         // due to network issues, the client might send multiple messages with the same msg_id.
         // Therefore, the msg_id might not always match the msg_id of the pending_msg.
@@ -227,7 +227,6 @@ where
           lock_guard.push(current_item);
         } else {
           flying_messages.remove(&income_message_id);
-          current_item.set_state(MessageState::Done)
         }
 
         trace!(

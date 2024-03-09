@@ -7,6 +7,7 @@ pub struct SinkConfig {
   pub send_timeout: Duration,
   /// `maximum_payload_size` is the maximum size of the messages to be merged.
   pub maximum_payload_size: usize,
+  pub disable_merge_message: bool,
 }
 
 impl SinkConfig {
@@ -30,6 +31,7 @@ impl Default for SinkConfig {
     Self {
       send_timeout: Duration::from_secs(DEFAULT_SYNC_TIMEOUT),
       maximum_payload_size: 1024 * 64,
+      disable_merge_message: false,
     }
   }
 }

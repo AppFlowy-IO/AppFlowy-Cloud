@@ -11,7 +11,7 @@ use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
 
-use tokio::sync::{oneshot, watch, Mutex};
+use tokio::sync::{watch, Mutex};
 
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, trace, warn};
@@ -203,7 +203,6 @@ where
   pub async fn ack_msg(&self, msg: &ServerCollabMessage) -> bool {
     if msg.msg_id().is_none() {
       // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
-      self.process_next_msg().await;
       return true;
     }
 
@@ -212,14 +211,12 @@ where
     let mut is_valid = false;
     {
       let mut lock_guard = self.message_queue.lock();
-      if let Some(mut current_item) = lock_guard.pop() {
+      if let Some(current_item) = lock_guard.pop() {
         // In most cases, the msg_id of the pending_msg is the same as the passed-in msg_id. However,
         // due to network issues, the client might send multiple messages with the same msg_id.
         // Therefore, the msg_id might not always match the msg_id of the pending_msg.
         if current_item.msg_id() != msg_id {
           lock_guard.push(current_item);
-        } else {
-          current_item.set_state(MessageState::Done)
         }
 
         trace!(
@@ -251,7 +248,6 @@ where
   }
 
   async fn send_msg_immediately(&self) -> Option<()> {
-    let (tx, rx) = oneshot::channel();
     let collab_msg = {
       let (mut msg_queue, mut next) = match self.message_queue.try_lock() {
         None => {
@@ -269,7 +265,6 @@ where
       }
 
       self.merge_items_into_next(&mut next, &mut msg_queue);
-      next.set_ret(tx);
       next.set_state(MessageState::Processing);
       let collab_msg = next.get_msg().clone();
       msg_queue.push(next);
@@ -289,21 +284,12 @@ where
       },
     }
 
-    if tokio::time::timeout(Duration::from_secs(6), rx)
-      .await
-      .is_err()
-    {
-      if let Some(mut pending_msg) = self.message_queue.lock().peek_mut() {
-        pending_msg.set_state(MessageState::Timeout);
-      }
-      self.notify();
-    }
     None
   }
 
   /// Merge the next message with the subsequent messages if possible.
   fn merge_items_into_next(&self, next: &mut QueueItem<Msg>, msg_queue: &mut SinkQueue<Msg>) {
-    if cfg!(feature = "disable_multi_msg_merge") {
+    if self.config.disable_merge_message {
       return;
     }
 
@@ -317,8 +303,9 @@ where
       // Attempt to merge the current message with the next one.
       // If merging is not successful or not advisable, push the unmerged message back and exit.
       match next.merge(&pending_msg, &self.config.maximum_payload_size) {
-        Ok(can_merge) => {
-          if !can_merge {
+        Ok(success) => {
+          if !success {
+            msg_queue.push(pending_msg);
             break;
           }
         },

@@ -95,7 +95,7 @@ tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
 scraper = "0.17.1"
 client-api-test-util = { path = "libs/client-api-test-util" }
-client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "disable_multi_msg_merge"] }
+client-api = { path = "libs/client-api", features = ["collab-sync", "test_util"] }
 opener = "0.6.1"
 image = "0.23.14"
 collab-folder = { version = "0.1.0" }
@@ -173,10 +173,10 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f8a8443b7368b7872add5128fabd45ef80ebba8" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f8a8443b7368b7872add5128fabd45ef80ebba8" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f8a8443b7368b7872add5128fabd45ef80ebba8" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0f8a8443b7368b7872add5128fabd45ef80ebba8" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
 
 [features]
 custom_env= []

@@ -433,16 +433,9 @@ fn handle_collab_message(
       // Iterate all channels and send the message to them.
       if let Some(channels) = collab_channels.read().get(&object_id) {
         for channel in channels.iter() {
-          match channel.upgrade() {
-            None => {
-              // when calling [WSClient::subscribe], the caller is responsible for keeping
-              // the channel alive as long as it wants to receive messages from the websocket.
-              warn!("channel is dropped");
-            },
-            Some(channel) => {
-              trace!("receive server message: {}", collab_msg);
-              channel.forward_to_stream(collab_msg.clone());
-            },
+          if let Some(channel) = channel.upgrade() {
+            trace!("receive server message: {}", collab_msg);
+            channel.forward_to_stream(collab_msg.clone());
           }
         }
       }

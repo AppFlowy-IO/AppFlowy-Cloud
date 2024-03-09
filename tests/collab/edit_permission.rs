@@ -32,7 +32,7 @@ async fn recv_updates_without_permission_test() {
   // Edit the collab from client 1 and then the server will broadcast to client 2. But the client 2
   // is not the member of the collab, so the client 2 will not receive the update.
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -58,7 +58,7 @@ async fn recv_remote_updates_with_readonly_permission_test() {
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -72,7 +72,7 @@ async fn recv_remote_updates_with_readonly_permission_test() {
 
   // Edit the collab from client 1 and then the server will broadcast to client 2
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -110,7 +110,7 @@ async fn init_sync_with_readonly_permission_test() {
     .create_and_edit_collab(&workspace_id, collab_type.clone())
     .await;
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -140,7 +140,7 @@ async fn init_sync_with_readonly_permission_test() {
   // Add client 2 as the member of the collab with readonly permission.
   // client 2 can pull the latest updates via the init sync. But it's not allowed to send local changes.
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -168,7 +168,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -183,7 +183,7 @@ async fn edit_collab_with_readonly_permission_test() {
   // client 2 edit the collab and then the server will reject the update which mean the
   // collab in the server will not be updated.
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -224,7 +224,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -238,7 +238,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
   // client 2 edit the collab and then the server will broadcast the update
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -281,7 +281,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -295,7 +295,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
   // client 2 edit the collab and then the server will broadcast the update
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
@@ -336,7 +336,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
 
   // Add client 2 as the member of the collab then the client 2 will receive the update.
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -350,7 +350,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .open_collab(&workspace_id, &object_id, collab_type.clone())
       .await;
     client_2
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -374,7 +374,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       )
       .await;
     client_2
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
       .collab
@@ -426,40 +426,40 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
     let collab_type = collab_type.clone();
     let workspace_id = workspace_id.clone();
     let task = tokio::spawn(async move {
-      let mut new_user = TestClient::new_user().await;
+      let mut new_member = TestClient::new_user().await;
       // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
       sleep(Duration::from_secs(i % 3)).await;
 
       owner
-        .add_workspace_member(&workspace_id, &new_user, AFRole::Member)
+        .add_workspace_member(&workspace_id, &new_member, AFRole::Member)
         .await;
       owner
-        .add_client_as_collab_member(
+        .add_collab_member(
           &workspace_id,
           &object_id,
-          &new_user,
+          &new_member,
           AFAccessLevel::ReadAndWrite,
         )
         .await;
 
-      new_user
+      new_member
         .open_collab(&workspace_id, &object_id, collab_type.clone())
         .await;
 
       // generate random string and insert it to the collab
       let random_str = generate_random_string(200);
-      new_user
-        .collab_by_object_id
+      new_member
+        .collabs
         .get_mut(&object_id)
         .unwrap()
         .collab
         .lock()
         .insert(&i.to_string(), random_str.clone());
-      new_user
+      new_member
         .wait_object_sync_complete(&object_id)
         .await
         .unwrap();
-      (random_str, new_user)
+      (random_str, new_member)
     });
     tasks.push(task);
   }
@@ -480,7 +480,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   assert_json_eq!(
     json!(expected_json),
     arc_owner
-      .collab_by_object_id
+      .collabs
       .get(&object_id)
       .unwrap()
       .collab
@@ -491,7 +491,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
     assert_json_include!(
       actual: json!(expected_json),
       expected: client
-        .collab_by_object_id
+        .collabs
         .get(&object_id)
         .unwrap()
         .collab
@@ -522,7 +522,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
       // sleep 2 secs to make sure it do not trigger register user too fast in gotrue
       sleep(Duration::from_secs(i % 2)).await;
       owner
-        .add_client_as_collab_member(
+        .add_collab_member(
           &workspace_id,
           &object_id,
           &new_user,
@@ -536,7 +536,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
 
       let random_str = generate_random_string(200);
       new_user
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
         .collab
@@ -557,7 +557,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
     assert_json_eq!(
       json!({index.to_string(): s}),
       client
-        .collab_by_object_id
+        .collabs
         .get(&object_id)
         .unwrap()
         .collab
@@ -568,7 +568,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   assert_json_eq!(
     json!({}),
     arc_owner
-      .collab_by_object_id
+      .collabs
       .get(&object_id)
       .unwrap()
       .collab

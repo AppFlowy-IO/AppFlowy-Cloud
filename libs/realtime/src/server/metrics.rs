@@ -1,7 +1,6 @@
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
 use std::sync::atomic::AtomicU64;
-use tracing::trace;
 
 #[derive(Clone)]
 pub struct RealtimeMetrics {
@@ -42,7 +41,6 @@ impl RealtimeMetrics {
   }
 
   pub fn record_connected_users(&self, num: usize) {
-    trace!("[metrics]: connected_users: {}", num);
     self.connected_users.set(num as i64);
   }
 
@@ -51,7 +49,6 @@ impl RealtimeMetrics {
   }
 
   pub fn record_opening_collab_count(&self, count: usize) {
-    trace!("[metrics]: opening_collab_count: {}", count);
     self.opening_collab_count.set(count as i64);
   }
 }

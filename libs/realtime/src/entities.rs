@@ -74,7 +74,7 @@ pub struct ClientStreamMessage {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
-pub(crate) struct Editing {
+pub struct Editing {
   pub object_id: String,
   pub origin: CollabOrigin,
 }

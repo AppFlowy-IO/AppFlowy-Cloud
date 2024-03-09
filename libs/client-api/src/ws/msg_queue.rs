@@ -115,6 +115,10 @@ async fn next_batch_message(
 
 #[inline]
 fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
+  // Define start and end signs
+  let start_sign = "----- Start of Message List -----";
+  let end_sign = "------ End of Message List ------";
+
   let log_msg = messages_map
     .iter()
     .map(|(object_id, messages)| {
@@ -127,5 +131,8 @@ fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
     .collect::<Vec<_>>()
     .join("\n"); // Joining with newline character
 
-  debug!("Aggregate messages:\n{}", log_msg);
+  // Prepend the start sign and append the end sign to the log message
+  let log_msg = format!("{}\n{}\n{}", start_sign, log_msg, end_sign);
+
+  debug!("Aggregate message list:\n{}", log_msg);
 }

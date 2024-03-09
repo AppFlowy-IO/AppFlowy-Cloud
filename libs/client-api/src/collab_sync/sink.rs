@@ -366,14 +366,22 @@ where
     if !next.can_merge() {
       return;
     }
+    let mut merged_ids = vec![];
 
     // Attempt to merge subsequent messages until it's no longer possible or advisable.
+    let flying_messages = self.flying_messages.lock();
     while let Some(pending_msg) = msg_queue.pop() {
+      if flying_messages.contains(&pending_msg.msg_id()) {
+        continue;
+      }
+
       // Attempt to merge the current message with the next one.
       // If merging is not successful or not advisable, push the unmerged message back and exit.
       match next.merge(&pending_msg, &self.config.maximum_payload_size) {
         Ok(success) => {
-          if !success {
+          if success {
+            merged_ids.push(pending_msg.msg_id());
+          } else {
             msg_queue.push(pending_msg);
             break;
           }
@@ -385,6 +393,12 @@ where
         },
       }
     }
+
+    trace!(
+      "Merged {:?} messages into one: {:?}",
+      merged_ids,
+      next.msg_id(),
+    );
   }
 
   /// Notify the sink to process the next message.

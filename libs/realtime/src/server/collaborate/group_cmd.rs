@@ -123,7 +123,7 @@ where
       let first_message = messages.first().unwrap();
       // If a group exists for the specified object_id and the message is an 'init sync',
       // then remove any existing subscriber from that group and add the new user as a subscriber to the group.
-      if first_message.is_init_msg() {
+      if first_message.is_client_init_sync() {
         self.all_groups.remove_user(&object_id, user).await?;
       }
 
@@ -137,7 +137,7 @@ where
       let first_message = messages.first().unwrap();
       // If there is no existing group for the given object_id and the message is an 'init message',
       // then create a new group and add the user as a subscriber to this group.
-      if first_message.is_init_msg() {
+      if first_message.is_client_init_sync() {
         self.create_group(first_message).await?;
         self.subscribe_group(user, first_message).await?;
         broadcast_client_collab_message(user, object_id, messages, &self.client_stream_by_user)

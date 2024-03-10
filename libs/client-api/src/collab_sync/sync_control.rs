@@ -12,7 +12,8 @@ use collab::preclude::Collab;
 
 use futures_util::{SinkExt, StreamExt};
 use realtime_entity::collab_msg::{
-  AckCode, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit, UpdateSync,
+  AckCode, BroadcastSync, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit,
+  UpdateSync,
 };
 use realtime_protocol::{handle_collab_message, ClientSyncProtocol, CollabSyncProtocol};
 use realtime_protocol::{Message, MessageReader, SyncMessage};
@@ -56,7 +57,7 @@ impl<Sink, Stream> Drop for SyncControl<Sink, Stream> {
 impl<E, Sink, Stream> SyncControl<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
   #[allow(clippy::too_many_arguments)]
@@ -130,10 +131,12 @@ where
   }
 
   pub fn pause(&self) {
+    trace!("pause {} sync", self.object.object_id);
     self.sink.pause();
   }
 
   pub fn resume(&self) {
+    trace!("resume {} sync", self.object.object_id);
     self.sink.resume();
   }
 
@@ -171,7 +174,7 @@ pub fn _init_sync<E, Sink>(
   sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
 ) where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
   let awareness = collab.get_awareness();
   if let Some(payload) = doc_init_state(awareness, &ClientSyncProtocol) {
@@ -217,7 +220,7 @@ impl<Sink, Stream> Drop for ObserveCollab<Sink, Stream> {
 impl<E, Sink, Stream> ObserveCollab<Sink, Stream>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
 {
   pub fn new(
@@ -315,71 +318,83 @@ where
     broadcast_seq_num: &Arc<AtomicU32>,
     last_sync_time: &LastSyncTime,
   ) -> Result<(), SyncError> {
-    trace!("start process message:{}", msg);
     // If server return the AckCode::ApplyInternalError, which means the server can not apply the
     // update
-    if matches!(msg, ServerCollabMessage::ClientAck(ref ack) if ack.code == AckCode::CannotApplyUpdate)
-    {
-      return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
+    if let ServerCollabMessage::ClientAck(ref ack) = msg {
+      if ack.code == AckCode::CannotApplyUpdate {
+        return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
+      }
     }
 
     if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
-      let prev_seq_num = broadcast_seq_num.load(Ordering::SeqCst);
-      broadcast_seq_num.store(data.seq_num, Ordering::SeqCst);
-
-      // In the debug mode, we use a shorter debounce duration to speed up the test.
-      let debounce_duration = if cfg!(debug_assertions) {
-        Duration::from_secs(2)
-      } else {
-        DEBOUNCE_DURATION
-      };
-
-      trace!(
-        "receive {} broadcast data, current: {}, prev: {}",
-        object.object_id,
-        data.seq_num,
-        prev_seq_num
-      );
-
-      // Check if the received seq_num indicates missing updates.
-      if data.seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
-        && sink.can_queue_init_sync()
-        && last_sync_time.should_sync(debounce_duration).await
-      {
-        if let Some(lock_guard) = collab.try_lock() {
-          info!(
-            "{} missing updates len: {}, start init sync",
-            object.object_id,
-            data.seq_num - prev_seq_num,
-          );
-          _init_sync(origin.clone(), object, &lock_guard, sink);
-          return Ok(());
-        }
+      if let Err(err) = Self::validate_broadcast(object, data, broadcast_seq_num).await {
+        info!("{}", err);
+        Self::try_init_sync(origin, object, collab, sink, last_sync_time).await;
       }
     }
 
     // Check if the message is acknowledged by the sink. If not, return.
-    let is_valid = sink.ack_msg(&msg).await;
-    if !is_valid {
-      return Ok(());
+    let is_valid = sink.validate_server_message(&msg).await;
+    // If there's no payload or the payload is empty, return.
+    if is_valid && !msg.payload().is_empty() {
+      ObserveCollab::<Sink, Stream>::process_payload(
+        origin,
+        msg.payload(),
+        &object.object_id,
+        collab,
+        sink,
+      )
+      .await?;
     }
 
-    // If there's no payload or the payload is empty, return.
-    let payload = if msg.payload().is_empty() {
-      return Ok(());
-    } else {
-      msg.payload()
-    };
+    if is_valid {
+      sink.notify();
+    }
+    Ok(())
+  }
 
-    ObserveCollab::<Sink, Stream>::process_payload(
-      origin,
-      payload,
-      &object.object_id,
-      collab,
-      sink,
-    )
-    .await?;
-    trace!("end process message: {:?}", msg.msg_id());
+  async fn try_init_sync(
+    origin: &CollabOrigin,
+    object: &SyncObject,
+    collab: &Arc<MutexCollab>,
+    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+    last_sync_time: &LastSyncTime,
+  ) {
+    let debounce_duration = if cfg!(debug_assertions) {
+      Duration::from_secs(2)
+    } else {
+      DEBOUNCE_DURATION
+    };
+    if sink.can_queue_init_sync() && last_sync_time.should_sync(debounce_duration).await {
+      if let Some(lock_guard) = collab.try_lock() {
+        _init_sync(origin.clone(), object, &lock_guard, sink);
+      }
+    }
+  }
+
+  async fn validate_broadcast(
+    object: &SyncObject,
+    broadcast_sync: &BroadcastSync,
+    broadcast_seq_num: &Arc<AtomicU32>,
+  ) -> Result<(), SyncError> {
+    let prev_seq_num = broadcast_seq_num.load(Ordering::SeqCst);
+    broadcast_seq_num.store(broadcast_sync.seq_num, Ordering::SeqCst);
+    trace!(
+      "receive {} broadcast data, current: {}, prev: {}",
+      object.object_id,
+      broadcast_sync.seq_num,
+      prev_seq_num
+    );
+
+    // Check if the received seq_num indicates missing updates.
+    if broadcast_sync.seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
+      return Err(SyncError::MissingBroadcast(format!(
+        "{} missing updates len: {}, start init sync",
+        object.object_id,
+        broadcast_sync.seq_num - prev_seq_num,
+      )));
+    }
+
     Ok(())
   }
 
@@ -395,12 +410,12 @@ where
       let reader = MessageReader::new(&mut decoder);
       for msg in reader {
         let msg = msg?;
-        let is_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+        let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
         if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, &mut collab, msg)?
         {
           let object_id = object_id.to_string();
           sink.queue_msg(|msg_id| {
-            if is_sync_step_1 {
+            if is_server_sync_step_1 {
               ClientCollabMessage::new_server_init_sync(ServerInit::new(
                 origin.clone(),
                 object_id,

@@ -12,7 +12,7 @@ use tracing::{trace, warn};
 
 pub struct WebSocketChannel<T> {
   object_id: String,
-  rt_msg_sender: Sender<ClientCollabMessage>,
+  rt_msg_sender: Sender<Vec<ClientCollabMessage>>,
   receiver: Sender<T>,
 }
 
@@ -26,7 +26,7 @@ impl<T> WebSocketChannel<T>
 where
   T: Into<RealtimeMessage> + Clone + Send + Sync + 'static,
 {
-  pub fn new(object_id: &str, rt_msg_sender: Sender<ClientCollabMessage>) -> Self {
+  pub fn new(object_id: &str, rt_msg_sender: Sender<Vec<ClientCollabMessage>>) -> Self {
     let object_id = object_id.to_string();
     let (receiver, _) = channel(1000);
     Self {
@@ -45,8 +45,8 @@ where
   }
 
   /// Use to send message to server via WebSocket.
-  pub fn sink(&self) -> BroadcastSink<ClientCollabMessage> {
-    let (tx, mut rx) = unbounded_channel::<ClientCollabMessage>();
+  pub fn sink(&self) -> BroadcastSink<Vec<ClientCollabMessage>> {
+    let (tx, mut rx) = unbounded_channel::<Vec<ClientCollabMessage>>();
     let cloned_sender = self.rt_msg_sender.clone();
     let object_id = self.object_id.clone();
     af_spawn(async move {

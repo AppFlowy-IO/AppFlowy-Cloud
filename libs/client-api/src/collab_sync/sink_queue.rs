@@ -5,8 +5,6 @@ use std::ops::{Deref, DerefMut};
 
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
 
-use tracing::trace;
-
 pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]
   uid: i64,
@@ -49,11 +47,11 @@ where
   }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct QueueItem<Msg> {
-  msg: Msg,
+  inner: Msg,
+  // TODO(nathan): user inner's msg_id
   msg_id: MsgId,
-  state: MessageState,
 }
 
 impl<Msg> QueueItem<Msg>
@@ -61,36 +59,19 @@ where
   Msg: CollabSinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
-    Self {
-      msg,
-      msg_id,
-      state: MessageState::Pending,
-    }
+    Self { inner: msg, msg_id }
   }
 
-  pub fn get_msg(&self) -> &Msg {
-    &self.msg
+  pub fn message(&self) -> &Msg {
+    &self.inner
   }
 
-  pub fn set_state(&mut self, new_state: MessageState) {
-    if self.state != new_state {
-      self.state = new_state;
-
-      trace!(
-        "oid:{}|msg_id:{},msg state:{:?}",
-        self.msg.collab_object_id(),
-        self.msg_id,
-        self.state
-      );
-    }
+  pub fn into_message(self) -> Msg {
+    self.inner
   }
 
   pub fn msg_id(&self) -> MsgId {
     self.msg_id
-  }
-
-  pub fn is_processing(&self) -> bool {
-    self.state == MessageState::Processing
   }
 }
 
@@ -98,15 +79,11 @@ impl<Msg> QueueItem<Msg>
 where
   Msg: CollabSinkMessage,
 {
-  pub fn can_merge(&self) -> bool {
-    if self.is_processing() {
-      return false;
-    }
-
-    self.msg.can_merge()
+  pub fn mergeable(&self) -> bool {
+    self.inner.mergeable()
   }
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
-    self.msg.merge(other.get_msg(), max_size)
+    self.inner.merge(other.message(), max_size)
   }
 }
 
@@ -117,7 +94,7 @@ where
   Msg: PartialEq,
 {
   fn eq(&self, other: &Self) -> bool {
-    self.msg == other.msg
+    self.inner == other.inner
   }
 }
 
@@ -135,12 +112,6 @@ where
   Msg: Ord,
 {
   fn cmp(&self, other: &Self) -> Ordering {
-    self.msg.cmp(&other.msg)
+    self.inner.cmp(&other.inner)
   }
-}
-
-#[derive(Debug, Eq, PartialEq, Clone)]
-pub(crate) enum MessageState {
-  Pending,
-  Processing,
 }

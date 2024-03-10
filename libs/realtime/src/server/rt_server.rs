@@ -504,11 +504,9 @@ impl CollabClientStream {
   }
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.
-  /// [Sink] will be used to receive changes from the collab object. Before receiving the changes, the sink_filter
-  /// will be used to check if the client is allowed to receive the changes.
+  /// [Sink] will be used to receive changes from the collab object.
   ///
-  /// [Stream] will be used to send changes to the collab object. Before sending the changes, the stream_filter
-  /// will be used to check if the client is allowed to send the changes.
+  /// [Stream] will be used to send changes to the collab object.
   ///
   pub fn client_channel<T, AC>(
     &mut self,
@@ -557,20 +555,24 @@ impl CollabClientStream {
     });
     let client_sink = UnboundedSenderSink::<T>::new(client_sink_tx);
 
+    let cloned_object_id = object_id.to_string();
     // forward the message to the stream that was subscribed by the broadcast group
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(realtime_msg)) = stream_rx.next().await {
         match realtime_msg.try_into_message_by_object_id() {
           Ok(messages_by_oid) => {
-            for (object_id, messages) in messages_by_oid {
-              let messages =
-                Self::access_control(&uid, &object_id, &access_control, messages).await;
+            for (msg_oid, messages) in messages_by_oid {
+              if cloned_object_id != msg_oid {
+                continue;
+              }
+
+              let messages = Self::access_control(&uid, &msg_oid, &access_control, messages).await;
               if messages.is_empty() {
                 continue;
               }
 
-              if tx.send([(object_id, messages)].into()).await.is_err() {
+              if tx.send([(msg_oid, messages)].into()).await.is_err() {
                 break;
               }
             }
@@ -603,7 +605,7 @@ impl CollabClientStream {
 
     let mut valid_messages = Vec::with_capacity(messages.len());
     for message in messages {
-      if message.is_init_msg()
+      if message.is_client_init_sync()
         && access_control
           .can_read_collab(uid, object_id)
           .await

@@ -37,7 +37,7 @@ impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
 impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
@@ -123,7 +123,7 @@ where
 impl<E, Sink, Stream, C> CollabPlugin for SyncPlugin<Sink, Stream, C>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<ClientCollabMessage, Error = E> + Send + Sync + Unpin + 'static,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {

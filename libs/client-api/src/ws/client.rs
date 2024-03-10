@@ -72,7 +72,7 @@ pub struct WSClient {
   state_notify: Arc<StateNotify>,
   /// Sender used to send messages to the websocket.
   ws_msg_sender: Sender<Message>,
-  rt_msg_sender: Sender<ClientCollabMessage>,
+  rt_msg_sender: Sender<Vec<ClientCollabMessage>>,
   http_sender: Arc<dyn WSClientHttpSender>,
   user_channel: Arc<Sender<UserMessage>>,
   channels: Arc<RwLock<ChannelByObjectId>>,
@@ -434,7 +434,7 @@ fn handle_collab_message(
       if let Some(channels) = collab_channels.read().get(&object_id) {
         for channel in channels.iter() {
           if let Some(channel) = channel.upgrade() {
-            trace!("receive server message: {}", collab_msg);
+            trace!("🌐receive server message: {}", collab_msg);
             channel.forward_to_stream(collab_msg.clone());
           }
         }

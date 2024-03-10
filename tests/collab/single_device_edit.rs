@@ -4,6 +4,7 @@ use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;
+use std::collections::HashMap;
 
 use std::time::Duration;
 use tokio::time::sleep;
@@ -24,9 +25,10 @@ async fn collab_write_small_chunk_of_data_test() {
   test_client
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
+  let mut expected_json = HashMap::new();
 
   // Edit the collab
-  for i in 0..=5 {
+  for i in 0..=20 {
     test_client
       .collabs
       .get_mut(&object_id)
@@ -34,6 +36,9 @@ async fn collab_write_small_chunk_of_data_test() {
       .collab
       .lock()
       .insert(&i.to_string(), i.to_string());
+
+    expected_json.insert(i.to_string(), i.to_string());
+    sleep(Duration::from_millis(300)).await;
   }
   test_client
     .wait_object_sync_complete(&object_id)
@@ -47,14 +52,7 @@ async fn collab_write_small_chunk_of_data_test() {
     &object_id,
     &collab_type,
     10,
-    json!( {
-      "0": "0",
-      "1": "1",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
-    }),
+    json!(expected_json),
   )
   .await
   .unwrap();

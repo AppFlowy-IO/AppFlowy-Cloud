@@ -562,17 +562,24 @@ impl CollabClientStream {
       while let Some(Ok(realtime_msg)) = stream_rx.next().await {
         match realtime_msg.try_into_message_by_object_id() {
           Ok(messages_by_oid) => {
-            for (msg_oid, messages) in messages_by_oid {
+            for (msg_oid, original_messages) in messages_by_oid {
               if cloned_object_id != msg_oid {
                 continue;
               }
 
-              let messages = Self::access_control(&uid, &msg_oid, &access_control, messages).await;
-              if messages.is_empty() {
+              let (valid_messages, invalid_message) =
+                Self::access_control(&uid, &msg_oid, &access_control, original_messages).await;
+              trace!(
+                "{} receive message: valid:{} invalid:{}",
+                msg_oid,
+                valid_messages.len(),
+                invalid_message.len()
+              );
+
+              if valid_messages.is_empty() {
                 continue;
               }
-
-              if tx.send([(msg_oid, messages)].into()).await.is_err() {
+              if tx.send([(msg_oid, valid_messages)].into()).await.is_err() {
                 break;
               }
             }
@@ -594,7 +601,7 @@ impl CollabClientStream {
     object_id: &str,
     access_control: &Arc<AC>,
     messages: Vec<ClientCollabMessage>,
-  ) -> Vec<ClientCollabMessage>
+  ) -> (Vec<ClientCollabMessage>, Vec<ClientCollabMessage>)
   where
     AC: RealtimeAccessControl,
   {
@@ -604,6 +611,7 @@ impl CollabClientStream {
       .unwrap_or(false);
 
     let mut valid_messages = Vec::with_capacity(messages.len());
+    let mut invalid_messages = Vec::with_capacity(messages.len());
     for message in messages {
       if message.is_client_init_sync()
         && access_control
@@ -617,9 +625,11 @@ impl CollabClientStream {
 
       if can_write {
         valid_messages.push(message);
+      } else {
+        invalid_messages.push(message);
       }
     }
-    valid_messages
+    (valid_messages, invalid_messages)
   }
 }
 

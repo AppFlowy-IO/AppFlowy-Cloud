@@ -136,8 +136,9 @@ where
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
     trace!(
-      "[realtime]: new group subscriber: {}, connected members: {}",
-      subscriber_origin,
+      "[realtime]: {} new subscriber: {}, connected members: {}",
+      self.object_id,
+      user.uid(),
       self.subscribers.len(),
     );
 

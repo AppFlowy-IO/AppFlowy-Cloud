@@ -67,3 +67,4 @@ again = "0.1.2"
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
+ws_verbose_log = []

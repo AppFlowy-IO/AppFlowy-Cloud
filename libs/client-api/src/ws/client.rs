@@ -65,7 +65,7 @@ pub(crate) type CurrentConnInfo = parking_lot::Mutex<Option<ConnectInfo>>;
 /// The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
 /// 50960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
 const MAXIMUM_MESSAGE_SIZE: usize = 40960;
-const MAXIMUM_BATCH_MESSAGE_SIZE: usize = 30960;
+const MAXIMUM_BATCH_MESSAGE_SIZE: usize = 20480;
 pub struct WSClient {
   current_conn_info: Arc<CurrentConnInfo>,
   config: WSClientConfig,

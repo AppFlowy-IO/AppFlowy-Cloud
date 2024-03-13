@@ -17,7 +17,7 @@ use database_entity::dto::{
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
-use sqlx::{Executor, Postgres, Transaction};
+use sqlx::Transaction;
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -63,18 +63,17 @@ where
     }
   }
 
-  async fn check_collab_permission<'a, E: Executor<'a, Database = Postgres>>(
+  /// Check if the user has enough permissions to insert collab
+  /// 1. If the collab already exists, check if the user has enough permissions to update collab
+  /// 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
+  async fn check_collab_permission(
     &self,
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
-    executor: E,
+    is_collab_exist: bool,
   ) -> Result<(), AppError> {
-    // Check if the user has enough permissions to insert collab
-    // 1. If the collab already exists, check if the user has enough permissions to update collab
-    // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
-    let collab_exists = is_collab_exists(&params.object_id, executor).await?;
-    if collab_exists {
+    if is_collab_exist {
       // If the collab already exists, check if the user has enough permissions to update collab
       let can_write = self
         .access_control
@@ -101,14 +100,7 @@ where
           action: format!("write workspace:{}", workspace_id),
         });
       }
-
-      // Cache the access level if the user has enough permissions to create collab.
-      self
-        .access_control
-        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-        .await?;
     }
-
     Ok(())
   }
 
@@ -191,17 +183,21 @@ where
   ) -> DatabaseResult<()> {
     params.validate()?;
 
-    if is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
-      self
-        .check_collab_permission(workspace_id, uid, &params, transaction.deref_mut())
-        .await?;
-    } else {
-      // Update the access level in the access control if the collab doesn't exist
+    let is_collab_exist_in_db =
+      is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
+
+    // When the collab is not exist in the database, and the user passes the permission check,
+    // which means the user has the permission to create the collab, we should update the policy
+    if !is_collab_exist_in_db {
       self
         .access_control
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
+
+    self
+      .check_collab_permission(workspace_id, uid, &params, is_collab_exist_in_db)
+      .await?;
 
     self
       .cache

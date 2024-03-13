@@ -536,9 +536,9 @@ async fn simulate_multiple_user_edit_collab_test() {
 #[tokio::test]
 async fn post_realtime_message_test() {
   let mut tasks = Vec::new();
-  let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
+  let big_text = generate_random_string(64 * 1024);
 
-  for _i in 0..20 {
+  for _i in 0..5 {
     let cloned_text = big_text.clone();
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;

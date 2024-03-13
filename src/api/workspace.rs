@@ -396,7 +396,6 @@ async fn create_collab_handler(
   };
 
   let (params, workspace_id) = params.split();
-  let _object_id = params.object_id.clone();
   state
     .collab_access_control_storage
     .insert_or_update_collab(&workspace_id, &uid, params)

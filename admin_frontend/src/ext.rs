@@ -30,7 +30,7 @@ pub async fn get_user_workspace_limit(
   let res = resp.json::<JsonResponse<UserUsageLimit>>().await?;
   let b = res.data;
   let c = b.workspace_count.unwrap_or({
-    tracing::warn!("workspace_count is None, return 0");
+    tracing::warn!("workspace_count is None, returning 0");
     0
   });
   Ok(c as u32)

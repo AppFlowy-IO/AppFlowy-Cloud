@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use tracing::error;
 
 /// Expire time for cache in seconds. When the cache is expired, the enforcer will re-evaluate the policy.
-const EXPIRE_TIME: u64 = 60 * 60 * 24 * 3;
+const EXPIRE_IN_ONE_DAY: u64 = 60 * 60 * 24;
 
 #[derive(Clone)]
 pub struct AFEnforcerCacheImpl {
@@ -31,7 +31,7 @@ impl AFEnforcerCache for AFEnforcerCacheImpl {
   ) -> Result<(), AppError> {
     self
       .redis_client
-      .set_ex::<&str, bool, ()>(key, value, EXPIRE_TIME)
+      .set_ex::<&str, bool, ()>(key, value, EXPIRE_IN_ONE_DAY)
       .await
       .map_err(|e| AppError::Internal(anyhow!("Failed to set enforcer result in redis: {}", e)))
   }

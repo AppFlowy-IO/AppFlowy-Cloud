@@ -167,18 +167,7 @@ where
 
     trace!("🔥 queue {}", new_msg);
     msg_queue.push_msg(msg_id, new_msg);
-    if !requeue_items.is_empty() {
-      trace!(
-        "{} requeue items: {}",
-        self.object.object_id,
-        requeue_items
-          .iter()
-          .map(|item| { item.msg_id().to_string() })
-          .collect::<Vec<_>>()
-          .join(",")
-      );
-      msg_queue.extend(requeue_items);
-    }
+    msg_queue.extend(requeue_items);
     drop(msg_queue);
     // Notify the sink to process the next message after 500ms.
     let _ = self
@@ -201,7 +190,9 @@ where
     // When the client is connected, remove all pending messages and send the init message.
     let mut msg_queue = self.message_queue.lock();
     let msg_id = self.msg_id_counter.next();
-    msg_queue.push_msg(msg_id, f(msg_id));
+    let init_sync = f(msg_id);
+    trace!("🔥queue {}", init_sync);
+    msg_queue.push_msg(msg_id, init_sync);
     let _ = self.notifier.send(SinkSignal::Proceed);
   }
 
@@ -242,7 +233,7 @@ where
 
   /// Notify the sink to process the next message and mark the current message as done.
   /// Returns bool value to indicate whether the message is valid.
-  pub async fn validate_server_message(&self, server_message: &ServerCollabMessage) -> bool {
+  pub async fn validate_response(&self, server_message: &ServerCollabMessage) -> bool {
     if server_message.msg_id().is_none() {
       // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
       return true;
@@ -298,56 +289,30 @@ where
     if self.pause.load(Ordering::SeqCst) {
       return;
     }
-    self.send_msg_immediately().await;
-  }
 
-  async fn send_msg_immediately(&self) {
     let items = {
-      let mut msg_queue = match self.message_queue.try_lock() {
-        None => {
+      let (mut msg_queue, mut flying_messages) = match (
+        self.message_queue.try_lock(),
+        self.flying_messages.try_lock(),
+      ) {
+        (Some(msg_queue), Some(flying_messages)) => (msg_queue, flying_messages),
+        _ => {
           // If acquire the lock failed, try later
           retry_later(Arc::downgrade(&self.notifier));
           return;
         },
-        Some(msg_queue) => msg_queue,
       };
-      let mut flying_messages = self.flying_messages.lock();
-      let mut items = vec![];
-
-      let mut count = 0;
-      let mut item_to_requeue = vec![];
-      while let Some(item) = msg_queue.pop() {
-        if count > 20 {
-          item_to_requeue.push(item);
-          break;
-        }
-
-        if flying_messages.contains(&item.msg_id()) {
-          item_to_requeue.push(item);
-          continue;
-        }
-
-        let is_init_sync = item.message().is_client_init_sync();
-        items.push(item.clone());
-        count += 1;
-        item_to_requeue.push(item);
-
-        if is_init_sync {
-          break;
-        }
-      }
-      msg_queue.extend(item_to_requeue);
-
-      let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
-      flying_messages.extend(message_ids);
-
-      items
+      get_next_batch_item(&self.object.object_id, &mut flying_messages, &mut msg_queue)
     };
 
     if items.is_empty() {
       return;
     }
 
+    self.send_immediately(items).await;
+  }
+
+  async fn send_immediately(&self, items: Vec<QueueItem<Msg>>) {
     let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
     let messages = items
       .into_iter()
@@ -364,18 +329,10 @@ where
         },
         Err(err) => {
           error!("Failed to send error: {:?}", err.into());
-          self
-            .flying_messages
-            .lock()
-            .retain(|id| !message_ids.contains(id));
         },
       },
       Err(_) => {
         warn!("failed to acquire the lock of the sink, retry later");
-        self
-          .flying_messages
-          .lock()
-          .retain(|id| !message_ids.contains(id));
         retry_later(Arc::downgrade(&self.notifier));
       },
     }
@@ -437,9 +394,57 @@ where
   }
 }
 
+fn get_next_batch_item<Msg>(
+  object_id: &str,
+  flying_messages: &mut HashSet<MsgId>,
+  msg_queue: &mut SinkQueue<Msg>,
+) -> Vec<QueueItem<Msg>>
+where
+  Msg: CollabSinkMessage,
+{
+  let mut items = vec![];
+  let mut requeue_items = vec![];
+  while let Some(item) = msg_queue.pop() {
+    if items.len() > 20 {
+      requeue_items.push(item);
+      break;
+    }
+
+    if flying_messages.contains(&item.msg_id()) {
+      requeue_items.push(item);
+      continue;
+    }
+
+    let is_init_sync = item.message().is_client_init_sync();
+    items.push(item.clone());
+    requeue_items.push(item);
+
+    if is_init_sync {
+      break;
+    }
+  }
+
+  if !requeue_items.is_empty() {
+    trace!(
+      "{} requeue items: {}",
+      object_id,
+      requeue_items
+        .iter()
+        .map(|item| { item.msg_id().to_string() })
+        .collect::<Vec<_>>()
+        .join(",")
+    );
+  }
+  msg_queue.extend(requeue_items);
+
+  let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
+  flying_messages.extend(message_ids);
+  items
+}
+
 fn retry_later(weak_notifier: Weak<watch::Sender<SinkSignal>>) {
   af_spawn(async move {
-    interval(Duration::from_millis(300)).tick().await;
+    interval(Duration::from_millis(500)).tick().await;
     if let Some(notifier) = weak_notifier.upgrade() {
       let _ = notifier.send(SinkSignal::Proceed);
     }

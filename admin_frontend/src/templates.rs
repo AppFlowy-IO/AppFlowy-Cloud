@@ -2,6 +2,23 @@ use askama::Template;
 use gotrue_entity::{dto::User, sso::SSOProvider};
 
 #[derive(Template)]
+#[template(path = "components/user_usage.html")]
+pub struct UserUsage {
+  pub workspace_count: u32,
+  pub workspace_limit: u32,
+}
+
+// #[derive(Template)]
+// #[template(path = "components/workspace_usage.html")]
+// pub struct WorkspaceUsage {
+//   pub name: String,
+//   pub member_count: u32,
+//   pub member_limit: u32,
+//   pub total_object_size: u64,
+//   pub total_object_limit: u64,
+// }
+
+#[derive(Template)]
 #[template(path = "components/admin_sso_detail.html")]
 pub struct SsoDetail {
   pub sso_provider: SSOProvider,

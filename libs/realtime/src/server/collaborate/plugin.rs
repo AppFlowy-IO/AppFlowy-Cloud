@@ -212,7 +212,6 @@ where
     trace!("{} edit state:{}", object_id, self.edit_state);
     if self.edit_state.should_flush(100, 3 * 60) {
       self.edit_state.tick();
-      let _object_id = object_id.to_string();
     }
   }
 

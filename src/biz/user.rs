@@ -110,7 +110,7 @@ where
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
     collab_storage
-      .insert_or_update_collab(
+      .insert_or_update_collab_with_transaction(
         workspace_id,
         &uid,
         CollabParams {

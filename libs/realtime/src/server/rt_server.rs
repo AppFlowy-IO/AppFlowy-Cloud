@@ -612,13 +612,13 @@ impl CollabClientStream {
 
     let mut valid_messages = Vec::with_capacity(messages.len());
     let mut invalid_messages = Vec::with_capacity(messages.len());
+    let can_read = access_control
+      .can_read_collab(uid, object_id)
+      .await
+      .unwrap_or(false);
+
     for message in messages {
-      if message.is_client_init_sync()
-        && access_control
-          .can_read_collab(uid, object_id)
-          .await
-          .unwrap_or(false)
-      {
+      if message.is_client_init_sync() && can_read {
         valid_messages.push(message);
         continue;
       }

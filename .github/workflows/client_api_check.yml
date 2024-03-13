@@ -34,5 +34,6 @@ jobs:
         run: wasm-pack build
 
       - name: Check ClientAPI Dependencies
-        run: bash ./build/client_api_deps_check.sh
+        working-directory: ./libs/client-api
+        run: bash ../../build/client_api_deps_check.sh
 

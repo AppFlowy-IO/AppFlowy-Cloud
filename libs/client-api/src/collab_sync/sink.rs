@@ -101,15 +101,16 @@ where
     let weak_notifier = Arc::downgrade(&notifier);
     let weak_flying_messages = Arc::downgrade(&flying_messages);
     af_spawn(async move {
+      // Initial delay to make sure the first tick waits for SEND_INTERVAL
+      sleep(SEND_INTERVAL).await;
+
       loop {
         interval.tick().await;
         match weak_notifier.upgrade() {
           Some(notifier) => {
             // Removing the flying messages allows for the re-sending of the top k messages in the message queue.
             if let Some(flying_messages) = weak_flying_messages.upgrade() {
-              if let Some(mut flying_messages) = flying_messages.try_lock() {
-                flying_messages.clear();
-              }
+              flying_messages.lock().clear();
             }
 
             if notifier.send(SinkSignal::Proceed).is_err() {
@@ -329,10 +330,18 @@ where
         },
         Err(err) => {
           error!("Failed to send error: {:?}", err.into());
+          self
+            .flying_messages
+            .lock()
+            .retain(|id| !message_ids.contains(id));
         },
       },
       Err(_) => {
         warn!("failed to acquire the lock of the sink, retry later");
+        self
+          .flying_messages
+          .lock()
+          .retain(|id| !message_ids.contains(id));
         retry_later(Arc::downgrade(&self.notifier));
       },
     }
@@ -411,6 +420,7 @@ where
     }
 
     if flying_messages.contains(&item.msg_id()) {
+      trace!("{} skip sending message: {:?}", object_id, item.msg_id());
       requeue_items.push(item);
       continue;
     }
@@ -426,7 +436,7 @@ where
 
   if !requeue_items.is_empty() {
     trace!(
-      "{} requeue items: {}",
+      "{} requeue items: ids=>{}",
       object_id,
       requeue_items
         .iter()
@@ -443,12 +453,9 @@ where
 }
 
 fn retry_later(weak_notifier: Weak<watch::Sender<SinkSignal>>) {
-  af_spawn(async move {
-    interval(Duration::from_millis(500)).tick().await;
-    if let Some(notifier) = weak_notifier.upgrade() {
-      let _ = notifier.send(SinkSignal::Proceed);
-    }
-  });
+  if let Some(notifier) = weak_notifier.upgrade() {
+    let _ = notifier.send(SinkSignal::ProcessAfterMillis(200));
+  }
 }
 
 pub struct CollabSinkRunner<Msg>(PhantomData<Msg>);

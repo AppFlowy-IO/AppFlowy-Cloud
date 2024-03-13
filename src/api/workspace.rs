@@ -395,15 +395,10 @@ async fn create_collab_handler(
     },
   };
 
-  params.validate().map_err(AppError::from)?;
-  let object_id = params.object_id.clone();
-  state
-    .collab_access_control
-    .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
-    .await?;
+  let (params, workspace_id) = params.split();
   state
     .collab_access_control_storage
-    .insert_collab(&uid, params, false)
+    .insert_or_update_collab(&workspace_id, &uid, params)
     .await?;
 
   Ok(Json(AppResponse::Ok()))
@@ -487,7 +482,7 @@ async fn batch_create_collab_handler(
     let object_id = params.object_id.clone();
     state
       .collab_access_control_storage
-      .insert_or_update_collab(&workspace_id, &uid, params, &mut transaction)
+      .insert_or_update_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
       .await?;
 
     state
@@ -550,15 +545,10 @@ async fn create_collab_list_handler(
     .map_err(AppError::from)?;
 
   for params in params_list {
-    let object_id = params.object_id.clone();
+    let _object_id = params.object_id.clone();
     state
       .collab_access_control_storage
-      .insert_or_update_collab(&workspace_id, &uid, params, &mut transaction)
-      .await?;
-
-    state
-      .collab_access_control
-      .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
+      .insert_or_update_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
       .await?;
   }
 
@@ -686,9 +676,10 @@ async fn update_collab_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
+  let (params, workspace_id) = create_params.split();
   state
     .collab_access_control_storage
-    .insert_collab(&uid, create_params, false)
+    .insert_or_update_collab(&workspace_id, &uid, params)
     .await?;
   Ok(AppResponse::Ok().into())
 }

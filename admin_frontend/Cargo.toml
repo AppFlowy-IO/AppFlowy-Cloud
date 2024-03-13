@@ -12,18 +12,18 @@ gotrue-entity = { path = "../libs/gotrue-entity" }
 
 anyhow = "1.0.79"
 axum = {version = "0.7", features = ["json"]}
-tokio = { version = "1.36.0", features = ["rt-multi-thread", "macros"] }
-askama = "0.12.1"
-axum-extra = { version = "0.9.2", features = ["cookie"] }
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros"] }
+askama = "0.12"
+axum-extra = { version = "0.9", features = ["cookie"] }
 serde.workspace = true
 serde_json.workspace = true
-redis = { version = "0.24.0", features = [ "aio", "tokio-comp", "connection-manager"] }
-uuid = { version = "1.6.1", features = ["v4"] }
-dotenvy = "0.15.7"
-reqwest = "0.11.23"
-tower-service = "0.3.2"
+redis = { version = "0.24", features = [ "aio", "tokio-comp", "connection-manager"] }
+uuid = { version = "1.6", features = ["v4"] }
+dotenvy = "0.15"
+reqwest = "0.11"
+tower-service = "0.3"
 tower-http = { version = "0.5", features = ["cors", "fs"] }
-tower = "0.4.13"
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
-jwt = "0.16.0"
+tower = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+jwt = "0.16"

@@ -1,12 +1,12 @@
-use crate::biz::casbin::access_control::{ActionType, ObjectType};
-use crate::biz::casbin::enforcer::AFEnforcer;
+use crate::biz::casbin::access_control::{AccessControl, ActionType, ObjectType};
+
 use crate::biz::pg_listener::PostgresDBListener;
 use database::pg_row::AFCollabMemberRow;
 use database::workspace::select_permission;
 use database_entity::dto::AFRole;
 use serde::Deserialize;
 use sqlx::PgPool;
-use std::sync::Arc;
+
 use tokio::sync::broadcast;
 use tracing::error;
 use tracing::log::warn;
@@ -15,7 +15,7 @@ use uuid::Uuid;
 pub(crate) fn spawn_listen_on_collab_member_change(
   pg_pool: PgPool,
   mut listener: broadcast::Receiver<CollabMemberNotification>,
-  enforcer: Arc<AFEnforcer>,
+  access_control: AccessControl,
 ) {
   tokio::spawn(async move {
     while let Ok(change) = listener.recv().await {
@@ -24,7 +24,7 @@ pub(crate) fn spawn_listen_on_collab_member_change(
           if let Some(member_row) = change.new {
             let permission_row = select_permission(&pg_pool, &member_row.permission_id).await;
             if let Ok(Some(row)) = permission_row {
-              if let Err(err) = enforcer
+              if let Err(err) = access_control
                 .update_policy(
                   &member_row.uid,
                   &ObjectType::Collab(&member_row.oid),
@@ -44,7 +44,10 @@ pub(crate) fn spawn_listen_on_collab_member_change(
         },
         CollabMemberAction::DELETE => {
           if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
-            if let Err(err) = enforcer.remove_policy(uid, &ObjectType::Collab(oid)).await {
+            if let Err(err) = access_control
+              .remove_policy(uid, &ObjectType::Collab(oid))
+              .await
+            {
               warn!(
                 "Failed to remove the user:{} collab{} access control, error: {}",
                 uid, oid, err
@@ -61,7 +64,7 @@ pub(crate) fn spawn_listen_on_collab_member_change(
 
 pub(crate) fn spawn_listen_on_workspace_member_change(
   mut listener: broadcast::Receiver<WorkspaceMemberNotification>,
-  enforcer: Arc<AFEnforcer>,
+  access_control: AccessControl,
 ) {
   tokio::spawn(async move {
     while let Ok(change) = listener.recv().await {
@@ -71,7 +74,7 @@ pub(crate) fn spawn_listen_on_workspace_member_change(
             warn!("The workspace member change can't be None when the action is INSERT or UPDATE")
           },
           Some(member_row) => {
-            if let Err(err) = enforcer
+            if let Err(err) = access_control
               .update_policy(
                 &member_row.uid,
                 &ObjectType::Workspace(&member_row.workspace_id.to_string()),
@@ -89,7 +92,7 @@ pub(crate) fn spawn_listen_on_workspace_member_change(
         WorkspaceMemberAction::DELETE => match change.old {
           None => warn!("The workspace member change can't be None when the action is DELETE"),
           Some(member_row) => {
-            if let Err(err) = enforcer
+            if let Err(err) = access_control
               .remove_policy(
                 &member_row.uid,
                 &ObjectType::Workspace(&member_row.workspace_id.to_string()),

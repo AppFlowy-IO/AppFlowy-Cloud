@@ -13,11 +13,11 @@ use database::collab::{
   is_collab_exists, CollabStorage, CollabStorageAccessControl, DatabaseResult,
 };
 use database_entity::dto::{
-  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
-  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
+  QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
-use sqlx::Transaction;
+use sqlx::{Executor, Postgres, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -63,17 +63,17 @@ where
     }
   }
 
-  async fn check_collab_permission(
+  async fn check_collab_permission<'a, E: Executor<'a, Database = Postgres>>(
     &self,
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
-    transaction: &mut Transaction<'_, sqlx::Postgres>,
+    executor: E,
   ) -> Result<(), AppError> {
     // Check if the user has enough permissions to insert collab
     // 1. If the collab already exists, check if the user has enough permissions to update collab
     // 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
-    let collab_exists = is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
+    let collab_exists = is_collab_exists(&params.object_id, executor).await?;
     if collab_exists {
       // If the collab already exists, check if the user has enough permissions to update collab
       let can_write = self
@@ -155,12 +155,13 @@ where
     self.cache.get_hit_rate()
   }
 
-  async fn insert_collab(
+  async fn insert_or_update_collab(
     &self,
+    workspace_id: &str,
     uid: &i64,
-    params: CreateCollabParams,
-    is_new: bool,
+    params: CollabParams,
   ) -> DatabaseResult<()> {
+    params.validate()?;
     let mut transaction = self
       .cache
       .pg_pool()
@@ -168,15 +169,8 @@ where
       .await
       .context("acquire transaction to upsert collab")
       .map_err(AppError::from)?;
-    if is_new {
-      self
-        .access_control
-        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-        .await?;
-    }
-    let (params, workspace_id) = params.split();
     self
-      .insert_or_update_collab(&workspace_id, uid, params, &mut transaction)
+      .insert_or_update_collab_with_transaction(workspace_id, uid, params, &mut transaction)
       .await?;
     transaction
       .commit()
@@ -188,7 +182,7 @@ where
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
   #[allow(clippy::blocks_in_if_conditions)]
-  async fn insert_or_update_collab(
+  async fn insert_or_update_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -196,9 +190,18 @@ where
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> DatabaseResult<()> {
     params.validate()?;
-    self
-      .check_collab_permission(workspace_id, uid, &params, transaction)
-      .await?;
+
+    if is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
+      self
+        .check_collab_permission(workspace_id, uid, &params, transaction.deref_mut())
+        .await?;
+    } else {
+      // Update the access level in the access control if the collab doesn't exist
+      self
+        .access_control
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
 
     self
       .cache

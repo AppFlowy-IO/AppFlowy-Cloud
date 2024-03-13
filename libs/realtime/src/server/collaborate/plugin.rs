@@ -16,7 +16,7 @@ use collab_document::document::check_document_is_valid;
 use collab_entity::CollabType;
 use collab_folder::check_folder_is_valid;
 use database::collab::CollabStorage;
-use database_entity::dto::{CreateCollabParams, InsertSnapshotParams, QueryCollabParams};
+use database_entity::dto::{CollabParams, InsertSnapshotParams, QueryCollabParams};
 use md5::Digest;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
@@ -68,17 +68,16 @@ where
   async fn insert_new_collab(&self, doc: &Doc, object_id: &str) -> Result<(), AppError> {
     match doc.get_encoded_collab_v1().encode_to_bytes() {
       Ok(encoded_collab_v1) => {
-        let params = CreateCollabParams {
+        let params = CollabParams {
           object_id: object_id.to_string(),
           encoded_collab_v1,
           collab_type: self.collab_type.clone(),
           override_if_exist: false,
-          workspace_id: self.workspace_id.clone(),
         };
 
         self
           .storage
-          .insert_collab(&self.uid, params, true)
+          .insert_or_update_collab(&self.workspace_id, &self.uid, params)
           .await
           .map_err(|err| {
             error!("fail to create new collab in plugin: {:?}", err);
@@ -247,19 +246,22 @@ where
     *self.latest_collab_md5.lock() = Some(digest);
 
     // Insert the encoded collab into the database
-    let params = CreateCollabParams {
+    let params = CollabParams {
       object_id: object_id.to_string(),
       encoded_collab_v1,
       collab_type: self.collab_type.clone(),
       override_if_exist: false,
-      workspace_id: self.workspace_id.clone(),
     };
 
     let storage = self.storage.clone();
+    let workspace_id = self.workspace_id.clone();
     let uid = self.uid;
     tokio::spawn(async move {
       info!("[realtime] flush collab: {}", params.object_id);
-      match storage.insert_collab(&uid, params, false).await {
+      match storage
+        .insert_or_update_collab(&workspace_id, &uid, params)
+        .await
+      {
         Ok(_) => {},
         Err(err) => error!("Failed to save collab: {:?}", err),
       }

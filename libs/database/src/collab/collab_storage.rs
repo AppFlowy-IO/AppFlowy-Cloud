@@ -3,8 +3,8 @@ use async_trait::async_trait;
 
 use collab::core::collab_plugin::EncodedCollab;
 use database_entity::dto::{
-  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, CreateCollabParams,
-  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
+  QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
 use sqlx::Transaction;
@@ -41,11 +41,11 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 pub trait CollabStorage: Send + Sync + 'static {
   fn encode_collab_mem_hit_rate(&self) -> f64;
 
-  async fn insert_collab(
+  async fn insert_or_update_collab(
     &self,
+    workspace_id: &str,
     uid: &i64,
-    params: CreateCollabParams,
-    is_new: bool,
+    params: CollabParams,
   ) -> DatabaseResult<()>;
 
   /// Insert/update a new collaboration in the storage.
@@ -57,7 +57,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_or_update_collab(
+  async fn insert_or_update_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -122,16 +122,19 @@ where
     self.as_ref().encode_collab_mem_hit_rate()
   }
 
-  async fn insert_collab(
+  async fn insert_or_update_collab(
     &self,
+    workspace_id: &str,
     uid: &i64,
-    params: CreateCollabParams,
-    is_new: bool,
+    params: CollabParams,
   ) -> DatabaseResult<()> {
-    self.as_ref().insert_collab(uid, params, is_new).await
+    self
+      .as_ref()
+      .insert_or_update_collab(workspace_id, uid, params)
+      .await
   }
 
-  async fn insert_or_update_collab(
+  async fn insert_or_update_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -140,7 +143,7 @@ where
   ) -> DatabaseResult<()> {
     self
       .as_ref()
-      .insert_or_update_collab(workspace_id, uid, params, transaction)
+      .insert_or_update_collab_with_transaction(workspace_id, uid, params, transaction)
       .await
   }
 

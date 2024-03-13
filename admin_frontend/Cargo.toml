@@ -9,6 +9,7 @@ edition = "2021"
 # local dependencies
 gotrue = { path = "../libs/gotrue" }
 gotrue-entity = { path = "../libs/gotrue-entity" }
+database-entity = { path = "../libs/database-entity" }
 
 anyhow = "1.0.79"
 axum = {version = "0.7", features = ["json"]}

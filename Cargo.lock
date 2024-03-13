@@ -321,6 +321,7 @@ dependencies = [
  "askama",
  "axum",
  "axum-extra",
+ "database-entity",
  "dotenvy",
  "gotrue",
  "gotrue-entity",

@@ -5,13 +5,16 @@ use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use crate::biz::casbin::access_control::AccessControl;
-use crate::biz::casbin::enforcer_cache::AFEnforcerCacheImpl;
+
 use crate::biz::casbin::RealtimeCollabAccessControlImpl;
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
 use crate::biz::collab::cache::CollabCache;
 
+use crate::biz::casbin::pg_listen::{
+  spawn_listen_on_collab_member_change, spawn_listen_on_workspace_member_change,
+};
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
@@ -195,15 +198,15 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!("Setting up access controls...");
-  let enforce_cache = AFEnforcerCacheImpl::new(redis_client.clone());
-  let access_control = AccessControl::new(
+  let access_control =
+    AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
+
+  spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
+  spawn_listen_on_collab_member_change(
     pg_pool.clone(),
     collab_member_listener,
-    workspace_member_listener,
-    metrics.access_control_metrics.clone(),
-    enforce_cache,
-  )
-  .await?;
+    access_control.clone(),
+  );
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control = access_control.new_collab_access_control();

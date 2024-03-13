@@ -90,8 +90,6 @@ pub async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
 }
 
 pub async fn user_invite_handler() -> Result<Html<String>, WebAppError> {
-  println!("----- user_invite_handler");
-
   render_template(templates::Invite)
 }
 
@@ -99,8 +97,6 @@ pub async fn user_usage_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  println!("----- user_usage_handler");
-
   let workspace_count =
     get_user_workspace_count(&session.token.access_token, &state.appflowy_cloud_url)
       .await
@@ -113,16 +109,16 @@ pub async fn user_usage_handler(
     &session.token.access_token,
     &state.appflowy_cloud_gateway_url,
   )
-  .await;
-  println!("workspace count: {:?}", workspace_count);
+  .await
+  .unwrap_or_else(|err| {
+    tracing::error!("Error getting user workspace limit: {:?}", err);
+    0
+  });
 
-  render_template(templates::Invite)
-
-  // todo!();
-  // render_template(templates::UserUsage {
-  //   workspace_count: 500,
-  //   workspace_limit: 1000,
-  // })
+  render_template(templates::UserUsage {
+    workspace_count,
+    workspace_limit,
+  })
 }
 
 pub async fn workspace_usage_handler(session: UserSession) -> Result<Html<String>, WebAppError> {

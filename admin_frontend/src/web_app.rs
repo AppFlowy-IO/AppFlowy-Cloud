@@ -1,4 +1,5 @@
 use crate::error::WebAppError;
+use crate::ext::{get_user_workspace_count, get_user_workspace_limit};
 use crate::session::UserSession;
 use askama::Template;
 use axum::extract::{Path, State};
@@ -29,6 +30,8 @@ pub fn component_router() -> Router<AppState> {
     .route("/user/user", get(user_user_handler))
     .route("/user/change_password", get(user_change_password_handler))
     .route("/user/invite", get(user_invite_handler))
+    .route("/user/user-usage", get(user_usage_handler))
+    .route("/user/workspace-usage", get(workspace_usage_handler))
 
     // Admin actions
     .route("/admin/navigate", get(admin_navigate_handler))
@@ -87,7 +90,43 @@ pub async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
 }
 
 pub async fn user_invite_handler() -> Result<Html<String>, WebAppError> {
+  println!("----- user_invite_handler");
+
   render_template(templates::Invite)
+}
+
+pub async fn user_usage_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  println!("----- user_usage_handler");
+
+  let workspace_count =
+    get_user_workspace_count(&session.token.access_token, &state.appflowy_cloud_url)
+      .await
+      .unwrap_or_else(|err| {
+        tracing::error!("Error getting user workspace count: {:?}", err);
+        0
+      });
+
+  let workspace_limit = get_user_workspace_limit(
+    &session.token.access_token,
+    &state.appflowy_cloud_gateway_url,
+  )
+  .await;
+  println!("workspace count: {:?}", workspace_count);
+
+  render_template(templates::Invite)
+
+  // todo!();
+  // render_template(templates::UserUsage {
+  //   workspace_count: 500,
+  //   workspace_limit: 1000,
+  // })
+}
+
+pub async fn workspace_usage_handler(session: UserSession) -> Result<Html<String>, WebAppError> {
+  todo!()
 }
 
 pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {

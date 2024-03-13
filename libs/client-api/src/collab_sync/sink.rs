@@ -4,7 +4,6 @@ use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::SyncObject;
 use futures_util::SinkExt;
 
-use parking_lot::MutexGuard;
 use realtime_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;

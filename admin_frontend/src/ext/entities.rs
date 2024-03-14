@@ -12,7 +12,7 @@ pub struct UserUsageLimit {
 }
 
 #[derive(Serialize)]
-pub struct WorkspaceUsage {
+pub struct WorkspaceUsageLimits {
   pub name: String,
   pub member_count: usize,
   pub member_limit: String,
@@ -38,4 +38,9 @@ pub struct WorkspaceUsageLimit {
 #[derive(Deserialize, Serialize)]
 pub struct WorkspaceBlobUsage {
   pub consumed_capacity: u64,
+}
+
+#[derive(Deserialize)]
+pub struct WorkspaceDocUsage {
+  pub total_document_size: i64,
 }

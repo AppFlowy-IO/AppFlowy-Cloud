@@ -2,7 +2,7 @@ use crate::error::WebAppError;
 use crate::ext::api::{
   get_user_workspace_count, get_user_workspace_limit, get_user_workspace_usages,
 };
-use crate::ext::entities::WorkspaceUsage;
+use crate::ext::entities::WorkspaceUsageLimits;
 use crate::session::UserSession;
 use askama::Template;
 use axum::extract::{Path, State};

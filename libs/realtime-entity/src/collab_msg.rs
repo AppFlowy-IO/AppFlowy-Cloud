@@ -670,6 +670,10 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientAwarenessSync(data) => data.msg_id,
     }
   }
+
+  pub fn is_init_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientInitSync { .. })
+  }
 }
 
 impl Display for ClientCollabMessage {

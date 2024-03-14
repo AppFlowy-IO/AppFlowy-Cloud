@@ -8,15 +8,22 @@ pub struct JsonResponse<T> {
 
 #[derive(Deserialize)]
 pub struct UserUsageLimit {
-  pub workspace_count: Option<i64>,
+  pub workspace_count: i64,
 }
 
 #[derive(Serialize)]
 pub struct WorkspaceUsage {
   pub name: String,
-  pub member_count: i64,
+  pub member_count: usize,
   pub member_limit: i64,
   pub total_doc_size: String,
   pub total_blob_size: String,
   pub total_blob_limit: String,
+}
+
+#[derive(Deserialize)]
+pub struct WorkspaceMember {
+  pub name: String,
+  pub email: String,
+  pub role: String,
 }

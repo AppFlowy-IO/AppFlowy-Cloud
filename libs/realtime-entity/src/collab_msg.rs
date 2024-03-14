@@ -670,6 +670,10 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientAwarenessSync(data) => data.msg_id,
     }
   }
+
+  pub fn is_init_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientInitSync { .. })
+  }
 }
 
 impl Display for ClientCollabMessage {
@@ -808,8 +812,8 @@ impl Ord for ClientCollabMessage {
       },
       (ClientCollabMessage::ClientInitSync { .. }, _) => Ordering::Greater,
       (_, ClientCollabMessage::ClientInitSync { .. }) => Ordering::Less,
-      (ClientCollabMessage::ServerInitSync(left), ClientCollabMessage::ServerInitSync(right)) => {
-        left.msg_id.cmp(&right.msg_id).reverse()
+      (ClientCollabMessage::ServerInitSync(_left), ClientCollabMessage::ServerInitSync(_right)) => {
+        Ordering::Equal
       },
       (ClientCollabMessage::ServerInitSync { .. }, _) => Ordering::Greater,
       (_, ClientCollabMessage::ServerInitSync { .. }) => Ordering::Less,

@@ -110,7 +110,7 @@ pub async fn user_usage_handler(
   )
   .await
   .map(|limit| limit.to_string())
-  .unwrap_or("".to_owned());
+  .unwrap_or("N/A".to_owned());
 
   render_template(templates::UserUsage {
     workspace_count,

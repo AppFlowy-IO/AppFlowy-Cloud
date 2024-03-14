@@ -1,5 +1,7 @@
 use crate::error::WebAppError;
-use crate::ext::api::{get_user_workspace_count, get_user_workspace_limit};
+use crate::ext::api::{
+  get_user_workspace_count, get_user_workspace_limit, get_user_workspace_usages,
+};
 use crate::ext::entities::WorkspaceUsage;
 use crate::session::UserSession;
 use askama::Template;
@@ -100,22 +102,15 @@ pub async fn user_usage_handler(
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
   let workspace_count =
-    get_user_workspace_count(&session.token.access_token, &state.appflowy_cloud_url)
-      .await
-      .unwrap_or_else(|err| {
-        tracing::error!("Error getting user workspace count: {:?}", err);
-        0
-      });
+    get_user_workspace_count(&session.token.access_token, &state.appflowy_cloud_url).await;
 
   let workspace_limit = get_user_workspace_limit(
     &session.token.access_token,
     &state.appflowy_cloud_gateway_url,
   )
   .await
-  .unwrap_or_else(|err| {
-    tracing::error!("Error getting user workspace limit: {:?}", err);
-    0
-  });
+  .map(|limit| limit.to_string())
+  .unwrap_or("".to_owned());
 
   render_template(templates::UserUsage {
     workspace_count,
@@ -127,25 +122,12 @@ pub async fn workspace_usage_handler(
   State(app_state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
-  let workspace_usages = vec![
-    WorkspaceUsage {
-      name: "test".to_owned(),
-      member_count: 6,
-      member_limit: 7,
-      total_doc_size: human_bytes(987654),
-      total_blob_size: human_bytes(9876543),
-      total_blob_limit: human_bytes(98765432),
-    },
-    WorkspaceUsage {
-      name: "test".to_owned(),
-      member_count: 6,
-      member_limit: 7,
-      total_doc_size: human_bytes(987654),
-      total_blob_size: human_bytes(9876543),
-      total_blob_limit: human_bytes(98765432),
-    },
-  ];
-
+  let workspace_usages = get_user_workspace_usages(
+    &session.token.access_token,
+    &app_state.appflowy_cloud_url,
+    &app_state.appflowy_cloud_gateway_url,
+  )
+  .await;
   render_template(templates::WorkspaceUsageList { workspace_usages })
 }
 

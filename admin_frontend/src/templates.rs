@@ -7,7 +7,7 @@ use crate::ext::entities::WorkspaceUsage;
 #[template(path = "components/user_usage.html")]
 pub struct UserUsage {
   pub workspace_count: u32,
-  pub workspace_limit: u32,
+  pub workspace_limit: String,
 }
 
 // ./../templates/components/workspace_usage.html

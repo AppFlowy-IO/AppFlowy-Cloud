@@ -8,15 +8,16 @@ pub struct UserUsage {
   pub workspace_limit: u32,
 }
 
-// #[derive(Template)]
-// #[template(path = "components/workspace_usage.html")]
-// pub struct WorkspaceUsage {
-//   pub name: String,
-//   pub member_count: u32,
-//   pub member_limit: u32,
-//   pub total_object_size: u64,
-//   pub total_object_limit: u64,
-// }
+#[derive(Template)]
+#[template(path = "components/workspace_usage.html")]
+pub struct WorkspaceUsage<'a> {
+  pub name: &'a str,
+  pub member_count: u32,
+  pub member_limit: u32,
+  pub total_doc_size: &'a str,
+  pub total_blob_size: &'a str,
+  pub total_blob_limit: &'a str,
+}
 
 #[derive(Template)]
 #[template(path = "components/admin_sso_detail.html")]
@@ -44,10 +45,6 @@ pub struct ChangePassword;
 pub struct Login<'a> {
   pub oauth_providers: Vec<&'a str>,
 }
-
-// #[derive(Template)]
-// #[template(path = "login.html")]
-// pub struct Login;
 
 #[derive(Template)]
 #[template(path = "pages/home.html")]

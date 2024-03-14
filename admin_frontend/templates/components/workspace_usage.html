@@ -5,16 +5,18 @@
         <th>Workspace Name</th>
         <th>Members</th>
         <th>Members Limit</th>
-        <th>Storage Space</th>
-        <th>Storage Space Limit</th>
+        <th>Document Storage</th>
+        <th>Object Storage</th>
+        <th>Object Storage Limit</th>
       </tr>
     </thead>
     <tr>
       <td> {{ name|escape }} </td>
       <td> {{ member_count|escape }} </td>
       <td> {{ member_limit|escape }} </td>
+      <td> {{ total_doc_size|escape }} </td>
       <td> {{ total_blob_size|escape }} </td>
-      <td> {{ total_blob_size_limit|escape }} </td>
+      <td> {{ total_blob_limit|escape }} </td>
     </tr>
   </table>
 </div>

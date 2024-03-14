@@ -6,6 +6,7 @@ use axum::extract::{Path, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
 use gotrue_entity::dto::User;
+use human_bytes::human_bytes;
 
 use crate::{templates, AppState};
 
@@ -122,7 +123,14 @@ pub async fn user_usage_handler(
 }
 
 pub async fn workspace_usage_handler(session: UserSession) -> Result<Html<String>, WebAppError> {
-  todo!()
+  render_template(templates::WorkspaceUsage {
+    name: "test",
+    member_count: 6,
+    member_limit: 7,
+    total_doc_size: &human_bytes(987654),
+    total_blob_size: &human_bytes(9876543),
+    total_blob_limit: &human_bytes(98765432),
+  })
 }
 
 pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {

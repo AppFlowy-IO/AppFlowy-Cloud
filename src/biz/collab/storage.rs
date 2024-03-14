@@ -17,15 +17,17 @@ use database_entity::dto::{
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
-use sqlx::Transaction;
+use sqlx::{Postgres, Transaction};
 use std::collections::HashMap;
 use std::ops::DerefMut;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 
 use crate::biz::collab::cache::CollabCache;
 
+use crate::biz::collab::queue::{StorageQueue, StorageQueueRunner, WriteSignal};
 use crate::biz::snapshot::SnapshotControl;
 use realtime::server::{RTCommand, RTCommandSender};
 use tracing::{error, instrument};
@@ -43,6 +45,7 @@ pub struct CollabStorageImpl<AC> {
   access_control: AC,
   snapshot_control: SnapshotControl,
   rt_cmd: RTCommandSender,
+  queue: Arc<StorageQueue>,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -55,17 +58,22 @@ where
     snapshot_control: SnapshotControl,
     rt_cmd_sender: RTCommandSender,
   ) -> Self {
+    let (notify_tx, notify_rx) = tokio::sync::watch::channel(WriteSignal::Idle);
+    let queue = Arc::new(StorageQueue::new(cache.clone(), notify_tx));
+    tokio::spawn(StorageQueueRunner::run(Arc::downgrade(&queue), notify_rx));
     Self {
       cache,
       access_control,
       snapshot_control,
       rt_cmd: rt_cmd_sender,
+      queue,
     }
   }
 
   /// Check if the user has enough permissions to insert collab
   /// 1. If the collab already exists, check if the user has enough permissions to update collab
   /// 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
+  #[instrument(level = "trace", skip_all)]
   async fn check_collab_permission(
     &self,
     workspace_id: &str,
@@ -161,14 +169,17 @@ where
       .await
       .context("acquire transaction to upsert collab")
       .map_err(AppError::from)?;
-    self
-      .insert_or_update_collab_with_transaction(workspace_id, uid, params, &mut transaction)
-      .await?;
+    let is_collab_exist_in_db = self.preprocess(uid, &params, &mut transaction).await?;
     transaction
       .commit()
       .await
       .context("fail to commit the transaction to upsert collab")
       .map_err(AppError::from)?;
+
+    self
+      .check_collab_permission(workspace_id, uid, &params, is_collab_exist_in_db)
+      .await?;
+    self.queue.push(*uid, workspace_id, params).await?;
     Ok(())
   }
 
@@ -179,30 +190,13 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    transaction: &mut Transaction<'_, sqlx::Postgres>,
+    transaction: &mut Transaction<'_, Postgres>,
   ) -> DatabaseResult<()> {
-    params.validate()?;
-
-    let is_collab_exist_in_db =
-      is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
-
-    // When the collab is not exist in the database, and the user passes the permission check,
-    // which means the user has the permission to create the collab, we should update the policy
-    if !is_collab_exist_in_db {
-      self
-        .access_control
-        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-        .await?;
-    }
-
+    let is_collab_exist_in_db = self.preprocess(uid, &params, transaction).await?;
     self
       .check_collab_permission(workspace_id, uid, &params, is_collab_exist_in_db)
       .await?;
-
-    self
-      .cache
-      .insert_collab_encoded(workspace_id, uid, params, transaction)
-      .await?;
+    self.queue.push(*uid, workspace_id, params).await?;
     Ok(())
   }
 
@@ -302,13 +296,44 @@ where
   }
 }
 
-pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), anyhow::Error> {
+impl<AC> CollabStorageImpl<AC>
+where
+  AC: CollabStorageAccessControl,
+{
+  async fn preprocess(
+    &self,
+    uid: &i64,
+    params: &CollabParams,
+    transaction: &mut Transaction<'_, Postgres>,
+  ) -> Result<bool, AppError> {
+    params.validate()?;
+
+    let is_collab_exist_in_db =
+      is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
+
+    // When the collab is not exist in the database, and the user passes the permission check,
+    // which means the user has the permission to create the collab, we should update the policy
+    if !is_collab_exist_in_db {
+      self
+        .access_control
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
+    Ok(is_collab_exist_in_db)
+  }
+}
+
+pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), AppError> {
   let encoded_collab = EncodedCollab::decode_from_bytes(data)?;
   let _ = Collab::new_with_doc_state(
     CollabOrigin::Empty,
     object_id,
     encoded_collab.doc_state.to_vec(),
     vec![],
-  )?;
+  )
+  .map_err(|err| AppError::DecodeCollab {
+    oid: object_id.to_string(),
+    err: err.to_string(),
+  })?;
   Ok(())
 }

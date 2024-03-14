@@ -1,6 +1,6 @@
 use crate::biz::collab::disk_cache::CollabDiskCache;
 use crate::biz::collab::mem_cache::CollabMemCache;
-use crate::biz::collab::storage::check_encoded_collab_data;
+
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 
@@ -17,8 +17,8 @@ use tracing::{event, Level};
 
 #[derive(Clone)]
 pub struct CollabCache {
-  disk_cache: CollabDiskCache,
-  mem_cache: CollabMemCache,
+  pub(crate) disk_cache: CollabDiskCache,
+  pub(crate) mem_cache: CollabMemCache,
   hits: Arc<AtomicU64>,
   total_attempts: Arc<AtomicU64>,
 }
@@ -103,32 +103,27 @@ impl CollabCache {
     results
   }
 
-  pub async fn insert_collab_encoded(
+  pub async fn cache_collab_params_in_memory(&self, params: CollabParams) -> Result<(), AppError> {
+    let object_id = params.object_id;
+    let encoded_collab = params.encoded_collab_v1;
+    self
+      .mem_cache
+      .insert_encode_collab_bytes(object_id, encoded_collab)
+      .await?;
+    Ok(())
+  }
+
+  pub async fn persist_collab_params_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
-    if let Err(err) = check_encoded_collab_data(&params.object_id, &params.encoded_collab_v1) {
-      let msg = format!(
-        "Can not decode the data into collab:{}, {}",
-        params.object_id, err
-      );
-      return Err(AppError::InvalidRequest(msg));
-    }
-
-    let object_id = params.object_id.clone();
-    let encoded_collab = params.encoded_collab_v1.clone();
     self
       .disk_cache
       .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
       .await?;
-
-    self
-      .mem_cache
-      .insert_encode_collab_bytes(object_id, encoded_collab)
-      .await;
     Ok(())
   }
 
@@ -150,6 +145,10 @@ impl CollabCache {
   }
 
   pub async fn is_exist(&self, oid: &str) -> Result<bool, AppError> {
+    if self.mem_cache.is_exist(oid).await {
+      return Ok(true);
+    }
+
     let is_exist = self.disk_cache.is_exist(oid).await?;
     Ok(is_exist)
   }

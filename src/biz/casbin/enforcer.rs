@@ -7,14 +7,13 @@ use casbin::{CoreApi, Enforcer, MgmtApi};
 
 use async_trait::async_trait;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicI64, Ordering};
+
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::biz::casbin::metrics::AccessControlMetrics;
 
 use tokio::sync::RwLock;
-use tokio::time::interval;
+
 use tracing::{event, instrument, trace};
 
 #[async_trait]
@@ -28,37 +27,16 @@ pub trait AFEnforcerCache: Send + Sync {
   async fn remove_enforcer_result(&mut self, key: &PolicyCacheKey);
 }
 
-pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
-
 pub struct AFEnforcer {
+  // TODO(nathan): read is more than write. considering using SharedLock
+  // https://docs.rs/crossbeam/latest/crossbeam/sync/struct.ShardedLock.html
   enforcer: RwLock<Enforcer>,
-  metrics_cal: MetricsCal,
 }
 
 impl AFEnforcer {
-  pub fn new(enforcer: Enforcer, metrics: Arc<AccessControlMetrics>) -> Self {
-    let metrics_cal = MetricsCal::new();
-    let cloned_metrics_cal = metrics_cal.clone();
-
-    tokio::spawn(async move {
-      let mut interval = interval(ENFORCER_METRICS_TICK_INTERVAL);
-      loop {
-        interval.tick().await;
-
-        metrics.record_enforce_count(
-          cloned_metrics_cal
-            .total_read_enforce_result
-            .load(Ordering::Relaxed),
-          cloned_metrics_cal
-            .read_enforce_result_from_cache
-            .load(Ordering::Relaxed),
-        );
-      }
-    });
-
+  pub fn new(enforcer: Enforcer, _metrics: Arc<AccessControlMetrics>) -> Self {
     Self {
       enforcer: RwLock::new(enforcer),
-      metrics_cal,
     }
   }
 
@@ -118,11 +96,6 @@ impl AFEnforcer {
   where
     A: ToACAction,
   {
-    self
-      .metrics_cal
-      .total_read_enforce_result
-      .fetch_add(1, Ordering::Relaxed);
-
     // create policy request
     let policy_request = vec![
       uid.to_string(),
@@ -234,19 +207,4 @@ async fn policies_for_user_with_given_object(
     .into_iter()
     .filter(|p| p[POLICY_FIELD_INDEX_USER] == uid.to_string())
     .collect::<Vec<_>>()
-}
-
-#[derive(Clone)]
-struct MetricsCal {
-  total_read_enforce_result: Arc<AtomicI64>,
-  read_enforce_result_from_cache: Arc<AtomicI64>,
-}
-
-impl MetricsCal {
-  fn new() -> Self {
-    Self {
-      total_read_enforce_result: Arc::new(Default::default()),
-      read_enforce_result_from_cache: Arc::new(Default::default()),
-    }
-  }
 }

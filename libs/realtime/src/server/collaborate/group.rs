@@ -167,11 +167,7 @@ where
   /// subscriber
   pub async fn is_inactive(&self) -> bool {
     let modified_at = self.broadcast.modified_at.lock();
-    if cfg!(debug_assertions) {
-      modified_at.elapsed().as_secs() > 60 && self.subscribers.is_empty()
-    } else {
-      modified_at.elapsed().as_secs() > self.timeout_secs() && self.subscribers.is_empty()
-    }
+    modified_at.elapsed().as_secs() > self.timeout_secs() && self.subscribers.is_empty()
   }
 
   pub async fn stop(&self) {

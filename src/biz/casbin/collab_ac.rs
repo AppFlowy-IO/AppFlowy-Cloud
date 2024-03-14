@@ -101,6 +101,7 @@ impl RealtimeCollabAccessControlImpl {
     }
   }
 
+  #[instrument(level = "trace", skip_all)]
   async fn can_perform_action(
     &self,
     uid: &i64,

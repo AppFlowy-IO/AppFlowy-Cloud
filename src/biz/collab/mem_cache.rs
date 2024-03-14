@@ -20,6 +20,16 @@ impl CollabMemCache {
     }
   }
 
+  pub async fn is_exist(&self, object_id: &str) -> bool {
+    self
+      .redis_client
+      .lock()
+      .await
+      .exists::<&str, bool>(object_id)
+      .await
+      .unwrap_or(false)
+  }
+
   pub async fn remove_encode_collab(&self, object_id: &str) -> Result<(), AppError> {
     self
       .redis_client
@@ -42,13 +52,10 @@ impl CollabMemCache {
       .await
       .get::<_, Option<Vec<u8>>>(object_id)
       .await;
-    match result {
-      Ok(bytes) => bytes,
-      Err(err) => {
-        error!("Failed to get encoded collab from redis: {:?}", err);
-        None
-      },
-    }
+    result.unwrap_or_else(|err| {
+      error!("Failed to get encoded collab from redis: {:?}", err);
+      None
+    })
   }
 
   pub async fn get_encode_collab(&self, object_id: &str) -> Option<EncodedCollab> {
@@ -83,10 +90,16 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn insert_encode_collab_bytes(&self, object_id: String, bytes: Vec<u8>) {
-    if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {
-      error!("Failed to cache encoded collab bytes: {:?}", err);
-    }
+  pub async fn insert_encode_collab_bytes(
+    &self,
+    object_id: String,
+    bytes: Vec<u8>,
+  ) -> Result<(), AppError> {
+    self
+      .set_bytes_in_redis(object_id, bytes)
+      .await
+      .map_err(|err| AppError::Internal(anyhow!("fail to cache collab in redis:{:?}", err)))?;
+    Ok(())
   }
 
   /// Set bytes in redis with a 3 days expiration.

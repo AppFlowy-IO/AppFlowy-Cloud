@@ -46,7 +46,7 @@ async fn load_collab_policies(
     let action = member_access_lv.access_level.to_action();
     let policy = [
       uid.to_string(),
-      object_type.to_object_id(),
+      object_type.policy_object(),
       action.to_string(),
     ]
     .to_vec();
@@ -68,7 +68,7 @@ async fn load_workspace_policies(
     let action = member_permission.role.to_action();
     let policy = [
       uid.to_string(),
-      object_type.to_object_id(),
+      object_type.policy_object(),
       action.to_string(),
     ]
     .to_vec();

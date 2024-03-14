@@ -60,7 +60,7 @@ itertools = "0.11"
 uuid = "1.6.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 prost = "0.12.3"
-casbin = { version = "2.1.0" }
+casbin = { version = "2.1.0", features = ["cached", "runtime-tokio", "incremental"] }
 dotenvy = "0.15.7"
 url = "2.5.0"
 brotli = "3.4.0"

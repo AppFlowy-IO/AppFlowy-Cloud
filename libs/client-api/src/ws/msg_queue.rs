@@ -54,7 +54,7 @@ impl AggregateMessageQueue {
           _ = rx.recv() => break,
           _ = interval.tick() => {
             if let Some(queue) = weak_queue.upgrade() {
-              let messages_map = next_batch_message(maximum_payload_size, &queue).await;
+              let messages_map = next_batch_message(10, maximum_payload_size, &queue).await;
               if messages_map.is_empty() {
                 continue;
               }
@@ -91,20 +91,37 @@ async fn send_batch_message(
   }
 }
 
+/// Gathers a batch of messages up to certain limits.
+///
+/// This function collects messages from a shared priority queue until reaching either the maximum number
+/// of initial sync messages or the maximum payload size. It groups messages by their object ID.
+///
+/// # Arguments
+/// - `maximum_init_sync`: Max number of initial sync messages allowed in a batch.
+/// - `maximum_payload_size`: Max total size of messages (in bytes) allowed in a batch.
 #[inline]
 async fn next_batch_message(
+  maximum_init_sync: usize,
   maximum_payload_size: usize,
   queue: &Arc<Mutex<BinaryHeap<ClientCollabMessage>>>,
 ) -> HashMap<String, Vec<ClientCollabMessage>> {
   let mut messages_map = HashMap::new();
   let mut size = 0;
+  let mut init_sync_count = 0;
   let mut lock_guard = queue.lock().await;
   while let Some(msg) = lock_guard.pop() {
     size += msg.size();
+    if msg.is_init_sync() {
+      init_sync_count += 1;
+    }
     messages_map
       .entry(msg.object_id().to_string())
       .or_insert(vec![])
       .push(msg);
+
+    if init_sync_count > maximum_init_sync {
+      break;
+    }
     if size > maximum_payload_size {
       break;
     }

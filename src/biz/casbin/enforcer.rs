@@ -13,9 +13,9 @@ use std::time::Duration;
 
 use crate::biz::casbin::metrics::AccessControlMetrics;
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tokio::time::interval;
-use tracing::{error, event, instrument, trace};
+use tracing::{event, instrument, trace};
 
 #[async_trait]
 pub trait AFEnforcerCache: Send + Sync {
@@ -32,16 +32,11 @@ pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
-  cache: Arc<Mutex<dyn AFEnforcerCache>>,
   metrics_cal: MetricsCal,
 }
 
 impl AFEnforcer {
-  pub fn new(
-    enforcer: Enforcer,
-    cache: impl AFEnforcerCache + 'static,
-    metrics: Arc<AccessControlMetrics>,
-  ) -> Self {
+  pub fn new(enforcer: Enforcer, metrics: Arc<AccessControlMetrics>) -> Self {
     let metrics_cal = MetricsCal::new();
     let cloned_metrics_cal = metrics_cal.clone();
 
@@ -63,7 +58,6 @@ impl AFEnforcer {
 
     Self {
       enforcer: RwLock::new(enforcer),
-      cache: Arc::new(Mutex::new(cache)),
       metrics_cal,
     }
   }
@@ -79,39 +73,27 @@ impl AFEnforcer {
     uid: &i64,
     obj: &ObjectType<'_>,
     act: &ActionType,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     validate_obj_action(obj, act)?;
     let policy = vec![
       uid.to_string(),
-      obj.to_object_id(),
+      obj.policy_object(),
       act.to_action().to_string(),
     ];
     let policy_key = PolicyCacheKey::new(&policy);
-
-    // if the policy is already in the cache, return. Only update the policy if it's not in the cache.
-    if let Some(value) = self
-      .cache
-      .lock()
-      .await
-      .get_enforcer_result(&policy_key)
-      .await
-    {
-      return Ok(value);
-    }
-
     // only one policy per user per object. So remove the old policy and add the new one.
     let mut write_guard = self.enforcer.write().await;
     let result = write_guard
       .add_policy(policy)
       .await
-      .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")));
+      .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")))?;
     trace!(
       "[access control]: add policy:{} => {:?}",
       policy_key.0,
       result
     );
     drop(write_guard);
-    result
+    Ok(())
   }
 
   /// Returns policies that match the filter.
@@ -144,27 +126,11 @@ impl AFEnforcer {
     // create policy request
     let policy_request = vec![
       uid.to_string(),
-      obj.to_object_id(),
+      obj.policy_object(),
       act.to_action().to_string(),
     ];
 
     let policy_key = PolicyCacheKey::new(&policy_request);
-
-    // if the policy is already in the cache, return. Only update the policy if it's not in the cache.
-    if let Some(value) = self
-      .cache
-      .lock()
-      .await
-      .get_enforcer_result(&policy_key)
-      .await
-    {
-      self
-        .metrics_cal
-        .read_enforce_result_from_cache
-        .fetch_add(1, Ordering::Relaxed);
-      return Ok(value);
-    }
-
     // Perform the action and capture the result or error
     let action_result = self.enforcer.read().await.enforce(policy_request);
     match &action_result {
@@ -182,15 +148,6 @@ impl AFEnforcer {
 
     // Convert the action result into the original method's result type, handling errors as before
     let result = action_result.map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
-    if let Err(err) = self
-      .cache
-      .lock()
-      .await
-      .set_enforcer_result(&policy_key, result)
-      .await
-    {
-      error!("{}", err)
-    }
     Ok(result)
   }
 
@@ -212,17 +169,10 @@ impl AFEnforcer {
     event!(
       tracing::Level::INFO,
       "[access control]: remove policy: object={}, user={}, policies={:?}",
-      object_type.to_object_id(),
+      object_type.policy_object(),
       uid,
       policies_for_user_on_object
     );
-    let mut cache_lock_guard = self.cache.lock().await;
-    for policy in &policies_for_user_on_object {
-      cache_lock_guard
-        .remove_enforcer_result(&PolicyCacheKey::new(policy))
-        .await;
-    }
-    drop(cache_lock_guard);
 
     enforcer
       .remove_policies(policies_for_user_on_object)
@@ -276,7 +226,7 @@ async fn policies_for_user_with_given_object(
   object_type: &ObjectType<'_>,
   enforcer: &Enforcer,
 ) -> Vec<Vec<String>> {
-  let object_type_id = object_type.to_object_id();
+  let object_type_id = object_type.policy_object();
   let policies_related_to_object =
     enforcer.get_filtered_policy(POLICY_FIELD_INDEX_OBJECT, vec![object_type_id]);
 

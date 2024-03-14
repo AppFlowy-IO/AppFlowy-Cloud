@@ -1,7 +1,8 @@
 use crate::biz::casbin::collab_ac::CollabAccessControlImpl;
-use crate::biz::casbin::enforcer::{AFEnforcer, AFEnforcerCache};
-use crate::biz::casbin::pg_listen::*;
+use crate::biz::casbin::enforcer::AFEnforcer;
+
 use crate::biz::casbin::workspace_ac::WorkspaceAccessControlImpl;
+use std::cmp::Ordering;
 
 use app_error::AppError;
 use casbin::CoreApi;
@@ -18,6 +19,12 @@ use redis::{ErrorKind, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRe
 use std::sync::Arc;
 
 use tokio::sync::broadcast;
+
+#[derive(Debug, Clone)]
+pub enum AccessControlChange {
+  UpdatePolicy { uid: i64, oid: String },
+  RemovePolicy { uid: i64, oid: String },
+}
 
 /// Manages access control.
 ///
@@ -36,15 +43,13 @@ pub struct AccessControl {
   enforcer: Arc<AFEnforcer>,
   #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
+  change_tx: broadcast::Sender<AccessControlChange>,
 }
 
 impl AccessControl {
   pub async fn new(
     pg_pool: PgPool,
-    collab_listener: broadcast::Receiver<CollabMemberNotification>,
-    workspace_listener: broadcast::Receiver<WorkspaceMemberNotification>,
     access_control_metrics: Arc<AccessControlMetrics>,
-    enforcer_cache: impl AFEnforcerCache + 'static,
   ) -> Result<Self, AppError> {
     let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF)
       .await
@@ -56,18 +61,19 @@ impl AccessControl {
         AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
       })?;
 
-    let enforcer = Arc::new(AFEnforcer::new(
-      enforcer,
-      enforcer_cache,
-      access_control_metrics.clone(),
-    ));
-    spawn_listen_on_workspace_member_change(workspace_listener, enforcer.clone());
-    spawn_listen_on_collab_member_change(pg_pool, collab_listener, enforcer.clone());
+    let enforcer = Arc::new(AFEnforcer::new(enforcer, access_control_metrics.clone()));
+    let (change_tx, _) = broadcast::channel(1000);
     Ok(Self {
       enforcer,
       access_control_metrics,
+      change_tx,
     })
   }
+
+  pub fn subscribe_change(&self) -> broadcast::Receiver<AccessControlChange> {
+    self.change_tx.subscribe()
+  }
+
   pub fn new_collab_access_control(&self) -> CollabAccessControlImpl {
     CollabAccessControlImpl::new(self.clone())
   }
@@ -81,11 +87,16 @@ impl AccessControl {
     uid: &i64,
     obj: &ObjectType<'_>,
     act: &ActionType,
-  ) -> Result<bool, AppError> {
+  ) -> Result<(), AppError> {
     if cfg!(feature = "disable_access_control") {
-      Ok(true)
+      Ok(())
     } else {
-      self.enforcer.update_policy(uid, obj, act).await
+      let result = self.enforcer.update_policy(uid, obj, act).await;
+      let _ = self.change_tx.send(AccessControlChange::UpdatePolicy {
+        uid: *uid,
+        oid: obj.object_id().to_string(),
+      });
+      result
     }
   }
 
@@ -94,6 +105,10 @@ impl AccessControl {
       Ok(())
     } else {
       self.enforcer.remove_policy(uid, obj).await?;
+      let _ = self.change_tx.send(AccessControlChange::RemovePolicy {
+        uid: *uid,
+        oid: obj.object_id().to_string(),
+      });
       Ok(())
     }
   }
@@ -187,10 +202,17 @@ pub enum ObjectType<'id> {
 }
 
 impl ObjectType<'_> {
-  pub fn to_object_id(&self) -> String {
+  pub fn policy_object(&self) -> String {
     match self {
       ObjectType::Collab(s) => format!("collab::{}", s),
       ObjectType::Workspace(s) => format!("workspace::{}", s),
+    }
+  }
+
+  pub fn object_id(&self) -> &str {
+    match self {
+      ObjectType::Collab(s) => s,
+      ObjectType::Workspace(s) => s,
     }
   }
 }
@@ -212,11 +234,34 @@ impl ToACAction for ActionType {
 }
 
 /// Represents the actions that can be performed on objects.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Action {
   Read,
   Write,
   Delete,
+}
+
+impl PartialOrd for Action {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for Action {
+  fn cmp(&self, other: &Self) -> Ordering {
+    match (self, other) {
+      // Read
+      (Action::Read, Action::Read) => Ordering::Equal,
+      (Action::Read, _) => Ordering::Less,
+      (_, Action::Read) => Ordering::Greater,
+      // Write
+      (Action::Write, Action::Write) => Ordering::Equal,
+      (Action::Write, Action::Delete) => Ordering::Less,
+      // Delete
+      (Action::Delete, Action::Write) => Ordering::Greater,
+      (Action::Delete, Action::Delete) => Ordering::Equal,
+    }
+  }
 }
 
 impl ToRedisArgs for Action {
@@ -241,6 +286,16 @@ impl FromRedisValue for Action {
 }
 
 impl ToACAction for Action {
+  fn to_action(&self) -> &str {
+    match self {
+      Action::Read => "read",
+      Action::Write => "write",
+      Action::Delete => "delete",
+    }
+  }
+}
+
+impl ToACAction for &Action {
   fn to_action(&self) -> &str {
     match self {
       Action::Read => "read",

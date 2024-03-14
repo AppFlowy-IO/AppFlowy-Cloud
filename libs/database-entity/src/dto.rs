@@ -258,6 +258,11 @@ pub enum QueryCollabResult {
 #[derive(Serialize, Deserialize)]
 pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);
 
+#[derive(Serialize, Deserialize)]
+pub struct WorkspaceUsage {
+  pub total_document_size: i64,
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabMemberParams {
   pub uid: i64,

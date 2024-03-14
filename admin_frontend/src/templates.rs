@@ -1,6 +1,8 @@
 use askama::Template;
 use gotrue_entity::{dto::User, sso::SSOProvider};
 
+use crate::ext::entities::WorkspaceUsage;
+
 #[derive(Template)]
 #[template(path = "components/user_usage.html")]
 pub struct UserUsage {
@@ -8,15 +10,11 @@ pub struct UserUsage {
   pub workspace_limit: u32,
 }
 
+// ./../templates/components/workspace_usage.html
 #[derive(Template)]
 #[template(path = "components/workspace_usage.html")]
-pub struct WorkspaceUsage<'a> {
-  pub name: &'a str,
-  pub member_count: u32,
-  pub member_limit: u32,
-  pub total_doc_size: &'a str,
-  pub total_blob_size: &'a str,
-  pub total_blob_limit: &'a str,
+pub struct WorkspaceUsageList {
+  pub workspace_usages: Vec<WorkspaceUsage>,
 }
 
 #[derive(Template)]

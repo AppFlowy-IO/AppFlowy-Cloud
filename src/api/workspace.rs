@@ -102,6 +102,9 @@ pub fn workspace_scope() -> Scope {
           .route(web::post().to(create_collab_list_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/usage").route(web::get().to(get_workspace_usage_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/{object_id}/snapshot")
         .route(web::get().to(get_collab_snapshot_handler))
         .route(web::post().to(create_collab_snapshot_handler)),
@@ -839,6 +842,17 @@ async fn post_realtime_message_stream_handler(
     }
   }
   Err(AppError::Internal(anyhow!("Failed to send message to websocket server")).into())
+}
+
+async fn get_workspace_usage_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<WorkspaceUsage>>> {
+  let res = WorkspaceUsage {
+    total_document_size: 19978, //  TODO
+  };
+  Ok(Json(AppResponse::Ok().with_data(res)))
 }
 
 #[inline]

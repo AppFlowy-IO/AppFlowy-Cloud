@@ -1,5 +1,6 @@
 use crate::error::WebAppError;
-use crate::ext::{get_user_workspace_count, get_user_workspace_limit};
+use crate::ext::api::{get_user_workspace_count, get_user_workspace_limit};
+use crate::ext::entities::WorkspaceUsage;
 use crate::session::UserSession;
 use askama::Template;
 use axum::extract::{Path, State};
@@ -122,15 +123,30 @@ pub async fn user_usage_handler(
   })
 }
 
-pub async fn workspace_usage_handler(session: UserSession) -> Result<Html<String>, WebAppError> {
-  render_template(templates::WorkspaceUsage {
-    name: "test",
-    member_count: 6,
-    member_limit: 7,
-    total_doc_size: &human_bytes(987654),
-    total_blob_size: &human_bytes(9876543),
-    total_blob_limit: &human_bytes(98765432),
-  })
+pub async fn workspace_usage_handler(
+  State(app_state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  let workspace_usages = vec![
+    WorkspaceUsage {
+      name: "test".to_owned(),
+      member_count: 6,
+      member_limit: 7,
+      total_doc_size: human_bytes(987654),
+      total_blob_size: human_bytes(9876543),
+      total_blob_limit: human_bytes(98765432),
+    },
+    WorkspaceUsage {
+      name: "test".to_owned(),
+      member_count: 6,
+      member_limit: 7,
+      total_doc_size: human_bytes(987654),
+      total_blob_size: human_bytes(9876543),
+      total_blob_limit: human_bytes(98765432),
+    },
+  ];
+
+  render_template(templates::WorkspaceUsageList { workspace_usages })
 }
 
 pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {

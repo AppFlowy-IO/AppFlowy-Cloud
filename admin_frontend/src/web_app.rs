@@ -2,14 +2,12 @@ use crate::error::WebAppError;
 use crate::ext::api::{
   get_user_workspace_count, get_user_workspace_limit, get_user_workspace_usages,
 };
-use crate::ext::entities::WorkspaceUsageLimits;
 use crate::session::UserSession;
 use askama::Template;
 use axum::extract::{Path, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
 use gotrue_entity::dto::User;
-use human_bytes::human_bytes;
 
 use crate::{templates, AppState};
 

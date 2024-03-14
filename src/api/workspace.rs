@@ -849,9 +849,12 @@ async fn get_workspace_usage_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<WorkspaceUsage>>> {
-  let res = WorkspaceUsage {
-    total_document_size: 19978, //  TODO
-  };
+  let res = biz::workspace::ops::get_workspace_document_total_bytes(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok().with_data(res)))
 }
 

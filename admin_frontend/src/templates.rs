@@ -1,6 +1,22 @@
 use askama::Template;
 use gotrue_entity::{dto::User, sso::SSOProvider};
 
+use crate::ext::entities::WorkspaceUsageLimits;
+
+#[derive(Template)]
+#[template(path = "components/user_usage.html")]
+pub struct UserUsage {
+  pub workspace_count: u32,
+  pub workspace_limit: String,
+}
+
+// ./../templates/components/workspace_usage.html
+#[derive(Template)]
+#[template(path = "components/workspace_usage.html")]
+pub struct WorkspaceUsageList {
+  pub workspace_usages: Vec<WorkspaceUsageLimits>,
+}
+
 #[derive(Template)]
 #[template(path = "components/admin_sso_detail.html")]
 pub struct SsoDetail {
@@ -27,10 +43,6 @@ pub struct ChangePassword;
 pub struct Login<'a> {
   pub oauth_providers: Vec<&'a str>,
 }
-
-// #[derive(Template)]
-// #[template(path = "login.html")]
-// pub struct Login;
 
 #[derive(Template)]
 #[template(path = "pages/home.html")]

@@ -47,6 +47,7 @@ impl AccessControlMetrics {
     self.load_all_policies.set(millis as i64);
   }
 
+  #[allow(dead_code)]
   pub fn record_enforce_count(&self, total: i64, from_cache: i64) {
     trace!(
       "enforce_count: total: {}, from_cache: {}",

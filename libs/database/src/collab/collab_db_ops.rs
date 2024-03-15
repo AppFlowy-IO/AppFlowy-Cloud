@@ -85,11 +85,8 @@ pub async fn insert_into_af_collab(
           uid,
         )
         .execute(tx.deref_mut())
-        .await
-        .context(format!(
-          "user:{} update af_collab:{} failed",
-          uid, params.object_id
-        ))?;
+        .await?;
+
         event!(
           tracing::Level::TRACE,
           "did update collab row:{}",
@@ -128,11 +125,7 @@ pub async fn insert_into_af_collab(
         permission_id
       )
       .execute(tx.deref_mut())
-      .await
-      .context(format!(
-        "Insert af_collab_member failed: {}:{}:{}",
-        uid, params.object_id, permission_id
-      ))?;
+      .await?;
 
       sqlx::query!(
         "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
@@ -146,11 +139,7 @@ pub async fn insert_into_af_collab(
         workspace_id,
       )
       .execute(tx.deref_mut())
-      .await
-      .context(format!(
-        "Insert new af_collab failed: {}:{}:{}",
-        uid, params.object_id, params.collab_type
-      ))?;
+      .await?;
 
       event!(
         tracing::Level::TRACE,

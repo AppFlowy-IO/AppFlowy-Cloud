@@ -52,6 +52,9 @@ pub enum AppError {
   #[error("Invalid request:{0}")]
   InvalidRequest(String),
 
+  #[error("Can not decode {oid} data with error:{err}")]
+  DecodeCollab { oid: String, err: String },
+
   #[error("Invalid OAuth Provider:{0}")]
   InvalidOAuthProvider(String),
 
@@ -164,6 +167,7 @@ impl AppError {
       AppError::TokioJoinError(_) => ErrorCode::Internal,
       #[cfg(feature = "bincode_error")]
       AppError::BincodeError(_) => ErrorCode::Internal,
+      AppError::DecodeCollab { .. } => ErrorCode::InvalidData,
     }
   }
 }
@@ -268,6 +272,7 @@ pub enum ErrorCode {
   SerdeError = 1022,
   NetworkError = 1023,
   UserUnAuthorized = 1024,
+  InvalidData = 1025,
 }
 
 impl ErrorCode {

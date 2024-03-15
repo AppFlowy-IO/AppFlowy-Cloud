@@ -11,12 +11,14 @@ use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
   insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_workspace, select_workspace_invitations_for_user, select_workspace_member_list,
+  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
+  select_workspace_member_list, select_workspace_total_collab_bytes,
   update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
   upsert_workspace_member, upsert_workspace_member_with_txn,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
+  WorkspaceUsage,
 };
 
 use gotrue::params::InviteUserParams;
@@ -365,4 +367,22 @@ pub async fn update_workspace_member(
   }
 
   Ok(())
+}
+
+pub async fn get_workspace_document_total_bytes(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<WorkspaceUsage, AppError> {
+  let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  if !is_owner {
+    return Err(AppError::UserUnAuthorized(
+      "User is not the owner of the workspace".to_string(),
+    ));
+  }
+
+  let byte_count = select_workspace_total_collab_bytes(pg_pool, workspace_id).await?;
+  Ok(WorkspaceUsage {
+    total_document_size: byte_count,
+  })
 }

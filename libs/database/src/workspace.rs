@@ -636,3 +636,25 @@ pub async fn select_permission_from_role_id(
   .await?;
   Ok(permission)
 }
+
+pub async fn select_workspace_total_collab_bytes(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<i64, AppError> {
+  let sum = sqlx::query_scalar!(
+    r#"
+    SELECT SUM(len) FROM af_collab WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_one(pool)
+  .await?;
+
+  match sum {
+    Some(s) => Ok(s),
+    None => Err(AppError::RecordNotFound(format!(
+      "Failed to get total collab bytes for workspace_id: {}",
+      workspace_id
+    ))),
+  }
+}

@@ -100,5 +100,14 @@ services:
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
+  appflowy_ai:
+    restart: on-failure
+    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
+    ports:
+      - 5001:5001
+    environment:
+      - FLASK_DEBUG=false
+      - FLASK_SKIP_DOTENV=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
 volumes:
   postgres_data:

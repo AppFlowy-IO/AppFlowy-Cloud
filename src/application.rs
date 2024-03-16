@@ -191,6 +191,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   info!("Connecting to Redis...");
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
 
+  #[cfg(feature = "ai_enable")]
+  let appflowy_ai_client =
+    appflowy_ai::client::AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
+
   // Pg listeners
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
@@ -248,6 +252,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     access_control,
     metrics,
     gotrue_admin,
+    #[cfg(feature = "ai_enable")]
+    appflowy_ai_client,
   })
 }
 

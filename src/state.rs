@@ -43,6 +43,8 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
+  #[cfg(feature = "ai_enable")]
+  pub appflowy_ai_client: appflowy_ai::client::AppFlowyAIClient,
 }
 
 impl AppState {

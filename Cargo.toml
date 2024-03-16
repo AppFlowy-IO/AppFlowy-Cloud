@@ -39,7 +39,7 @@ secrecy = { version = "0.8", features = ["serde"] }
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"
 thiserror = "1.0.56"
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+reqwest = { workspace = true, default-features = false, features = ["json", "rustls-tls", "cookies"] }
 unicode-segmentation = "1.10"
 lazy_static = "1.4.0"
 fancy-regex = "0.11.0"
@@ -68,6 +68,7 @@ evmap.workspace = true
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
+appflowy-ai = { path = "libs/appflowy_ai" }
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
@@ -133,7 +134,9 @@ members = [
     "libs/encrypt",
     "libs/realtime-protocol",
     "libs/websocket",
-    "libs/client-api-test-util", "libs/wasm-test",
+    "libs/client-api-test-util",
+    "libs/wasm-test",
+    "libs/appflowy_ai",
 ]
 
 [workspace.dependencies]
@@ -162,6 +165,7 @@ evmap = "10.0.2"
 dashmap = "5.5.3"
 futures = "0.3.30"
 async-stream = "0.3.5"
+reqwest = "0.11.26"
 
 [profile.release]
 lto = true
@@ -182,6 +186,7 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 custom_env= []
 # This feature will be removed once the cpu spike issue is resolved
 disable_access_control = []
+ai_enable = []
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

@@ -14,6 +14,7 @@ pub struct Config {
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
   pub casbin: CasbinSetting,
+  pub appflowy_ai: AppFlowyAISetting,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -38,6 +39,11 @@ pub struct GoTrueSetting {
   pub jwt_secret: Secret<String>,
   pub admin_email: String,
   pub admin_password: Secret<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct AppFlowyAISetting {
+  pub url: Secret<String>,
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our
@@ -131,6 +137,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     casbin: CasbinSetting {
       pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
+    },
+    appflowy_ai: AppFlowyAISetting {
+      url: get_env_var("APPFLOWY_AI_URL", "http://localhost:5001").into(),
     },
   };
   Ok(config)

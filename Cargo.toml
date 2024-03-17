@@ -127,7 +127,7 @@ members = [
     "libs/gotrue",
     "libs/gotrue-entity",
     "admin_frontend",
-    "libs/app_error",
+    "libs/app-error",
     "libs/workspace-template",
     "libs/encrypt",
     "libs/realtime-protocol",
@@ -142,7 +142,7 @@ realtime-entity = { path = "libs/realtime-entity" }
 realtime-protocol = { path = "libs/realtime-protocol" }
 database-entity = { path = "libs/database-entity" }
 shared-entity = { path = "libs/shared-entity" }
-app-error = { path = "libs/app_error" }
+app-error = { path = "libs/app-error" }
 serde_json = "1.0.111"
 serde = { version = "1.0.195", features = ["derive"] }
 bytes = "1.5.0"

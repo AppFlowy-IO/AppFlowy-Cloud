@@ -1,5 +1,5 @@
+use client_websocket::{Error, ProtocolError};
 use reqwest::StatusCode;
-use websocket::{Error, ProtocolError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum WSError {

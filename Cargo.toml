@@ -75,7 +75,6 @@ collab = { version = "0.1.0", features = ["async-plugin"] }
 collab-entity = { version = "0.1.0" }
 
 #Local crate
-token = { path = "libs/token" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 database = { path = "libs/database" }
@@ -117,7 +116,6 @@ path = "src/lib.rs"
 
 [workspace]
 members = [
-    "libs/token",
     "libs/snowflake",
     "libs/realtime",
     "libs/realtime-entity",

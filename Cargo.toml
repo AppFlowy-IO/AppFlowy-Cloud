@@ -68,7 +68,7 @@ evmap.workspace = true
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
-appflowy-ai = { path = "libs/appflowy_ai" }
+appflowy-ai = { path = "libs/appflowy-ai" }
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
@@ -134,7 +134,7 @@ members = [
     "libs/client-websocket",
     "libs/client-api-test-util",
     "libs/wasm-test",
-    "libs/appflowy_ai",
+    "libs/appflowy-ai",
 ]
 
 [workspace.dependencies]

@@ -30,7 +30,7 @@ lazy_static = "1.4.0"
 dotenvy = "0.15.7"
 reqwest = "0.11.23"
 gotrue.workspace = true
-websocket.workspace = true
+client-websocket.workspace = true
 futures = "0.3.30"
 anyhow = "1.0.80"
 

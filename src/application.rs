@@ -20,7 +20,6 @@ use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
 use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
-use crate::component::auth::HEADER_TOKEN;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
 use crate::middleware::metrics_mw::MetricsMiddleware;
@@ -124,7 +123,6 @@ pub async fn run(
       .wrap(IdentityMiddleware::default())
       .wrap(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
-          .cookie_name(HEADER_TOKEN.to_string())
           .build(),
       )
       // .wrap(DecryptPayloadMiddleware)

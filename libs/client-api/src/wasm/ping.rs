@@ -1,10 +1,10 @@
 use crate::ws::ConnectStateNotify;
+use client_websocket::Message;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use websocket::Message;
 #[allow(dead_code)]
 pub(crate) struct ServerFixIntervalPing {
   duration: Duration,

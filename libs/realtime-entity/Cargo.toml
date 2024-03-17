@@ -22,7 +22,7 @@ database-entity.workspace = true
 yrs.workspace = true
 thiserror = "1.0.56"
 realtime-protocol.workspace = true
-websocket.workspace = true
+client-websocket.workspace = true
 serde_repr = "0.1"
 brotli = { version = "3.4.0", optional = true }
 

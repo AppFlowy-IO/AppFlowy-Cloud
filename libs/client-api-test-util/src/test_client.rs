@@ -600,7 +600,7 @@ impl TestClient {
   #[cfg(not(target_arch = "wasm32"))]
   pub async fn post_realtime_message(
     &self,
-    message: websocket::Message,
+    message: client_websocket::Message,
   ) -> Result<(), AppResponseError> {
     self
       .api_client

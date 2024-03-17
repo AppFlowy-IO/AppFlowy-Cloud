@@ -493,13 +493,14 @@ impl TestClient {
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = match encoded_collab_v1 {
-      None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![])),
+      None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![], false)),
       Some(data) => Arc::new(
         MutexCollab::new_with_doc_state(
           origin.clone(),
           &object_id,
           data.doc_state.to_vec(),
           vec![],
+          false,
         )
         .unwrap(),
       ),
@@ -574,7 +575,7 @@ impl TestClient {
     let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(
-      MutexCollab::new_with_doc_state(origin.clone(), object_id, doc_state, vec![]).unwrap(),
+      MutexCollab::new_with_doc_state(origin.clone(), object_id, doc_state, vec![], false).unwrap(),
     );
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();
@@ -661,6 +662,7 @@ pub async fn assert_server_snapshot(
             &object_id,
             encoded_collab_v1.doc_state.to_vec(),
             vec![],
+              false,
           )
           .unwrap()
           .to_json_value();
@@ -718,6 +720,7 @@ pub async fn assert_server_collab(
             &object_id,
             data.doc_state.to_vec(),
             vec![],
+            false,
           )
           .unwrap()
           .to_json_value();
@@ -838,6 +841,7 @@ pub async fn get_collab_json_from_server(
     object_id,
     bytes.doc_state.to_vec(),
     vec![],
+    false,
   )
   .unwrap()
   .to_json_value()

@@ -533,6 +533,7 @@ dependencies = [
  "chrono",
  "client-api",
  "client-api-test-util",
+ "client-websocket",
  "collab",
  "collab-entity",
  "collab-folder",
@@ -586,7 +587,6 @@ dependencies = [
  "url",
  "uuid",
  "validator",
- "websocket",
  "workspace-template",
 ]
 
@@ -1297,6 +1297,7 @@ dependencies = [
  "brotli",
  "bytes",
  "chrono",
+ "client-websocket",
  "collab",
  "collab-entity",
  "database-entity",
@@ -1327,7 +1328,6 @@ dependencies = [
  "url",
  "uuid",
  "wasm-bindgen-futures",
- "websocket",
  "workspace-template",
  "yrs",
 ]
@@ -1340,6 +1340,7 @@ dependencies = [
  "assert-json-diff",
  "bytes",
  "client-api",
+ "client-websocket",
  "collab",
  "collab-entity",
  "collab-folder",
@@ -1363,7 +1364,23 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "web-sys",
- "websocket",
+]
+
+[[package]]
+name = "client-websocket"
+version = "0.1.0"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "http 0.2.11",
+ "httparse",
+ "js-sys",
+ "percent-encoding",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -4252,6 +4269,7 @@ dependencies = [
  "bincode",
  "brotli",
  "bytes",
+ "client-websocket",
  "collab",
  "collab-entity",
  "database-entity",
@@ -4264,7 +4282,6 @@ dependencies = [
  "serde_repr",
  "thiserror",
  "tokio-tungstenite",
- "websocket",
  "yrs",
 ]
 
@@ -6364,23 +6381,6 @@ name = "webpki-roots"
 version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1778a42e8b3b90bff8d0f5032bf22250792889a5cdc752aa0020c84abe3aaf10"
-
-[[package]]
-name = "websocket"
-version = "0.1.0"
-dependencies = [
- "futures-channel",
- "futures-util",
- "http 0.2.11",
- "httparse",
- "js-sys",
- "percent-encoding",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
- "wasm-bindgen",
- "web-sys",
-]
 
 [[package]]
 name = "weezl"

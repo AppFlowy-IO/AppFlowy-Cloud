@@ -1,7 +1,7 @@
 use crate::ws::{ConnectInfo, CurrentConnInfo, StateNotify, WSError};
+use client_websocket::{connect_async, WebSocketStream};
 use reqwest::header::HeaderMap;
 use std::sync::Weak;
-use websocket::{connect_async, WebSocketStream};
 
 pub async fn retry_connect(
   url: String,

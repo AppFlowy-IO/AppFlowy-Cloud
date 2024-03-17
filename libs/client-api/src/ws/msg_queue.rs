@@ -1,3 +1,4 @@
+use client_websocket::Message;
 use realtime_entity::collab_msg::ClientCollabMessage;
 use realtime_entity::message::RealtimeMessage;
 use std::collections::{BinaryHeap, HashMap};
@@ -6,7 +7,6 @@ use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::interval;
 use tracing::{debug, error, trace};
-use websocket::Message;
 
 pub type AggregateMessagesSender = mpsc::Sender<Message>;
 pub type AggregateMessagesReceiver = mpsc::Receiver<Message>;

@@ -1,9 +1,8 @@
-use crate::component::auth::Token;
 use actix_session::SessionExt;
-use actix_session::{Session, SessionGetError, SessionInsertError};
+use actix_session::{Session, SessionGetError};
 use actix_web::dev::Payload;
 use actix_web::{FromRequest, HttpRequest};
-use secrecy::{ExposeSecret, Secret};
+
 use std::future::{ready, Ready};
 
 pub struct SessionToken(Session);
@@ -13,10 +12,6 @@ impl SessionToken {
 
   pub fn renew(&self) {
     self.0.renew();
-  }
-
-  pub fn insert_token(&self, token: Secret<Token>) -> Result<(), SessionInsertError> {
-    self.0.insert(Self::TOKEN_ID_KEY, token.expose_secret())
   }
 
   pub fn get_token(&self) -> Result<Option<String>, SessionGetError> {

@@ -87,6 +87,7 @@ async fn get_snapshot_data_test() {
     &object_id,
     encoded_collab.doc_state.to_vec(),
     vec![],
+    false,
   )
   .unwrap();
   let json = collab.to_json_value();
@@ -136,7 +137,7 @@ async fn snapshot_limit_test() {
 }
 
 fn test_collab_data(uid: i64, oid: &str) -> (EncodedCollab, Value) {
-  let collab = Collab::new(uid, oid, "fake_device_id", vec![]);
+  let collab = Collab::new(uid, oid, "fake_device_id", vec![], false);
   collab.with_origin_transact_mut(|txn| {
     collab.insert_with_txn(txn, "0", "a");
     collab.insert_with_txn(txn, "1", "b");

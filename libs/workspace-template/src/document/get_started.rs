@@ -40,7 +40,12 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
     let data = tokio::task::spawn_blocking(|| {
       let json_str = include_str!("../../assets/read_me.json");
       let document_data = JsonToDocumentParser::json_str_to_document(json_str).unwrap();
-      let collab = Arc::new(MutexCollab::new(CollabOrigin::Empty, &view_id, vec![]));
+      let collab = Arc::new(MutexCollab::new(
+        CollabOrigin::Empty,
+        &view_id,
+        vec![],
+        false,
+      ));
       let document = Document::create_with_data(collab, document_data)?;
       let data = document.get_collab().encode_collab_v1();
       Ok::<_, anyhow::Error>(TemplateData {

@@ -309,6 +309,7 @@ pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), any
     object_id,
     encoded_collab.doc_state.to_vec(),
     vec![],
+    false,
   )?;
   Ok(())
 }

@@ -117,7 +117,12 @@ impl WorkspaceTemplateBuilder {
         trash: Default::default(),
       };
 
-      let collab = Arc::new(MutexCollab::new(CollabOrigin::Empty, &workspace_id, vec![]));
+      let collab = Arc::new(MutexCollab::new(
+        CollabOrigin::Empty,
+        &workspace_id,
+        vec![],
+        false,
+      ));
       let folder = Folder::create(uid, collab, None, folder_data);
       let data = folder.encode_collab_v1();
       Ok::<_, anyhow::Error>(TemplateData {

@@ -290,6 +290,7 @@ where
         object_id,
         encoded_collab.doc_state.to_vec(),
         vec![],
+        false,
       ) {
         match collab_type {
           CollabType::Document => {

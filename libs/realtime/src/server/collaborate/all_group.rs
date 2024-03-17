@@ -100,7 +100,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) {
-    let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![]);
+    let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
     let plugin = CollabStoragePlugin::new(
       uid,
       workspace_id,

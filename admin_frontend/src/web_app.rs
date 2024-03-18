@@ -1,8 +1,8 @@
 use crate::askama_entities::WorkspaceWithMembers;
 use crate::error::WebAppError;
 use crate::ext::api::{
-  get_pending_workspace_invitations, get_user_owned_workspaces, get_user_workspace_limit,
-  get_user_workspace_usages, get_workspace_members,
+  get_pending_workspace_invitations, get_user_owned_workspaces, get_user_profile,
+  get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
 };
 use crate::session::UserSession;
 use askama::Template;
@@ -98,26 +98,30 @@ pub async fn user_invite_handler(
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
   let user_workspaces =
-    get_user_owned_workspaces(&session.token.access_token, &state.appflowy_cloud_url)
-      .await
-      .unwrap_or_else(|err| {
-        tracing::error!("Error getting user workspaces: {:?}", err);
-        vec![]
-      });
+    get_user_workspaces(&session.token.access_token, &state.appflowy_cloud_url).await;
 
-  let mut workspace_with_members_list = Vec::with_capacity(user_workspaces.len());
+  let user_workspaces = user_workspaces?;
+  let profile = get_user_profile(
+    session.token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
+  let mut shared_workspaces = Vec::new();
+  let mut owned_workspaces = Vec::with_capacity(user_workspaces.len());
+
   for workspace in user_workspaces {
-    let members = get_workspace_members(
-      workspace.workspace_id.to_string().as_str(),
-      session.token.access_token.as_str(),
-      state.appflowy_cloud_url.as_str(),
-    )
-    .await?;
-    workspace_with_members_list.push(WorkspaceWithMembers {
-      workspace_id: workspace.workspace_id.to_string(),
-      workspace_name: workspace.workspace_name.to_string(),
-      member_emails: members.into_iter().map(|m| m.email).collect(),
-    });
+    if workspace.owner_uid == profile.uid {
+      let members = get_workspace_members(
+        workspace.workspace_id.to_string().as_str(),
+        session.token.access_token.as_str(),
+        state.appflowy_cloud_url.as_str(),
+      )
+      .await?;
+      owned_workspaces.push(WorkspaceWithMembers { workspace, members });
+    } else {
+      shared_workspaces.push(workspace);
+    }
   }
 
   let pending_workspace_invitations = get_pending_workspace_invitations(
@@ -127,7 +131,8 @@ pub async fn user_invite_handler(
   .await?;
 
   render_template(templates::Invite {
-    workspace_with_members_list,
+    shared_workspaces,
+    owned_workspaces,
     pending_workspace_invitations,
   })
 }

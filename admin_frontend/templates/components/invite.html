@@ -23,6 +23,23 @@
   </form>
 
   <br />
+  <h4>Workspaces shared with you</h4>
+  <table class="cyan-table table">
+  <thead>
+    <tr>
+      <th>Workspace Name</th>
+      <th>Owner Name</th>
+    </tr>
+  </thead>
+  {% for shared_workspace in shared_workspaces %}
+    <tr>
+      <td> {{ shared_workspace.workspace_name|escape }} </td>
+      <td> {{ shared_workspace.owner_name|escape }} </td>
+    </tr>
+  {% endfor %}
+  </table>
+
+  <br />
   <h4>Invite another user to your workspace</h4>
   <table class="red-table table">
   <thead>
@@ -32,29 +49,28 @@
       <th>Invite</th>
     </tr>
   </thead>
-    {% for workspace_with_members in workspace_with_members_list %}
-      <tr>
-        <td> {{ workspace_with_members.workspace_name|escape }} </td>
-        <td>
-          {% for member_email in workspace_with_members.member_emails %}
-            {{ member_email|escape }} <br />
-          {% endfor %}
-        </td>
-        <td>
-          <form hx-post="/web-api/workspace/{{ workspace_with_members.workspace_id|escape }}/invite" hx-target="#none">
-            <input
-              class="input"
-              name="email"
-              placeholder="user1_email@example.com"
-              required
-            />
-            <button class="button cyan" type="submit">Invite</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
+  {% for owned_workspace in owned_workspaces %}
+    <tr>
+      <td> {{ owned_workspace.workspace.workspace_name|escape }} </td>
+      <td>
+        {% for member in owned_workspace.members %}
+          {{ member.email|escape }} <br />
+        {% endfor %}
+      </td>
+      <td>
+        <form hx-post="/web-api/workspace/{{ owned_workspace.workspace.workspace_id|escape }}/invite" hx-target="#none">
+          <input
+            class="input"
+            name="email"
+            placeholder="user1_email@example.com"
+            required
+          />
+          <button class="button cyan" type="submit">Invite</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
   </table>
-
 
   <br />
   <h4>Pending Invitation</h4>
@@ -66,17 +82,17 @@
       <th>Action</th>
     </tr>
   </thead>
-    {% for pending_workspace_invitation in pending_workspace_invitations %}
-      <tr>
-        <td> {{ pending_workspace_invitation.workspace_name|default("")|escape }} </td>
-        <td> {{ pending_workspace_invitation.inviter_email|default("")|escape }} </td>
-        <td>
-          <form hx-post="/web-api/workspace/{{ pending_workspace_invitation.invite_id|escape }}/accept" hx-target="#none">
-            <button class="button cyan" type="submit">Accept</button>
-          </form>
-        </td>
-      </tr>
-    {% endfor %}
+  {% for pending_workspace_invitation in pending_workspace_invitations %}
+    <tr>
+      <td> {{ pending_workspace_invitation.workspace_name|default("")|escape }} </td>
+      <td> {{ pending_workspace_invitation.inviter_email|default("")|escape }} </td>
+      <td>
+        <form hx-post="/web-api/invite/{{ pending_workspace_invitation.invite_id|escape }}/accept" hx-target="#none">
+          <button class="button cyan" type="submit">Accept</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
   </table>
 
 </div>

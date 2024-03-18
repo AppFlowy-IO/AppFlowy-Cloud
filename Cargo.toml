@@ -39,7 +39,7 @@ secrecy = { version = "0.8", features = ["serde"] }
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"
 thiserror = "1.0.56"
-reqwest = { workspace = true, default-features = false, features = ["json", "rustls-tls", "cookies"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies"] }
 unicode-segmentation = "1.10"
 lazy_static = "1.4.0"
 fancy-regex = "0.11.0"
@@ -182,8 +182,6 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 
 [features]
 custom_env= []
-# This feature will be removed once the cpu spike issue is resolved
-disable_access_control = []
 ai_enable = []
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder

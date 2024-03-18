@@ -1,12 +1,13 @@
 use askama::Template;
+use database_entity::dto::{AFWorkspace, AFWorkspaceInvitation};
 use gotrue_entity::{dto::User, sso::SSOProvider};
 
-use crate::ext::entities::WorkspaceUsageLimits;
+use crate::{askama_entities::WorkspaceWithMembers, ext::entities::WorkspaceUsageLimits};
 
 #[derive(Template)]
 #[template(path = "components/user_usage.html")]
 pub struct UserUsage {
-  pub workspace_count: u32,
+  pub workspace_count: usize,
   pub workspace_limit: String,
 }
 
@@ -57,7 +58,11 @@ pub struct CreateUser;
 
 #[derive(Template)]
 #[template(path = "components/invite.html")]
-pub struct Invite;
+pub struct Invite {
+  pub shared_workspaces: Vec<AFWorkspace>,
+  pub owned_workspaces: Vec<WorkspaceWithMembers>,
+  pub pending_workspace_invitations: Vec<AFWorkspaceInvitation>,
+}
 
 #[derive(Template)]
 #[template(path = "components/admin_navigate.html")]

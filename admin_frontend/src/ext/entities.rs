@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct JsonResponse<T> {
@@ -43,4 +44,17 @@ pub struct WorkspaceBlobUsage {
 #[derive(Deserialize)]
 pub struct WorkspaceDocUsage {
   pub total_document_size: i64,
+}
+
+#[derive(Deserialize)]
+pub struct UserProfile {
+  pub uid: i64,
+  pub uuid: Uuid,
+  pub email: Option<String>,
+  pub password: Option<String>,
+  pub name: Option<String>,
+  pub metadata: Option<serde_json::Value>,
+  pub encryption_sign: Option<String>,
+  pub latest_workspace_id: Uuid,
+  pub updated_at: i64,
 }

@@ -1,6 +1,8 @@
+use crate::askama_entities::WorkspaceWithMembers;
 use crate::error::WebAppError;
 use crate::ext::api::{
-  get_user_workspace_count, get_user_workspace_limit, get_user_workspace_usages,
+  get_pending_workspace_invitations, get_user_owned_workspaces, get_user_profile,
+  get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
 };
 use crate::session::UserSession;
 use askama::Template;
@@ -91,8 +93,48 @@ pub async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::AdminNavigate)
 }
 
-pub async fn user_invite_handler() -> Result<Html<String>, WebAppError> {
-  render_template(templates::Invite)
+pub async fn user_invite_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  let user_workspaces =
+    get_user_workspaces(&session.token.access_token, &state.appflowy_cloud_url).await;
+
+  let user_workspaces = user_workspaces?;
+  let profile = get_user_profile(
+    session.token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
+  let mut shared_workspaces = Vec::new();
+  let mut owned_workspaces = Vec::with_capacity(user_workspaces.len());
+
+  for workspace in user_workspaces {
+    if workspace.owner_uid == profile.uid {
+      let members = get_workspace_members(
+        workspace.workspace_id.to_string().as_str(),
+        session.token.access_token.as_str(),
+        state.appflowy_cloud_url.as_str(),
+      )
+      .await?;
+      owned_workspaces.push(WorkspaceWithMembers { workspace, members });
+    } else {
+      shared_workspaces.push(workspace);
+    }
+  }
+
+  let pending_workspace_invitations = get_pending_workspace_invitations(
+    session.token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
+  render_template(templates::Invite {
+    shared_workspaces,
+    owned_workspaces,
+    pending_workspace_invitations,
+  })
 }
 
 pub async fn user_usage_handler(
@@ -100,15 +142,24 @@ pub async fn user_usage_handler(
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
   let workspace_count =
-    get_user_workspace_count(&session.token.access_token, &state.appflowy_cloud_url).await;
+    get_user_owned_workspaces(&session.token.access_token, &state.appflowy_cloud_url)
+      .await
+      .map(|workspaces| workspaces.len())
+      .unwrap_or_else(|err| {
+        tracing::error!("Error getting user workspace count: {:?}", err);
+        0
+      });
 
   let workspace_limit = get_user_workspace_limit(
     &session.token.access_token,
     &state.appflowy_cloud_gateway_url,
   )
   .await
-  .map(|limit| limit.to_string())
-  .unwrap_or("N/A".to_owned());
+  .map(|limit| limit.workspace_count.to_string())
+  .unwrap_or_else(|err| {
+    tracing::warn!("unable to get user workspace limit: {:?}", err);
+    "N/A".to_owned()
+  });
 
   render_template(templates::UserUsage {
     workspace_count,
@@ -125,7 +176,7 @@ pub async fn workspace_usage_handler(
     &app_state.appflowy_cloud_url,
     &app_state.appflowy_cloud_gateway_url,
   )
-  .await;
+  .await?;
   render_template(templates::WorkspaceUsageList { workspace_usages })
 }
 

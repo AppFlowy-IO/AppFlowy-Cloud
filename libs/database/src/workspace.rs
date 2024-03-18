@@ -41,7 +41,17 @@ pub async fn insert_user_workspace(
     r#"
     INSERT INTO public.af_workspace (owner_uid, workspace_name)
     VALUES ((SELECT uid FROM public.af_user WHERE uuid = $1), $2)
-    RETURNING *;
+    RETURNING
+      workspace_id,
+      database_storage_id,
+      owner_uid,
+      (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
+      created_at,
+      workspace_type,
+      deleted_at,
+      workspace_name,
+      icon
+    ;
     "#,
     user_uuid,
     workspace_name,
@@ -529,7 +539,17 @@ pub async fn select_workspace<'a, E: Executor<'a, Database = Postgres>>(
   let workspace = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-       SELECT * FROM public.af_workspace WHERE workspace_id = $1
+      SELECT
+        workspace_id,
+        database_storage_id,
+        owner_uid,
+        (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
+        created_at,
+        workspace_type,
+        deleted_at,
+        workspace_name,
+        icon
+      FROM public.af_workspace WHERE workspace_id = $1
     "#,
     workspace_id
   )
@@ -566,7 +586,16 @@ pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-      SELECT w.*
+      SELECT
+        w.workspace_id,
+        w.database_storage_id,
+        w.owner_uid,
+        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,
+        w.created_at,
+        w.workspace_type,
+        w.deleted_at,
+        w.workspace_name,
+        w.icon
       FROM af_workspace w
       JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
       WHERE wm.uid = (
@@ -590,7 +619,17 @@ pub async fn select_all_user_workspaces(
   let workspaces = sqlx::query_as!(
     AFWorkspaceRow,
     r#"
-      SELECT * FROM public.af_workspace
+      SELECT
+        workspace_id,
+        database_storage_id,
+        owner_uid,
+        (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
+        created_at,
+        workspace_type,
+        deleted_at,
+        workspace_name,
+        icon
+      FROM public.af_workspace
       WHERE workspace_id IN (
         SELECT workspace_id FROM public.af_workspace_member
         WHERE af_workspace_member.uid = (SELECT uid FROM public.af_user WHERE uuid = $1)

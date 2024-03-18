@@ -28,7 +28,12 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Workspace(workspace_id), role)
+      .enforce(
+        workspace_id,
+        uid,
+        &ObjectType::Workspace(workspace_id),
+        role,
+      )
       .await
   }
 
@@ -40,7 +45,12 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Workspace(workspace_id), action)
+      .enforce(
+        workspace_id,
+        uid,
+        &ObjectType::Workspace(workspace_id),
+        action,
+      )
       .await
   }
 

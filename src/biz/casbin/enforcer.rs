@@ -1,34 +1,31 @@
 use crate::biz::casbin::access_control::{
-  ActionType, ObjectType, ToACAction, POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_USER,
+  Action, ActionType, ObjectType, ToACAction, POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_USER,
 };
+use crate::biz::casbin::metrics::AccessControlMetrics;
 use anyhow::anyhow;
 use app_error::AppError;
-use casbin::{CoreApi, Enforcer, MgmtApi};
-
 use async_trait::async_trait;
+use casbin::{CoreApi, Enforcer, MgmtApi};
 use std::ops::Deref;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-
-use crate::biz::casbin::metrics::AccessControlMetrics;
-
 use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{event, instrument, trace};
 
-#[async_trait]
-pub trait AFEnforcerCache: Send + Sync {
-  async fn set_enforcer_result(
-    &mut self,
-    key: &PolicyCacheKey,
-    value: bool,
-  ) -> Result<(), AppError>;
-  async fn get_enforcer_result(&mut self, key: &PolicyCacheKey) -> Option<bool>;
-  async fn remove_enforcer_result(&mut self, key: &PolicyCacheKey);
-}
-
 pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
+
+#[async_trait]
+pub trait AFEnforceGroup {
+  async fn enforce_group<'a>(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    object_type: ObjectType<'a>,
+    action: Action,
+  ) -> Result<PolicyRequest, AppError>;
+}
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
@@ -111,6 +108,7 @@ impl AFEnforcer {
   #[instrument(level = "debug", skip_all)]
   pub async fn enforce_policy<A>(
     &self,
+    workspace_id: &str,
     uid: &i64,
     obj: &ObjectType<'_>,
     act: A,
@@ -124,24 +122,19 @@ impl AFEnforcer {
       .fetch_add(1, Ordering::Relaxed);
 
     // create policy request
-    let policy_request = vec![
-      uid.to_string(),
-      obj.policy_object(),
-      act.to_action().to_string(),
-    ];
-
-    let policy_key = PolicyCacheKey::new(&policy_request);
+    let policy_request = PolicyRequest::new(uid, obj, act).into_request();
     // Perform the action and capture the result or error
+    let key = PolicyCacheKey::new(&policy_request);
     let action_result = self.enforcer.read().await.enforce(policy_request);
     match &action_result {
       Ok(result) => trace!(
         "[access control]: enforce policy:{} with result:{}",
-        policy_key.0,
+        key.0,
         result
       ),
       Err(e) => trace!(
         "[access control]: enforce policy:{} with error: {:?}",
-        policy_key.0,
+        key.0
         e
       ),
     }
@@ -248,5 +241,33 @@ impl MetricsCal {
       total_read_enforce_result: Arc::new(Default::default()),
       read_enforce_result_from_cache: Arc::new(Default::default()),
     }
+  }
+}
+
+pub struct PolicyRequest<'a> {
+  pub uid: &'a i64,
+  pub object_type: &'a ObjectType<'a>,
+  pub action: String,
+}
+
+impl<'a> PolicyRequest<'a> {
+  pub fn new<T>(uid: &i64, object_type: &ObjectType<'a>, action: T) -> Self
+  where
+    T: ToACAction,
+  {
+    let action = action.to_action().to_string();
+    Self {
+      uid,
+      object_type,
+      action,
+    }
+  }
+
+  pub fn into_request(self) -> Vec<String> {
+    vec![
+      self.uid.to_string(),
+      self.object_type.policy_object(),
+      self.action,
+    ]
   }
 }

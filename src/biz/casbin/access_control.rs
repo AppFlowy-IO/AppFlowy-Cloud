@@ -114,50 +114,79 @@ impl AccessControl {
     }
   }
 
-  pub async fn enforce<A>(&self, uid: &i64, obj: &ObjectType<'_>, act: A) -> Result<bool, AppError>
+  pub async fn enforce<A>(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    obj: &ObjectType<'_>,
+    act: A,
+  ) -> Result<bool, AppError>
   where
     A: ToACAction,
   {
     if enable_access_control() {
-      self.enforcer.enforce_policy(uid, obj, act).await
+      self
+        .enforcer
+        .enforce_policy(workspace_id, uid, obj, act)
+        .await
     } else {
       Ok(true)
     }
   }
 }
 
-/// policy:
-///   p = sub=uid, obj=object_id, act=role_id
-///   p = sub=uid, obj=object_id, act=access_level
 ///
-/// role_definition in db:
-///   g = _, _
-///      af role:
-///      ["1", "delete"], ["1", "write"], ["1", "read"],
-///      ["2", "write"], ["2", "read"],
-///      ["3", "read"],
-///      af access level:
-///      ["10", "read"],
-///      ["20", "read"],
-///      ["30", "read"], ["30", "write"],
-///      ["50", "read"], ["50", "write"], ["50", "delete"]
+/// ## Policy Definitions:
+/// - p1 = sub=uid, obj=object_id, act=role_id
+///   - Associates a user (`uid`) with a role (`role_id`) for accessing an object (`object_id`).
 ///
-/// matchers:
-/// r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)
+/// - p2 = sub=uid, obj=object_id, act=access_level
+///   - Specifies the access level (`access_level`) a user (`uid`) has for an object (`object_id`).
 ///
-/// Example:
-///   request:
-///    1. api/workspace/123, user=1, workspace_id=123 GET
-///     r = sub = 1, obj = 123, act =read
-///     p = sub = 1, obj = 123, act = 1
+/// - p3 = sub=guid, obj=object_id, act=access_level
+///   - Defines the access level (`access_level`) a group (`guid`) has for an object (`object_id`).
 ///
-///    Evaluation:
-///     1. Subject Match: r.sub == p.sub
-///     2. Object Match: p.obj == r.obj
-///     3. Action Permission: g(p.act, r.act) => g(1, read) =>  ["1", "read"]
-///    Result:
-///     Allow
+/// ## Role Definitions in Database:
+/// Roles and access levels are defined with the following mappings:
+/// - **Role "1" (Owner):** Can `delete`, `write`, and `read`.
+/// - **Role "2" (Member):** Can `write` and `read`.
+/// - **Role "3" (Guest):** Can `read`.
 ///
+/// ## Access Levels:
+/// - **"10" (Read-only):** Permission to `read`.
+/// - **"20" (Read and Comment):** Permission to `read`.
+/// - **"30" (Read and Write):** Permissions to `read` and `write`.
+/// - **"50" (Full Access):** Permissions to `read`, `write`, and `delete`.
+///
+/// ## Matchers:
+/// - `m = r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)`
+///   Evaluates whether the subject and object in the request match those in a policy and if the
+///   given role or access level authorizes the action.
+///
+/// ## Examples:
+/// ### Policy 1 Evaluation (User Access with Role):
+/// ```text
+/// Request: api/workspace/123, uid=1, workspace_id=123, method=GET
+/// - `r = sub = 1, obj = 123, act = read`
+/// - `p = sub = 1, obj = 123, act = 1` (Policy in DB)
+/// Evaluation:
+/// - Subject Match: `r.sub == p.sub`
+/// - Object Match: `p.obj == r.obj`
+/// - Action Permission: `g(p.act, r.act) => g(1, read) => ["1", "read"]`
+/// Result: Allow
+/// ```
+///
+/// ### Policy 3 Evaluation (Group Access with Access Level):
+/// ```text
+/// Request: api/collab/123, uid=1, object_id=123, guid=g1, method=GET
+/// - `r = sub = g1, obj = 123, act = read`
+/// - `p = sub = g1, obj = 123, act = 50` (Policy in DB)
+/// Evaluation:
+/// - Subject Match: `r.sub == p.sub`
+/// - Object Match: `p.obj == r.obj`
+/// - Enforce by Access Level: `g(p.act, r.act) => g(50, read) => ["50", "read"]`
+/// Result: Allow
+/// ```
 pub const MODEL_CONF: &str = r###"
 [request_definition]
 r = sub, obj, act
@@ -166,7 +195,7 @@ r = sub, obj, act
 p = sub, obj, act
 
 [role_definition]
-g = _, _ # rule for action
+g = _, _ # role and access level rule
 
 [policy_effect]
 e = some(where (p.eft == allow))
@@ -315,6 +344,11 @@ impl From<&Method> for Action {
       _ => Action::Read,
     }
   }
+}
+
+pub enum AccessControlAction {
+  Role(AFRole),
+  AccessLevel(AFAccessLevel),
 }
 
 pub trait ToACAction {

@@ -4,7 +4,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::casbin::access_control::AccessControl;
+use crate::biz::casbin::access_control::{enable_access_control, AccessControl};
 
 use crate::biz::casbin::RealtimeCollabAccessControlImpl;
 use crate::biz::collab::access_control::{
@@ -164,9 +164,6 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
 
 pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<AppState, Error> {
   // Print the feature flags
-  if cfg!(feature = "disable_access_control") {
-    info!("Access control is disabled");
-  }
 
   let metrics = AppMetrics::new();
 
@@ -199,7 +196,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   let collab_member_listener = pg_listeners.subscribe_collab_member_change();
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
-  info!("Setting up access controls...");
+  info!(
+    "Setting up access controls, is_enable: {}",
+    enable_access_control()
+  );
   let access_control =
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
 

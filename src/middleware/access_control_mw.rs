@@ -18,6 +18,7 @@ use std::future::{ready, Ready};
 use std::sync::Arc;
 use tracing::error;
 
+use crate::biz::casbin::access_control::enable_access_control;
 use crate::state::AppState;
 use app_error::AppError;
 use uuid::Uuid;
@@ -118,6 +119,12 @@ where
   forward_ready!(service);
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    // If the access control is not enabled, skip the access control
+    if !enable_access_control() {
+      let fut = self.service.call(req);
+      return Box::pin(fut);
+    }
+
     let path = req.match_pattern().map(|pattern| {
       // Create ResourceDef will cause memory leak, so we use the cache to store the ResourceDef
       let mut path = req.match_info().clone();

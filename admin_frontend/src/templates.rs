@@ -1,5 +1,5 @@
 use askama::Template;
-use database_entity::dto::AFWorkspaceInvitation;
+use database_entity::dto::{AFWorkspace, AFWorkspaceInvitation};
 use gotrue_entity::{dto::User, sso::SSOProvider};
 
 use crate::{askama_entities::WorkspaceWithMembers, ext::entities::WorkspaceUsageLimits};
@@ -59,7 +59,8 @@ pub struct CreateUser;
 #[derive(Template)]
 #[template(path = "components/invite.html")]
 pub struct Invite {
-  pub workspace_with_members_list: Vec<WorkspaceWithMembers>,
+  pub shared_workspaces: Vec<AFWorkspace>,
+  pub owned_workspaces: Vec<WorkspaceWithMembers>,
   pub pending_workspace_invitations: Vec<AFWorkspaceInvitation>,
 }
 

@@ -198,7 +198,7 @@ async fn get_user_workspace_doc_usage(
   from_json_response(resp).await
 }
 
-async fn get_user_profile(
+pub async fn get_user_profile(
   access_token: &str,
   appflowy_cloud_base_url: &str,
 ) -> Result<UserProfile, Error> {
@@ -232,6 +232,26 @@ pub async fn invite_user_to_workspace(
     .post(url)
     .header("Authorization", format!("Bearer {}", access_token))
     .json(&invi)
+    .send()
+    .await?;
+
+  check_response(resp).await
+}
+
+pub async fn accept_workspace_invitation(
+  access_token: &str,
+  invite_id: &str,
+  appflowy_cloud_base_url: &str,
+) -> Result<(), Error> {
+  let http_client = reqwest::Client::new();
+  let url = format!(
+    "{}/api/workspace/accept-invite/{}",
+    appflowy_cloud_base_url, invite_id
+  );
+  let resp = http_client
+    .post(url)
+    .header("Authorization", format!("Bearer {}", access_token))
+    .json(&())
     .send()
     .await?;
 

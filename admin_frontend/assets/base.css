@@ -49,6 +49,15 @@ body {
   border: 1px solid var(--af-dark-red);
 }
 
+.purple-table th {
+  border: 1px solid var(--af-dark-purple);
+  background-color: var(--af-purple);
+}
+
+.purple-table td {
+  border: 1px solid var(--af-dark-purple);
+}
+
 .purple:hover {
   background-color: var(--af-dark-purple);
 }

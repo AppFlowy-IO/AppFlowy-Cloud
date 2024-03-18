@@ -1,5 +1,5 @@
 <div id="invite-user">
-  <h4>Please enter the following email invite a new user</h4>
+  <h4>Invite another user to AppFlowy</h4>
   <form hx-post="/web-api/invite" hx-target="#none">
     <table>
       <tr>
@@ -21,4 +21,62 @@
       </tr>
     </table>
   </form>
+
+  <br />
+  <h4>Invite another user to your workspace</h4>
+  <table class="red-table table">
+  <thead>
+    <tr>
+      <th>Workspace Name</th>
+      <th>Members</th>
+      <th>Invite</th>
+    </tr>
+  </thead>
+    {% for workspace_with_members in workspace_with_members_list %}
+      <tr>
+        <td> {{ workspace_with_members.workspace_name|escape }} </td>
+        <td>
+          {% for member_email in workspace_with_members.member_emails %}
+            {{ member_email|escape }} <br />
+          {% endfor %}
+        </td>
+        <td>
+          <form hx-post="/web-api/workspace/{{ workspace_with_members.workspace_id|escape }}/invite" hx-target="#none">
+            <input
+              class="input"
+              name="email"
+              placeholder="user1_email@example.com"
+              required
+            />
+            <button class="button cyan" type="submit">Invite</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+
+
+  <br />
+  <h4>Pending Invitation</h4>
+  <table class="purple-table table">
+  <thead>
+    <tr>
+      <th>Workspace Name</th>
+      <th>Inviter</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+    {% for pending_workspace_invitation in pending_workspace_invitations %}
+      <tr>
+        <td> {{ pending_workspace_invitation.workspace_name|default("")|escape }} </td>
+        <td> {{ pending_workspace_invitation.inviter_email|default("")|escape }} </td>
+        <td>
+          <form hx-post="/web-api/workspace/{{ pending_workspace_invitation.invite_id|escape }}/accept" hx-target="#none">
+            <button class="button cyan" type="submit">Accept</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+
 </div>

@@ -1,4 +1,5 @@
 use crate::error::WebApiError;
+use crate::ext::api::{invite_user_to_workspace, verify_token_cloud};
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
   WebApiInviteUserRequest, WebApiPutUserRequest,
@@ -32,6 +33,7 @@ pub fn router() -> Router<AppState> {
     .route("/change_password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
     .route("/invite", post(invite_handler))
+    .route("/workspace/:workspace_id/invite", post(workspace_invite_handler))
     .route("/open_app", post(open_app_handler))
 
     // admin
@@ -125,6 +127,23 @@ pub async fn invite_handler(
       Some("/".to_owned()),
     )
     .await?;
+  Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
+}
+
+pub async fn workspace_invite_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(workspace_id): Path<String>,
+  Form(param): Form<WebApiInviteUserRequest>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  invite_user_to_workspace(
+    &session.token.access_token,
+    &workspace_id,
+    &param.email,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
   Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
 }
 
@@ -364,6 +383,12 @@ async fn session_login(
   token: GotrueTokenResponse,
   jar: CookieJar,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  verify_token_cloud(
+    token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;

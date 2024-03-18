@@ -106,11 +106,12 @@ services:
       - APPFLOWY_S3_BUCKET=${APPFLOWY_S3_BUCKET}
       - APPFLOWY_S3_REGION=${APPFLOWY_S3_REGION}
       - APPFLOWY_AI_URL=${APPFLOWY_AI_URL}
+      - APPFLOWY_ACCESS_CONTROL=${APPFLOWY_ACCESS_CONTROL}
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        FEATURES: "disable_access_control"
+        FEATURES: ""
     image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
 
   admin_frontend:

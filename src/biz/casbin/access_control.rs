@@ -15,6 +15,7 @@ use anyhow::anyhow;
 
 use sqlx::PgPool;
 
+use lazy_static::lazy_static;
 use redis::{ErrorKind, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use std::sync::Arc;
 
@@ -88,27 +89,27 @@ impl AccessControl {
     obj: &ObjectType<'_>,
     act: &ActionType,
   ) -> Result<(), AppError> {
-    if cfg!(feature = "disable_access_control") {
-      Ok(())
-    } else {
+    if enable_access_control() {
       let result = self.enforcer.update_policy(uid, obj, act).await;
       let _ = self.change_tx.send(AccessControlChange::UpdatePolicy {
         uid: *uid,
         oid: obj.object_id().to_string(),
       });
       result
+    } else {
+      Ok(())
     }
   }
 
   pub async fn remove_policy(&self, uid: &i64, obj: &ObjectType<'_>) -> Result<(), AppError> {
-    if cfg!(feature = "disable_access_control") {
-      Ok(())
-    } else {
+    if enable_access_control() {
       self.enforcer.remove_policy(uid, obj).await?;
       let _ = self.change_tx.send(AccessControlChange::RemovePolicy {
         uid: *uid,
         oid: obj.object_id().to_string(),
       });
+      Ok(())
+    } else {
       Ok(())
     }
   }
@@ -117,17 +118,17 @@ impl AccessControl {
   where
     A: ToACAction,
   {
-    if cfg!(feature = "disable_access_control") {
-      Ok(true)
-    } else {
+    if enable_access_control() {
       self.enforcer.enforce_policy(uid, obj, act).await
+    } else {
+      Ok(true)
     }
   }
 }
 
-/// policy in db:
-///   p = 1, 123, 1 (1 mean AFRole::Owner)
-///   p = 1, 456, 50 (50 mean AFAccessLevel::FullAccess)
+/// policy:
+///   p = sub=uid, obj=object_id, act=role_id
+///   p = sub=uid, obj=object_id, act=access_level
 ///
 /// role_definition in db:
 ///   g = _, _
@@ -353,4 +354,18 @@ impl FromACAction for AFRole {
   fn from_action(action: &str) -> Self {
     Self::from(action)
   }
+}
+
+lazy_static! {
+  static ref ENABLE_ACCESS_CONTROL: bool = {
+    match std::env::var("APPFLOWY_ACCESS_CONTROL") {
+      Ok(value) => value.eq_ignore_ascii_case("true") || value.eq("1"),
+      Err(_) => false,
+    }
+  };
+}
+
+#[inline]
+pub fn enable_access_control() -> bool {
+  *ENABLE_ACCESS_CONTROL
 }

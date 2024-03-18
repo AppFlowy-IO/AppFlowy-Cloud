@@ -1,4 +1,6 @@
-use crate::biz::casbin::access_control::{AccessControl, AccessControlChange, Action};
+use crate::biz::casbin::access_control::{
+  enable_access_control, AccessControl, AccessControlChange, Action,
+};
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
@@ -107,27 +109,28 @@ impl RealtimeCollabAccessControlImpl {
     oid: &str,
     required_action: Action,
   ) -> Result<bool, AppError> {
-    if cfg!(feature = "disable_access_control") {
-      return Ok(true);
-    }
-    let key = cache_key(*uid, oid);
-    // Check if the action is already cached
-    if let Some(action) = self.action_by_oid.get(&key) {
-      return Ok(*action >= required_action);
-    }
+    if enable_access_control() {
+      let key = cache_key(*uid, oid);
+      // Check if the action is already cached
+      if let Some(action) = self.action_by_oid.get(&key) {
+        return Ok(*action >= required_action);
+      }
 
-    // Not in cache, enforce access control
-    let is_permitted = self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), &required_action)
-      .await?;
+      // Not in cache, enforce access control
+      let is_permitted = self
+        .access_control
+        .enforce(uid, &ObjectType::Collab(oid), &required_action)
+        .await?;
 
-    if is_permitted {
-      // Permission granted, cache the action
-      self.action_by_oid.insert(key, required_action);
+      if is_permitted {
+        // Permission granted, cache the action
+        self.action_by_oid.insert(key, required_action);
+      }
+
+      Ok(is_permitted)
+    } else {
+      Ok(true)
     }
-
-    Ok(is_permitted)
   }
 }
 

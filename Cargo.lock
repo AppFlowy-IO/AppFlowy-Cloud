@@ -146,7 +146,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "mio",
- "socket2 0.5.5",
+ "socket2",
  "tokio",
  "tracing",
 ]
@@ -246,7 +246,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "smallvec",
- "socket2 0.5.5",
+ "socket2",
  "time",
  "url",
 ]
@@ -327,7 +327,7 @@ dependencies = [
  "gotrue-entity",
  "human_bytes",
  "jwt",
- "redis 0.24.0",
+ "redis 0.25.2",
  "reqwest",
  "serde",
  "serde_json",
@@ -542,7 +542,6 @@ dependencies = [
  "database-entity",
  "derive_more",
  "dotenvy",
- "evmap",
  "fancy-regex",
  "futures",
  "futures-util",
@@ -562,7 +561,7 @@ dependencies = [
  "rcgen",
  "realtime",
  "realtime-entity",
- "redis 0.24.0",
+ "redis 0.25.2",
  "reqwest",
  "rust-s3",
  "scraper",
@@ -1461,6 +1460,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "collab-history"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "collab",
+ "dotenvy",
+ "redis 0.25.2",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "color_quant"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1816,7 +1836,7 @@ dependencies = [
  "collab-entity",
  "database-entity",
  "futures-util",
- "redis 0.24.0",
+ "redis 0.25.2",
  "rust-s3",
  "rust_decimal",
  "serde",
@@ -2058,17 +2078,6 @@ name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
-
-[[package]]
-name = "evmap"
-version = "10.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e3ea06a83f97d3dc2eb06e51e7a729b418f0717a5558a5c870e3d5156dc558d"
-dependencies = [
- "hashbag",
- "slab",
- "smallvec",
-]
 
 [[package]]
 name = "fancy-regex"
@@ -2469,12 +2478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hashbag"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3d44c238cb72d3e8993a30c32e97b2b2c2c1a12388603f28c4f19a44c4396bc"
-
-[[package]]
 name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2679,7 +2682,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.5",
+ "socket2",
  "tokio",
  "tower-service",
  "tracing",
@@ -2744,7 +2747,7 @@ dependencies = [
  "http-body 1.0.0",
  "hyper 1.1.0",
  "pin-project-lite",
- "socket2 0.5.5",
+ "socket2",
  "tokio",
 ]
 
@@ -4323,9 +4326,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.24.0"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c580d9cbbe1d1b479e8d67cf9daf6a62c957e6846048408b80b43ac3f6af84cd"
+checksum = "71d64e978fd98a0e6b105d066ba4889a7301fca65aeac850a877d8797343feeb"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -4340,7 +4343,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1_smol",
- "socket2 0.4.10",
+ "socket2",
  "tokio",
  "tokio-retry",
  "tokio-util",
@@ -5148,16 +5151,6 @@ version = "0.1.0"
 
 [[package]]
 name = "socket2"
-version = "0.4.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
-name = "socket2"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
@@ -5695,7 +5688,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2 0.5.5",
+ "socket2",
  "tokio-macros",
  "windows-sys 0.48.0",
 ]

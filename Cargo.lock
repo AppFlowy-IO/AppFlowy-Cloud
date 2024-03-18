@@ -331,6 +331,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "shared-entity",
  "tokio",
  "tower",
  "tower-http",

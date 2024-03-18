@@ -4,6 +4,7 @@ mod collab_ac;
 mod enforcer;
 pub(crate) mod metrics;
 pub mod pg_listen;
+mod request;
 mod workspace_ac;
 
 pub use collab_ac::CollabAccessControlImpl;

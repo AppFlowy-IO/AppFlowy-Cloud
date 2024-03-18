@@ -1,4 +1,4 @@
-use crate::biz::casbin::access_control::{AccessControl, Action};
+use crate::biz::casbin::access_control::{AccessControl, Action, ActionVariant};
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
@@ -31,8 +31,8 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
       .enforce(
         workspace_id,
         uid,
-        &ObjectType::Workspace(workspace_id),
-        role,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&role),
       )
       .await
   }
@@ -48,8 +48,8 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
       .enforce(
         workspace_id,
         uid,
-        &ObjectType::Workspace(workspace_id),
-        action,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromAction(&action),
       )
       .await
   }

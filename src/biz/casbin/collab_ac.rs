@@ -1,5 +1,5 @@
 use crate::biz::casbin::access_control::{
-  enable_access_control, AccessControl, AccessControlChange, Action,
+  enable_access_control, AccessControl, AccessControlChange, Action, ActionVariant,
 };
 use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use crate::biz::collab::access_control::CollabAccessControl;
@@ -34,7 +34,12 @@ impl CollabAccessControl for CollabAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(workspace_id, uid, &ObjectType::Collab(oid), action)
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Collab(oid),
+        ActionVariant::FromAction(&action),
+      )
       .await
   }
 
@@ -47,7 +52,12 @@ impl CollabAccessControl for CollabAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(workspace_id, uid, &ObjectType::Collab(oid), access_level)
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Collab(oid),
+        ActionVariant::FromAccessLevel(&access_level),
+      )
       .await
   }
 
@@ -130,8 +140,8 @@ impl RealtimeCollabAccessControlImpl {
         .enforce(
           workspace_id,
           uid,
-          &ObjectType::Collab(oid),
-          &required_action,
+          ObjectType::Collab(oid),
+          ActionVariant::FromAction(&required_action),
         )
         .await?;
 

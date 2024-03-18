@@ -1,11 +1,14 @@
 use crate::biz::casbin::access_control::{
-  Action, ActionType, ObjectType, ToACAction, POLICY_FIELD_INDEX_OBJECT, POLICY_FIELD_INDEX_USER,
+  ActionType, ActionVariant, ObjectType, ToACAction, POLICY_FIELD_INDEX_OBJECT,
+  POLICY_FIELD_INDEX_USER,
 };
 use crate::biz::casbin::metrics::AccessControlMetrics;
+use crate::biz::casbin::request::{PolicyRequest, WorkspacePolicyRequest};
 use anyhow::anyhow;
 use app_error::AppError;
-use async_trait::async_trait;
+
 use casbin::{CoreApi, Enforcer, MgmtApi};
+
 use std::ops::Deref;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
@@ -15,17 +18,6 @@ use tokio::time::interval;
 use tracing::{event, instrument, trace};
 
 pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
-
-#[async_trait]
-pub trait AFEnforceGroup {
-  async fn enforce_group<'a>(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    object_type: ObjectType<'a>,
-    action: Action,
-  ) -> Result<PolicyRequest, AppError>;
-}
 
 pub struct AFEnforcer {
   enforcer: RwLock<Enforcer>,
@@ -106,41 +98,44 @@ impl AFEnforcer {
   }
 
   #[instrument(level = "debug", skip_all)]
-  pub async fn enforce_policy<A>(
+  pub async fn enforce_policy(
     &self,
     workspace_id: &str,
     uid: &i64,
-    obj: &ObjectType<'_>,
-    act: A,
-  ) -> Result<bool, AppError>
-  where
-    A: ToACAction,
-  {
+    obj: ObjectType<'_>,
+    act: ActionVariant<'_>,
+  ) -> Result<bool, AppError> {
     self
       .metrics_cal
       .total_read_enforce_result
       .fetch_add(1, Ordering::Relaxed);
 
-    // create policy request
-    let policy_request = PolicyRequest::new(uid, obj, act).into_request();
-    // Perform the action and capture the result or error
-    let key = PolicyCacheKey::new(&policy_request);
-    let action_result = self.enforcer.read().await.enforce(policy_request);
-    match &action_result {
-      Ok(result) => trace!(
-        "[access control]: enforce policy:{} with result:{}",
-        key.0,
-        result
-      ),
-      Err(e) => trace!(
-        "[access control]: enforce policy:{} with error: {:?}",
-        key.0
-        e
-      ),
+    // check workspace policy first
+    let workspace_policy_request = WorkspacePolicyRequest::new(workspace_id, uid, &act);
+    let segments = workspace_policy_request.into_segments();
+    let mut result = self
+      .enforcer
+      .read()
+      .await
+      .enforce(segments)
+      .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
+
+    if !result {
+      // if the result is false, then try to use group policy request
     }
 
-    // Convert the action result into the original method's result type, handling errors as before
-    let result = action_result.map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
+    // if the result is false, then try to check the collab object policy
+    if !result {
+      let policy_request = PolicyRequest::new(*uid, &obj, &act);
+      let segments = policy_request.into_segments();
+      result = self
+        .enforcer
+        .read()
+        .await
+        .enforce(segments)
+        .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
+    }
+
     Ok(result)
   }
 
@@ -241,33 +236,5 @@ impl MetricsCal {
       total_read_enforce_result: Arc::new(Default::default()),
       read_enforce_result_from_cache: Arc::new(Default::default()),
     }
-  }
-}
-
-pub struct PolicyRequest<'a> {
-  pub uid: &'a i64,
-  pub object_type: &'a ObjectType<'a>,
-  pub action: String,
-}
-
-impl<'a> PolicyRequest<'a> {
-  pub fn new<T>(uid: &i64, object_type: &ObjectType<'a>, action: T) -> Self
-  where
-    T: ToACAction,
-  {
-    let action = action.to_action().to_string();
-    Self {
-      uid,
-      object_type,
-      action,
-    }
-  }
-
-  pub fn into_request(self) -> Vec<String> {
-    vec![
-      self.uid.to_string(),
-      self.object_type.policy_object(),
-      self.action,
-    ]
   }
 }

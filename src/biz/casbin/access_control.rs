@@ -114,16 +114,13 @@ impl AccessControl {
     }
   }
 
-  pub async fn enforce<A>(
+  pub async fn enforce(
     &self,
     workspace_id: &str,
     uid: &i64,
-    obj: &ObjectType<'_>,
-    act: A,
-  ) -> Result<bool, AppError>
-  where
-    A: ToACAction,
-  {
+    obj: ObjectType<'_>,
+    act: ActionVariant<'_>,
+  ) -> Result<bool, AppError> {
     if enable_access_control() {
       self
         .enforcer
@@ -346,9 +343,20 @@ impl From<&Method> for Action {
   }
 }
 
-pub enum AccessControlAction {
-  Role(AFRole),
-  AccessLevel(AFAccessLevel),
+pub enum ActionVariant<'a> {
+  FromRole(&'a AFRole),
+  FromAccessLevel(&'a AFAccessLevel),
+  FromAction(&'a Action),
+}
+
+impl ToACAction for ActionVariant<'_> {
+  fn to_action(&self) -> &str {
+    match self {
+      ActionVariant::FromRole(role) => role.to_action(),
+      ActionVariant::FromAccessLevel(level) => level.to_action(),
+      ActionVariant::FromAction(action) => action.to_action(),
+    }
+  }
 }
 
 pub trait ToACAction {

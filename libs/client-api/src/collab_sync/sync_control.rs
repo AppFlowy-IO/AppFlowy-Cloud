@@ -337,8 +337,9 @@ where
     let is_valid = sink.validate_response(&msg).await;
     // If there's no payload or the payload is empty, return.
     if is_valid && !msg.payload().is_empty() {
-      ObserveCollab::<Sink, Stream>::process_payload(
-        origin,
+      let msg_origin = msg.origin();
+      let origin = ObserveCollab::<Sink, Stream>::process_payload(
+        msg_origin,
         msg.payload(),
         &object.object_id,
         collab,

@@ -1,3 +1,4 @@
+mod askama_entities;
 mod config;
 mod error;
 mod ext;

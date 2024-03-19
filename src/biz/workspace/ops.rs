@@ -315,6 +315,16 @@ pub async fn add_workspace_members_db_only(
   Ok(())
 }
 
+pub async fn leave_workspace(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  user_uuid: &Uuid,
+  workspace_access_control: &impl WorkspaceAccessControl,
+) -> Result<(), AppResponseError> {
+  let email = database::user::select_email_from_user_uuid(pg_pool, user_uuid).await?;
+  remove_workspace_members(pg_pool, workspace_id, &[email], workspace_access_control).await
+}
+
 pub async fn remove_workspace_members(
   pg_pool: &PgPool,
   workspace_id: &Uuid,

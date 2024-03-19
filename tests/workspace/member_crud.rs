@@ -352,3 +352,13 @@ async fn get_user_workspace_info_after_open_workspace() {
     workspace_id_c1
   );
 }
+
+#[tokio::test]
+async fn leave_workspace_test() {
+  let c1 = TestClient::new_user().await;
+  let workspace_id_c1 = c1.workspace_id().await;
+
+  let c2 = TestClient::new_user().await;
+  c1.add_workspace_member(&workspace_id_c1, &c2, AFRole::Member)
+    .await;
+}

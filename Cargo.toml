@@ -135,6 +135,7 @@ members = [
     "libs/client-api-test-util",
     "libs/wasm-test",
     "libs/appflowy-ai",
+    "libs/redis-queue",
 ]
 
 [workspace.dependencies]

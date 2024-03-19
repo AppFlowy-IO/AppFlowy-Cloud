@@ -1,3 +1,4 @@
 pub mod client;
-pub mod collab_stream;
-pub mod collab_update;
+mod error;
+pub mod model;
+pub mod stream;

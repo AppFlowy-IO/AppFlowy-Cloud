@@ -123,7 +123,9 @@ members = [
     "libs/encrypt",
     "libs/realtime-protocol",
     "libs/websocket",
-    "libs/client-api-test-util", "libs/wasm-test",
+    "libs/client-api-test-util",
+    "libs/wasm-test",
+    "libs/collab-stream",
 ]
 
 [workspace.dependencies]

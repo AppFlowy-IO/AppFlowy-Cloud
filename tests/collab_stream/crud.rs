@@ -1,4 +1,4 @@
-use collab_stream::{client::CollabStreamClient, collab_update::CollabUpdate};
+use collab_stream::{client::CollabStreamClient, model::Message};
 use sqlx::types::Uuid;
 
 #[tokio::test]
@@ -13,7 +13,7 @@ async fn write_and_read_stream() {
 
   let mut doc_stream = collab_streamer.stream(&oid, partition_key).await;
   let _inserted_time = doc_stream
-    .insert_one_update(CollabUpdate {
+    .insert_message(Message {
       uid: user_id.to_string(),
       raw_data: vec![1, 2, 3],
     })
@@ -21,7 +21,7 @@ async fn write_and_read_stream() {
     .unwrap();
 
   let _inserted_time = doc_stream
-    .insert_one_update(CollabUpdate {
+    .insert_message(Message {
       uid: user_id.to_string(),
       raw_data: vec![4, 5, 6],
     })
@@ -29,14 +29,14 @@ async fn write_and_read_stream() {
     .unwrap();
 
   let _inserted_time = doc_stream
-    .insert_one_update(CollabUpdate {
+    .insert_message(Message {
       uid: user_id.to_string(),
       raw_data: vec![7, 8, 9],
     })
     .await
     .unwrap();
 
-  let all_updates = doc_stream.read_all_updates().await.unwrap();
+  let all_updates = doc_stream.read_all_message().await.unwrap();
   let raw_data: Vec<u8> = all_updates.into_iter().flat_map(|u| u.raw_data).collect();
   assert_eq!(raw_data, vec![1, 2, 3, 4, 5, 6, 7, 8, 9])
 }
@@ -55,7 +55,7 @@ async fn wait_one_update_from_stream() {
     let collab_streamer = CollabStreamClient::new(redis_client).await.unwrap();
     let mut doc_stream = collab_streamer.stream(oid, partition_key).await;
     doc_stream
-      .insert_one_update(CollabUpdate {
+      .insert_message(Message {
         uid: user_id.to_string(),
         raw_data: vec![1, 2, 3],
       })

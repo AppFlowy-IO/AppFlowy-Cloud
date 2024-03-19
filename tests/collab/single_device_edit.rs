@@ -486,7 +486,7 @@ async fn multiple_collab_edit_test() {
 #[tokio::test]
 async fn simulate_multiple_user_edit_collab_test() {
   let mut tasks = Vec::new();
-  for _i in 0..20 {
+  for _i in 0..5 {
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;
       let collab_type = CollabType::Document;

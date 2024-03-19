@@ -17,10 +17,17 @@ use tracing::{instrument, trace};
 
 #[async_trait]
 pub trait CollabAccessControl: Sync + Send + 'static {
-  async fn enforce_action(&self, uid: &i64, oid: &str, action: Action) -> Result<bool, AppError>;
+  async fn enforce_action(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+    action: Action,
+  ) -> Result<bool, AppError>;
 
   async fn enforce_access_level(
     &self,
+    workspace_id: &str,
     uid: &i64,
     oid: &str,
     access_level: AFAccessLevel,
@@ -100,6 +107,7 @@ where
   #[instrument(name = "check_collab_permission", level = "trace", skip_all)]
   async fn check_resource_permission(
     &self,
+    workspace_id: &str,
     uid: &i64,
     oid: &str,
     method: Method,
@@ -122,13 +130,13 @@ where
       None => {
         self
           .access_control
-          .enforce_action(uid, oid, Action::from(&method))
+          .enforce_action(workspace_id, uid, oid, Action::from(&method))
           .await?
       },
       Some(access_level) => {
         self
           .access_control
-          .enforce_access_level(uid, oid, access_level)
+          .enforce_access_level(workspace_id, uid, oid, access_level)
           .await?
       },
     };
@@ -175,7 +183,12 @@ where
       .await
   }
 
-  async fn enforce_read_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn enforce_read_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
     let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       return Err(AppError::RecordNotFound(format!(
@@ -185,11 +198,16 @@ where
     }
     self
       .collab_access_control
-      .enforce_action(uid, oid, Action::Read)
+      .enforce_action(workspace_id, uid, oid, Action::Read)
       .await
   }
 
-  async fn enforce_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn enforce_write_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
     let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       return Err(AppError::RecordNotFound(format!(
@@ -199,14 +217,19 @@ where
     }
     self
       .collab_access_control
-      .enforce_action(uid, oid, Action::Write)
+      .enforce_action(workspace_id, uid, oid, Action::Write)
       .await
   }
 
-  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
+  async fn enforce_delete(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
     self
       .collab_access_control
-      .enforce_access_level(uid, oid, AFAccessLevel::FullAccess)
+      .enforce_access_level(workspace_id, uid, oid, AFAccessLevel::FullAccess)
       .await
   }
 

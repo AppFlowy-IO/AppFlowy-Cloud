@@ -1,5 +1,7 @@
-use crate::biz::casbin::access_control::{AccessControl, AccessControlChange, Action};
-use crate::biz::casbin::access_control::{ActionType, ObjectType};
+use crate::biz::casbin::access_control::ObjectType;
+use crate::biz::casbin::access_control::{
+  enable_access_control, AccessControl, AccessControlChange, Action, ActionVariant,
+};
 use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -23,22 +25,39 @@ impl CollabAccessControlImpl {
 
 #[async_trait]
 impl CollabAccessControl for CollabAccessControlImpl {
-  async fn enforce_action(&self, uid: &i64, oid: &str, action: Action) -> Result<bool, AppError> {
+  async fn enforce_action(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+    action: Action,
+  ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), action)
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Collab(oid),
+        ActionVariant::FromAction(&action),
+      )
       .await
   }
 
   async fn enforce_access_level(
     &self,
+    workspace_id: &str,
     uid: &i64,
     oid: &str,
     access_level: AFAccessLevel,
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Collab(oid), access_level)
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Collab(oid),
+        ActionVariant::FromAccessLevel(&access_level),
+      )
       .await
   }
 
@@ -51,7 +70,11 @@ impl CollabAccessControl for CollabAccessControlImpl {
   ) -> Result<(), AppError> {
     self
       .access_control
-      .update_policy(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
+      .update_policy(
+        uid,
+        ObjectType::Collab(oid),
+        ActionVariant::FromAccessLevel(&level),
+      )
       .await?;
 
     Ok(())
@@ -103,31 +126,38 @@ impl RealtimeCollabAccessControlImpl {
 
   async fn can_perform_action(
     &self,
+    workspace_id: &str,
     uid: &i64,
     oid: &str,
     required_action: Action,
   ) -> Result<bool, AppError> {
-    if cfg!(feature = "disable_access_control") {
-      return Ok(true);
-    }
-    let key = cache_key(*uid, oid);
-    // Check if the action is already cached
-    if let Some(action) = self.action_by_oid.get(&key) {
-      return Ok(*action >= required_action);
-    }
+    if enable_access_control() {
+      let key = cache_key(*uid, oid);
+      // Check if the action is already cached
+      if let Some(action) = self.action_by_oid.get(&key) {
+        return Ok(*action >= required_action);
+      }
 
-    // Not in cache, enforce access control
-    let is_permitted = self
-      .access_control
-      .enforce(uid, &ObjectType::Collab(oid), &required_action)
-      .await?;
+      // Not in cache, enforce access control
+      let is_permitted = self
+        .access_control
+        .enforce(
+          workspace_id,
+          uid,
+          ObjectType::Collab(oid),
+          ActionVariant::FromAction(&required_action),
+        )
+        .await?;
 
-    if is_permitted {
-      // Permission granted, cache the action
-      self.action_by_oid.insert(key, required_action);
+      if is_permitted {
+        // Permission granted, cache the action
+        self.action_by_oid.insert(key, required_action);
+      }
+
+      Ok(is_permitted)
+    } else {
+      Ok(true)
     }
-
-    Ok(is_permitted)
   }
 }
 
@@ -138,11 +168,25 @@ fn cache_key(uid: i64, oid: &str) -> String {
 
 #[async_trait]
 impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
-  async fn can_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.can_perform_action(uid, oid, Action::Write).await
+  async fn can_write_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    self
+      .can_perform_action(workspace_id, uid, oid, Action::Write)
+      .await
   }
 
-  async fn can_read_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    self.can_perform_action(uid, oid, Action::Read).await
+  async fn can_read_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    self
+      .can_perform_action(workspace_id, uid, oid, Action::Read)
+      .await
   }
 }

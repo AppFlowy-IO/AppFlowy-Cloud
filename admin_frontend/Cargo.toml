@@ -10,6 +10,7 @@ edition = "2021"
 gotrue = { path = "../libs/gotrue" }
 gotrue-entity = { path = "../libs/gotrue-entity" }
 database-entity = { path = "../libs/database-entity" }
+shared-entity = { path = "../libs/shared-entity" }
 
 anyhow = "1.0.79"
 axum = {version = "0.7", features = ["json"]}

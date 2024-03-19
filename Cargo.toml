@@ -60,7 +60,7 @@ itertools = "0.11"
 uuid = "1.6.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 prost = "0.12.3"
-casbin = { version = "2.1.0", features = ["cached", "runtime-tokio", "incremental"] }
+casbin = { version = "2.2.0", features = ["cached", "runtime-tokio", "incremental"] }
 dotenvy = "0.15.7"
 url = "2.5.0"
 brotli = "3.4.0"
@@ -180,8 +180,6 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 
 [features]
 custom_env= []
-# This feature will be removed once the cpu spike issue is resolved
-disable_access_control = []
 ai_enable = []
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder

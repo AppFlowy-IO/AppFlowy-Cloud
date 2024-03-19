@@ -120,6 +120,7 @@ where
   #[instrument(name = "check_workspace_permission", level = "trace", skip_all)]
   async fn check_resource_permission(
     &self,
+    workspace_id: &str,
     uid: &i64,
     resource_id: &str,
     method: Method,

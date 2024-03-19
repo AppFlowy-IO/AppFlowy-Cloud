@@ -462,6 +462,7 @@ pub struct AFWorkspace {
   pub workspace_id: Uuid,
   pub database_storage_id: Uuid,
   pub owner_uid: i64,
+  pub owner_name: String,
   pub workspace_type: i32,
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,

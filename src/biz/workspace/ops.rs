@@ -206,6 +206,7 @@ pub async fn invite_workspace_members(
       },
     }
 
+    // Generate a link such that when clicked, the user is added to the workspace.
     insert_workspace_invitation(
       &mut txn,
       workspace_id,

@@ -77,7 +77,7 @@ where
       // If the collab already exists, check if the user has enough permissions to update collab
       let can_write = self
         .access_control
-        .enforce_write_collab(uid, &params.object_id)
+        .enforce_write_collab(workspace_id, uid, &params.object_id)
         .await?;
 
       if !can_write {
@@ -217,7 +217,7 @@ where
     // Check if the user has enough permissions to access the collab
     let can_read = self
       .access_control
-      .enforce_read_collab(uid, &params.object_id)
+      .enforce_read_collab(&params.workspace_id, uid, &params.object_id)
       .await?;
 
     if !can_read {
@@ -262,8 +262,17 @@ where
     results
   }
 
-  async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
-    if !self.access_control.enforce_delete(uid, object_id).await? {
+  async fn delete_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    object_id: &str,
+  ) -> DatabaseResult<()> {
+    if !self
+      .access_control
+      .enforce_delete(workspace_id, uid, object_id)
+      .await?
+    {
       return Err(AppError::NotEnoughPermissions {
         user: uid.to_string(),
         action: format!("delete collab:{}", object_id),

@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 
 use axum::{
-  http::status,
+  http::{status, StatusCode},
   response::{IntoResponse, Redirect},
 };
+
+use crate::ext;
 
 pub struct WebApiError<'a> {
   pub status_code: status::StatusCode,
@@ -43,33 +45,52 @@ impl From<redis::RedisError> for WebApiError<'_> {
 }
 
 pub enum WebAppError {
-  AskamaError(askama::Error),
-  GoTrueError(gotrue_entity::error::GoTrueError),
+  Askama(askama::Error),
+  GoTrue(gotrue_entity::error::GoTrueError),
+  ExtApi(ext::error::Error),
 }
 
 impl IntoResponse for WebAppError {
   fn into_response(self) -> axum::response::Response {
     match self {
-      WebAppError::AskamaError(e) => {
+      WebAppError::Askama(e) => {
         tracing::error!("askama error: {:?}", e);
         status::StatusCode::INTERNAL_SERVER_ERROR.into_response()
       },
-      WebAppError::GoTrueError(e) => {
+      WebAppError::GoTrue(e) => {
         tracing::error!("gotrue error: {:?}", e);
         Redirect::to("/login").into_response()
       },
+      WebAppError::ExtApi(e) => e.into_response(),
     }
   }
 }
 
 impl From<askama::Error> for WebAppError {
   fn from(v: askama::Error) -> Self {
-    WebAppError::AskamaError(v)
+    WebAppError::Askama(v)
   }
 }
 
 impl From<gotrue_entity::error::GoTrueError> for WebAppError {
   fn from(v: gotrue_entity::error::GoTrueError) -> Self {
-    WebAppError::GoTrueError(v)
+    WebAppError::GoTrue(v)
+  }
+}
+
+impl From<ext::error::Error> for WebAppError {
+  fn from(v: ext::error::Error) -> Self {
+    WebAppError::ExtApi(v)
+  }
+}
+
+impl From<ext::error::Error> for WebApiError<'_> {
+  fn from(v: ext::error::Error) -> Self {
+    match v {
+      ext::error::Error::NotOk(code, payload) => {
+        WebApiError::new(StatusCode::from_u16(code).unwrap(), payload)
+      },
+      err => WebApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("{:?}", err)),
+    }
   }
 }

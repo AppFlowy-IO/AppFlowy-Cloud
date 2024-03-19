@@ -1,7 +1,6 @@
 use appflowy_cloud::application::{init_state, Application};
 use appflowy_cloud::config::config::get_configuration;
 use appflowy_cloud::telemetry::init_subscriber;
-use tracing::info;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,34 +20,8 @@ async fn main() -> anyhow::Result<()> {
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
   init_subscriber(&conf.app_env, filters);
 
-  // If current build is debug and the feature "custom_env" is not enabled, load from .env
-  // otherwise, load from .env.without_nginx.
-  if cfg!(debug_assertions) {
-    #[cfg(not(feature = "custom_env"))]
-    {
-      info!("custom_env is disable, load from .env");
-      dotenvy::dotenv().ok();
-    }
-
-    #[cfg(feature = "custom_env")]
-    {
-      match dotenvy::from_filename(".env.without_nginx") {
-        Ok(_) => {
-          info!("custom_env is enabled, load from .env.without_nginx");
-        },
-        Err(err) => {
-          tracing::error!(
-            "Failed to load .env.without_nginx: {}, fallback to .env file",
-            err
-          );
-          dotenvy::dotenv().ok();
-        },
-      }
-    }
-  } else {
-    // In release, always load from .env
-    dotenvy::dotenv().ok();
-  }
+  // Load environment variables from .env file
+  dotenvy::dotenv().ok();
 
   let (tx, rx) = tokio::sync::mpsc::channel(1000);
   let state = init_state(&conf, tx)

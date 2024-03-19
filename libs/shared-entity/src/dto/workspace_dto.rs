@@ -74,7 +74,6 @@ impl WorkspaceMemberChangeset {
 
 #[derive(Deserialize, Serialize)]
 pub struct WorkspaceSpaceUsage {
-  pub total_capacity: u64,
   pub consumed_capacity: u64,
 }
 

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::i64;
 use std::str::FromStr;
 
 use crate::error::{internal, StreamError};
@@ -51,7 +52,7 @@ impl FromRedisValue for CreatedTime {
 #[derive(Debug)]
 pub struct Message {
   /// user who did the change
-  pub uid: String,
+  pub uid: i64,
   pub raw_data: Vec<u8>,
 }
 
@@ -80,7 +81,7 @@ impl FromRedisValue for MessageReadById {
 #[derive(Debug)]
 pub struct MessageRead {
   /// user who did the change
-  pub uid: String,
+  pub uid: i64,
   pub raw_data: Vec<u8>,
   /// only applicable when reading from redis
   pub created_time: CreatedTime,
@@ -140,7 +141,7 @@ impl FromRedisValue for MessageRead {
 
     // Simplified field verification and value extraction
     verify_field(&fields[0], "uid")?;
-    let uid = String::from_redis_value(&fields[1])?;
+    let uid = i64::from_redis_value(&fields[1])?;
 
     verify_field(&fields[2], "data")?;
     let raw_data = Vec::<u8>::from_redis_value(&fields[3])?;
@@ -155,11 +156,14 @@ impl FromRedisValue for MessageRead {
   // Utility function to verify expected field names
 }
 
-impl<'a> Message {
-  pub fn to_single_tuple_array(&'a self) -> [(&'static str, &'a [u8]); 2] {
+impl Message {
+  pub fn into_tuple_array(self) -> [(&'static str, Vec<u8>); 2] {
     static UID: &str = "uid";
     static DATA: &str = "data";
-    [(UID, self.uid.as_bytes()), (DATA, self.raw_data.as_ref())]
+    [
+      (UID, self.uid.to_be_bytes().to_vec()),
+      (DATA, self.raw_data),
+    ]
   }
 }
 

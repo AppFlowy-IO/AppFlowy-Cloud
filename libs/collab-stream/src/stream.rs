@@ -23,9 +23,10 @@ impl CollabStream {
   }
 
   pub async fn insert_message(&mut self, message: Message) -> Result<CreatedTime, RedisError> {
+    let tuple = message.into_tuple_array();
     self
       .connection_manager
-      .xadd(&self.stream_key, "*", &message.to_single_tuple_array())
+      .xadd(&self.stream_key, "*", tuple.as_slice())
       .await
   }
 
@@ -35,7 +36,7 @@ impl CollabStream {
   pub async fn wait_one_update<'after>(
     &mut self,
     after: Option<CreatedTime>,
-  ) -> Result<Vec<MessageRead>, StreamError> {
+  ) -> Result<Vec<Message>, StreamError> {
     static NEWEST_ID: &str = "$";
     let keys = &self.stream_key;
     let id: Cow<'after, str> = match after {
@@ -54,6 +55,15 @@ impl CollabStream {
       .0
       .pop_first()
       .ok_or(StreamError::UnexpectedValue(format!("{:?}", message_by_id)))?;
-    Ok(popped.1)
+    Ok(
+      popped
+        .1
+        .into_iter()
+        .map(|m| Message {
+          uid: m.uid,
+          raw_data: m.raw_data,
+        })
+        .collect(),
+    )
   }
 }

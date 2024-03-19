@@ -1,7 +1,7 @@
+use crate::biz::casbin::access_control::ObjectType;
 use crate::biz::casbin::access_control::{
   enable_access_control, AccessControl, AccessControlChange, Action, ActionVariant,
 };
-use crate::biz::casbin::access_control::{ActionType, ObjectType};
 use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -70,7 +70,11 @@ impl CollabAccessControl for CollabAccessControlImpl {
   ) -> Result<(), AppError> {
     self
       .access_control
-      .update_policy(uid, &ObjectType::Collab(oid), &ActionType::Level(level))
+      .update_policy(
+        uid,
+        ObjectType::Collab(oid),
+        ActionVariant::FromAccessLevel(&level),
+      )
       .await?;
 
     Ok(())

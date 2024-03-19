@@ -5,11 +5,11 @@ use crate::biz::casbin::workspace_ac::WorkspaceAccessControlImpl;
 use std::cmp::Ordering;
 
 use app_error::AppError;
-use casbin::CoreApi;
+use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
 
 use crate::biz::casbin::adapter::PgAdapter;
-use crate::biz::casbin::metrics::AccessControlMetrics;
+use crate::biz::casbin::metrics::{tick_metric, AccessControlMetrics};
 use actix_http::Method;
 use anyhow::anyhow;
 
@@ -52,17 +52,17 @@ impl AccessControl {
     pg_pool: PgPool,
     access_control_metrics: Arc<AccessControlMetrics>,
   ) -> Result<Self, AppError> {
-    let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF)
-      .await
-      .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
-    let access_control_adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
-    let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter)
-      .await
-      .map_err(|e| {
-        AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
-      })?;
+    let model = casbin_model().await?;
+    let adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
+    let enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
+      AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
+    })?;
 
-    let enforcer = Arc::new(AFEnforcer::new(enforcer, access_control_metrics.clone()));
+    let enforcer = Arc::new(AFEnforcer::new(enforcer).await?);
+    tick_metric(
+      enforcer.metrics_state.clone(),
+      access_control_metrics.clone(),
+    );
     let (change_tx, _) = broadcast::channel(1000);
     Ok(Self {
       enforcer,
@@ -86,15 +86,16 @@ impl AccessControl {
   pub async fn update_policy(
     &self,
     uid: &i64,
-    obj: &ObjectType<'_>,
-    act: &ActionType,
+    obj: ObjectType<'_>,
+    act: ActionVariant<'_>,
   ) -> Result<(), AppError> {
     if enable_access_control() {
-      let result = self.enforcer.update_policy(uid, obj, act).await;
-      let _ = self.change_tx.send(AccessControlChange::UpdatePolicy {
+      let change = AccessControlChange::UpdatePolicy {
         uid: *uid,
         oid: obj.object_id().to_string(),
-      });
+      };
+      let result = self.enforcer.update_policy(uid, obj, act).await;
+      let _ = self.change_tx.send(change);
       result
     } else {
       Ok(())
@@ -202,11 +203,11 @@ m = r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)
 "###;
 
 /// Represents the entity stored at the index of the access control policy.
-/// `user_id, object_id, role/action`
+/// `subject_id, object_id, role/action`
 ///
 /// E.g. user1, collab::123, Owner
 ///
-pub const POLICY_FIELD_INDEX_USER: usize = 0;
+pub const POLICY_FIELD_INDEX_SUBJECT: usize = 0;
 pub const POLICY_FIELD_INDEX_OBJECT: usize = 1;
 pub const POLICY_FIELD_INDEX_ACTION: usize = 2;
 
@@ -410,4 +411,60 @@ lazy_static! {
 #[inline]
 pub fn enable_access_control() -> bool {
   *ENABLE_ACCESS_CONTROL
+}
+
+pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), AppError> {
+  // Grouping definition of access level to action.
+  let af_access_levels = [
+    AFAccessLevel::ReadOnly,
+    AFAccessLevel::ReadAndComment,
+    AFAccessLevel::ReadAndWrite,
+    AFAccessLevel::FullAccess,
+  ];
+  let mut grouping_policies = Vec::new();
+  for level in &af_access_levels {
+    // All levels can read
+    grouping_policies.push([level.to_action(), Action::Read.to_action()].to_vec());
+    if level.can_write() {
+      grouping_policies.push([level.to_action(), Action::Write.to_action()].to_vec());
+    }
+    if level.can_delete() {
+      grouping_policies.push([level.to_action(), Action::Delete.to_action()].to_vec());
+    }
+  }
+
+  let af_roles = [AFRole::Owner, AFRole::Member, AFRole::Guest];
+  for role in &af_roles {
+    match role {
+      AFRole::Owner => {
+        grouping_policies.push([role.to_action(), Action::Delete.to_action()].to_vec());
+        grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+      },
+      AFRole::Member => {
+        grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
+        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+      },
+      AFRole::Guest => {
+        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+      },
+    }
+  }
+
+  let grouping_policies = grouping_policies
+    .into_iter()
+    .map(|actions| actions.into_iter().map(|a| a.to_string()).collect())
+    .collect();
+  enforcer
+    .add_grouping_policies(grouping_policies)
+    .await
+    .map_err(|e| AppError::Internal(anyhow!("Failed to add grouping policies: {}", e)))?;
+  Ok(())
+}
+
+pub(crate) async fn casbin_model() -> Result<DefaultModel, AppError> {
+  let model = casbin::DefaultModel::from_str(MODEL_CONF)
+    .await
+    .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
+  Ok(model)
 }

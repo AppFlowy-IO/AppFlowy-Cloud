@@ -1,4 +1,4 @@
-use crate::biz::casbin::access_control::{AccessControl, ActionType, ObjectType};
+use crate::biz::casbin::access_control::{AccessControl, ActionVariant, ObjectType};
 
 use crate::biz::pg_listener::PostgresDBListener;
 use database::pg_row::AFCollabMemberRow;
@@ -27,8 +27,8 @@ pub(crate) fn spawn_listen_on_collab_member_change(
               if let Err(err) = access_control
                 .update_policy(
                   &member_row.uid,
-                  &ObjectType::Collab(&member_row.oid),
-                  &ActionType::Level(row.access_level),
+                  ObjectType::Collab(&member_row.oid),
+                  ActionVariant::FromAccessLevel(&row.access_level),
                 )
                 .await
               {
@@ -77,8 +77,8 @@ pub(crate) fn spawn_listen_on_workspace_member_change(
             if let Err(err) = access_control
               .update_policy(
                 &member_row.uid,
-                &ObjectType::Workspace(&member_row.workspace_id.to_string()),
-                &ActionType::Role(AFRole::from(member_row.role_id as i32)),
+                ObjectType::Workspace(&member_row.workspace_id.to_string()),
+                ActionVariant::FromRole(&AFRole::from(member_row.role_id as i32)),
               )
               .await
             {

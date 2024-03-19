@@ -704,7 +704,7 @@ async fn delete_collab_handler(
 
   state
     .collab_access_control_storage
-    .delete_collab(&uid, &payload.object_id)
+    .delete_collab(&payload.workspace_id, &uid, &payload.object_id)
     .await
     .map_err(AppResponseError::from)?;
 

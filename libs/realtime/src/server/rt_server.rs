@@ -510,6 +510,7 @@ impl CollabClientStream {
   ///
   pub fn client_channel<T, AC>(
     &mut self,
+    workspace_id: &str,
     uid: i64,
     object_id: &str,
     access_control: Arc<AC>,
@@ -526,10 +527,11 @@ impl CollabClientStream {
     // it will apply the changes.
     let (client_sink_tx, mut client_sink_rx) = tokio::sync::mpsc::unbounded_channel::<T>();
     let sink_access_control = access_control.clone();
+    let sink_workspace_id = workspace_id.to_string();
     tokio::spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
         let result = sink_access_control
-          .can_read_collab(&uid, &cloned_object_id)
+          .can_read_collab(&sink_workspace_id, &uid, &cloned_object_id)
           .await;
         match result {
           Ok(is_allowed) => {
@@ -556,6 +558,7 @@ impl CollabClientStream {
     let client_sink = UnboundedSenderSink::<T>::new(client_sink_tx);
 
     let cloned_object_id = object_id.to_string();
+    let stream_workspace_id = workspace_id.to_string();
     // forward the message to the stream that was subscribed by the broadcast group
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
@@ -567,8 +570,14 @@ impl CollabClientStream {
                 continue;
               }
 
-              let (valid_messages, invalid_message) =
-                Self::access_control(&uid, &msg_oid, &access_control, original_messages).await;
+              let (valid_messages, invalid_message) = Self::access_control(
+                &stream_workspace_id,
+                &uid,
+                &msg_oid,
+                &access_control,
+                original_messages,
+              )
+              .await;
               trace!(
                 "{} receive message: valid:{} invalid:{}",
                 msg_oid,
@@ -597,6 +606,7 @@ impl CollabClientStream {
   }
 
   async fn access_control<AC>(
+    workspace_id: &str,
     uid: &i64,
     object_id: &str,
     access_control: &Arc<AC>,
@@ -606,14 +616,14 @@ impl CollabClientStream {
     AC: RealtimeAccessControl,
   {
     let can_write = access_control
-      .can_write_collab(uid, object_id)
+      .can_write_collab(workspace_id, uid, object_id)
       .await
       .unwrap_or(false);
 
     let mut valid_messages = Vec::with_capacity(messages.len());
     let mut invalid_messages = Vec::with_capacity(messages.len());
     let can_read = access_control
-      .can_read_collab(uid, object_id)
+      .can_read_collab(workspace_id, uid, object_id)
       .await
       .unwrap_or(false);
 

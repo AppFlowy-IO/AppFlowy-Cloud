@@ -23,11 +23,26 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   async fn update_policy(&self, uid: &i64, oid: &str, level: AFAccessLevel)
     -> Result<(), AppError>;
 
-  async fn enforce_read_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+  async fn enforce_read_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError>;
 
-  async fn enforce_write_collab(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+  async fn enforce_write_collab(
+    &self,
+    worksapce_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError>;
 
-  async fn enforce_delete(&self, uid: &i64, oid: &str) -> Result<bool, AppError>;
+  async fn enforce_delete(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError>;
 
   /// Returns the role of the user in the workspace.
   async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
@@ -96,7 +111,12 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
-  async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()>;
+  async fn delete_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    object_id: &str,
+  ) -> DatabaseResult<()>;
   async fn should_create_snapshot(&self, oid: &str) -> bool;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta>;
@@ -167,8 +187,16 @@ where
     self.as_ref().batch_get_collab(uid, queries).await
   }
 
-  async fn delete_collab(&self, uid: &i64, object_id: &str) -> DatabaseResult<()> {
-    self.as_ref().delete_collab(uid, object_id).await
+  async fn delete_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    object_id: &str,
+  ) -> DatabaseResult<()> {
+    self
+      .as_ref()
+      .delete_collab(workspace_id, uid, object_id)
+      .await
   }
 
   async fn should_create_snapshot(&self, oid: &str) -> bool {

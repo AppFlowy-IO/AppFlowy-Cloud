@@ -15,7 +15,8 @@ use tracing::trace;
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup<U> {
-  object_id: String,
+  pub workspace_id: String,
+  pub object_id: String,
   collab: Rc<Mutex<Collab>>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -37,10 +38,16 @@ impl<U> CollabGroup<U>
 where
   U: RealtimeUser,
 {
-  pub async fn new(object_id: String, collab_type: CollabType, mut collab: Collab) -> Self {
+  pub async fn new(
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+    mut collab: Collab,
+  ) -> Self {
     let broadcast = CollabBroadcast::new(&object_id, 10);
     broadcast.observe_collab_changes(&mut collab).await;
     Self {
+      workspace_id,
       object_id,
       collab_type,
       collab: Rc::new(Mutex::new(collab)),

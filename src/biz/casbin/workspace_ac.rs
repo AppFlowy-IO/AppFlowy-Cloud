@@ -1,5 +1,5 @@
-use crate::biz::casbin::access_control::{AccessControl, Action};
-use crate::biz::casbin::access_control::{ActionType, ObjectType};
+use crate::biz::casbin::access_control::ObjectType;
+use crate::biz::casbin::access_control::{AccessControl, Action, ActionVariant};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -28,7 +28,12 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Workspace(workspace_id), role)
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&role),
+      )
       .await
   }
 
@@ -40,7 +45,12 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .access_control
-      .enforce(uid, &ObjectType::Workspace(workspace_id), action)
+      .enforce(
+        workspace_id,
+        uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromAction(&action),
+      )
       .await
   }
 
@@ -56,16 +66,16 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
       .access_control
       .update_policy(
         uid,
-        &ObjectType::Workspace(&workspace_id.to_string()),
-        &ActionType::Role(role),
+        ObjectType::Workspace(&workspace_id.to_string()),
+        ActionVariant::FromRole(&role),
       )
       .await?;
     self
       .access_control
       .update_policy(
         uid,
-        &ObjectType::Collab(&workspace_id.to_string()),
-        &ActionType::Level(access_level),
+        ObjectType::Collab(&workspace_id.to_string()),
+        ActionVariant::FromAccessLevel(&access_level),
       )
       .await?;
     Ok(())

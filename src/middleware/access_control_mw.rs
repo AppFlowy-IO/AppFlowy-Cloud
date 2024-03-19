@@ -44,6 +44,7 @@ pub trait MiddlewareAccessControl: Send + Sync {
   #[allow(unused_variables)]
   async fn check_resource_permission(
     &self,
+    workspace_id: &str,
     uid: &i64,
     resource_id: &str,
     method: Method,
@@ -181,32 +182,39 @@ where
           let uid = uid.await?;
           // check workspace permission
           if let Some(workspace_id) = workspace_id {
+            let workspace_id = workspace_id.to_string();
             if let Some(workspace_ac) = services.get(&AccessResource::Workspace) {
               if let Err(err) = workspace_ac
-                .check_resource_permission(&uid, &workspace_id.to_string(), method.clone(), &path)
+                .check_resource_permission(
+                  &workspace_id,
+                  &uid,
+                  &workspace_id,
+                  method.clone(),
+                  &path,
+                )
                 .await
               {
                 error!("workspace access control: {}", err,);
                 return Err(Error::from(err));
               }
             };
-          }
 
-          // check collab permission
-          if let Some(collab_object_id) = object_id {
-            if let Some(collab_ac) = services.get(&AccessResource::Collab) {
-              if let Err(err) = collab_ac
-                .check_resource_permission(&uid, &collab_object_id, method, &path)
-                .await
-              {
-                error!(
-                  "collab access control: {:?}, with path:{}",
-                  err,
-                  path.as_str()
-                );
-                return Err(Error::from(err));
-              }
-            };
+            // check collab permission
+            if let Some(collab_object_id) = object_id {
+              if let Some(collab_ac) = services.get(&AccessResource::Collab) {
+                if let Err(err) = collab_ac
+                  .check_resource_permission(&workspace_id, &uid, &collab_object_id, method, &path)
+                  .await
+                {
+                  error!(
+                    "collab access control: {:?}, with path:{}",
+                    err,
+                    path.as_str()
+                  );
+                  return Err(Error::from(err));
+                }
+              };
+            }
           }
 
           // call next service

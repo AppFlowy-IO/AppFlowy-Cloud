@@ -1,6 +1,10 @@
 use prometheus_client::metrics::gauge::Gauge;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 
+use crate::biz::casbin::enforcer::ENFORCER_METRICS_TICK_INTERVAL;
 use prometheus_client::registry::Registry;
+use tokio::time::interval;
 use tracing::trace;
 
 #[derive(Clone)]
@@ -56,4 +60,34 @@ impl AccessControlMetrics {
     self.total_read_enforce_count.set(total);
     self.read_enforce_from_cache_count.set(from_cache);
   }
+}
+
+#[derive(Clone)]
+pub(crate) struct MetricsCalState {
+  pub(crate) total_read_enforce_result: Arc<AtomicI64>,
+  pub(crate) read_enforce_result_from_cache: Arc<AtomicI64>,
+}
+
+impl MetricsCalState {
+  pub(crate) fn new() -> Self {
+    Self {
+      total_read_enforce_result: Arc::new(Default::default()),
+      read_enforce_result_from_cache: Arc::new(Default::default()),
+    }
+  }
+}
+
+/// Collect and record metrics for access control
+pub(crate) fn tick_metric(state: MetricsCalState, metrics: Arc<AccessControlMetrics>) {
+  tokio::spawn(async move {
+    let mut interval = interval(ENFORCER_METRICS_TICK_INTERVAL);
+    loop {
+      interval.tick().await;
+
+      metrics.record_enforce_count(
+        state.total_read_enforce_result.load(Ordering::Relaxed),
+        state.read_enforce_result_from_cache.load(Ordering::Relaxed),
+      );
+    }
+  });
 }

@@ -2,26 +2,26 @@ use crate::biz::casbin::access_control::{ActionVariant, ObjectType, ToACAction};
 
 pub struct GroupPolicyRequest<'a> {
   pub guid: &'a str,
-  pub object_id: &'a str,
+  pub object_type: &'a ObjectType<'a>,
   pub action: &'a ActionVariant<'a>,
 }
 
 impl GroupPolicyRequest<'_> {
   pub fn new<'a>(
     guid: &'a str,
-    object_id: &'a str,
+    object_type: &'a ObjectType<'a>,
     action: &'a ActionVariant<'a>,
   ) -> GroupPolicyRequest<'a> {
     GroupPolicyRequest {
       guid,
-      object_id,
+      object_type,
       action,
     }
   }
   pub fn into_segments(self) -> Vec<String> {
     vec![
       self.guid.to_string(),
-      ObjectType::Collab(self.object_id).policy_object(),
+      self.object_type.policy_object(),
       self.action.to_action().to_string(),
     ]
   }

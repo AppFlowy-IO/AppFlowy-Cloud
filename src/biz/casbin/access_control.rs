@@ -1,5 +1,5 @@
 use crate::biz::casbin::collab_ac::CollabAccessControlImpl;
-use crate::biz::casbin::enforcer::AFEnforcer;
+use crate::biz::casbin::enforcer::{AFEnforcer, NoEnforceGroup};
 
 use crate::biz::casbin::workspace_ac::WorkspaceAccessControlImpl;
 use std::cmp::Ordering;
@@ -41,7 +41,7 @@ pub enum AccessControlChange {
 /// according to the model defined.
 #[derive(Clone)]
 pub struct AccessControl {
-  enforcer: Arc<AFEnforcer>,
+  enforcer: Arc<AFEnforcer<NoEnforceGroup>>,
   #[allow(dead_code)]
   access_control_metrics: Arc<AccessControlMetrics>,
   change_tx: broadcast::Sender<AccessControlChange>,
@@ -58,7 +58,7 @@ impl AccessControl {
       AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
     })?;
 
-    let enforcer = Arc::new(AFEnforcer::new(enforcer).await?);
+    let enforcer = Arc::new(AFEnforcer::new(enforcer, NoEnforceGroup).await?);
     tick_metric(
       enforcer.metrics_state.clone(),
       access_control_metrics.clone(),

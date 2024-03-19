@@ -3,7 +3,7 @@ use crate::biz::casbin::access_control::{
   POLICY_FIELD_INDEX_SUBJECT,
 };
 use crate::biz::casbin::metrics::MetricsCalState;
-use crate::biz::casbin::request::{PolicyRequest, WorkspacePolicyRequest};
+use crate::biz::casbin::request::{GroupPolicyRequest, PolicyRequest, WorkspacePolicyRequest};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -22,20 +22,22 @@ pub trait EnforcerGroup {
   async fn get_enforce_group_id(&self, uid: &i64) -> Option<String>;
 }
 
-pub struct AFEnforcer {
+pub struct AFEnforcer<T> {
   enforcer: RwLock<Enforcer>,
   pub(crate) metrics_state: MetricsCalState,
+  enforce_group: T,
 }
 
-impl AFEnforcer {
-  pub async fn new<T>(mut enforcer: Enforcer, enforce_group: Option<T>) -> Result<Self, AppError>
-  where
-    T: EnforcerGroup,
-  {
+impl<T> AFEnforcer<T>
+where
+  T: EnforcerGroup,
+{
+  pub async fn new(mut enforcer: Enforcer, enforce_group: T) -> Result<Self, AppError> {
     load_group_policies(&mut enforcer).await?;
     Ok(Self {
       enforcer: RwLock::new(enforcer),
       metrics_state: MetricsCalState::new(),
+      enforce_group,
     })
   }
 
@@ -125,7 +127,15 @@ impl AFEnforcer {
 
     // Fallback to group policy if workspace-level check fails.
     if !result {
-      // TODO(Zack): group permission
+      if let Some(guid) = self.enforce_group.get_enforce_group_id(uid).await {
+        let policy_request = GroupPolicyRequest::new(&guid, &obj, &act);
+        result = self
+          .enforcer
+          .read()
+          .await
+          .enforce(policy_request.into_segments())
+          .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
+      }
     }
 
     // Finally, enforce object-specific policy if previous checks fail.
@@ -203,23 +213,45 @@ async fn policies_for_subject_with_given_object<T: ToString>(
     .collect::<Vec<_>>()
 }
 
+pub struct NoEnforceGroup;
+#[async_trait]
+impl EnforcerGroup for NoEnforceGroup {
+  async fn get_enforce_group_id(&self, _uid: &i64) -> Option<String> {
+    None
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use crate::biz::casbin::access_control::{casbin_model, Action, ActionVariant, ObjectType};
-  use crate::biz::casbin::enforcer::AFEnforcer;
+  use crate::biz::casbin::enforcer::{AFEnforcer, EnforcerGroup, NoEnforceGroup};
+  use async_trait::async_trait;
   use casbin::{CoreApi, MemoryAdapter};
   use database_entity::dto::{AFAccessLevel, AFRole};
 
-  async fn test_enforcer() -> AFEnforcer {
+  pub struct TestEnforceGroup {
+    guid: String,
+  }
+  #[async_trait]
+  impl EnforcerGroup for TestEnforceGroup {
+    async fn get_enforce_group_id(&self, _uid: &i64) -> Option<String> {
+      Some(self.guid.clone())
+    }
+  }
+
+  async fn test_enforcer<T>(enforce_group: T) -> AFEnforcer<T>
+  where
+    T: EnforcerGroup,
+  {
     let model = casbin_model().await.unwrap();
     let enforcer = casbin::Enforcer::new(model, MemoryAdapter::default())
       .await
       .unwrap();
-    AFEnforcer::new(enforcer).await.unwrap()
+    AFEnforcer::new(enforcer, enforce_group).await.unwrap()
   }
   #[tokio::test]
   async fn collab_group_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
 
     let uid = 1;
     let workspace_id = "w1";
@@ -252,7 +284,7 @@ mod tests {
 
   #[tokio::test]
   async fn workspace_group_policy_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
     let uid = 1;
     let workspace_id = "w1";
 
@@ -283,7 +315,7 @@ mod tests {
 
   #[tokio::test]
   async fn workspace_owner_and_try_to_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
 
     let uid = 1;
     let workspace_id = "w1";
@@ -315,7 +347,7 @@ mod tests {
 
   #[tokio::test]
   async fn workspace_member_collab_owner_try_to_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
 
     let uid = 1;
     let workspace_id = "w1";
@@ -356,7 +388,7 @@ mod tests {
 
   #[tokio::test]
   async fn workspace_member_but_not_collab_member_and_try_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
 
     let uid = 1;
     let workspace_id = "w1";
@@ -402,7 +434,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_workspace_member_but_collab_owner_try_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
     let uid = 1;
     let workspace_id = "w1";
     let object_1 = "o1";
@@ -432,7 +464,7 @@ mod tests {
 
   #[tokio::test]
   async fn not_workspace_member_not_collab_member_and_try_full_access_collab_test() {
-    let enforcer = test_enforcer().await;
+    let enforcer = test_enforcer(NoEnforceGroup).await;
     let uid = 1;
     let workspace_id = "w1";
     let object_1 = "o1";

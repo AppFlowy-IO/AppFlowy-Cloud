@@ -13,7 +13,7 @@ use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{event, instrument, trace};
 
-pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(30);
+pub const ENFORCER_METRICS_TICK_INTERVAL: Duration = Duration::from_secs(120);
 
 #[async_trait]
 pub trait EnforcerGroup {
@@ -86,7 +86,7 @@ where
   ///    has permission to perform the action on the workspace, the function returns `true` without further checks.
   ///
   /// 2. **Group Policy**: (If applicable) If the workspace policy check fails (`false`), the function will then
-  ///    evaluate group-level policies. This part is planned for future implementation (`TODO`).
+  ///    evaluate group-level policies.
   ///
   /// 3. **Object-Specific Policy**: If both previous checks fail, the function finally evaluates the policy
   ///    specific to the object itself.
@@ -115,7 +115,7 @@ where
       .total_read_enforce_result
       .fetch_add(1, Ordering::Relaxed);
 
-    // First, check workspace-level permissions.
+    // 1. First, check workspace-level permissions.
     let workspace_policy_request = WorkspacePolicyRequest::new(workspace_id, uid, &obj, &act);
     let segments = workspace_policy_request.into_segments();
     let mut result = self
@@ -125,7 +125,7 @@ where
       .enforce(segments)
       .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
 
-    // Fallback to group policy if workspace-level check fails.
+    // 2. Fallback to group policy if workspace-level check fails.
     if !result {
       if let Some(guid) = self.enforce_group.get_enforce_group_id(uid).await {
         let policy_request = GroupPolicyRequest::new(&guid, &obj, &act);
@@ -138,7 +138,7 @@ where
       }
     }
 
-    // Finally, enforce object-specific policy if previous checks fail.
+    // 3. Finally, enforce object-specific policy if previous checks fail.
     if !result {
       let policy_request = PolicyRequest::new(*uid, &obj, &act);
       let segments = policy_request.into_segments();
@@ -387,6 +387,99 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn workspace_owner_collab_member_try_to_full_access_collab_test() {
+    let enforcer = test_enforcer(NoEnforceGroup).await;
+
+    let uid = 1;
+    let workspace_id = "w1";
+    let object_1 = "o1";
+
+    // add user as a member of the workspace
+    enforcer
+      .update_policy(
+        &uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&AFRole::Owner),
+      )
+      .await
+      .unwrap();
+
+    enforcer
+      .update_policy(
+        &uid,
+        ObjectType::Collab(object_1),
+        ActionVariant::FromAccessLevel(&AFAccessLevel::ReadAndWrite),
+      )
+      .await
+      .unwrap();
+
+    for action in [Action::Write, Action::Read, Action::Delete] {
+      let result = enforcer
+        .enforce_policy(
+          workspace_id,
+          &uid,
+          ObjectType::Collab(object_1),
+          ActionVariant::FromAction(&action),
+        )
+        .await
+        .unwrap();
+      assert!(result, "action={:?}", action);
+    }
+  }
+
+  #[tokio::test]
+  async fn workspace_member_collab_member_try_to_full_access_collab_test() {
+    let enforcer = test_enforcer(NoEnforceGroup).await;
+
+    let uid = 1;
+    let workspace_id = "w1";
+    let object_1 = "o1";
+
+    // add user as a member of the workspace
+    enforcer
+      .update_policy(
+        &uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&AFRole::Member),
+      )
+      .await
+      .unwrap();
+
+    enforcer
+      .update_policy(
+        &uid,
+        ObjectType::Collab(object_1),
+        ActionVariant::FromAccessLevel(&AFAccessLevel::ReadAndWrite),
+      )
+      .await
+      .unwrap();
+
+    for action in [Action::Write, Action::Read] {
+      let result = enforcer
+        .enforce_policy(
+          workspace_id,
+          &uid,
+          ObjectType::Collab(object_1),
+          ActionVariant::FromAction(&action),
+        )
+        .await
+        .unwrap();
+      assert!(result, "action={:?}", action);
+    }
+
+    let result = enforcer
+      .enforce_policy(
+        workspace_id,
+        &uid,
+        ObjectType::Collab(object_1),
+        ActionVariant::FromAction(&Action::Delete),
+      )
+      .await
+      .unwrap();
+    assert!(!result, "only the owner can perform delete")
+  }
+
+  #[tokio::test]
   async fn workspace_member_but_not_collab_member_and_try_full_access_collab_test() {
     let enforcer = test_enforcer(NoEnforceGroup).await;
 
@@ -406,7 +499,7 @@ mod tests {
 
     // Although the user is not directly associated with the collab object, they are a member of the
     // workspace containing it. Therefore, the system will evaluate their permissions based on the
-    // workspace's policy as a fallback.
+    // workspace policy as a fallback.
     for action in [Action::Write, Action::Read] {
       let result = enforcer
         .enforce_policy(

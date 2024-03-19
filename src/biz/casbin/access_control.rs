@@ -185,6 +185,8 @@ impl AccessControl {
 /// - Enforce by Access Level: `g(p.act, r.act) => g(50, read) => ["50", "read"]`
 /// Result: Allow
 /// ```
+///
+/// casbin model online writer: https://casbin.org/editor/
 pub const MODEL_CONF: &str = r###"
 [request_definition]
 r = sub, obj, act

@@ -1,1 +1,1 @@
-mod stream_test;
+mod collab_stream_test;

@@ -338,7 +338,7 @@ where
     // If there's no payload or the payload is empty, return.
     if is_valid && !msg.payload().is_empty() {
       let msg_origin = msg.origin();
-      let origin = ObserveCollab::<Sink, Stream>::process_payload(
+      ObserveCollab::<Sink, Stream>::process_payload(
         msg_origin,
         msg.payload(),
         &object.object_id,

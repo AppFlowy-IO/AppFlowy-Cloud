@@ -1,10 +1,11 @@
-use crate::stream_test::test_util::stream_client;
+use crate::stream_test::test_util::{random_i64, stream_client};
 use collab_stream::model::Message;
 
 #[tokio::test]
 async fn read_single_message_test() {
+  let oid = format!("o{}", random_i64());
   let client_2 = stream_client().await;
-  let mut stream_2 = client_2.stream("w1", "o1").await;
+  let mut stream_2 = client_2.stream("w1", &oid).await;
 
   let (tx, mut rx) = tokio::sync::mpsc::channel(1);
   tokio::spawn(async move {
@@ -19,7 +20,7 @@ async fn read_single_message_test() {
 
   {
     let client_1 = stream_client().await;
-    let mut stream_1 = client_1.stream("w1", "o1").await;
+    let mut stream_1 = client_1.stream("w1", &oid).await;
     stream_1.insert_message(msg).await.unwrap();
   }
 
@@ -29,13 +30,14 @@ async fn read_single_message_test() {
 
 #[tokio::test]
 async fn read_multiple_messages_test() {
+  let oid = format!("o{}", random_i64());
   let client_2 = stream_client().await;
-  let mut stream_2 = client_2.stream("w1", "o1").await;
+  let mut stream_2 = client_2.stream("w1", &oid).await;
   stream_2.clear().await.unwrap();
 
   {
     let client_1 = stream_client().await;
-    let mut stream_1 = client_1.stream("w1", "o1").await;
+    let mut stream_1 = client_1.stream("w1", &oid).await;
     let messages = vec![
       Message {
         uid: 1001,

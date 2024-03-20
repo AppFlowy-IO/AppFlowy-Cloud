@@ -1,4 +1,4 @@
-use crate::stream_test::test_util::{pubsub_client, random_i64};
+use crate::collab_stream_test::test_util::{pubsub_client, random_i64};
 
 use collab_stream::pubsub::PubSubMessage;
 
@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::test]
-async fn different_group_read_message_test() {
+async fn pubsub_test() {
   let oid = format!("o{}", random_i64());
   let client_1 = pubsub_client().await;
   let client_2 = pubsub_client().await;

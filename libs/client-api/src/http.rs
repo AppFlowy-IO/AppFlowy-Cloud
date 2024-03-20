@@ -586,6 +586,18 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn leave_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/leave", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspace_members<W: AsRef<str>>(
     &self,
     workspace_id: W,

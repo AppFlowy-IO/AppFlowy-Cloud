@@ -74,6 +74,7 @@ pub fn workspace_scope() -> Scope {
       .route(web::delete().to(delete_workspace_handler))
     )
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
+    .service(web::resource("/{workspace_id}/leave").route(web::post().to(leave_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))
@@ -340,6 +341,23 @@ async fn open_workspace_handler(
   let workspace_id = workspace_id.into_inner();
   let workspace = workspace::ops::open_workspace(&state.pg_pool, &user_uuid, &workspace_id).await?;
   Ok(AppResponse::Ok().with_data(workspace).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn leave_workspace_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<()>> {
+  let workspace_id = workspace_id.into_inner();
+  workspace::ops::leave_workspace(
+    &state.pg_pool,
+    &workspace_id,
+    &user_uuid,
+    &state.workspace_access_control,
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
 }
 
 #[instrument(level = "debug", skip_all, err)]

@@ -1,4 +1,5 @@
 use crate::error::StreamError;
+use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream::CollabStream;
 use crate::stream_group::CollabStreamGroup;
 use redis::aio::ConnectionManager;
@@ -31,5 +32,30 @@ impl CollabStreamClient {
     );
     group.ensure_consumer_group("0").await?;
     Ok(group)
+  }
+}
+
+pub struct PubSubClient {
+  redis_client: redis::Client,
+  connection_manager: ConnectionManager,
+}
+
+impl PubSubClient {
+  pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
+    let connection_manager = redis_client.get_connection_manager().await?;
+    Ok(Self {
+      redis_client,
+      connection_manager,
+    })
+  }
+
+  pub async fn collab_pub(&self) -> CollabStreamPub {
+    CollabStreamPub::new(self.connection_manager.clone())
+  }
+
+  #[allow(deprecated)]
+  pub async fn collab_sub(&self) -> Result<CollabStreamSub, StreamError> {
+    let conn = self.redis_client.get_async_connection().await?;
+    Ok(CollabStreamSub::new(conn))
   }
 }

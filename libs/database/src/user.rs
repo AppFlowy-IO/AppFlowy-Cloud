@@ -196,3 +196,19 @@ pub async fn is_user_exist<'a, E: Executor<'a, Database = Postgres>>(
 
   Ok(exists.unwrap_or(false))
 }
+
+#[inline]
+pub async fn select_email_from_user_uuid(
+  pool: &PgPool,
+  user_uuid: &Uuid,
+) -> Result<String, AppError> {
+  let email = sqlx::query_scalar!(
+    r#"
+      SELECT email FROM af_user WHERE uuid = $1
+    "#,
+    user_uuid
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(email)
+}

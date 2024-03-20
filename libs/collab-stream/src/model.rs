@@ -55,6 +55,9 @@ pub struct MessageReadByStreamKey(pub BTreeMap<String, Vec<MessageRead>>);
 impl FromRedisValue for MessageReadByStreamKey {
   fn from_redis_value(v: &Value) -> RedisResult<Self> {
     let mut map: BTreeMap<String, Vec<MessageRead>> = BTreeMap::new();
+    if matches!(v, Value::Nil) {
+      return Ok(MessageReadByStreamKey(map));
+    }
 
     let value_by_id = bulk_from_redis_value(v)?.iter();
     for value in value_by_id {

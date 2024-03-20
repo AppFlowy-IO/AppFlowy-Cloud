@@ -17,6 +17,9 @@ pub enum StreamError {
   #[error(transparent)]
   ParseIntError(#[from] std::num::ParseIntError),
 
+  #[error("Stream group already exists")]
+  GroupAlreadyExists(String),
+
   #[error("Internal error: {0}")]
   Internal(anyhow::Error),
 }

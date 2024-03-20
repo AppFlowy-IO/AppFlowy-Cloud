@@ -1467,6 +1467,8 @@ name = "collab-stream"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
+ "rand 0.8.5",
  "redis 0.24.0",
  "thiserror",
  "tokio",

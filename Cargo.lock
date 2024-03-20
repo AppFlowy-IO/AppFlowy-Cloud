@@ -538,6 +538,7 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-folder",
+ "collab-stream",
  "dashmap",
  "database",
  "database-entity",
@@ -1459,6 +1460,17 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+]
+
+[[package]]
+name = "collab-stream"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "redis 0.24.0",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

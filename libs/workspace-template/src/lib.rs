@@ -115,6 +115,7 @@ impl WorkspaceTemplateBuilder {
         favorites: Default::default(),
         recent: Default::default(),
         trash: Default::default(),
+        private: Default::default(),
       };
 
       let collab = Arc::new(MutexCollab::new(

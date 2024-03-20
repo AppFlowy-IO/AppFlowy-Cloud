@@ -152,7 +152,7 @@ pub async fn invite_accept_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(invite_id): Path<String>,
-) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+) -> Result<HeaderMap, WebApiError<'static>> {
   accept_workspace_invitation(
     &session.token.access_token,
     &invite_id,
@@ -160,9 +160,7 @@ pub async fn invite_accept_handler(
   )
   .await?;
 
-  Ok(WebApiResponse::<()>::from_str(
-    "Invitation accepted.\nPlease refresh page to see changes".into(),
-  ))
+  Ok(htmx_trigger("workspaceInvitationAccepted"))
 }
 
 pub async fn change_password_handler(
@@ -300,6 +298,12 @@ pub async fn login_refresh_handler(
     ))
     .await?;
 
+  verify_token_cloud(
+    token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
@@ -387,6 +391,12 @@ pub async fn logout_handler(
 fn htmx_redirect(url: &str) -> HeaderMap {
   let mut h = HeaderMap::new();
   h.insert("HX-Redirect", url.parse().unwrap());
+  h
+}
+
+fn htmx_trigger(trigger: &str) -> HeaderMap {
+  let mut h = HeaderMap::new();
+  h.insert("HX-Trigger", trigger.parse().unwrap());
   h
 }
 

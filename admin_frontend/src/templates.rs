@@ -65,6 +65,12 @@ pub struct Invite {
 }
 
 #[derive(Template)]
+#[template(path = "components/shared_workspaces.html")]
+pub struct SharedWorkspaces {
+  pub shared_workspaces: Vec<AFWorkspace>,
+}
+
+#[derive(Template)]
 #[template(path = "components/admin_navigate.html")]
 pub struct AdminNavigate;
 

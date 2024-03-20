@@ -3,7 +3,7 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 #[allow(deprecated)]
 use redis::aio::{Connection, ConnectionManager};
-use redis::{AsyncCommands, FromRedisValue, RedisResult, RedisWrite, ToRedisArgs, Value};
+use redis::{AsyncCommands, RedisWrite, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
@@ -61,7 +61,7 @@ pub struct PubSubMessage {
 
 impl PubSubMessage {
   pub fn from_vec(vec: &[u8]) -> Result<Self, StreamError> {
-    let message = serde_json::from_slice(vec)?;
+    let message = bincode::deserialize(vec)?;
     Ok(message)
   }
 }
@@ -71,28 +71,7 @@ impl ToRedisArgs for PubSubMessage {
   where
     W: ?Sized + RedisWrite,
   {
-    let json = serde_json::to_vec(self).unwrap();
+    let json = bincode::serialize(self).unwrap();
     json.write_redis_args(out);
-  }
-}
-
-impl FromRedisValue for PubSubMessage {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    match *v {
-      Value::Data(ref data) => {
-        let s = std::str::from_utf8(data)?;
-        serde_json::from_str(s).map_err(|e| {
-          redis::RedisError::from((
-            redis::ErrorKind::TypeError,
-            "Cannot deserialize PubSubMessage",
-            e.to_string(),
-          ))
-        })
-      },
-      _ => Err(redis::RedisError::from((
-        redis::ErrorKind::TypeError,
-        "Expected data type for PubSubMessage",
-      ))),
-    }
   }
 }

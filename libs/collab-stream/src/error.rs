@@ -21,7 +21,7 @@ pub enum StreamError {
   GroupAlreadyExists(String),
 
   #[error(transparent)]
-  JsonSerdeError(#[from] serde_json::Error),
+  BinCodeSerde(#[from] bincode::Error),
 
   #[error("Internal error: {0}")]
   Internal(anyhow::Error),

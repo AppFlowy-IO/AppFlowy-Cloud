@@ -1,0 +1,95 @@
+use crate::error::StreamError;
+use futures::stream::BoxStream;
+use futures::StreamExt;
+use redis::aio::{Connection, ConnectionManager};
+use redis::{AsyncCommands, FromRedisValue, RedisResult, RedisWrite, ToRedisArgs, Value};
+use serde::{Deserialize, Serialize};
+use tracing::instrument;
+
+const ACTIVE_COLLAB_CHANNEL: &str = "active_collab_channel";
+
+pub struct CollabStreamSub {
+  conn: Connection,
+}
+
+impl CollabStreamSub {
+  pub fn new(conn: Connection) -> Self {
+    Self { conn }
+  }
+
+  pub async fn subscribe(
+    self,
+  ) -> Result<BoxStream<'static, Result<PubSubMessage, StreamError>>, StreamError> {
+    let mut pubsub = self.conn.into_pubsub();
+    pubsub.subscribe(ACTIVE_COLLAB_CHANNEL).await?;
+
+    let message_stream = pubsub
+      .into_on_message()
+      .then(|msg| async move {
+        let payload = msg.get_payload_bytes();
+        PubSubMessage::from_vec(payload)
+      })
+      .boxed();
+    Ok(message_stream)
+  }
+}
+
+pub struct CollabStreamPub {
+  conn: ConnectionManager,
+}
+
+impl CollabStreamPub {
+  pub fn new(conn: ConnectionManager) -> Self {
+    Self { conn }
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn publish(&mut self, message: PubSubMessage) -> Result<(), StreamError> {
+    self.conn.publish(ACTIVE_COLLAB_CHANNEL, message).await?;
+    Ok(())
+  }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PubSubMessage {
+  pub workspace_id: String,
+  pub oid: String,
+}
+
+impl PubSubMessage {
+  pub fn from_vec(vec: &[u8]) -> Result<Self, StreamError> {
+    let message = serde_json::from_slice(vec)?;
+    Ok(message)
+  }
+}
+
+impl ToRedisArgs for PubSubMessage {
+  fn write_redis_args<W>(&self, out: &mut W)
+  where
+    W: ?Sized + RedisWrite,
+  {
+    let json = serde_json::to_vec(self).unwrap();
+    json.write_redis_args(out);
+  }
+}
+
+impl FromRedisValue for PubSubMessage {
+  fn from_redis_value(v: &Value) -> RedisResult<Self> {
+    match *v {
+      Value::Data(ref data) => {
+        let s = std::str::from_utf8(data)?;
+        serde_json::from_str(s).map_err(|e| {
+          redis::RedisError::from((
+            redis::ErrorKind::TypeError,
+            "Cannot deserialize PubSubMessage",
+            e.to_string(),
+          ))
+        })
+      },
+      _ => Err(redis::RedisError::from((
+        redis::ErrorKind::TypeError,
+        "Expected data type for PubSubMessage",
+      ))),
+    }
+  }
+}

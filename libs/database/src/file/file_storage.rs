@@ -1,17 +1,12 @@
 use crate::pg_row::AFBlobMetadataRow;
 use crate::resource_usage::{
-  delete_blob_metadata, get_blob_metadata, get_workspace_usage_size, insert_blob_metadata,
-  is_blob_metadata_exists,
+  delete_blob_metadata, get_blob_metadata, insert_blob_metadata, is_blob_metadata_exists,
 };
 use app_error::AppError;
 use async_trait::async_trait;
 use sqlx::PgPool;
-use tracing::{event, instrument, warn};
+use tracing::{instrument, warn};
 use uuid::Uuid;
-
-/// Maximum size of a blob in bytes.
-pub const MAX_BLOB_SIZE: usize = 6 * 1024 * 1024;
-pub const MAX_USAGE: u64 = 10 * 1024 * 1024 * 1024;
 
 pub trait ResponseBlob {
   fn to_blob(self) -> Vec<u8>;
@@ -64,22 +59,7 @@ where
       return Ok(());
     }
 
-    // query the storage space of the workspace
     let obj_key = format!("{}/{}", workspace_id, file_id);
-    let usage = get_workspace_usage_size(&self.pg_pool, &workspace_id).await?;
-    event!(
-      tracing::Level::TRACE,
-      "workspace consumed space: {}, new file:{} with size: {}",
-      obj_key,
-      file_id,
-      file_data.len(),
-    );
-    if usage > MAX_USAGE {
-      return Err(AppError::StorageSpaceNotEnough);
-    }
-
-    let obj_key = format!("{}/{}", workspace_id, file_id);
-
     let mut tx = self.pg_pool.begin().await?;
     insert_blob_metadata(
       &mut tx,

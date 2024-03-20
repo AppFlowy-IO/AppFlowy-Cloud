@@ -1,4 +1,5 @@
 use app_error::ErrorCode;
+use client_api::entity::CreateCollabParams;
 use client_api_test_util::{api_client_with_email, TestClient};
 use database_entity::dto::{AFAccessLevel, AFRole, QueryCollabMembers};
 use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
@@ -361,4 +362,11 @@ async fn leave_workspace_test() {
   let c2 = TestClient::new_user().await;
   c1.add_workspace_member(&workspace_id_c1, &c2, AFRole::Member)
     .await;
+  c2.api_client
+    .leave_workspace(&workspace_id_c1)
+    .await
+    .unwrap();
+
+  let members = c1.get_workspace_members(&workspace_id_c1).await;
+  assert_eq!(members.len(), 1);
 }

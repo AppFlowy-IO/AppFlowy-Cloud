@@ -74,7 +74,7 @@ pub fn workspace_scope() -> Scope {
       .route(web::delete().to(delete_workspace_handler))
     )
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
-    .service(web::resource("/{workspace_id}/leave").route(web::put().to(leave_workspace_handler)))
+    .service(web::resource("/{workspace_id}/leave").route(web::post().to(leave_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/member")
         .route(web::get().to(get_workspace_members_handler))

@@ -397,7 +397,7 @@ pub struct UpdateSync {
   ///    ...
   ///   }
   /// ```
-  ///  
+  ///
   pub payload: Bytes,
 }
 
@@ -864,6 +864,15 @@ impl ServerCollabMessage {
       ServerCollabMessage::ServerInitSync(msg) => msg.payload.len(),
       ServerCollabMessage::AwarenessSync(msg) => msg.payload.len(),
       ServerCollabMessage::ServerBroadcast(msg) => msg.payload.len(),
+    }
+  }
+
+  pub fn origin(&self) -> &CollabOrigin {
+    match self {
+      ServerCollabMessage::ClientAck(value) => &value.origin,
+      ServerCollabMessage::ServerInitSync(value) => &value.origin,
+      ServerCollabMessage::AwarenessSync(value) => &value.origin,
+      ServerCollabMessage::ServerBroadcast(value) => &value.origin,
     }
   }
 }

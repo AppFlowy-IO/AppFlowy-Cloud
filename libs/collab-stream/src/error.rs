@@ -20,6 +20,9 @@ pub enum StreamError {
   #[error("Stream group already exists")]
   GroupAlreadyExists(String),
 
+  #[error(transparent)]
+  BinCodeSerde(#[from] bincode::Error),
+
   #[error("Internal error: {0}")]
   Internal(anyhow::Error),
 }

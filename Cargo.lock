@@ -1487,12 +1487,15 @@ name = "collab-stream"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "futures",
  "rand 0.8.5",
  "redis 0.25.2",
+ "serde",
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]

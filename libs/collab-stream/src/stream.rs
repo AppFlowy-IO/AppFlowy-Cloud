@@ -10,7 +10,7 @@ pub struct CollabStream {
 }
 
 impl CollabStream {
-  pub fn new(connection_manager: ConnectionManager, workspace_id: &str, oid: &str) -> Self {
+  pub fn new(workspace_id: &str, oid: &str, connection_manager: ConnectionManager) -> Self {
     let stream_key = format!("af_collab-{}-{}", workspace_id, oid);
     Self {
       connection_manager,
@@ -67,7 +67,7 @@ impl CollabStream {
       .map(|ct| format!("{}-{}", ct.timestamp_ms, ct.sequence_number))
       .unwrap_or_else(|| "$".to_string());
 
-    let options = StreamReadOptions::default().block(100);
+    let options = StreamReadOptions::default().group("1", "2").block(100);
     let map: MessageReadByStreamKey = self
       .connection_manager
       .xread_options(&[&self.stream_key], &[&id], &options)

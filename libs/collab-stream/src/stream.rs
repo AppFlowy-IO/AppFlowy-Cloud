@@ -1,5 +1,5 @@
 use crate::error::StreamError;
-use crate::model::{CreatedTime, Message, MessageRead, MessageReadByStreamKey};
+use crate::model::{Message, MessageId, StreamMessage, StreamMessageByStreamKey};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamMaxlen, StreamReadOptions};
 use redis::{pipe, AsyncCommands, RedisError};
@@ -19,13 +19,13 @@ impl CollabStream {
   }
 
   /// Inserts a single message into the Redis stream.
-  pub async fn insert_message(&mut self, message: Message) -> Result<CreatedTime, StreamError> {
+  pub async fn insert_message(&mut self, message: Message) -> Result<MessageId, StreamError> {
     let tuple = message.into_tuple_array();
-    let created_time = self
+    let message_id = self
       .connection_manager
       .xadd(&self.stream_key, "*", tuple.as_slice())
       .await?;
-    Ok(created_time)
+    Ok(message_id)
   }
 
   /// Inserts multiple messages into the Redis stream using a pipeline.
@@ -42,9 +42,9 @@ impl CollabStream {
 
   /// Fetches the next message from a Redis stream after a specified entry.
   ///
-  pub async fn next(&mut self) -> Result<Option<Message>, StreamError> {
+  pub async fn next(&mut self) -> Result<Option<StreamMessage>, StreamError> {
     let options = StreamReadOptions::default().count(1).block(100);
-    let map: MessageReadByStreamKey = self
+    let map: StreamMessageByStreamKey = self
       .connection_manager
       .xread_options(&[&self.stream_key], &["$"], &options)
       .await?;
@@ -56,21 +56,21 @@ impl CollabStream {
       .ok_or_else(|| StreamError::UnexpectedValue("Empty stream".into()))?;
 
     debug_assert_eq!(messages.len(), 1);
-    Ok(messages.pop().map(Into::into))
+    Ok(messages.pop())
   }
 
   pub async fn next_after(
     &mut self,
-    after: Option<CreatedTime>,
-  ) -> Result<Option<Message>, StreamError> {
-    let id = after
-      .map(|ct| format!("{}-{}", ct.timestamp_ms, ct.sequence_number))
+    after: Option<MessageId>,
+  ) -> Result<Option<StreamMessage>, StreamError> {
+    let message_id = after
+      .map(|ct| ct.to_string())
       .unwrap_or_else(|| "$".to_string());
 
     let options = StreamReadOptions::default().group("1", "2").block(100);
-    let map: MessageReadByStreamKey = self
+    let map: StreamMessageByStreamKey = self
       .connection_manager
-      .xread_options(&[&self.stream_key], &[&id], &options)
+      .xread_options(&[&self.stream_key], &[&message_id], &options)
       .await?;
 
     let (_, mut messages) = map
@@ -80,11 +80,11 @@ impl CollabStream {
       .ok_or_else(|| StreamError::UnexpectedValue("Empty stream".into()))?;
 
     debug_assert_eq!(messages.len(), 1);
-    Ok(messages.pop().map(Into::into))
+    Ok(messages.pop())
   }
 
   pub async fn read_all_message(&mut self) -> Result<Vec<Message>, StreamError> {
-    let read_messages: Vec<MessageRead> =
+    let read_messages: Vec<StreamMessage> =
       self.connection_manager.xrange_all(&self.stream_key).await?;
     Ok(read_messages.into_iter().map(Into::into).collect())
   }

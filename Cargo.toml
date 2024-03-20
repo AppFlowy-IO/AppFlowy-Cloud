@@ -82,6 +82,7 @@ database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
+collab-stream = { path = "libs/collab-stream" }
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
@@ -131,6 +132,7 @@ members = [
     "libs/workspace-template",
     "libs/encrypt",
     "libs/realtime-protocol",
+    "libs/collab-stream",
     "libs/client-websocket",
     "libs/client-api-test-util",
     "libs/wasm-test",

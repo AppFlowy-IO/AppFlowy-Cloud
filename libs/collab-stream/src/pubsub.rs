@@ -1,6 +1,7 @@
 use crate::error::StreamError;
 use futures::stream::BoxStream;
 use futures::StreamExt;
+#[allow(deprecated)]
 use redis::aio::{Connection, ConnectionManager};
 use redis::{AsyncCommands, FromRedisValue, RedisResult, RedisWrite, ToRedisArgs, Value};
 use serde::{Deserialize, Serialize};
@@ -9,10 +10,12 @@ use tracing::instrument;
 const ACTIVE_COLLAB_CHANNEL: &str = "active_collab_channel";
 
 pub struct CollabStreamSub {
+  #[allow(deprecated)]
   conn: Connection,
 }
 
 impl CollabStreamSub {
+  #[allow(deprecated)]
   pub fn new(conn: Connection) -> Self {
     Self { conn }
   }

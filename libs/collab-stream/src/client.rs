@@ -53,6 +53,7 @@ impl PubSubClient {
     CollabStreamPub::new(self.connection_manager.clone())
   }
 
+  #[allow(deprecated)]
   pub async fn collab_sub(&self) -> Result<CollabStreamSub, StreamError> {
     let conn = self.redis_client.get_async_connection().await?;
     Ok(CollabStreamSub::new(conn))

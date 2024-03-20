@@ -23,7 +23,7 @@ impl Client {
   pub async fn post_realtime_msg(
     &self,
     device_id: &str,
-    msg: websocket::Message,
+    msg: client_websocket::Message,
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
     let payload =
@@ -152,7 +152,11 @@ impl Client {
 
 #[async_trait]
 impl WSClientHttpSender for Client {
-  async fn send_ws_msg(&self, device_id: &str, message: websocket::Message) -> Result<(), WSError> {
+  async fn send_ws_msg(
+    &self,
+    device_id: &str,
+    message: client_websocket::Message,
+  ) -> Result<(), WSError> {
     self
       .post_realtime_msg(device_id, message)
       .await

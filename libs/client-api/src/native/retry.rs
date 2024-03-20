@@ -3,6 +3,7 @@ use crate::ws::{
   ConnectInfo, ConnectState, ConnectStateNotify, CurrentConnInfo, StateNotify, WSError,
 };
 use app_error::gotrue::GoTrueError;
+use client_websocket::{connect_async, WebSocketStream};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
 use reqwest::header::HeaderMap;
@@ -13,7 +14,6 @@ use std::time::Duration;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, RetryIf};
 use tracing::{debug, info};
-use websocket::{connect_async, WebSocketStream};
 
 pub(crate) struct RefreshTokenAction {
   token: Arc<RwLock<ClientToken>>,

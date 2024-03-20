@@ -23,6 +23,50 @@ body {
   cursor: pointer;
 }
 
+.table {
+    border-collapse: collapse; /* Collapse borders so there's no double borders */
+}
+
+.table th, .table td {
+  padding: 8px;
+}
+
+.yellow-table th {
+  border: 1px solid var(--af-dark-yellow);
+  background-color: var(--af-yellow);
+}
+
+.yellow-table td {
+  border: 1px solid var(--af-dark-yellow);
+}
+
+.red-table th {
+  border: 1px solid var(--af-dark-red);
+  background-color: var(--af-red);
+}
+
+.red-table td {
+  border: 1px solid var(--af-dark-red);
+}
+
+.cyan-table th {
+  border: 1px solid var(--af-dark-cyan);
+  background-color: var(--af-cyan);
+}
+
+.cyan-table td {
+  border: 1px solid var(--af-dark-cyan);
+}
+
+.purple-table th {
+  border: 1px solid var(--af-dark-purple);
+  background-color: var(--af-purple);
+}
+
+.purple-table td {
+  border: 1px solid var(--af-dark-purple);
+}
+
 .purple:hover {
   background-color: var(--af-dark-purple);
 }

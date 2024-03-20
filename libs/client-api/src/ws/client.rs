@@ -25,9 +25,9 @@ use realtime_entity::message::{RealtimeMessage, SystemMessage};
 use realtime_entity::user::UserMessage;
 
 use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
+use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};
 use tokio::sync::{oneshot, Mutex};
 use tracing::{error, info, trace, warn};
-use websocket::{CloseCode, CloseFrame, Message, WebSocketStream};
 
 pub struct WSClientConfig {
   /// specifies the number of messages that the channel can hold at any given

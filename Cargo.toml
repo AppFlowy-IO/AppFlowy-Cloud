@@ -39,7 +39,7 @@ secrecy = { version = "0.8", features = ["serde"] }
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"
 thiserror = "1.0.56"
-reqwest = { version = "0.11.23", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies"] }
 unicode-segmentation = "1.10"
 lazy_static = "1.4.0"
 fancy-regex = "0.11.0"
@@ -60,7 +60,7 @@ itertools = "0.11"
 uuid = "1.6.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 prost = "0.12.3"
-casbin = { version = "2.1.0", features = ["cached", "runtime-tokio", "incremental"] }
+casbin = { version = "2.2.0", features = ["cached", "runtime-tokio", "incremental"] }
 dotenvy = "0.15.7"
 url = "2.5.0"
 brotli = "3.4.0"
@@ -68,13 +68,13 @@ evmap.workspace = true
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
+appflowy-ai = { path = "libs/appflowy-ai" }
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
 collab-entity = { version = "0.1.0" }
 
 #Local crate
-token = { path = "libs/token" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 database = { path = "libs/database" }
@@ -82,6 +82,7 @@ database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
+collab-stream = { path = "libs/collab-stream" }
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
@@ -99,7 +100,7 @@ client-api = { path = "libs/client-api", features = ["collab-sync", "test_util"]
 opener = "0.6.1"
 image = "0.23.14"
 collab-folder = { version = "0.1.0" }
-websocket.workspace = true
+client-websocket.workspace = true
 
 #criterion = { version = "0.5", features = ["async_tokio"] }
 
@@ -116,7 +117,6 @@ path = "src/lib.rs"
 
 [workspace]
 members = [
-    "libs/token",
     "libs/snowflake",
     "libs/realtime",
     "libs/realtime-entity",
@@ -128,12 +128,15 @@ members = [
     "libs/gotrue",
     "libs/gotrue-entity",
     "admin_frontend",
-    "libs/app_error",
+    "libs/app-error",
     "libs/workspace-template",
     "libs/encrypt",
     "libs/realtime-protocol",
-    "libs/websocket",
-    "libs/client-api-test-util", "libs/wasm-test",
+    "libs/collab-stream",
+    "libs/client-websocket",
+    "libs/client-api-test-util",
+    "libs/wasm-test",
+    "libs/appflowy-ai",
 ]
 
 [workspace.dependencies]
@@ -141,7 +144,7 @@ realtime-entity = { path = "libs/realtime-entity" }
 realtime-protocol = { path = "libs/realtime-protocol" }
 database-entity = { path = "libs/database-entity" }
 shared-entity = { path = "libs/shared-entity" }
-app-error = { path = "libs/app_error" }
+app-error = { path = "libs/app-error" }
 serde_json = "1.0.111"
 serde = { version = "1.0.195", features = ["derive"] }
 bytes = "1.5.0"
@@ -151,7 +154,7 @@ anyhow = "1.0.79"
 tokio = { version = "1.36.0", features = ["sync"] }
 yrs = "0.17.2"
 bincode = "1.3.3"
-websocket = { path = "libs/websocket" }
+client-websocket = { path = "libs/client-websocket" }
 collab = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 tracing = { version = "0.1"}
@@ -162,6 +165,7 @@ evmap = "10.0.2"
 dashmap = "5.5.3"
 futures = "0.3.30"
 async-stream = "0.3.5"
+reqwest = "0.11.26"
 
 [profile.release]
 lto = true
@@ -173,15 +177,14 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "6c8931dabb793181f54b16d7aba6f795055b92cb" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ba46c5e9e39049c4fedd6f3d67410368874b324f" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ba46c5e9e39049c4fedd6f3d67410368874b324f" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ba46c5e9e39049c4fedd6f3d67410368874b324f" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ba46c5e9e39049c4fedd6f3d67410368874b324f" }
 
 [features]
 custom_env= []
-# This feature will be removed once the cpu spike issue is resolved
-disable_access_control = []
+ai_enable = []
 
 # Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
 #collab = { path = "libs/AppFlowy-Collab/collab" }

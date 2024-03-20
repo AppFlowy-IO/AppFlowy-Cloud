@@ -1,5 +1,7 @@
+mod askama_entities;
 mod config;
 mod error;
+mod ext;
 mod models;
 mod response;
 mod session;
@@ -50,6 +52,8 @@ async fn main() {
   let session_store = session::SessionStorage::new(redis_client);
 
   let state = AppState {
+    appflowy_cloud_url: config.appflowy_cloud_url,
+    appflowy_cloud_gateway_url: config.appflowy_cloud_gateway_url,
     gotrue_client,
     session_store,
   };
@@ -85,6 +89,8 @@ async fn main() {
 
 #[derive(Clone)]
 pub struct AppState {
+  pub appflowy_cloud_url: String,
+  pub appflowy_cloud_gateway_url: String,
   pub gotrue_client: gotrue::api::Client,
   pub session_store: session::SessionStorage,
 }

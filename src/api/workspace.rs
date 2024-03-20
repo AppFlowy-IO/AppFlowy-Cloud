@@ -102,6 +102,9 @@ pub fn workspace_scope() -> Scope {
           .route(web::post().to(create_collab_list_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/usage").route(web::get().to(get_workspace_usage_handler)),
+    )
+    .service(
       web::resource("/{workspace_id}/{object_id}/snapshot")
         .route(web::get().to(get_collab_snapshot_handler))
         .route(web::post().to(create_collab_snapshot_handler)),
@@ -701,7 +704,7 @@ async fn delete_collab_handler(
 
   state
     .collab_access_control_storage
-    .delete_collab(&uid, &payload.object_id)
+    .delete_collab(&payload.workspace_id, &uid, &payload.object_id)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -830,6 +833,20 @@ async fn post_realtime_message_stream_handler(
     }
   }
   Err(AppError::Internal(anyhow!("Failed to send message to websocket server")).into())
+}
+
+async fn get_workspace_usage_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<WorkspaceUsage>>> {
+  let res = biz::workspace::ops::get_workspace_document_total_bytes(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(res)))
 }
 
 #[inline]

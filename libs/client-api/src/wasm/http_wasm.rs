@@ -76,7 +76,7 @@ impl WSClientHttpSender for Client {
   async fn send_ws_msg(
     &self,
     _device_id: &str,
-    _message: websocket::Message,
+    _message: client_websocket::Message,
   ) -> Result<(), WSError> {
     Err(WSError::Internal(anyhow::Error::msg("not supported")))
   }

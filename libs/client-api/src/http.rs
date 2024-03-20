@@ -591,6 +591,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
+      .json(&())
       .send()
       .await?;
     log_request_id(&resp);

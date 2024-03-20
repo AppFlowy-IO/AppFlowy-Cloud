@@ -146,7 +146,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "mio",
- "socket2 0.5.5",
+ "socket2",
  "tokio",
  "tracing",
 ]
@@ -246,7 +246,7 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "smallvec",
- "socket2 0.5.5",
+ "socket2",
  "time",
  "url",
 ]
@@ -327,7 +327,7 @@ dependencies = [
  "gotrue-entity",
  "human_bytes",
  "jwt",
- "redis 0.24.0",
+ "redis 0.25.2",
  "reqwest",
  "serde",
  "serde_json",
@@ -564,7 +564,7 @@ dependencies = [
  "rcgen",
  "realtime",
  "realtime-entity",
- "redis 0.24.0",
+ "redis 0.25.2",
  "reqwest",
  "rust-s3",
  "scraper",
@@ -1467,12 +1467,15 @@ name = "collab-stream"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "futures",
  "rand 0.8.5",
- "redis 0.24.0",
+ "redis 0.25.2",
+ "serde",
  "thiserror",
  "tokio",
  "tokio-stream",
+ "tracing",
 ]
 
 [[package]]
@@ -1831,7 +1834,7 @@ dependencies = [
  "collab-entity",
  "database-entity",
  "futures-util",
- "redis 0.24.0",
+ "redis 0.25.2",
  "rust-s3",
  "rust_decimal",
  "serde",
@@ -2694,7 +2697,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.5",
+ "socket2",
  "tokio",
  "tower-service",
  "tracing",
@@ -2759,7 +2762,7 @@ dependencies = [
  "http-body 1.0.0",
  "hyper 1.1.0",
  "pin-project-lite",
- "socket2 0.5.5",
+ "socket2",
  "tokio",
 ]
 
@@ -4338,9 +4341,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.24.0"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c580d9cbbe1d1b479e8d67cf9daf6a62c957e6846048408b80b43ac3f6af84cd"
+checksum = "71d64e978fd98a0e6b105d066ba4889a7301fca65aeac850a877d8797343feeb"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -4355,7 +4358,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha1_smol",
- "socket2 0.4.10",
+ "socket2",
  "tokio",
  "tokio-retry",
  "tokio-util",
@@ -5163,16 +5166,6 @@ version = "0.1.0"
 
 [[package]]
 name = "socket2"
-version = "0.4.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f7916fc008ca5542385b89a3d3ce689953c143e9304a9bf8beec1de48994c0d"
-dependencies = [
- "libc",
- "winapi",
-]
-
-[[package]]
-name = "socket2"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
@@ -5710,7 +5703,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "pin-project-lite",
  "signal-hook-registry",
- "socket2 0.5.5",
+ "socket2",
  "tokio-macros",
  "windows-sys 0.48.0",
 ]

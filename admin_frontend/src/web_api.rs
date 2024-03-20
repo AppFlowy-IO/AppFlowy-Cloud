@@ -1,5 +1,7 @@
 use crate::error::WebApiError;
-use crate::ext::api::{accept_workspace_invitation, invite_user_to_workspace, verify_token_cloud};
+use crate::ext::api::{
+  accept_workspace_invitation, invite_user_to_workspace, leave_workspace, verify_token_cloud,
+};
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
   WebApiInviteUserRequest, WebApiPutUserRequest,
@@ -34,6 +36,7 @@ pub fn router() -> Router<AppState> {
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
     .route("/invite", post(invite_handler))
     .route("/workspace/:workspace_id/invite", post(workspace_invite_handler))
+    .route("/workspace/:workspace_id/leave", post(leave_workspace_handler))
     .route("/invite/:invite_id/accept", post(invite_accept_handler))
     .route("/open_app", post(open_app_handler))
 
@@ -146,6 +149,21 @@ pub async fn workspace_invite_handler(
   .await?;
 
   Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
+}
+
+pub async fn leave_workspace_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(workspace_id): Path<String>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  leave_workspace(
+    &session.token.access_token,
+    &workspace_id,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
+  Ok(WebApiResponse::<()>::from_str("Left workspace".into()))
 }
 
 pub async fn invite_accept_handler(

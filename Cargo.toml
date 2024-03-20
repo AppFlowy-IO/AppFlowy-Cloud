@@ -160,7 +160,7 @@ collab-folder = { version = "0.1.0" }
 tracing = { version = "0.1"}
 collab-entity = { version = "0.1.0" }
 gotrue = { path = "libs/gotrue" }
-redis = "0.24.0"
+redis = "0.25.2"
 evmap = "10.0.2"
 dashmap = "5.5.3"
 futures = "0.3.30"

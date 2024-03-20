@@ -1,5 +1,5 @@
 use anyhow::Context;
-use collab_stream::client::CollabStreamClient;
+use collab_stream::client::{CollabStreamClient, PubSubClient};
 use rand::{thread_rng, Rng};
 
 pub async fn redis_client() -> redis::Client {
@@ -12,6 +12,14 @@ pub async fn redis_client() -> redis::Client {
 pub async fn stream_client() -> CollabStreamClient {
   let redis_client = redis_client().await;
   CollabStreamClient::new(redis_client)
+    .await
+    .context("failed to create stream client")
+    .unwrap()
+}
+
+pub async fn pubsub_client() -> PubSubClient {
+  let redis_client = redis_client().await;
+  PubSubClient::new(redis_client)
     .await
     .context("failed to create stream client")
     .unwrap()

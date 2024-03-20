@@ -43,6 +43,7 @@ pub trait CollabAccessControl: Sync + Send + 'static {
 
   async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
 }
+
 #[derive(Clone)]
 pub struct CollabMiddlewareAccessControl<AC: CollabAccessControl> {
   pub access_control: Arc<AC>,

@@ -1,7 +1,6 @@
-use crate::stream_test::test_util::stream_client;
+use crate::stream_test::test_util::{random_i64, stream_client};
 use collab_stream::model::Message;
 use futures::future::join;
-use rand::{thread_rng, Rng};
 
 #[tokio::test]
 async fn single_group_read_message_test() {
@@ -128,10 +127,4 @@ async fn read_all_message_test() {
     assert_eq!(messages[i].uid, uids[i]);
     assert_eq!(consumer_messages[i].uid, uids[i]);
   }
-}
-
-fn random_i64() -> i64 {
-  let mut rng = thread_rng();
-  let num: i64 = rng.gen();
-  num
 }

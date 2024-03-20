@@ -397,7 +397,7 @@ pub struct UpdateSync {
   ///    ...
   ///   }
   /// ```
-  ///  
+  ///
   pub payload: Bytes,
 }
 

@@ -1,5 +1,4 @@
 use app_error::ErrorCode;
-use client_api::entity::CreateCollabParams;
 use client_api_test_util::{api_client_with_email, TestClient};
 use database_entity::dto::{AFAccessLevel, AFRole, QueryCollabMembers};
 use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;

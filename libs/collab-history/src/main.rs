@@ -11,7 +11,6 @@ mod config;
 mod error;
 mod models;
 mod response;
-mod stream;
 
 #[tokio::main]
 async fn main() {

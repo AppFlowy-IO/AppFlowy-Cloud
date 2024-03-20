@@ -11,7 +11,6 @@ use actix_web::{
 use actix_web::{HttpResponse, Result};
 use app_error::AppError;
 use chrono::DateTime;
-use database::file::{MAX_BLOB_SIZE, MAX_USAGE};
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
@@ -57,15 +56,6 @@ async fn put_blob_handler(
   let content_length = content_length.into_inner().into_inner();
   let content_type = content_type.into_inner().to_string();
   let content = {
-    // Check content length, if it's too large, return error.
-    if content_length > MAX_BLOB_SIZE {
-      return Ok(
-        AppResponse::from(AppError::PayloadTooLarge(
-          "The uploading file is too large".to_string(),
-        ))
-        .into(),
-      );
-    }
     let mut payload_reader = payload_to_async_read(payload);
     let mut content = vec![0; content_length];
     let n = payload_reader.read_exact(&mut content).await?;
@@ -204,7 +194,6 @@ async fn get_workspace_usage_handler(
     .map_err(AppResponseError::from)?;
   let usage = WorkspaceSpaceUsage {
     consumed_capacity: current,
-    total_capacity: MAX_USAGE,
   };
   Ok(AppResponse::Ok().with_data(usage).into())
 }

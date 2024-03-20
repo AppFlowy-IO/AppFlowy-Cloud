@@ -13,7 +13,7 @@
     <td>
       <button
         class="button red"
-        hx-delete="/web-api/workspace/{{ shared_workspace.workspace_id|escape }}/leave"
+        hx-post="/web-api/workspace/{{ shared_workspace.workspace_id|escape }}/leave"
         hx-confirm="Are you sure?"
         hx-target="closest tr"
         hx-swap="delete"

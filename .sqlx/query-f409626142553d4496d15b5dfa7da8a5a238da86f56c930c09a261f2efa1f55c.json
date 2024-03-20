@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT sid as \"snapshot_id\", oid as \"object_id\", created_at\n    FROM af_collab_snapshot\n    WHERE oid = $1 AND deleted_at IS NULL\n    ORDER BY created_at DESC;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "snapshot_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "object_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f409626142553d4496d15b5dfa7da8a5a238da86f56c930c09a261f2efa1f55c"
+}

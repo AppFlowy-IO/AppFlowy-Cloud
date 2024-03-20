@@ -27,13 +27,6 @@ async fn metrics_handler(reg: web::Data<Arc<Registry>>) -> Result<HttpResponse> 
   )
 }
 
-pub fn metrics_registry() -> (AppFlowyCloudMetrics, Registry) {
-  let metric = AppFlowyCloudMetrics::init();
-  let mut registry = Registry::default();
-  AppFlowyCloudMetrics::register(metric.clone(), &mut registry);
-  (metric, registry)
-}
-
 #[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
 pub struct PathLabel {
   pub path: String,
@@ -49,7 +42,7 @@ pub struct ResultLabel {
 // Metric types: https://prometheus.io/docs/concepts/metric_types
 // Application handlers should call the corresponding methods to update the metrics.
 #[derive(Clone)]
-pub struct AppFlowyCloudMetrics {
+pub struct RequestMetrics {
   requests_count: Family<PathLabel, Counter>,
   requests_latency: Family<PathLabel, CounterWithExemplar<TraceLabel>>,
   requests_result: Family<ResultLabel, CounterWithExemplar<TraceLabel>>,
@@ -60,7 +53,7 @@ pub struct TraceLabel {
   pub trace_id: String,
 }
 
-impl AppFlowyCloudMetrics {
+impl RequestMetrics {
   fn init() -> Self {
     Self {
       requests_count: Family::default(),
@@ -69,23 +62,26 @@ impl AppFlowyCloudMetrics {
     }
   }
 
-  fn register(self, registry: &mut Registry) {
+  pub fn register(registry: &mut Registry) -> Self {
+    let af_metrics = Self::init();
+
     let af_registry = registry.sub_registry_with_prefix("appflowy_cloud");
     af_registry.register(
       "requests_count",
       "number of requests",
-      self.requests_count.clone(),
+      af_metrics.requests_count.clone(),
     );
     af_registry.register(
       "requests_latency",
       "request response time",
-      self.requests_latency.clone(),
+      af_metrics.requests_latency.clone(),
     );
     af_registry.register(
       "requests_result",
       "status code of response",
-      self.requests_result.clone(),
+      af_metrics.requests_result.clone(),
     );
+    af_metrics
   }
 
   // app services/middleware should call this method to increase the request count for the path

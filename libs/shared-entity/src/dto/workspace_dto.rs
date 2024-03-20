@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use database_entity::dto::AFRole;
+use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use uuid::Uuid;
@@ -29,10 +29,22 @@ impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   }
 }
 
+// Deprecated
 #[derive(Deserialize, Serialize)]
 pub struct CreateWorkspaceMember {
   pub email: String,
   pub role: AFRole,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkspaceMemberInvitation {
+  pub email: String,
+  pub role: AFRole,
+}
+
+#[derive(Deserialize)]
+pub struct WorkspaceInviteQuery {
+  pub status: Option<AFWorkspaceInvitationStatus>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -81,4 +93,11 @@ pub struct BlobMetadata {
 #[derive(Serialize, Deserialize)]
 pub struct CreateWorkspaceParam {
   pub workspace_name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct PatchWorkspaceParam {
+  pub workspace_id: Uuid,
+  pub workspace_name: Option<String>,
+  pub workspace_icon: Option<String>,
 }

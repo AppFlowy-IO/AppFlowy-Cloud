@@ -7,7 +7,7 @@ use std::future::{ready, Ready};
 use std::sync::Arc;
 
 use super::request_id::get_request_id;
-use crate::api::metrics::AppFlowyCloudMetrics;
+use crate::api::metrics::RequestMetrics;
 
 pub struct MetricsMiddleware;
 
@@ -46,7 +46,7 @@ where
 
   fn call(&self, req: ServiceRequest) -> Self::Future {
     // Get the metrics from the app_data
-    let metrics = match req.app_data::<Data<Arc<AppFlowyCloudMetrics>>>() {
+    let metrics = match req.app_data::<Data<Arc<RequestMetrics>>>() {
       Some(m) => m.clone(),
       None => {
         tracing::error!("Failed to get metrics from app_data");

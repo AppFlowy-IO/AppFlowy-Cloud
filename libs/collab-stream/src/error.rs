@@ -21,14 +21,6 @@ pub enum StreamError {
   Internal(anyhow::Error),
 }
 
-pub fn parse_error<T>(value: &redis::Value) -> RedisError {
-  RedisError::from((
-    redis::ErrorKind::TypeError,
-    "unexpected value",
-    format!("can't parse {:?} to {}", value, std::any::type_name::<T>()),
-  ))
-}
-
 pub fn internal<T: ToString>(msg: T) -> RedisError {
   let msg = msg.to_string();
   RedisError::from((redis::ErrorKind::TypeError, "", msg))

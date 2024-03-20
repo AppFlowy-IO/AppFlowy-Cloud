@@ -36,9 +36,7 @@ pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
         .with_file(false)
         .pretty()
         .finish()
-        .with(env_filter)
-        .with(JsonStorageLayer)
-        .with(formatting_layer);
+        .with(env_filter);
       set_global_default(subscriber).unwrap();
     },
     Environment::Production => {

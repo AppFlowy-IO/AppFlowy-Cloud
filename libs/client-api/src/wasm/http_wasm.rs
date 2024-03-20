@@ -63,7 +63,7 @@ impl Client {
   }
 }
 
-pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+pub fn af_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + 'static,
   T::Output: Send + 'static,
@@ -76,7 +76,7 @@ impl WSClientHttpSender for Client {
   async fn send_ws_msg(
     &self,
     _device_id: &str,
-    _message: websocket::Message,
+    _message: client_websocket::Message,
   ) -> Result<(), WSError> {
     Err(WSError::Internal(anyhow::Error::msg("not supported")))
   }

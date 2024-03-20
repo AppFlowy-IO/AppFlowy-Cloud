@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 use tracing::error;
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -24,6 +25,18 @@ pub struct CreateCollabParams {
   /// Determine whether to override the collab if it exists. Default is false.
   #[serde(default)]
   pub override_if_exist: bool,
+}
+
+impl From<(String, CollabParams)> for CreateCollabParams {
+  fn from((workspace_id, collab_params): (String, CollabParams)) -> Self {
+    Self {
+      workspace_id,
+      object_id: collab_params.object_id,
+      encoded_collab_v1: collab_params.encoded_collab_v1,
+      collab_type: collab_params.collab_type,
+      override_if_exist: collab_params.override_if_exist,
+    }
+  }
 }
 
 impl CreateCollabParams {
@@ -245,6 +258,11 @@ pub enum QueryCollabResult {
 #[derive(Serialize, Deserialize)]
 pub struct BatchQueryCollabResult(pub HashMap<String, QueryCollabResult>);
 
+#[derive(Serialize, Deserialize)]
+pub struct WorkspaceUsage {
+  pub total_document_size: i64,
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct InsertCollabMemberParams {
   pub uid: i64,
@@ -281,11 +299,12 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
+#[repr(i32)]
 pub enum AFRole {
-  Owner,
-  Member,
-  Guest,
+  Owner = 1,
+  Member = 2,
+  Guest = 3,
 }
 
 impl AFRole {
@@ -310,32 +329,24 @@ impl From<i32> for AFRole {
   }
 }
 
-impl From<i64> for AFRole {
-  fn from(value: i64) -> Self {
-    Self::from(value as i32)
-  }
-}
-
-impl From<Option<i32>> for AFRole {
-  fn from(value: Option<i32>) -> Self {
-    match value {
-      None => {
-        error!("Invalid role id: None");
-        AFRole::Guest
-      },
-      Some(value) => value.into(),
+impl From<&str> for AFRole {
+  fn from(value: &str) -> Self {
+    match i32::from_str(value) {
+      Ok(value) => value.into(),
+      Err(_) => AFRole::Guest,
     }
   }
 }
 
 impl From<AFRole> for i32 {
   fn from(role: AFRole) -> Self {
-    // Can't modify the value of the enum
-    match role {
-      AFRole::Owner => 1,
-      AFRole::Member => 2,
-      AFRole::Guest => 3,
-    }
+    role as i32
+  }
+}
+
+impl From<&AFRole> for i32 {
+  fn from(role: &AFRole) -> Self {
+    role.clone() as i32
   }
 }
 
@@ -376,6 +387,22 @@ impl AFAccessLevel {
   }
 }
 
+impl From<&AFRole> for AFAccessLevel {
+  fn from(value: &AFRole) -> Self {
+    match value {
+      AFRole::Owner => AFAccessLevel::FullAccess,
+      AFRole::Member => AFAccessLevel::ReadAndWrite,
+      AFRole::Guest => AFAccessLevel::ReadOnly,
+    }
+  }
+}
+
+impl From<AFRole> for AFAccessLevel {
+  fn from(value: AFRole) -> Self {
+    AFAccessLevel::from(&value)
+  }
+}
+
 impl From<i32> for AFAccessLevel {
   fn from(value: i32) -> Self {
     // Can't modify the value of the enum
@@ -392,12 +419,26 @@ impl From<i32> for AFAccessLevel {
   }
 }
 
+impl From<&str> for AFAccessLevel {
+  fn from(value: &str) -> Self {
+    match i32::from_str(value) {
+      Ok(value) => AFAccessLevel::from(value),
+      Err(_) => AFAccessLevel::ReadOnly,
+    }
+  }
+}
+
 impl From<AFAccessLevel> for i32 {
   fn from(level: AFAccessLevel) -> Self {
     level as i32
   }
 }
 
+impl From<&AFAccessLevel> for i32 {
+  fn from(level: &AFAccessLevel) -> Self {
+    *level as i32
+  }
+}
 #[derive(Serialize, Deserialize)]
 pub struct AFCollabMembers(pub Vec<AFCollabMember>);
 
@@ -421,9 +462,11 @@ pub struct AFWorkspace {
   pub workspace_id: Uuid,
   pub database_storage_id: Uuid,
   pub owner_uid: i64,
+  pub owner_name: String,
   pub workspace_type: i32,
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,
+  pub icon: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -436,7 +479,7 @@ pub struct AFUserWorkspaceInfo {
   pub workspaces: Vec<AFWorkspace>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct AFWorkspaceMember {
   pub name: String,
   pub email: String,
@@ -444,4 +487,35 @@ pub struct AFWorkspaceMember {
   pub avatar_url: Option<String>,
 }
 
-// pub type AFBlobMetadata = AFBlobMetadataRow;
+#[derive(Deserialize, Serialize, Debug)]
+pub struct AFWorkspaceInvitation {
+  pub invite_id: Uuid,
+  pub workspace_id: Uuid,
+  pub workspace_name: Option<String>,
+  pub inviter_email: Option<String>,
+  pub inviter_name: Option<String>,
+  pub status: AFWorkspaceInvitationStatus,
+  pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone)]
+#[repr(i16)]
+pub enum AFWorkspaceInvitationStatus {
+  Pending = 0,
+  Accepted = 1,
+  Rejected = 2,
+}
+
+impl From<i16> for AFWorkspaceInvitationStatus {
+  fn from(value: i16) -> Self {
+    match value {
+      0 => AFWorkspaceInvitationStatus::Pending,
+      1 => AFWorkspaceInvitationStatus::Accepted,
+      2 => AFWorkspaceInvitationStatus::Rejected,
+      _ => {
+        error!("Invalid role id: {}", value);
+        AFWorkspaceInvitationStatus::Pending
+      },
+    }
+  }
+}

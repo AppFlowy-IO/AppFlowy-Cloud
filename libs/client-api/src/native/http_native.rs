@@ -23,7 +23,7 @@ impl Client {
   pub async fn post_realtime_msg(
     &self,
     device_id: &str,
-    msg: websocket::Message,
+    msg: client_websocket::Message,
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
     let payload =
@@ -56,7 +56,7 @@ impl Client {
       .into_iter()
       .map(|params| {
         let config = self.config.clone();
-        platform_spawn(async move {
+        af_spawn(async move {
           let data = params.to_bytes().map_err(AppError::from)?;
           spawn_blocking_brotli_compress(
             data,
@@ -129,7 +129,7 @@ impl Client {
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(10)).take(4);
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
     let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
     match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
       Ok(_) => {
@@ -152,16 +152,20 @@ impl Client {
 
 #[async_trait]
 impl WSClientHttpSender for Client {
-  async fn send_ws_msg(&self, device_id: &str, message: websocket::Message) -> Result<(), WSError> {
+  async fn send_ws_msg(
+    &self,
+    device_id: &str,
+    message: client_websocket::Message,
+  ) -> Result<(), WSError> {
     self
       .post_realtime_msg(device_id, message)
       .await
-      .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
+      .map_err(|err| WSError::Http(err.to_string()))
   }
 }
 
 // TODO(nathan): spawn for wasm
-pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+pub fn af_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + Send + 'static,
   T::Output: Send + 'static,

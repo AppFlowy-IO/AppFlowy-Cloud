@@ -24,7 +24,7 @@ pub enum RealtimeError {
   UnexpectedData(&'static str),
 
   #[error("Expected init sync message, but received: {0}")]
-  ExpectInitSync(&'static str),
+  ExpectInitSync(String),
 
   #[error(transparent)]
   CollabError(#[from] CollabError),
@@ -40,10 +40,4 @@ pub enum RealtimeError {
 
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
-}
-
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum StreamError {
-  #[error("Internal error:{0}")]
-  Internal(String),
 }

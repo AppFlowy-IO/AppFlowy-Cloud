@@ -1,8 +1,9 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
-use anyhow::Context;
 use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
-use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceParam, PatchWorkspaceParam, WorkspaceMemberInvitation,
+};
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 
@@ -10,14 +11,15 @@ use app_error::AppError;
 use bytes::Bytes;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
-  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
-  BatchQueryCollabResult, CollabMemberIdentify, CreateCollabParams, DeleteCollabParams,
-  InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
+  AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult,
+  CollabMemberIdentify, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams,
+  QueryCollab, QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
-use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
+use gotrue::grant::{Grant, RefreshTokenGrant};
 
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
@@ -30,6 +32,7 @@ use collab_entity::CollabType;
 use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;
+use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
@@ -43,13 +46,10 @@ use std::time::Duration;
 use tracing::{error, event, info, instrument, trace, warn};
 use url::Url;
 
+use crate::ws::ConnectInfo;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 
-/// The API version of the client.
-/// 0.0.4
-///  fix refresh token issue
-pub const CLIENT_API_VERSION: &str = "0.0.4";
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
@@ -109,6 +109,8 @@ pub struct Client {
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
   ws_addr: String,
+  pub device_id: String,
+  pub client_version: Version,
   pub(crate) token: Arc<RwLock<ClientToken>>,
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
@@ -127,8 +129,16 @@ impl Client {
   /// - `base_url`: The base URL for API requests.
   /// - `ws_addr`: The WebSocket address for real-time communication.
   /// - `gotrue_url`: The URL for the GoTrue API.
-  pub fn new(base_url: &str, ws_addr: &str, gotrue_url: &str, config: ClientConfiguration) -> Self {
+  pub fn new(
+    base_url: &str,
+    ws_addr: &str,
+    gotrue_url: &str,
+    device_id: &str,
+    config: ClientConfiguration,
+    client_id: &str,
+  ) -> Self {
     let reqwest_client = reqwest::Client::new();
+    let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 5, 0));
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
@@ -138,6 +148,8 @@ impl Client {
       is_refreshing_token: Default::default(),
       refresh_ret_txs: Default::default(),
       config,
+      device_id: device_id.to_string(),
+      client_version,
     }
   }
 
@@ -187,56 +199,42 @@ impl Client {
     self.token.read().subscribe()
   }
 
-  /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
+  /// Attempts to sign in using a URL, extracting refresh_token from the URL.
   /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
   /// return a bool indicating if the user is new
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppResponseError> {
-    let mut access_token: Option<String> = None;
-    let mut token_type: Option<String> = None;
-    let mut expires_in: Option<i64> = None;
-    let mut expires_at: Option<i64> = None;
-    let mut refresh_token: Option<String> = None;
-    let mut provider_access_token: Option<String> = None;
-    let mut provider_refresh_token: Option<String> = None;
-
-    Url::parse(url)?
+    let parsed = Url::parse(url)?;
+    let key_value_pairs = parsed
       .fragment()
       .ok_or(url_missing_param("fragment"))?
-      .split('&')
-      .try_for_each(|f| -> Result<(), AppResponseError> {
-        let (k, v) = f.split_once('=').ok_or(url_missing_param("key=value"))?;
-        match k {
-          "access_token" => access_token = Some(v.to_string()),
-          "token_type" => token_type = Some(v.to_string()),
-          "expires_in" => expires_in = Some(v.parse::<i64>().context("parser expires_in failed")?),
-          "expires_at" => expires_at = Some(v.parse::<i64>().context("parser expires_at failed")?),
-          "refresh_token" => refresh_token = Some(v.to_string()),
-          "provider_access_token" => provider_access_token = Some(v.to_string()),
-          "provider_refresh_token" => provider_refresh_token = Some(v.to_string()),
-          x => tracing::warn!("unhandled param in url: {}", x),
-        };
-        Ok(())
-      })?;
+      .split('&');
 
-    let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    if access_token.is_empty() {
-      return Err(AppError::OAuthError("Empty access token".to_string()).into());
+    let mut refresh_token: Option<&str> = None;
+    for param in key_value_pairs {
+      match param.split_once('=') {
+        Some(pair) => {
+          let (k, v) = pair;
+          if k == "refresh_token" {
+            refresh_token = Some(v);
+            break;
+          }
+        },
+        None => warn!("param is not in key=value format: {}", param),
+      }
     }
+    let refresh_token = refresh_token.ok_or(url_missing_param("refresh_token"))?;
 
-    let (user, new) = self.verify_token(&access_token).await?;
-    self.token.write().set(GotrueTokenResponse {
-      access_token,
-      token_type: token_type.ok_or(url_missing_param("token_type"))?,
-      expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
-      expires_at: expires_at.ok_or(url_missing_param("expires_at"))?,
-      refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
-      user,
-      provider_access_token,
-      provider_refresh_token,
-    });
+    let new_token = self
+      .gotrue_client
+      .token(&Grant::RefreshToken(RefreshTokenGrant {
+        refresh_token: refresh_token.to_owned(),
+      }))
+      .await?;
 
+    let (_user, new) = self.verify_token(&new_token.access_token).await?;
+    self.token.write().set(new_token);
     Ok(new)
   }
 
@@ -367,22 +365,18 @@ impl Client {
     self
       .gotrue_client
       .magic_link(
-        &self.access_token()?,
         &MagicLinkParams {
           email: email.to_owned(),
           ..Default::default()
         },
+        None,
       )
       .await?;
     Ok(())
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn create_magic_link(
-    &self,
-    email: &str,
-    password: &str,
-  ) -> Result<User, AppResponseError> {
+  pub async fn create_user(&self, email: &str, password: &str) -> Result<User, AppResponseError> {
     Ok(
       self
         .gotrue_client
@@ -419,6 +413,19 @@ impl Client {
         )
         .await?,
     )
+  }
+
+  // filter is postgre sql like filter
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn admin_list_users(
+    &self,
+    filter: Option<&str>,
+  ) -> Result<Vec<User>, AppResponseError> {
+    let user = self
+      .gotrue_client
+      .admin_list_user(&self.access_token()?, filter)
+      .await?;
+    Ok(user.users)
   }
 
   /// Only expose this method for testing
@@ -538,6 +545,19 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn patch_workspace(&self, params: PatchWorkspaceParam) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
@@ -586,6 +606,58 @@ impl Client {
       .into_data()
   }
 
+  pub async fn invite_workspace_members(
+    &self,
+    workspace_id: &str,
+    invitations: Vec<WorkspaceMemberInvitation>,
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/invite", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&invitations)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  pub async fn list_workspace_invitations(
+    &self,
+    status: Option<AFWorkspaceInvitationStatus>,
+  ) -> Result<Vec<AFWorkspaceInvitation>, AppResponseError> {
+    let url = format!("{}/api/workspace/invite", self.base_url);
+    let mut builder = self.http_client_with_auth(Method::GET, &url).await?;
+    if let Some(status) = status {
+      builder = builder.query(&[("status", status)])
+    }
+    let resp = builder.send().await?;
+    log_request_id(&resp);
+    let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
+    res.into_data()
+  }
+
+  pub async fn accept_workspace_invitation(
+    &self,
+    invitation_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/accept-invite/{}",
+      self.base_url, invitation_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&())
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  // deprecated
   #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,
@@ -676,7 +748,7 @@ impl Client {
 
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
-    match self.gotrue_client.sign_up(email, password).await? {
+    match self.gotrue_client.sign_up(email, password, None).await? {
       Authenticated(access_token_resp) => {
         self.token.write().set(access_token_resp);
         Ok(())
@@ -992,13 +1064,20 @@ impl Client {
       .into_data()
   }
 
-  pub async fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
+  pub fn ws_url(&self) -> String {
+    format!("{}/v1", self.ws_addr)
+  }
+
+  pub async fn ws_connect_info(&self) -> Result<ConnectInfo, AppResponseError> {
     self
       .refresh_if_expired(chrono::Local::now().timestamp())
       .await?;
 
-    let access_token = self.access_token()?;
-    Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
+    Ok(ConnectInfo {
+      access_token: self.access_token()?,
+      client_version: self.client_version.clone(),
+      device_id: self.device_id.clone(),
+    })
   }
 
   pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
@@ -1185,8 +1264,9 @@ impl Client {
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", CLIENT_API_VERSION)
+      .header("client-version", self.client_version.to_string())
       .header("client-timestamp", ts_now.to_string())
+      .header("device_id", self.device_id.clone())
       .bearer_auth(access_token);
     Ok(request_builder)
   }
@@ -1248,23 +1328,11 @@ pub async fn spawn_blocking_brotli_compress(
   buffer_size: usize,
 ) -> Result<Vec<u8>, AppError> {
   tokio::task::spawn_blocking(move || {
-    event!(
-      tracing::Level::DEBUG,
-      "start compressing collab with len:{}",
-      data.len(),
-    );
     let mut compressor = CompressorReader::new(&*data, buffer_size, quality, 22);
     let mut compressed_data = Vec::new();
     compressor
       .read_to_end(&mut compressed_data)
       .map_err(|err| AppError::InvalidRequest(format!("Failed to compress data: {}", err)))?;
-
-    event!(
-      tracing::Level::DEBUG,
-      "compress collab success: before:{}, after:{}",
-      data.len(),
-      compressed_data.len()
-    );
     Ok(compressed_data)
   })
   .await

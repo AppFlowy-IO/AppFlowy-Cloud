@@ -45,7 +45,7 @@ where
 
   fn call(&self, mut req: ServiceRequest) -> Self::Future {
     // Skip generate request id for metrics requests
-    if req.path() == "/metrics" {
+    if skip_request_id(&req) {
       let fut = self.service.call(req);
       Box::pin(fut)
     } else {
@@ -62,7 +62,7 @@ where
       let client_info = get_client_info(&req);
       let span = span!(Level::INFO, "request",
         request_id = %request_id,
-        path = %req.path(),
+        path = %req.match_pattern().unwrap_or_default(),
         method = %req.method(),
         client_version = client_info.client_version,
         payload_size = client_info.payload_size
@@ -120,4 +120,17 @@ fn get_client_info(req: &ServiceRequest) -> ClientInfo {
 struct ClientInfo<'a> {
   payload_size: usize,
   client_version: Option<&'a str>,
+}
+
+#[inline]
+fn skip_request_id(req: &ServiceRequest) -> bool {
+  if req.path().starts_with("/metrics") {
+    return true;
+  }
+
+  if req.path().starts_with("/ws") {
+    return true;
+  }
+
+  false
 }

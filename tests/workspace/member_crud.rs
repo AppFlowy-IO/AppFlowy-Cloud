@@ -1,23 +1,55 @@
 use app_error::ErrorCode;
-use client_api_test_util::TestClient;
-use database_entity::dto::AFRole;
-use shared_entity::dto::workspace_dto::CreateWorkspaceMember;
+use client_api_test_util::{api_client_with_email, TestClient};
+use database_entity::dto::{AFAccessLevel, AFRole, QueryCollabMembers};
+use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
+
+#[tokio::test]
+async fn get_workspace_owner_after_sign_up_test() {
+  let c1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = c1.workspace_id().await;
+
+  // after the user sign up, the user should be the owner of the workspace
+  let members = c1
+    .api_client
+    .get_workspace_members(&workspace_id)
+    .await
+    .unwrap();
+  assert_eq!(members.len(), 1);
+  assert_eq!(members[0].email, c1.email().await);
+
+  // after user sign up, the user should have full access to the workspace
+  let collab_members = c1
+    .api_client
+    .get_collab_members(QueryCollabMembers {
+      workspace_id: workspace_id.clone(),
+      object_id: workspace_id.clone(),
+    })
+    .await
+    .unwrap()
+    .0;
+  assert_eq!(collab_members.len(), 1);
+  assert_eq!(
+    collab_members[0].permission.access_level,
+    AFAccessLevel::FullAccess
+  );
+}
 
 #[tokio::test]
 async fn add_workspace_members_not_enough_permission() {
-  let c1 = TestClient::new_user_without_ws_conn().await;
-  let c2 = TestClient::new_user_without_ws_conn().await;
-  let c3 = TestClient::new_user_without_ws_conn().await;
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let member_1 = TestClient::new_user_without_ws_conn().await;
+  let member_2 = TestClient::new_user_without_ws_conn().await;
 
-  let workspace_id = c1.workspace_id().await;
+  let workspace_id = owner.workspace_id().await;
 
   // add client 2 to client 1's workspace
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Member)
+  owner
+    .add_workspace_member(&workspace_id, &member_1, AFRole::Member)
     .await;
 
   // client 2 add client 3 to client 1's workspace but permission denied
-  let error = c2
-    .try_add_workspace_member(&workspace_id, &c3, AFRole::Member)
+  let error = member_1
+    .invite_and_accepted_workspace_member(&workspace_id, &member_2, AFRole::Member)
     .await
     .unwrap_err();
   assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
@@ -41,20 +73,34 @@ async fn add_not_exist_workspace_members() {
   let c1 = TestClient::new_user_without_ws_conn().await;
   let workspace_id = c1.workspace_id().await;
   let email = format!("{}@appflowy.io", uuid::Uuid::new_v4());
-  let err = c1
-    .api_client
-    .add_workspace_members(
-      workspace_id,
-      vec![CreateWorkspaceMember {
-        email,
+  c1.api_client
+    .invite_workspace_members(
+      &workspace_id,
+      vec![WorkspaceMemberInvitation {
+        email: email.clone(),
         role: AFRole::Member,
       }],
     )
     .await
-    .unwrap_err();
+    .unwrap();
 
-  assert_eq!(err.code, ErrorCode::RecordNotFound);
+  let invited_client = api_client_with_email(&email).await;
+  let invite_id = invited_client
+    .list_workspace_invitations(None)
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .invite_id;
+  invited_client
+    .accept_workspace_invitation(invite_id.to_string().as_str())
+    .await
+    .unwrap();
+
+  let workspaces = invited_client.get_workspaces().await.unwrap();
+  assert_eq!(workspaces.0.len(), 2);
 }
+
 #[tokio::test]
 async fn update_workspace_member_role_not_enough_permission() {
   let c1 = TestClient::new_user_without_ws_conn().await;
@@ -75,67 +121,120 @@ async fn update_workspace_member_role_not_enough_permission() {
 
 #[tokio::test]
 async fn update_workspace_member_role_from_guest_to_member() {
-  let c1 = TestClient::new_user_without_ws_conn().await;
-  let c2 = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = c1.workspace_id().await;
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let guest = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = owner.workspace_id().await;
 
   // add client 2 to client 1's workspace
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Guest)
+  owner
+    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
     .await;
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
-  assert_eq!(members[0].email, c1.email().await);
+  assert_eq!(members[0].email, owner.email().await);
   assert_eq!(members[0].role, AFRole::Owner);
-  assert_eq!(members[1].email, c2.email().await);
+  assert_eq!(members[1].email, guest.email().await);
   assert_eq!(members[1].role, AFRole::Guest);
 
-  c1.try_update_workspace_member(&workspace_id, &c2, AFRole::Member)
+  owner
+    .try_update_workspace_member(&workspace_id, &guest, AFRole::Member)
     .await
     .unwrap();
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
-  assert_eq!(members[0].email, c1.email().await);
+  assert_eq!(members[0].email, owner.email().await);
   assert_eq!(members[0].role, AFRole::Owner);
-  assert_eq!(members[1].email, c2.email().await);
+  assert_eq!(members[1].email, guest.email().await);
   assert_eq!(members[1].role, AFRole::Member);
 }
 
 #[tokio::test]
-async fn workspace_second_owner_add_member() {
-  let c1 = TestClient::new_user_without_ws_conn().await;
-  let c2 = TestClient::new_user_without_ws_conn().await;
-  let c3 = TestClient::new_user_without_ws_conn().await;
+async fn workspace_add_member() {
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let other_owner = TestClient::new_user_without_ws_conn().await;
+  let member = TestClient::new_user_without_ws_conn().await;
+  let guest = TestClient::new_user_without_ws_conn().await;
 
-  let workspace_id = c1.workspace_id().await;
+  let workspace_id = owner.workspace_id().await;
 
   // add client 2 to client 1's workspace
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Owner)
+  owner
+    .add_workspace_member(&workspace_id, &other_owner, AFRole::Owner)
     .await;
 
   // add client 3 to client 1's workspace
-  c2.add_workspace_member(&workspace_id, &c3, AFRole::Member)
+  other_owner
+    .add_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await;
+  other_owner
+    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
     .await;
 
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
-  assert_eq!(members.len(), 3);
-  assert_eq!(members[0].email, c1.email().await);
+  assert_eq!(members.len(), 4);
+  assert_eq!(members[0].email, owner.email().await);
   assert_eq!(members[0].role, AFRole::Owner);
 
-  assert_eq!(members[1].email, c2.email().await);
+  assert_eq!(members[1].email, other_owner.email().await);
   assert_eq!(members[1].role, AFRole::Owner);
 
-  assert_eq!(members[2].email, c3.email().await);
+  assert_eq!(members[2].email, member.email().await);
   assert_eq!(members[2].role, AFRole::Member);
+
+  assert_eq!(members[3].email, guest.email().await);
+  assert_eq!(members[3].role, AFRole::Guest);
+
+  // after adding the members to the workspace, we should be able to get the collab members
+  // of the workspace.
+  let collab_members = owner
+    .api_client
+    .get_collab_members(QueryCollabMembers {
+      workspace_id: workspace_id.clone(),
+      object_id: workspace_id.clone(),
+    })
+    .await
+    .unwrap()
+    .0;
+
+  assert_eq!(collab_members.len(), 4);
+
+  // owner
+  assert_eq!(collab_members[0].uid, owner.uid().await);
+  assert_eq!(
+    collab_members[0].permission.access_level,
+    AFAccessLevel::FullAccess
+  );
+
+  // other owner
+  assert_eq!(collab_members[1].uid, other_owner.uid().await);
+  assert_eq!(
+    collab_members[1].permission.access_level,
+    AFAccessLevel::FullAccess
+  );
+
+  // member
+  assert_eq!(collab_members[2].uid, member.uid().await);
+  assert_eq!(
+    collab_members[2].permission.access_level,
+    AFAccessLevel::ReadAndWrite
+  );
+
+  // guest
+  assert_eq!(collab_members[3].uid, guest.uid().await);
+  assert_eq!(
+    collab_members[3].permission.access_level,
+    AFAccessLevel::ReadOnly
+  );
 }
 
 #[tokio::test]

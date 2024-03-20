@@ -6,11 +6,12 @@ use database_entity::dto::{
 };
 
 use crate::collab::SNAPSHOT_PER_HOUR;
-use crate::pg_row::AFCollabMemerAccessLevelRow;
+use crate::pg_row::AFCollabMemberAccessLevelRow;
 use crate::pg_row::AFSnapshotRow;
 use app_error::AppError;
 use chrono::{Duration, Utc};
 use futures_util::stream::BoxStream;
+
 use sqlx::postgres::PgRow;
 use sqlx::{Error, Executor, PgPool, Postgres, Row, Transaction};
 use std::collections::HashMap;
@@ -18,19 +19,6 @@ use std::fmt::Debug;
 use std::{ops::DerefMut, str::FromStr};
 use tracing::{error, event, instrument};
 use uuid::Uuid;
-
-#[inline]
-pub async fn collab_exists(pg_pool: &PgPool, oid: &str) -> Result<bool, sqlx::Error> {
-  let result = sqlx::query_scalar!(
-    r#"
-        SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)
-        "#,
-    &oid,
-  )
-  .fetch_one(pg_pool)
-  .await;
-  transform_record_not_found_error(result)
-}
 
 /// Inserts a new row into the `af_collab` table or updates an existing row if it matches the
 /// provided `object_id`.Additionally, if the row is being inserted for the first time, a corresponding
@@ -79,6 +67,10 @@ pub async fn insert_into_af_collab(
     params.encoded_collab_v1.len(),
   );
 
+  // If the collab already exists, update the row with the new data.
+  // In most cases, the workspace_id should be the same as the existing one. Comparing the workspace_id
+  // is a safety check to prevent a user from inserting a row with an existing object_id but a different
+  // workspace_id.
   match existing_workspace_id {
     Some(existing_workspace_id) => {
       if existing_workspace_id == workspace_id {
@@ -110,7 +102,8 @@ pub async fn insert_into_af_collab(
       }
     },
     None => {
-      // Get the permission_id of the Owner
+      // If the collab doesn't exist, insert a new row into the `af_collab` table and add a corresponding
+      // entry to the `af_collab_member` table.
       let permission_id: i32 = sqlx::query_scalar!(
         r#"
           SELECT rp.permission_id
@@ -173,11 +166,14 @@ pub async fn insert_into_af_collab(
 }
 
 #[inline]
-pub async fn select_blob_from_af_collab(
-  pg_pool: &PgPool,
+pub async fn select_blob_from_af_collab<'a, E>(
+  conn: E,
   collab_type: &CollabType,
   object_id: &str,
-) -> Result<Vec<u8>, sqlx::Error> {
+) -> Result<Vec<u8>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
   let partition_key = collab_type.value();
   sqlx::query_scalar!(
     r#"
@@ -188,7 +184,7 @@ pub async fn select_blob_from_af_collab(
     object_id,
     partition_key,
   )
-  .fetch_one(pg_pool)
+  .fetch_one(conn)
   .await
 }
 
@@ -309,7 +305,7 @@ pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
 ) -> Result<bool, sqlx::Error> {
   let hours = Utc::now() - Duration::hours(SNAPSHOT_PER_HOUR);
   let latest_snapshot_time: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
-    "SELECT created_at FROM af_collab_snapshot 
+    "SELECT created_at FROM af_collab_snapshot
          WHERE oid = $1 ORDER BY created_at DESC LIMIT 1",
   )
   .bind(oid)
@@ -325,22 +321,18 @@ pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
 /// of snapshots stored for the specified `oid` does not exceed the provided `snapshot_limit`. If the limit
 /// is exceeded, the oldest snapshots are deleted to maintain the limit.
 ///
-pub(crate) async fn create_snapshot_and_maintain_limit(
-  pg_pool: &PgPool,
+pub async fn create_snapshot_and_maintain_limit<'a>(
+  mut transaction: Transaction<'a, Postgres>,
+  workspace_id: &str,
   oid: &str,
   encoded_collab_v1: &[u8],
-  workspace_id: &Uuid,
   snapshot_limit: i64,
 ) -> Result<AFSnapshotMeta, AppError> {
-  let mut tx = pg_pool
-    .begin()
-    .await
-    .context("acquire transaction to insert collab snapshot")?;
-
+  let workspace_id = Uuid::from_str(workspace_id)?;
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMeta,
     r#"
-      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id) 
+      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING sid AS snapshot_id, oid AS object_id, created_at
     "#,
@@ -350,22 +342,23 @@ pub(crate) async fn create_snapshot_and_maintain_limit(
     0,
     workspace_id,
   )
-  .fetch_one(tx.deref_mut())
+  .fetch_one(transaction.deref_mut())
   .await?;
 
   // When a new snapshot is created that surpasses the preset limit, older snapshots will be deleted to maintain the limit
   sqlx::query(
     r#"
-       DELETE FROM af_collab_snapshot 
+       DELETE FROM af_collab_snapshot
        WHERE oid = $1 AND sid NOT IN ( SELECT sid FROM af_collab_snapshot WHERE oid = $1 ORDER BY created_at DESC LIMIT $2)
       "#,
     )
     .bind(oid)
     .bind(snapshot_limit)
-    .execute(tx.deref_mut())
+    .execute(transaction.deref_mut())
     .await?;
 
-  tx.commit()
+  transaction
+    .commit()
     .await
     .context("fail to commit the transaction to insert collab snapshot")?;
 
@@ -390,6 +383,7 @@ pub async fn select_snapshot(
   Ok(row)
 }
 
+/// Returns list of snapshots for given object_id in descending order of creation time.
 pub async fn get_all_collab_snapshot_meta(
   pg_pool: &PgPool,
   object_id: &str,
@@ -398,7 +392,7 @@ pub async fn get_all_collab_snapshot_meta(
     AFSnapshotMeta,
     r#"
     SELECT sid as "snapshot_id", oid as "object_id", created_at
-    FROM af_collab_snapshot 
+    FROM af_collab_snapshot
     WHERE oid = $1 AND deleted_at IS NULL
     ORDER BY created_at DESC;
     "#,
@@ -465,20 +459,24 @@ pub async fn insert_collab_member(
   Ok(())
 }
 
-pub async fn delete_collab_member(uid: i64, oid: &str, pg_pool: &PgPool) -> Result<(), AppError> {
+pub async fn delete_collab_member(
+  uid: i64,
+  oid: &str,
+  txn: &mut Transaction<'_, sqlx::Postgres>,
+) -> Result<(), AppError> {
   sqlx::query("DELETE FROM af_collab_member WHERE uid = $1 AND oid = $2")
     .bind(uid)
     .bind(oid)
-    .execute(pg_pool)
+    .execute(txn.deref_mut())
     .await?;
   Ok(())
 }
 
 pub fn select_collab_member_access_level(
   pg_pool: &PgPool,
-) -> BoxStream<'_, sqlx::Result<AFCollabMemerAccessLevelRow>> {
+) -> BoxStream<'_, sqlx::Result<AFCollabMemberAccessLevelRow>> {
   sqlx::query_as!(
-    AFCollabMemerAccessLevelRow,
+    AFCollabMemberAccessLevelRow,
     r#"
       SELECT
           uid, oid, access_level
@@ -497,10 +495,16 @@ pub async fn select_collab_members(
 ) -> Result<Vec<AFCollabMember>, AppError> {
   let members = sqlx::query(
     r#"
-      SELECT af_collab_member.uid, af_collab_member.oid, af_permissions.id, af_permissions.name, af_permissions.access_level, af_permissions.description
+      SELECT af_collab_member.uid, 
+             af_collab_member.oid, 
+             af_permissions.id, 
+             af_permissions.name, 
+             af_permissions.access_level, 
+             af_permissions.description
       FROM af_collab_member
       JOIN af_permissions ON af_collab_member.permission_id = af_permissions.id
       WHERE af_collab_member.oid = $1
+      ORDER BY af_collab_member.created_at ASC
       "#,
   )
   .bind(oid)
@@ -512,10 +516,10 @@ pub async fn select_collab_members(
 }
 
 #[inline]
-pub async fn select_collab_member(
+pub async fn select_collab_member<'a, E: Executor<'a, Database = Postgres>>(
   uid: &i64,
   oid: &str,
-  pg_pool: &PgPool,
+  executor: E,
 ) -> Result<AFCollabMember, AppError> {
   let row = sqlx::query(
   r#"
@@ -527,7 +531,7 @@ pub async fn select_collab_member(
   )
   .bind(uid)
   .bind(oid)
-  .fetch_one(pg_pool)
+  .fetch_one(executor)
   .await?;
 
   let member = collab_member_try_from_row(row)?;

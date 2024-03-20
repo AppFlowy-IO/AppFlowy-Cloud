@@ -1,47 +1,50 @@
-use crate::api::metrics::{metrics_registry, metrics_scope};
-use crate::biz::casbin::adapter::PgAdapter;
-use crate::biz::casbin::MODEL_CONF;
-use crate::component::auth::HEADER_TOKEN;
+use crate::api::metrics::metrics_scope;
+
+use crate::api::file_storage::file_storage_scope;
+use crate::api::user::user_scope;
+use crate::api::workspace::{collab_scope, workspace_scope};
+use crate::api::ws::ws_scope;
+use crate::biz::casbin::access_control::{enable_access_control, AccessControl};
+
+use crate::biz::casbin::RealtimeCollabAccessControlImpl;
+use crate::biz::collab::access_control::{
+  CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
+};
+use crate::biz::collab::cache::CollabCache;
+
+use crate::biz::casbin::pg_listen::{
+  spawn_listen_on_collab_member_change, spawn_listen_on_workspace_member_change,
+};
+use crate::biz::collab::storage::CollabStorageImpl;
+use crate::biz::pg_listener::PgListeners;
+use crate::biz::snapshot::SnapshotControl;
+use crate::biz::user::RealtimeUserImpl;
+use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
+use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
+use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
-use crate::state::{AppState, UserCache};
+use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
+use actix::Actor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
-
-use actix::Actor;
 use anyhow::{Context, Error};
+use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
+use realtime::server::{RTCommandReceiver, RTCommandSender, RealtimeServer};
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
-
 use tokio::sync::RwLock;
 use tracing::info;
-
-use crate::api::file_storage::file_storage_scope;
-use crate::api::user::user_scope;
-use crate::api::workspace::{collab_scope, workspace_scope};
-use crate::api::ws::ws_scope;
-use crate::biz::casbin::access_control::CasbinAccessControl;
-use crate::biz::collab::access_control::CollabHttpAccessControl;
-use crate::biz::collab::storage::init_collab_storage;
-use crate::biz::pg_listener::PgListeners;
-use crate::biz::user::RealtimeUserImpl;
-use crate::biz::workspace::access_control::WorkspaceHttpAccessControl;
-use crate::middleware::access_control_mw::WorkspaceAccessControl;
-
-use crate::middleware::metrics_mw::MetricsMiddleware;
-use casbin::CoreApi;
-use database::file::bucket_s3_impl::S3BucketStorage;
-use realtime::collaborate::CollabServer;
 
 pub struct Application {
   port: u16,
@@ -49,11 +52,15 @@ pub struct Application {
 }
 
 impl Application {
-  pub async fn build(config: Config, state: AppState) -> Result<Self, anyhow::Error> {
+  pub async fn build(
+    config: Config,
+    state: AppState,
+    rt_cmd_recv: RTCommandReceiver,
+  ) -> Result<Self, anyhow::Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config).await?;
+    let server = run(listener, state, config, rt_cmd_recv).await?;
 
     Ok(Self { port, server })
   }
@@ -71,6 +78,7 @@ pub async fn run(
   listener: TcpListener,
   state: AppState,
   config: Config,
+  rt_cmd_recv: RTCommandReceiver,
 ) -> Result<Server, anyhow::Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
@@ -87,26 +95,26 @@ pub async fn run(
     .map(|(_, server_key)| Key::from(server_key.expose_secret().as_bytes()))
     .unwrap_or_else(Key::generate);
 
-  let storage = state.collab_storage.clone();
-  let collab_server = CollabServer::<_, Arc<RealtimeUserImpl>, _>::new(
-    storage.clone(),
-    state.collab_access_control.clone(),
-  )
-  .unwrap()
-  .start();
-
-  let access_control = WorkspaceAccessControl::new()
-    .with_acs(WorkspaceHttpAccessControl(
+  let storage = state.collab_access_control_storage.clone();
+  let access_control = MiddlewareAccessControlTransform::new()
+    .with_acs(WorkspaceMiddlewareAccessControl::new(
+      state.pg_pool.clone(),
       state.workspace_access_control.clone().into(),
     ))
-    .with_acs(CollabHttpAccessControl(
+    .with_acs(CollabMiddlewareAccessControl::new(
       state.collab_access_control.clone().into(),
+      state.collab_cache.clone(),
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let (metrics, registry) = metrics_registry();
-  let registry_arc = Arc::new(registry);
-  let metrics_arc = Arc::new(metrics);
+  let realtime_server = RealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
+    storage.clone(),
+    RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
+    state.metrics.realtime_metrics.clone(),
+    rt_cmd_recv,
+  )
+  .unwrap()
+  .start();
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -115,12 +123,11 @@ pub async fn run(
       .wrap(IdentityMiddleware::default())
       .wrap(
         SessionMiddleware::builder(redis_store.clone(), key.clone())
-          .cookie_name(HEADER_TOKEN.to_string())
           .build(),
       )
       // .wrap(DecryptPayloadMiddleware)
-      .wrap(RequestIdMiddleware)
       .wrap(access_control.clone())
+      .wrap(RequestIdMiddleware)
       .app_data(web::JsonConfig::default().limit(5 * 1024 * 1024))
       .service(user_scope())
       .service(workspace_scope())
@@ -128,9 +135,11 @@ pub async fn run(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(metrics_scope())
-      .app_data(Data::new(metrics_arc.clone()))
-      .app_data(Data::new(registry_arc.clone()))
-      .app_data(Data::new(collab_server.clone()))
+      .app_data(Data::new(state.metrics.registry.clone()))
+      .app_data(Data::new(state.metrics.request_metrics.clone()))
+      .app_data(Data::new(state.metrics.realtime_metrics.clone()))
+      .app_data(Data::new(state.metrics.access_control_metrics.clone()))
+      .app_data(Data::new(realtime_server.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
   });
@@ -153,9 +162,13 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(config: &Config) -> Result<AppState, Error> {
+pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<AppState, Error> {
+  // Print the feature flags
+
+  let metrics = AppMetrics::new();
+
   // Postgres
-  info!("Preparng to run database migrations...");
+  info!("Preparing to run database migrations...");
   let pg_pool = get_connection_pool(&config.db_settings).await?;
   migrate(&pg_pool).await?;
 
@@ -167,11 +180,15 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   // Gotrue
   info!("Connecting to GoTrue...");
   let gotrue_client = get_gotrue_client(&config.gotrue).await?;
-  setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
+  let gotrue_admin = setup_admin_account(&gotrue_client, &pg_pool, &config.gotrue).await?;
 
   // Redis
   info!("Connecting to Redis...");
   let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
+
+  #[cfg(feature = "ai_enable")]
+  let appflowy_ai_client =
+    appflowy_ai::client::AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -179,44 +196,62 @@ pub async fn init_state(config: &Config) -> Result<AppState, Error> {
   let collab_member_listener = pg_listeners.subscribe_collab_member_change();
   let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
-  info!("Setting up access controls with Casbin...");
-  let access_control_model = casbin::DefaultModel::from_str(MODEL_CONF).await?;
-  let access_control_adapter = PgAdapter::new(pg_pool.clone());
-  let enforcer = casbin::Enforcer::new(access_control_model, access_control_adapter).await?;
-  let casbin_access_control = CasbinAccessControl::new(
+  info!(
+    "Setting up access controls, is_enable: {}",
+    enable_access_control()
+  );
+  let access_control =
+    AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
+
+  spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
+  spawn_listen_on_collab_member_change(
     pg_pool.clone(),
     collab_member_listener,
-    workspace_member_listener,
-    enforcer,
+    access_control.clone(),
   );
 
-  let collab_access_control = casbin_access_control.new_collab_access_control();
-  let workspace_access_control = casbin_access_control.new_workspace_access_control();
+  let user_cache = UserCache::new(pg_pool.clone()).await;
+  let collab_access_control = access_control.new_collab_access_control();
+  let workspace_access_control = access_control.new_workspace_access_control();
+  let collab_cache = CollabCache::new(redis_client.clone(), pg_pool.clone());
 
-  let collab_storage = Arc::new(
-    init_collab_storage(
-      pg_pool.clone(),
-      collab_access_control.clone(),
-      workspace_access_control.clone(),
-    )
-    .await,
-  );
-  let users = UserCache::new(pg_pool.clone());
+  let collab_storage_access_control = CollabStorageAccessControlImpl {
+    collab_access_control: collab_access_control.clone().into(),
+    workspace_access_control: workspace_access_control.clone().into(),
+    cache: collab_cache.clone(),
+  };
+  let snapshot_control = SnapshotControl::new(
+    redis_client.clone(),
+    pg_pool.clone(),
+    metrics.collab_metrics.clone(),
+  )
+  .await;
+  let collab_storage = Arc::new(CollabStorageImpl::new(
+    collab_cache.clone(),
+    collab_storage_access_control,
+    snapshot_control,
+    rt_cmd_tx,
+  ));
 
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
     config: Arc::new(config.clone()),
-    users: Arc::new(users),
+    user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
     redis_client,
-    collab_storage,
+    collab_cache,
+    collab_access_control_storage: collab_storage,
     collab_access_control,
     workspace_access_control,
     bucket_storage,
     pg_listeners,
-    casbin_access_control,
+    access_control,
+    metrics,
+    gotrue_admin,
+    #[cfg(feature = "ai_enable")]
+    appflowy_ai_client,
   })
 }
 
@@ -224,17 +259,19 @@ async fn setup_admin_account(
   gotrue_client: &gotrue::api::Client,
   pg_pool: &PgPool,
   gotrue_setting: &GoTrueSetting,
-) -> Result<(), Error> {
+) -> Result<GoTrueAdmin, Error> {
   let admin_email = gotrue_setting.admin_email.as_str();
-  let password = gotrue_setting.admin_password.as_str();
-  let res_resp = gotrue_client.sign_up(admin_email, password).await;
+  let password = gotrue_setting.admin_password.expose_secret();
+  let gotrue_admin = GoTrueAdmin::new(admin_email.to_owned(), password.to_owned());
+
+  let res_resp = gotrue_client.sign_up(admin_email, password, None).await;
   match res_resp {
     Err(err) => {
       if let app_error::gotrue::GoTrueError::Internal(err) = err {
         match (err.code, err.msg.as_str()) {
           (400, "User already registered") => {
             info!("Admin user already registered");
-            Ok(())
+            Ok(gotrue_admin)
           },
           _ => Err(err.into()),
         }
@@ -252,7 +289,7 @@ async fn setup_admin_account(
       match admin_user.role.as_str() {
         "supabase_admin" => {
           info!("Admin user already created and set role to supabase_admin");
-          Ok(())
+          Ok(gotrue_admin)
         },
         _ => {
           let user_id = admin_user.id.parse::<uuid::Uuid>()?;
@@ -271,7 +308,7 @@ async fn setup_admin_account(
           assert_eq!(result.rows_affected(), 1);
           info!("Admin user created and set role to supabase_admin");
 
-          Ok(())
+          Ok(gotrue_admin)
         },
       }
     },
@@ -282,7 +319,7 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
   info!("Connecting to redis with uri: {}", redis_uri);
   let manager = redis::Client::open(redis_uri)
     .context("failed to connect to redis")?
-    .get_tokio_connection_manager()
+    .get_connection_manager()
     .await
     .context("failed to get the connection manager")?;
   Ok(manager)
@@ -337,6 +374,8 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
   PgPoolOptions::new()
     .max_connections(setting.max_connections)
     .acquire_timeout(Duration::from_secs(10))
+    .max_lifetime(Duration::from_secs(60 * 60))
+    .idle_timeout(Duration::from_secs(60))
     .connect_with(setting.with_db())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))
@@ -344,6 +383,7 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
 
 async fn migrate(pool: &PgPool) -> Result<(), Error> {
   sqlx::migrate!("./migrations")
+    .set_ignore_missing(true)
     .run(pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to run migrations: {}", e))

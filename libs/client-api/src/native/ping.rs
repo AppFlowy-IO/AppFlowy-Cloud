@@ -1,11 +1,11 @@
-use crate::platform_spawn;
+use crate::af_spawn;
 use crate::ws::{ConnectState, ConnectStateNotify};
+use client_websocket::Message;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::Mutex;
-use websocket::Message;
 
 pub(crate) struct ServerFixIntervalPing {
   duration: Duration,
@@ -52,13 +52,17 @@ impl ServerFixIntervalPing {
     let weak_ping_count = Arc::downgrade(&self.ping_count);
     let weak_state = Arc::downgrade(&self.state);
     let reconnect_per_ping = self.maximum_ping_count;
-    platform_spawn(async move {
+    af_spawn(async move {
       loop {
         tokio::select! {
           _ = interval.tick() => {
             // send ping to server
-            if let Err(err) = ping_sender.send(Message::Ping(vec![])) {
-              tracing::error!("ping send error: {}", err);
+            // when the ping_sender return error which means the ping_receiver was dropped
+            if  ping_sender.send(Message::Ping(vec![])).is_err() {
+               if let Some(state) =weak_state.upgrade() {
+                 state.lock().set_state(ConnectState::PingTimeout);
+               }
+              break;
             }
             if let Some(ping_count) = weak_ping_count.upgrade() {
               let mut lock = ping_count.lock().await;

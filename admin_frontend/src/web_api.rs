@@ -1,4 +1,5 @@
 use crate::error::WebApiError;
+use crate::ext::api::{accept_workspace_invitation, invite_user_to_workspace, verify_token_cloud};
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
   WebApiInviteUserRequest, WebApiPutUserRequest,
@@ -19,11 +20,12 @@ use gotrue::params::{
   MagicLinkParams,
 };
 use gotrue_entity::dto::{GotrueTokenResponse, SignUpResponse, UpdateGotrueUserParams, User};
-use gotrue_entity::error::GoTrueError;
+use tracing::info;
 
 pub fn router() -> Router<AppState> {
   Router::new()
-    .route("/login", post(login_handler))
+    .route("/signin", post(sign_in_handler))
+    .route("/signup", post(sign_up_handler))
     .route("/login_refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
 
@@ -31,6 +33,8 @@ pub fn router() -> Router<AppState> {
     .route("/change_password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
     .route("/invite", post(invite_handler))
+    .route("/workspace/:workspace_id/invite", post(workspace_invite_handler))
+    .route("/invite/:invite_id/accept", post(invite_accept_handler))
     .route("/open_app", post(open_app_handler))
 
     // admin
@@ -112,20 +116,53 @@ pub async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiE
 // to the target user
 pub async fn invite_handler(
   State(state): State<AppState>,
-  session: UserSession,
   Form(param): Form<WebApiInviteUserRequest>,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
   state
     .gotrue_client
     .magic_link(
-      &session.token.access_token,
       &MagicLinkParams {
         email: param.email,
         ..Default::default()
       },
+      Some("/".to_owned()),
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
+}
+
+pub async fn workspace_invite_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(workspace_id): Path<String>,
+  Form(param): Form<WebApiInviteUserRequest>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  invite_user_to_workspace(
+    &session.token.access_token,
+    &workspace_id,
+    &param.email,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
+  Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
+}
+
+pub async fn invite_accept_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(invite_id): Path<String>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  accept_workspace_invitation(
+    &session.token.access_token,
+    &invite_id,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
+  Ok(WebApiResponse::<()>::from_str(
+    "Invitation accepted.\nPlease refresh page to see changes".into(),
+  ))
 }
 
 pub async fn change_password_handler(
@@ -253,6 +290,16 @@ pub async fn login_refresh_handler(
     ))
     .await?;
 
+  // Do another round of refresh_token to consume and invalidate the old one
+  let token = state
+    .gotrue_client
+    .token(&gotrue::grant::Grant::RefreshToken(
+      gotrue::grant::RefreshTokenGrant {
+        refresh_token: token.refresh_token,
+      },
+    ))
+    .await?;
+
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
@@ -265,13 +312,18 @@ pub async fn login_refresh_handler(
 
 // login and set the cookie
 // sign up if not exist
-pub async fn login_handler(
+pub async fn sign_in_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  if param.password.is_empty() {
+    let res = send_magic_link(State(state), &param.email).await?;
+    return Ok((CookieJar::new(), HeaderMap::new(), res));
+  }
+
   // Attempt to sign in with email and password
-  let token_res = state
+  let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::Password(
       gotrue::grant::PasswordGrant {
@@ -279,48 +331,36 @@ pub async fn login_handler(
         password: param.password.to_owned(),
       },
     ))
-    .await;
+    .await?;
 
-  match token_res {
-    Ok(token) => session_login(State(state), token, jar).await, // login success
-    Err(err) => match &err {
-      GoTrueError::ClientError(client_err) => {
-        match (
-          client_err.error.as_str(),
-          client_err.error_description.as_deref(),
-        ) {
-          // Email not exist or wrong password
-          ("invalid_grant", Some("Invalid login credentials")) => {
-            let sign_up_res = state
-              .gotrue_client
-              .sign_up_with_referrer(&param.email, &param.password, Some("/"))
-              .await;
+  session_login(State(state), token, jar).await
+}
 
-            match sign_up_res {
-              Ok(resp) => match resp {
-                // when GOTRUE_MAILER_AUTOCONFIRM=true, auto sign in
-                SignUpResponse::Authenticated(token) => {
-                  session_login(State(state), token, jar).await
-                },
-                SignUpResponse::NotAuthenticated(user) => match user.identities {
-                  Some(_identities) => {
-                    // new user, awaiting email verification
-                    Ok((
-                      jar,
-                      HeaderMap::new(),
-                      WebApiResponse::<()>::from_str("Email Verification Sent".into()),
-                    ))
-                  },
-                  None => Err(err.into()), // user exists but sign in password not correct
-                },
-              },
-              Err(err) => Err(err.into()),
-            }
-          },
-          _ => Err(err.into()),
-        }
-      },
-      _ => Err(err.into()),
+pub async fn sign_up_handler(
+  State(state): State<AppState>,
+  jar: CookieJar,
+  Form(param): Form<WebApiLoginRequest>,
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  if param.password.is_empty() {
+    let res = send_magic_link(State(state), &param.email).await?;
+    return Ok((CookieJar::new(), HeaderMap::new(), res));
+  }
+
+  let sign_up_res = state
+    .gotrue_client
+    .sign_up(&param.email, &param.password, Some("/"))
+    .await?;
+
+  match sign_up_res {
+    // when GOTRUE_MAILER_AUTOCONFIRM=true, auto sign in
+    SignUpResponse::Authenticated(token) => session_login(State(state), token, jar).await,
+    SignUpResponse::NotAuthenticated(user) => {
+      info!("user signed up and not authenticated: {:?}", user);
+      Ok((
+        jar,
+        HeaderMap::new(),
+        WebApiResponse::<()>::from_str("Email Verification Sent".into()),
+      ))
     },
   }
 }
@@ -339,7 +379,7 @@ pub async fn logout_handler(
 
   state.session_store.del_user_session(session_id).await?;
   Ok((
-    jar.remove(Cookie::named("session_id")),
+    jar.remove(Cookie::from("session_id")),
     htmx_redirect("/web/login"),
   ))
 }
@@ -361,6 +401,12 @@ async fn session_login(
   token: GotrueTokenResponse,
   jar: CookieJar,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  verify_token_cloud(
+    token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
@@ -370,6 +416,23 @@ async fn session_login(
     htmx_redirect("/web/home"),
     ().into(),
   ))
+}
+
+async fn send_magic_link(
+  State(state): State<AppState>,
+  email: &str,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  state
+    .gotrue_client
+    .magic_link(
+      &MagicLinkParams {
+        email: email.to_owned(),
+        ..Default::default()
+      },
+      Some("/".to_owned()),
+    )
+    .await?;
+  Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))
 }
 
 fn get_base_url(header_map: &HeaderMap) -> String {

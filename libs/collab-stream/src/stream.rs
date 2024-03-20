@@ -1,8 +1,8 @@
 use crate::error::StreamError;
-use crate::model::{CreatedTime, Message, MessageRead, MessageReadById};
+use crate::model::{CreatedTime, Message, MessageRead, MessageReadByStreamKey};
 use redis::aio::ConnectionManager;
-use redis::{AsyncCommands, RedisError};
-use std::borrow::Cow;
+use redis::streams::{StreamMaxlen, StreamReadOptions};
+use redis::{pipe, AsyncCommands, RedisError};
 
 pub struct CollabStream {
   connection_manager: ConnectionManager,
@@ -18,52 +18,82 @@ impl CollabStream {
     }
   }
 
-  pub async fn read_all_message(&mut self) -> Result<Vec<MessageRead>, RedisError> {
-    self.connection_manager.xrange_all(&self.stream_key).await
-  }
-
-  pub async fn insert_message(&mut self, message: Message) -> Result<CreatedTime, RedisError> {
+  /// Inserts a single message into the Redis stream.
+  pub async fn insert_message(&mut self, message: Message) -> Result<CreatedTime, StreamError> {
     let tuple = message.into_tuple_array();
-    self
+    let created_time = self
       .connection_manager
       .xadd(&self.stream_key, "*", tuple.as_slice())
-      .await
+      .await?;
+    Ok(created_time)
   }
 
-  // returns the first instance of update after CreatedTime
-  // if there is none, it blocks until there is one
-  // if after is not specified, it returns the newest update
-  pub async fn wait_one_update<'after>(
+  /// Inserts multiple messages into the Redis stream using a pipeline.
+  ///
+  pub async fn insert_messages(&mut self, messages: Vec<Message>) -> Result<(), StreamError> {
+    let mut pipe = pipe();
+    for message in messages {
+      let tuple = message.into_tuple_array();
+      pipe.xadd(&self.stream_key, "*", tuple.as_slice());
+    }
+    pipe.query_async(&mut self.connection_manager).await?;
+    Ok(())
+  }
+
+  /// Fetches the next message from a Redis stream after a specified entry.
+  ///
+  pub async fn next(&mut self) -> Result<Option<Message>, StreamError> {
+    let options = StreamReadOptions::default().count(1).block(100);
+    let map: MessageReadByStreamKey = self
+      .connection_manager
+      .xread_options(&[&self.stream_key], &["$"], &options)
+      .await?;
+
+    let (_, mut messages) = map
+      .0
+      .into_iter()
+      .next()
+      .ok_or_else(|| StreamError::UnexpectedValue("Empty stream".into()))?;
+
+    debug_assert_eq!(messages.len(), 1);
+    Ok(messages.pop().map(Into::into))
+  }
+
+  pub async fn next_after(
     &mut self,
     after: Option<CreatedTime>,
-  ) -> Result<Vec<Message>, StreamError> {
-    static NEWEST_ID: &str = "$";
-    let keys = &self.stream_key;
-    let id: Cow<'after, str> = match after {
-      Some(created_time) => Cow::Owned(format!(
-        "{}-{}",
-        created_time.timestamp_ms, created_time.sequence_number
-      )),
-      None => Cow::Borrowed(NEWEST_ID),
-    };
-    let options = redis::streams::StreamReadOptions::default().block(0);
-    let mut message_by_id: MessageReadById = self
+  ) -> Result<Option<Message>, StreamError> {
+    let id = after
+      .map(|ct| format!("{}-{}", ct.timestamp_ms, ct.sequence_number))
+      .unwrap_or_else(|| "$".to_string());
+
+    let options = StreamReadOptions::default().block(100);
+    let map: MessageReadByStreamKey = self
       .connection_manager
-      .xread_options(&[keys.as_str()], &[id.as_ref()], &options)
+      .xread_options(&[&self.stream_key], &[&id], &options)
       .await?;
-    let popped = message_by_id
+
+    let (_, mut messages) = map
       .0
-      .pop_first()
-      .ok_or(StreamError::UnexpectedValue(format!("{:?}", message_by_id)))?;
-    Ok(
-      popped
-        .1
-        .into_iter()
-        .map(|m| Message {
-          uid: m.uid,
-          raw_data: m.raw_data,
-        })
-        .collect(),
-    )
+      .into_iter()
+      .next()
+      .ok_or_else(|| StreamError::UnexpectedValue("Empty stream".into()))?;
+
+    debug_assert_eq!(messages.len(), 1);
+    Ok(messages.pop().map(Into::into))
+  }
+
+  pub async fn read_all_message(&mut self) -> Result<Vec<Message>, StreamError> {
+    let read_messages: Vec<MessageRead> =
+      self.connection_manager.xrange_all(&self.stream_key).await?;
+    Ok(read_messages.into_iter().map(Into::into).collect())
+  }
+
+  pub async fn clear(&mut self) -> Result<(), RedisError> {
+    self
+      .connection_manager
+      .xtrim(&self.stream_key, StreamMaxlen::Equals(0))
+      .await?;
+    Ok(())
   }
 }

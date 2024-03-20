@@ -1,13 +1,12 @@
 use crate::client::{localhost_client, LOCALHOST_GOTRUE};
 use crate::log::setup_log;
 use client_api::Client;
-use dotenv::dotenv;
 use lazy_static::lazy_static;
 use uuid::Uuid;
 
 lazy_static! {
   pub static ref ADMIN_USER: User = {
-    dotenv().ok();
+    dotenvy::dotenv().ok();
     User {
       email: std::env::var("GOTRUE_ADMIN_EMAIL").unwrap_or("admin@example.com".to_string()),
       password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap_or("password".to_string()),
@@ -75,6 +74,30 @@ pub async fn generate_sign_in_action_link(email: &str) -> String {
     .generate_sign_in_action_link(email)
     .await
     .unwrap()
+}
+
+// same as generate_unique_registered_user_client
+// but with specific email
+pub async fn api_client_with_email(user_email: &str) -> client_api::Client {
+  let new_user_sign_in_link = {
+    let admin_client = admin_user_client().await;
+    admin_client
+      .generate_sign_in_action_link(user_email)
+      .await
+      .unwrap()
+  };
+
+  let client = localhost_client();
+  let appflowy_sign_in_url = client
+    .extract_sign_in_url(&new_user_sign_in_link)
+    .await
+    .unwrap();
+  client
+    .sign_in_with_url(&appflowy_sign_in_url)
+    .await
+    .unwrap();
+
+  client
 }
 
 pub fn localhost_gotrue_client() -> gotrue::api::Client {

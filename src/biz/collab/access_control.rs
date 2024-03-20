@@ -1,255 +1,102 @@
-use crate::biz::collab::member_listener::{CollabMemberAction, CollabMemberNotification};
+use crate::api::workspace::COLLAB_PATTERN;
+use crate::biz::casbin::access_control::Action;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
-use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
-use actix_router::{Path, Url};
+use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
+use actix_router::{Path, ResourceDef, Url};
 use actix_web::http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
 use database::collab::CollabStorageAccessControl;
-
 use database_entity::dto::{AFAccessLevel, AFRole};
-use realtime::collaborate::CollabAccessControl;
-use sqlx::PgPool;
-use std::collections::hash_map::Entry;
+
+use crate::biz::collab::cache::CollabCache;
+
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
-use tracing::{instrument, warn};
-
-/// Represents the access level of a collaboration object identified by its OID.
-/// - Key: OID of the collaboration object.
-/// - Value: The user's role within the collaboration.
-///
-type CollabMemberStatusByOid = HashMap<String, MemberStatus>;
-
-/// Represents the access levels of various collaboration objects for a user.
-/// - Key: User's UID.
-/// - Value: A mapping between the collaboration object's OID and the user's access level within that collaboration.
-///
-///  uid -> oid -> access level of the user in the collab
-///
-type MemberStatusByUid = HashMap<i64, CollabMemberStatusByOid>;
-
-/// Used to cache the access level of a user for collaboration objects.
-/// The cache will be updated after the user's access level for a collaboration object is changed.
-/// The change is broadcasted by the `CollabMemberListener` or set by the [CollabAccessControlImpl::update_member] method.
-///
-/// TODO(nathan): broadcast the member access level changes to all connected devices
-///
-pub struct CollabAccessControlImpl {
-  pg_pool: PgPool,
-  member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
-}
-
-#[derive(Clone, Debug)]
-enum MemberStatus {
-  /// Mark the user is not the member of the collab.
-  /// it don't need to query the database to get the access level of the user in the collab
-  /// when the user is not the member of the collab
-  Deleted,
-  /// The user is the member of the collab
-  Valid(AFAccessLevel),
-}
-
-impl CollabAccessControlImpl {
-  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<CollabMemberNotification>) -> Self {
-    let member_status_by_uid = Arc::new(RwLock::new(HashMap::new()));
-
-    // Listen to the changes of the collab member and update the memory cache
-    spawn_listen_on_collab_member_change(listener, pg_pool.clone(), member_status_by_uid.clone());
-    Self {
-      pg_pool,
-      member_status_by_uid,
-    }
-  }
-
-  /// The member's access level may be altered by PostgreSQL notifications. However, there are instances
-  /// where these notifications aren't received promptly, leading to potential inconsistencies in the user's access level.
-  /// Therefore, it's essential to update the user's access level in the cache whenever there's a change.
-  pub async fn update_member(&self, uid: &i64, oid: &str, access_level: AFAccessLevel) {
-    cache_collab_member_status(uid, oid, access_level, &self.member_status_by_uid).await;
-  }
-
-  pub async fn remove_member(&self, uid: &i64, oid: &str) {
-    if let Some(inner_map) = self.member_status_by_uid.write().await.get_mut(uid) {
-      if let Entry::Occupied(mut entry) = inner_map.entry(oid.to_string()) {
-        entry.insert(MemberStatus::Deleted);
-      }
-    }
-  }
-
-  #[instrument(level = "debug", skip(self))]
-  async fn get_user_collab_access_level(
-    &self,
-    uid: &i64,
-    oid: &str,
-  ) -> Result<AFAccessLevel, AppError> {
-    let member_status = self
-      .member_status_by_uid
-      .read()
-      .await
-      .get(uid)
-      .and_then(|map| map.get(oid).cloned());
-
-    let member_status = match member_status {
-      None => {
-        reload_collab_member_status_from_db(uid, oid, &self.pg_pool, &self.member_status_by_uid)
-          .await?
-      },
-      Some(status) => status,
-    };
-
-    match member_status {
-      MemberStatus::Deleted => Err(AppError::NotEnoughPermissions(format!(
-        "user:{} is not a member of collab:{}",
-        uid, oid
-      ))),
-      MemberStatus::Valid(access_level) => Ok(access_level),
-    }
-  }
-}
-
-fn spawn_listen_on_collab_member_change(
-  mut listener: broadcast::Receiver<CollabMemberNotification>,
-  pg_pool: PgPool,
-  member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
-) {
-  tokio::spawn(async move {
-    while let Ok(change) = listener.recv().await {
-      match change.action_type {
-        CollabMemberAction::INSERT | CollabMemberAction::UPDATE => {
-          if let (Some(oid), Some(uid)) = (change.new_oid(), change.new_uid()) {
-            if let Err(err) =
-              reload_collab_member_status_from_db(uid, oid, &pg_pool, &member_status_by_uid).await
-            {
-              warn!(
-                "Failed to reload the collab member status from db: {:?}, error: {}",
-                change, err
-              );
-            }
-          } else {
-            warn!("The oid or uid is None")
-          }
-        },
-        CollabMemberAction::DELETE => {
-          if let (Some(oid), Some(uid)) = (change.old_oid(), change.old_uid()) {
-            if let Some(inner_map) = member_status_by_uid.write().await.get_mut(uid) {
-              inner_map.insert(oid.to_string(), MemberStatus::Deleted);
-            }
-          } else {
-            warn!("The oid or uid is None")
-          }
-        },
-      }
-    }
-  });
-}
-
-#[inline]
-async fn cache_collab_member_status(
-  uid: &i64,
-  oid: &str,
-  access_level: AFAccessLevel,
-  member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
-) {
-  let mut outer_map = member_status_by_uid.write().await;
-  let inner_map = outer_map.entry(*uid).or_insert_with(HashMap::new);
-  inner_map.insert(oid.to_string(), MemberStatus::Valid(access_level));
-}
-
-#[instrument(level = "debug", skip(pg_pool, member_status_by_uid))]
-async fn reload_collab_member_status_from_db(
-  uid: &i64,
-  oid: &str,
-  pg_pool: &PgPool,
-  member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
-) -> Result<MemberStatus, AppError> {
-  let member = database::collab::select_collab_member(uid, oid, pg_pool).await?;
-  let status = MemberStatus::Valid(member.permission.access_level);
-  cache_collab_member_status(
-    uid,
-    oid,
-    member.permission.access_level,
-    member_status_by_uid,
-  )
-  .await;
-  Ok(status)
-}
+use tracing::{instrument, trace};
 
 #[async_trait]
-impl CollabAccessControl for CollabAccessControlImpl {
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    self.get_user_collab_access_level(uid, oid).await
-  }
+pub trait CollabAccessControl: Sync + Send + 'static {
+  async fn enforce_action(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+    action: Action,
+  ) -> Result<bool, AppError>;
 
-  async fn cache_collab_access_level(
+  async fn enforce_access_level(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+    access_level: AFAccessLevel,
+  ) -> Result<bool, AppError>;
+
+  /// Return the access level of the user in the collab
+  async fn update_access_level_policy(
     &self,
     uid: &i64,
     oid: &str,
     level: AFAccessLevel,
-  ) -> Result<(), AppError> {
-    self.update_member(uid, oid, level).await;
-    Ok(())
-  }
+  ) -> Result<(), AppError>;
 
-  #[instrument(level = "debug", skip_all, err)]
-  async fn can_access_http_method(
-    &self,
-    uid: &i64,
-    oid: &str,
-    method: &Method,
-  ) -> Result<bool, AppError> {
-    match self.get_collab_access_level(uid, oid).await {
-      Ok(level) => {
-        if Method::POST == method || Method::PUT == method || Method::DELETE == method {
-          Ok(level.can_write())
-        } else {
-          Ok(true)
-        }
-      },
-      Err(err) => {
-        if err.is_record_not_found() {
-          Ok(true)
-        } else {
-          Err(err)
-        }
-      },
+  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
+}
+#[derive(Clone)]
+pub struct CollabMiddlewareAccessControl<AC: CollabAccessControl> {
+  pub access_control: Arc<AC>,
+  collab_cache: CollabCache,
+  skip_resources: Vec<(Method, ResourceDef)>,
+  require_access_levels: Vec<(ResourceDef, HashMap<Method, AFAccessLevel>)>,
+}
+
+impl<AC> CollabMiddlewareAccessControl<AC>
+where
+  AC: CollabAccessControl,
+{
+  pub fn new(access_control: Arc<AC>, collab_cache: CollabCache) -> Self {
+    Self {
+      skip_resources: vec![
+        // Skip access control when trying to create a collab
+        (Method::POST, ResourceDef::new(COLLAB_PATTERN)),
+      ],
+      require_access_levels: vec![(
+        ResourceDef::new(COLLAB_PATTERN),
+        [
+          // Only the user with FullAccess can delete the collab
+          (Method::DELETE, AFAccessLevel::FullAccess),
+        ]
+        .into(),
+      )],
+      access_control,
+      collab_cache,
     }
   }
 
-  #[inline]
-  #[instrument(level = "debug", skip_all, err)]
-  async fn can_send_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    let result = self.get_collab_access_level(uid, oid).await;
+  fn should_skip(&self, method: &Method, path: &Path<Url>) -> bool {
+    self.skip_resources.iter().any(|(m, r)| {
+      if m != method {
+        return false;
+      }
 
-    match result {
-      Ok(level) => match level {
-        AFAccessLevel::ReadOnly | AFAccessLevel::ReadAndComment => Ok(false),
-        AFAccessLevel::ReadAndWrite | AFAccessLevel::FullAccess => Ok(true),
-      },
-      Err(err) => {
-        // // If the collab object with given oid is not found which means the collab object is created
-        // // by the user. So the user is allowed to send the message
-        // if err.is_record_not_found() {
-        //   return Ok(true);
-        // }
-        return Err(err);
-      },
-    }
+      r.is_match(path.as_str())
+    })
   }
 
-  #[inline]
-  #[instrument(level = "debug", skip_all, err)]
-  async fn can_receive_collab_update(&self, uid: &i64, oid: &str) -> Result<bool, AppError> {
-    Ok(self.get_collab_access_level(uid, oid).await.is_ok())
+  fn require_access_level(&self, method: &Method, path: &Path<Url>) -> Option<AFAccessLevel> {
+    self.require_access_levels.iter().find_map(|(r, roles)| {
+      if r.is_match(path.as_str()) {
+        roles.get(method).cloned()
+      } else {
+        None
+      }
+    })
   }
 }
 
-#[derive(Clone)]
-pub struct CollabHttpAccessControl<AC: CollabAccessControl>(pub Arc<AC>);
-
 #[async_trait]
-impl<AC> HttpAccessControlService for CollabHttpAccessControl<AC>
+impl<AC> MiddlewareAccessControl for CollabMiddlewareAccessControl<AC>
 where
   AC: CollabAccessControl,
 {
@@ -257,23 +104,56 @@ where
     AccessResource::Collab
   }
 
-  #[instrument(level = "debug", skip_all, err)]
-  async fn check_collab_permission(
+  #[instrument(name = "check_collab_permission", level = "trace", skip_all)]
+  async fn check_resource_permission(
     &self,
-    oid: &str,
+    workspace_id: &str,
     uid: &i64,
+    oid: &str,
     method: Method,
-    _path: &Path<Url>,
+    path: &Path<Url>,
   ) -> Result<(), AppError> {
-    let can_access = self.0.can_access_http_method(uid, oid, &method).await?;
-
-    if !can_access {
-      return Err(AppError::NotEnoughPermissions(format!(
-        "Not enough permissions to access the collab: {} with http method: {}",
-        oid, method
+    if self.should_skip(&method, path) {
+      trace!("Skip access control for the request");
+      return Ok(());
+    }
+    let collab_exists = self.collab_cache.is_exist(oid).await?;
+    if !collab_exists {
+      return Err(AppError::RecordNotFound(format!(
+        "Collab not exist in db. {}",
+        oid
       )));
     }
-    Ok(())
+
+    let access_level = self.require_access_level(&method, path);
+    let result = match access_level {
+      None => {
+        self
+          .access_control
+          .enforce_action(workspace_id, uid, oid, Action::from(&method))
+          .await?
+      },
+      Some(access_level) => {
+        self
+          .access_control
+          .enforce_access_level(workspace_id, uid, oid, access_level)
+          .await?
+      },
+    };
+
+    if result {
+      Ok(())
+    } else {
+      Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!(
+          "access collab:{} with url:{}, method:{}",
+          oid,
+          path.as_str(),
+          method
+        ),
+      })
+    }
   }
 }
 
@@ -281,6 +161,7 @@ where
 pub struct CollabStorageAccessControlImpl<CollabAC, WorkspaceAC> {
   pub(crate) collab_access_control: Arc<CollabAC>,
   pub(crate) workspace_access_control: Arc<WorkspaceAC>,
+  pub(crate) cache: CollabCache,
 }
 
 #[async_trait]
@@ -290,14 +171,7 @@ where
   CollabAC: CollabAccessControl,
   WorkspaceAC: WorkspaceAccessControl,
 {
-  async fn get_collab_access_level(&self, uid: &i64, oid: &str) -> Result<AFAccessLevel, AppError> {
-    self
-      .collab_access_control
-      .get_collab_access_level(uid, oid)
-      .await
-  }
-
-  async fn cache_collab_access_level(
+  async fn update_policy(
     &self,
     uid: &i64,
     oid: &str,
@@ -305,18 +179,64 @@ where
   ) -> Result<(), AppError> {
     self
       .collab_access_control
-      .cache_collab_access_level(uid, oid, level)
+      .update_access_level_policy(uid, oid, level)
       .await
   }
 
-  async fn get_user_workspace_role(
+  async fn enforce_read_collab(
     &self,
-    uid: &i64,
     workspace_id: &str,
-  ) -> Result<AFRole, AppError> {
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    let collab_exists = self.cache.is_exist(oid).await?;
+    if !collab_exists {
+      return Err(AppError::RecordNotFound(format!(
+        "Collab not exist in db. {}",
+        oid
+      )));
+    }
+    self
+      .collab_access_control
+      .enforce_action(workspace_id, uid, oid, Action::Read)
+      .await
+  }
+
+  async fn enforce_write_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    let collab_exists = self.cache.is_exist(oid).await?;
+    if !collab_exists {
+      return Err(AppError::RecordNotFound(format!(
+        "Collab not exist in db. {}",
+        oid
+      )));
+    }
+    self
+      .collab_access_control
+      .enforce_action(workspace_id, uid, oid, Action::Write)
+      .await
+  }
+
+  async fn enforce_delete(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    self
+      .collab_access_control
+      .enforce_access_level(workspace_id, uid, oid, AFAccessLevel::FullAccess)
+      .await
+  }
+
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
     self
       .workspace_access_control
-      .get_role_from_uid(uid, &workspace_id.parse()?)
+      .enforce_role(uid, workspace_id, AFRole::Owner)
       .await
   }
 }

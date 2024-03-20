@@ -14,6 +14,7 @@ pub struct Config {
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
   pub casbin: CasbinSetting,
+  pub appflowy_ai: AppFlowyAISetting,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -37,7 +38,12 @@ pub struct GoTrueSetting {
   pub ext_url: String, // public url
   pub jwt_secret: Secret<String>,
   pub admin_email: String,
-  pub admin_password: String,
+  pub admin_password: Secret<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct AppFlowyAISetting {
+  pub url: Secret<String>,
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our
@@ -94,7 +100,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_REQUIRE_SSL")?,
-      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20")
+      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "40")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
       database_name: get_env_var("APPFLOWY_DATABASE_NAME", "postgres"),
@@ -104,7 +110,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       ext_url: get_env_var("APPFLOWY_GOTRUE_EXT_URL", "http://localhost:9999"),
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
       admin_email: get_env_var("APPFLOWY_GOTRUE_ADMIN_EMAIL", "admin@example.com"),
-      admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password"),
+      admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password").into(),
     },
     application: ApplicationSetting {
       port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
@@ -116,7 +122,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     websocket: WebsocketSetting {
       heartbeat_interval: get_env_var("APPFLOWY_WEBSOCKET_HEARTBEAT_INTERVAL", "6").parse()?,
-      client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "30").parse()?,
+      client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "60").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
     s3: S3Setting {
@@ -131,6 +137,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     casbin: CasbinSetting {
       pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
+    },
+    appflowy_ai: AppFlowyAISetting {
+      url: get_env_var("APPFLOWY_AI_URL", "http://localhost:5001").into(),
     },
   };
   Ok(config)

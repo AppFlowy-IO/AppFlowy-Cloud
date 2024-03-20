@@ -355,7 +355,7 @@ async fn get_user_workspace_info_after_open_workspace() {
 }
 
 #[tokio::test]
-async fn leave_workspace_test() {
+async fn member_leave_workspace_test() {
   let c1 = TestClient::new_user().await;
   let workspace_id_c1 = c1.workspace_id().await;
 
@@ -369,4 +369,19 @@ async fn leave_workspace_test() {
 
   let members = c1.get_workspace_members(&workspace_id_c1).await;
   assert_eq!(members.len(), 1);
+}
+
+#[tokio::test]
+async fn owner_leave_workspace_test() {
+  let c1 = TestClient::new_user().await;
+  let workspace_id_c1 = c1.workspace_id().await;
+
+  let err = c1
+    .api_client
+    .leave_workspace(&workspace_id_c1)
+    .await
+    .unwrap_err();
+
+  // owner of workspace cannot leave the workspace
+  assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
 }

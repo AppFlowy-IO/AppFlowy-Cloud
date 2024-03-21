@@ -107,13 +107,14 @@
   </div>
 
   <script>
-    // OAuthLogin
+    // OAuthLogin (This is done because axum doesn't support fragment in the URL)
+    // https://github.com/tokio-rs/axum/discussions/2147
     if (window.location.hash) {
       // Extract data from the URL fragment
-      const fragmentData = window.location.hash.substring(1); // Remove the leading #
+      const fragmentData = window.location.hash.substring(1);   // Remove the leading #
       const fragmentParams = new URLSearchParams(fragmentData); // Parse the fragment data as a URLSearchParams object
       const refreshToken = fragmentParams.get("refresh_token"); // Extract the refresh_token
-      fetch(`/web-api/login_refresh/${refreshToken}`, {
+      fetch(`/web-api/login-refresh/${refreshToken}`, {
         // Login in via refresh_token
         method: "POST",
       }).then((response) => {
@@ -123,6 +124,9 @@
           window.location.href = "/web/home";
         }
       });
+
+      // Remove # from url, prevent access_token from being reused event though refresh token is already invalid
+      history.replaceState("", document.title, window.location.pathname + window.location.search);
     }
   </script>
   {% endblock %}

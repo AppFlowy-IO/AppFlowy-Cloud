@@ -29,12 +29,11 @@ pub struct RealtimeClient<
   U: Unpin + RealtimeUser,
   S: Unpin + 'static,
   AC: Unpin + RealtimeAccessControl,
-  CS: Unpin + RealtimeClientWebsocketSink,
 > {
   session_id: String,
   user: U,
   hb: Instant,
-  pub server: Addr<RealtimeServerActor<S, U, AC, CS>>,
+  pub server: Addr<RealtimeServerActor<S, U, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
@@ -44,17 +43,16 @@ pub struct RealtimeClient<
   client_version: Version,
 }
 
-impl<U, S, AC, CS> RealtimeClient<U, S, AC, CS>
+impl<U, S, AC> RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
   AC: RealtimeAccessControl + Unpin,
-  CS: RealtimeClientWebsocketSink + Unpin,
 {
   pub fn new(
     user: U,
     user_change_recv: tokio::sync::mpsc::Receiver<AFUserNotification>,
-    server: Addr<RealtimeServerActor<S, U, AC, CS>>,
+    server: Addr<RealtimeServerActor<S, U, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
     client_version: Version,
@@ -98,7 +96,7 @@ where
 
   async fn send_binary_to_server(
     user: U,
-    server: Addr<RealtimeServerActor<S, U, AC, CS>>,
+    server: Addr<RealtimeServerActor<S, U, AC>>,
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
     let message = tokio::task::spawn_blocking(move || {
@@ -144,12 +142,11 @@ where
   }
 }
 
-impl<U, S, P, CS> Actor for RealtimeClient<U, S, P, CS>
+impl<U, S, P> Actor for RealtimeClient<U, S, P>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
   P: RealtimeAccessControl + Unpin,
-  CS: RealtimeClientWebsocketSink + Unpin,
 {
   type Context = ws::WebsocketContext<Self>;
 
@@ -227,12 +224,11 @@ where
 }
 
 /// Handle message sent from the server
-impl<U, S, AC, CS> Handler<RealtimeMessage> for RealtimeClient<U, S, AC, CS>
+impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
   AC: RealtimeAccessControl + Unpin,
-  CS: RealtimeClientWebsocketSink + Unpin,
 {
   type Result = ();
 
@@ -258,13 +254,11 @@ where
 }
 
 /// Handle the messages sent from the client
-impl<U, S, AC, CS> StreamHandler<Result<ws::Message, ws::ProtocolError>>
-  for RealtimeClient<U, S, AC, CS>
+impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<U, S, AC>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
   AC: RealtimeAccessControl + Unpin,
-  CS: RealtimeClientWebsocketSink + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let now = Instant::now();

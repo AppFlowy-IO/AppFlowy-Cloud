@@ -19,15 +19,15 @@ pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) collab_message: &'a ClientCollabMessage,
 }
 
-pub(crate) struct SubscribeGroup<'a, S, U, AC, CS> {
+pub(crate) struct SubscribeGroup<'a, S, U, AC> {
   pub(crate) message: &'a CollabUserMessage<'a, U>,
   pub(crate) groups: &'a Arc<AllGroup<S, U, AC>>,
   pub(crate) edit_collab_by_user: &'a Arc<DashMap<U, HashSet<Editing>>>,
-  pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream<CS>>>,
+  pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream>>,
   pub(crate) access_control: &'a Arc<AC>,
 }
 
-impl<'a, S, U, AC, CS> SubscribeGroup<'a, S, U, AC, CS>
+impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
@@ -38,12 +38,11 @@ where
   }
 }
 
-impl<'a, S, U, AC, CS> SubscribeGroup<'a, S, U, AC, CS>
+impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
 where
   U: RealtimeUser,
   S: CollabStorage,
   AC: RealtimeAccessControl,
-  CS: RealtimeClientWebsocketSink,
 {
   pub(crate) async fn run(self) {
     let CollabUserMessage {

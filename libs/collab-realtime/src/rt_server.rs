@@ -1,8 +1,6 @@
-use crate::client::rt_client::RealtimeClientWebsocketSink;
 use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::command::{spawn_rt_command, RTCommandReceiver};
-use crate::entities::{Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
 use crate::util::channel_ext::UnboundedSenderSink;
 use crate::{spawn_metrics, RealtimeAccessControl, RealtimeMetrics};
@@ -17,6 +15,7 @@ use realtime_entity::user::{Editing, RealtimeUser, UserDevice};
 use std::collections::HashSet;
 use std::future::Future;
 
+use async_trait::async_trait;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -96,10 +95,12 @@ where
 
   pub(crate) fn handle_new_connection(
     &self,
-    new_conn: Connect<U>,
+    user: U,
+    session_id: String,
+    conn_sink: impl RealtimeClientWebsocketSink,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
-    let new_client_stream = CollabClientStream::new(new_conn.socket);
+    let new_client_stream = CollabClientStream::new(conn_sink);
     let groups = self.groups.clone();
     let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
@@ -107,10 +108,10 @@ where
     let user_by_session_id = self.session_id_by_user.clone();
 
     Box::pin(async move {
-      trace!("[realtime]: new connection => {} ", new_conn.user);
-      user_by_session_id.insert(new_conn.user.clone(), new_conn.session_id);
+      trace!("[realtime]: new connection => {} ", user);
+      user_by_session_id.insert(user.clone(), session_id);
 
-      let old_user = user_by_device.insert(UserDevice::from(&new_conn.user), new_conn.user.clone());
+      let old_user = user_by_device.insert(UserDevice::from(&user), user.clone());
       if let Some(old_user) = old_user {
         if let Some(value) = client_stream_by_user.remove(&old_user) {
           let old_stream = value.1;
@@ -127,7 +128,7 @@ where
         remove_user(&groups, &editing_collab_by_user, &old_user).await;
       }
 
-      client_stream_by_user.insert(new_conn.user, new_client_stream);
+      client_stream_by_user.insert(user, new_client_stream);
       Ok(())
     })
   }
@@ -144,7 +145,8 @@ where
   ///
   pub(crate) fn handle_disconnect(
     &self,
-    msg: Disconnect<U>,
+    user: U,
+    session_id: String,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
@@ -152,18 +154,18 @@ where
     let session_id_by_user = self.session_id_by_user.clone();
 
     Box::pin(async move {
-      trace!("[realtime]: disconnect => {}", msg.user);
+      trace!("[realtime]: disconnect => {}", user);
       // If the user has reconnected with a new session, the session id will be different.
       // So do not remove the user from groups and client streams
-      if let Some(entry) = session_id_by_user.get(&msg.user) {
-        if entry.value() != &msg.session_id {
+      if let Some(entry) = session_id_by_user.get(&user) {
+        if entry.value() != &session_id {
           return Ok(());
         }
       }
 
-      remove_user(&groups, &editing_collab_by_user, &msg.user).await;
-      if client_stream_by_user.remove(&msg.user).is_some() {
-        info!("remove client stream: {}", &msg.user);
+      remove_user(&groups, &editing_collab_by_user, &user).await;
+      if client_stream_by_user.remove(&user).is_some() {
+        info!("remove client stream: {}", &user);
       }
       Ok(())
     })
@@ -253,21 +255,29 @@ async fn remove_user<S, U, AC>(
   }
 }
 
+#[async_trait]
+pub trait RealtimeClientWebsocketSink: Send + Sync + 'static {
+  fn do_send(&self, message: RealtimeMessage);
+}
+
 pub struct CollabClientStream {
-  sink: RealtimeClientWebsocketSink,
+  sink: Arc<dyn RealtimeClientWebsocketSink>,
   /// Used to receive messages from the collab server. The message will forward to the [CollabBroadcast] which
   /// will broadcast the message to all connected clients.
   ///
   /// The message flow:
   /// ClientSession(websocket) -> [RealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
-  stream_tx: tokio::sync::broadcast::Sender<RealtimeMessage>,
+  pub(crate) stream_tx: tokio::sync::broadcast::Sender<RealtimeMessage>,
 }
 
 impl CollabClientStream {
-  pub fn new(sink: RealtimeClientWebsocketSink) -> Self {
+  pub fn new(sink: impl RealtimeClientWebsocketSink) -> Self {
     // When receive a new connection, create a new [ClientStream] that holds the connection's websocket
     let (stream_tx, _) = tokio::sync::broadcast::channel(1000);
-    Self { sink, stream_tx }
+    Self {
+      sink: Arc::new(sink),
+      stream_tx,
+    }
   }
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.

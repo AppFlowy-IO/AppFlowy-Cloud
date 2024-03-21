@@ -1,7 +1,7 @@
 use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::error::RealtimeError;
-use crate::RealtimeAccessControl;
+use crate::{CollabClientStream, RealtimeAccessControl};
 
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;

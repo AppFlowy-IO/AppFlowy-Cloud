@@ -64,7 +64,6 @@ pub trait RealtimeUser:
 {
   fn uid(&self) -> i64;
   fn device_id(&self) -> &str;
-
   fn user_device(&self) -> String {
     format!("{}-{}", self.uid(), self.device_id())
   }

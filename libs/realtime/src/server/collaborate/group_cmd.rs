@@ -31,20 +31,19 @@ pub enum GroupCommand<U> {
 pub type GroupCommandSender<U> = tokio::sync::mpsc::Sender<GroupCommand<U>>;
 pub type GroupCommandReceiver<U> = tokio::sync::mpsc::Receiver<GroupCommand<U>>;
 
-pub struct GroupCommandRunner<S, U, AC, CS> {
+pub struct GroupCommandRunner<S, U, AC> {
   pub all_groups: Arc<AllGroup<S, U, AC>>,
-  pub client_stream_by_user: Arc<DashMap<U, CollabClientStream<CS>>>,
+  pub client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
   pub edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   pub access_control: Arc<AC>,
   pub recv: Option<GroupCommandReceiver<U>>,
 }
 
-impl<S, U, AC, CS> GroupCommandRunner<S, U, AC, CS>
+impl<S, U, AC> GroupCommandRunner<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
   AC: RealtimeAccessControl,
-  CS: RealtimeClientWebsocketSink,
 {
   pub async fn run(mut self, object_id: String) {
     let mut receiver = self.recv.take().expect("Only take once");

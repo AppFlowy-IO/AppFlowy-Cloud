@@ -26,7 +26,7 @@ use tokio_stream::StreamExt;
 use tracing::{error, event, info, trace, warn};
 
 #[derive(Clone)]
-pub struct RealtimeServer<S, U, AC, CS> {
+pub struct RealtimeServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
@@ -46,19 +46,18 @@ pub struct RealtimeServer<S, U, AC, CS> {
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
-  client_stream_by_user: Arc<DashMap<U, CollabClientStream<CS>>>,
+  client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
 }
 
-impl<S, U, AC, CS> RealtimeServer<S, U, AC, CS>
+impl<S, U, AC> RealtimeServer<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
   AC: RealtimeAccessControl,
-  CS: RealtimeClientWebsocketSink,
 {
   pub fn new(
     storage: Arc<S>,
@@ -68,7 +67,7 @@ where
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
     let groups = Arc::new(AllGroup::new(storage.clone(), access_control.clone()));
-    let client_stream_by_user: Arc<DashMap<U, CollabClientStream<CS>>> = Default::default();
+    let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
       Arc::new(Default::default());
@@ -257,12 +256,12 @@ async fn remove_user<S, U, AC>(
 }
 
 #[async_trait]
-pub trait RealtimeClientWebsocketSink: Clone + Send + Sync + 'static {
+pub trait RealtimeClientWebsocketSink: Send + Sync + 'static {
   fn do_send(&self, message: RealtimeMessage);
 }
 
 pub struct CollabClientStream {
-  sink: Box<dyn RealtimeClientWebsocketSink>,
+  sink: Arc<dyn RealtimeClientWebsocketSink>,
   /// Used to receive messages from the collab server. The message will forward to the [CollabBroadcast] which
   /// will broadcast the message to all connected clients.
   ///
@@ -275,7 +274,10 @@ impl CollabClientStream {
   pub fn new(sink: impl RealtimeClientWebsocketSink) -> Self {
     // When receive a new connection, create a new [ClientStream] that holds the connection's websocket
     let (stream_tx, _) = tokio::sync::broadcast::channel(1000);
-    Self { sink, stream_tx }
+    Self {
+      sink: Arc::new(sink),
+      stream_tx,
+    }
   }
 
   /// Returns a [UnboundedSenderSink] and a [ReceiverStream] for the object_id.
@@ -419,11 +421,11 @@ impl CollabClientStream {
 }
 
 #[inline]
-pub async fn broadcast_client_collab_message<U, CS>(
+pub async fn broadcast_client_collab_message<U>(
   user: &U,
   object_id: String,
   collab_messages: Vec<ClientCollabMessage>,
-  client_streams: &Arc<DashMap<U, CollabClientStream<CS>>>,
+  client_streams: &Arc<DashMap<U, CollabClientStream>>,
 ) where
   U: RealtimeUser,
 {

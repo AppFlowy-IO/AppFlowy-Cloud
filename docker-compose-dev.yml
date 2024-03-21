@@ -115,8 +115,6 @@ services:
     build:
       context: .
       dockerfile: ./libs/collab-history/Dockerfile
-    # comment out the following line if you want to use the latest version
-    #image: appflowyinc/collab_history:${COLLAB_HISTORY_VERSION:-latest}
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - COLLAB_HISTORY_REDIS_URL=${COLLAB_HISTORY_REDIS_URL:-redis://redis:6379}

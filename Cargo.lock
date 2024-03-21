@@ -1468,6 +1468,7 @@ dependencies = [
  "anyhow",
  "axum",
  "collab",
+ "collab-stream",
  "dotenvy",
  "redis 0.25.2",
  "serde",

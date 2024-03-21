@@ -21,3 +21,4 @@ tower-service = "0.3"
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 tower = "0.4"
 serde_repr = "0.1.18"
+collab-stream.workspace = true

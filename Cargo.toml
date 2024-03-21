@@ -67,7 +67,7 @@ brotli = "3.4.0"
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
-appflowy-ai = { path = "libs/appflowy-ai" }
+semver = "1.0.22"
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
@@ -77,16 +77,16 @@ collab-entity = { version = "0.1.0" }
 snowflake = { path = "libs/snowflake" }
 realtime = { path = "libs/realtime" }
 database = { path = "libs/database" }
+appflowy-ai = { path = "libs/appflowy-ai" }
 database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
-collab-stream = { path = "libs/collab-stream" }
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 realtime-entity.workspace = true
-semver = "1.0.22"
+collab-stream.workspace = true
 
 
 [dev-dependencies]
@@ -144,6 +144,7 @@ realtime-protocol = { path = "libs/realtime-protocol" }
 database-entity = { path = "libs/database-entity" }
 shared-entity = { path = "libs/shared-entity" }
 app-error = { path = "libs/app-error" }
+collab-stream = { path = "libs/collab-stream" }
 serde_json = "1.0.111"
 serde = { version = "1.0.195", features = ["derive"] }
 bytes = "1.5.0"

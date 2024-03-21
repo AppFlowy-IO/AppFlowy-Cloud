@@ -1,38 +1,10 @@
 use crate::error::RealtimeError;
 use actix::{Message, Recipient};
-use collab::core::origin::CollabOrigin;
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-use std::sync::Arc;
-use tokio_stream::Stream;
+use std::fmt::Debug;
 
 pub use realtime_entity::message::RealtimeMessage;
-
-pub trait RealtimeUser:
-  Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
-{
-  fn uid(&self) -> i64;
-  fn device_id(&self) -> &str;
-
-  fn user_device(&self) -> String {
-    format!("{}-{}", self.uid(), self.device_id())
-  }
-}
-
-impl<T> RealtimeUser for Arc<T>
-where
-  T: RealtimeUser,
-{
-  fn uid(&self) -> i64 {
-    self.as_ref().uid()
-  }
-
-  fn device_id(&self) -> &str {
-    self.as_ref().device_id()
-  }
-}
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
@@ -70,11 +42,5 @@ pub struct ClientMessage<U> {
 pub struct ClientStreamMessage {
   pub uid: i64,
   pub device_id: String,
-  pub stream: Box<dyn Stream<Item = RealtimeMessage> + Unpin + Send>,
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct Editing {
-  pub object_id: String,
-  pub origin: CollabOrigin,
+  pub message: RealtimeMessage,
 }

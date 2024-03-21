@@ -1,6 +1,6 @@
-use crate::server::collaborate::all_group::AllGroup;
-use crate::server::CollabClientStream;
-use crate::server::RealtimeAccessControl;
+use crate::collaborate::all_group::AllGroup;
+use crate::CollabClientStream;
+use crate::RealtimeAccessControl;
 
 use collab::core::origin::CollabOrigin;
 use dashmap::DashMap;

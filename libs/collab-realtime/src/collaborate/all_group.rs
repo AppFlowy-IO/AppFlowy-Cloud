@@ -1,6 +1,6 @@
-use crate::server::collaborate::group::CollabGroup;
-use crate::server::collaborate::plugin::CollabStoragePlugin;
-use crate::server::RealtimeAccessControl;
+use crate::collaborate::group::CollabGroup;
+use crate::collaborate::plugin::CollabStoragePlugin;
+use crate::RealtimeAccessControl;
 use anyhow::Error;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;

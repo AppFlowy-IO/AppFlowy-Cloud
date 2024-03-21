@@ -1,4 +1,4 @@
-use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage, RealtimeUser};
+use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
 use crate::server::RealtimeAccessControl;
 use actix::{
@@ -19,7 +19,7 @@ use tokio::time::sleep;
 use crate::server::RealtimeServer;
 use database::pg_row::AFUserNotification;
 use realtime_entity::message::SystemMessage;
-use realtime_entity::user::{AFUserChange, UserMessage};
+use realtime_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use tracing::{debug, error, trace, warn};
 
 const MAX_MESSAGES_PER_INTERVAL: usize = 10;

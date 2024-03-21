@@ -59,7 +59,7 @@ impl RealtimeMessage {
   /// If the message is not a collab message, it will return an empty vec
   /// If the message is a collab message, it will return a vec with one element
   /// If the message is a ClientCollabV1, it will return list of collab messages
-  pub fn try_into_message_by_object_id(self) -> Result<MessageByObjectId, Error> {
+  pub fn transform(self) -> Result<MessageByObjectId, Error> {
     match self {
       RealtimeMessage::Collab(collab_message) => {
         let object_id = collab_message.object_id().to_string();

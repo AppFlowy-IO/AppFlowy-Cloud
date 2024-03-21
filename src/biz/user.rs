@@ -8,7 +8,7 @@ use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
 use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
 use database_entity::dto::{AFRole, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, CollabParams};
-use realtime::entities::RealtimeUser;
+use realtime_entity::user::RealtimeUser;
 use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::response::AppResponseError;

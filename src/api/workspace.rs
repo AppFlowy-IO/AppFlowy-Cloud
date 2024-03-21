@@ -812,11 +812,10 @@ async fn post_realtime_message_stream_handler(
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let stream = Box::new(tokio_stream::once(message));
   let mut stream_message = Some(ClientStreamMessage {
     uid,
     device_id,
-    stream,
+    message,
   });
   const MAX_RETRIES: usize = 3;
   const RETRY_DELAY: Duration = Duration::from_secs(2);

@@ -1,8 +1,7 @@
+use crate::collaborate::all_group::AllGroup;
+use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::error::RealtimeError;
-use crate::server::collaborate::all_group::AllGroup;
-use crate::server::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
-use crate::server::RealtimeAccessControl;
-use crate::server::{broadcast_client_collab_message, CollabClientStream};
+use crate::RealtimeAccessControl;
 
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
@@ -11,6 +10,7 @@ use database::collab::CollabStorage;
 use futures_util::StreamExt;
 use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
 
+use realtime_entity::message::RealtimeMessage;
 use realtime_entity::user::{Editing, RealtimeUser};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -192,6 +192,36 @@ where
         Ok(())
       },
       _ => Err(RealtimeError::ExpectInitSync(collab_message.to_string())),
+    }
+  }
+}
+
+#[inline]
+pub async fn broadcast_client_collab_message<U>(
+  user: &U,
+  object_id: String,
+  collab_messages: Vec<ClientCollabMessage>,
+  client_streams: &Arc<DashMap<U, CollabClientStream>>,
+) where
+  U: RealtimeUser,
+{
+  if let Some(client_stream) = client_streams.get(user) {
+    trace!(
+      "[realtime]: receive: uid:{} oid:{} msg ids: {:?}",
+      user.uid(),
+      object_id,
+      collab_messages
+        .iter()
+        .map(|v| v.msg_id())
+        .collect::<Vec<_>>()
+    );
+    let pair = (object_id, collab_messages);
+    let err = client_stream
+      .stream_tx
+      .send(RealtimeMessage::ClientCollabV2([pair].into()));
+    if let Err(err) = err {
+      warn!("Send user:{} message to group error: {}", user.uid(), err,);
+      client_streams.remove(user);
     }
   }
 }

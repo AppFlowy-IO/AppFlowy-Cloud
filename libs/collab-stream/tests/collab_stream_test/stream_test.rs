@@ -1,4 +1,4 @@
-use crate::stream_test::test_util::{random_i64, stream_client};
+use crate::collab_stream_test::test_util::{random_i64, stream_client};
 use collab_stream::model::Message;
 
 #[tokio::test]

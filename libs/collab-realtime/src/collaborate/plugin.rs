@@ -17,11 +17,11 @@ use collab_entity::CollabType;
 use collab_folder::check_folder_is_valid;
 use database::collab::CollabStorage;
 use database_entity::dto::{CollabParams, InsertSnapshotParams, QueryCollabParams};
-use md5::Digest;
+
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::Arc;
 
-use tracing::{debug, error, event, info, instrument, span, trace, Instrument, Level};
+use tracing::{error, event, info, instrument, span, trace, Instrument, Level};
 
 use yrs::updates::decoder::Decode;
 use yrs::{Transact, Update};

@@ -29,7 +29,7 @@ pub struct RealtimeServer<S, U, AC> {
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<AllGroup<S, U, AC>>,
-  pub(crate) user_by_device: Arc<DashMap<UserDevice, U>>,
+  pub user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
   ///
@@ -93,7 +93,7 @@ where
     })
   }
 
-  pub(crate) fn handle_new_connection(
+  pub fn handle_new_connection(
     &self,
     user: U,
     session_id: String,
@@ -143,7 +143,7 @@ where
   ///      no action is taken and the function returns.
   /// 2. Removes the user from the collaboration groups and client streams, if applicable.
   ///
-  pub(crate) fn handle_disconnect(
+  pub fn handle_disconnect(
     &self,
     user: U,
     session_id: String,
@@ -172,7 +172,7 @@ where
   }
 
   #[inline]
-  pub(crate) fn handle_client_message(
+  pub fn handle_client_message(
     &self,
     user: U,
     message_by_oid: MessageByObjectId,

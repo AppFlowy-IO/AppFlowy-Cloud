@@ -1,6 +1,6 @@
 use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_cmd::GroupCommandSender;
-use crate::{CollabClientStream, RealtimeAccessControl, RealtimeServer};
+use crate::{CollabClientStream, RealtimeAccessControl};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use prometheus_client::metrics::gauge::Gauge;

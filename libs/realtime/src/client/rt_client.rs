@@ -1,6 +1,5 @@
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
-use crate::error::RealtimeError;
-use crate::server::{RealtimeAccessControl, RealtimeClientWebsocketSink, RealtimeServerActor};
+use crate::server::RealtimeServerActor;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   MailboxError, Recipient, Running, StreamHandler, WrapFuture,
@@ -17,6 +16,8 @@ use semver::Version;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
+use collab_realtime::error::RealtimeError;
+use collab_realtime::{RealtimeAccessControl, RealtimeClientWebsocketSink};
 use database::pg_row::AFUserNotification;
 use realtime_entity::message::SystemMessage;
 use realtime_entity::user::{AFUserChange, RealtimeUser, UserMessage};

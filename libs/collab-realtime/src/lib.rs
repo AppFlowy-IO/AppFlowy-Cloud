@@ -1,6 +1,6 @@
 mod collaborate;
 pub mod command;
-mod error;
+pub mod error;
 mod metrics;
 mod permission;
 mod rt_server;

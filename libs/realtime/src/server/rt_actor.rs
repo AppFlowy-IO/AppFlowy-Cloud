@@ -1,7 +1,8 @@
+use crate::client::rt_client::RealtimeClientWebsocketSinkImpl;
 use crate::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
-use crate::error::RealtimeError;
-use crate::server::{RealtimeAccessControl, RealtimeClientWebsocketSink, RealtimeServer};
 use actix::{Actor, Context, Handler, ResponseFuture};
+use collab_realtime::error::RealtimeError;
+use collab_realtime::{RealtimeAccessControl, RealtimeServer};
 use database::collab::CollabStorage;
 use realtime_entity::user::{RealtimeUser, UserDevice};
 use std::ops::Deref;
@@ -50,7 +51,8 @@ where
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    self.handle_new_connection(new_conn)
+    let conn_sink = RealtimeClientWebsocketSinkImpl(new_conn.socket);
+    self.handle_new_connection(new_conn.user, new_conn.session_id, conn_sink)
   }
 }
 
@@ -62,7 +64,7 @@ where
 {
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    self.handle_disconnect(msg)
+    self.handle_disconnect(msg.user, msg.session_id)
   }
 }
 

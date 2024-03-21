@@ -32,6 +32,7 @@ collab = { version = "0.1.0"}
 collab-entity = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
+collab-realtime.workspace = true
 database = { path = "../database" }
 database-entity.workspace = true
 yrs.workspace = true

@@ -28,11 +28,11 @@ pub fn router() -> Router<AppState> {
   Router::new()
     .route("/signin", post(sign_in_handler))
     .route("/signup", post(sign_up_handler))
-    .route("/login_refresh/:refresh_token", post(login_refresh_handler))
+    .route("/login-refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
 
     // user
-    .route("/change_password", post(change_password_handler))
+    .route("/change-password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
     .route("/invite", post(invite_handler))
     .route("/workspace/:workspace_id/invite", post(workspace_invite_handler))

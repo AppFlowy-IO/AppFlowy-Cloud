@@ -238,6 +238,26 @@ pub async fn invite_user_to_workspace(
   check_response(resp).await
 }
 
+pub async fn leave_workspace(
+  access_token: &str,
+  workspace_id: &str,
+  appflowy_cloud_base_url: &str,
+) -> Result<(), Error> {
+  let http_client = reqwest::Client::new();
+  let url = format!(
+    "{}/api/workspace/{}/leave",
+    appflowy_cloud_base_url, workspace_id
+  );
+  let resp = http_client
+    .post(url)
+    .header("Authorization", format!("Bearer {}", access_token))
+    .json(&())
+    .send()
+    .await?;
+
+  check_response(resp).await
+}
+
 pub async fn accept_workspace_invitation(
   access_token: &str,
   invite_id: &str,

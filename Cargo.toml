@@ -117,6 +117,7 @@ path = "src/lib.rs"
 
 [workspace]
 members = [
+    # libs
     "libs/snowflake",
     "libs/collab-rt-entity",
     "libs/database",
@@ -136,8 +137,9 @@ members = [
     "libs/client-api-test-util",
     "libs/wasm-test",
     "libs/appflowy-ai",
-    "libs/collab-history",
     "libs/collab-rt",
+    # services
+    "services/collab-history", "services/realtime",
 ]
 
 [workspace.dependencies]

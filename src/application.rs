@@ -37,7 +37,7 @@ use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use realtime::server::command::{RTCommandReceiver, RTCommandSender};
-use realtime::server::RealtimeServer;
+use realtime::server::{RealtimeServer, RealtimeServerActor};
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -114,8 +114,9 @@ pub async fn run(
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
   )
-  .unwrap()
-  .start();
+  .unwrap();
+
+  let realtime_server_actor = RealtimeServerActor(realtime_server).start();
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -140,7 +141,7 @@ pub async fn run(
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
       .app_data(Data::new(state.metrics.access_control_metrics.clone()))
-      .app_data(Data::new(realtime_server.clone()))
+      .app_data(Data::new(realtime_server_actor.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
   });

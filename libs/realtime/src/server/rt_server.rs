@@ -1,40 +1,37 @@
-use crate::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect, RealtimeMessage};
+use crate::entities::{Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
+use crate::server::collaborate::all_group::AllGroup;
+use crate::server::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
+use crate::server::command::{spawn_rt_command, RTCommandReceiver};
 use crate::server::{spawn_metrics, RealtimeAccessControl, RealtimeMetrics};
 use crate::util::channel_ext::UnboundedSenderSink;
-use actix::{Context, Handler, ResponseFuture};
-use anyhow::Result;
 
+use anyhow::Result;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-
 use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
 use realtime_entity::message::{MessageByObjectId, SystemMessage};
+use realtime_entity::user::{Editing, RealtimeUser, UserDevice};
 use std::collections::HashSet;
 use std::future::Future;
-use std::pin::Pin;
 
-use crate::client::rt_client::RealtimeClientWebsocketSink;
-use crate::server::collaborate::all_group::AllGroup;
-use crate::server::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
+use crate::client::rt_client::RealtimeClientWebsocketSinkImpl;
+use async_trait::async_trait;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-
-use crate::server::command::{spawn_rt_command, RTCommandReceiver};
-use realtime_entity::user::{Editing, RealtimeUser, UserDevice};
-
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 use tokio_stream::StreamExt;
 use tracing::{error, event, info, trace, warn};
 
 #[derive(Clone)]
-pub struct RealtimeServer<S, U, AC> {
+pub struct RealtimeServer<S, U, AC, CS> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<AllGroup<S, U, AC>>,
-  user_by_device: Arc<DashMap<UserDevice, U>>,
+  pub(crate) user_by_device: Arc<DashMap<UserDevice, U>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
   ///
@@ -49,18 +46,19 @@ pub struct RealtimeServer<S, U, AC> {
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
-  client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
+  client_stream_by_user: Arc<DashMap<U, CollabClientStream<CS>>>,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<RealtimeMetrics>,
 }
 
-impl<S, U, AC> RealtimeServer<S, U, AC>
+impl<S, U, AC, CS> RealtimeServer<S, U, AC, CS>
 where
   S: CollabStorage,
   U: RealtimeUser,
   AC: RealtimeAccessControl,
+  CS: RealtimeClientWebsocketSink,
 {
   pub fn new(
     storage: Arc<S>,
@@ -70,7 +68,7 @@ where
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
     let groups = Arc::new(AllGroup::new(storage.clone(), access_control.clone()));
-    let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
+    let client_stream_by_user: Arc<DashMap<U, CollabClientStream<CS>>> = Default::default();
     let editing_collab_by_user = Default::default();
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
       Arc::new(Default::default());
@@ -98,12 +96,13 @@ where
     })
   }
 
-  fn handle_new_connection(
+  pub(crate) fn handle_new_connection(
     &self,
     new_conn: Connect<U>,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
-    let new_client_stream = CollabClientStream::new(new_conn.socket);
+    let new_client_stream =
+      CollabClientStream::new(RealtimeClientWebsocketSinkImpl(new_conn.socket));
     let groups = self.groups.clone();
     let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
@@ -146,7 +145,7 @@ where
   ///      no action is taken and the function returns.
   /// 2. Removes the user from the collaboration groups and client streams, if applicable.
   ///
-  fn handle_disconnect(
+  pub(crate) fn handle_disconnect(
     &self,
     msg: Disconnect<U>,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
@@ -174,7 +173,7 @@ where
   }
 
   #[inline]
-  fn handle_client_message(
+  pub(crate) fn handle_client_message(
     &self,
     user: U,
     message_by_oid: MessageByObjectId,
@@ -257,102 +256,13 @@ async fn remove_user<S, U, AC>(
   }
 }
 
-impl<S, U, AC> Handler<Connect<U>> for RealtimeServer<S, U, AC>
-where
-  U: RealtimeUser + Unpin,
-  S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
-{
-  type Result = ResponseFuture<Result<(), RealtimeError>>;
-
-  fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    self.handle_new_connection(new_conn)
-  }
-}
-
-impl<S, U, AC> Handler<Disconnect<U>> for RealtimeServer<S, U, AC>
-where
-  U: RealtimeUser + Unpin,
-  S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
-{
-  type Result = ResponseFuture<Result<(), RealtimeError>>;
-  fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    self.handle_disconnect(msg)
-  }
-}
-
-impl<S, U, AC> Handler<ClientMessage<U>> for RealtimeServer<S, U, AC>
-where
-  U: RealtimeUser + Unpin,
-  S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
-{
-  type Result = ResponseFuture<Result<(), RealtimeError>>;
-
-  fn handle(&mut self, client_msg: ClientMessage<U>, _ctx: &mut Context<Self>) -> Self::Result {
-    let ClientMessage { user, message } = client_msg;
-    match message.transform() {
-      Ok(message_by_object_id) => self.handle_client_message(user, message_by_object_id),
-      Err(err) => {
-        if cfg!(debug_assertions) {
-          error!("parse client message error: {}", err);
-        }
-        Box::pin(async { Ok(()) })
-      },
-    }
-  }
-}
-
-impl<S, U, AC> Handler<ClientStreamMessage> for RealtimeServer<S, U, AC>
-where
-  U: RealtimeUser + Unpin,
-  S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
-{
-  type Result = ResponseFuture<Result<(), RealtimeError>>;
-
-  fn handle(&mut self, client_msg: ClientStreamMessage, _ctx: &mut Context<Self>) -> Self::Result {
-    let ClientStreamMessage {
-      uid,
-      device_id,
-      message,
-    } = client_msg;
-
-    let user = self
-      .user_by_device
-      .get(&UserDevice::new(&device_id, uid))
-      .map(|entry| entry.value().clone());
-
-    match (user, message.transform()) {
-      (Some(user), Ok(messages)) => self.handle_client_message(user, messages),
-      (None, _) => {
-        warn!("user:{}|device:{} not found", uid, device_id);
-        Box::pin(async { Ok(()) })
-      },
-      (Some(_), Err(err)) => {
-        if cfg!(debug_assertions) {
-          error!("parse client message error: {}", err);
-        }
-        Box::pin(async { Ok(()) })
-      },
-    }
-  }
-}
-
-impl<S, U, AC> actix::Supervised for RealtimeServer<S, U, AC>
-where
-  S: 'static + Unpin,
-  U: RealtimeUser + Unpin,
-  AC: RealtimeAccessControl + Unpin,
-{
-  fn restarting(&mut self, _ctx: &mut Context<RealtimeServer<S, U, AC>>) {
-    warn!("restarting");
-  }
+#[async_trait]
+pub trait RealtimeClientWebsocketSink: Clone + Send + Sync + 'static {
+  fn do_send(&self, message: RealtimeMessage);
 }
 
 pub struct CollabClientStream {
-  sink: RealtimeClientWebsocketSink,
+  sink: Box<dyn RealtimeClientWebsocketSink>,
   /// Used to receive messages from the collab server. The message will forward to the [CollabBroadcast] which
   /// will broadcast the message to all connected clients.
   ///
@@ -362,7 +272,7 @@ pub struct CollabClientStream {
 }
 
 impl CollabClientStream {
-  pub fn new(sink: RealtimeClientWebsocketSink) -> Self {
+  pub fn new(sink: impl RealtimeClientWebsocketSink) -> Self {
     // When receive a new connection, create a new [ClientStream] that holds the connection's websocket
     let (stream_tx, _) = tokio::sync::broadcast::channel(1000);
     Self { sink, stream_tx }
@@ -509,11 +419,11 @@ impl CollabClientStream {
 }
 
 #[inline]
-pub async fn broadcast_client_collab_message<U>(
+pub async fn broadcast_client_collab_message<U, CS>(
   user: &U,
   object_id: String,
   collab_messages: Vec<ClientCollabMessage>,
-  client_streams: &Arc<DashMap<U, CollabClientStream>>,
+  client_streams: &Arc<DashMap<U, CollabClientStream<CS>>>,
 ) where
   U: RealtimeUser,
 {

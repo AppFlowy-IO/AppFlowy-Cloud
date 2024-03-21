@@ -62,11 +62,11 @@ impl RealtimeMetrics {
   }
 }
 
-pub(crate) fn spawn_metrics<S, U, AC>(
+pub(crate) fn spawn_metrics<S, U, AC, CS>(
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender<U>>>,
   weak_groups: Weak<AllGroup<S, U, AC>>,
   metrics: &Arc<RealtimeMetrics>,
-  client_stream_by_user: &Arc<DashMap<U, CollabClientStream>>,
+  client_stream_by_user: &Arc<DashMap<U, CollabClientStream<CS>>>,
   storage: &Arc<S>,
 ) where
   S: CollabStorage,

@@ -1,6 +1,6 @@
 use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
 use crate::error::RealtimeError;
-use crate::server::RealtimeAccessControl;
+use crate::server::{RealtimeAccessControl, RealtimeClientWebsocketSink, RealtimeServerActor};
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   MailboxError, Recipient, Running, StreamHandler, WrapFuture,
@@ -12,11 +12,11 @@ use database::collab::CollabStorage;
 
 use anyhow::anyhow;
 
+use async_trait::async_trait;
 use semver::Version;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::server::RealtimeServer;
 use database::pg_row::AFUserNotification;
 use realtime_entity::message::SystemMessage;
 use realtime_entity::user::{AFUserChange, RealtimeUser, UserMessage};
@@ -29,11 +29,12 @@ pub struct RealtimeClient<
   U: Unpin + RealtimeUser,
   S: Unpin + 'static,
   AC: Unpin + RealtimeAccessControl,
+  CS: Unpin + RealtimeClientWebsocketSink,
 > {
   session_id: String,
   user: U,
   hb: Instant,
-  pub server: Addr<RealtimeServer<S, U, AC>>,
+  pub server: Addr<RealtimeServerActor<S, U, AC, CS>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
@@ -43,16 +44,17 @@ pub struct RealtimeClient<
   client_version: Version,
 }
 
-impl<U, S, AC> RealtimeClient<U, S, AC>
+impl<U, S, AC, CS> RealtimeClient<U, S, AC, CS>
 where
   U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
   AC: RealtimeAccessControl + Unpin,
+  CS: RealtimeClientWebsocketSink + Unpin,
 {
   pub fn new(
     user: U,
     user_change_recv: tokio::sync::mpsc::Receiver<AFUserNotification>,
-    server: Addr<RealtimeServer<S, U, AC>>,
+    server: Addr<RealtimeServerActor<S, U, AC, CS>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
     client_version: Version,
@@ -96,7 +98,7 @@ where
 
   async fn send_binary_to_server(
     user: U,
-    server: Addr<RealtimeServer<S, U, AC>>,
+    server: Addr<RealtimeServerActor<S, U, AC, CS>>,
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
     let message = tokio::task::spawn_blocking(move || {
@@ -142,11 +144,12 @@ where
   }
 }
 
-impl<U, S, P> Actor for RealtimeClient<U, S, P>
+impl<U, S, P, CS> Actor for RealtimeClient<U, S, P, CS>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
   P: RealtimeAccessControl + Unpin,
+  CS: RealtimeClientWebsocketSink + Unpin,
 {
   type Context = ws::WebsocketContext<Self>;
 
@@ -224,11 +227,12 @@ where
 }
 
 /// Handle message sent from the server
-impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
+impl<U, S, AC, CS> Handler<RealtimeMessage> for RealtimeClient<U, S, AC, CS>
 where
   U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
   AC: RealtimeAccessControl + Unpin,
+  CS: RealtimeClientWebsocketSink + Unpin,
 {
   type Result = ();
 
@@ -254,11 +258,13 @@ where
 }
 
 /// Handle the messages sent from the client
-impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<U, S, AC>
+impl<U, S, AC, CS> StreamHandler<Result<ws::Message, ws::ProtocolError>>
+  for RealtimeClient<U, S, AC, CS>
 where
   U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
   AC: RealtimeAccessControl + Unpin,
+  CS: RealtimeClientWebsocketSink + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     let now = Instant::now();
@@ -314,4 +320,12 @@ where
   }
 }
 
-pub type RealtimeClientWebsocketSink = Recipient<RealtimeMessage>;
+#[derive(Clone)]
+pub struct RealtimeClientWebsocketSinkImpl(pub Recipient<RealtimeMessage>);
+
+#[async_trait]
+impl RealtimeClientWebsocketSink for RealtimeClientWebsocketSinkImpl {
+  fn do_send(&self, message: RealtimeMessage) {
+    self.0.do_send(message);
+  }
+}

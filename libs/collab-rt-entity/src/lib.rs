@@ -5,7 +5,7 @@ pub mod user;
 
 // If the realtime_proto not exist, the following code will be generated:
 // ```shell
-//  cd libs/realtime-entity
+//  cd libs/collab-rt-entity
 //  cargo clean
 //  cargo build
 // ```

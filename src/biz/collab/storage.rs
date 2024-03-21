@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_realtime::command::{RTCommand, RTCommandSender};
+use collab_rt::command::{RTCommand, RTCommandSender};
 use database::collab::{
   is_collab_exists, CollabStorage, CollabStorageAccessControl, DatabaseResult,
 };

@@ -41,8 +41,8 @@ done
 # Kill any existing instances
 pkill -f appflowy_cloud || true
 
-# Generate protobuf files for realtime-entity crate.
-# To run sqlx prepare, we need to build the realtime-entity crate first
+# Generate protobuf files for collab-rt-entity crate.
+# To run sqlx prepare, we need to build the collab-rt-entity crate first
 ./build/code_gen.sh
 
 # Require if there are any changes to the database schema

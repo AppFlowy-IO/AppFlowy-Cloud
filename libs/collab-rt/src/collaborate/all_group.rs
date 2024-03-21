@@ -5,9 +5,9 @@ use anyhow::Error;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
+use collab_rt_entity::user::RealtimeUser;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use realtime_entity::user::RealtimeUser;
 use std::sync::Arc;
 use tracing::{debug, error, instrument};
 

@@ -1,5 +1,5 @@
 [package]
-name = "realtime-protocol"
+name = "collab-rt-protocol"
 version = "0.1.0"
 edition = "2021"
 

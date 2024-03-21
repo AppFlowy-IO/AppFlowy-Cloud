@@ -1,5 +1,5 @@
 [package]
-name = "collab-realtime"
+name = "collab-rt"
 version = "0.1.0"
 edition = "2021"
 
@@ -29,8 +29,8 @@ database = { path = "../database" }
 database-entity.workspace = true
 yrs.workspace = true
 chrono = "0.4.31"
-realtime-entity = { workspace = true, features = ["actix_message"] }
-realtime-protocol.workspace = true
+collab-rt-entity = { workspace = true, features = ["actix_message"] }
+collab-rt-protocol.workspace = true
 uuid = { version = "1", features = ["v4"] }
 md5 = "0.7"
 prometheus-client = "0.22.1"

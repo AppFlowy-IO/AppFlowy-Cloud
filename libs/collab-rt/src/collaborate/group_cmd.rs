@@ -5,13 +5,13 @@ use crate::{CollabClientStream, RealtimeAccessControl};
 
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
+use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
-use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
 
-use realtime_entity::message::RealtimeMessage;
-use realtime_entity::user::{Editing, RealtimeUser};
+use collab_rt_entity::message::RealtimeMessage;
+use collab_rt_entity::user::{Editing, RealtimeUser};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};

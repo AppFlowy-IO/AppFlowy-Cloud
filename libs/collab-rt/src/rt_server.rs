@@ -3,15 +3,15 @@ use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupComma
 use crate::command::{spawn_rt_command, RTCommandReceiver};
 use crate::error::RealtimeError;
 use crate::util::channel_ext::UnboundedSenderSink;
-use crate::{spawn_metrics, RealtimeAccessControl, RealtimeMetrics};
+use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeAccessControl};
 
 use anyhow::Result;
+use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
+use collab_rt_entity::message::{MessageByObjectId, RealtimeMessage, SystemMessage};
+use collab_rt_entity::user::{Editing, RealtimeUser, UserDevice};
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use realtime_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
-use realtime_entity::message::{MessageByObjectId, RealtimeMessage, SystemMessage};
-use realtime_entity::user::{Editing, RealtimeUser, UserDevice};
 use std::collections::HashSet;
 use std::future::Future;
 
@@ -24,7 +24,7 @@ use tokio_stream::StreamExt;
 use tracing::{error, event, info, trace, warn};
 
 #[derive(Clone)]
-pub struct RealtimeServer<S, U, AC> {
+pub struct CollabRealtimeServer<S, U, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
@@ -48,10 +48,10 @@ pub struct RealtimeServer<S, U, AC> {
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
-  metrics: Arc<RealtimeMetrics>,
+  metrics: Arc<CollabRealtimeMetrics>,
 }
 
-impl<S, U, AC> RealtimeServer<S, U, AC>
+impl<S, U, AC> CollabRealtimeServer<S, U, AC>
 where
   S: CollabStorage,
   U: RealtimeUser,
@@ -60,7 +60,7 @@ where
   pub fn new(
     storage: Arc<S>,
     access_control: AC,
-    metrics: Arc<RealtimeMetrics>,
+    metrics: Arc<CollabRealtimeMetrics>,
     command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
@@ -266,7 +266,7 @@ pub struct CollabClientStream {
   /// will broadcast the message to all connected clients.
   ///
   /// The message flow:
-  /// ClientSession(websocket) -> [RealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
+  /// ClientSession(websocket) -> [CollabRealtimeServer] -> [CollabClientStream] -> [CollabBroadcast] 1->* websocket(client)
   pub(crate) stream_tx: tokio::sync::broadcast::Sender<RealtimeMessage>,
 }
 

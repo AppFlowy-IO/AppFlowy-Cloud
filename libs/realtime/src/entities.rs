@@ -1,10 +1,10 @@
 use actix::{Message, Recipient};
-use collab_realtime::error::RealtimeError;
+use collab_rt::error::RealtimeError;
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;
 
-pub use realtime_entity::message::RealtimeMessage;
+pub use collab_rt_entity::message::RealtimeMessage;
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]

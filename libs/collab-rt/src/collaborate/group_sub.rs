@@ -3,15 +3,15 @@ use crate::CollabClientStream;
 use crate::RealtimeAccessControl;
 
 use collab::core::origin::CollabOrigin;
+use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use realtime_entity::collab_msg::{ClientCollabMessage, CollabMessage};
 
 use std::collections::HashSet;
 
 use std::sync::Arc;
 
-use realtime_entity::user::{Editing, RealtimeUser};
+use collab_rt_entity::user::{Editing, RealtimeUser};
 use tracing::{trace, warn};
 
 pub(crate) struct CollabUserMessage<'a, U> {

@@ -3,9 +3,9 @@ use std::rc::{Rc, Weak};
 
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
+use collab_rt_protocol::{handle_collab_message, Error};
+use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
-use realtime_protocol::{handle_collab_message, Error};
-use realtime_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
@@ -18,10 +18,10 @@ use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
-use realtime_entity::collab_msg::{
+use collab_rt_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use realtime_entity::message::MessageByObjectId;
+use collab_rt_entity::message::MessageByObjectId;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 

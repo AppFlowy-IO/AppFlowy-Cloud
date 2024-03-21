@@ -1,24 +1,24 @@
 use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_cmd::GroupCommandSender;
 use crate::{CollabClientStream, RealtimeAccessControl};
+use collab_rt_entity::user::RealtimeUser;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use realtime_entity::user::RealtimeUser;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
 
 #[derive(Clone)]
-pub struct RealtimeMetrics {
+pub struct CollabRealtimeMetrics {
   connected_users: Gauge,
   encode_collab_mem_hit_rate: Gauge<f64, AtomicU64>,
   opening_collab_count: Gauge,
 }
 
-impl RealtimeMetrics {
+impl CollabRealtimeMetrics {
   fn init() -> Self {
     Self {
       connected_users: Gauge::default(),
@@ -65,7 +65,7 @@ impl RealtimeMetrics {
 pub(crate) fn spawn_metrics<S, U, AC>(
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender<U>>>,
   weak_groups: Weak<AllGroup<S, U, AC>>,
-  metrics: &Arc<RealtimeMetrics>,
+  metrics: &Arc<CollabRealtimeMetrics>,
   client_stream_by_user: &Arc<DashMap<U, CollabClientStream>>,
   storage: &Arc<S>,
 ) where

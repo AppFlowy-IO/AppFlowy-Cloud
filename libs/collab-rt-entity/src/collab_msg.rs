@@ -11,7 +11,7 @@ use collab::preclude::merge_updates_v1;
 use collab::preclude::updates::decoder::DecoderV1;
 use collab::preclude::updates::encoder::{Encode, Encoder, EncoderV1};
 use collab_entity::CollabType;
-use realtime_protocol::{Message, MessageReader, SyncMessage};
+use collab_rt_protocol::{Message, MessageReader, SyncMessage};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 

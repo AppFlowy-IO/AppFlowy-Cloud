@@ -538,7 +538,8 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-folder",
- "collab-realtime",
+ "collab-rt",
+ "collab-rt-entity",
  "collab-stream",
  "dashmap",
  "database",
@@ -563,7 +564,6 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "realtime",
- "realtime-entity",
  "redis 0.25.2",
  "reqwest",
  "rust-s3",
@@ -1302,6 +1302,8 @@ dependencies = [
  "client-websocket",
  "collab",
  "collab-entity",
+ "collab-rt-entity",
+ "collab-rt-protocol",
  "database-entity",
  "futures-core",
  "futures-util",
@@ -1313,8 +1315,6 @@ dependencies = [
  "mime_guess",
  "parking_lot 0.12.1",
  "prost",
- "realtime-entity",
- "realtime-protocol",
  "reqwest",
  "scraper",
  "semver",
@@ -1485,7 +1485,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "collab-realtime"
+name = "collab-rt"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1497,6 +1497,8 @@ dependencies = [
  "collab-document",
  "collab-entity",
  "collab-folder",
+ "collab-rt-entity",
+ "collab-rt-protocol",
  "dashmap",
  "database",
  "database-entity",
@@ -1506,8 +1508,6 @@ dependencies = [
  "md5",
  "parking_lot 0.12.1",
  "prometheus-client",
- "realtime-entity",
- "realtime-protocol",
  "redis 0.25.2",
  "semver",
  "serde",
@@ -1518,6 +1518,43 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+ "yrs",
+]
+
+[[package]]
+name = "collab-rt-entity"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "anyhow",
+ "bincode",
+ "brotli",
+ "bytes",
+ "client-websocket",
+ "collab",
+ "collab-entity",
+ "collab-rt-protocol",
+ "database-entity",
+ "prost",
+ "prost-build",
+ "protoc-bin-vendored",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "thiserror",
+ "tokio-tungstenite",
+ "yrs",
+]
+
+[[package]]
+name = "collab-rt-protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "collab",
+ "serde",
+ "thiserror",
  "yrs",
 ]
 
@@ -4285,7 +4322,9 @@ dependencies = [
  "collab-document",
  "collab-entity",
  "collab-folder",
- "collab-realtime",
+ "collab-rt",
+ "collab-rt-entity",
+ "collab-rt-protocol",
  "dashmap",
  "database",
  "database-entity",
@@ -4295,8 +4334,6 @@ dependencies = [
  "md5",
  "parking_lot 0.12.1",
  "prometheus-client",
- "realtime-entity",
- "realtime-protocol",
  "redis 0.25.2",
  "reqwest",
  "semver",
@@ -4310,43 +4347,6 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
- "yrs",
-]
-
-[[package]]
-name = "realtime-entity"
-version = "0.1.0"
-dependencies = [
- "actix",
- "anyhow",
- "bincode",
- "brotli",
- "bytes",
- "client-websocket",
- "collab",
- "collab-entity",
- "database-entity",
- "prost",
- "prost-build",
- "protoc-bin-vendored",
- "realtime-protocol",
- "serde",
- "serde_json",
- "serde_repr",
- "thiserror",
- "tokio-tungstenite",
- "yrs",
-]
-
-[[package]]
-name = "realtime-protocol"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "collab",
- "serde",
- "thiserror",
  "yrs",
 ]
 

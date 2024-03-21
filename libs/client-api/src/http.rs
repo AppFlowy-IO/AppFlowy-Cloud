@@ -21,11 +21,11 @@ use futures_util::StreamExt;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 
+use collab_rt_entity::EncodedCollab;
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
-use realtime_entity::EncodedCollab;
 use reqwest::{header, StatusCode};
 
 use collab_entity::CollabType;

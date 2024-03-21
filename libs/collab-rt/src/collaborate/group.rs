@@ -6,10 +6,10 @@ use dashmap::DashMap;
 use std::rc::Rc;
 
 use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
+use collab_rt_entity::collab_msg::CollabMessage;
+use collab_rt_entity::message::MessageByObjectId;
+use collab_rt_entity::user::RealtimeUser;
 use futures_util::{SinkExt, StreamExt};
-use realtime_entity::collab_msg::CollabMessage;
-use realtime_entity::message::MessageByObjectId;
-use realtime_entity::user::RealtimeUser;
 use tokio::sync::Mutex;
 use tracing::trace;
 

@@ -85,9 +85,9 @@ infra = { path = "libs/infra" }
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
-realtime-entity.workspace = true
+collab-rt-entity.workspace = true
 collab-stream.workspace = true
-collab-realtime.workspace = true
+collab-rt.workspace = true
 
 
 [dev-dependencies]
@@ -119,7 +119,7 @@ path = "src/lib.rs"
 members = [
     "libs/snowflake",
     "libs/realtime",
-    "libs/realtime-entity",
+    "libs/collab-rt-entity",
     "libs/database",
     "libs/database-entity",
     "libs/client-api",
@@ -131,17 +131,19 @@ members = [
     "libs/app-error",
     "libs/workspace-template",
     "libs/encrypt",
-    "libs/realtime-protocol",
+    "libs/collab-rt-protocol",
     "libs/collab-stream",
     "libs/client-websocket",
     "libs/client-api-test-util",
     "libs/wasm-test",
-    "libs/appflowy-ai", "libs/collab-history", "libs/collab-realtime",
+    "libs/appflowy-ai",
+    "libs/collab-history",
+    "libs/collab-rt",
 ]
 
 [workspace.dependencies]
-realtime-entity = { path = "libs/realtime-entity" }
-realtime-protocol = { path = "libs/realtime-protocol" }
+collab-rt-entity = { path = "libs/collab-rt-entity" }
+collab-rt-protocol = { path = "libs/collab-rt-protocol" }
 database-entity = { path = "libs/database-entity" }
 shared-entity = { path = "libs/shared-entity" }
 app-error = { path = "libs/app-error" }
@@ -166,7 +168,7 @@ dashmap = "5.5.3"
 futures = "0.3.30"
 async-stream = "0.3.5"
 reqwest = "0.11.26"
-collab-realtime = { path = "libs/collab-realtime" }
+collab-rt = { path = "libs/collab-rt" }
 
 [profile.release]
 lto = true

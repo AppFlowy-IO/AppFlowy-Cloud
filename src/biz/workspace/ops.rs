@@ -1,5 +1,4 @@
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
-use crate::state::GoTrueAdmin;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -21,7 +20,7 @@ use database_entity::dto::{
   WorkspaceUsage,
 };
 
-use gotrue::params::{InviteUserParams, MagicLinkParams};
+use gotrue::params::MagicLinkParams;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
@@ -31,7 +30,7 @@ use sqlx::{types::uuid, PgPool};
 use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::sync::Arc;
-use tracing::{info, instrument};
+use tracing::instrument;
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 

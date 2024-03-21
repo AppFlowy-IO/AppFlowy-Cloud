@@ -32,8 +32,9 @@ pub fn component_router() -> Router<AppState> {
     // User actions
     .route("/user/navigate", get(user_navigate_handler))
     .route("/user/user", get(user_user_handler))
-    .route("/user/change_password", get(user_change_password_handler))
+    .route("/user/change-password", get(user_change_password_handler))
     .route("/user/invite", get(user_invite_handler))
+    .route("/user/shared-workspaces", get(shared_workspaces_handler))
     .route("/user/user-usage", get(user_usage_handler))
     .route("/user/workspace-usage", get(workspace_usage_handler))
 
@@ -93,14 +94,34 @@ pub async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::AdminNavigate)
 }
 
+pub async fn shared_workspaces_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+) -> Result<Html<String>, WebAppError> {
+  let user_workspaces =
+    get_user_workspaces(&session.token.access_token, &state.appflowy_cloud_url).await?;
+
+  let profile = get_user_profile(
+    session.token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
+  let shared_workspaces = user_workspaces
+    .into_iter()
+    .filter(|workspace| workspace.owner_uid != profile.uid)
+    .collect::<Vec<_>>();
+
+  render_template(templates::SharedWorkspaces { shared_workspaces })
+}
+
 pub async fn user_invite_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
   let user_workspaces =
-    get_user_workspaces(&session.token.access_token, &state.appflowy_cloud_url).await;
+    get_user_workspaces(&session.token.access_token, &state.appflowy_cloud_url).await?;
 
-  let user_workspaces = user_workspaces?;
   let profile = get_user_profile(
     session.token.access_token.as_str(),
     state.appflowy_cloud_url.as_str(),

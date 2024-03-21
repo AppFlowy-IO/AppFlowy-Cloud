@@ -1,5 +1,5 @@
-use crate::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
-use crate::server::RealtimeServerActor;
+use crate::biz::actix_ws::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
+use crate::biz::actix_ws::server::RealtimeServerActor;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
   MailboxError, Recipient, Running, StreamHandler, WrapFuture,

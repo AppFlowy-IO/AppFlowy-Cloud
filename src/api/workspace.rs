@@ -22,9 +22,9 @@ use database::user::select_uid_from_email;
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
 
+use crate::biz::actix_ws::entities::{ClientStreamMessage, RealtimeMessage};
 use bytes::BytesMut;
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
-use realtime::entities::{ClientStreamMessage, RealtimeMessage};
 
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;

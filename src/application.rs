@@ -12,6 +12,7 @@ use crate::biz::collab::access_control::{
 };
 use crate::biz::collab::cache::CollabCache;
 
+use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::pg_listen::{
   spawn_listen_on_collab_member_change, spawn_listen_on_workspace_member_change,
 };
@@ -38,7 +39,6 @@ use collab_rt::CollabRealtimeServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
-use realtime::server::RealtimeServerActor;
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};

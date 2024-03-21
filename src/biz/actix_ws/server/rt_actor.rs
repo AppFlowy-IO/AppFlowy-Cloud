@@ -1,5 +1,5 @@
-use crate::client::rt_client::RealtimeClientWebsocketSinkImpl;
-use crate::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
+use crate::biz::actix_ws::client::rt_client::RealtimeClientWebsocketSinkImpl;
+use crate::biz::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
 use actix::{Actor, Context, Handler, ResponseFuture};
 use collab_rt::error::RealtimeError;
 use collab_rt::{CollabRealtimeServer, RealtimeAccessControl};

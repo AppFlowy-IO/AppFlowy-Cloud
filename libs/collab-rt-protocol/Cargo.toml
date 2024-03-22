@@ -1,0 +1,16 @@
+[package]
+name = "collab-rt-protocol"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+yrs.workspace = true
+thiserror = "1.0.56"
+serde.workspace = true
+collab = { version = "0.1.0" }
+bincode.workspace = true
+anyhow.workspace = true

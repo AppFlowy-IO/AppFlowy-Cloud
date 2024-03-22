@@ -2,5 +2,5 @@
 set -x
 set -eo pipefail
 
-# Generate protobuf files for realtime-entity crate.
-cargo build -p realtime-entity
+# Generate protobuf files for collab-rt-entity crate.
+cargo build -p collab-rt-entity

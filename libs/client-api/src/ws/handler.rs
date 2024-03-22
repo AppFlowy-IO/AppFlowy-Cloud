@@ -1,7 +1,7 @@
 use crate::af_spawn;
+use collab_rt_entity::collab_msg::ClientCollabMessage;
+use collab_rt_entity::message::RealtimeMessage;
 use futures_util::Sink;
-use realtime_entity::collab_msg::ClientCollabMessage;
-use realtime_entity::message::RealtimeMessage;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};

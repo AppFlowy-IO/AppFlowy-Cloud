@@ -1,24 +1,21 @@
-use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
-use crate::biz::collab::storage::CollabAccessControlStorage;
-use crate::biz::pg_listener::PgListeners;
-
-use crate::config::config::Config;
-use app_error::AppError;
-use gotrue::grant::{Grant, PasswordGrant};
-use secrecy::{ExposeSecret, Secret};
-
 use crate::api::metrics::RequestMetrics;
 use crate::biz::casbin::access_control::AccessControl;
 use crate::biz::casbin::metrics::AccessControlMetrics;
+use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
+use crate::biz::collab::cache::CollabCache;
+use crate::biz::collab::metrics::CollabMetrics;
+use crate::biz::collab::storage::CollabAccessControlStorage;
+use crate::biz::pg_listener::PgListeners;
+use crate::config::config::Config;
+use app_error::AppError;
+use collab_rt::CollabRealtimeMetrics;
 use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
-use realtime::server::RealtimeMetrics;
+use gotrue::grant::{Grant, PasswordGrant};
+use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::PgPool;
-
-use crate::biz::collab::cache::CollabCache;
-use crate::biz::collab::metrics::CollabMetrics;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
@@ -110,7 +107,7 @@ pub struct AppMetrics {
   #[allow(dead_code)]
   pub registry: Arc<prometheus_client::registry::Registry>,
   pub request_metrics: Arc<RequestMetrics>,
-  pub realtime_metrics: Arc<RealtimeMetrics>,
+  pub realtime_metrics: Arc<CollabRealtimeMetrics>,
   pub access_control_metrics: Arc<AccessControlMetrics>,
   pub collab_metrics: Arc<CollabMetrics>,
 }
@@ -125,7 +122,7 @@ impl AppMetrics {
   pub fn new() -> Self {
     let mut registry = prometheus_client::registry::Registry::default();
     let request_metrics = Arc::new(RequestMetrics::register(&mut registry));
-    let realtime_metrics = Arc::new(RealtimeMetrics::register(&mut registry));
+    let realtime_metrics = Arc::new(CollabRealtimeMetrics::register(&mut registry));
     let access_control_metrics = Arc::new(AccessControlMetrics::register(&mut registry));
     let collab_metrics = Arc::new(CollabMetrics::register(&mut registry));
     Self {

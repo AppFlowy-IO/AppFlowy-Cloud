@@ -1,3 +1,4 @@
+pub mod actix_ws;
 pub mod casbin;
 pub mod collab;
 pub mod pg_listener;

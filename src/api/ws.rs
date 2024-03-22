@@ -10,11 +10,11 @@ use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
+use crate::biz::actix_ws::client::rt_client::RealtimeClient;
+use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::RealtimeCollabAccessControlImpl;
 use actix_http::header::AUTHORIZATION;
 use app_error::AppError;
-use realtime::client::rt_client::RealtimeClient;
-use realtime::server::RealtimeServer;
 
 use semver::Version;
 
@@ -30,7 +30,7 @@ pub fn ws_scope() -> Scope {
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 pub type RealtimeServerAddr = Addr<
-  RealtimeServer<
+  RealtimeServerActor<
     CollabAccessControlStorage,
     Arc<RealtimeUserImpl>,
     RealtimeCollabAccessControlImpl,

@@ -538,13 +538,14 @@ dependencies = [
  "collab",
  "collab-entity",
  "collab-folder",
+ "collab-rt",
+ "collab-rt-entity",
  "collab-stream",
  "dashmap",
  "database",
  "database-entity",
  "derive_more",
  "dotenvy",
- "evmap",
  "fancy-regex",
  "futures",
  "futures-util",
@@ -562,8 +563,6 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rcgen",
- "realtime",
- "realtime-entity",
  "redis 0.25.2",
  "reqwest",
  "rust-s3",
@@ -572,6 +571,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_repr",
  "shared-entity",
  "snowflake",
  "sqlx",
@@ -1302,6 +1302,8 @@ dependencies = [
  "client-websocket",
  "collab",
  "collab-entity",
+ "collab-rt-entity",
+ "collab-rt-protocol",
  "database-entity",
  "futures-core",
  "futures-util",
@@ -1313,8 +1315,6 @@ dependencies = [
  "mime_guess",
  "parking_lot 0.12.1",
  "prost",
- "realtime-entity",
- "realtime-protocol",
  "reqwest",
  "scraper",
  "semver",
@@ -1461,6 +1461,102 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
+]
+
+[[package]]
+name = "collab-history"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "collab",
+ "collab-stream",
+ "dotenvy",
+ "redis 0.25.2",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "collab-rt"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "app-error",
+ "async-stream",
+ "async-trait",
+ "chrono",
+ "collab",
+ "collab-document",
+ "collab-entity",
+ "collab-folder",
+ "collab-rt-entity",
+ "collab-rt-protocol",
+ "dashmap",
+ "database",
+ "database-entity",
+ "futures",
+ "futures-util",
+ "indexmap",
+ "md5",
+ "parking_lot 0.12.1",
+ "prometheus-client",
+ "redis 0.25.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "yrs",
+]
+
+[[package]]
+name = "collab-rt-entity"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "anyhow",
+ "bincode",
+ "brotli",
+ "bytes",
+ "client-websocket",
+ "collab",
+ "collab-entity",
+ "collab-rt-protocol",
+ "database-entity",
+ "prost",
+ "prost-build",
+ "protoc-bin-vendored",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "thiserror",
+ "tokio-tungstenite",
+ "yrs",
+]
+
+[[package]]
+name = "collab-rt-protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "collab",
+ "serde",
+ "thiserror",
+ "yrs",
 ]
 
 [[package]]
@@ -2079,17 +2175,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
-name = "evmap"
-version = "10.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e3ea06a83f97d3dc2eb06e51e7a729b418f0717a5558a5c870e3d5156dc558d"
-dependencies = [
- "hashbag",
- "slab",
- "smallvec",
-]
-
-[[package]]
 name = "fancy-regex"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2486,12 +2571,6 @@ dependencies = [
  "cfg-if",
  "crunchy",
 ]
-
-[[package]]
-name = "hashbag"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3d44c238cb72d3e8993a30c32e97b2b2c2c1a12388603f28c4f19a44c4396bc"
 
 [[package]]
 name = "hashbrown"
@@ -4231,90 +4310,6 @@ dependencies = [
 [[package]]
 name = "realtime"
 version = "0.1.0"
-dependencies = [
- "actix",
- "actix-rt",
- "actix-web",
- "actix-web-actors",
- "anyhow",
- "app-error",
- "assert-json-diff",
- "async-stream",
- "async-trait",
- "bytes",
- "chrono",
- "collab",
- "collab-document",
- "collab-entity",
- "collab-folder",
- "dashmap",
- "database",
- "database-entity",
- "futures",
- "futures-util",
- "indexmap",
- "md5",
- "once_cell",
- "parking_lot 0.12.1",
- "prometheus-client",
- "realtime-entity",
- "realtime-protocol",
- "reqwest",
- "semver",
- "serde",
- "serde-aux",
- "serde_json",
- "serde_repr",
- "tempfile",
- "thiserror",
- "tokio",
- "tokio-retry",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "tracing-bunyan-formatter",
- "tracing-log 0.1.4",
- "tracing-subscriber",
- "uuid",
- "yrs",
-]
-
-[[package]]
-name = "realtime-entity"
-version = "0.1.0"
-dependencies = [
- "actix",
- "anyhow",
- "bincode",
- "brotli",
- "bytes",
- "client-websocket",
- "collab",
- "collab-entity",
- "database-entity",
- "prost",
- "prost-build",
- "protoc-bin-vendored",
- "realtime-protocol",
- "serde",
- "serde_json",
- "serde_repr",
- "thiserror",
- "tokio-tungstenite",
- "yrs",
-]
-
-[[package]]
-name = "realtime-protocol"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "collab",
- "serde",
- "thiserror",
- "yrs",
-]
 
 [[package]]
 name = "redis"
@@ -4929,17 +4924,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63261df402c67811e9ac6def069e4786148c4563f4b50fd4bf30aa370d626b02"
 dependencies = [
  "serde_derive",
-]
-
-[[package]]
-name = "serde-aux"
-version = "4.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a86348501c129f3ad50c2f4635a01971f76974cd8a3f335988a0f1581c082765"
-dependencies = [
- "chrono",
- "serde",
- "serde_json",
 ]
 
 [[package]]

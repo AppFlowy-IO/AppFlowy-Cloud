@@ -20,9 +20,9 @@ use tokio::sync::broadcast::{channel, Receiver, Sender};
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use crate::ServerFixIntervalPing;
 use crate::{af_spawn, retry_connect};
-use realtime_entity::collab_msg::{ClientCollabMessage, ServerCollabMessage};
-use realtime_entity::message::{RealtimeMessage, SystemMessage};
-use realtime_entity::user::UserMessage;
+use collab_rt_entity::collab_msg::{ClientCollabMessage, ServerCollabMessage};
+use collab_rt_entity::message::{RealtimeMessage, SystemMessage};
+use collab_rt_entity::user::UserMessage;
 
 use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
 use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};

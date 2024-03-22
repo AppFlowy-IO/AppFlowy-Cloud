@@ -18,11 +18,11 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 
-WORKDIR /app/libs/collab-history
+WORKDIR /app/services/collab-history
 RUN cargo build --release --bin collab-history
 
 FROM debian:bookworm-slim AS runtime
-WORKDIR /app/libs/collab-history
+WORKDIR /app/services/collab-history
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl \
     # Clean up

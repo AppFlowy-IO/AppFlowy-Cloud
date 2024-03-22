@@ -6,9 +6,9 @@ use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
 
+use collab_rt::RealtimeAccessControl;
 use dashmap::DashMap;
 use database_entity::dto::AFAccessLevel;
-use realtime::server::RealtimeAccessControl;
 use std::sync::Arc;
 use tracing::instrument;
 

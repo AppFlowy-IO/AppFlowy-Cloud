@@ -12,6 +12,7 @@ use crate::biz::collab::access_control::{
 };
 use crate::biz::collab::cache::CollabCache;
 
+use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::pg_listen::{
   spawn_listen_on_collab_member_change, spawn_listen_on_workspace_member_change,
 };
@@ -33,10 +34,11 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
+use collab_rt::command::{RTCommandReceiver, RTCommandSender};
+use collab_rt::CollabRealtimeServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
-use realtime::server::{RTCommandReceiver, RTCommandSender, RealtimeServer};
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
@@ -56,7 +58,7 @@ impl Application {
     config: Config,
     state: AppState,
     rt_cmd_recv: RTCommandReceiver,
-  ) -> Result<Self, anyhow::Error> {
+  ) -> Result<Self, Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
@@ -107,14 +109,15 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = RealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
+  let realtime_server = CollabRealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
     storage.clone(),
     RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
   )
-  .unwrap()
-  .start();
+  .unwrap();
+
+  let realtime_server_actor = RealtimeServerActor(realtime_server).start();
 
   let mut server = HttpServer::new(move || {
     App::new()
@@ -139,7 +142,7 @@ pub async fn run(
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
       .app_data(Data::new(state.metrics.access_control_metrics.clone()))
-      .app_data(Data::new(realtime_server.clone()))
+      .app_data(Data::new(realtime_server_actor.clone()))
       .app_data(Data::new(state.clone()))
       .app_data(Data::new(storage.clone()))
   });

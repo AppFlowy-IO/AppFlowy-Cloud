@@ -13,4 +13,4 @@ pub use sink::*;
 pub use sink_config::*;
 pub use sync_control::*;
 
-pub use realtime_entity::collab_msg;
+pub use collab_rt_entity::collab_msg;

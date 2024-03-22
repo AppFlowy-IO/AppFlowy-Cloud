@@ -41,9 +41,9 @@ pub mod error {
 
 // Export all dto entities that will be used in the frontend application
 pub mod entity {
+  pub use collab_rt_entity::user::*;
   pub use database_entity::dto::*;
   pub use gotrue_entity::dto::*;
-  pub use realtime_entity::user::*;
   pub use shared_entity::dto::*;
 }
 

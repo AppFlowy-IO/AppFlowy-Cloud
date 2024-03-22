@@ -1,0 +1,40 @@
+[package]
+name = "collab-rt"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+app-error = { workspace = true }
+dashmap.workspace = true
+async-stream.workspace = true
+futures.workspace = true
+tracing = "0.1.40"
+futures-util = "0.3.30"
+tokio-util = { version = "0.7", features = ["codec"] }
+tokio-stream = { version = "0.1.14", features = ["sync"] }
+tokio = { workspace = true, features = ["net", "sync", "macros"] }
+async-trait = "0.1.77"
+serde.workspace = true
+serde_json.workspace = true
+thiserror = "1.0.56"
+anyhow = "1"
+
+collab = { version = "0.1.0"}
+collab-entity = { version = "0.1.0" }
+collab-folder = { version = "0.1.0" }
+collab-document = { version = "0.1.0" }
+database = { path = "../database" }
+database-entity.workspace = true
+yrs.workspace = true
+chrono = "0.4.31"
+collab-rt-entity = { workspace = true, features = ["actix_message"] }
+collab-rt-protocol.workspace = true
+uuid = { version = "1", features = ["v4"] }
+md5 = "0.7"
+prometheus-client = "0.22.1"
+indexmap = "2.2.5"
+semver = "1.0.22"
+redis = "0.25.2"
+parking_lot = "0.12.1"

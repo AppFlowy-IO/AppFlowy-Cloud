@@ -9,7 +9,7 @@
 - `libs/gotrue`: Contains the GoTrue Authentication Server code.
 - `libs/gotrue-entity`: Entity definitions for the GoTrue Auth Server.
 - `libs/realtime`: Realtime server implementation.
-- `libs/realtime-entity`: Realtime server entity definitions.
+- `libs/collab-rt-entity`: Realtime server entity definitions.
 - `libs/infra`: Scripts and tools for infrastructure management.
 - `libs/app_error`: Custom error types specific to AppFlowy-Cloud.
 

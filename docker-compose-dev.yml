@@ -109,5 +109,14 @@ services:
       - FLASK_DEBUG=false
       - FLASK_SKIP_DOTENV=true
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+#  collab_history:
+#    restart: on-failure
+#    build:
+#      context: .
+#      dockerfile: ./libs/collab-history/Dockerfile
+#    environment:
+#      - RUST_LOG=${RUST_LOG:-info}
+#      - COLLAB_HISTORY_REDIS_URL=${COLLAB_HISTORY_REDIS_URL:-redis://redis:6379}
 volumes:
   postgres_data:

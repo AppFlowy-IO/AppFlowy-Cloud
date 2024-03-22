@@ -1,0 +1,24 @@
+[package]
+name = "collab-history"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+collab.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+redis = { workspace = true, features = [ "aio", "tokio-comp", "connection-manager"] }
+dotenvy = "0.15.0"
+axum = "0.7.4"
+thiserror = "1.0.58"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tower-service = "0.3"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+tower = "0.4"
+serde_repr = "0.1.18"
+collab-stream.workspace = true

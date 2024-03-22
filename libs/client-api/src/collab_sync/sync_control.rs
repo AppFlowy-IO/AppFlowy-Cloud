@@ -10,13 +10,13 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 
-use futures_util::{SinkExt, StreamExt};
-use realtime_entity::collab_msg::{
+use collab_rt_entity::collab_msg::{
   AckCode, BroadcastSync, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit,
   UpdateSync,
 };
-use realtime_protocol::{handle_collab_message, ClientSyncProtocol, CollabSyncProtocol};
-use realtime_protocol::{Message, MessageReader, SyncMessage};
+use collab_rt_protocol::{handle_collab_message, ClientSyncProtocol, CollabSyncProtocol};
+use collab_rt_protocol::{Message, MessageReader, SyncMessage};
+use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, Ordering};

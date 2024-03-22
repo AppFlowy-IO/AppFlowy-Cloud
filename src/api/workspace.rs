@@ -22,9 +22,9 @@ use database::user::select_uid_from_email;
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
 
+use crate::biz::actix_ws::entities::{ClientStreamMessage, RealtimeMessage};
 use bytes::BytesMut;
-use realtime::entities::{ClientStreamMessage, RealtimeMessage};
-use realtime_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
@@ -811,11 +811,10 @@ async fn post_realtime_message_stream_handler(
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let stream = Box::new(tokio_stream::once(message));
   let mut stream_message = Some(ClientStreamMessage {
     uid,
     device_id,
-    stream,
+    message,
   });
   const MAX_RETRIES: usize = 3;
   const RETRY_DELAY: Duration = Duration::from_secs(2);

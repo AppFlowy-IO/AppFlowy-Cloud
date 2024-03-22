@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
 
-use realtime_entity::collab_msg::{CollabSinkMessage, MsgId};
+use collab_rt_entity::collab_msg::{CollabSinkMessage, MsgId};
 
 pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]

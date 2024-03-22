@@ -149,7 +149,7 @@ impl CollabCache {
     Ok(())
   }
 
-  pub async fn is_exist(&self, oid: &str) -> Result<bool, AppError> {
+  pub async fn is_exist_in_disk(&self, oid: &str) -> Result<bool, AppError> {
     let is_exist = self.disk_cache.is_exist(oid).await?;
     Ok(is_exist)
   }

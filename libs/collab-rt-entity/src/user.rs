@@ -64,8 +64,11 @@ pub trait RealtimeUser:
 {
   fn uid(&self) -> i64;
   fn device_id(&self) -> &str;
+
+  fn connect_at(&self) -> i64;
+
   fn user_device(&self) -> String {
-    format!("{}-{}", self.uid(), self.device_id())
+    format!("{}:{}", self.uid(), self.device_id())
   }
 }
 
@@ -79,5 +82,9 @@ where
 
   fn device_id(&self) -> &str {
     self.as_ref().device_id()
+  }
+
+  fn connect_at(&self) -> i64 {
+    self.as_ref().connect_at()
   }
 }

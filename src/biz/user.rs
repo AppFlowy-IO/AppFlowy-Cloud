@@ -207,7 +207,7 @@ pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotifi
 pub struct RealtimeUserImpl {
   pub uid: i64,
   pub device_id: String,
-  pub timestamp: i64,
+  pub connect_at: i64,
 }
 
 impl RealtimeUserImpl {
@@ -215,7 +215,7 @@ impl RealtimeUserImpl {
     Self {
       uid,
       device_id,
-      timestamp: chrono::Utc::now().timestamp(),
+      connect_at: chrono::Utc::now().timestamp(),
     }
   }
 }
@@ -224,7 +224,7 @@ impl Display for RealtimeUserImpl {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
       "uid:{}|device_id:{}|connected_at:{}",
-      self.uid, self.device_id, self.timestamp,
+      self.uid, self.device_id, self.connect_at,
     ))
   }
 }
@@ -236,5 +236,9 @@ impl RealtimeUser for RealtimeUserImpl {
 
   fn device_id(&self) -> &str {
     &self.device_id
+  }
+
+  fn connect_at(&self) -> i64 {
+    self.connect_at
   }
 }

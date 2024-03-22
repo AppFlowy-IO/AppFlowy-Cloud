@@ -3,7 +3,7 @@ use std::rc::{Rc, Weak};
 
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_rt_protocol::{handle_collab_message, Error};
+use collab_rt_protocol::{handle_message, Error};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -22,6 +22,7 @@ use collab_rt_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
 use collab_rt_entity::message::MessageByObjectId;
+use collab_rt_entity::user::RealtimeUser;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 
@@ -158,14 +159,16 @@ impl CollabBroadcast {
   /// A `Subscription` instance that represents the active subscription. Dropping this structure or
   /// calling its `stop` method will unsubscribe the connection and cease all related activities.
   ///
-  pub fn subscribe<Sink, Stream>(
+  pub fn subscribe<Sink, Stream, U>(
     &self,
+    user: &U,
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
     collab: Weak<Mutex<Collab>>,
   ) -> Subscription
   where
+    U: RealtimeUser,
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
@@ -203,6 +206,7 @@ impl CollabBroadcast {
       stop_tx
     };
 
+    let user = user.clone();
     let stream_stop_tx = {
       let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       let object_id = self.object_id.clone();
@@ -213,16 +217,23 @@ impl CollabBroadcast {
       tokio::task::spawn_local(async move {
         loop {
           select! {
-            _ = stop_rx.recv() => break,
+            _ = stop_rx.recv() => {
+             trace!("stop receiving {} stream from user:{} connect at:{}", object_id, user.uid(), user.connect_at());
+              break
+            },
             result = stream.next() => {
               match result {
                 Some(map) => {
                   match collab.upgrade() {
-                    None => break, // break the loop if the collab is dropped
+                    None => {
+                      trace!("{} stop receiving user:{} messages because of collab is drop", user.user_device(), object_id);
+                      // break the loop if the collab is dropped
+                      break
+                    },
                     Some(collab) => {
                       for (msg_oid, collab_messages) in map {
                         if collab_messages.is_empty()  {
-                          warn!("collab messages is empty");
+                          warn!("{} collab messages is empty", object_id);
                         }
 
                         // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
@@ -237,7 +248,10 @@ impl CollabBroadcast {
                     }
                   }
                 },
-                None => break,
+                None => {
+                  trace!("{} stop receiving user:{} messages", object_id, user.user_device());
+                  break
+                },
               }
             }
           }
@@ -274,7 +288,7 @@ async fn handle_client_collab_message<Sink>(
     match msg {
       Ok(msg) => {
         if let Ok(mut collab) = collab.try_lock() {
-          let result = handle_collab_message(&origin, &ServerSyncProtocol, &mut collab, msg);
+          let result = handle_message(&origin, &ServerSyncProtocol, &mut collab, msg);
           match result {
             Ok(payload) => {
               let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())

@@ -66,7 +66,7 @@ where
   }
 
   pub async fn remove_user(&self, user: &U) {
-    trace!("remove subscribe: {}", user);
+    trace!("{} remove subscriber from group: {}", self.object_id, user);
     if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
       old_sub.stop().await;
     }
@@ -142,32 +142,41 @@ where
     Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
-    trace!(
-      "[realtime]: {} new subscriber: {}, connected members: {}",
-      self.object_id,
-      user.uid(),
-      self.subscribers.len(),
-    );
-
-    let sub =
-      self
-        .broadcast
-        .subscribe(subscriber_origin, sink, stream, Rc::downgrade(&self.collab));
-
     // Remove the old user if it exists
     let user_device = user.user_device();
     if let Some((_, old)) = self.user_by_user_device.remove(&user_device) {
-      trace!("remove subscriber: {}", old);
+      trace!(
+        "{} remove subscriber when resubscribing: {}",
+        self.object_id,
+        old
+      );
       if let Some((_, mut old_sub)) = self.subscribers.remove(&old) {
         old_sub.stop().await;
       }
     }
 
+    // create new subscription for new subscriber
+    let sub = self.broadcast.subscribe(
+      user,
+      subscriber_origin,
+      sink,
+      stream,
+      Rc::downgrade(&self.collab),
+    );
+
+    // insert the device for given user
     self
       .user_by_user_device
       .insert(user_device, (*user).clone());
-    trace!("insert subscriber: {}", user);
     self.subscribers.insert((*user).clone(), sub);
+
+    trace!(
+      "[realtime]:{} new subscriber:{}, connect at:{}, connected members: {}",
+      self.object_id,
+      user.user_device(),
+      user.connect_at(),
+      self.subscribers.len(),
+    );
   }
 
   /// Check if the group is active. A group is considered active if it has at least one

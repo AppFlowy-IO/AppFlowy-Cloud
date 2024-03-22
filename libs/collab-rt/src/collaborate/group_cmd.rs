@@ -63,7 +63,7 @@ where
             collab_messages,
           } => {
             if let Err(err) = self
-              .handle_collab_message(&user, object_id, collab_messages)
+              .handle_client_collab_message(&user, object_id, collab_messages)
               .await
             {
               error!("handle client message error: {}", err);
@@ -96,7 +96,7 @@ where
   ///      - If the group does not exist: The client is prompted to send an 'init sync' message first.
 
   #[instrument(level = "trace", skip_all)]
-  async fn handle_collab_message(
+  async fn handle_client_collab_message(
     &self,
     user: &U,
     object_id: String,
@@ -120,19 +120,14 @@ where
 
     let is_group_exist = self.all_groups.contains_group(&object_id).await;
     if is_group_exist {
-      let first_message = messages.first().unwrap();
-      // If a group exists for the specified object_id and the message is an 'init sync',
-      // then remove any existing subscriber from that group and add the new user as a subscriber to the group.
-      if first_message.is_client_init_sync() {
-        self.all_groups.remove_user(&object_id, user).await?;
-      }
-
       // subscribe the user to the group. then the user will receive the changes from the group
       let is_user_subscribed = self.all_groups.contains_user(&object_id, user).await;
       if !is_user_subscribed {
+        // safety: messages is not empty because we have checked it before
+        let first_message = messages.first().unwrap();
         self.subscribe_group(user, first_message).await?;
       }
-      broadcast_client_collab_message(user, object_id, messages, &self.client_stream_by_user).await;
+      forward_message_to_group(user, object_id, messages, &self.client_stream_by_user).await;
     } else {
       let first_message = messages.first().unwrap();
       // If there is no existing group for the given object_id and the message is an 'init message',
@@ -140,8 +135,7 @@ where
       if first_message.is_client_init_sync() {
         self.create_group(first_message).await?;
         self.subscribe_group(user, first_message).await?;
-        broadcast_client_collab_message(user, object_id, messages, &self.client_stream_by_user)
-          .await;
+        forward_message_to_group(user, object_id, messages, &self.client_stream_by_user).await;
       } else {
         warn!(
           "The group:{} is not found, the client:{} should send the init message first",
@@ -196,8 +190,10 @@ where
   }
 }
 
+/// Forward the message to the group.
+/// When the group receives the message, it will broadcast the message to all the users in the group.
 #[inline]
-pub async fn broadcast_client_collab_message<U>(
+pub async fn forward_message_to_group<U>(
   user: &U,
   object_id: String,
   collab_messages: Vec<ClientCollabMessage>,

@@ -61,7 +61,6 @@ where
             collab_message.object_id()
           );
 
-          let client_uid = user.uid();
           self
             .edit_collab_by_user
             .entry((*user).clone())
@@ -73,9 +72,9 @@ where
 
           let (sink, stream) = client_stream
             .value_mut()
-            .client_channel::<CollabMessage, _>(
+            .client_channel::<CollabMessage, _, U>(
               &collab_group.workspace_id,
-              client_uid,
+              user,
               object_id,
               self.access_control.clone(),
             );

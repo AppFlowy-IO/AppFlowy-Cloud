@@ -11,14 +11,16 @@ pub use collab_rt_entity::message::RealtimeMessage;
 pub struct Connect<U> {
   pub socket: Recipient<RealtimeMessage>,
   pub user: U,
-  pub session_id: String,
+  /// Each websocket connection has a unique id
+  pub ws_connect_id: String,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
 pub struct Disconnect<U> {
   pub user: U,
-  pub session_id: String,
+  /// Each websocket connection has a unique id
+  pub ws_connect_id: String,
 }
 
 #[derive(Debug, Message, Clone)]

@@ -23,7 +23,7 @@ use std::ops::DerefMut;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
-use tracing::{error, instrument};
+use tracing::{error, instrument, trace};
 use validator::Validate;
 
 pub type CollabAccessControlStorage = CollabStorageImpl<
@@ -201,6 +201,7 @@ where
     Ok(())
   }
 
+  #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, is_collab_init = %is_collab_init))]
   async fn get_collab_encoded(
     &self,
     uid: &i64,
@@ -224,6 +225,7 @@ where
 
     // Early return if editing collab is initialized, as it indicates no need to query further.
     if !is_collab_init {
+      trace!("Get encode collab {} from editing collab", params.object_id);
       // Attempt to retrieve encoded collab from the editing collab
       if let Some(value) = self.get_encode_collab_from_editing(&params.object_id).await {
         return Ok(value);

@@ -52,7 +52,7 @@ where
 
   fn handle(&mut self, new_conn: Connect<U>, _ctx: &mut Context<Self>) -> Self::Result {
     let conn_sink = RealtimeClientWebsocketSinkImpl(new_conn.socket);
-    self.handle_new_connection(new_conn.user, new_conn.session_id, conn_sink)
+    self.handle_new_connection(new_conn.user, new_conn.ws_connect_id, conn_sink)
   }
 }
 
@@ -64,7 +64,7 @@ where
 {
   type Result = ResponseFuture<anyhow::Result<(), RealtimeError>>;
   fn handle(&mut self, msg: Disconnect<U>, _: &mut Context<Self>) -> Self::Result {
-    self.handle_disconnect(msg.user, msg.session_id)
+    self.handle_disconnect(msg.user, msg.ws_connect_id)
   }
 }
 

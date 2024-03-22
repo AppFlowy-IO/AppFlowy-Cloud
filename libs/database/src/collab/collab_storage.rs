@@ -32,7 +32,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 
   async fn enforce_write_collab(
     &self,
-    worksapce_id: &str,
+    workspace_id: &str,
     uid: &i64,
     oid: &str,
   ) -> Result<bool, AppError>;

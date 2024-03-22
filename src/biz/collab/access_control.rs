@@ -118,12 +118,10 @@ where
       trace!("Skip access control for the request");
       return Ok(());
     }
-    let collab_exists = self.collab_cache.is_exist(oid).await?;
+    let collab_exists = self.collab_cache.is_exist_in_disk(oid).await?;
     if !collab_exists {
-      return Err(AppError::RecordNotFound(format!(
-        "Collab not exist in db. {}",
-        oid
-      )));
+      // If the collab does not exist, we should not enforce the access control
+      return Ok(());
     }
 
     let access_level = self.require_access_level(&method, path);
@@ -190,12 +188,11 @@ where
     uid: &i64,
     oid: &str,
   ) -> Result<bool, AppError> {
-    let collab_exists = self.cache.is_exist(oid).await?;
+    let collab_exists = self.cache.is_exist_in_disk(oid).await?;
     if !collab_exists {
-      return Err(AppError::RecordNotFound(format!(
-        "Collab not exist in db. {}",
-        oid
-      )));
+      // If the collab does not exist, we should not enforce the access control. We consider the user
+      // has the permission to read the collab
+      return Ok(true);
     }
     self
       .collab_access_control
@@ -209,12 +206,11 @@ where
     uid: &i64,
     oid: &str,
   ) -> Result<bool, AppError> {
-    let collab_exists = self.cache.is_exist(oid).await?;
+    let collab_exists = self.cache.is_exist_in_disk(oid).await?;
     if !collab_exists {
-      return Err(AppError::RecordNotFound(format!(
-        "Collab not exist in db. {}",
-        oid
-      )));
+      // If the collab does not exist, we should not enforce the access control. we consider the user
+      // has the permission to write the collab
+      return Ok(true);
     }
     self
       .collab_access_control

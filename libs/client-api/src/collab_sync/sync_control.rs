@@ -14,7 +14,7 @@ use collab_rt_entity::collab_msg::{
   AckCode, BroadcastSync, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit,
   UpdateSync,
 };
-use collab_rt_protocol::{handle_collab_message, ClientSyncProtocol, CollabSyncProtocol};
+use collab_rt_protocol::{handle_message, ClientSyncProtocol, CollabSyncProtocol};
 use collab_rt_protocol::{Message, MessageReader, SyncMessage};
 use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
@@ -412,8 +412,7 @@ where
       for msg in reader {
         let msg = msg?;
         let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-        if let Some(payload) = handle_collab_message(origin, &ClientSyncProtocol, &mut collab, msg)?
-        {
+        if let Some(payload) = handle_message(origin, &ClientSyncProtocol, &mut collab, msg)? {
           let object_id = object_id.to_string();
           sink.queue_msg(|msg_id| {
             if is_server_sync_step_1 {

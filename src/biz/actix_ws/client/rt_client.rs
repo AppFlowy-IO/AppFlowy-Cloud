@@ -82,7 +82,7 @@ where
 
         act.server.do_send(Disconnect {
           user,
-          session_id: session_id.clone(),
+          ws_connect_id: session_id.clone(),
         });
         ctx.stop();
         return;
@@ -186,7 +186,7 @@ where
       .send(Connect {
         socket: ctx.address().recipient(),
         user: self.user.clone(),
-        session_id: self.session_id.clone(),
+        ws_connect_id: self.session_id.clone(),
       })
       .into_actor(self)
       .then(|res, _session, ctx| {
@@ -215,7 +215,7 @@ where
     trace!("{} stopping websocket connect", user);
     self.server.do_send(Disconnect {
       user,
-      session_id: self.session_id.clone(),
+      ws_connect_id: self.session_id.clone(),
     });
     Running::Stop
   }

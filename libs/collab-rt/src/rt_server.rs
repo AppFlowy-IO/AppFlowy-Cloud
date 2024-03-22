@@ -38,7 +38,7 @@ pub struct CollabRealtimeServer<S, U, AC> {
   /// If the two session IDs differ, it indicates that the user has established a new connection
   /// to the server since the stored session ID was last updated.
   ///
-  session_id_by_user: Arc<DashMap<U, String>>,
+  user_by_ws_connect_id: Arc<DashMap<U, String>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
@@ -84,7 +84,7 @@ where
       storage,
       groups,
       user_by_device: Default::default(),
-      session_id_by_user: Default::default(),
+      user_by_ws_connect_id: Default::default(),
       editing_collab_by_user,
       client_stream_by_user,
       group_sender_by_object_id,
@@ -96,7 +96,7 @@ where
   pub fn handle_new_connection(
     &self,
     user: U,
-    session_id: String,
+    ws_connect_id: String,
     conn_sink: impl RealtimeClientWebsocketSink,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
@@ -105,13 +105,16 @@ where
     let user_by_device = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
-    let user_by_session_id = self.session_id_by_user.clone();
+    let user_by_ws_connect_id = self.user_by_ws_connect_id.clone();
 
     Box::pin(async move {
-      trace!("[realtime]: new connection => {} ", user);
-      user_by_session_id.insert(user.clone(), session_id);
-
+      user_by_ws_connect_id.insert(user.clone(), ws_connect_id);
       let old_user = user_by_device.insert(UserDevice::from(&user), user.clone());
+      trace!(
+        "[realtime]: new connection => {}, remove old: {:?}",
+        user,
+        old_user
+      );
       if let Some(old_user) = old_user {
         if let Some(value) = client_stream_by_user.remove(&old_user) {
           let old_stream = value.1;
@@ -146,19 +149,19 @@ where
   pub fn handle_disconnect(
     &self,
     user: U,
-    session_id: String,
+    ws_connect_id: String,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
-    let session_id_by_user = self.session_id_by_user.clone();
+    let session_id_by_user = self.user_by_ws_connect_id.clone();
 
     Box::pin(async move {
       trace!("[realtime]: disconnect => {}", user);
       // If the user has reconnected with a new session, the session id will be different.
       // So do not remove the user from groups and client streams
       if let Some(entry) = session_id_by_user.get(&user) {
-        if entry.value() != &session_id {
+        if entry.value() != &ws_connect_id {
           return Ok(());
         }
       }
@@ -285,14 +288,15 @@ impl CollabClientStream {
   ///
   /// [Stream] will be used to send changes to the collab object.
   ///
-  pub fn client_channel<T, AC>(
+  pub fn client_channel<T, AC, U>(
     &mut self,
     workspace_id: &str,
-    uid: i64,
+    user: &U,
     object_id: &str,
     access_control: Arc<AC>,
   ) -> (UnboundedSenderSink<T>, ReceiverStream<MessageByObjectId>)
   where
+    U: RealtimeUser,
     T: Into<RealtimeMessage> + Send + Sync + 'static,
     AC: RealtimeAccessControl,
   {
@@ -305,6 +309,7 @@ impl CollabClientStream {
     let (client_sink_tx, mut client_sink_rx) = tokio::sync::mpsc::unbounded_channel::<T>();
     let sink_access_control = access_control.clone();
     let sink_workspace_id = workspace_id.to_string();
+    let uid = user.uid();
     tokio::spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
         let result = sink_access_control
@@ -336,7 +341,9 @@ impl CollabClientStream {
 
     let cloned_object_id = object_id.to_string();
     let stream_workspace_id = workspace_id.to_string();
-    // forward the message to the stream that was subscribed by the broadcast group
+    let user = user.clone();
+    // stream_rx continuously receive messages from the websocket client and then
+    // forward the message to the subscriber which is the broadcast channel [CollabBroadcast].
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
       while let Some(Ok(realtime_msg)) = stream_rx.next().await {
@@ -349,15 +356,16 @@ impl CollabClientStream {
 
               let (valid_messages, invalid_message) = Self::access_control(
                 &stream_workspace_id,
-                &uid,
+                &user.uid(),
                 &msg_oid,
                 &access_control,
                 original_messages,
               )
               .await;
               trace!(
-                "{} receive message: valid:{} invalid:{}",
+                "{} receive {} client message: valid:{} invalid:{}",
                 msg_oid,
+                user.uid(),
                 valid_messages.len(),
                 invalid_message.len()
               );
@@ -365,8 +373,16 @@ impl CollabClientStream {
               if valid_messages.is_empty() {
                 continue;
               }
-              if tx.send([(msg_oid, valid_messages)].into()).await.is_err() {
-                break;
+
+              // if tx.send return error, it means the client is disconnected from the group
+              if let Err(err) = tx.send([(msg_oid, valid_messages)].into()).await {
+                trace!(
+                  "{} send message to user:{} stream fail with error: {}, break the loop",
+                  cloned_object_id,
+                  user.user_device(),
+                  err,
+                );
+                return;
               }
             }
           },

@@ -19,7 +19,6 @@ use crate::biz::casbin::pg_listen::{
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
-use crate::biz::user::RealtimeUserImpl;
 use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
 use crate::config::config::{Config, DatabaseSetting, GoTrueSetting, S3Setting};
 use crate::middleware::access_control_mw::MiddlewareAccessControlTransform;
@@ -109,7 +108,7 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollabRealtimeServer::<_, Arc<RealtimeUserImpl>, _>::new(
+  let realtime_server = CollabRealtimeServer::<_, _>::new(
     storage.clone(),
     RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),

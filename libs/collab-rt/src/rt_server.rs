@@ -24,12 +24,12 @@ use tokio_stream::StreamExt;
 use tracing::{error, event, info, trace, warn};
 
 #[derive(Clone)]
-pub struct CollabRealtimeServer<S, U, AC> {
+pub struct CollabRealtimeServer<S, AC> {
   #[allow(dead_code)]
   storage: Arc<S>,
   /// Keep track of all collab groups
-  groups: Arc<AllGroup<S, U, AC>>,
-  pub user_by_device: Arc<DashMap<UserDevice, U>>,
+  groups: Arc<AllGroup<S, AC>>,
+  pub device_by_user: Arc<DashMap<UserDevice, RealtimeUser>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
   ///
@@ -38,23 +38,22 @@ pub struct CollabRealtimeServer<S, U, AC> {
   /// If the two session IDs differ, it indicates that the user has established a new connection
   /// to the server since the stored session ID was last updated.
   ///
-  user_by_ws_connect_id: Arc<DashMap<U, String>>,
+  user_by_ws_connect_id: Arc<DashMap<RealtimeUser, String>>,
   /// Keep track of all object ids that a user is subscribed to
-  editing_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
+  editing_collab_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
-  client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-  group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>>,
+  client_stream_by_user: Arc<DashMap<RealtimeUser, CollabClientStream>>,
+  group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
   access_control: Arc<AC>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
 }
 
-impl<S, U, AC> CollabRealtimeServer<S, U, AC>
+impl<S, AC> CollabRealtimeServer<S, AC>
 where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: RealtimeAccessControl,
 {
   pub fn new(
@@ -65,9 +64,9 @@ where
   ) -> Result<Self, RealtimeError> {
     let access_control = Arc::new(access_control);
     let groups = Arc::new(AllGroup::new(storage.clone(), access_control.clone()));
-    let client_stream_by_user: Arc<DashMap<U, CollabClientStream>> = Default::default();
+    let client_stream_by_user: Arc<DashMap<RealtimeUser, CollabClientStream>> = Default::default();
     let editing_collab_by_user = Default::default();
-    let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender<U>>> =
+    let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
       Arc::new(Default::default());
 
     spawn_rt_command(command_recv, &group_sender_by_object_id);
@@ -83,7 +82,7 @@ where
     Ok(Self {
       storage,
       groups,
-      user_by_device: Default::default(),
+      device_by_user: Default::default(),
       user_by_ws_connect_id: Default::default(),
       editing_collab_by_user,
       client_stream_by_user,
@@ -95,21 +94,21 @@ where
 
   pub fn handle_new_connection(
     &self,
-    user: U,
+    user: RealtimeUser,
     ws_connect_id: String,
     conn_sink: impl RealtimeClientWebsocketSink,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
     let new_client_stream = CollabClientStream::new(conn_sink);
     let groups = self.groups.clone();
-    let user_by_device = self.user_by_device.clone();
+    let device_by_user = self.device_by_user.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     let user_by_ws_connect_id = self.user_by_ws_connect_id.clone();
 
     Box::pin(async move {
       user_by_ws_connect_id.insert(user.clone(), ws_connect_id);
-      let old_user = user_by_device.insert(UserDevice::from(&user), user.clone());
+      let old_user = device_by_user.insert(UserDevice::from(&user), user.clone());
       trace!(
         "[realtime]: new connection => {}, remove old: {:?}",
         user,
@@ -148,7 +147,7 @@ where
   ///
   pub fn handle_disconnect(
     &self,
-    user: U,
+    user: RealtimeUser,
     ws_connect_id: String,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let groups = self.groups.clone();
@@ -177,7 +176,7 @@ where
   #[inline]
   pub fn handle_client_message(
     &self,
-    user: U,
+    user: RealtimeUser,
     message_by_oid: MessageByObjectId,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let group_sender_by_object_id = self.group_sender_by_object_id.clone();
@@ -231,13 +230,12 @@ where
   }
 }
 
-async fn remove_user<S, U, AC>(
-  groups: &Arc<AllGroup<S, U, AC>>,
-  editing_collab_by_user: &Arc<DashMap<U, HashSet<Editing>>>,
-  user: &U,
+async fn remove_user<S, AC>(
+  groups: &Arc<AllGroup<S, AC>>,
+  editing_collab_by_user: &Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
+  user: &RealtimeUser,
 ) where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: RealtimeAccessControl,
 {
   let entry = editing_collab_by_user.remove(user);
@@ -288,15 +286,14 @@ impl CollabClientStream {
   ///
   /// [Stream] will be used to send changes to the collab object.
   ///
-  pub fn client_channel<T, AC, U>(
+  pub fn client_channel<T, AC>(
     &mut self,
     workspace_id: &str,
-    user: &U,
+    user: &RealtimeUser,
     object_id: &str,
     access_control: Arc<AC>,
   ) -> (UnboundedSenderSink<T>, ReceiverStream<MessageByObjectId>)
   where
-    U: RealtimeUser,
     T: Into<RealtimeMessage> + Send + Sync + 'static,
     AC: RealtimeAccessControl,
   {
@@ -309,7 +306,7 @@ impl CollabClientStream {
     let (client_sink_tx, mut client_sink_rx) = tokio::sync::mpsc::unbounded_channel::<T>();
     let sink_access_control = access_control.clone();
     let sink_workspace_id = workspace_id.to_string();
-    let uid = user.uid();
+    let uid = user.uid;
     tokio::spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
         let result = sink_access_control
@@ -356,7 +353,7 @@ impl CollabClientStream {
 
               let (valid_messages, invalid_message) = Self::access_control(
                 &stream_workspace_id,
-                &user.uid(),
+                &user.uid,
                 &msg_oid,
                 &access_control,
                 original_messages,
@@ -365,7 +362,7 @@ impl CollabClientStream {
               trace!(
                 "{} receive {} client message: valid:{} invalid:{}",
                 msg_oid,
-                user.uid(),
+                user.uid,
                 valid_messages.len(),
                 invalid_message.len()
               );
@@ -437,18 +434,16 @@ impl CollabClientStream {
 }
 
 #[inline]
-pub async fn broadcast_client_collab_message<U>(
-  user: &U,
+pub async fn broadcast_client_collab_message(
+  user: &RealtimeUser,
   object_id: String,
   collab_messages: Vec<ClientCollabMessage>,
-  client_streams: &Arc<DashMap<U, CollabClientStream>>,
-) where
-  U: RealtimeUser,
-{
+  client_streams: &Arc<DashMap<RealtimeUser, CollabClientStream>>,
+) {
   if let Some(client_stream) = client_streams.get(user) {
     trace!(
       "[realtime]: receive: uid:{} oid:{} msg ids: {:?}",
-      user.uid(),
+      user.uid,
       object_id,
       collab_messages
         .iter()
@@ -460,7 +455,7 @@ pub async fn broadcast_client_collab_message<U>(
       .stream_tx
       .send(RealtimeMessage::ClientCollabV2([pair].into()));
     if let Err(err) = err {
-      warn!("Send user:{} message to group error: {}", user.uid(), err,);
+      warn!("Send user:{} message to group error: {}", user.uid, err,);
       client_streams.remove(user);
     }
   }

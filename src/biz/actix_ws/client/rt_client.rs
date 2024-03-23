@@ -23,15 +23,11 @@ use tracing::{debug, error, trace, warn};
 const MAX_MESSAGES_PER_INTERVAL: usize = 10;
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
-pub struct RealtimeClient<
-  U: Unpin + RealtimeUser,
-  S: Unpin + 'static,
-  AC: Unpin + RealtimeAccessControl,
-> {
+pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl> {
   session_id: String,
-  user: U,
+  user: RealtimeUser,
   hb: Instant,
-  pub server: Addr<RealtimeServerActor<S, U, AC>>,
+  pub server: Addr<RealtimeServerActor<S, AC>>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
@@ -41,16 +37,15 @@ pub struct RealtimeClient<
   client_version: Version,
 }
 
-impl<U, S, AC> RealtimeClient<U, S, AC>
+impl<S, AC> RealtimeClient<S, AC>
 where
-  U: Unpin + RealtimeUser + Clone,
   S: CollabStorage + Unpin,
   AC: RealtimeAccessControl + Unpin,
 {
   pub fn new(
-    user: U,
+    user: RealtimeUser,
     user_change_recv: tokio::sync::mpsc::Receiver<AFUserNotification>,
-    server: Addr<RealtimeServerActor<S, U, AC>>,
+    server: Addr<RealtimeServerActor<S, AC>>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
     client_version: Version,
@@ -93,8 +88,8 @@ where
   }
 
   async fn send_binary_to_server(
-    user: U,
-    server: Addr<RealtimeServerActor<S, U, AC>>,
+    user: RealtimeUser,
+    server: Addr<RealtimeServerActor<S, AC>>,
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
     let message = tokio::task::spawn_blocking(move || {
@@ -140,9 +135,8 @@ where
   }
 }
 
-impl<U, S, P> Actor for RealtimeClient<U, S, P>
+impl<S, P> Actor for RealtimeClient<S, P>
 where
-  U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
   P: RealtimeAccessControl + Unpin,
 {
@@ -222,9 +216,8 @@ where
 }
 
 /// Handle message sent from the server
-impl<U, S, AC> Handler<RealtimeMessage> for RealtimeClient<U, S, AC>
+impl<S, AC> Handler<RealtimeMessage> for RealtimeClient<S, AC>
 where
-  U: Unpin + RealtimeUser,
   S: Unpin + CollabStorage,
   AC: RealtimeAccessControl + Unpin,
 {
@@ -252,9 +245,8 @@ where
 }
 
 /// Handle the messages sent from the client
-impl<U, S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<U, S, AC>
+impl<S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<S, AC>
 where
-  U: Unpin + RealtimeUser + Clone,
   S: Unpin + CollabStorage,
   AC: RealtimeAccessControl + Unpin,
 {
@@ -298,11 +290,7 @@ where
         }));
       },
       ws::Message::Close(reason) => {
-        debug!(
-          "Websocket closing for ({:?}): {:?}",
-          self.user.uid(),
-          reason
-        );
+        debug!("Websocket closing for ({:?}): {:?}", self.user.uid, reason);
         ctx.close(reason);
         ctx.stop();
       },

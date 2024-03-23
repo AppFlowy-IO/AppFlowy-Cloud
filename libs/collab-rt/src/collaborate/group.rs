@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use tracing::trace;
 
 /// A group used to manage a single [Collab] object
-pub struct CollabGroup<U> {
+pub struct CollabGroup {
   pub workspace_id: String,
   pub object_id: String,
   collab: Rc<Mutex<Collab>>,
@@ -24,20 +24,17 @@ pub struct CollabGroup<U> {
   broadcast: CollabBroadcast,
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
-  subscribers: DashMap<U, Subscription>,
-  user_by_user_device: DashMap<String, U>,
+  subscribers: DashMap<RealtimeUser, Subscription>,
+  user_by_user_device: DashMap<String, RealtimeUser>,
 }
 
-impl<U> Drop for CollabGroup<U> {
+impl Drop for CollabGroup {
   fn drop(&mut self) {
     trace!("Drop collab group:{}", self.object_id);
   }
 }
 
-impl<U> CollabGroup<U>
-where
-  U: RealtimeUser,
-{
+impl CollabGroup {
   pub async fn new(
     workspace_id: String,
     object_id: String,
@@ -61,11 +58,11 @@ where
     self.collab.lock().await.encode_collab_v1()
   }
 
-  pub fn contains_user(&self, user: &U) -> bool {
+  pub fn contains_user(&self, user: &RealtimeUser) -> bool {
     self.subscribers.contains_key(user)
   }
 
-  pub async fn remove_user(&self, user: &U) {
+  pub async fn remove_user(&self, user: &RealtimeUser) {
     trace!("{} remove subscriber from group: {}", self.object_id, user);
     if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
       old_sub.stop().await;
@@ -133,7 +130,7 @@ where
   ///   Collaboration Group Updates (triggers Sink flow)
   pub async fn subscribe<Sink, Stream>(
     &self,
-    user: &U,
+    user: &RealtimeUser,
     subscriber_origin: CollabOrigin,
     sink: Sink,
     stream: Stream,
@@ -174,7 +171,7 @@ where
       "[realtime]:{} new subscriber:{}, connect at:{}, connected members: {}",
       self.object_id,
       user.user_device(),
-      user.connect_at(),
+      user.connect_at,
       self.subscribers.len(),
     );
   }

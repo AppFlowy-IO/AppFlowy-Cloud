@@ -1,9 +1,8 @@
 use collab::core::origin::CollabOrigin;
 use database_entity::dto::AFWorkspaceMember;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum UserMessage {
@@ -41,14 +40,11 @@ impl UserDevice {
   }
 }
 
-impl<T> From<&T> for UserDevice
-where
-  T: RealtimeUser,
-{
-  fn from(user: &T) -> Self {
+impl From<&RealtimeUser> for UserDevice {
+  fn from(user: &RealtimeUser) -> Self {
     Self {
-      device_id: user.device_id().to_string(),
-      uid: user.uid(),
+      device_id: user.device_id.to_string(),
+      uid: user.uid,
     }
   }
 }
@@ -59,32 +55,32 @@ pub struct Editing {
   pub origin: CollabOrigin,
 }
 
-pub trait RealtimeUser:
-  Clone + Debug + Send + Sync + 'static + Display + Hash + Eq + PartialEq
-{
-  fn uid(&self) -> i64;
-  fn device_id(&self) -> &str;
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct RealtimeUser {
+  pub uid: i64,
+  pub device_id: String,
+  pub connect_at: i64,
+}
 
-  fn connect_at(&self) -> i64;
+impl RealtimeUser {
+  pub fn new(uid: i64, device_id: String) -> Self {
+    Self {
+      uid,
+      device_id,
+      connect_at: chrono::Utc::now().timestamp(),
+    }
+  }
 
-  fn user_device(&self) -> String {
-    format!("{}:{}", self.uid(), self.device_id())
+  pub fn user_device(&self) -> String {
+    format!("{}:{}", self.uid, self.device_id)
   }
 }
 
-impl<T> RealtimeUser for Arc<T>
-where
-  T: RealtimeUser,
-{
-  fn uid(&self) -> i64 {
-    self.as_ref().uid()
-  }
-
-  fn device_id(&self) -> &str {
-    self.as_ref().device_id()
-  }
-
-  fn connect_at(&self) -> i64 {
-    self.as_ref().connect_at()
+impl Display for RealtimeUser {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "uid:{}|device_id:{}|connected_at:{}",
+      self.uid, self.device_id, self.connect_at,
+    ))
   }
 }

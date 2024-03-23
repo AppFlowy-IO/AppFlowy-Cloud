@@ -4,7 +4,6 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
 use collab_rt_entity::collab_msg::CollabMessage;
@@ -18,7 +17,7 @@ use tracing::trace;
 pub struct CollabGroup {
   pub workspace_id: String,
   pub object_id: String,
-  collab: Arc<Mutex<Collab>>,
+  collab: Rc<Mutex<Collab>>,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -48,7 +47,7 @@ impl CollabGroup {
       workspace_id,
       object_id,
       collab_type,
-      collab: Arc::new(Mutex::new(collab)),
+      collab: Rc::new(Mutex::new(collab)),
       broadcast,
       subscribers: Default::default(),
       user_by_user_device: Default::default(),

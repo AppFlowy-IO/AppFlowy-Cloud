@@ -162,6 +162,15 @@ where
             collab_message.object_id()
           );
 
+          self
+            .edit_collab_by_user
+            .entry((*user).clone())
+            .or_default()
+            .insert(Editing {
+              object_id: object_id.to_string(),
+              origin: origin.clone(),
+            });
+
           let (sink, stream) = client_stream
             .value_mut()
             .client_channel::<CollabMessage, _>(

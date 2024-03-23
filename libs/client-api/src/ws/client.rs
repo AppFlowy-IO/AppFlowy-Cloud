@@ -526,6 +526,10 @@ impl From<ConnectInfo> for HeaderMap {
       AUTHORIZATION,
       HeaderValue::from_str(&info.access_token).unwrap_or(HeaderValue::from_static("")),
     );
+    headers.insert(
+      "connect-at",
+      HeaderValue::from(chrono::Utc::now().timestamp()),
+    );
     headers
   }
 }

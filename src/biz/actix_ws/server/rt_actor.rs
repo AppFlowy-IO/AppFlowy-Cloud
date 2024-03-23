@@ -100,7 +100,7 @@ where
     } = client_msg;
 
     let user = self
-      .user_by_device
+      .device_by_user
       .get(&UserDevice::new(&device_id, uid))
       .map(|entry| entry.value().clone());
 

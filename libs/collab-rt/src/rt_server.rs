@@ -29,7 +29,7 @@ pub struct CollabRealtimeServer<S, AC> {
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<AllGroup<S, AC>>,
-  pub user_by_device: Arc<DashMap<UserDevice, RealtimeUser>>,
+  pub device_by_user: Arc<DashMap<UserDevice, RealtimeUser>>,
   /// This map stores the session IDs for users currently connected to the server.
   /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
   ///
@@ -82,7 +82,7 @@ where
     Ok(Self {
       storage,
       groups,
-      user_by_device: Default::default(),
+      device_by_user: Default::default(),
       user_by_ws_connect_id: Default::default(),
       editing_collab_by_user,
       client_stream_by_user,
@@ -101,14 +101,14 @@ where
     // User with the same id and same device will be replaced with the new connection [CollabClientStream]
     let new_client_stream = CollabClientStream::new(conn_sink);
     let groups = self.groups.clone();
-    let user_by_device = self.user_by_device.clone();
+    let device_by_user = self.device_by_user.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
     let user_by_ws_connect_id = self.user_by_ws_connect_id.clone();
 
     Box::pin(async move {
       user_by_ws_connect_id.insert(user.clone(), ws_connect_id);
-      let old_user = user_by_device.insert(UserDevice::from(&user), user.clone());
+      let old_user = device_by_user.insert(UserDevice::from(&user), user.clone());
       trace!(
         "[realtime]: new connection => {}, remove old: {:?}",
         user,

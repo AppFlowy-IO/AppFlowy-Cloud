@@ -8,11 +8,12 @@ use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
+use std::rc::Rc;
 use std::sync::Arc;
 use tracing::{debug, error, instrument};
 
 pub struct AllGroup<S, AC> {
-  group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
+  group_by_object_id: Rc<DashMap<String, Rc<CollabGroup>>>,
   storage: Arc<S>,
   access_control: Arc<AC>,
 }
@@ -24,7 +25,7 @@ where
 {
   pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Self {
     Self {
-      group_by_object_id: Arc::new(DashMap::new()),
+      group_by_object_id: Rc::new(DashMap::new()),
       storage,
       access_control,
     }
@@ -72,7 +73,7 @@ where
     self.group_by_object_id.get(object_id).is_some()
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
+  pub async fn get_group(&self, object_id: &str) -> Option<Rc<CollabGroup>> {
     self
       .group_by_object_id
       .get(object_id)
@@ -111,7 +112,7 @@ where
     collab.initialize().await;
 
     // The lifecycle of the collab is managed by the group.
-    let group = Arc::new(
+    let group = Rc::new(
       CollabGroup::new(
         workspace_id.to_string(),
         object_id.to_string(),

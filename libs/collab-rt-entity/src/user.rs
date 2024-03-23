@@ -60,14 +60,16 @@ pub struct RealtimeUser {
   pub uid: i64,
   pub device_id: String,
   pub connect_at: i64,
+  pub session_id: String,
 }
 
 impl RealtimeUser {
-  pub fn new(uid: i64, device_id: String) -> Self {
+  pub fn new(uid: i64, device_id: String, session_id: String, connect_at: i64) -> Self {
     Self {
       uid,
       device_id,
-      connect_at: chrono::Utc::now().timestamp(),
+      connect_at,
+      session_id,
     }
   }
 

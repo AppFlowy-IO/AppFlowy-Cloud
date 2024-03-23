@@ -1,11 +1,10 @@
 use crate::collaborate::all_group::AllGroup;
-use crate::collaborate::group_sub::{CollabUserMessage, SubscribeGroup};
 use crate::error::RealtimeError;
 use crate::{CollabClientStream, RealtimeAccessControl};
 
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
-use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
+use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabMessage, CollabSinkMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
@@ -152,18 +151,35 @@ where
     user: &RealtimeUser,
     collab_message: &ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
-    SubscribeGroup {
-      message: &CollabUserMessage {
-        user,
-        collab_message,
-      },
-      groups: &self.all_groups,
-      edit_collab_by_user: &self.edit_collab_by_user,
-      client_stream_by_user: &self.client_stream_by_user,
-      access_control: &self.access_control,
+    let object_id = collab_message.object_id();
+    let origin = collab_message.origin();
+    if let Some(mut client_stream) = self.client_stream_by_user.get_mut(user) {
+      if let Some(collab_group) = self.all_groups.get_group(object_id).await {
+        if !collab_group.contains_user(user) {
+          trace!(
+            "[realtime]: {} subscribe group:{}",
+            user,
+            collab_message.object_id()
+          );
+
+          let (sink, stream) = client_stream
+            .value_mut()
+            .client_channel::<CollabMessage, _>(
+              &collab_group.workspace_id,
+              user,
+              object_id,
+              self.access_control.clone(),
+            );
+
+          collab_group
+            .subscribe(user, origin.clone(), sink, stream)
+            .await;
+        }
+      }
+    } else {
+      warn!("The client stream: {} is not found", user);
     }
-    .run()
-    .await;
+
     Ok(())
   }
   async fn create_group(&self, collab_message: &ClientCollabMessage) -> Result<(), RealtimeError> {

@@ -151,18 +151,13 @@ where
 
     Box::pin(async move {
       let user_device = UserDevice::from(&disconnect_user);
+      let was_removed = device_by_user.remove_if(&user_device, |_, existing_user| {
+        existing_user.session_id == disconnect_user.session_id
+      });
 
-      // use temporary variable to shorten the lifetime of the lock for device_by_user]
-      let mut should_remove = false;
-      if let Some(existing_user) = device_by_user.get(&user_device) {
-        if existing_user.value().session_id == disconnect_user.session_id {
-          trace!("[realtime]: disconnect => {}", disconnect_user);
-          device_by_user.remove(&user_device);
-          should_remove = true;
-        }
-      }
+      if was_removed.is_some() {
+        trace!("[realtime]: disconnect => {}", disconnect_user);
 
-      if should_remove {
         remove_user_in_groups(&groups, &editing_collab_by_user, &disconnect_user).await;
         if client_stream_by_user.remove(&disconnect_user).is_some() {
           info!("remove client stream: {}", &disconnect_user);

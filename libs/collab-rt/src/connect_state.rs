@@ -130,4 +130,45 @@ mod tests {
       .unwrap();
     assert_eq!(user, user_device_b);
   }
+
+  #[tokio::test]
+  async fn multiple_devices_connect_test() {
+    let user_a = vec![
+      mock_user(1, "device_a"),
+      mock_user(1, "device_b"),
+      mock_user(1, "device_c"),
+      mock_user(1, "device_d"),
+    ];
+
+    let user_b = vec![
+      mock_user(2, "device_a"),
+      mock_user(2, "device_b"),
+      mock_user(2, "device_b"),
+      mock_user(2, "device_a"),
+    ];
+
+    let connect_state = ConnectState::new();
+
+    let (tx, rx_1) = tokio::sync::oneshot::channel();
+    let cloned_connect_state = connect_state.clone();
+    tokio::spawn(async move {
+      for user in user_a {
+        cloned_connect_state.handle_user_connect(user, mock_stream());
+      }
+      tx.send(()).unwrap();
+    });
+
+    let (tx, rx_2) = tokio::sync::oneshot::channel();
+    let cloned_connect_state = connect_state.clone();
+    tokio::spawn(async move {
+      for user in user_b {
+        cloned_connect_state.handle_user_connect(user, mock_stream());
+      }
+      tx.send(()).unwrap();
+    });
+
+    let _ = futures::future::join(rx_1, rx_2).await;
+
+    assert_eq!(connect_state.num_connected_users(), 6);
+  }
 }

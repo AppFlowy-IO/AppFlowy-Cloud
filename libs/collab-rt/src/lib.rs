@@ -1,6 +1,6 @@
 mod collaborate;
 pub mod command;
-mod conn_control;
+pub mod connect_state;
 pub mod error;
 mod metrics;
 mod permission;

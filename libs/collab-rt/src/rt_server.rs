@@ -15,7 +15,7 @@ use database::collab::CollabStorage;
 use std::collections::HashSet;
 use std::future::Future;
 
-use crate::conn_control::ConnectControl;
+use crate::connect_state::ConnectState;
 use async_trait::async_trait;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use tracing::{error, event, trace, warn};
 pub struct CollabRealtimeServer<S, AC> {
   /// Keep track of all collab groups
   groups: Arc<AllGroup<S, AC>>,
-  connect_control: ConnectControl,
+  connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
   access_control: Arc<AC>,
   /// Keep track of all object ids that a user is subscribed to
@@ -48,7 +48,7 @@ where
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
-    let connect_control = ConnectControl::new();
+    let connect_state = ConnectState::new();
     let access_control = Arc::new(access_control);
     let groups = Arc::new(AllGroup::new(storage.clone(), access_control.clone()));
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
@@ -60,13 +60,13 @@ where
       &group_sender_by_object_id,
       Arc::downgrade(&groups),
       &metrics,
-      &connect_control.client_stream_by_user,
+      &connect_state.client_stream_by_user,
       &storage,
     );
 
     Ok(Self {
       groups,
-      connect_control,
+      connect_state,
       group_sender_by_object_id,
       access_control,
       editing_collab_by_user: Arc::new(Default::default()),
@@ -88,7 +88,7 @@ where
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let new_client_stream = CollabClientStream::new(conn_sink);
     let groups = self.groups.clone();
-    let connect_control = self.connect_control.clone();
+    let connect_control = self.connect_state.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
@@ -113,7 +113,7 @@ where
     disconnect_user: RealtimeUser,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let groups = self.groups.clone();
-    let connect_control = self.connect_control.clone();
+    let connect_control = self.connect_state.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
 
     Box::pin(async move {
@@ -134,7 +134,7 @@ where
     message_by_oid: MessageByObjectId,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let group_sender_by_object_id = self.group_sender_by_object_id.clone();
-    let client_stream_by_user = self.connect_control.client_stream_by_user.clone();
+    let client_stream_by_user = self.connect_state.client_stream_by_user.clone();
     let groups = self.groups.clone();
     let edit_collab_by_user = self.editing_collab_by_user.clone();
     let access_control = self.access_control.clone();
@@ -185,7 +185,7 @@ where
 
   pub fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
     self
-      .connect_control
+      .connect_state
       .user_by_device
       .get(user_device)
       .map(|entry| entry.value().clone())

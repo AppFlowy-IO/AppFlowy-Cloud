@@ -6,8 +6,8 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::{info, trace};
 
-#[derive(Clone)]
-pub struct ConnectControl {
+#[derive(Clone, Default)]
+pub struct ConnectState {
   pub(crate) user_by_device: Arc<DashMap<UserDevice, RealtimeUser>>,
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
   /// 1. User disconnection.
@@ -15,12 +15,9 @@ pub struct ConnectControl {
   pub(crate) client_stream_by_user: Arc<DashMap<RealtimeUser, CollabClientStream>>,
 }
 
-impl ConnectControl {
+impl ConnectState {
   pub fn new() -> Self {
-    Self {
-      user_by_device: Arc::new(DashMap::new()),
-      client_stream_by_user: Arc::new(DashMap::new()),
-    }
+    Self::default()
   }
   pub fn handle_user_connect(
     &self,
@@ -69,5 +66,68 @@ impl ConnectControl {
     }
 
     was_removed
+  }
+
+  #[allow(dead_code)]
+  fn num_connected_users(&self) -> usize {
+    self.user_by_device.len()
+  }
+
+  #[allow(dead_code)]
+  fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
+    self.user_by_device.get(user_device).map(|v| v.clone())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::connect_state::ConnectState;
+  use crate::{CollabClientStream, RealtimeClientWebsocketSink};
+  use collab_rt_entity::message::RealtimeMessage;
+  use collab_rt_entity::user::{RealtimeUser, UserDevice};
+
+  struct MockSink;
+
+  impl RealtimeClientWebsocketSink for MockSink {
+    fn do_send(&self, _message: RealtimeMessage) {}
+  }
+
+  fn mock_user(uid: i64, device_id: &str) -> RealtimeUser {
+    RealtimeUser::new(
+      uid,
+      device_id.to_string(),
+      uuid::Uuid::new_v4().to_string(),
+      chrono::Utc::now().timestamp(),
+    )
+  }
+
+  fn mock_stream() -> CollabClientStream {
+    CollabClientStream::new(MockSink)
+  }
+
+  #[tokio::test]
+  async fn same_user_different_device_connect_test() {
+    let connect_state = ConnectState::new();
+    let user_device_a = mock_user(1, "device_a");
+    let user_device_b = mock_user(1, "device_b");
+    connect_state.handle_user_connect(user_device_a, mock_stream());
+    connect_state.handle_user_connect(user_device_b, mock_stream());
+
+    assert_eq!(connect_state.num_connected_users(), 2);
+  }
+
+  #[tokio::test]
+  async fn same_user_same_device_connect_test() {
+    let connect_state = ConnectState::new();
+    let user_device_a = mock_user(1, "device_a");
+    let user_device_b = mock_user(1, "device_a");
+    connect_state.handle_user_connect(user_device_a, mock_stream());
+    connect_state.handle_user_connect(user_device_b.clone(), mock_stream());
+
+    assert_eq!(connect_state.num_connected_users(), 1);
+    let user = connect_state
+      .get_user_by_device(&UserDevice::from(&user_device_b))
+      .unwrap();
+    assert_eq!(user, user_device_b);
   }
 }

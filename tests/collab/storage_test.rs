@@ -8,7 +8,7 @@ use collab_entity::CollabType;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
-use futures_util::TryFutureExt;
+
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 

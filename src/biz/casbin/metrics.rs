@@ -5,7 +5,6 @@ use std::sync::Arc;
 use crate::biz::casbin::enforcer::ENFORCER_METRICS_TICK_INTERVAL;
 use prometheus_client::registry::Registry;
 use tokio::time::interval;
-use tracing::trace;
 
 #[derive(Clone)]
 pub struct AccessControlMetrics {

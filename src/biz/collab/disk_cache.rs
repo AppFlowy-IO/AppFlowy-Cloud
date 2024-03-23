@@ -10,7 +10,7 @@ use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{event, instrument, Level};
+use tracing::{event, Level};
 
 #[derive(Clone)]
 pub struct CollabDiskCache {

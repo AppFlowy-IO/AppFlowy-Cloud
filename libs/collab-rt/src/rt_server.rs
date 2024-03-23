@@ -29,16 +29,8 @@ pub struct CollabRealtimeServer<S, AC> {
   storage: Arc<S>,
   /// Keep track of all collab groups
   groups: Arc<AllGroup<S, AC>>,
-  pub device_by_user: Arc<DashMap<UserDevice, RealtimeUser>>,
-  /// This map stores the session IDs for users currently connected to the server.
-  /// The user's identifier [U] is used as the key, and their corresponding session ID is the value.
-  ///
-  /// When a user disconnects, their session ID is retrieved using their user identifier [U].
-  /// This session ID is then compared with the session ID provided in the [Disconnect] message.
-  /// If the two session IDs differ, it indicates that the user has established a new connection
-  /// to the server since the stored session ID was last updated.
-  ///
-  user_by_ws_connect_id: Arc<DashMap<RealtimeUser, String>>,
+  //
+  pub user_by_device: Arc<DashMap<UserDevice, RealtimeUser>>,
   /// Keep track of all object ids that a user is subscribed to
   editing_collab_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
@@ -82,8 +74,7 @@ where
     Ok(Self {
       storage,
       groups,
-      device_by_user: Default::default(),
-      user_by_ws_connect_id: Default::default(),
+      user_by_device: Default::default(),
       editing_collab_by_user,
       client_stream_by_user,
       group_sender_by_object_id,
@@ -92,83 +83,87 @@ where
     })
   }
 
+  /// Handles a new user connection, replacing any existing connection for the same user.
+  ///
+  /// - Creates a new client stream for the connected user.
+  /// - Replaces any existing user connection with the new one, signaling the old connection
+  ///   if it's replaced.
+  /// - Removes the old user connection from all collaboration groups.
+  ///
   pub fn handle_new_connection(
     &self,
-    user: RealtimeUser,
-    ws_connect_id: String,
+    connected_user: RealtimeUser,
     conn_sink: impl RealtimeClientWebsocketSink,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
-    // User with the same id and same device will be replaced with the new connection [CollabClientStream]
     let new_client_stream = CollabClientStream::new(conn_sink);
     let groups = self.groups.clone();
-    let device_by_user = self.device_by_user.clone();
+    let device_by_user = self.user_by_device.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
-    let user_by_ws_connect_id = self.user_by_ws_connect_id.clone();
 
     Box::pin(async move {
-      user_by_ws_connect_id.insert(user.clone(), ws_connect_id);
-      let old_user = device_by_user.insert(UserDevice::from(&user), user.clone());
+      let old_user =
+        device_by_user.insert(UserDevice::from(&connected_user), connected_user.clone());
+
       trace!(
-        "[realtime]: new connection => {}, remove old: {:?}",
-        user,
+        "[realtime]: new connection => {}, removing old: {:?}",
+        connected_user,
         old_user
       );
+
+      // If there was a previous connection for the same user, handle cleanup.
       if let Some(old_user) = old_user {
-        if let Some(value) = client_stream_by_user.remove(&old_user) {
-          let old_stream = value.1;
+        // Remove and retrieve the old client stream if it exists.
+        if let Some((_, client_stream)) = client_stream_by_user.remove(&old_user) {
           info!(
-            "same user connect with the same device again, remove old stream: {}",
+            "Removing old stream for same user and device: {}",
             &old_user
           );
-          old_stream
+          // Notify the old stream of the duplicate connection.
+          client_stream
             .sink
             .do_send(RealtimeMessage::System(SystemMessage::DuplicateConnection));
         }
-
-        // when a new connection is established, remove the old connection from all groups
-        remove_user(&groups, &editing_collab_by_user, &old_user).await;
+        // Remove the old user from all collaboration groups.
+        remove_user_in_groups(&groups, &editing_collab_by_user, &old_user).await;
       }
 
-      client_stream_by_user.insert(user, new_client_stream);
+      client_stream_by_user.insert(connected_user, new_client_stream);
       Ok(())
     })
   }
 
-  /// Handles the disconnection of a user from the collaboration server.
+  /// Handles a user's disconnection from the collaboration server.
   ///
-  /// Upon receiving a `Disconnect` message, the method performs the following actions:
-  /// 1. Attempts to acquire a read lock on `session_id_by_user` to compare the stored session ID
-  ///    with the session ID in the `Disconnect` message.
-  ///    - If the session IDs match, it proceeds to remove the user from groups and client streams.
-  ///    - If the session IDs do not match, indicating the user has reconnected with a new session,
-  ///      no action is taken and the function returns.
-  /// 2. Removes the user from the collaboration groups and client streams, if applicable.
-  ///
+  /// Steps:
+  /// 1. Checks if the disconnecting user's session matches the stored session.
+  ///    - If yes, proceeds with removal.
+  ///    - If not, exits without action.
+  /// 2. Removes the user from collaboration groups and client streams.
   pub fn handle_disconnect(
     &self,
-    user: RealtimeUser,
-    ws_connect_id: String,
+    disconnect_user: RealtimeUser,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let groups = self.groups.clone();
     let client_stream_by_user = self.client_stream_by_user.clone();
     let editing_collab_by_user = self.editing_collab_by_user.clone();
-    let session_id_by_user = self.user_by_ws_connect_id.clone();
+    let device_by_user = self.user_by_device.clone();
 
     Box::pin(async move {
-      trace!("[realtime]: disconnect => {}", user);
-      // If the user has reconnected with a new session, the session id will be different.
-      // So do not remove the user from groups and client streams
-      if let Some(entry) = session_id_by_user.get(&user) {
-        if entry.value() != &ws_connect_id {
-          return Ok(());
+      let user_device = UserDevice::from(&disconnect_user);
+      let was_removed = device_by_user.remove_if(&user_device, |_, existing_user| {
+        existing_user.session_id == disconnect_user.session_id
+      });
+
+      if was_removed.is_some() {
+        trace!("[realtime]: disconnect => {}", disconnect_user);
+
+        remove_user_in_groups(&groups, &editing_collab_by_user, &disconnect_user).await;
+        if client_stream_by_user.remove(&disconnect_user).is_some() {
+          info!("remove client stream: {}", &disconnect_user);
         }
       }
 
-      remove_user(&groups, &editing_collab_by_user, &user).await;
-      if client_stream_by_user.remove(&user).is_some() {
-        info!("remove client stream: {}", &user);
-      }
       Ok(())
     })
   }
@@ -196,7 +191,7 @@ where
           None => match group_sender_by_object_id.entry(object_id.clone()) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
-              let (new_sender, recv) = tokio::sync::mpsc::channel(1000);
+              let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
               let runner = GroupCommandRunner {
                 all_groups: groups.clone(),
                 client_stream_by_user: client_stream_by_user.clone(),
@@ -230,7 +225,7 @@ where
   }
 }
 
-async fn remove_user<S, AC>(
+async fn remove_user_in_groups<S, AC>(
   groups: &Arc<AllGroup<S, AC>>,
   editing_collab_by_user: &Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   user: &RealtimeUser,

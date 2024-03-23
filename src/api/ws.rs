@@ -43,6 +43,7 @@ pub async fn establish_ws_connection(
 ) -> Result<HttpResponse> {
   let (access_token, device_id) = path.into_inner();
   let client_version = Version::new(0, 5, 0);
+  let connect_at = chrono::Utc::now().timestamp();
   start_connect(
     &request,
     payload,
@@ -51,6 +52,7 @@ pub async fn establish_ws_connection(
     access_token,
     device_id,
     client_version,
+    connect_at,
   )
   .await
 }
@@ -69,6 +71,7 @@ pub async fn establish_ws_connection_v1(
     access_token,
     client_version,
     device_id,
+    connect_at,
   } = match ConnectInfo::parse_from(&request) {
     Ok(info) => info,
     Err(_) => {
@@ -85,10 +88,12 @@ pub async fn establish_ws_connection_v1(
     access_token,
     device_id,
     client_version,
+    connect_at,
   )
   .await
 }
 
+#[allow(clippy::too_many_arguments)]
 #[inline]
 async fn start_connect(
   request: &HttpRequest,
@@ -98,6 +103,7 @@ async fn start_connect(
   access_token: String,
   device_id: String,
   client_version: Version,
+  connect_at: i64,
 ) -> Result<HttpResponse> {
   let auth = authorization_from_token(access_token.as_str(), state)?;
   let user_uuid = UserUuid::from_auth(auth)?;
@@ -111,7 +117,8 @@ async fn start_connect(
         uid, device_id, client_version
       );
 
-      let realtime_user = RealtimeUser::new(uid, device_id);
+      let session_id = uuid::Uuid::new_v4().to_string();
+      let realtime_user = RealtimeUser::new(uid, device_id, session_id, connect_at);
       let client = RealtimeClient::new(
         realtime_user,
         user_change_recv,
@@ -145,10 +152,12 @@ struct ConnectInfo {
   access_token: String,
   client_version: Version,
   device_id: String,
+  connect_at: i64,
 }
 
 const CLIENT_VERSION: &str = "client-version";
 const DEVICE_ID: &str = "device-id";
+const CONNECT_AT: &str = "connect-at";
 
 // Trait for parameter extraction
 trait ExtractParameter {
@@ -192,11 +201,18 @@ impl ConnectInfo {
     let client_version = Version::parse(&client_version_str)
       .map_err(|_| AppError::InvalidRequest(format!("Invalid version:{}", client_version_str)))?;
     let device_id = source.extract_param(DEVICE_ID)?;
+    let connect_at = match source.extract_param(CONNECT_AT) {
+      Ok(start_at) => start_at
+        .parse::<i64>()
+        .unwrap_or_else(|_| chrono::Utc::now().timestamp()),
+      Err(_) => chrono::Utc::now().timestamp(),
+    };
 
     Ok(Self {
       access_token,
       client_version,
       device_id,
+      connect_at,
     })
   }
 }

@@ -15,7 +15,7 @@ pub struct AggregateMessageQueue {
   maximum_payload_size: usize,
   queue: Arc<Mutex<BinaryHeap<ClientCollabMessage>>>,
   stop_tx: Mutex<Option<mpsc::Sender<()>>>,
-  seen_ids: Arc<Mutex<HashSet<String>>>,
+  seen_ids: Arc<Mutex<HashSet<SeenId>>>,
 }
 
 impl AggregateMessageQueue {
@@ -33,7 +33,7 @@ impl AggregateMessageQueue {
     let mut seen_ids_guard = self.seen_ids.lock().await;
 
     for msg in msg.into_iter() {
-      if seen_ids_guard.insert(seen_id(msg.object_id(), msg.msg_id())) {
+      if seen_ids_guard.insert(SeenId::from(&msg)) {
         // Assuming ClientCollabMessage has an id() method.
         queue_guard.push(msg);
       }
@@ -55,7 +55,7 @@ impl AggregateMessageQueue {
     let maximum_payload_size = self.maximum_payload_size;
     let weak_queue = Arc::downgrade(&self.queue);
     let weak_seen_ids = Arc::downgrade(&self.seen_ids);
-    let interval_duration = Duration::from_secs(2);
+    let interval_duration = Duration::from_secs(1);
     let mut next_tick = Instant::now() + interval_duration;
     tokio::spawn(async move {
       loop {
@@ -72,20 +72,20 @@ impl AggregateMessageQueue {
                 log_message_map(&messages_map);
               }
 
+              // Send messages to server
               send_batch_message(&sender, messages_map).await;
 
+              // after sending messages, remove seen_ids
+              let num_init_sync = did_sent_seen_ids.iter().filter(|id| id.is_init_sync).count();
               if let Some(seen_ids) = weak_seen_ids.upgrade() {
                 let mut seen_lock = seen_ids.lock().await;
-                for id in did_sent_seen_ids {
-                  seen_lock.remove(&id);
-                }
+                seen_lock.retain(|id| !did_sent_seen_ids.contains(id));
               }
 
-              if queue.lock().await.len() > 20 {
-                next_tick = Instant::now() +  Duration::from_secs(1);
-              } else {
-                next_tick = Instant::now() + interval_duration;
-              }
+              // To determine the next interval dynamically, consider factors such as the number of messages sent,
+              // their total size, and the current network type. This approach allows for more nuanced interval
+              // adjustments, optimizing for efficiency and responsiveness under varying conditions.
+              next_tick = calculate_next_tick(num_init_sync, interval_duration);
             } else {
               break;
             }
@@ -127,7 +127,7 @@ async fn next_batch_message(
   maximum_init_sync: usize,
   maximum_payload_size: usize,
   queue: &Arc<Mutex<BinaryHeap<ClientCollabMessage>>>,
-) -> (HashSet<String>, HashMap<String, Vec<ClientCollabMessage>>) {
+) -> (HashSet<SeenId>, HashMap<String, Vec<ClientCollabMessage>>) {
   let mut messages_map = HashMap::new();
   let mut size = 0;
   let mut init_sync_count = 0;
@@ -138,7 +138,8 @@ async fn next_batch_message(
     if msg.is_init_sync() {
       init_sync_count += 1;
     }
-    seen_ids.insert(seen_id(msg.object_id(), msg.msg_id()));
+
+    seen_ids.insert(SeenId::from(&msg));
     messages_map
       .entry(msg.object_id().to_string())
       .or_insert(vec![])
@@ -179,6 +180,28 @@ fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
   debug!("Aggregate message list:\n{}", log_msg);
 }
 
-fn seen_id(object_id: &str, msg_id: MsgId) -> String {
-  format!("{}:{}", object_id, msg_id)
+#[derive(Eq, PartialEq, Hash)]
+struct SeenId {
+  object_id: String,
+  msg_id: MsgId,
+  is_init_sync: bool,
+}
+
+impl From<&ClientCollabMessage> for SeenId {
+  fn from(msg: &ClientCollabMessage) -> Self {
+    Self {
+      object_id: msg.object_id().to_string(),
+      msg_id: msg.msg_id(),
+      is_init_sync: msg.is_init_sync(),
+    }
+  }
+}
+
+fn calculate_next_tick(num_init_sync: usize, default_interval: Duration) -> Instant {
+  match num_init_sync {
+    0 => Instant::now() + default_interval,
+    1..=3 => Instant::now() + Duration::from_secs(2),
+    4..=7 => Instant::now() + Duration::from_secs(4),
+    _ => Instant::now() + Duration::from_secs(6),
+  }
 }

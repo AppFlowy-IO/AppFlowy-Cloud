@@ -99,10 +99,7 @@ where
       message,
     } = client_msg;
 
-    let user = self
-      .user_by_device
-      .get(&UserDevice::new(&device_id, uid))
-      .map(|entry| entry.value().clone());
+    let user = self.get_user_by_device(&UserDevice::new(&device_id, uid));
 
     match (user, message.transform()) {
       (Some(user), Ok(messages)) => self.handle_client_message(user, messages),

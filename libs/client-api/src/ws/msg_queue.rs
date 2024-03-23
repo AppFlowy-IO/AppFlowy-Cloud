@@ -34,7 +34,6 @@ impl AggregateMessageQueue {
 
     for msg in msg.into_iter() {
       if seen_ids_guard.insert(SeenId::from(&msg)) {
-        // Assuming ClientCollabMessage has an id() method.
         queue_guard.push(msg);
       }
     }

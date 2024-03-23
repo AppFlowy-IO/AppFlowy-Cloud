@@ -88,7 +88,6 @@ where
     config: SinkConfig,
     pause: bool,
   ) -> Self {
-    trace!("Create CollabSink {}", object.object_id);
     let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);

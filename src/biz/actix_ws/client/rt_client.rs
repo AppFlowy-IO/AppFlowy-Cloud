@@ -24,7 +24,6 @@ const MAX_MESSAGES_PER_INTERVAL: usize = 10;
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl> {
-  session_id: String,
   user: RealtimeUser,
   hb: Instant,
   pub server: Addr<RealtimeServerActor<S, AC>>,
@@ -57,7 +56,6 @@ where
       heartbeat_interval,
       client_timeout,
       user_change_recv: Some(user_change_recv),
-      session_id: uuid::Uuid::new_v4().to_string(),
       message_count: 0,
       interval_start: Instant::now(),
       client_version,
@@ -65,7 +63,6 @@ where
   }
 
   fn hb(&self, ctx: &mut ws::WebsocketContext<Self>) {
-    let session_id = self.session_id.clone();
     ctx.run_interval(self.heartbeat_interval, move |act, ctx| {
       if Instant::now().duration_since(act.hb) > act.client_timeout {
         let user = act.user.clone();
@@ -75,10 +72,7 @@ where
           act.client_timeout.as_secs()
         );
 
-        act.server.do_send(Disconnect {
-          user,
-          ws_connect_id: session_id.clone(),
-        });
+        act.server.do_send(Disconnect { user });
         ctx.stop();
         return;
       }
@@ -180,7 +174,6 @@ where
       .send(Connect {
         socket: ctx.address().recipient(),
         user: self.user.clone(),
-        ws_connect_id: self.session_id.clone(),
       })
       .into_actor(self)
       .then(|res, _session, ctx| {
@@ -207,10 +200,7 @@ where
     // disconnect message to the server.
     let user = self.user.clone();
     trace!("{} stopping websocket connect", user);
-    self.server.do_send(Disconnect {
-      user,
-      ws_connect_id: self.session_id.clone(),
-    });
+    self.server.do_send(Disconnect { user });
     Running::Stop
   }
 }

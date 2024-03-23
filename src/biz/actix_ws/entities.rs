@@ -5,20 +5,21 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;
 
 pub use collab_rt_entity::message::RealtimeMessage;
+use collab_rt_entity::user::RealtimeUser;
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct Connect<U> {
+pub struct Connect {
   pub socket: Recipient<RealtimeMessage>,
-  pub user: U,
+  pub user: RealtimeUser,
   /// Each websocket connection has a unique id
   pub ws_connect_id: String,
 }
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct Disconnect<U> {
-  pub user: U,
+pub struct Disconnect {
+  pub user: RealtimeUser,
   /// Each websocket connection has a unique id
   pub ws_connect_id: String,
 }
@@ -34,8 +35,8 @@ pub enum BusinessID {
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]
-pub struct ClientMessage<U> {
-  pub user: U,
+pub struct ClientMessage {
+  pub user: RealtimeUser,
   pub message: RealtimeMessage,
 }
 

@@ -62,15 +62,14 @@ impl CollabRealtimeMetrics {
   }
 }
 
-pub(crate) fn spawn_metrics<S, U, AC>(
-  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender<U>>>,
-  weak_groups: Weak<AllGroup<S, U, AC>>,
+pub(crate) fn spawn_metrics<S, AC>(
+  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
+  weak_groups: Weak<AllGroup<S, AC>>,
   metrics: &Arc<CollabRealtimeMetrics>,
-  client_stream_by_user: &Arc<DashMap<U, CollabClientStream>>,
+  client_stream_by_user: &Arc<DashMap<RealtimeUser, CollabClientStream>>,
   storage: &Arc<S>,
 ) where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: RealtimeAccessControl,
 {
   let metrics = metrics.clone();

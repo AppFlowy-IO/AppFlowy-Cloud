@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::state::AppState;
 use app_error::AppError;
-use collab_rt_entity::user::RealtimeUser;
 use database::collab::CollabStorage;
 use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
@@ -13,7 +12,7 @@ use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::response::AppResponseError;
 use sqlx::{types::uuid, PgPool, Transaction};
-use std::fmt::{Display, Formatter};
+
 use std::ops::DerefMut;
 use std::sync::Arc;
 use tracing::{debug, event, instrument};
@@ -203,42 +202,3 @@ fn name_from_user_metadata(value: &serde_json::Value) -> String {
 }
 
 pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotification>;
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct RealtimeUserImpl {
-  pub uid: i64,
-  pub device_id: String,
-  pub connect_at: i64,
-}
-
-impl RealtimeUserImpl {
-  pub fn new(uid: i64, device_id: String) -> Self {
-    Self {
-      uid,
-      device_id,
-      connect_at: chrono::Utc::now().timestamp(),
-    }
-  }
-}
-
-impl Display for RealtimeUserImpl {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    f.write_fmt(format_args!(
-      "uid:{}|device_id:{}|connected_at:{}",
-      self.uid, self.device_id, self.connect_at,
-    ))
-  }
-}
-
-impl RealtimeUser for RealtimeUserImpl {
-  fn uid(&self) -> i64 {
-    self.uid
-  }
-
-  fn device_id(&self) -> &str {
-    &self.device_id
-  }
-
-  fn connect_at(&self) -> i64 {
-    self.connect_at
-  }
-}

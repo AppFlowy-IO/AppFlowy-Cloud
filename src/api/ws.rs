@@ -4,10 +4,8 @@ use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use crate::biz::collab::storage::CollabAccessControlStorage;
-use crate::biz::user::RealtimeUserImpl;
 use crate::component::auth::jwt::{authorization_from_token, UserUuid};
 
 use crate::biz::actix_ws::client::rt_client::RealtimeClient;
@@ -18,6 +16,7 @@ use app_error::AppError;
 
 use semver::Version;
 
+use collab_rt_entity::user::RealtimeUser;
 use shared_entity::response::AppResponseError;
 use std::time::Duration;
 use tracing::{debug, error, instrument, trace};
@@ -29,13 +28,8 @@ pub fn ws_scope() -> Scope {
 }
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
-pub type RealtimeServerAddr = Addr<
-  RealtimeServerActor<
-    CollabAccessControlStorage,
-    Arc<RealtimeUserImpl>,
-    RealtimeCollabAccessControlImpl,
-  >,
->;
+pub type RealtimeServerAddr =
+  Addr<RealtimeServerActor<CollabAccessControlStorage, RealtimeCollabAccessControlImpl>>;
 
 /// This function will not be used after the 0.5.0 of the client.
 #[instrument(skip_all, err)]
@@ -117,7 +111,7 @@ async fn start_connect(
         uid, device_id, client_version
       );
 
-      let realtime_user = Arc::new(RealtimeUserImpl::new(uid, device_id));
+      let realtime_user = RealtimeUser::new(uid, device_id);
       let client = RealtimeClient::new(
         realtime_user,
         user_change_recv,

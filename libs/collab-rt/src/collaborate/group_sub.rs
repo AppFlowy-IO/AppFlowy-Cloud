@@ -19,17 +19,16 @@ pub(crate) struct CollabUserMessage<'a, U> {
   pub(crate) collab_message: &'a ClientCollabMessage,
 }
 
-pub(crate) struct SubscribeGroup<'a, S, U, AC> {
-  pub(crate) message: &'a CollabUserMessage<'a, U>,
-  pub(crate) groups: &'a Arc<AllGroup<S, U, AC>>,
-  pub(crate) edit_collab_by_user: &'a Arc<DashMap<U, HashSet<Editing>>>,
-  pub(crate) client_stream_by_user: &'a Arc<DashMap<U, CollabClientStream>>,
+pub(crate) struct SubscribeGroup<'a, S, AC> {
+  pub(crate) message: &'a CollabUserMessage<'a, RealtimeUser>,
+  pub(crate) groups: &'a Arc<AllGroup<S, AC>>,
+  pub(crate) edit_collab_by_user: &'a Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
+  pub(crate) client_stream_by_user: &'a Arc<DashMap<RealtimeUser, CollabClientStream>>,
   pub(crate) access_control: &'a Arc<AC>,
 }
 
-impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
+impl<'a, S, AC> SubscribeGroup<'a, S, AC>
 where
-  U: RealtimeUser,
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
@@ -38,9 +37,8 @@ where
   }
 }
 
-impl<'a, S, U, AC> SubscribeGroup<'a, S, U, AC>
+impl<'a, S, AC> SubscribeGroup<'a, S, AC>
 where
-  U: RealtimeUser,
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
@@ -72,7 +70,7 @@ where
 
           let (sink, stream) = client_stream
             .value_mut()
-            .client_channel::<CollabMessage, _, U>(
+            .client_channel::<CollabMessage, _>(
               &collab_group.workspace_id,
               user,
               object_id,

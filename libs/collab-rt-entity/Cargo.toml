@@ -25,6 +25,7 @@ collab-rt-protocol.workspace = true
 client-websocket.workspace = true
 serde_repr = "0.1"
 brotli = { version = "3.4.0", optional = true }
+chrono = "0.4"
 
 [build-dependencies]
 protoc-bin-vendored = { version = "3.0" }

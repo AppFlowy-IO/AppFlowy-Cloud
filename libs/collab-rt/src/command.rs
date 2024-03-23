@@ -15,12 +15,10 @@ pub enum RTCommand {
   },
 }
 
-pub(crate) fn spawn_rt_command<U>(
+pub(crate) fn spawn_rt_command(
   mut command_recv: RTCommandReceiver,
-  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender<U>>>,
-) where
-  U: Send + Sync + 'static,
-{
+  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
+) {
   let group_sender_by_object_id = group_sender_by_object_id.clone();
   tokio::spawn(async move {
     while let Some(cmd) = command_recv.recv().await {

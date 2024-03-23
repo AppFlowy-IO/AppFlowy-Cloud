@@ -11,16 +11,15 @@ use database::collab::CollabStorage;
 use std::sync::Arc;
 use tracing::{debug, error, instrument};
 
-pub struct AllGroup<S, U, AC> {
-  group_by_object_id: Arc<DashMap<String, Arc<CollabGroup<U>>>>,
+pub struct AllGroup<S, AC> {
+  group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
   storage: Arc<S>,
   access_control: Arc<AC>,
 }
 
-impl<S, U, AC> AllGroup<S, U, AC>
+impl<S, AC> AllGroup<S, AC>
 where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: RealtimeAccessControl,
 {
   pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Self {
@@ -53,7 +52,7 @@ where
     inactive_group_ids
   }
 
-  pub async fn contains_user(&self, object_id: &str, user: &U) -> bool {
+  pub async fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
     if let Some(entry) = self.group_by_object_id.get(object_id) {
       entry.value().contains_user(user)
     } else {
@@ -61,7 +60,7 @@ where
     }
   }
 
-  pub async fn remove_user(&self, object_id: &str, user: &U) -> Result<(), Error> {
+  pub async fn remove_user(&self, object_id: &str, user: &RealtimeUser) -> Result<(), Error> {
     if let Some(entry) = self.group_by_object_id.get(object_id) {
       let group = entry.value();
       group.remove_user(user).await;
@@ -73,7 +72,7 @@ where
     self.group_by_object_id.get(object_id).is_some()
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup<U>>> {
+  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
     self
       .group_by_object_id
       .get(object_id)

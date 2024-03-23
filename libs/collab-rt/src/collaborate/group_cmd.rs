@@ -16,9 +16,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
 
-pub enum GroupCommand<U> {
+pub enum GroupCommand {
   HandleClientCollabMessage {
-    user: U,
+    user: RealtimeUser,
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
   },
@@ -28,21 +28,20 @@ pub enum GroupCommand<U> {
   },
 }
 
-pub type GroupCommandSender<U> = tokio::sync::mpsc::Sender<GroupCommand<U>>;
-pub type GroupCommandReceiver<U> = tokio::sync::mpsc::Receiver<GroupCommand<U>>;
+pub type GroupCommandSender = tokio::sync::mpsc::Sender<GroupCommand>;
+pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 
-pub struct GroupCommandRunner<S, U, AC> {
-  pub all_groups: Arc<AllGroup<S, U, AC>>,
-  pub client_stream_by_user: Arc<DashMap<U, CollabClientStream>>,
-  pub edit_collab_by_user: Arc<DashMap<U, HashSet<Editing>>>,
+pub struct GroupCommandRunner<S, AC> {
+  pub all_groups: Arc<AllGroup<S, AC>>,
+  pub client_stream_by_user: Arc<DashMap<RealtimeUser, CollabClientStream>>,
+  pub edit_collab_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   pub access_control: Arc<AC>,
-  pub recv: Option<GroupCommandReceiver<U>>,
+  pub recv: Option<GroupCommandReceiver>,
 }
 
-impl<S, U, AC> GroupCommandRunner<S, U, AC>
+impl<S, AC> GroupCommandRunner<S, AC>
 where
   S: CollabStorage,
-  U: RealtimeUser,
   AC: RealtimeAccessControl,
 {
   pub async fn run(mut self, object_id: String) {
@@ -98,7 +97,7 @@ where
   #[instrument(level = "trace", skip_all)]
   async fn handle_client_collab_message(
     &self,
-    user: &U,
+    user: &RealtimeUser,
     object_id: String,
     messages: Vec<ClientCollabMessage>,
   ) -> Result<(), RealtimeError> {
@@ -150,7 +149,7 @@ where
 
   async fn subscribe_group(
     &self,
-    user: &U,
+    user: &RealtimeUser,
     collab_message: &ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
     SubscribeGroup {
@@ -193,18 +192,16 @@ where
 /// Forward the message to the group.
 /// When the group receives the message, it will broadcast the message to all the users in the group.
 #[inline]
-pub async fn forward_message_to_group<U>(
-  user: &U,
+pub async fn forward_message_to_group(
+  user: &RealtimeUser,
   object_id: String,
   collab_messages: Vec<ClientCollabMessage>,
-  client_streams: &Arc<DashMap<U, CollabClientStream>>,
-) where
-  U: RealtimeUser,
-{
+  client_streams: &Arc<DashMap<RealtimeUser, CollabClientStream>>,
+) {
   if let Some(client_stream) = client_streams.get(user) {
     trace!(
       "[realtime]: receive: uid:{} oid:{} msg ids: {:?}",
-      user.uid(),
+      user.uid,
       object_id,
       collab_messages
         .iter()
@@ -216,7 +213,7 @@ pub async fn forward_message_to_group<U>(
       .stream_tx
       .send(RealtimeMessage::ClientCollabV2([pair].into()));
     if let Err(err) = err {
-      warn!("Send user:{} message to group error: {}", user.uid(), err,);
+      warn!("Send user:{} message to group error: {}", user.uid, err,);
       client_streams.remove(user);
     }
   }

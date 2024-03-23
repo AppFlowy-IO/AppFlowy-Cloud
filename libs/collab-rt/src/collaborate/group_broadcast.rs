@@ -159,16 +159,15 @@ impl CollabBroadcast {
   /// A `Subscription` instance that represents the active subscription. Dropping this structure or
   /// calling its `stop` method will unsubscribe the connection and cease all related activities.
   ///
-  pub fn subscribe<Sink, Stream, U>(
+  pub fn subscribe<Sink, Stream>(
     &self,
-    user: &U,
+    user: &RealtimeUser,
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
     collab: Weak<Mutex<Collab>>,
   ) -> Subscription
   where
-    U: RealtimeUser,
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
     Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
@@ -218,7 +217,7 @@ impl CollabBroadcast {
         loop {
           select! {
             _ = stop_rx.recv() => {
-             trace!("stop receiving {} stream from user:{} connect at:{}", object_id, user.uid(), user.connect_at());
+             trace!("stop receiving {} stream from user:{} connect at:{}", object_id, user.uid, user.connect_at);
               break
             },
             result = stream.next() => {

@@ -40,7 +40,7 @@ pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> Encoded
 
 pub async fn redis_client() -> redis::Client {
   let redis_uri = get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379");
-  redis::Client::open(&redis_uri)
+  redis::Client::open(redis_uri)
     .context("failed to connect to redis")
     .unwrap()
 }

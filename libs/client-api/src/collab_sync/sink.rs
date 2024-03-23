@@ -88,6 +88,7 @@ where
     config: SinkConfig,
     pause: bool,
   ) -> Self {
+    trace!("Create CollabSink {}", object.object_id);
     let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);
@@ -212,7 +213,6 @@ where
 
   pub fn resume(&self) {
     self.pause.store(false, Ordering::SeqCst);
-    self.notify();
   }
 
   /// Notify the sink to process the next message and mark the current message as done.

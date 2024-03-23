@@ -212,7 +212,6 @@ where
 
   pub fn resume(&self) {
     self.pause.store(false, Ordering::SeqCst);
-    self.notify();
   }
 
   /// Notify the sink to process the next message and mark the current message as done.

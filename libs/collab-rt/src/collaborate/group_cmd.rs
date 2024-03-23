@@ -225,8 +225,9 @@ pub async fn forward_message_to_group(
 ) {
   if let Some(client_stream) = client_streams.get(user) {
     trace!(
-      "[realtime]: receive: uid:{} oid:{} msg ids: {:?}",
+      "[realtime]: receive client:{} device:{} oid:{} msg ids: {:?}",
       user.uid,
+      user.device_id,
       object_id,
       collab_messages
         .iter()

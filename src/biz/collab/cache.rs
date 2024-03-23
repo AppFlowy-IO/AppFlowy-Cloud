@@ -42,11 +42,7 @@ impl CollabCache {
   ) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
-    if let Some(encoded_collab) = self
-      .mem_cache
-      .get_encode_collab(&params.inner.object_id)
-      .await
-    {
+    if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&params.object_id).await {
       event!(
         Level::DEBUG,
         "Get encoded collab:{} from cache",

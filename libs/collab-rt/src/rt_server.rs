@@ -355,9 +355,10 @@ impl CollabClientStream {
               )
               .await;
               trace!(
-                "{} receive {} client message: valid:{} invalid:{}",
+                "{} receive client:{}, device:{}, message: valid:{} invalid:{}",
                 msg_oid,
                 user.uid,
+                user.device_id,
                 valid_messages.len(),
                 invalid_message.len()
               );

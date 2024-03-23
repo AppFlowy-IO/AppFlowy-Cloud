@@ -6,6 +6,7 @@ use collab_entity::CollabType;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
+
 use sqlx::types::Uuid;
 use std::collections::HashMap;
 
@@ -225,3 +226,26 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
 
   assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
 }
+
+// #[tokio::test]
+// async fn collab_mem_cache_read_write_test() {
+//   let redis_client = redis_client().await;
+//   let conn = redis_client.get_connection_manager().await.unwrap();
+//
+//   let mem_cache = CollabMemCache::new(conn);
+//   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
+//
+//   let object_id = uuid::Uuid::new_v4().to_string();
+//   mem_cache
+//     .insert_encode_collab_bytes(object_id.clone(), encode_collab.encode_to_bytes().unwrap())
+//     .await;
+//   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
+//   assert_eq!(encode_collab_from_cache.doc_state, encode_collab.doc_state);
+//   assert_eq!(
+//     encode_collab_from_cache.state_vector,
+//     encode_collab.state_vector
+//   );
+//
+//   assert_eq!(encode_collab.state_vector, vec![1, 2, 3]);
+//   assert_eq!(encode_collab.doc_state, vec![4, 5, 6]);
+// }

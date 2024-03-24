@@ -71,7 +71,6 @@ impl AggregateMessageQueue {
                 // adjustments, optimizing for efficiency and responsiveness under varying conditions.
                 next_tick = calculate_next_tick(num_init_sync, interval_duration);
               }
-              trace!("Next tick after {:?}", next_tick.elapsed().as_secs());
             } else {
               break;
             }

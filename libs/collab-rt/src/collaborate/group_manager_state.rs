@@ -121,10 +121,6 @@ impl GroupManagementState {
       object_id: object_id.to_string(),
     };
 
-    if !self.contains_group(&editing.object_id).await {
-      return Err(RealtimeError::GroupNotFound(editing.object_id.clone()));
-    }
-
     self
       .editing_by_user
       .entry(user.clone())

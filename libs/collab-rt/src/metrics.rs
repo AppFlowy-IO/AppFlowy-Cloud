@@ -1,6 +1,7 @@
+use crate::client_msg_router::ClientMessageRouter;
 use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_cmd::GroupCommandSender;
-use crate::{CollabClientStream, RealtimeAccessControl};
+use crate::RealtimeAccessControl;
 use collab_rt_entity::user::RealtimeUser;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
@@ -66,14 +67,14 @@ pub(crate) fn spawn_metrics<S, AC>(
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
   weak_groups: Weak<AllGroup<S, AC>>,
   metrics: &Arc<CollabRealtimeMetrics>,
-  client_stream_by_user: &Arc<DashMap<RealtimeUser, CollabClientStream>>,
+  client_msg_router_by_user: &Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   storage: &Arc<S>,
 ) where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
   let metrics = metrics.clone();
-  let client_stream_by_user = client_stream_by_user.clone();
+  let client_stream_by_user = client_msg_router_by_user.clone();
   let storage = storage.clone();
 
   let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();

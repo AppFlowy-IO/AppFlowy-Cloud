@@ -1,19 +1,26 @@
 use crate::collaborate::group::CollabGroup;
 use crate::collaborate::plugin::CollabStoragePlugin;
 use crate::RealtimeAccessControl;
-use anyhow::Error;
+
+use crate::client_msg_router::ClientMessageRouter;
+use crate::error::RealtimeError;
+use anyhow::anyhow;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::collab_msg::CollabMessage;
+use collab_rt_entity::user::{Editing, RealtimeUser};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, event, instrument, trace};
 
 pub struct AllGroup<S, AC> {
   group_by_object_id: Rc<DashMap<String, Rc<CollabGroup>>>,
+  /// Keep track of all [Collab] objects that a user is subscribed to.
+  editing_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   storage: Arc<S>,
   access_control: Arc<AC>,
 }
@@ -26,6 +33,7 @@ where
   pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Self {
     Self {
       group_by_object_id: Rc::new(DashMap::new()),
+      editing_by_user: Arc::new(Default::default()),
       storage,
       access_control,
     }
@@ -61,12 +69,29 @@ where
     }
   }
 
-  pub async fn remove_user(&self, object_id: &str, user: &RealtimeUser) -> Result<(), Error> {
-    if let Some(entry) = self.group_by_object_id.get(object_id) {
-      let group = entry.value();
-      group.remove_user(user).await;
+  pub async fn remove_user(&self, user: &RealtimeUser) {
+    let entry = self.editing_by_user.remove(user);
+    if let Some(entry) = entry {
+      for editing in entry.1 {
+        if let Some(entry) = self.group_by_object_id.get(&editing.object_id) {
+          let group = entry.value();
+          group.remove_user(user).await;
+        }
+
+        if cfg!(debug_assertions) {
+          // Remove the user from the group and remove the group from the cache if the group is empty.
+          if let Some(group) = self.get_group(&editing.object_id).await {
+            event!(
+              tracing::Level::TRACE,
+              "{}: Remove group subscriber:{}, Current group member: {}",
+              &editing.object_id,
+              editing.origin,
+              group.user_count(),
+            );
+          }
+        }
+      }
     }
-    Ok(())
   }
 
   pub async fn contains_group(&self, object_id: &str) -> bool {
@@ -80,6 +105,26 @@ where
       .map(|v| v.value().clone())
   }
 
+  pub fn get_group_if(
+    &self,
+    object_id: &str,
+    f: impl FnOnce(&CollabGroup) -> bool,
+  ) -> Option<Rc<CollabGroup>> {
+    self
+      .group_by_object_id
+      .get(object_id)
+      .filter(|v| f(v.value()))
+      .map(|v| v.value().clone())
+  }
+
+  pub fn record_editing(&self, user: &RealtimeUser, editing: Editing) {
+    self
+      .editing_by_user
+      .entry(user.clone())
+      .or_default()
+      .insert(editing);
+  }
+
   #[instrument(skip(self))]
   async fn remove_group(&self, object_id: &str) {
     let entry = self.group_by_object_id.remove(object_id);
@@ -90,6 +135,43 @@ where
     } else {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);
+    }
+  }
+
+  pub async fn subscribe_group(
+    &self,
+    user: &RealtimeUser,
+    object_id: &str,
+    origin: &CollabOrigin,
+    client_msg_router: &mut ClientMessageRouter,
+  ) -> Result<(), RealtimeError> {
+    if let Some(collab_group) = self.get_group_if(object_id, |group| !group.contains_user(user)) {
+      trace!("[realtime]: {} subscribe group:{}", user, object_id,);
+      self.record_editing(
+        user,
+        Editing {
+          object_id: object_id.to_string(),
+          origin: origin.clone(),
+        },
+      );
+
+      let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage, _>(
+        &collab_group.workspace_id,
+        user,
+        object_id,
+        self.access_control.clone(),
+      );
+
+      collab_group
+        .subscribe(user, origin.clone(), sink, stream)
+        .await;
+      Ok(())
+    } else {
+      // When subscribing to a group, the group should exist. Otherwise, it's a bug.
+      Err(RealtimeError::Internal(anyhow!(
+        "The group:{} is not found",
+        object_id
+      )))
     }
   }
 
@@ -128,4 +210,12 @@ where
   pub async fn number_of_groups(&self) -> usize {
     self.group_by_object_id.len()
   }
+}
+
+#[cfg(test)]
+mod tests {
+
+  struct MockStorage;
+  #[tokio::test]
+  async fn create_group_test() {}
 }

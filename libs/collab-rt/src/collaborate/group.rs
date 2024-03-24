@@ -63,9 +63,11 @@ impl CollabGroup {
   }
 
   pub async fn remove_user(&self, user: &RealtimeUser) {
-    trace!("{} remove subscriber from group: {}", self.object_id, user);
     if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
-      old_sub.stop().await;
+      trace!("{} remove subscriber from group: {}", self.object_id, user);
+      tokio::spawn(async move {
+        old_sub.stop().await;
+      });
     }
   }
 

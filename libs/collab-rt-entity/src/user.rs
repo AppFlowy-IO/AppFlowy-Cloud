@@ -60,6 +60,8 @@ pub struct RealtimeUser {
   pub uid: i64,
   pub device_id: String,
   pub connect_at: i64,
+  /// Represents the websocket connection session id.
+  /// When each websocket connection is established, a unique session id is generated.
   pub session_id: String,
 }
 

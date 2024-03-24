@@ -1509,6 +1509,7 @@ dependencies = [
  "md5",
  "parking_lot 0.12.1",
  "prometheus-client",
+ "rand 0.8.5",
  "redis 0.25.2",
  "semver",
  "serde",

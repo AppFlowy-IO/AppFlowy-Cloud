@@ -1,6 +1,6 @@
 use crate::client_msg_router::{ClientMessageRouter, RealtimeClientWebsocketSink};
-use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
+use crate::collaborate::group_manager::GroupManager;
 use crate::command::{spawn_rt_command, RTCommandReceiver};
 use crate::connect_state::ConnectState;
 use crate::error::RealtimeError;
@@ -19,7 +19,7 @@ use tracing::{error, trace};
 #[derive(Clone)]
 pub struct CollabRealtimeServer<S, AC> {
   /// Keep track of all collab groups
-  groups: Arc<AllGroup<S, AC>>,
+  group_manager: Arc<GroupManager<S, AC>>,
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
   access_control: Arc<AC>,
@@ -40,7 +40,7 @@ where
   ) -> Result<Self, RealtimeError> {
     let connect_state = ConnectState::new();
     let access_control = Arc::new(access_control);
-    let groups = Arc::new(AllGroup::new(storage.clone(), access_control.clone()));
+    let group_manager = Arc::new(GroupManager::new(storage.clone(), access_control.clone()));
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
       Arc::new(Default::default());
 
@@ -48,14 +48,14 @@ where
 
     spawn_metrics(
       &group_sender_by_object_id,
-      Arc::downgrade(&groups),
+      Arc::downgrade(&group_manager),
       &metrics,
       &connect_state.client_message_routers,
       &storage,
     );
 
     Ok(Self {
-      groups,
+      group_manager,
       connect_state,
       group_sender_by_object_id,
       access_control,
@@ -76,13 +76,13 @@ where
     conn_sink: impl RealtimeClientWebsocketSink,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let new_client_router = ClientMessageRouter::new(conn_sink);
-    let groups = self.groups.clone();
+    let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
 
     Box::pin(async move {
       if let Some(old_user) = connect_state.handle_user_connect(connected_user, new_client_router) {
         // Remove the old user from all collaboration groups.
-        groups.remove_user(&old_user).await;
+        group_manager.remove_user(&old_user).await;
       }
       Ok(())
     })
@@ -99,14 +99,14 @@ where
     &self,
     disconnect_user: RealtimeUser,
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
-    let groups = self.groups.clone();
+    let group_manager = self.group_manager.clone();
     let connect_control = self.connect_state.clone();
 
     Box::pin(async move {
       trace!("[realtime]: disconnect => {}", disconnect_user);
       let was_removed = connect_control.handle_user_disconnect(&disconnect_user);
       if was_removed.is_some() {
-        groups.remove_user(&disconnect_user).await;
+        group_manager.remove_user(&disconnect_user).await;
       }
 
       Ok(())
@@ -121,7 +121,7 @@ where
   ) -> Pin<Box<dyn Future<Output = Result<(), RealtimeError>>>> {
     let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
-    let groups = self.groups.clone();
+    let group_manager = self.group_manager.clone();
     let access_control = self.access_control.clone();
 
     Box::pin(async move {
@@ -137,7 +137,7 @@ where
             Entry::Vacant(entry) => {
               let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
               let runner = GroupCommandRunner {
-                groups: groups.clone(),
+                group_manager: group_manager.clone(),
                 client_msg_router_by_user: client_msg_router_by_user.clone(),
                 access_control: access_control.clone(),
                 recv: Some(recv),

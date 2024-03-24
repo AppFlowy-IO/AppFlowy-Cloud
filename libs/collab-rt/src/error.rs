@@ -38,6 +38,9 @@ pub enum RealtimeError {
   #[error("{0}")]
   UserNotFound(String),
 
+  #[error("group is not exist: {0}")]
+  GroupNotFound(String),
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }

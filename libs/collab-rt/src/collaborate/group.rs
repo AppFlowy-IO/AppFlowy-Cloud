@@ -25,7 +25,6 @@ pub struct CollabGroup {
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
-  user_by_user_device: DashMap<String, RealtimeUser>,
 }
 
 impl Drop for CollabGroup {
@@ -50,7 +49,6 @@ impl CollabGroup {
       collab: Rc::new(Mutex::new(collab)),
       broadcast,
       subscribers: Default::default(),
-      user_by_user_device: Default::default(),
     }
   }
 
@@ -77,59 +75,6 @@ impl CollabGroup {
 
   /// Subscribes a new connection to the broadcast group for collaborative activities.
   ///
-  /// This method establishes a new subscription for a user, represented by a `sink`/`stream` pair.
-  /// These pairs implement the futures `Sink` and `Stream` protocols, facilitating real-time
-  /// communication between the server and the client.
-  ///
-  /// # Parameters
-  /// - `user`: Reference to the user initiating the subscription. Used for managing user-specific
-  ///   subscriptions and ensuring unique subscriptions per user-device combination.
-  /// - `subscriber_origin`: Identifies the origin of the subscription, used to prevent echoing
-  ///   messages back to the sender.
-  /// - `sink`: A `Sink` implementation used for sending collaboration changes to the client.
-  /// - `stream`: A `Stream` implementation for receiving messages from the client.
-  ///
-  /// # Behavior
-  /// - **Sink**: Utilized for forwarding any collaboration changes within the group to the client.
-  ///   Ensures that updates are communicated in real-time.
-  ///
-  ///   Collaboration Group Changes
-  ///               |
-  ///               | (1) Detect Change
-  ///               V
-  ///   +---------------------------+
-  ///   | Subscribe Function        |
-  ///   +---------------------------+
-  ///               |
-  ///               | (2) Forward Update
-  ///               V
-  ///        +-------------+
-  ///        |             |
-  ///        | Sink        |-----> (To Client)
-  ///        |             |
-  ///        +-------------+
-  ///
-  /// - **Stream**: Processes incoming messages from the client. After processing, responses are
-  ///   dispatched back to the client through the `sink`.
-  ///        (From Client)
-  ///             |
-  ///             | (1) Receive Message
-  ///             V
-  ///        +-------------+
-  ///        |             |
-  ///        | Stream      |
-  ///        |             |
-  ///        +-------------+
-  ///             |
-  ///             | (2) Process Message
-  ///             V
-  ///   +---------------------------+
-  ///   | Subscribe Function        |
-  ///   +---------------------------+
-  ///             |
-  ///             | (3) Alter Document (if applicable)
-  ///             V
-  ///   Collaboration Group Updates (triggers Sink flow)
   pub async fn subscribe<Sink, Stream>(
     &self,
     user: &RealtimeUser,
@@ -141,19 +86,6 @@ impl CollabGroup {
     Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
-    // Remove the old user if it exists
-    let user_device = user.user_device();
-    if let Some((_, old)) = self.user_by_user_device.remove(&user_device) {
-      trace!(
-        "{} remove subscriber when resubscribing: {}",
-        self.object_id,
-        old
-      );
-      if let Some((_, mut old_sub)) = self.subscribers.remove(&old) {
-        old_sub.stop().await;
-      }
-    }
-
     // create new subscription for new subscriber
     let sub = self.broadcast.subscribe(
       user,
@@ -163,11 +95,9 @@ impl CollabGroup {
       Rc::downgrade(&self.collab),
     );
 
-    // insert the device for given user
-    self
-      .user_by_user_device
-      .insert(user_device, (*user).clone());
-    self.subscribers.insert((*user).clone(), sub);
+    if let Some(mut old) = self.subscribers.insert((*user).clone(), sub) {
+      old.stop().await;
+    }
 
     trace!(
       "[realtime]:{} new subscriber:{}, connect at:{}, connected members: {}",

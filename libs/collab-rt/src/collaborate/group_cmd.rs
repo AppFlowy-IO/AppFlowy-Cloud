@@ -1,4 +1,4 @@
-use crate::collaborate::all_group::AllGroup;
+use crate::collaborate::group_manager::GroupManager;
 use crate::error::RealtimeError;
 use crate::RealtimeAccessControl;
 
@@ -33,7 +33,7 @@ pub type GroupCommandSender = tokio::sync::mpsc::Sender<GroupCommand>;
 pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 
 pub struct GroupCommandRunner<S, AC> {
-  pub groups: Arc<AllGroup<S, AC>>,
+  pub group_manager: Arc<GroupManager<S, AC>>,
   pub client_msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   pub access_control: Arc<AC>,
   pub recv: Option<GroupCommandReceiver>,
@@ -69,7 +69,7 @@ where
             }
           },
           GroupCommand::EncodeCollab { object_id, ret } => {
-            let group = self.groups.get_group(&object_id).await;
+            let group = self.group_manager.get_group(&object_id).await;
             if let Err(_err) = match group {
               None => ret.send(None),
               Some(group) => ret.send(Some(group.encode_collab().await)),
@@ -117,10 +117,10 @@ where
       return Ok(());
     }
 
-    let is_group_exist = self.groups.contains_group(&object_id).await;
+    let is_group_exist = self.group_manager.contains_group(&object_id).await;
     if is_group_exist {
       // subscribe the user to the group. then the user will receive the changes from the group
-      let is_user_subscribed = self.groups.contains_user(&object_id, user).await;
+      let is_user_subscribed = self.group_manager.contains_user(&object_id, user).await;
       if !is_user_subscribed {
         // safety: messages is not empty because we have checked it before
         let first_message = messages.first().unwrap();
@@ -161,7 +161,7 @@ where
       },
       Some(mut client_msg_router) => {
         self
-          .groups
+          .group_manager
           .subscribe_group(user, object_id, origin, client_msg_router.value_mut())
           .await
       },
@@ -179,7 +179,7 @@ where
           ))?;
 
         self
-          .groups
+          .group_manager
           .create_group(uid, &data.workspace_id, object_id, data.collab_type.clone())
           .await;
 

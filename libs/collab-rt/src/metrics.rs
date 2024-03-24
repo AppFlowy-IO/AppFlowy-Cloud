@@ -1,6 +1,6 @@
 use crate::client_msg_router::ClientMessageRouter;
-use crate::collaborate::all_group::AllGroup;
 use crate::collaborate::group_cmd::GroupCommandSender;
+use crate::collaborate::group_manager::GroupManager;
 use crate::RealtimeAccessControl;
 use collab_rt_entity::user::RealtimeUser;
 use dashmap::DashMap;
@@ -65,7 +65,7 @@ impl CollabRealtimeMetrics {
 
 pub(crate) fn spawn_metrics<S, AC>(
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
-  weak_groups: Weak<AllGroup<S, AC>>,
+  weak_groups: Weak<GroupManager<S, AC>>,
   metrics: &Arc<CollabRealtimeMetrics>,
   client_msg_router_by_user: &Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   storage: &Arc<S>,
@@ -87,7 +87,7 @@ pub(crate) fn spawn_metrics<S, AC>(
     loop {
       interval.tick().await;
       if let Some(groups) = weak_groups.upgrade() {
-        let inactive_group_ids = groups.tick().await;
+        let inactive_group_ids = groups.inactive_groups().await;
         for id in inactive_group_ids {
           cloned_group_sender_by_object_id.remove(&id);
         }

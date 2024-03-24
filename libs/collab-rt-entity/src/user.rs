@@ -1,4 +1,3 @@
-use collab::core::origin::CollabOrigin;
 use database_entity::dto::AFWorkspaceMember;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
@@ -49,19 +48,23 @@ impl From<&RealtimeUser> for UserDevice {
   }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub struct Editing {
-  pub object_id: String,
-  pub origin: CollabOrigin,
-}
-
+/// A `RealtimeUser` represents an individual user's connection within a realtime collaboration environment.
+///
+/// Each instance uniquely identifies a user's connection through a combination of user ID, device ID, and session ID.
+/// This struct is crucial for managing user states, such as their active connections and interactions with the realtime server.
+///
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct RealtimeUser {
   pub uid: i64,
+  /// `device_id`: A `String` representing the identifier of the device through which the user is connected.
   pub device_id: String,
+  /// - `connect_at`: The time, in milliseconds since the Unix epoch, when the user established the connection to
+  ///   the realtime server. For users connecting multiple times from the same device, this represents the most
+  ///   recent connection time.
   pub connect_at: i64,
-  /// Represents the websocket connection session id.
-  /// When each websocket connection is established, a unique session id is generated.
+  /// - `session_id`: A `String` that uniquely identifies the current websocket connection session. This ID is
+  ///   generated anew for each connection established, providing a mechanism to uniquely identify and manage
+  ///   individual connection sessions. The session ID is used when cleanly handling user disconnections.
   pub session_id: String,
 }
 

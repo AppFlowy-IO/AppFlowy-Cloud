@@ -38,3 +38,6 @@ indexmap = "2.2.5"
 semver = "1.0.22"
 redis = "0.25.2"
 parking_lot = "0.12.1"
+
+[dev-dependencies]
+rand = "0.8.5"

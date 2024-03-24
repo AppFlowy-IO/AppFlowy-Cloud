@@ -70,21 +70,23 @@ where
     // Lock the group and subscribe the user to the group.
     if let Some(group) = self.state.get_mut_group(object_id).await {
       trace!("[realtime]: {} subscribe group:{}", user, object_id,);
-      self.state.insert_user(user, object_id).await?;
-
       let (sink, stream) = client_msg_router.init_client_communication::<CollabMessage, _>(
         &group.workspace_id,
         user,
         object_id,
         self.access_control.clone(),
       );
-
       group.subscribe(user, origin.clone(), sink, stream).await;
-      Ok(())
+      // explicitly drop the group to release the lock.
+      drop(group);
+
+      self.state.insert_user(user, object_id).await?;
     } else {
       // When subscribing to a group, the group should exist. Otherwise, it's a bug.
-      Err(RealtimeError::GroupNotFound(object_id.to_string()))
+      return Err(RealtimeError::GroupNotFound(object_id.to_string()));
     }
+
+    Ok(())
   }
 
   pub async fn create_group(

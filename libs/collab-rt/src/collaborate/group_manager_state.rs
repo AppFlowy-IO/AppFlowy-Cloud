@@ -68,6 +68,8 @@ impl GroupManagementState {
     }
   }
 
+  /// Get a mutable reference to the group by object_id.
+  /// may deadlock when holding the RefMut and trying to read group_by_object_id.
   pub(crate) async fn get_mut_group(
     &self,
     object_id: &str,

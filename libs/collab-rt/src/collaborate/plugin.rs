@@ -6,7 +6,6 @@ use std::fmt::Display;
 use crate::RealtimeAccessControl;
 use anyhow::anyhow;
 
-use collab::core::awareness::{AwarenessUpdate, Event};
 use collab::core::collab::{DocStateSource, TransactionMutExt};
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
@@ -23,6 +22,7 @@ use std::sync::Arc;
 
 use tracing::{error, event, info, instrument, span, trace, Instrument, Level};
 
+use yrs::sync::awareness::Event;
 use yrs::updates::decoder::Decode;
 use yrs::{Transact, Update};
 
@@ -211,13 +211,7 @@ where
     }
   }
 
-  fn receive_local_state(
-    &self,
-    _origin: &CollabOrigin,
-    _object_id: &str,
-    _event: &Event,
-    _update: &AwarenessUpdate,
-  ) {
+  fn receive_local_state(&self, _origin: &CollabOrigin, _object_id: &str, _event: &Event) {
     // do nothing
   }
 

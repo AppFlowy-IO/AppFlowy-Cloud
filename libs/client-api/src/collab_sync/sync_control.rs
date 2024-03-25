@@ -4,7 +4,6 @@ use crate::collab_sync::{
   CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncError, SyncObject,
 };
 use bytes::Bytes;
-use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
@@ -26,6 +25,7 @@ use tokio::sync::{watch, Mutex};
 use tokio_stream::wrappers::WatchStream;
 use tracing::{error, info, trace, warn};
 use yrs::encoding::read::Cursor;
+use yrs::sync::Awareness;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 

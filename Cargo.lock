@@ -1388,7 +1388,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b25b67c2d37d84162a44ab5bcacc35f1dc0c0831#b25b67c2d37d84162a44ab5bcacc35f1dc0c0831"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1412,7 +1412,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b25b67c2d37d84162a44ab5bcacc35f1dc0c0831#b25b67c2d37d84162a44ab5bcacc35f1dc0c0831"
 dependencies = [
  "anyhow",
  "collab",
@@ -1431,7 +1431,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b25b67c2d37d84162a44ab5bcacc35f1dc0c0831#b25b67c2d37d84162a44ab5bcacc35f1dc0c0831"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1446,7 +1446,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b25b67c2d37d84162a44ab5bcacc35f1dc0c0831#b25b67c2d37d84162a44ab5bcacc35f1dc0c0831"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2191,6 +2191,9 @@ name = "fastrand"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
+dependencies = [
+ "getrandom 0.2.12",
+]
 
 [[package]]
 name = "fiat-crypto"
@@ -2428,10 +2431,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fc3cb4d91f53b50155bdcfd23f6a4c39ae1969c2ae85982b135750cccaf5fce"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi 0.9.0+wasi-snapshot-preview1",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -6667,12 +6668,13 @@ dependencies = [
 
 [[package]]
 name = "yrs"
-version = "0.17.2"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68aea14c6c33f2edd8a5ff9415360cfa5b98d90cce30c5ee3be59a8419fb15a9"
+checksum = "cd95835cc7973a5867b769d5373effbfe75138f0544c4ad7cca7bc5080ca1897"
 dependencies = [
+ "arc-swap",
  "atomic_refcell",
- "rand 0.7.3",
+ "fastrand",
  "serde",
  "serde_json",
  "smallstr",

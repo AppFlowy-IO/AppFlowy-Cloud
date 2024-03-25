@@ -1,4 +1,3 @@
-use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::{Arc, Weak};
 
 use collab::core::collab::MutexCollab;
@@ -14,6 +13,7 @@ use tokio_stream::StreamExt;
 use crate::collab_sync::SyncControl;
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
+use yrs::sync::awareness::Event;
 
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
@@ -145,19 +145,13 @@ where
     });
   }
 
-  fn receive_local_state(
-    &self,
-    origin: &CollabOrigin,
-    object_id: &str,
-    _event: &Event,
-    update: &AwarenessUpdate,
-  ) {
-    let payload = Message::Awareness(update.clone()).encode_v1();
-    self.sync_queue.queue_msg(|msg_id| {
-      let update_sync = UpdateSync::new(origin.clone(), object_id.to_string(), payload, msg_id);
-      trace!("queue local state: {}", update_sync);
-      ClientCollabMessage::new_update_sync(update_sync)
-    });
+  fn receive_local_state(&self, _origin: &CollabOrigin, _object_id: &str, _event: &Event) {
+    // let payload = Message::Awareness(update.clone()).encode_v1();
+    // self.sync_queue.queue_msg(|msg_id| {
+    //   let update_sync = UpdateSync::new(origin.clone(), object_id.to_string(), payload, msg_id);
+    //   trace!("queue local state: {}", update_sync);
+    //   ClientCollabMessage::new_update_sync(update_sync)
+    // });
   }
 
   fn reset(&self, _object_id: &str) {

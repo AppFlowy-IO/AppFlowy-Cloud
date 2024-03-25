@@ -1,10 +1,10 @@
-use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::TransactionRetry;
 
 use collab::preclude::Collab;
 
+use yrs::sync::{Awareness, AwarenessUpdate};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};

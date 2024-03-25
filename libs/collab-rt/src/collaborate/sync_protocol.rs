@@ -1,7 +1,7 @@
-use collab::core::awareness::Awareness;
 use collab::core::collab::TransactionExt;
 use collab_rt_protocol::CollabSyncProtocol;
 use collab_rt_protocol::{CustomMessage, Error, Message, SyncMessage};
+use yrs::sync::Awareness;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Transact};
 

@@ -320,14 +320,14 @@ async fn handle_client_collab_message(
   let mut ack_response = None;
 
   metrics_calculate
-    .apply_update_count
+    .acquire_collab_lock_count
     .fetch_add(1, Ordering::Relaxed);
 
   let mut collab_lock = match collab.try_lock() {
     Ok(collab) => collab,
     Err(err) => {
       metrics_calculate
-        .apply_update_failed_count
+        .acquire_collab_lock_fail_count
         .fetch_add(1, Ordering::Relaxed);
 
       return Err(RealtimeError::Internal(anyhow!(
@@ -344,6 +344,9 @@ async fn handle_client_collab_message(
         let result = handle_message(&origin, &ServerSyncProtocol, &mut collab_lock, msg);
         match result {
           Ok(payload) => {
+            metrics_calculate
+              .apply_update_count
+              .fetch_add(1, Ordering::Relaxed);
             // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
             // send one ack back to the client.
             if ack_response.is_none() {
@@ -353,6 +356,9 @@ async fn handle_client_collab_message(
             }
           },
           Err(err) => {
+            metrics_calculate
+              .apply_update_failed_count
+              .fetch_add(1, Ordering::Relaxed);
             error!("handle collab:{} message error:{}", object_id, err);
             if ack_response.is_none() {
               let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())

@@ -16,6 +16,9 @@ pub struct CollabRealtimeMetrics {
   apply_update_count: Gauge,
   /// The number of apply update failed
   apply_update_failed_count: Gauge,
+
+  acquire_collab_lock_count: Gauge,
+  acquire_collab_lock_fail_count: Gauge,
 }
 
 impl CollabRealtimeMetrics {
@@ -26,6 +29,8 @@ impl CollabRealtimeMetrics {
       opening_collab_count: Gauge::default(),
       apply_update_count: Default::default(),
       apply_update_failed_count: Default::default(),
+      acquire_collab_lock_count: Default::default(),
+      acquire_collab_lock_fail_count: Default::default(),
     }
   }
 
@@ -58,33 +63,30 @@ impl CollabRealtimeMetrics {
       metrics.apply_update_failed_count.clone(),
     );
 
-    metrics
-  }
+    realtime_registry.register(
+      "acquire_collab_lock_count",
+      "number of acquire collab lock",
+      metrics.acquire_collab_lock_count.clone(),
+    );
+    realtime_registry.register(
+      "acquire_collab_lock_fail_count",
+      "number of acquire collab lock failed",
+      metrics.acquire_collab_lock_fail_count.clone(),
+    );
 
-  pub fn record_connected_users(&self, num: i64) {
-    self.connected_users.set(num);
+    metrics
   }
 
   pub fn record_encode_collab_mem_hit_rate(&self, rate: f64) {
     self.encode_collab_mem_hit_rate.set(rate);
-  }
-
-  pub fn record_opening_collab_count(&self, count: i64) {
-    self.opening_collab_count.set(count);
-  }
-
-  pub fn record_apply_update_count(&self, count: i64) {
-    self.apply_update_count.set(count);
-  }
-
-  pub fn record_apply_update_failed_count(&self, count: i64) {
-    self.apply_update_failed_count.set(count);
   }
 }
 
 #[derive(Clone, Default)]
 pub(crate) struct CollabMetricsCalculate {
   pub(crate) connected_users: Arc<AtomicI64>,
+  pub(crate) acquire_collab_lock_count: Arc<AtomicI64>,
+  pub(crate) acquire_collab_lock_fail_count: Arc<AtomicI64>,
   pub(crate) apply_update_count: Arc<AtomicI64>,
   pub(crate) apply_update_failed_count: Arc<AtomicI64>,
   pub(crate) num_of_active_collab: Arc<AtomicI64>,
@@ -104,27 +106,46 @@ pub(crate) fn spawn_metrics<S>(
     let mut interval = interval(Duration::from_secs(120));
     loop {
       interval.tick().await;
-      metrics.record_opening_collab_count(
+
+      // active collab
+      metrics.opening_collab_count.set(
         metrics_calculation
           .num_of_active_collab
           .load(std::sync::atomic::Ordering::Relaxed),
       );
-      metrics.record_connected_users(
+
+      // connect user
+      metrics.connected_users.set(
         metrics_calculation
           .connected_users
           .load(std::sync::atomic::Ordering::Relaxed),
       );
 
-      metrics.record_apply_update_count(
+      // lock
+      metrics.acquire_collab_lock_count.set(
+        metrics_calculation
+          .acquire_collab_lock_count
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
+      metrics.acquire_collab_lock_fail_count.set(
+        metrics_calculation
+          .acquire_collab_lock_fail_count
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
+
+      // update count
+      metrics.apply_update_count.set(
         metrics_calculation
           .apply_update_count
           .load(std::sync::atomic::Ordering::Relaxed),
       );
-      metrics.record_apply_update_failed_count(
+      metrics.apply_update_failed_count.set(
         metrics_calculation
           .apply_update_failed_count
           .load(std::sync::atomic::Ordering::Relaxed),
       );
+
+      // cache hit rate
       metrics.record_encode_collab_mem_hit_rate(storage.encode_collab_mem_hit_rate());
     }
   });

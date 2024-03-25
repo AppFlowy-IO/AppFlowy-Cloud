@@ -330,7 +330,7 @@ fn ack_code_from_error(error: &Error) -> AckCode {
   match error {
     Error::YrsTransaction(_) => AckCode::Retry,
     Error::YrsApplyUpdate(_) => AckCode::CannotApplyUpdate,
-    Error::YrsEncodeState(_) => AckCode::EncodeState,
+    // Error::YrsEncodeState(_) => AckCode::EncodeState,
     _ => AckCode::Internal,
   }
 }

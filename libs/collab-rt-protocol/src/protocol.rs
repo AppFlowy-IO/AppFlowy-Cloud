@@ -1,5 +1,5 @@
 use collab::core::awareness::{Awareness, AwarenessUpdate};
-use collab::core::collab::TransactionMutExt;
+use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::TransactionRetry;
 use collab::preclude::Collab;
@@ -70,7 +70,10 @@ pub trait CollabSyncProtocol {
       .doc()
       .try_transact()
       .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step1. error: {}", err)))?
-      .encode_state_as_update_v1(&sv);
+      .try_encode_state_as_update_v1(&sv)
+      .map_err(|err| {
+        Error::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
+      })?;
     Ok(Some(
       Message::Sync(SyncMessage::SyncStep2(update)).encode_v1(),
     ))

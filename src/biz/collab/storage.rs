@@ -5,6 +5,7 @@ use crate::biz::snapshot::SnapshotControl;
 use anyhow::Context;
 use app_error::AppError;
 use async_trait::async_trait;
+use collab::core::collab::DocStateSource;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -313,7 +314,7 @@ pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), any
   let _ = Collab::new_with_doc_state(
     CollabOrigin::Empty,
     object_id,
-    encoded_collab.doc_state.to_vec(),
+    DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
     vec![],
     false,
   )?;

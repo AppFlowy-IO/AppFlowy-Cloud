@@ -461,6 +461,7 @@ pub enum AckCode {
   CannotApplyUpdate = 1,
   Retry = 2,
   Internal = 3,
+  EncodeState = 4,
 }
 
 ///  ⚠️ ⚠️ ⚠️Compatibility Warning:

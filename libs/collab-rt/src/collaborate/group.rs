@@ -6,6 +6,8 @@ use dashmap::DashMap;
 use std::rc::Rc;
 
 use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
+use crate::metrics::CollabMetricsCalculate;
+
 use collab_rt_entity::collab_msg::CollabMessage;
 use collab_rt_entity::message::MessageByObjectId;
 use collab_rt_entity::user::RealtimeUser;
@@ -25,6 +27,7 @@ pub struct CollabGroup {
   /// A list of subscribers to this group. Each subscriber will receive updates from the
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
+  metrics_calculate: CollabMetricsCalculate,
 }
 
 impl Drop for CollabGroup {
@@ -39,6 +42,7 @@ impl CollabGroup {
     object_id: String,
     collab_type: CollabType,
     mut collab: Collab,
+    metrics_calculate: CollabMetricsCalculate,
   ) -> Self {
     let broadcast = CollabBroadcast::new(&object_id, 10);
     broadcast.observe_collab_changes(&mut collab).await;
@@ -49,6 +53,7 @@ impl CollabGroup {
       collab: Rc::new(Mutex::new(collab)),
       broadcast,
       subscribers: Default::default(),
+      metrics_calculate,
     }
   }
 
@@ -93,6 +98,7 @@ impl CollabGroup {
       sink,
       stream,
       Rc::downgrade(&self.collab),
+      self.metrics_calculate.clone(),
     );
 
     if let Some(mut old) = self.subscribers.insert((*user).clone(), sub) {

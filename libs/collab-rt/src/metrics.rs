@@ -1,14 +1,8 @@
-use crate::client_msg_router::ClientMessageRouter;
-use crate::collaborate::group_cmd::GroupCommandSender;
-use crate::collaborate::group_manager::GroupManager;
-use crate::RealtimeAccessControl;
-use collab_rt_entity::user::RealtimeUser;
-use dashmap::DashMap;
 use database::collab::CollabStorage;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Weak};
+use std::sync::atomic::{AtomicI64, AtomicU64};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
 
@@ -17,6 +11,11 @@ pub struct CollabRealtimeMetrics {
   connected_users: Gauge,
   encode_collab_mem_hit_rate: Gauge<f64, AtomicU64>,
   opening_collab_count: Gauge,
+
+  /// The number of apply update
+  apply_update_count: Gauge,
+  /// The number of apply update failed
+  apply_update_failed_count: Gauge,
 }
 
 impl CollabRealtimeMetrics {
@@ -25,6 +24,8 @@ impl CollabRealtimeMetrics {
       connected_users: Gauge::default(),
       encode_collab_mem_hit_rate: Gauge::default(),
       opening_collab_count: Gauge::default(),
+      apply_update_count: Default::default(),
+      apply_update_failed_count: Default::default(),
     }
   }
 
@@ -46,58 +47,85 @@ impl CollabRealtimeMetrics {
       "number of opening collabs",
       metrics.opening_collab_count.clone(),
     );
+    realtime_registry.register(
+      "apply_update_count",
+      "number of apply update",
+      metrics.apply_update_count.clone(),
+    );
+    realtime_registry.register(
+      "apply_update_failed_count",
+      "number of apply update failed",
+      metrics.apply_update_failed_count.clone(),
+    );
 
     metrics
   }
 
-  pub fn record_connected_users(&self, num: usize) {
-    self.connected_users.set(num as i64);
+  pub fn record_connected_users(&self, num: i64) {
+    self.connected_users.set(num);
   }
 
   pub fn record_encode_collab_mem_hit_rate(&self, rate: f64) {
     self.encode_collab_mem_hit_rate.set(rate);
   }
 
-  pub fn record_opening_collab_count(&self, count: usize) {
-    self.opening_collab_count.set(count as i64);
+  pub fn record_opening_collab_count(&self, count: i64) {
+    self.opening_collab_count.set(count);
+  }
+
+  pub fn record_apply_update_count(&self, count: i64) {
+    self.apply_update_count.set(count);
+  }
+
+  pub fn record_apply_update_failed_count(&self, count: i64) {
+    self.apply_update_failed_count.set(count);
   }
 }
 
-pub(crate) fn spawn_metrics<S, AC>(
-  group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
-  weak_groups: Weak<GroupManager<S, AC>>,
+#[derive(Clone, Default)]
+pub(crate) struct CollabMetricsCalculate {
+  pub(crate) connected_users: Arc<AtomicI64>,
+  pub(crate) apply_update_count: Arc<AtomicI64>,
+  pub(crate) apply_update_failed_count: Arc<AtomicI64>,
+  pub(crate) num_of_active_collab: Arc<AtomicI64>,
+}
+
+pub(crate) fn spawn_metrics<S>(
   metrics: &Arc<CollabRealtimeMetrics>,
-  client_msg_router_by_user: &Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
+  metrics_calculation: &CollabMetricsCalculate,
   storage: &Arc<S>,
 ) where
   S: CollabStorage,
-  AC: RealtimeAccessControl,
 {
   let metrics = metrics.clone();
-  let client_stream_by_user = client_msg_router_by_user.clone();
+  let metrics_calculation = metrics_calculation.clone();
   let storage = storage.clone();
-
-  let cloned_group_sender_by_object_id = group_sender_by_object_id.clone();
   tokio::task::spawn_local(async move {
-    let mut interval = if cfg!(debug_assertions) {
-      interval(Duration::from_secs(10))
-    } else {
-      interval(Duration::from_secs(60))
-    };
+    let mut interval = interval(Duration::from_secs(120));
     loop {
       interval.tick().await;
-      if let Some(groups) = weak_groups.upgrade() {
-        let inactive_group_ids = groups.inactive_groups().await;
-        for id in inactive_group_ids {
-          cloned_group_sender_by_object_id.remove(&id);
-        }
+      metrics.record_opening_collab_count(
+        metrics_calculation
+          .num_of_active_collab
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
+      metrics.record_connected_users(
+        metrics_calculation
+          .connected_users
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
 
-        metrics.record_opening_collab_count(groups.number_of_groups().await);
-        metrics.record_connected_users(client_stream_by_user.len());
-        metrics.record_encode_collab_mem_hit_rate(storage.encode_collab_mem_hit_rate());
-      } else {
-        break;
-      }
+      metrics.record_apply_update_count(
+        metrics_calculation
+          .apply_update_count
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
+      metrics.record_apply_update_failed_count(
+        metrics_calculation
+          .apply_update_failed_count
+          .load(std::sync::atomic::Ordering::Relaxed),
+      );
+      metrics.record_encode_collab_mem_hit_rate(storage.encode_collab_mem_hit_rate());
     }
   });
 }

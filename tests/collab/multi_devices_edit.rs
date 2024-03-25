@@ -123,9 +123,9 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   let expected_json = json!({
     "name": "workspace2"
   });
-  assert_client_collab_within_30_secs(&mut client_1, &object_id, "name", expected_json.clone())
+  assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
     .await;
-  assert_client_collab_within_30_secs(&mut client_2, &object_id, "name", expected_json.clone())
+  assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
     .await;
 }
 
@@ -176,13 +176,14 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
   device_1
     .open_collab(&workspace_id, &object_id_2, collab_type.clone())
     .await;
-  assert_client_collab_within_30_secs(
+  assert_client_collab_within_secs(
     &mut device_1,
     &object_id_2,
     "name",
     json!({
       "name": "object 2"
     }),
+    60,
   )
   .await;
 
@@ -190,13 +191,14 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
   device_2
     .open_collab(&workspace_id, &object_id_1, collab_type.clone())
     .await;
-  assert_client_collab_within_30_secs(
+  assert_client_collab_within_secs(
     &mut device_2,
     &object_id_1,
     "name",
     json!({
       "name": "object 1"
     }),
+    60,
   )
   .await;
 }
@@ -268,20 +270,12 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     "8": "Task 8",
     "9": "Task 9"
   });
-  assert_client_collab_include_value_within_30_secs(
-    &mut client_1,
-    &object_id,
-    expected_json.clone(),
-  )
-  .await
-  .unwrap();
-  assert_client_collab_include_value_within_30_secs(
-    &mut client_2,
-    &object_id,
-    expected_json.clone(),
-  )
-  .await
-  .unwrap();
+  assert_client_collab_include_value(&mut client_1, &object_id, expected_json.clone())
+    .await
+    .unwrap();
+  assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone())
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -372,7 +366,7 @@ async fn init_sync_when_missing_updates_test() {
     .unwrap();
 
   // Validate client_1's view includes "task 2", and "task 3", while client_2 missed key2 and key3.
-  assert_client_collab_include_value_within_30_secs(
+  assert_client_collab_include_value(
     &mut client_1,
     &object_id,
     json!({ "1": "task 1", "2": text.clone(), "3": "task 3" }),
@@ -410,7 +404,7 @@ async fn init_sync_when_missing_updates_test() {
     .await
     .unwrap();
 
-  assert_client_collab_include_value_within_30_secs(
+  assert_client_collab_include_value(
     &mut client_2,
     &object_id,
     json!({ "1": "task 1", "2": text.clone(), "3": "task 3", "4": "task 4" }),

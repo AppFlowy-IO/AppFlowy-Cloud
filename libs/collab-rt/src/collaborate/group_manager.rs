@@ -12,6 +12,7 @@ use collab_rt_entity::user::RealtimeUser;
 
 use database::collab::CollabStorage;
 
+use crate::metrics::CollabMetricsCalculate;
 use std::rc::Rc;
 use std::sync::Arc;
 use tracing::{debug, instrument, trace};
@@ -20,6 +21,7 @@ pub struct GroupManager<S, AC> {
   state: GroupManagementState,
   storage: Arc<S>,
   access_control: Arc<AC>,
+  metrics_calculate: CollabMetricsCalculate,
 }
 
 impl<S, AC> GroupManager<S, AC>
@@ -27,11 +29,16 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
-  pub fn new(storage: Arc<S>, access_control: Arc<AC>) -> Self {
+  pub fn new(
+    storage: Arc<S>,
+    access_control: Arc<AC>,
+    metrics_calculate: CollabMetricsCalculate,
+  ) -> Self {
     Self {
-      state: GroupManagementState::new(),
+      state: GroupManagementState::new(metrics_calculate.clone()),
       storage,
       access_control,
+      metrics_calculate,
     }
   }
 
@@ -114,14 +121,11 @@ where
         object_id.to_string(),
         collab_type,
         collab,
+        self.metrics_calculate.clone(),
       )
       .await,
     );
     debug!("[realtime]: {} create group:{}", uid, object_id);
     self.state.insert_group(object_id, group.clone()).await;
-  }
-
-  pub async fn number_of_groups(&self) -> usize {
-    self.state.number_of_groups()
   }
 }

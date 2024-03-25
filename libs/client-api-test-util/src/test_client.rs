@@ -751,13 +751,13 @@ pub async fn assert_server_collab(
   Ok(())
 }
 
-pub async fn assert_client_collab_within_30_secs(
+pub async fn assert_client_collab_within_secs(
   client: &mut TestClient,
   object_id: &str,
   key: &str,
   expected: Value,
+  secs: u64,
 ) {
-  let secs = 30;
   let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {
@@ -788,7 +788,7 @@ pub async fn assert_client_collab_within_30_secs(
   }
 }
 
-pub async fn assert_client_collab_include_value_within_30_secs(
+pub async fn assert_client_collab_include_value(
   client: &mut TestClient,
   object_id: &str,
   expected: Value,

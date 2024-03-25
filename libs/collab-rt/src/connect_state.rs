@@ -99,6 +99,10 @@ impl ConnectState {
     was_removed
   }
 
+  pub fn number_of_connected_users(&self) -> usize {
+    self.user_by_device.len()
+  }
+
   #[allow(dead_code)]
   fn get_user_by_device(&self, user_device: &UserDevice) -> Option<RealtimeUser> {
     self.user_by_device.get(user_device).map(|v| v.clone())

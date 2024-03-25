@@ -1,10 +1,9 @@
-use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
 use std::rc::{Rc, Weak};
 
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
+use collab::preclude::{Collab, YrsSubscription};
 use collab_rt_protocol::{handle_message, Error};
-use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
+use collab_rt_protocol::{MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::{AtomicU32, Ordering};
 use tokio::select;
@@ -14,8 +13,7 @@ use tokio::sync::Mutex;
 use tokio::time::Instant;
 
 use yrs::updates::decoder::DecoderV1;
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::UpdateSubscription;
+use yrs::updates::encoder::{Encoder, EncoderV1};
 
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use collab_rt_entity::collab_msg::{
@@ -33,10 +31,10 @@ use yrs::encoding::write::Write;
 pub struct CollabBroadcast {
   object_id: String,
   sender: Sender<CollabMessage>,
-  awareness_sub: Mutex<Option<AwarenessUpdateSubscription>>,
+  awareness_sub: Mutex<Option<YrsSubscription>>,
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
-  doc_subscription: Mutex<Option<UpdateSubscription>>,
+  doc_subscription: Mutex<Option<YrsSubscription>>,
   broadcast_seq_num_counter: Rc<AtomicU32>,
   /// The last modified time of the document.
   pub modified_at: Rc<parking_lot::Mutex<Instant>>,
@@ -101,19 +99,19 @@ impl CollabBroadcast {
         })
         .unwrap();
 
-      let broadcast_sink = self.sender.clone();
-      let cloned_oid = self.object_id.clone();
+      let _broadcast_sink = self.sender.clone();
+      let _cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
-      let awareness_sub = collab.observe_awareness(move |awareness, event| {
-        if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
-          trace!("observe awareness update:{}", awareness_update);
-          let payload = Message::Awareness(awareness_update).encode_v1();
-          let msg = AwarenessSync::new(cloned_oid.clone(), payload);
-          if let Err(err) = broadcast_sink.send(msg.into()) {
-            trace!("fail to broadcast awareness:{}", err);
-          }
-        }
+      let awareness_sub = collab.observe_awareness(move |_event| {
+        // if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
+        //   trace!("observe awareness update:{}", awareness_update);
+        //   let payload = Message::Awareness(awareness_update).encode_v1();
+        //   let msg = AwarenessSync::new(cloned_oid.clone(), payload);
+        //   if let Err(err) = broadcast_sink.send(msg.into()) {
+        //     trace!("fail to broadcast awareness:{}", err);
+        //   }
+        // }
       });
       (doc_sub, awareness_sub)
     };

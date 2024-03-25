@@ -1,9 +1,9 @@
-use collab::core::awareness::AwarenessUpdate;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
 use thiserror::Error;
 
+use yrs::sync::AwarenessUpdate;
 use yrs::updates::decoder::{Decode, Decoder};
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::StateVector;
@@ -235,7 +235,7 @@ pub enum Error {
 
   /// Applying incoming Y-protocol awareness update has failed.
   #[error("failed to process awareness update: {0}")]
-  AwarenessEncoding(#[from] collab::core::awareness::Error),
+  AwarenessEncoding(#[from] yrs::sync::awareness::Error),
 
   /// An incoming Y-protocol authorization request has been denied.
   #[error("permission denied to access: {reason}")]

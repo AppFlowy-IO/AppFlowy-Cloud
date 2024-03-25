@@ -156,7 +156,7 @@ workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4"] }
 anyhow = "1.0.79"
 tokio = { version = "1.36.0", features = ["sync"] }
-yrs = "0.17.2"
+yrs = "0.18.1"
 bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
 collab = { version = "0.1.0" }
@@ -186,10 +186,10 @@ panic = 'unwind'
 panic = 'unwind'
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b25b67c2d37d84162a44ab5bcacc35f1dc0c0831" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b25b67c2d37d84162a44ab5bcacc35f1dc0c0831" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b25b67c2d37d84162a44ab5bcacc35f1dc0c0831" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b25b67c2d37d84162a44ab5bcacc35f1dc0c0831" }
 
 [features]
 custom_env= []

@@ -6,7 +6,7 @@ pub enum RealtimeError {
   YSync(#[from] collab_rt_protocol::Error),
 
   #[error(transparent)]
-  YAwareness(#[from] collab::core::awareness::Error),
+  YAwareness(#[from] yrs::sync::awareness::Error),
 
   #[error("failed to deserialize message: {0}")]
   DecodingError(#[from] yrs::encoding::read::Error),

@@ -115,9 +115,10 @@ impl TestClient {
       .collab
       .lock()
       .get_awareness()
-      .get_states()
+      .clients()
       .iter()
       .map(|(_a, json)| {
+        let json = serde_json::from_str::<Value>(json).unwrap();
         let uid = json.get("uid").unwrap().as_i64();
         uid.unwrap()
       })

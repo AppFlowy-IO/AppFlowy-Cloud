@@ -1,4 +1,5 @@
 use collab::core::awareness::Awareness;
+use collab::core::collab::TransactionExt;
 use collab_rt_protocol::CollabSyncProtocol;
 use collab_rt_protocol::{CustomMessage, Error, Message, SyncMessage};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
@@ -12,8 +13,14 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     awareness: &Awareness,
     sv: StateVector,
   ) -> Result<Option<Vec<u8>>, Error> {
-    let txn = awareness.doc().transact();
-    let client_step2_update = txn.encode_state_as_update_v1(&sv);
+    let txn = awareness
+      .doc()
+      .try_transact()
+      .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step1. error: {}", err)))?;
+
+    let client_step2_update = txn.try_encode_state_as_update_v1(&sv).map_err(|err| {
+      Error::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
+    })?;
 
     // Retrieve the latest document state from the client after they return online from offline editing.
     let server_step1_update = txn.state_vector();

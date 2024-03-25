@@ -175,16 +175,21 @@ collab-rt = { path = "libs/collab-rt" }
 lto = true
 opt-level = 3
 codegen-units = 1
+panic = 'unwind'
 
 [profile.profiling]
 inherits = "release"
 debug = true
+panic = 'unwind'
+
+[profile.dev]
+panic = 'unwind'
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0970b2e1440134af7c83bb8fc80cac5d2dedebb7" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0970b2e1440134af7c83bb8fc80cac5d2dedebb7" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0970b2e1440134af7c83bb8fc80cac5d2dedebb7" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "0970b2e1440134af7c83bb8fc80cac5d2dedebb7" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }
 
 [features]
 custom_env= []

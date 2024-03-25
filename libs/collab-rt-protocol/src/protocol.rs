@@ -1,8 +1,10 @@
 use collab::core::awareness::{Awareness, AwarenessUpdate};
-use collab::core::collab::TransactionMutExt;
+use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::TransactionRetry;
+
 use collab::preclude::Collab;
+
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -70,7 +72,10 @@ pub trait CollabSyncProtocol {
       .doc()
       .try_transact()
       .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step1. error: {}", err)))?
-      .encode_state_as_update_v1(&sv);
+      .try_encode_state_as_update_v1(&sv)
+      .map_err(|err| {
+        Error::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
+      })?;
     Ok(Some(
       Message::Sync(SyncMessage::SyncStep2(update)).encode_v1(),
     ))
@@ -91,6 +96,10 @@ pub trait CollabSyncProtocol {
     txn
       .try_apply_update(update)
       .map_err(|err| Error::YrsApplyUpdate(format!("sync step2 apply update: {}", err)))?;
+
+    txn
+      .try_commit()
+      .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
     Ok(None)
   }
 

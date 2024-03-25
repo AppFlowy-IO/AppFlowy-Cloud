@@ -31,7 +31,6 @@ impl AggregateMessageQueue {
   pub async fn push(&self, msg: Vec<ClientCollabMessage>) {
     let mut queue_guard = self.queue.lock().await;
     let mut seen_ids_guard = self.seen_ids.lock().await;
-
     for msg in msg.into_iter() {
       if seen_ids_guard.insert(SeenId::from(&msg)) {
         queue_guard.push(msg);

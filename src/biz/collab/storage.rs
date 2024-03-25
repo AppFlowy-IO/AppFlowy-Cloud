@@ -121,7 +121,10 @@ where
     // Await the response from the realtime server with a timeout
     match timeout(timeout_duration, rx).await {
       Ok(Ok(Some(encode_collab))) => Some(encode_collab),
-      Ok(Ok(None)) => None,
+      Ok(Ok(None)) => {
+        trace!("No encode collab found in editing collab");
+        None
+      },
       Ok(Err(err)) => {
         error!("Failed to get encode collab from realtime server: {}", err);
         None

@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use app_error::AppError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{error, trace};
+use tracing::{error, instrument, trace};
 
 #[derive(Clone)]
 pub struct CollabMemCache {
@@ -51,7 +51,8 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn get_encode_collab(&self, object_id: &str) -> Option<EncodedCollab> {
+  #[instrument(level = "trace", skip_all)]
+  pub async fn get_encode_collab_from_mem(&self, object_id: &str) -> Option<EncodedCollab> {
     match self.get_encode_collab_bytes(object_id).await {
       Some(bytes) => match EncodedCollab::decode_from_bytes(&bytes) {
         Ok(encoded_collab) => Some(encoded_collab),
@@ -70,7 +71,9 @@ impl CollabMemCache {
     }
   }
 
+  #[instrument(level = "trace", skip_all, fields(object_id=%object_id))]
   pub async fn insert_encode_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
+    trace!("Inserting encode collab into cache: {}", object_id);
     match encoded_collab.encode_to_bytes() {
       Ok(bytes) => {
         if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {

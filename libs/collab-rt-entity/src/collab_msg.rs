@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Error};
 use std::cmp::Ordering;
+use std::fmt;
 
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -12,8 +13,9 @@ use collab::preclude::updates::decoder::DecoderV1;
 use collab::preclude::updates::encoder::{Encode, Encoder, EncoderV1};
 use collab_entity::CollabType;
 use collab_rt_protocol::{Message, MessageReader, SyncMessage};
-use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde::de::Visitor;
+use serde::{de, Deserialize, Deserializer, Serialize};
+use serde_repr::Serialize_repr;
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn payload_size(&self) -> usize;
@@ -454,13 +456,14 @@ impl Display for UpdateSync {
   }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Deserialize_repr, Hash)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Hash)]
 #[repr(u8)]
 pub enum AckCode {
   Success = 0,
   CannotApplyUpdate = 1,
   Retry = 2,
   Internal = 3,
+  EncodeState = 4,
 }
 
 ///  ⚠️ ⚠️ ⚠️Compatibility Warning:
@@ -476,7 +479,38 @@ pub struct CollabAck {
   pub object_id: String,
   pub source: AckSource,
   pub payload: Bytes,
+  #[serde(deserialize_with = "deserialize_ack_code")]
   pub code: AckCode,
+}
+fn deserialize_ack_code<'de, D>(deserializer: D) -> Result<AckCode, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  struct AckCodeVisitor;
+
+  impl<'de> Visitor<'de> for AckCodeVisitor {
+    type Value = AckCode;
+
+    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+      formatter.write_str("an integer between 0 and 4")
+    }
+
+    fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
+    where
+      E: de::Error,
+    {
+      match value {
+        0 => Ok(AckCode::Success),
+        1 => Ok(AckCode::CannotApplyUpdate),
+        2 => Ok(AckCode::Retry),
+        3 => Ok(AckCode::Internal),
+        4 => Ok(AckCode::EncodeState),
+        _ => Ok(AckCode::Internal),
+      }
+    }
+  }
+
+  deserializer.deserialize_u8(AckCodeVisitor)
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]

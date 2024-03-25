@@ -42,7 +42,11 @@ impl CollabCache {
   ) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
-    if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&params.object_id).await {
+    if let Some(encoded_collab) = self
+      .mem_cache
+      .get_encode_collab_from_mem(&params.object_id)
+      .await
+    {
       event!(
         Level::DEBUG,
         "Get encoded collab:{} from cache",
@@ -54,7 +58,10 @@ impl CollabCache {
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
     let object_id = params.object_id.clone();
-    let encoded_collab = self.disk_cache.get_collab_encoded(uid, params).await?;
+    let encoded_collab = self
+      .disk_cache
+      .get_collab_encoded_from_disk(uid, params)
+      .await?;
     self
       .mem_cache
       .insert_encode_collab(object_id, &encoded_collab)

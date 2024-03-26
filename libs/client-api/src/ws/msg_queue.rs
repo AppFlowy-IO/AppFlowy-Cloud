@@ -63,12 +63,23 @@ impl AggregateMessageQueue {
             if let Some(queue) = weak_queue.upgrade() {
               let (num_init_sync, num_messages) = handle_tick(&sender, &queue, maximum_payload_size, weak_seen_ids.clone()).await;
               if num_messages == 0 {
-                next_tick = Instant::now() + Duration::from_secs(4);
+                if cfg!(feature = "test_fast_sync") {
+                  next_tick = Instant::now() + Duration::from_secs(1);
+                } else {
+                trace!("No messages to send, slowing down next tick");
+                  next_tick = Instant::now() + Duration::from_secs(4);
+                }
               } else {
                 // To determine the next interval dynamically, consider factors such as the number of messages sent,
                 // their total size, and the current network type. This approach allows for more nuanced interval
                 // adjustments, optimizing for efficiency and responsiveness under varying conditions.
-                next_tick = calculate_next_tick(num_init_sync, interval_duration);
+                let duration = if cfg!(feature = "test_fast_sync") {
+                  Duration::from_secs(1)
+                } else {
+                  calculate_next_tick_duration(num_init_sync, interval_duration)
+                };
+                trace!("Next tick after {} seconds",duration.as_secs());
+                next_tick = Instant::now() + duration;
               }
             } else {
               break;
@@ -212,11 +223,11 @@ impl From<&ClientCollabMessage> for SeenId {
   }
 }
 
-fn calculate_next_tick(num_init_sync: usize, default_interval: Duration) -> Instant {
+fn calculate_next_tick_duration(num_init_sync: usize, default_interval: Duration) -> Duration {
   match num_init_sync {
-    0 => Instant::now() + default_interval,
-    1..=3 => Instant::now() + Duration::from_secs(2),
-    4..=7 => Instant::now() + Duration::from_secs(4),
-    _ => Instant::now() + Duration::from_secs(6),
+    0 => default_interval,
+    1..=3 => Duration::from_secs(2),
+    4..=7 => Duration::from_secs(4),
+    _ => Duration::from_secs(6),
   }
 }

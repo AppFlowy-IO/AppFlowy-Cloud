@@ -35,6 +35,30 @@ async fn get_workspace_owner_after_sign_up_test() {
 }
 
 #[tokio::test]
+async fn workspace_members_through_invite_or_direct_add() {
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let member_1 = TestClient::new_user_without_ws_conn().await;
+  let member_2 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = owner.workspace_id().await;
+  owner
+    .add_workspace_member(&workspace_id, &member_1, AFRole::Member)
+    .await;
+
+  // TODO(Zack): fix { code: OAuthError, message: "code: 500, msg:Error sending magic link, error_id: Some(\"3ec69543-e7b9-496d-92d8-f0b73ff09e0f\")" }
+  owner
+    .invite_and_accepted_workspace_member(&workspace_id, &member_2, AFRole::Member)
+    .await
+    .unwrap();
+
+  let members = owner
+    .api_client
+    .get_workspace_members(&workspace_id)
+    .await
+    .unwrap();
+  assert_eq!(members.len(), 3);
+}
+
+#[tokio::test]
 async fn add_workspace_members_not_enough_permission() {
   let owner = TestClient::new_user_without_ws_conn().await;
   let member_1 = TestClient::new_user_without_ws_conn().await;

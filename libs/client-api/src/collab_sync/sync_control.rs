@@ -154,10 +154,14 @@ where
   }
 }
 
-fn doc_init_state<P: CollabSyncProtocol>(awareness: &Awareness, protocol: &P) -> Option<Vec<u8>> {
+fn doc_init_state<P: CollabSyncProtocol>(
+  awareness: &Awareness,
+  protocol: &P,
+  sync_before: bool,
+) -> Option<Vec<u8>> {
   let payload = {
     let mut encoder = EncoderV1::new();
-    protocol.start(awareness, &mut encoder).ok()?;
+    protocol.start(awareness, &mut encoder, sync_before).ok()?;
     encoder.to_vec()
   };
   if payload.is_empty() {
@@ -176,8 +180,9 @@ pub fn _init_sync<E, Sink>(
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
+  let sync_before = collab.get_last_sync_at() > 0;
   let awareness = collab.get_awareness();
-  if let Some(payload) = doc_init_state(awareness, &ClientSyncProtocol) {
+  if let Some(payload) = doc_init_state(awareness, &ClientSyncProtocol, sync_before) {
     sink.queue_init_sync(|msg_id| {
       let init_sync = InitSync::new(
         origin,

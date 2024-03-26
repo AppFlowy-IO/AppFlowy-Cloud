@@ -1,15 +1,15 @@
 use crate::biz::casbin::access_control::ObjectType;
 use crate::biz::casbin::access_control::{
-  enable_access_control, AccessControl, AccessControlChange, Action, ActionVariant,
+  enable_access_control, AccessControl, Action, ActionVariant,
 };
 use crate::biz::collab::access_control::CollabAccessControl;
 use app_error::AppError;
 use async_trait::async_trait;
 
 use collab_rt::RealtimeAccessControl;
-use dashmap::DashMap;
+
 use database_entity::dto::AFAccessLevel;
-use std::sync::Arc;
+
 use tracing::instrument;
 
 #[derive(Clone)]
@@ -93,35 +93,25 @@ impl CollabAccessControl for CollabAccessControlImpl {
 #[derive(Clone)]
 pub struct RealtimeCollabAccessControlImpl {
   access_control: AccessControl,
-  action_by_oid: Arc<DashMap<String, Action>>,
 }
 
 impl RealtimeCollabAccessControlImpl {
   pub fn new(access_control: AccessControl) -> Self {
-    let action_by_oid = Arc::new(DashMap::new());
-    let mut sub = access_control.subscribe_change();
-    let weak_action_by_oid = Arc::downgrade(&action_by_oid);
-
-    tokio::spawn(async move {
-      while let Ok(change) = sub.recv().await {
-        match weak_action_by_oid.upgrade() {
-          None => break,
-          Some(action_by_oid) => match change {
-            AccessControlChange::UpdatePolicy { uid, oid } => {
-              action_by_oid.remove(&cache_key(uid, &oid));
-            },
-            AccessControlChange::RemovePolicy { uid, oid } => {
-              action_by_oid.remove(&cache_key(uid, &oid));
-            },
-          },
-        }
-      }
-    });
-
-    Self {
-      access_control,
-      action_by_oid,
-    }
+    // let action_by_oid = Arc::new(DashMap::new());
+    // let mut sub = access_control.subscribe_change();
+    // let weak_action_by_oid = Arc::downgrade(&action_by_oid);
+    // tokio::spawn(async move {
+    //   while let Ok(change) = sub.recv().await {
+    //     match weak_action_by_oid.upgrade() {
+    //       None => break,
+    //       Some(action_by_oid) => match change {
+    //         AccessControlChange::UpdatePolicy { uid, oid } => {},
+    //         AccessControlChange::RemovePolicy { uid, oid } => {},
+    //       },
+    //     }
+    //   }
+    // });
+    Self { access_control }
   }
 
   async fn can_perform_action(
@@ -132,13 +122,6 @@ impl RealtimeCollabAccessControlImpl {
     required_action: Action,
   ) -> Result<bool, AppError> {
     if enable_access_control() {
-      let key = cache_key(*uid, oid);
-      // Check if the action is already cached
-      if let Some(action) = self.action_by_oid.get(&key) {
-        return Ok(*action >= required_action);
-      }
-
-      // Not in cache, enforce access control
       let is_permitted = self
         .access_control
         .enforce(
@@ -149,21 +132,11 @@ impl RealtimeCollabAccessControlImpl {
         )
         .await?;
 
-      if is_permitted {
-        // Permission granted, cache the action
-        self.action_by_oid.insert(key, required_action);
-      }
-
       Ok(is_permitted)
     } else {
       Ok(true)
     }
   }
-}
-
-#[inline]
-fn cache_key(uid: i64, oid: &str) -> String {
-  format!("{}:{}", uid, oid)
 }
 
 #[async_trait]

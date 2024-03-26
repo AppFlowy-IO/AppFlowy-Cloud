@@ -39,6 +39,9 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     oid: &str,
   ) -> Result<bool, AppError>;
 
+  /// Enforce the user's permission to write to the workspace.
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
+
   /// Enforce the user's permission to delete the collab object.
   async fn enforce_delete(
     &self,
@@ -46,9 +49,6 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     uid: &i64,
     oid: &str,
   ) -> Result<bool, AppError>;
-
-  /// Enforce the user's permission to write to the workspace.
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
 }
 
 /// Represents a storage mechanism for collaborations.

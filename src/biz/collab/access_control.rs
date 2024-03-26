@@ -218,6 +218,13 @@ where
       .await
   }
 
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
+    self
+      .workspace_access_control
+      .enforce_action(uid, workspace_id, Action::Write)
+      .await
+  }
+
   async fn enforce_delete(
     &self,
     workspace_id: &str,
@@ -227,13 +234,6 @@ where
     self
       .collab_access_control
       .enforce_access_level(workspace_id, uid, oid, AFAccessLevel::FullAccess)
-      .await
-  }
-
-  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
-    self
-      .workspace_access_control
-      .enforce_role(uid, workspace_id, AFRole::Member)
       .await
   }
 }

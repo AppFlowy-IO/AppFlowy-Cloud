@@ -1,5 +1,4 @@
 #![allow(unused)]
-use crate::component::auth::jwt::UserUuid;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use actix_http::Method;
 use async_trait::async_trait;

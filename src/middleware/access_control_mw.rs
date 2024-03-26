@@ -1,26 +1,22 @@
-use crate::component::auth::jwt::UserUuid;
-
 use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
+use crate::biz::casbin::access_control::enable_access_control;
+use crate::biz::user::auth::jwt::UserUuid;
+use crate::state::AppState;
 use actix_router::{Path, Url};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ResourceDef, ServiceRequest, ServiceResponse};
 use actix_web::http::Method;
-use actix_web::Error;
-use async_trait::async_trait;
-use futures_util::future::LocalBoxFuture;
-
 use actix_web::web::Data;
+use actix_web::Error;
+use app_error::AppError;
+use async_trait::async_trait;
 use dashmap::DashMap;
+use futures_util::future::LocalBoxFuture;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::future::{ready, Ready};
-
 use std::sync::Arc;
 use tracing::error;
-
-use crate::biz::casbin::access_control::enable_access_control;
-use crate::state::AppState;
-use app_error::AppError;
 use uuid::Uuid;
 
 static RESOURCE_DEF_CACHE: Lazy<DashMap<String, ResourceDef>> = Lazy::new(DashMap::new);

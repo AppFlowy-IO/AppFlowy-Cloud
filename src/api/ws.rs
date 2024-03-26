@@ -1,23 +1,19 @@
-use crate::state::AppState;
-use actix::Addr;
-use actix_web::web::{Data, Path, Payload};
-use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
-use actix_web_actors::ws;
-use std::collections::HashMap;
-
-use crate::biz::collab::storage::CollabAccessControlStorage;
-use crate::component::auth::jwt::{authorization_from_token, UserUuid};
-
 use crate::biz::actix_ws::client::rt_client::RealtimeClient;
 use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::RealtimeCollabAccessControlImpl;
+use crate::biz::collab::storage::CollabAccessControlStorage;
+use crate::biz::user::auth::jwt::{authorization_from_token, UserUuid};
+use crate::state::AppState;
+use actix::Addr;
 use actix_http::header::AUTHORIZATION;
+use actix_web::web::{Data, Path, Payload};
+use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
+use actix_web_actors::ws;
 use app_error::AppError;
-
-use semver::Version;
-
 use collab_rt_entity::user::RealtimeUser;
+use semver::Version;
 use shared_entity::response::AppResponseError;
+use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{debug, error, instrument, trace};
 

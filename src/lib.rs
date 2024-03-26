@@ -1,7 +1,6 @@
 pub mod api;
 pub mod application;
 pub mod biz;
-pub mod component;
 pub mod config;
 pub mod domain;
 pub mod middleware;

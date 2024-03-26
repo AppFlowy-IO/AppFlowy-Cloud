@@ -251,6 +251,9 @@ pub enum Error {
   #[error("{0}")]
   YrsApplyUpdate(String),
 
+  #[error("{0}")]
+  YrsEncodeState(String),
+
   #[error(transparent)]
   BinCodeSerde(#[from] bincode::Error),
 

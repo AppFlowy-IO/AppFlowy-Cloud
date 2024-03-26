@@ -10,7 +10,7 @@ use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{event, Level};
+use tracing::{event, instrument, Level};
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
@@ -38,14 +38,16 @@ impl CollabDiskCache {
     Ok(())
   }
 
-  pub async fn get_collab_encoded(
+  #[instrument(level = "trace", skip_all)]
+  pub async fn get_collab_encoded_from_disk(
     &self,
     _uid: &i64,
     params: QueryCollabParams,
   ) -> Result<EncodedCollab, AppError> {
     event!(
       Level::INFO,
-      "Get encoded collab:{} from disk",
+      "Get {}:{} from disk",
+      params.collab_type,
       params.object_id
     );
 

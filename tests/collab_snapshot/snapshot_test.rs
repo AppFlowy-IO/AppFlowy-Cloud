@@ -1,5 +1,5 @@
 use assert_json_diff::assert_json_eq;
-use collab::core::collab::MutexCollab;
+use collab::core::collab::{DocStateSource, MutexCollab};
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -85,7 +85,7 @@ async fn get_snapshot_data_test() {
   let collab = MutexCollab::new_with_doc_state(
     CollabOrigin::Empty,
     &object_id,
-    encoded_collab.doc_state.to_vec(),
+    DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
     vec![],
     false,
   )

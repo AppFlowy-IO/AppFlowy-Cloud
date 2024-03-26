@@ -7,7 +7,7 @@ use crate::RealtimeAccessControl;
 use anyhow::anyhow;
 
 use collab::core::awareness::{AwarenessUpdate, Event};
-use collab::core::collab::TransactionMutExt;
+use collab::core::collab::{DocStateSource, TransactionMutExt};
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::DocTransactionExtension;
@@ -273,7 +273,7 @@ where
       if let Ok(collab) = Collab::new_with_doc_state(
         CollabOrigin::Empty,
         object_id,
-        encoded_collab.doc_state.to_vec(),
+        DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
         vec![],
         false,
       ) {

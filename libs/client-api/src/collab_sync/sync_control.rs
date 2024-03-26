@@ -24,7 +24,7 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use tokio::sync::{watch, Mutex};
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, info, trace, warn};
+use tracing::{error, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encoder, EncoderV1};
@@ -333,28 +333,48 @@ where
 
     if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
       if let Err(err) = Self::validate_broadcast(object, data, broadcast_seq_num).await {
-        info!("{}", err);
-        Self::try_init_sync(origin, object, collab, sink, last_sync_time).await;
+        if err.is_missing_broadcast() {
+          Self::try_init_sync(origin, object, collab, sink, last_sync_time).await;
+        }
       }
     }
 
-    // Check if the message is acknowledged by the sink. If not, return.
-    let is_valid = sink.validate_response(&msg).await;
-    // If there's no payload or the payload is empty, return.
-    if is_valid && !msg.payload().is_empty() {
+    match msg.msg_id() {
+      None => {
+        // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
+        Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
+      },
+      Some(msg_id) => {
+        // Check if the message is acknowledged by the sink.
+        let is_valid = sink.validate_response(msg_id, &msg).await;
+        if is_valid {
+          Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
+          // Update the last sync time if the message is valid.
+          update_last_sync_at(collab);
+          sink.notify();
+        }
+      },
+    };
+
+    Ok(())
+  }
+
+  async fn process_message_payload(
+    object_id: &str,
+    msg: ServerCollabMessage,
+    collab: &Arc<MutexCollab>,
+    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+  ) -> Result<(), SyncError> {
+    if !msg.payload().is_empty() {
       let msg_origin = msg.origin();
       ObserveCollab::<Sink, Stream>::process_payload(
         msg_origin,
         msg.payload(),
-        &object.object_id,
+        object_id,
         collab,
         sink,
       )
       .await?;
-    }
-
-    if is_valid {
-      sink.notify();
     }
     Ok(())
   }
@@ -468,5 +488,12 @@ impl LastSyncTime {
     } else {
       false
     }
+  }
+}
+
+#[inline]
+fn update_last_sync_at(collab: &Arc<MutexCollab>) {
+  if let Some(collab) = collab.try_lock() {
+    collab.set_last_sync_at(chrono::Utc::now().timestamp());
   }
 }

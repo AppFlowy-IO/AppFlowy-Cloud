@@ -216,14 +216,18 @@ where
 
   /// Notify the sink to process the next message and mark the current message as done.
   /// Returns bool value to indicate whether the message is valid.
-  pub async fn validate_response(&self, server_message: &ServerCollabMessage) -> bool {
+  pub async fn validate_response(
+    &self,
+    msg_id: MsgId,
+    server_message: &ServerCollabMessage,
+  ) -> bool {
     if server_message.msg_id().is_none() {
       // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
       return true;
     }
 
     // safety: msg_id is not None
-    let income_message_id = server_message.msg_id().unwrap();
+    let income_message_id = msg_id;
     let mut flying_messages = self.flying_messages.lock();
 
     // if the message id is not in the flying messages, it means the message is invalid.

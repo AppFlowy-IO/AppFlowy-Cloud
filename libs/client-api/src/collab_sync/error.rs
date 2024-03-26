@@ -35,4 +35,7 @@ impl SyncError {
   pub fn is_cannot_apply_update(&self) -> bool {
     matches!(self, Self::CannotApplyUpdate(_))
   }
+  pub fn is_missing_broadcast(&self) -> bool {
+    matches!(self, Self::MissingBroadcast(_))
+  }
 }

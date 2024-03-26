@@ -1,14 +1,14 @@
-use crate::biz;
-use crate::component::auth::jwt::{Authorization, UserUuid};
+use crate::biz::user::auth::jwt::{Authorization, UserUuid};
+use crate::biz::user::user_info::{get_profile, get_user_workspace_info, update_user};
+use crate::biz::user::user_verify::verify_token;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::Result;
 use actix_web::{web, Scope};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
 use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
-use shared_entity::response::{AppResponse, JsonAppResponse};
-
 use shared_entity::response::AppResponseError;
+use shared_entity::response::{AppResponse, JsonAppResponse};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
@@ -24,7 +24,7 @@ async fn verify_user_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
-  let is_new = biz::user::verify_token(&access_token, state.as_ref())
+  let is_new = verify_token(&access_token, state.as_ref())
     .await
     .map_err(AppResponseError::from)?;
   let resp = SignInTokenResponse { is_new };
@@ -36,7 +36,7 @@ async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserProfile>> {
-  let profile = biz::user::get_profile(&state.pg_pool, &uuid)
+  let profile = get_profile(&state.pg_pool, &uuid)
     .await
     .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().with_data(profile).into())
@@ -47,7 +47,7 @@ async fn get_user_workspace_info_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserWorkspaceInfo>> {
-  let info = biz::user::get_user_workspace_info(&state.pg_pool, &uuid).await?;
+  let info = get_user_workspace_info(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(info).into())
 }
 
@@ -58,6 +58,6 @@ async fn update_user_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
-  biz::user::update_user(&state.pg_pool, auth.uuid()?, params).await?;
+  update_user(&state.pg_pool, auth.uuid()?, params).await?;
   Ok(AppResponse::Ok().into())
 }

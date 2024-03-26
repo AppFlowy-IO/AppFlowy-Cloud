@@ -2,7 +2,7 @@ use crate::biz::casbin::pg_listen::{
   CollabMemberListener, CollabMemberNotification, WorkspaceMemberListener,
   WorkspaceMemberNotification,
 };
-use crate::biz::user::UserListener;
+use crate::biz::user::user_verify::UserListener;
 use anyhow::Error;
 use database::pg_row::AFUserNotification;
 use serde::de::DeserializeOwned;

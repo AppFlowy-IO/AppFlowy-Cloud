@@ -1,8 +1,8 @@
-use crate::CollabClientStream;
 use collab_rt_entity::message::{RealtimeMessage, SystemMessage};
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use dashmap::DashMap;
 
+use crate::client_msg_router::ClientMessageRouter;
 use dashmap::mapref::entry::Entry;
 use std::sync::Arc;
 use tracing::{info, trace};
@@ -13,7 +13,7 @@ pub struct ConnectState {
   /// Maintains a record of all client streams. A client stream associated with a user may be terminated for the following reasons:
   /// 1. User disconnection.
   /// 2. Server closes the connection due to a ping/pong timeout.
-  pub(crate) client_stream_by_user: Arc<DashMap<RealtimeUser, CollabClientStream>>,
+  pub(crate) client_message_routers: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
 }
 
 impl ConnectState {
@@ -33,7 +33,7 @@ impl ConnectState {
   pub fn handle_user_connect(
     &self,
     new_user: RealtimeUser,
-    client_stream: CollabClientStream,
+    client_message_router: ClientMessageRouter,
   ) -> Option<RealtimeUser> {
     let user_device = UserDevice::from(&new_user);
     let entry = self.user_by_device.entry(user_device);
@@ -42,7 +42,7 @@ impl ConnectState {
         if e.get().connect_at <= new_user.connect_at {
           let old_user = e.insert(new_user.clone());
           trace!("[realtime]: new connection replaces old => {}", new_user);
-          if let Some((_, old_stream)) = self.client_stream_by_user.remove(&old_user) {
+          if let Some((_, old_stream)) = self.client_message_routers.remove(&old_user) {
             info!(
               "Removing old stream for same user and device: {}",
               old_user.uid
@@ -51,7 +51,9 @@ impl ConnectState {
               .sink
               .do_send(RealtimeMessage::System(SystemMessage::DuplicateConnection));
           }
-          self.client_stream_by_user.insert(new_user, client_stream);
+          self
+            .client_message_routers
+            .insert(new_user, client_message_router);
           Some(old_user)
         } else {
           None
@@ -60,7 +62,9 @@ impl ConnectState {
       Entry::Vacant(e) => {
         trace!("[realtime]: new connection => {}", new_user);
         e.insert(new_user.clone());
-        self.client_stream_by_user.insert(new_user, client_stream);
+        self
+          .client_message_routers
+          .insert(new_user, client_message_router);
         None
       },
     }
@@ -83,11 +87,20 @@ impl ConnectState {
         existing_user.session_id == disconnect_user.session_id
       });
 
-    if was_removed.is_some() && self.client_stream_by_user.remove(disconnect_user).is_some() {
+    if was_removed.is_some()
+      && self
+        .client_message_routers
+        .remove(disconnect_user)
+        .is_some()
+    {
       info!("remove client stream: {}", &disconnect_user);
     }
 
     was_removed
+  }
+
+  pub fn number_of_connected_users(&self) -> usize {
+    self.user_by_device.len()
   }
 
   #[allow(dead_code)]
@@ -98,8 +111,8 @@ impl ConnectState {
 
 #[cfg(test)]
 mod tests {
+  use crate::client_msg_router::{ClientMessageRouter, RealtimeClientWebsocketSink};
   use crate::connect_state::ConnectState;
-  use crate::{CollabClientStream, RealtimeClientWebsocketSink};
   use collab_rt_entity::message::RealtimeMessage;
   use collab_rt_entity::user::{RealtimeUser, UserDevice};
   use std::time::Duration;
@@ -120,8 +133,8 @@ mod tests {
     )
   }
 
-  fn mock_stream() -> CollabClientStream {
-    CollabClientStream::new(MockSink)
+  fn mock_stream() -> ClientMessageRouter {
+    ClientMessageRouter::new(MockSink)
   }
 
   #[tokio::test]
@@ -170,7 +183,7 @@ mod tests {
       .get_user_by_device(&UserDevice::new("device_a", 1))
       .unwrap();
     assert_eq!(connect_state.user_by_device.len(), 1);
-    assert_eq!(connect_state.client_stream_by_user.len(), 1);
+    assert_eq!(connect_state.client_message_routers.len(), 1);
     assert_eq!(user.connect_at, 999);
   }
 
@@ -201,7 +214,7 @@ mod tests {
       .unwrap();
 
     assert_eq!(connect_state.user_by_device.len(), 1);
-    assert_eq!(connect_state.client_stream_by_user.len(), 1);
+    assert_eq!(connect_state.client_message_routers.len(), 1);
     assert_eq!(user.connect_at, 1999);
   }
 

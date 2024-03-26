@@ -90,11 +90,6 @@ pub async fn insert_into_af_collab(
           "user:{} update af_collab:{} failed",
           uid, params.object_id
         ))?;
-        event!(
-          tracing::Level::TRACE,
-          "did update collab row:{}",
-          params.object_id
-        );
       } else {
         return Err(AppError::Internal(anyhow!(
           "Inserting a row with an existing object_id but different workspace_id"

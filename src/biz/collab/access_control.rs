@@ -7,7 +7,7 @@ use actix_web::http::Method;
 use app_error::AppError;
 use async_trait::async_trait;
 use database::collab::CollabStorageAccessControl;
-use database_entity::dto::{AFAccessLevel, AFRole};
+use database_entity::dto::AFAccessLevel;
 
 use crate::biz::collab::cache::CollabCache;
 

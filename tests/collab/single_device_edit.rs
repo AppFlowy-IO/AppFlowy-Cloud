@@ -272,7 +272,7 @@ async fn second_connect_override_first_connect_test() {
     .await
     .unwrap();
 
-  assert_client_collab_include_value_within_30_secs(
+  assert_client_collab_include_value(
     &mut new_client,
     &object_id,
     json!({
@@ -395,20 +395,12 @@ async fn two_direction_peer_sync_test() {
     "name": "AppFlowy",
     "support platform": "macOS, Windows, Linux, iOS, Android"
   });
-  assert_client_collab_include_value_within_30_secs(
-    &mut client_1,
-    &object_id,
-    expected_json.clone(),
-  )
-  .await
-  .unwrap();
-  assert_client_collab_include_value_within_30_secs(
-    &mut client_2,
-    &object_id,
-    expected_json.clone(),
-  )
-  .await
-  .unwrap();
+  assert_client_collab_include_value(&mut client_1, &object_id, expected_json.clone())
+    .await
+    .unwrap();
+  assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone())
+    .await
+    .unwrap();
 }
 
 #[tokio::test]

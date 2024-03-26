@@ -1,6 +1,7 @@
 use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
 use std::rc::{Rc, Weak};
 
+use anyhow::anyhow;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_rt_protocol::{handle_message, Error};
@@ -18,6 +19,9 @@ use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::UpdateSubscription;
 
 use crate::collaborate::sync_protocol::ServerSyncProtocol;
+use crate::error::RealtimeError;
+use crate::metrics::CollabMetricsCalculate;
+
 use collab_rt_entity::collab_msg::{
   AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
@@ -37,6 +41,8 @@ pub struct CollabBroadcast {
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
+  /// Used to generate a unique sequence number for each broadcast message.
+  /// Client will use this sequence number to detect the missing broadcast messages.
   broadcast_seq_num_counter: Rc<AtomicU32>,
   /// The last modified time of the document.
   pub modified_at: Rc<parking_lot::Mutex<Instant>>,
@@ -74,7 +80,7 @@ impl CollabBroadcast {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
       let broadcast_sink = self.sender.clone();
-      let seq_num_counter = self.broadcast_seq_num_counter.clone();
+      let broadcast_seq_num_counter = self.broadcast_seq_num_counter.clone();
       let modified_at = self.modified_at.clone();
 
       // Observer the document's update and broadcast it to all subscribers. When one of the clients
@@ -85,7 +91,7 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
-          let value = seq_num_counter.fetch_add(1, Ordering::SeqCst);
+          let value = broadcast_seq_num_counter.fetch_add(1, Ordering::SeqCst);
 
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
@@ -166,6 +172,7 @@ impl CollabBroadcast {
     mut sink: Sink,
     mut stream: Stream,
     collab: Weak<Mutex<Collab>>,
+    metrics_calculate: CollabMetricsCalculate,
   ) -> Subscription
   where
     Sink: SinkExt<CollabMessage> + Clone + Send + Sync + Unpin + 'static,
@@ -221,36 +228,20 @@ impl CollabBroadcast {
               break
             },
             result = stream.next() => {
-              match result {
-                Some(map) => {
-                  match collab.upgrade() {
-                    None => {
-                      trace!("{} stop receiving user:{} messages because of collab is drop", user.user_device(), object_id);
-                      // break the loop if the collab is dropped
-                      break
-                    },
-                    Some(collab) => {
-                      for (msg_oid, collab_messages) in map {
-                        if collab_messages.is_empty()  {
-                          warn!("{} collab messages is empty", object_id);
-                        }
-
-                        // The message is valid if it has a payload and the object_id matches the broadcast's object_id.
-                        if object_id == msg_oid {
-                            for collab_message in collab_messages {
-                              handle_client_collab_message(&object_id, &mut sink, &collab_message, &collab).await;
-                            }
-                        } else {
-                          warn!("Expect object id:{} but got:{}", object_id, msg_oid);
-                        }
-                      }
-                    }
-                  }
-                },
+              if result.is_none() {
+                trace!("{} stop receiving user:{} messages", object_id, user.user_device());
+                break
+              }
+              let message_map = result.unwrap();
+              match collab.upgrade() {
                 None => {
-                  trace!("{} stop receiving user:{} messages", object_id, user.user_device());
+                  trace!("{} stop receiving user:{} messages because of collab is drop", user.user_device(), object_id);
+                  // break the loop if the collab is dropped
                   break
                 },
+                Some(collab) => {
+                  handle_message_map(&object_id, message_map, &mut sink, collab, &metrics_calculate).await;
+                }
               }
             }
           }
@@ -268,61 +259,124 @@ impl CollabBroadcast {
   }
 }
 
-/// Handle the message sent from the client
-async fn handle_client_collab_message<Sink>(
+async fn handle_message_map<Sink>(
   object_id: &str,
+  message_map: MessageByObjectId,
   sink: &mut Sink,
-  collab_msg: &ClientCollabMessage,
-  collab: &Mutex<Collab>,
+  collab: Rc<Mutex<Collab>>,
+  metrics_calculate: &CollabMetricsCalculate,
 ) where
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
 {
+  for (msg_oid, collab_messages) in message_map {
+    // TODO(nathan): remove the logic of checking object_id, because the message is already filtered by the object_id
+    if object_id != msg_oid {
+      warn!("Expect object id:{} but got:{}", object_id, msg_oid);
+      continue;
+    }
+
+    if collab_messages.is_empty() {
+      warn!("{} collab messages is empty", object_id);
+    }
+
+    for collab_message in collab_messages {
+      match handle_client_collab_message(object_id, &collab_message, &collab, metrics_calculate)
+        .await
+      {
+        Ok(response) => {
+          trace!("[realtime]: sending response: {}", response);
+          match sink.send(response.into()).await {
+            Ok(_) => {},
+            Err(err) => {
+              trace!("[realtime]: send failed: {}", err);
+              break;
+            },
+          }
+        },
+        Err(err) => {
+          error!(
+            "Error handling collab message for object_id: {}: {}",
+            msg_oid, err
+          );
+          break;
+        },
+      }
+    }
+  }
+}
+
+/// Handle the message sent from the client
+async fn handle_client_collab_message(
+  object_id: &str,
+  collab_msg: &ClientCollabMessage,
+  collab: &Mutex<Collab>,
+  metrics_calculate: &CollabMetricsCalculate,
+) -> Result<CollabAck, RealtimeError> {
   trace!("Applying client updates: {}", collab_msg);
   let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
   let origin = collab_msg.origin().clone();
   let reader = MessageReader::new(&mut decoder);
-  let mut resps = vec![];
+  let mut ack_response = None;
+
+  metrics_calculate
+    .acquire_collab_lock_count
+    .fetch_add(1, Ordering::Relaxed);
+
+  let mut collab_lock = match collab.try_lock() {
+    Ok(collab) => collab,
+    Err(err) => {
+      metrics_calculate
+        .acquire_collab_lock_fail_count
+        .fetch_add(1, Ordering::Relaxed);
+
+      return Err(RealtimeError::Internal(anyhow!(
+        "fail to lock collab:{}, {:?}",
+        object_id,
+        err
+      )));
+    },
+  };
+
   for msg in reader {
     match msg {
       Ok(msg) => {
-        if let Ok(mut collab) = collab.try_lock() {
-          let result = handle_message(&origin, &ServerSyncProtocol, &mut collab, msg);
-          match result {
-            Ok(payload) => {
+        let result = handle_message(&origin, &ServerSyncProtocol, &mut collab_lock, msg);
+        match result {
+          Ok(payload) => {
+            metrics_calculate
+              .apply_update_count
+              .fetch_add(1, Ordering::Relaxed);
+            // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
+            // send one ack back to the client.
+            if ack_response.is_none() {
               let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())
                 .with_payload(payload.unwrap_or_default());
-
-              // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
-              // send one ack back to the client.
-              if resps.is_empty() {
-                resps.push(resp);
-              }
-            },
-            Err(err) => {
-              error!("handle collab:{} message error:{}", object_id, err);
+              ack_response = Some(resp);
+            }
+          },
+          Err(err) => {
+            metrics_calculate
+              .apply_update_failed_count
+              .fetch_add(1, Ordering::Relaxed);
+            error!("handle collab:{} message error:{}", object_id, err);
+            if ack_response.is_none() {
               let resp = CollabAck::new(origin.clone(), object_id.to_string(), collab_msg.msg_id())
                 .with_code(ack_code_from_error(&err));
-              resps.push(resp);
-            },
-          }
+              ack_response = Some(resp);
+            }
+            break;
+          },
         }
       },
       Err(e) => {
-        error!(
-          "object id:{} => parser sync message failed: {:?}",
-          object_id, e
-        );
+        error!("{} => parse sync message failed: {:?}", object_id, e);
         break;
       },
     }
   }
-  for resp in resps {
-    trace!("[realtime]: send {}", resp);
-    if let Err(err) = sink.send(resp.into()).await {
-      trace!("fail to send response to client: {}", err);
-    }
-  }
+  let response = ack_response.ok_or_else(|| RealtimeError::UnexpectedData("No ack response"))?;
+  Ok(response)
 }
 
 #[inline]

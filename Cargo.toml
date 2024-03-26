@@ -175,15 +175,10 @@ collab-rt = { path = "libs/collab-rt" }
 lto = true
 opt-level = 3
 codegen-units = 1
-panic = 'unwind'
 
 [profile.profiling]
 inherits = "release"
 debug = true
-panic = 'unwind'
-
-[profile.dev]
-panic = 'unwind'
 
 [patch.crates-io]
 collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "409058aad0969c4d4429151317428a3d17f341d1" }

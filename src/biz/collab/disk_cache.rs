@@ -46,7 +46,8 @@ impl CollabDiskCache {
   ) -> Result<EncodedCollab, AppError> {
     event!(
       Level::INFO,
-      "Get encoded collab:{} from disk",
+      "Get {}:{} from disk",
+      params.collab_type,
       params.object_id
     );
 

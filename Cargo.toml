@@ -139,7 +139,8 @@ members = [
     "libs/appflowy-ai",
     "libs/collab-rt",
     # services
-    "services/collab-history", "services/realtime",
+    "services/collab-history",
+    "services/realtime",
 ]
 
 [workspace.dependencies]
@@ -189,7 +190,3 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 [features]
 custom_env= []
 ai_enable = []
-
-# Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
-#collab = { path = "libs/AppFlowy-Collab/collab" }
-#collab-entity = { path = "libs/AppFlowy-Collab/collab-define" }

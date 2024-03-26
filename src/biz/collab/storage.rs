@@ -172,7 +172,6 @@ where
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
-  #[allow(clippy::blocks_in_if_conditions)]
   async fn insert_or_update_collab_with_transaction(
     &self,
     workspace_id: &str,
@@ -188,6 +187,11 @@ where
     // When the collab is not exist in the database, and the user passes the permission check,
     // which means the user has the permission to create the collab, we should update the policy
     if !is_collab_exist_in_db {
+      trace!(
+        "Update policy for user:{} to create collab:{}",
+        uid,
+        params.object_id
+      );
       self
         .access_control
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)

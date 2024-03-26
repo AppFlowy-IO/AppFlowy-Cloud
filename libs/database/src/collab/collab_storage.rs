@@ -23,6 +23,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
   async fn update_policy(&self, uid: &i64, oid: &str, level: AFAccessLevel)
     -> Result<(), AppError>;
 
+  /// Removes the access level of the user for given collab object.
   async fn enforce_read_collab(
     &self,
     workspace_id: &str,
@@ -30,6 +31,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     oid: &str,
   ) -> Result<bool, AppError>;
 
+  /// Enforce the user's permission to write to the collab object.
   async fn enforce_write_collab(
     &self,
     workspace_id: &str,
@@ -37,6 +39,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     oid: &str,
   ) -> Result<bool, AppError>;
 
+  /// Enforce the user's permission to delete the collab object.
   async fn enforce_delete(
     &self,
     workspace_id: &str,
@@ -44,7 +47,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
     oid: &str,
   ) -> Result<bool, AppError>;
 
-  /// Returns the role of the user in the workspace.
+  /// Enforce the user's permission to write to the workspace.
   async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError>;
 }
 

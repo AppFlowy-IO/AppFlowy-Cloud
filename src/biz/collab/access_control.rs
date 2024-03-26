@@ -233,7 +233,7 @@ where
   async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
     self
       .workspace_access_control
-      .enforce_role(uid, workspace_id, AFRole::Owner)
+      .enforce_role(uid, workspace_id, AFRole::Member)
       .await
   }
 }

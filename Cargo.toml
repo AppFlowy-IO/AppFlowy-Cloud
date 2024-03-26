@@ -96,7 +96,7 @@ tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
 scraper = "0.17.1"
 client-api-test-util = { path = "libs/client-api-test-util" }
-client-api = { path = "libs/client-api", features = ["collab-sync", "test_util"] }
+client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "test_fast_sync"] }
 opener = "0.6.1"
 image = "0.23.14"
 collab-folder = { version = "0.1.0" }
@@ -139,7 +139,8 @@ members = [
     "libs/appflowy-ai",
     "libs/collab-rt",
     # services
-    "services/collab-history", "services/realtime",
+    "services/collab-history",
+    "services/realtime",
 ]
 
 [workspace.dependencies]
@@ -189,7 +190,3 @@ collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev 
 [features]
 custom_env= []
 ai_enable = []
-
-# Comment the above and uncomment the below to use local version of collab by cloning the repo and placing it in libs folder
-#collab = { path = "libs/AppFlowy-Collab/collab" }
-#collab-entity = { path = "libs/AppFlowy-Collab/collab-define" }

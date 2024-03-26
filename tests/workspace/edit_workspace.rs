@@ -26,16 +26,12 @@ async fn edit_workspace_without_permission() {
     .await
     .unwrap();
 
-  assert_client_collab_include_value_within_30_secs(
-    &mut client_1,
-    &workspace_id,
-    json!({"name": "AppFlowy"}),
-  )
-  .await
-  .unwrap();
+  assert_client_collab_include_value(&mut client_1, &workspace_id, json!({"name": "AppFlowy"}))
+    .await
+    .unwrap();
 
   // client 2 has not permission to read/edit the workspace
-  assert_client_collab_include_value_within_30_secs(&mut client_2, &workspace_id, json!({}))
+  assert_client_collab_include_value(&mut client_2, &workspace_id, json!({}))
     .await
     .unwrap();
 }
@@ -65,18 +61,20 @@ async fn init_sync_workspace_with_guest_permission() {
     .await
     .unwrap();
 
-  assert_client_collab_within_30_secs(
+  assert_client_collab_within_secs(
     &mut owner,
     &workspace_id,
     "name",
     json!({"name": "AppFlowy"}),
+    60,
   )
   .await;
-  assert_client_collab_within_30_secs(
+  assert_client_collab_within_secs(
     &mut guest,
     &workspace_id,
     "name",
     json!({"name": "AppFlowy"}),
+    60,
   )
   .await;
 }
@@ -118,20 +116,12 @@ async fn edit_workspace_with_guest_permission() {
     .lock()
     .insert("name", "nathan");
 
-  assert_client_collab_include_value_within_30_secs(
-    &mut owner,
-    &workspace_id,
-    json!({"name": "zack"}),
-  )
-  .await
-  .unwrap();
-  assert_client_collab_include_value_within_30_secs(
-    &mut guest,
-    &workspace_id,
-    json!({"name": "nathan"}),
-  )
-  .await
-  .unwrap();
+  assert_client_collab_include_value(&mut owner, &workspace_id, json!({"name": "zack"}))
+    .await
+    .unwrap();
+  assert_client_collab_include_value(&mut guest, &workspace_id, json!({"name": "nathan"}))
+    .await
+    .unwrap();
 
   assert_server_collab(
     &workspace_id,

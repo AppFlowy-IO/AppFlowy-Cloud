@@ -1,3 +1,4 @@
+mod client_msg_router;
 mod collaborate;
 pub mod command;
 pub mod connect_state;
@@ -10,3 +11,5 @@ mod util;
 pub use metrics::*;
 pub use permission::*;
 pub use rt_server::*;
+
+pub use client_msg_router::RealtimeClientWebsocketSink;

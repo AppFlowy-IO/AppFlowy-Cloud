@@ -5,7 +5,23 @@ use {
 };
 
 #[cfg(not(target_arch = "wasm32"))]
+fn get_bool_from_env_var(env_var_name: &str) -> bool {
+  match std::env::var(env_var_name) {
+    Ok(value) => match value.to_lowercase().as_str() {
+      "true" | "1" => true,
+      "false" | "0" => false,
+      _ => false,
+    },
+    Err(_) => false,
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn setup_log() {
+  if get_bool_from_env_var("DISABLE_CI_TEST_LOG") {
+    return;
+  }
+
   static START: Once = Once::new();
   START.call_once(|| {
     let level = std::env::var("RUST_LOG").unwrap_or("trace".to_string());

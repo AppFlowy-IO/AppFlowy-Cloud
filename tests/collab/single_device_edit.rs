@@ -13,6 +13,51 @@ use collab_rt_entity::message::MAXIMUM_REALTIME_MESSAGE_SIZE;
 use uuid::Uuid;
 
 #[tokio::test]
+async fn realtime_write_single_collab_test() {
+  let collab_type = CollabType::Document;
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = test_client
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .await;
+  test_client
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+
+  // Edit the collab
+  for i in 0..=5 {
+    test_client
+      .collabs
+      .get_mut(&object_id)
+      .unwrap()
+      .collab
+      .lock()
+      .insert(&i.to_string(), i.to_string());
+  }
+
+  let expected_json = json!( {
+    "0": "0",
+    "1": "1",
+    "2": "2",
+    "3": "3",
+  });
+  test_client
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+
+  assert_server_collab(
+    &workspace_id,
+    &mut test_client.api_client,
+    &object_id,
+    &collab_type,
+    10,
+    expected_json,
+  )
+  .await
+  .unwrap();
+}
+#[tokio::test]
 async fn collab_write_small_chunk_of_data_test() {
   let collab_type = CollabType::Document;
   let mut test_client = TestClient::new_user().await;
@@ -123,52 +168,6 @@ async fn write_big_chunk_data_init_sync_test() {
     json!({
       "big_text": big_text
     }),
-  )
-  .await
-  .unwrap();
-}
-
-#[tokio::test]
-async fn realtime_write_single_collab_test() {
-  let collab_type = CollabType::Document;
-  let mut test_client = TestClient::new_user().await;
-  let workspace_id = test_client.workspace_id().await;
-  let object_id = test_client
-    .create_and_edit_collab(&workspace_id, collab_type.clone())
-    .await;
-  test_client
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-
-  // Edit the collab
-  for i in 0..=5 {
-    test_client
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .lock()
-      .insert(&i.to_string(), i.to_string());
-  }
-
-  let expected_json = json!( {
-    "0": "0",
-    "1": "1",
-    "2": "2",
-    "3": "3",
-  });
-  test_client
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-
-  assert_server_collab(
-    &workspace_id,
-    &mut test_client.api_client,
-    &object_id,
-    &collab_type,
-    10,
-    expected_json,
   )
   .await
   .unwrap();

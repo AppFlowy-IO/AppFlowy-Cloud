@@ -1,12 +1,19 @@
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
-use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabMessage, InitSync};
+use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabMessage, InitSync, MsgId};
 use collab_rt_entity::message::{RealtimeMessage, SystemMessage};
 use collab_rt_entity::user::UserMessage;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
+
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
+pub struct AckMetaV1 {
+  #[serde(rename = "sync_verbose")]
+  pub verbose: String,
+  pub msg_id: MsgId,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(

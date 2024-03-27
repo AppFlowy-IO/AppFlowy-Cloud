@@ -63,7 +63,7 @@ impl ClientMessageRouter {
   {
     let client_ws_sink = self.sink.clone();
     let mut stream_rx = BroadcastStream::new(self.stream_tx.subscribe());
-    let cloned_object_id = object_id.to_string();
+    let target_object_id = object_id.to_string();
 
     // Send the message to the connected websocket client. When the client receive the message,
     // it will apply the changes.
@@ -75,7 +75,7 @@ impl ClientMessageRouter {
     tokio::spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
         let result = sink_access_control
-          .can_read_collab(&sink_workspace_id, &uid, &cloned_object_id)
+          .can_read_collab(&sink_workspace_id, &uid, &target_object_id)
           .await;
         match result {
           Ok(is_allowed) => {
@@ -83,12 +83,7 @@ impl ClientMessageRouter {
               let rt_msg = msg.into();
               client_ws_sink.do_send(rt_msg);
             } else {
-              trace!(
-                "user:{} is not allow to observe {} changes",
-                uid,
-                cloned_object_id
-              );
-              // when then client is not allowed to receive messages
+              trace!("user:{} is not allowed to read {}", uid, target_object_id);
               tokio::time::sleep(Duration::from_secs(2)).await;
             }
           },
@@ -99,33 +94,38 @@ impl ClientMessageRouter {
         }
       }
     });
-    let cloned_object_id = object_id.to_string();
+    let target_object_id = object_id.to_string();
     let stream_workspace_id = workspace_id.to_string();
     let user = user.clone();
     // stream_rx continuously receive messages from the websocket client and then
     // forward the message to the subscriber which is the broadcast channel [CollabBroadcast].
-    let (recv_client_msg, rx) = tokio::sync::mpsc::channel(100);
+    let (client_msg_rx, rx) = tokio::sync::mpsc::channel(100);
     let client_stream = ReceiverStream::new(rx);
     tokio::spawn(async move {
       while let Some(Ok(realtime_msg)) = stream_rx.next().await {
         match realtime_msg.transform() {
           Ok(messages_by_oid) => {
-            for (msg_oid, original_messages) in messages_by_oid {
-              if cloned_object_id != msg_oid {
+            for (message_object_id, original_messages) in messages_by_oid {
+              // if the message is not for the target object, skip it. The stream_rx receives different
+              // objects' messages, so we need to filter out the messages that are not for the target object.
+              if target_object_id != message_object_id {
                 continue;
               }
 
+              // before applying user messages, we need to check if the user has the permission
+              // valid_messages contains the messages that the user is allowed to apply
+              // invalid_message contains the messages that the user is not allowed to apply
               let (valid_messages, invalid_message) = Self::access_control(
                 &stream_workspace_id,
                 &user.uid,
-                &msg_oid,
+                &message_object_id,
                 &access_control,
                 original_messages,
               )
               .await;
               trace!(
                 "{} receive client:{}, device:{}, message: valid:{} invalid:{}",
-                msg_oid,
+                message_object_id,
                 user.uid,
                 user.device_id,
                 valid_messages.len(),
@@ -137,13 +137,13 @@ impl ClientMessageRouter {
               }
 
               // if tx.send return error, it means the client is disconnected from the group
-              if let Err(err) = recv_client_msg
-                .send([(msg_oid, valid_messages)].into())
+              if let Err(err) = client_msg_rx
+                .send([(message_object_id, valid_messages)].into())
                 .await
               {
                 trace!(
                   "{} send message to user:{} stream fail with error: {}, break the loop",
-                  cloned_object_id,
+                  target_object_id,
                   user.user_device(),
                   err,
                 );

@@ -1,13 +1,13 @@
 use crate::af_spawn;
 use crate::collab_sync::sink_config::SinkConfig;
 use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
-use crate::collab_sync::SyncObject;
+use crate::collab_sync::{check_update_contiguous, SyncError, SyncObject};
 use futures_util::SinkExt;
 
 use collab_rt_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{watch, Mutex};
@@ -220,19 +220,15 @@ where
     &self,
     msg_id: MsgId,
     server_message: &ServerCollabMessage,
-  ) -> bool {
-    if server_message.msg_id().is_none() {
-      // msg_id will be None for [ServerBroadcast] or [ServerAwareness], automatically valid.
-      return true;
-    }
-
+    seq_num_counter: &Arc<AtomicU32>,
+  ) -> Result<bool, SyncError> {
     // safety: msg_id is not None
     let income_message_id = msg_id;
     let mut flying_messages = self.flying_messages.lock();
 
     // if the message id is not in the flying messages, it means the message is invalid.
     if !flying_messages.contains(&income_message_id) {
-      return false;
+      return Ok(false);
     }
 
     let mut message_queue = self.message_queue.lock();
@@ -253,6 +249,17 @@ where
       }
     }
 
+    if is_valid {
+      if let ServerCollabMessage::ClientAck(ack) = server_message {
+        let prev_seq_num = seq_num_counter
+          .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(ack.seq_num))
+          .unwrap();
+
+        // Check the seq_num is contiguous.
+        check_update_contiguous(&self.object.object_id, ack.seq_num, prev_seq_num)?;
+      }
+    }
+
     trace!(
       "{:?}: pending count:{} ids:{}",
       self.object.object_id,
@@ -269,7 +276,7 @@ where
         error!("send sink state failed: {}", e);
       }
     }
-    is_valid
+    Ok(is_valid)
   }
 
   async fn process_next_msg(&self) {

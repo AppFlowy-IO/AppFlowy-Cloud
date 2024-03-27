@@ -333,14 +333,14 @@ where
     // msg_id will be None for [ServerBroadcast] or [ServerAwareness].
     match msg.msg_id() {
       None => {
-        // if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
-        //   if let Err(err) = Self::validate_broadcast(object, data, seq_num_counter).await {
-        //     if err.is_missing_updates() {
-        //       Self::pull_missing_updates(origin, object, collab, sink, last_init_time).await;
-        //       return Ok(());
-        //     }
-        //   }
-        // }
+        if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
+          if let Err(err) = Self::validate_broadcast(object, data, seq_num_counter).await {
+            if err.is_missing_updates() {
+              Self::pull_missing_updates(origin, object, collab, sink, last_init_time).await;
+              return Ok(());
+            }
+          }
+        }
         Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
         sink.notify();
         Ok(())
@@ -351,15 +351,10 @@ where
           Ok(is_valid) => {
             if is_valid {
               Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
-              // Update the last sync time if the message is valid.
-              update_last_sync_at(collab);
               sink.notify();
             }
           },
           Err(err) => {
-            // Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
-            // update_last_sync_at(collab);
-            // sink.notify();
             // Update the last sync time if the message is valid.
             if err.is_missing_updates() {
               Self::pull_missing_updates(origin, object, collab, sink, last_init_time).await;

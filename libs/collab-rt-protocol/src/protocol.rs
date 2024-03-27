@@ -45,19 +45,36 @@ pub trait CollabSyncProtocol {
     Ok(())
   }
 
-  fn start<E: Encoder>(&self, awareness: &Awareness, encoder: &mut E) -> Result<(), Error> {
-    let (sv, update) = {
-      let sv = awareness
+  fn start<E: Encoder>(
+    &self,
+    awareness: &Awareness,
+    encoder: &mut E,
+    sync_before: bool,
+  ) -> Result<(), Error> {
+    let (state_vector, awareness_update) = {
+      let state_vector = awareness
         .doc()
         .try_transact()
         .map_err(|e| Error::YrsTransaction(e.to_string()))?
         .state_vector();
-      let update = awareness.update()?;
-      (sv, update)
+      let awareness_update = awareness.update()?;
+      (state_vector, awareness_update)
     };
 
-    Message::Sync(SyncMessage::SyncStep1(sv)).encode(encoder);
-    Message::Awareness(update).encode(encoder);
+    // 1. encode doc state vector
+    Message::Sync(SyncMessage::SyncStep1(state_vector)).encode(encoder);
+
+    // 2. ff the sync_before is false, which means the doc is not synced before, then we need to
+    // send the full update to the server.
+    if !sync_before {
+      if let Ok(txn) = awareness.doc().try_transact() {
+        let update = txn.encode_state_as_update_v1(&StateVector::default());
+        Message::Sync(SyncMessage::SyncStep2(update)).encode(encoder);
+      }
+    }
+
+    // 3. encode awareness update
+    Message::Awareness(awareness_update).encode(encoder);
     Ok(())
   }
 
@@ -96,7 +113,6 @@ pub trait CollabSyncProtocol {
     txn
       .try_apply_update(update)
       .map_err(|err| Error::YrsApplyUpdate(format!("sync step2 apply update: {}", err)))?;
-
     txn
       .try_commit()
       .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;

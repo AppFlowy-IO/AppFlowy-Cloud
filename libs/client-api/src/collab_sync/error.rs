@@ -24,8 +24,8 @@ pub enum SyncError {
   #[error("Workspace id is not found")]
   NoWorkspaceId,
 
-  #[error("Missing broadcast data:{0}")]
-  MissingBroadcast(String),
+  #[error("{0}")]
+  MissingUpdates(String),
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
@@ -34,5 +34,8 @@ pub enum SyncError {
 impl SyncError {
   pub fn is_cannot_apply_update(&self) -> bool {
     matches!(self, Self::CannotApplyUpdate(_))
+  }
+  pub fn is_missing_updates(&self) -> bool {
+    matches!(self, Self::MissingUpdates(_))
   }
 }

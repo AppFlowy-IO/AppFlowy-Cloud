@@ -62,25 +62,11 @@ impl AggregateMessageQueue {
           _ = sleep_until(next_tick) => {
             if let Some(queue) = weak_queue.upgrade() {
               let (num_init_sync, num_messages) = handle_tick(&sender, &queue, maximum_payload_size, weak_seen_ids.clone()).await;
-              if num_messages == 0 {
-                if cfg!(feature = "test_fast_sync") {
-                  next_tick = Instant::now() + Duration::from_secs(1);
-                } else {
-                trace!("No messages to send, slowing down next tick");
-                  next_tick = Instant::now() + Duration::from_secs(4);
-                }
-              } else {
-                // To determine the next interval dynamically, consider factors such as the number of messages sent,
-                // their total size, and the current network type. This approach allows for more nuanced interval
-                // adjustments, optimizing for efficiency and responsiveness under varying conditions.
-                let duration = if cfg!(feature = "test_fast_sync") {
-                  Duration::from_secs(1)
-                } else {
-                  calculate_next_tick_duration(num_init_sync, interval_duration)
-                };
-                trace!("Next tick after {} seconds",duration.as_secs());
-                next_tick = Instant::now() + duration;
-              }
+              // To determine the next interval dynamically, consider factors such as the number of messages sent,
+              // their total size, and the current network type. This approach allows for more nuanced interval
+              // adjustments, optimizing for efficiency and responsiveness under varying conditions.
+              let duration = calculate_next_tick_duration(num_messages, num_init_sync, interval_duration);
+              next_tick = Instant::now() + duration;
             } else {
               break;
             }
@@ -223,11 +209,27 @@ impl From<&ClientCollabMessage> for SeenId {
   }
 }
 
-fn calculate_next_tick_duration(num_init_sync: usize, default_interval: Duration) -> Duration {
-  match num_init_sync {
-    0 => default_interval,
-    1..=3 => Duration::from_secs(2),
-    4..=7 => Duration::from_secs(4),
-    _ => Duration::from_secs(6),
+/// Calculates the duration until the next tick based on the current state.
+///
+/// determines the appropriate interval until the next action should be taken, considering the
+/// number of messages and initial synchronizations.
+///
+/// - When the `test_fast_sync` feature is enabled, it always returns a fixed 1-second interval.
+fn calculate_next_tick_duration(
+  num_messages: usize,
+  num_init_sync: usize,
+  default_interval: Duration,
+) -> Duration {
+  if cfg!(feature = "test_fast_sync") {
+    Duration::from_secs(1)
+  } else if num_messages == 0 {
+    Duration::from_secs(4)
+  } else {
+    match num_init_sync {
+      0 => default_interval,
+      1..=3 => Duration::from_secs(2),
+      4..=7 => Duration::from_secs(4),
+      _ => Duration::from_secs(6),
+    }
   }
 }

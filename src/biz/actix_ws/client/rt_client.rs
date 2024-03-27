@@ -87,12 +87,7 @@ where
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
     let message = tokio::task::spawn_blocking(move || {
-      RealtimeMessage::decode(bytes.as_ref()).map_err(|err| {
-        RealtimeError::Internal(anyhow!(
-          "Fail to deserialize the bytes into RealtimeMessage: {:?}",
-          err
-        ))
-      })
+      RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal)
     })
     .await
     .map_err(|err| RealtimeError::Internal(err.into()))??;

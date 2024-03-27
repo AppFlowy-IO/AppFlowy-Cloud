@@ -15,6 +15,7 @@ use collab_entity::CollabType;
 use collab_rt_protocol::{Message, MessageReader, SyncMessage};
 use serde::de::Visitor;
 use serde::{de, Deserialize, Deserializer, Serialize};
+
 use serde_repr::Serialize_repr;
 
 pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
@@ -26,10 +27,6 @@ pub trait CollabSinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn is_client_init_sync(&self) -> bool;
   fn is_server_init_sync(&self) -> bool;
   fn is_update_sync(&self) -> bool;
-
-  fn set_msg_id(&mut self, msg_id: MsgId);
-
-  fn get_msg_id(&self) -> Option<MsgId>;
 }
 
 pub type MsgId = u64;
@@ -75,21 +72,6 @@ impl CollabSinkMessage for CollabMessage {
 
   fn is_update_sync(&self) -> bool {
     matches!(self, CollabMessage::ClientUpdateSync(_))
-  }
-
-  fn set_msg_id(&mut self, msg_id: MsgId) {
-    match self {
-      CollabMessage::ClientInitSync(value) => value.msg_id = msg_id,
-      CollabMessage::ClientUpdateSync(value) => value.msg_id = msg_id,
-      CollabMessage::ClientAck(value) => value.source.msg_id = msg_id,
-      CollabMessage::ServerInitSync(value) => value.msg_id = msg_id,
-      CollabMessage::ServerBroadcast(_) => {},
-      CollabMessage::AwarenessSync(_) => {},
-    }
-  }
-
-  fn get_msg_id(&self) -> Option<MsgId> {
-    self.msg_id()
   }
 }
 
@@ -141,22 +123,11 @@ impl CollabMessage {
     matches!(self, CollabMessage::ServerInitSync(_))
   }
 
-  pub fn type_str(&self) -> String {
-    match self {
-      CollabMessage::ClientInitSync(_) => "ClientInitSync".to_string(),
-      CollabMessage::ClientUpdateSync(_) => "UpdateSync".to_string(),
-      CollabMessage::ClientAck(_) => "ClientAck".to_string(),
-      CollabMessage::ServerInitSync(_) => "ServerInitSync".to_string(),
-      CollabMessage::ServerBroadcast(_) => "Broadcast".to_string(),
-      CollabMessage::AwarenessSync(_) => "Awareness".to_string(),
-    }
-  }
-
   pub fn msg_id(&self) -> Option<MsgId> {
     match self {
       CollabMessage::ClientInitSync(value) => Some(value.msg_id),
       CollabMessage::ClientUpdateSync(value) => Some(value.msg_id),
-      CollabMessage::ClientAck(value) => Some(value.source.msg_id),
+      CollabMessage::ClientAck(value) => Some(value.msg_id),
       CollabMessage::ServerInitSync(value) => Some(value.msg_id),
       CollabMessage::ServerBroadcast(_) => None,
       CollabMessage::AwarenessSync(_) => None,
@@ -164,16 +135,16 @@ impl CollabMessage {
   }
 
   pub fn len(&self) -> usize {
-    self.payload().map(|payload| payload.len()).unwrap_or(0)
+    self.payload().len()
   }
-  pub fn payload(&self) -> Option<&Bytes> {
+  pub fn payload(&self) -> &Bytes {
     match self {
-      CollabMessage::ClientInitSync(value) => Some(&value.payload),
-      CollabMessage::ClientUpdateSync(value) => Some(&value.payload),
-      CollabMessage::ClientAck(value) => Some(&value.payload),
-      CollabMessage::ServerInitSync(value) => Some(&value.payload),
-      CollabMessage::ServerBroadcast(value) => Some(&value.payload),
-      CollabMessage::AwarenessSync(value) => Some(&value.payload),
+      CollabMessage::ClientInitSync(value) => &value.payload,
+      CollabMessage::ClientUpdateSync(value) => &value.payload,
+      CollabMessage::ClientAck(value) => &value.payload,
+      CollabMessage::ServerInitSync(value) => &value.payload,
+      CollabMessage::ServerBroadcast(value) => &value.payload,
+      CollabMessage::AwarenessSync(value) => &value.payload,
     }
   }
   pub fn is_empty(&self) -> bool {
@@ -202,13 +173,6 @@ impl CollabMessage {
       CollabMessage::ServerInitSync(value) => &value.object_id,
       CollabMessage::ServerBroadcast(value) => &value.object_id,
       CollabMessage::AwarenessSync(value) => &value.object_id,
-    }
-  }
-
-  pub fn device_id(&self) -> Option<String> {
-    match self.origin() {
-      CollabOrigin::Client(origin) => Some(origin.device_id.clone()),
-      _ => None,
     }
   }
 }
@@ -477,11 +441,40 @@ pub enum AckCode {
 pub struct CollabAck {
   pub origin: CollabOrigin,
   pub object_id: String,
-  pub source: AckSource,
+  #[deprecated(note = "since 0.2.18")]
+  pub meta: AckMeta,
   pub payload: Bytes,
   #[serde(deserialize_with = "deserialize_ack_code")]
   pub code: AckCode,
+  pub msg_id: MsgId,
+  pub seq_num: u32,
 }
+
+impl CollabAck {
+  #[allow(deprecated)]
+  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId, seq_num: u32) -> Self {
+    Self {
+      origin,
+      object_id,
+      meta: AckMeta::new(&msg_id),
+      payload: Bytes::from(vec![]),
+      code: AckCode::Success,
+      msg_id,
+      seq_num,
+    }
+  }
+
+  pub fn with_payload<T: Into<Bytes>>(mut self, payload: T) -> Self {
+    self.payload = payload.into();
+    self
+  }
+
+  pub fn with_code(mut self, code: AckCode) -> Self {
+    self.code = code;
+    self
+  }
+}
+
 fn deserialize_ack_code<'de, D>(deserializer: D) -> Result<AckCode, D::Error>
 where
   D: Deserializer<'de>,
@@ -514,35 +507,17 @@ where
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
-pub struct AckSource {
-  #[serde(rename = "sync_verbose")]
-  pub verbose: String,
+pub struct AckMeta {
+  pub data: String,
   pub msg_id: MsgId,
 }
 
-impl CollabAck {
-  pub fn new(origin: CollabOrigin, object_id: String, msg_id: MsgId) -> Self {
-    let source = AckSource {
-      verbose: "".to_string(),
-      msg_id,
-    };
+impl AckMeta {
+  fn new(msg_id: &MsgId) -> Self {
     Self {
-      origin,
-      object_id,
-      source,
-      payload: Bytes::from(vec![]),
-      code: AckCode::Success,
+      data: "".to_string(),
+      msg_id: *msg_id,
     }
-  }
-
-  pub fn with_payload<T: Into<Bytes>>(mut self, payload: T) -> Self {
-    self.payload = payload.into();
-    self
-  }
-
-  pub fn with_code(mut self, code: AckCode) -> Self {
-    self.code = code;
-    self
   }
 }
 
@@ -558,7 +533,7 @@ impl Display for CollabAck {
       "ack: [uid:{}|oid:{}|msg_id:{:?}|len:{}]",
       self.origin.client_user_id().unwrap_or(0),
       self.object_id,
-      self.source.msg_id,
+      self.msg_id,
       self.payload.len(),
     ))
   }
@@ -799,19 +774,6 @@ impl CollabSinkMessage for ClientCollabMessage {
   fn is_update_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
   }
-
-  fn set_msg_id(&mut self, msg_id: MsgId) {
-    match self {
-      ClientCollabMessage::ClientInitSync { data, .. } => data.msg_id = msg_id,
-      ClientCollabMessage::ClientUpdateSync { data, .. } => data.msg_id = msg_id,
-      ClientCollabMessage::ServerInitSync(data) => data.msg_id = msg_id,
-      ClientCollabMessage::ClientAwarenessSync(data) => data.msg_id = msg_id,
-    }
-  }
-
-  fn get_msg_id(&self) -> Option<MsgId> {
-    Some(self.msg_id())
-  }
 }
 
 impl Hash for ClientCollabMessage {
@@ -876,7 +838,7 @@ impl ServerCollabMessage {
 
   pub fn msg_id(&self) -> Option<MsgId> {
     match self {
-      ServerCollabMessage::ClientAck(value) => Some(value.source.msg_id),
+      ServerCollabMessage::ClientAck(value) => Some(value.msg_id),
       ServerCollabMessage::ServerInitSync(value) => Some(value.msg_id),
       ServerCollabMessage::AwarenessSync(_) => None,
       ServerCollabMessage::ServerBroadcast(_) => None,

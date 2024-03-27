@@ -9,7 +9,7 @@ pub enum RealtimeError {
   YAwareness(#[from] collab::core::awareness::Error),
 
   #[error("failed to deserialize message: {0}")]
-  DecodingError(#[from] yrs::encoding::read::Error),
+  YrsDecodingError(#[from] yrs::encoding::read::Error),
 
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),

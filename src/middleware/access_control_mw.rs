@@ -1,7 +1,7 @@
 use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
-use crate::biz::casbin::access_control::enable_access_control;
 use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
+use access_control::access::enable_access_control;
 use actix_router::{Path, Url};
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ResourceDef, ServiceRequest, ServiceResponse};

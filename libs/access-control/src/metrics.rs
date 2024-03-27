@@ -2,7 +2,7 @@ use prometheus_client::metrics::gauge::Gauge;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
-use crate::biz::casbin::enforcer::ENFORCER_METRICS_TICK_INTERVAL;
+use crate::enforcer::ENFORCER_METRICS_TICK_INTERVAL;
 use prometheus_client::registry::Registry;
 use tokio::time::interval;
 

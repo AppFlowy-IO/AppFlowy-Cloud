@@ -1,4 +1,4 @@
-use crate::biz::casbin::access_control::{AccessControl, ActionVariant, ObjectType};
+use access_control::access::{AccessControl, ActionVariant, ObjectType};
 
 use crate::biz::pg_listener::PostgresDBListener;
 use database::pg_row::AFCollabMemberRow;

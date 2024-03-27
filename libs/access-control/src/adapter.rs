@@ -1,8 +1,8 @@
-use crate::biz::casbin::access_control::{ObjectType, ToACAction};
+use crate::access::{ObjectType, ToACAction};
 
 use async_trait::async_trait;
 
-use crate::biz::casbin::metrics::AccessControlMetrics;
+use crate::metrics::AccessControlMetrics;
 use casbin::Adapter;
 use casbin::Filter;
 use casbin::Model;

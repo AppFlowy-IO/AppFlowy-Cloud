@@ -1,12 +1,12 @@
 use crate::api::metrics::RequestMetrics;
-use crate::biz::casbin::access_control::AccessControl;
-use crate::biz::casbin::metrics::AccessControlMetrics;
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::pg_listener::PgListeners;
 use crate::config::config::Config;
+use access_control::access::AccessControl;
+use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use collab_rt::CollabRealtimeMetrics;
 use dashmap::DashMap;

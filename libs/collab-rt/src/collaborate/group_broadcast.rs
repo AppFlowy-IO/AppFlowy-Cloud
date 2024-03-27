@@ -2,6 +2,7 @@ use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubsc
 use std::rc::{Rc, Weak};
 
 use anyhow::anyhow;
+
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_rt_protocol::{handle_message, Error};
@@ -94,12 +95,15 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
-          let value = seq_num_counter.fetch_add(1, Ordering::SeqCst);
-
+          let seq_num = seq_num_counter
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+              Some(current + 1)
+            })
+            .unwrap();
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
-          let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, value + 1);
+          let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
 
           trace!("observe doc update with len:{}", update_len);
           if let Err(err) = broadcast_sink.send(msg.into()) {
@@ -244,7 +248,7 @@ impl CollabBroadcast {
                   break
                 },
                 Some(collab) => {
-                  handle_message_map(&object_id, message_map, &mut sink, collab, &metrics_calculate, &seq_num_counter).await;
+                  handle_client_messages(&object_id, message_map, &mut sink, collab, &metrics_calculate, &seq_num_counter).await;
                 }
               }
             }
@@ -263,7 +267,7 @@ impl CollabBroadcast {
   }
 }
 
-async fn handle_message_map<Sink>(
+async fn handle_client_messages<Sink>(
   object_id: &str,
   message_map: MessageByObjectId,
   sink: &mut Sink,
@@ -285,18 +289,17 @@ async fn handle_message_map<Sink>(
       );
       continue;
     }
-    let seq_num = seq_num_counter.load(Ordering::SeqCst);
     if collab_messages.is_empty() {
       warn!("{} collab messages is empty", object_id);
     }
 
     for collab_message in collab_messages {
-      match handle_client_collab_message(
+      match handle_one_client_message(
         object_id,
         &collab_message,
         &collab,
         metrics_calculate,
-        seq_num,
+        seq_num_counter,
       )
       .await
       {
@@ -319,16 +322,19 @@ async fn handle_message_map<Sink>(
         },
       }
     }
+
+    // update the last sync time
+    update_last_sync_at(&collab);
   }
 }
 
 /// Handle the message sent from the client
-async fn handle_client_collab_message(
+async fn handle_one_client_message(
   object_id: &str,
   collab_msg: &ClientCollabMessage,
   collab: &Mutex<Collab>,
   metrics_calculate: &CollabMetricsCalculate,
-  seq_num: u32,
+  seq_num_counter: &Rc<AtomicU32>,
 ) -> Result<CollabAck, RealtimeError> {
   trace!("Applying client updates: {}", collab_msg);
   let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
@@ -355,6 +361,7 @@ async fn handle_client_collab_message(
     },
   };
 
+  let seq_num = seq_num_counter.load(Ordering::SeqCst);
   for msg in reader {
     match msg {
       Ok(msg) => {
@@ -466,4 +473,11 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
   encoder.write_var(MSG_SYNC_UPDATE);
   encoder.write_buf(update);
   encoder.to_vec()
+}
+
+#[inline]
+fn update_last_sync_at(collab: &Rc<Mutex<Collab>>) {
+  if let Ok(collab) = collab.try_lock() {
+    collab.set_last_sync_at(chrono::Utc::now().timestamp());
+  }
 }

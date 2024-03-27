@@ -146,7 +146,7 @@ where
   }
 
   pub fn init_sync(&self, collab: &Collab) {
-    _init_sync(self.origin.clone(), &self.object, collab, &self.sink);
+    start_sync(self.origin.clone(), &self.object, collab, &self.sink);
   }
 
   /// Remove all the messages in the sink queue
@@ -155,7 +155,7 @@ where
   }
 }
 
-fn start_sync<P: CollabSyncProtocol>(
+fn gen_sync_state<P: CollabSyncProtocol>(
   awareness: &Awareness,
   protocol: &P,
   sync_before: bool,
@@ -165,7 +165,7 @@ fn start_sync<P: CollabSyncProtocol>(
   Some(encoder.to_vec())
 }
 
-pub fn _init_sync<E, Sink>(
+pub fn start_sync<E, Sink>(
   origin: CollabOrigin,
   sync_object: &SyncObject,
   collab: &Collab,
@@ -176,7 +176,7 @@ pub fn _init_sync<E, Sink>(
 {
   let sync_before = collab.get_last_sync_at() > 0;
   let awareness = collab.get_awareness();
-  if let Some(payload) = start_sync(awareness, &ClientSyncProtocol, sync_before) {
+  if let Some(payload) = gen_sync_state(awareness, &ClientSyncProtocol, sync_before) {
     sink.queue_init_sync(|msg_id| {
       let init_sync = InitSync::new(
         origin,
@@ -408,7 +408,7 @@ where
         .await
     {
       if let Some(lock_guard) = collab.try_lock() {
-        _init_sync(origin.clone(), object, &lock_guard, sink);
+        start_sync(origin.clone(), object, &lock_guard, sink);
       }
     }
   }
@@ -497,13 +497,6 @@ impl LastSyncTime {
   }
 }
 
-#[inline]
-fn update_last_sync_at(collab: &Arc<MutexCollab>) {
-  if let Some(collab) = collab.try_lock() {
-    collab.set_last_sync_at(chrono::Utc::now().timestamp());
-  }
-}
-
 /// Check if the update is contiguous.
 pub fn check_update_contiguous(
   object_id: &str,
@@ -516,6 +509,11 @@ pub fn check_update_contiguous(
     prev_seq_num,
     current_seq_num,
   );
+
+  // If the previous seq_num is 0, which means the doc is not synced before.
+  if prev_seq_num == 0 {
+    return Ok(());
+  }
 
   if current_seq_num < prev_seq_num {
     return Err(SyncError::Internal(anyhow!(

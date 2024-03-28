@@ -6,7 +6,7 @@ use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::{CollabObject, CollabType};
-use collab_rt_entity::collab_msg::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
+use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
 use tokio_stream::StreamExt;

@@ -1,9 +1,9 @@
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
-use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabMessage, InitSync, MsgId};
-use collab_rt_entity::message::{RealtimeMessage, SystemMessage};
 use collab_rt_entity::user::UserMessage;
+use collab_rt_entity::{ClientCollabMessage, CollabMessage, InitSync, MsgId};
+use collab_rt_entity::{RealtimeMessage, SystemMessage};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};

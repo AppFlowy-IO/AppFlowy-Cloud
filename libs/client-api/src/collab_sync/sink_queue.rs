@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
 
-use collab_rt_entity::collab_msg::{CollabSinkMessage, MsgId};
+use collab_rt_entity::{MsgId, SinkMessage};
 
 pub(crate) struct SinkQueue<Msg> {
   #[allow(dead_code)]
@@ -13,7 +13,7 @@ pub(crate) struct SinkQueue<Msg> {
 
 impl<Msg> SinkQueue<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   pub(crate) fn new(uid: i64) -> Self {
     Self {
@@ -29,7 +29,7 @@ where
 
 impl<Msg> Deref for SinkQueue<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   type Target = BinaryHeap<QueueItem<Msg>>;
 
@@ -40,7 +40,7 @@ where
 
 impl<Msg> DerefMut for SinkQueue<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.queue
@@ -56,7 +56,7 @@ pub(crate) struct QueueItem<Msg> {
 
 impl<Msg> QueueItem<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
     Self { inner: msg, msg_id }
@@ -77,11 +77,12 @@ where
 
 impl<Msg> QueueItem<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   pub fn mergeable(&self) -> bool {
     self.inner.mergeable()
   }
+
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
     self.inner.merge(other.message(), max_size)
   }

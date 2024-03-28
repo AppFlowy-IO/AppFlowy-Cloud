@@ -12,5 +12,3 @@ pub use plugin::*;
 pub use sink::*;
 pub use sink_config::*;
 pub use sync_control::*;
-
-pub use collab_rt_entity::collab_msg;

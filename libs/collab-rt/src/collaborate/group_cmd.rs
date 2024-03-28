@@ -1,19 +1,15 @@
+use crate::client_msg_router::ClientMessageRouter;
 use crate::collaborate::group_manager::GroupManager;
 use crate::error::RealtimeError;
 use crate::RealtimeAccessControl;
-
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
-use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::{ClientCollabMessage, SinkMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
-
-use collab_rt_entity::message::RealtimeMessage;
-use collab_rt_entity::user::RealtimeUser;
-
-use crate::client_msg_router::ClientMessageRouter;
-
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
 

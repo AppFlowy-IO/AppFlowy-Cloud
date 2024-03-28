@@ -172,8 +172,8 @@ where
           Ok(is_valid) => {
             if is_valid {
               Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
-              sink.notify();
             }
+            sink.notify();
           },
           Err(err) => {
             // Update the last sync time if the message is valid.
@@ -345,6 +345,7 @@ pub(crate) fn check_update_contiguous(
   if current_seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
     || seq_num_counter.should_init_sync()
   {
+    seq_num_counter.reset_counter();
     return Err(SyncError::MissingUpdates(format!(
       "{} missing {} updates, should start init sync",
       object_id,
@@ -362,24 +363,33 @@ pub struct SeqNumCounter {
 
 impl SeqNumCounter {
   pub fn fetch_update(&self, seq_num: u32) -> u32 {
-    let prev = self
+    match self
       .counter
-      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| {
-        // must return Some to update the value
-        Some(seq_num)
-      })
-      .unwrap();
-
-    if prev == seq_num {
-      self.equal_counter.fetch_add(1, Ordering::SeqCst);
-    } else {
-      self.equal_counter.store(0, Ordering::SeqCst);
+      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+        if seq_num >= current {
+          Some(seq_num)
+        } else {
+          None
+        }
+      }) {
+      Ok(prev) => {
+        if prev == seq_num {
+          self.equal_counter.fetch_add(1, Ordering::SeqCst);
+        } else {
+          self.equal_counter.store(0, Ordering::SeqCst);
+        }
+        prev
+      },
+      Err(prev) => prev,
     }
-
-    prev
   }
 
   pub fn should_init_sync(&self) -> bool {
-    self.equal_counter.load(Ordering::SeqCst) >= 6
+    // when receive 8 continuous equal seq_num, we should start the init sync.
+    self.equal_counter.load(Ordering::SeqCst) >= 8
+  }
+
+  pub fn reset_counter(&self) {
+    self.equal_counter.store(0, Ordering::SeqCst);
   }
 }

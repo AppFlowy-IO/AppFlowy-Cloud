@@ -174,8 +174,6 @@ pub fn start_sync<E, Sink>(
 
       ClientCollabMessage::new_init_sync(init_sync)
     })
-  } else {
-    sink.notify();
   }
 }
 

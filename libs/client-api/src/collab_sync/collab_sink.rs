@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
+
 use tokio::sync::{watch, Mutex};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
@@ -272,17 +273,6 @@ where
       }
     }
 
-    trace!(
-      "{}: pending count:{} ids:{}",
-      self.object.object_id,
-      message_queue.len(),
-      message_queue
-        .iter()
-        .map(|item| item.msg_id().to_string())
-        .collect::<Vec<_>>()
-        .join(",")
-    );
-
     if is_valid {
       if let ServerCollabMessage::ClientAck(ack) = server_message {
         // Check the seq_num is contiguous.
@@ -297,12 +287,26 @@ where
 
     // If there are no non-ping messages left in the queue, it indicates all messages have been sent
     if all_non_ping_messages_sent {
-      if let Err(e) = self.state_notifier.send(SinkState::Finished) {
-        error!(
-          "Failed to send SinkState::Finished for object_id '{}': {}",
-          self.object.object_id, e
-        );
+      match self.state_notifier.send(SinkState::Finished) {
+        Ok(_) => trace!("{}: all messages sent", self.object.object_id),
+        Err(err) => {
+          error!(
+            "Failed to send SinkState::Finished for object_id '{}': {}",
+            self.object.object_id, err
+          );
+        },
       }
+    } else {
+      trace!(
+        "{}: pending count:{} ids:{}",
+        self.object.object_id,
+        message_queue.len(),
+        message_queue
+          .iter()
+          .map(|item| item.msg_id().to_string())
+          .collect::<Vec<_>>()
+          .join(",")
+      );
     }
 
     Ok(is_valid)
@@ -347,7 +351,7 @@ where
         match sender.send(messages).await {
           Ok(_) => {
             trace!(
-              "🔥 sending {} messages {:?}",
+              "🔥client sending {} messages {:?}",
               self.object.object_id,
               message_ids
             );
@@ -430,7 +434,7 @@ where
 }
 
 fn get_next_batch_item(
-  object_id: &str,
+  _object_id: &str,
   flying_messages: &mut HashSet<MsgId>,
   msg_queue: &mut SinkQueue<ClientCollabMessage>,
 ) -> Vec<QueueItem<ClientCollabMessage>> {
@@ -459,18 +463,17 @@ fn get_next_batch_item(
       }
     }
   }
-
-  if !requeue_items.is_empty() {
-    trace!(
-      "requeue {} messages: ids=>{}",
-      object_id,
-      requeue_items
-        .iter()
-        .map(|item| { item.msg_id().to_string() })
-        .collect::<Vec<_>>()
-        .join(",")
-    );
-  }
+  // if !requeue_items.is_empty() {
+  //   trace!(
+  //     "requeue {} messages: ids=>{}",
+  //     object_id,
+  //     requeue_items
+  //       .iter()
+  //       .map(|item| { item.msg_id().to_string() })
+  //       .collect::<Vec<_>>()
+  //       .join(",")
+  //   );
+  // }
   msg_queue.extend(requeue_items);
   let message_ids = next_sending_items
     .iter()
@@ -497,9 +500,6 @@ impl CollabSinkRunner {
     E: Into<anyhow::Error> + Send + Sync + 'static,
     Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   {
-    if let Some(sink) = weak_sink.upgrade() {
-      sink.notify();
-    }
     loop {
       // stops the runner if the notifier was closed.
       if notifier.changed().await.is_err() {

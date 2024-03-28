@@ -292,8 +292,7 @@ impl BroadcastSync {
 impl Display for BroadcastSync {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     f.write_fmt(format_args!(
-      "broadcast: [uid:{}|oid:{}|len:{}]",
-      self.origin.client_user_id().unwrap_or(0),
+      "broadcast: [oid:{}|len:{}]",
       self.object_id,
       self.payload.len(),
     ))

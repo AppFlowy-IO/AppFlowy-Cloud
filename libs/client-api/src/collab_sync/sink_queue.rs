@@ -79,6 +79,10 @@ impl<Msg> QueueItem<Msg>
 where
   Msg: SinkMessage,
 {
+  pub fn mergeable(&self) -> bool {
+    self.inner.mergeable()
+  }
+
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
     self.inner.merge(other.message(), max_size)
   }

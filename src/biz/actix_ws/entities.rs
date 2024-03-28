@@ -4,8 +4,8 @@ use collab_rt::error::RealtimeError;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;
 
-pub use collab_rt_entity::message::RealtimeMessage;
 use collab_rt_entity::user::RealtimeUser;
+pub use collab_rt_entity::RealtimeMessage;
 
 #[derive(Debug, Message, Clone)]
 #[rtype(result = "Result<(), RealtimeError>")]

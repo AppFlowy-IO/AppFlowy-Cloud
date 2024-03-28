@@ -1,6 +1,6 @@
 use crate::af_spawn;
-use collab_rt_entity::collab_msg::ClientCollabMessage;
-use collab_rt_entity::message::RealtimeMessage;
+use collab_rt_entity::ClientCollabMessage;
+use collab_rt_entity::RealtimeMessage;
 use futures_util::Sink;
 use std::fmt::Debug;
 use std::pin::Pin;

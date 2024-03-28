@@ -7,8 +7,8 @@ use crate::RealtimeAccessControl;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
-use collab_rt_entity::collab_msg::CollabMessage;
 use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::CollabMessage;
 
 use database::collab::CollabStorage;
 

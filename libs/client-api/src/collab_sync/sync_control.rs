@@ -11,7 +11,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 
 use anyhow::anyhow;
-use collab_rt_entity::collab_msg::{
+use collab_rt_entity::{
   AckCode, BroadcastSync, ClientCollabMessage, InitSync, ServerCollabMessage, ServerInit,
   UpdateSync,
 };

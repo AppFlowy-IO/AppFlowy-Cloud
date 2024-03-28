@@ -17,15 +17,15 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 
+use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
 use crate::ws::{ConnectState, ConnectStateNotify, WSError, WebSocketChannel};
 use crate::ServerFixIntervalPing;
 use crate::{af_spawn, retry_connect};
-use collab_rt_entity::collab_msg::{ClientCollabMessage, ServerCollabMessage};
-use collab_rt_entity::message::{RealtimeMessage, SystemMessage};
-use collab_rt_entity::user::UserMessage;
-
-use crate::ws::msg_queue::{AggregateMessageQueue, AggregateMessagesReceiver};
 use client_websocket::{CloseCode, CloseFrame, Message, WebSocketStream};
+use collab_rt_entity::user::UserMessage;
+use collab_rt_entity::ClientCollabMessage;
+use collab_rt_entity::ServerCollabMessage;
+use collab_rt_entity::{RealtimeMessage, SystemMessage};
 use tokio::sync::{oneshot, Mutex};
 use tracing::{error, info, trace, warn};
 

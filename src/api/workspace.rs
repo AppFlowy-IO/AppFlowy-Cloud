@@ -1,7 +1,7 @@
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
-use crate::biz::actix_ws::entities::{ClientStreamMessage, RealtimeMessage};
+use crate::biz::actix_ws::entities::ClientStreamMessage;
 use crate::biz::collab::access_control::CollabAccessControl;
 use crate::biz::user::auth::jwt::UserUuid;
 use crate::biz::workspace;
@@ -17,6 +17,7 @@ use bytes::BytesMut;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::RealtimeMessage;
 use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::*;

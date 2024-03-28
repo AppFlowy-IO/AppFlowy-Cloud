@@ -4,7 +4,7 @@ use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::{check_update_contiguous, SyncError, SyncObject};
 use futures_util::SinkExt;
 
-use collab_rt_entity::collab_msg::{CollabSinkMessage, MsgId, ServerCollabMessage};
+use collab_rt_entity::{MsgId, ServerCollabMessage, SinkMessage};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -78,7 +78,7 @@ impl<E, Sink, Msg> CollabSink<Sink, Msg>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<Msg>, Error = E> + Send + Sync + Unpin + 'static,
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   pub fn new(
     uid: i64,
@@ -416,7 +416,7 @@ fn get_next_batch_item<Msg>(
   msg_queue: &mut SinkQueue<Msg>,
 ) -> Vec<QueueItem<Msg>>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   let mut next_sending_items = vec![];
   let mut requeue_items = vec![];
@@ -485,7 +485,7 @@ impl<Msg> CollabSinkRunner<Msg> {
   ) where
     E: Into<anyhow::Error> + Send + Sync + 'static,
     Sink: SinkExt<Vec<Msg>, Error = E> + Send + Sync + Unpin + 'static,
-    Msg: CollabSinkMessage,
+    Msg: SinkMessage,
   {
     if let Some(sink) = weak_sink.upgrade() {
       sink.notify();

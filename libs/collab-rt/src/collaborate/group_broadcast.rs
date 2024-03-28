@@ -23,11 +23,12 @@ use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
 
-use collab_rt_entity::collab_msg::{
-  AckCode, AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
-};
-use collab_rt_entity::message::MessageByObjectId;
 use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::AckCode;
+use collab_rt_entity::MessageByObjectId;
+use collab_rt_entity::{
+  AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
+};
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 

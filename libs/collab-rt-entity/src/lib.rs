@@ -1,8 +1,7 @@
-pub mod collab_msg;
-
-pub mod message;
+mod message;
 pub mod user;
 
+mod client_message;
 // If the realtime_proto not exist, the following code will be generated:
 // ```shell
 //  cd libs/collab-rt-entity
@@ -10,5 +9,10 @@ pub mod user;
 //  cargo build
 // ```
 pub mod realtime_proto;
+mod server_message;
 
+pub use client_message::*;
 pub use collab::core::collab_plugin::EncodedCollab;
+pub use message::*;
+pub use realtime_proto::*;
+pub use server_message::*;

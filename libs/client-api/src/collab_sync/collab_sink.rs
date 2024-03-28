@@ -1,15 +1,13 @@
 use crate::af_spawn;
-use crate::collab_sync::sink_config::SinkConfig;
-use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
-use crate::collab_sync::{check_update_contiguous, SyncError, SyncObject};
-use futures_util::SinkExt;
-
+use crate::collab_sync::collab_stream::{check_update_contiguous, SeqNumCounter};
 use crate::collab_sync::ping::PingSyncRunner;
+use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
+use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
+use futures_util::SinkExt;
 use std::collections::{HashMap, HashSet};
-
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 use tokio::sync::{watch, Mutex};
@@ -94,7 +92,7 @@ where
     let notifier = Arc::new(notifier);
     let state_notifier = Arc::new(sync_state_tx);
     let sender = Arc::new(Mutex::new(sink));
-    let msg_queue = SinkQueue::new(uid);
+    let msg_queue = SinkQueue::new();
     let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
     let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
@@ -174,7 +172,6 @@ where
     let new_msg = f(msg_id);
     trace!("🔥 queue {}", new_msg);
     msg_queue.push_msg(msg_id, new_msg);
-    // msg_queue.extend(requeue_items);
     drop(msg_queue);
     self.merge();
 
@@ -245,7 +242,7 @@ where
     &self,
     msg_id: MsgId,
     server_message: &ServerCollabMessage,
-    seq_num_counter: &Arc<AtomicU32>,
+    seq_num_counter: &Arc<SeqNumCounter>,
   ) -> Result<bool, SyncError> {
     // safety: msg_id is not None
     let income_message_id = msg_id;
@@ -276,12 +273,8 @@ where
 
     if is_valid {
       if let ServerCollabMessage::ClientAck(ack) = server_message {
-        let prev_seq_num = seq_num_counter
-          .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_| Some(ack.seq_num))
-          .unwrap();
-
         // Check the seq_num is contiguous.
-        check_update_contiguous(&self.object.object_id, ack.seq_num, prev_seq_num)?;
+        check_update_contiguous(&self.object.object_id, ack.seq_num, seq_num_counter)?;
       }
     }
 
@@ -370,10 +363,6 @@ where
   }
 
   fn merge(&self) {
-    if self.config.disable_merge_message {
-      return;
-    }
-
     if let (Some(flying_messages), Some(mut msg_queue)) = (
       self.flying_messages.try_lock(),
       self.message_queue.try_lock(),

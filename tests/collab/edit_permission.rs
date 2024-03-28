@@ -554,15 +554,14 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let results = futures::future::join_all(tasks).await;
   for (index, result) in results.into_iter().enumerate() {
     let (s, client) = result.unwrap();
-    assert_json_eq!(
-      json!({index.to_string(): s}),
-      client
-        .collabs
-        .get(&object_id)
-        .unwrap()
-        .collab
-        .to_json_value(),
-    );
+    let value = client
+      .collabs
+      .get(&object_id)
+      .unwrap()
+      .collab
+      .to_json_value();
+
+    assert_json_eq!(json!({index.to_string(): s}), value,);
   }
   // all the clients should have the same collab object
   assert_json_eq!(

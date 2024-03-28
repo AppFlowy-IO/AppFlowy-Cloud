@@ -2,7 +2,7 @@ use crate::util::channel_ext::UnboundedSenderSink;
 use crate::RealtimeAccessControl;
 use async_trait::async_trait;
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::{ClientCollabMessage, SinkMessage};
+use collab_rt_entity::ClientCollabMessage;
 use collab_rt_entity::{MessageByObjectId, RealtimeMessage};
 use std::sync::Arc;
 use std::time::Duration;
@@ -180,17 +180,8 @@ impl ClientMessageRouter {
 
     let mut valid_messages = Vec::with_capacity(messages.len());
     let mut invalid_messages = Vec::with_capacity(messages.len());
-    let can_read = access_control
-      .can_read_collab(workspace_id, uid, object_id)
-      .await
-      .unwrap_or(false);
 
     for message in messages {
-      if message.is_client_init_sync() && can_read {
-        valid_messages.push(message);
-        continue;
-      }
-
       if can_write {
         valid_messages.push(message);
       } else {

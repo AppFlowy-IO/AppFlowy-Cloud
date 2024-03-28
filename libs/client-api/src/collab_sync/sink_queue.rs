@@ -6,8 +6,6 @@ use std::ops::{Deref, DerefMut};
 use collab_rt_entity::{MsgId, SinkMessage};
 
 pub(crate) struct SinkQueue<Msg> {
-  #[allow(dead_code)]
-  uid: i64,
   queue: BinaryHeap<QueueItem<Msg>>,
 }
 
@@ -15,9 +13,8 @@ impl<Msg> SinkQueue<Msg>
 where
   Msg: SinkMessage,
 {
-  pub(crate) fn new(uid: i64) -> Self {
+  pub(crate) fn new() -> Self {
     Self {
-      uid,
       queue: Default::default(),
     }
   }
@@ -50,7 +47,6 @@ where
 #[derive(Debug, Clone)]
 pub(crate) struct QueueItem<Msg> {
   inner: Msg,
-  // TODO(nathan): user inner's msg_id
   msg_id: MsgId,
 }
 

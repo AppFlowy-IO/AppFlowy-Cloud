@@ -11,12 +11,11 @@ use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
 use tokio_stream::StreamExt;
 
-use crate::collab_sync::SyncControl;
+use crate::collab_sync::{SinkConfig, SyncControl};
 use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
 use crate::af_spawn;
-use crate::collab_sync::sink_config::SinkConfig;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 

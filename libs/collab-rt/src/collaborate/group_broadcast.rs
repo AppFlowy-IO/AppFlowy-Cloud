@@ -24,8 +24,8 @@ use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
 
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::AckCode;
 use collab_rt_entity::MessageByObjectId;
+use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
@@ -325,9 +325,6 @@ async fn handle_client_messages<Sink>(
         },
       }
     }
-
-    // update the last sync time
-    update_last_sync_at(&collab);
   }
 }
 
@@ -339,9 +336,47 @@ async fn handle_one_client_message(
   metrics_calculate: &CollabMetricsCalculate,
   seq_num_counter: &Rc<AtomicU32>,
 ) -> Result<CollabAck, RealtimeError> {
-  trace!("Applying client updates: {}", collab_msg);
-  let mut decoder = DecoderV1::from(collab_msg.payload().as_ref());
-  let origin = collab_msg.origin().clone();
+  let msg_id = collab_msg.msg_id();
+  let message_origin = collab_msg.origin().clone();
+  let seq_num = seq_num_counter.load(Ordering::SeqCst);
+
+  // If the payload is empty, we don't need to apply any updates to the document.
+  // Currently, only the ping message should has an empty payload.
+  if collab_msg.payload().is_empty() {
+    if !matches!(collab_msg, ClientCollabMessage::ClientPingSync(_)) {
+      error!("receive unexpected empty payload message:{}", collab_msg);
+    }
+    let resp = CollabAck::new(message_origin, object_id.to_string(), msg_id, seq_num);
+    Ok(resp)
+  } else {
+    trace!("Applying client updates: {}", collab_msg);
+    let ack = handle_one_message_payload(
+      object_id,
+      message_origin,
+      msg_id,
+      collab_msg.payload(),
+      collab,
+      metrics_calculate,
+      seq_num,
+    )
+    .await?;
+
+    update_last_sync_at(collab);
+    Ok(ack)
+  }
+}
+
+/// Handle the message sent from the client
+async fn handle_one_message_payload(
+  object_id: &str,
+  origin: CollabOrigin,
+  msg_id: MsgId,
+  payload: &[u8],
+  collab: &Mutex<Collab>,
+  metrics_calculate: &CollabMetricsCalculate,
+  seq_num: u32,
+) -> Result<CollabAck, RealtimeError> {
+  let mut decoder = DecoderV1::from(payload);
   let reader = MessageReader::new(&mut decoder);
   let mut ack_response = None;
 
@@ -364,7 +399,6 @@ async fn handle_one_client_message(
     },
   };
 
-  let seq_num = seq_num_counter.load(Ordering::SeqCst);
   for msg in reader {
     match msg {
       Ok(msg) => {
@@ -377,13 +411,8 @@ async fn handle_one_client_message(
             // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
             // send one ack back to the client.
             if ack_response.is_none() {
-              let resp = CollabAck::new(
-                origin.clone(),
-                object_id.to_string(),
-                collab_msg.msg_id(),
-                seq_num,
-              )
-              .with_payload(payload.unwrap_or_default());
+              let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id, seq_num)
+                .with_payload(payload.unwrap_or_default());
               ack_response = Some(resp);
             }
           },
@@ -393,13 +422,8 @@ async fn handle_one_client_message(
               .fetch_add(1, Ordering::Relaxed);
             error!("handle collab:{} message error:{}", object_id, err);
             if ack_response.is_none() {
-              let resp = CollabAck::new(
-                origin.clone(),
-                object_id.to_string(),
-                collab_msg.msg_id(),
-                seq_num,
-              )
-              .with_code(ack_code_from_error(&err));
+              let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id, seq_num)
+                .with_code(ack_code_from_error(&err));
               ack_response = Some(resp);
             }
             break;
@@ -479,7 +503,7 @@ fn gen_update_message(update: &[u8]) -> Vec<u8> {
 }
 
 #[inline]
-fn update_last_sync_at(collab: &Rc<Mutex<Collab>>) {
+fn update_last_sync_at(collab: &Mutex<Collab>) {
   if let Ok(collab) = collab.try_lock() {
     collab.set_last_sync_at(chrono::Utc::now().timestamp());
   }

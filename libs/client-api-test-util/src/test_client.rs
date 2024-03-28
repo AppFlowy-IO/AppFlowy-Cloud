@@ -806,7 +806,7 @@ pub async fn assert_client_collab_include_value(
   object_id: &str,
   expected: Value,
 ) -> Result<(), Error> {
-  let secs = 30;
+  let secs = 60;
   let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {

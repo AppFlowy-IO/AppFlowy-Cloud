@@ -41,7 +41,7 @@ pub struct SyncControl<Sink, Stream> {
   /// The [CollabSink] is used to send the updates to the remote. It will send the current
   /// update periodically if the timeout is reached or it will send the next update if
   /// it receive previous ack from the remote.
-  sink: Arc<CollabSink<Sink, ClientCollabMessage>>,
+  sink: Arc<CollabSink<Sink>>,
   /// The [ObserveCollab] will be spawned in a separate task It continuously receive
   /// the updates from the remote.
   #[allow(dead_code)]
@@ -169,7 +169,7 @@ pub fn start_sync<E, Sink>(
   origin: CollabOrigin,
   sync_object: &SyncObject,
   collab: &Collab,
-  sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+  sink: &Arc<CollabSink<Sink>>,
 ) where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
@@ -194,7 +194,7 @@ pub fn start_sync<E, Sink>(
 }
 
 impl<Sink, Stream> Deref for SyncControl<Sink, Stream> {
-  type Target = Arc<CollabSink<Sink, ClientCollabMessage>>;
+  type Target = Arc<CollabSink<Sink>>;
 
   fn deref(&self) -> &Self::Target {
     &self.sink
@@ -230,7 +230,7 @@ where
     object: SyncObject,
     stream: Stream,
     weak_collab: Weak<MutexCollab>,
-    sink: Weak<CollabSink<Sink, ClientCollabMessage>>,
+    sink: Weak<CollabSink<Sink>>,
   ) -> Self {
     let seq_num_counter = Arc::new(AtomicU32::new(0));
     let last_init_sync = LastSyncTime::new();
@@ -261,7 +261,7 @@ where
     object: SyncObject,
     mut stream: Stream,
     weak_collab: Weak<MutexCollab>,
-    weak_sink: Weak<CollabSink<Sink, ClientCollabMessage>>,
+    weak_sink: Weak<CollabSink<Sink>>,
     seq_num_counter: Arc<AtomicU32>,
     last_init_sync: LastSyncTime,
   ) {
@@ -317,7 +317,7 @@ where
     origin: &CollabOrigin,
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+    sink: &Arc<CollabSink<Sink>>,
     msg: ServerCollabMessage,
     seq_num_counter: &Arc<AtomicU32>,
     last_init_time: &LastSyncTime,
@@ -372,7 +372,7 @@ where
     object_id: &str,
     msg: ServerCollabMessage,
     collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+    sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
     if !msg.payload().is_empty() {
       let msg_origin = msg.origin();
@@ -393,7 +393,7 @@ where
     origin: &CollabOrigin,
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+    sink: &Arc<CollabSink<Sink>>,
     last_sync_time: &LastSyncTime,
   ) {
     let debounce_duration = if cfg!(debug_assertions) {
@@ -435,7 +435,7 @@ where
     payload: &Bytes,
     object_id: &str,
     collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink, ClientCollabMessage>>,
+    sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
     if let Some(mut collab) = collab.try_lock() {
       let mut decoder = DecoderV1::new(Cursor::new(payload));

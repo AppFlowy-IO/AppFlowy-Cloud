@@ -27,6 +27,7 @@ pub enum ClientCollabMessage {
   ClientUpdateSync { data: UpdateSync },
   ServerInitSync(ServerInit),
   ClientAwarenessSync(UpdateSync),
+  ClientPingSync(PingSync),
 }
 
 impl ClientCollabMessage {
@@ -51,6 +52,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientUpdateSync { data, .. } => data.payload.len(),
       ClientCollabMessage::ServerInitSync(msg) => msg.payload.len(),
       ClientCollabMessage::ClientAwarenessSync(data) => data.payload.len(),
+      ClientCollabMessage::ClientPingSync(_) => 0,
     }
   }
   pub fn object_id(&self) -> &str {
@@ -59,6 +61,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.object_id,
       ClientCollabMessage::ServerInitSync(msg) => &msg.object_id,
       ClientCollabMessage::ClientAwarenessSync(data) => &data.object_id,
+      ClientCollabMessage::ClientPingSync(data) => &data.object_id,
     }
   }
 
@@ -68,14 +71,17 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.origin,
       ClientCollabMessage::ServerInitSync(msg) => &msg.origin,
       ClientCollabMessage::ClientAwarenessSync(data) => &data.origin,
+      ClientCollabMessage::ClientPingSync(data) => &data.origin,
     }
   }
   pub fn payload(&self) -> &Bytes {
+    static EMPTY_BYTES: Bytes = Bytes::from_static(b"");
     match self {
       ClientCollabMessage::ClientInitSync { data, .. } => &data.payload,
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.payload,
       ClientCollabMessage::ServerInitSync(msg) => &msg.payload,
       ClientCollabMessage::ClientAwarenessSync(data) => &data.payload,
+      ClientCollabMessage::ClientPingSync(_) => &EMPTY_BYTES,
     }
   }
   pub fn device_id(&self) -> Option<String> {
@@ -91,6 +97,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientUpdateSync { data, .. } => data.msg_id,
       ClientCollabMessage::ServerInitSync(value) => value.msg_id,
       ClientCollabMessage::ClientAwarenessSync(data) => data.msg_id,
+      ClientCollabMessage::ClientPingSync(data) => data.msg_id,
     }
   }
 
@@ -112,6 +119,7 @@ impl Display for ClientCollabMessage {
         data.msg_id,
         data.payload.len(),
       )),
+      ClientCollabMessage::ClientPingSync(data) => Display::fmt(data, f),
     }
   }
 }
@@ -342,6 +350,24 @@ impl Display for UpdateSync {
       self.object_id,
       self.msg_id,
       self.payload.len(),
+    ))
+  }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
+pub struct PingSync {
+  pub origin: CollabOrigin,
+  pub object_id: String,
+  pub msg_id: MsgId,
+}
+
+impl Display for PingSync {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "ping: [uid:{}|oid:{}|msg_id:{:?}]",
+      self.origin.client_user_id().unwrap_or(0),
+      self.object_id,
+      self.msg_id,
     ))
   }
 }

@@ -4,9 +4,11 @@ use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::{check_update_contiguous, SyncError, SyncObject};
 use futures_util::SinkExt;
 
-use collab_rt_entity::{MsgId, ServerCollabMessage, SinkMessage};
+use crate::collab_sync::ping::PingSyncRunner;
+use collab::core::origin::{CollabClient, CollabOrigin};
+use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
 use std::collections::{HashMap, HashSet};
-use std::marker::PhantomData;
+
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
@@ -41,12 +43,11 @@ pub enum SinkSignal {
   ProcessAfterMillis(u64),
 }
 
-const SEND_INTERVAL: Duration = Duration::from_secs(8);
+pub(crate) const SEND_INTERVAL: Duration = Duration::from_secs(8);
 
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
 
-/// Use to sync the [Msg] to the remote.
-pub struct CollabSink<Sink, Msg> {
+pub struct CollabSink<Sink> {
   #[allow(dead_code)]
   uid: i64,
   /// The [Sink] is used to send the messages to the remote. It might be a websocket sink or
@@ -54,7 +55,7 @@ pub struct CollabSink<Sink, Msg> {
   sender: Arc<Mutex<Sink>>,
   /// The [SinkQueue] is used to queue the messages that are waiting to be sent to the
   /// remote. It will merge the messages if possible.
-  message_queue: Arc<parking_lot::Mutex<SinkQueue<Msg>>>,
+  message_queue: Arc<parking_lot::Mutex<SinkQueue<ClientCollabMessage>>>,
   msg_id_counter: Arc<DefaultMsgIdCounter>,
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
@@ -65,20 +66,20 @@ pub struct CollabSink<Sink, Msg> {
   object: SyncObject,
   flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
   last_sync: Arc<LastSync>,
+  pause_ping: Arc<AtomicBool>,
 }
 
-impl<Sink, Msg> Drop for CollabSink<Sink, Msg> {
+impl<Sink> Drop for CollabSink<Sink> {
   fn drop(&mut self) {
     trace!("Drop CollabSink {}", self.object.object_id);
     let _ = self.notifier.send(SinkSignal::Stop);
   }
 }
 
-impl<E, Sink, Msg> CollabSink<Sink, Msg>
+impl<E, Sink> CollabSink<Sink>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
-  Sink: SinkExt<Vec<Msg>, Error = E> + Send + Sync + Unpin + 'static,
-  Msg: SinkMessage,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
   pub fn new(
     uid: i64,
@@ -97,16 +98,30 @@ where
     let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
     let msg_id_counter = Arc::new(msg_id_counter);
     let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
+    let pause_ping = Arc::new(AtomicBool::new(false));
 
     let last_sync = Arc::new(LastSync::new());
     let mut interval = interval(SEND_INTERVAL);
     let weak_notifier = Arc::downgrade(&notifier);
     let weak_flying_messages = Arc::downgrade(&flying_messages);
     let cloned_last_sync = last_sync.clone();
+
+    let origin = CollabOrigin::Client(CollabClient {
+      uid,
+      device_id: object.device_id.clone(),
+    });
+
+    PingSyncRunner::run(
+      origin,
+      object.object_id.clone(),
+      msg_id_counter.clone(),
+      Arc::downgrade(&message_queue),
+      pause_ping.clone(),
+    );
+
     af_spawn(async move {
       // Initial delay to make sure the first tick waits for SEND_INTERVAL
       sleep(SEND_INTERVAL).await;
-
       loop {
         interval.tick().await;
         match weak_notifier.upgrade() {
@@ -139,6 +154,7 @@ where
       object,
       flying_messages,
       last_sync,
+      pause_ping,
     }
   }
 
@@ -147,8 +163,9 @@ where
   /// its priority. And the message priority is determined by the [Msg] that implement the [Ord] and
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
-  pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> Msg) {
+  pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
     if !self.state_notifier.borrow().is_syncing() {
+      self.pause_ping.store(true, Ordering::SeqCst);
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
 
@@ -169,8 +186,9 @@ where
 
   /// When queue the init message, the sink will clear all the pending messages and send the init
   /// message immediately.
-  pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> Msg) {
+  pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
     if !self.state_notifier.borrow().is_syncing() {
+      self.pause_ping.store(true, Ordering::SeqCst);
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
 
@@ -212,6 +230,7 @@ where
   }
 
   pub fn pause(&self) {
+    self.pause_ping.store(true, Ordering::SeqCst);
     self.pause.store(true, Ordering::SeqCst);
     let _ = self.state_notifier.send(SinkState::Pause);
   }
@@ -278,6 +297,7 @@ where
     );
 
     if message_queue.is_empty() {
+      self.pause_ping.store(false, Ordering::SeqCst);
       if let Err(e) = self.state_notifier.send(SinkState::Finished) {
         error!("send sink state failed: {}", e);
       }
@@ -312,7 +332,7 @@ where
     self.send_immediately(items).await;
   }
 
-  async fn send_immediately(&self, items: Vec<QueueItem<Msg>>) {
+  async fn send_immediately(&self, items: Vec<QueueItem<ClientCollabMessage>>) {
     let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
     let messages = items
       .into_iter()
@@ -358,7 +378,7 @@ where
       self.flying_messages.try_lock(),
       self.message_queue.try_lock(),
     ) {
-      let mut items: Vec<QueueItem<Msg>> = Vec::with_capacity(msg_queue.len());
+      let mut items: Vec<QueueItem<ClientCollabMessage>> = Vec::with_capacity(msg_queue.len());
       let mut merged_ids = HashMap::new();
       while let Some(next) = msg_queue.pop() {
         // If the message is in the flying messages, it means the message is sending to the remote.
@@ -410,14 +430,11 @@ where
   }
 }
 
-fn get_next_batch_item<Msg>(
+fn get_next_batch_item(
   object_id: &str,
   flying_messages: &mut HashSet<MsgId>,
-  msg_queue: &mut SinkQueue<Msg>,
-) -> Vec<QueueItem<Msg>>
-where
-  Msg: SinkMessage,
-{
+  msg_queue: &mut SinkQueue<ClientCollabMessage>,
+) -> Vec<QueueItem<ClientCollabMessage>> {
   let mut next_sending_items = vec![];
   let mut requeue_items = vec![];
   while let Some(item) = msg_queue.pop() {
@@ -475,17 +492,16 @@ fn retry_later(weak_notifier: Weak<watch::Sender<SinkSignal>>) {
   }
 }
 
-pub struct CollabSinkRunner<Msg>(PhantomData<Msg>);
+pub struct CollabSinkRunner;
 
-impl<Msg> CollabSinkRunner<Msg> {
+impl CollabSinkRunner {
   /// The runner will stop if the [CollabSink] was dropped or the notifier was closed.
   pub async fn run<E, Sink>(
-    weak_sink: Weak<CollabSink<Sink, Msg>>,
+    weak_sink: Weak<CollabSink<Sink>>,
     mut notifier: watch::Receiver<SinkSignal>,
   ) where
     E: Into<anyhow::Error> + Send + Sync + 'static,
-    Sink: SinkExt<Vec<Msg>, Error = E> + Send + Sync + Unpin + 'static,
-    Msg: SinkMessage,
+    Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   {
     if let Some(sink) = weak_sink.upgrade() {
       sink.notify();
@@ -526,7 +542,7 @@ impl DefaultMsgIdCounter {
   pub fn new() -> Self {
     Self::default()
   }
-  fn next(&self) -> MsgId {
+  pub(crate) fn next(&self) -> MsgId {
     self.0.fetch_add(1, Ordering::SeqCst)
   }
 }

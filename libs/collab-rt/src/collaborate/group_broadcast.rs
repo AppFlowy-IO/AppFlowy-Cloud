@@ -96,6 +96,9 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
+          // Increment the sequence number counter and assign the new value to the `seq_num` field of the
+          // broadcast message. This sequence number is used by the client to verify the order of the
+          // messages and to request a full synchronization if any messages are missing.
           let seq_num = seq_num_counter
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
               Some(current + 1)
@@ -106,11 +109,10 @@ impl CollabBroadcast {
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
 
-          trace!("observe doc update with len:{}", update_len);
+          trace!("collab update with len:{}", update_len);
           if let Err(err) = broadcast_sink.send(msg.into()) {
             trace!("fail to broadcast updates:{}", err);
           }
-
           *modified_at.lock() = Instant::now();
         })
         .unwrap();
@@ -121,7 +123,7 @@ impl CollabBroadcast {
       // Observer the awareness's update and broadcast it to all subscribers.
       let awareness_sub = collab.observe_awareness(move |awareness, event| {
         if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
-          trace!("observe awareness update:{}", awareness_update);
+          trace!("awareness update:{}", awareness_update);
           let payload = Message::Awareness(awareness_update).encode_v1();
           let msg = AwarenessSync::new(cloned_oid.clone(), payload);
           if let Err(err) = broadcast_sink.send(msg.into()) {

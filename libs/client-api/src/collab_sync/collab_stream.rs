@@ -380,6 +380,6 @@ impl SeqNumCounter {
   }
 
   pub fn should_init_sync(&self) -> bool {
-    self.equal_counter.load(Ordering::SeqCst) >= 3
+    self.equal_counter.load(Ordering::SeqCst) >= 6
   }
 }

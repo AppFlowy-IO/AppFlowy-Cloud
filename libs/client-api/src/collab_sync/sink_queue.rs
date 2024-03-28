@@ -1,9 +1,9 @@
 use anyhow::Error;
+use collab_rt_entity::{MsgId, SinkMessage};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
-
-use collab_rt_entity::{MsgId, SinkMessage};
+use tracing::trace;
 
 pub(crate) struct SinkQueue<Msg> {
   queue: BinaryHeap<QueueItem<Msg>>,
@@ -20,6 +20,7 @@ where
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
+    trace!("📩 queue: {}", msg);
     self.queue.push(QueueItem::new(msg, msg_id));
   }
 }

@@ -63,7 +63,7 @@ pub struct CollabSink<Sink> {
   pause: AtomicBool,
   object: SyncObject,
   flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
-  last_sync: Arc<LastSync>,
+  last_sync: Arc<SyncTimestamp>,
   pause_ping: Arc<AtomicBool>,
 }
 
@@ -98,11 +98,10 @@ where
     let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
     let pause_ping = Arc::new(AtomicBool::new(false));
 
-    let last_sync = Arc::new(LastSync::new());
+    let last_sync = Arc::new(SyncTimestamp::new());
     let mut interval = interval(SEND_INTERVAL);
     let weak_notifier = Arc::downgrade(&notifier);
     let weak_flying_messages = Arc::downgrade(&flying_messages);
-    let cloned_last_sync = last_sync.clone();
 
     let origin = CollabOrigin::Client(CollabClient {
       uid,
@@ -115,8 +114,12 @@ where
       msg_id_counter.clone(),
       Arc::downgrade(&message_queue),
       pause_ping.clone(),
+      weak_notifier,
+      last_sync.clone(),
     );
 
+    let cloned_last_sync = last_sync.clone();
+    let weak_notifier = Arc::downgrade(&notifier);
     af_spawn(async move {
       // Initial delay to make sure the first tick waits for SEND_INTERVAL
       sleep(SEND_INTERVAL).await;
@@ -126,7 +129,8 @@ where
           Some(notifier) => {
             // Removing the flying messages allows for the re-sending of the top k messages in the message queue.
             if let Some(flying_messages) = weak_flying_messages.upgrade() {
-              if cloned_last_sync.should_clear().await {
+              // remove all the flying messages if the last sync is expired within the SEND_INTERVAL.
+              if cloned_last_sync.is_time_for_next_sync(SEND_INTERVAL).await {
                 flying_messages.lock().clear();
               }
             }
@@ -163,14 +167,12 @@ where
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
     if !self.state_notifier.borrow().is_syncing() {
-      self.pause_ping.store(true, Ordering::SeqCst);
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
 
     let mut msg_queue = self.message_queue.lock();
     let msg_id = self.msg_id_counter.next();
     let new_msg = f(msg_id);
-    trace!("🔥 queue {}", new_msg);
     msg_queue.push_msg(msg_id, new_msg);
     drop(msg_queue);
     self.merge();
@@ -185,7 +187,6 @@ where
   /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
     if !self.state_notifier.borrow().is_syncing() {
-      self.pause_ping.store(true, Ordering::SeqCst);
       let _ = self.state_notifier.send(SinkState::Syncing);
     }
 
@@ -196,7 +197,6 @@ where
     let mut msg_queue = self.message_queue.lock();
     let msg_id = self.msg_id_counter.next();
     let init_sync = f(msg_id);
-    trace!("🔥queue {}", init_sync);
     msg_queue.push_msg(msg_id, init_sync);
     let _ = self.notifier.send(SinkSignal::Proceed);
   }
@@ -233,6 +233,7 @@ where
   }
 
   pub fn resume(&self) {
+    self.pause_ping.store(false, Ordering::SeqCst);
     self.pause.store(false, Ordering::SeqCst);
   }
 
@@ -271,15 +272,8 @@ where
       }
     }
 
-    if is_valid {
-      if let ServerCollabMessage::ClientAck(ack) = server_message {
-        // Check the seq_num is contiguous.
-        check_update_contiguous(&self.object.object_id, ack.seq_num, seq_num_counter)?;
-      }
-    }
-
     trace!(
-      "{:?}: pending count:{} ids:{}",
+      "{}: pending count:{} ids:{}",
       self.object.object_id,
       message_queue.len(),
       message_queue
@@ -289,12 +283,28 @@ where
         .join(",")
     );
 
-    if message_queue.is_empty() {
-      self.pause_ping.store(false, Ordering::SeqCst);
-      if let Err(e) = self.state_notifier.send(SinkState::Finished) {
-        error!("send sink state failed: {}", e);
+    if is_valid {
+      if let ServerCollabMessage::ClientAck(ack) = server_message {
+        // Check the seq_num is contiguous.
+        check_update_contiguous(&self.object.object_id, ack.seq_num, seq_num_counter)?;
       }
     }
+
+    // Check if all non-ping messages have been sent
+    let all_non_ping_messages_sent = !message_queue
+      .iter()
+      .any(|item| !item.message().is_ping_sync());
+
+    // If there are no non-ping messages left in the queue, it indicates all messages have been sent
+    if all_non_ping_messages_sent {
+      if let Err(e) = self.state_notifier.send(SinkState::Finished) {
+        error!(
+          "Failed to send SinkState::Finished for object_id '{}': {}",
+          self.object.object_id, e
+        );
+      }
+    }
+
     Ok(is_valid)
   }
 
@@ -333,7 +343,7 @@ where
       .collect::<Vec<_>>();
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        self.last_sync.tick().await;
+        self.last_sync.update_timestamp().await;
         match sender.send(messages).await {
           Ok(_) => {
             trace!(
@@ -433,11 +443,6 @@ fn get_next_batch_item(
     }
 
     if flying_messages.contains(&item.msg_id()) {
-      trace!(
-        "{} message:{} is syncing to server, stop sync more messages",
-        object_id,
-        item.msg_id()
-      );
       // because the messages in msg_queue are ordered by priority, so if the message is in the
       // flying messages, it means the message is sending to the remote. So don't send the following
       // messages.
@@ -536,25 +541,26 @@ impl DefaultMsgIdCounter {
   }
 }
 
-struct LastSync {
+pub(crate) struct SyncTimestamp {
   last_sync: Mutex<Instant>,
 }
 
-impl LastSync {
+impl SyncTimestamp {
   fn new() -> Self {
-    let now = std::time::Instant::now();
-    LastSync {
+    let now = Instant::now();
+    SyncTimestamp {
       last_sync: Mutex::new(now.checked_sub(Duration::from_secs(60)).unwrap_or(now)),
     }
   }
 
-  async fn should_clear(&self) -> bool {
-    let now = std::time::Instant::now();
-    now.duration_since(*self.last_sync.lock().await) > SEND_INTERVAL
+  /// Indicate the duration is passed since the last sync. The last sync timestamp will be updated
+  /// after sending a new message
+  pub async fn is_time_for_next_sync(&self, duration: Duration) -> bool {
+    Instant::now().duration_since(*self.last_sync.lock().await) > duration
   }
 
-  async fn tick(&self) {
+  async fn update_timestamp(&self) {
     let mut last_sync_locked = self.last_sync.lock().await;
-    *last_sync_locked = std::time::Instant::now();
+    *last_sync_locked = Instant::now();
   }
 }

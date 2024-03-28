@@ -20,6 +20,7 @@ pub trait SinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn is_client_init_sync(&self) -> bool;
   fn is_server_init_sync(&self) -> bool;
   fn is_update_sync(&self) -> bool;
+  fn is_ping_sync(&self) -> bool;
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ClientCollabMessage {
@@ -184,6 +185,9 @@ impl SinkMessage for ClientCollabMessage {
 
   fn is_update_sync(&self) -> bool {
     matches!(self, ClientCollabMessage::ClientUpdateSync { .. })
+  }
+  fn is_ping_sync(&self) -> bool {
+    matches!(self, ClientCollabMessage::ClientPingSync { .. })
   }
 }
 

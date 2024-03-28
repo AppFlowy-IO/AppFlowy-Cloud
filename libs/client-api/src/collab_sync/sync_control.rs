@@ -3,7 +3,6 @@ use crate::collab_sync::collab_stream::ObserveCollab;
 use crate::collab_sync::{CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncObject};
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
-use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage};
@@ -12,8 +11,8 @@ use futures_util::{SinkExt, StreamExt};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::watch;
-use tokio_stream::wrappers::WatchStream;
+use tokio::sync::{broadcast, watch};
+
 use tracing::trace;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
@@ -31,7 +30,7 @@ pub struct SyncControl<Sink, Stream> {
   /// the updates from the remote.
   #[allow(dead_code)]
   observe_collab: ObserveCollab<Sink, Stream>,
-  sync_state: Arc<watch::Sender<SyncState>>,
+  sync_state_tx: broadcast::Sender<SinkState>,
 }
 
 impl<Sink, Stream> Drop for SyncControl<Sink, Stream> {
@@ -58,8 +57,7 @@ where
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
-    let sync_state = Arc::new(watch::channel(SyncState::InitSyncBegin).0);
-    let (sync_state_tx, sink_state_rx) = watch::channel(SinkState::Init);
+    let (sync_state_tx, _) = broadcast::channel(10);
     debug_assert!(origin.client_user_id().is_some());
 
     // Create the sink and start the sink runner.
@@ -68,7 +66,7 @@ where
       object.clone(),
       sink,
       notifier,
-      sync_state_tx,
+      sync_state_tx.clone(),
       sink_config,
       pause,
     ));
@@ -85,34 +83,34 @@ where
       Arc::downgrade(&sink),
     );
 
-    let weak_sync_state = Arc::downgrade(&sync_state);
-    let mut sink_state_stream = WatchStream::new(sink_state_rx);
-    // Subscribe the sink state stream and update the sync state in the background.
-    af_spawn(async move {
-      while let Some(collab_state) = sink_state_stream.next().await {
-        if let Some(sync_state) = weak_sync_state.upgrade() {
-          match collab_state {
-            SinkState::Syncing => {
-              let _ = sync_state.send(SyncState::Syncing);
-            },
-            SinkState::Finished => {
-              let _ = sync_state.send(SyncState::SyncFinished);
-            },
-            SinkState::Init => {
-              let _ = sync_state.send(SyncState::InitSyncBegin);
-            },
-            SinkState::Pause => {},
-          }
-        }
-      }
-    });
+    // let weak_sync_state = Arc::downgrade(&sync_state);
+    // let mut sink_state_stream = WatchStream::new(sink_state_rx);
+    // // Subscribe the sink state stream and update the sync state in the background.
+    // af_spawn(async move {
+    //   while let Some(collab_state) = sink_state_stream.next().await {
+    //     if let Some(sync_state) = weak_sync_state.upgrade() {
+    //       match collab_state {
+    //         SinkState::Syncing => {
+    //           let _ = sync_state.send(SyncState::Syncing);
+    //         },
+    //         SinkState::Finished => {
+    //           let _ = sync_state.send(SyncState::SyncFinished);
+    //         },
+    //         SinkState::Init => {
+    //           let _ = sync_state.send(SyncState::InitSyncBegin);
+    //         },
+    //         SinkState::Pause => {},
+    //       }
+    //     }
+    //   }
+    // });
 
     Self {
       object,
       origin,
       sink,
       observe_collab: stream,
-      sync_state,
+      sync_state_tx,
     }
   }
 
@@ -126,8 +124,8 @@ where
     self.sink.resume();
   }
 
-  pub fn subscribe_sync_state(&self) -> watch::Receiver<SyncState> {
-    self.sync_state.subscribe()
+  pub fn subscribe_sync_state(&self) -> broadcast::Receiver<SinkState> {
+    self.sync_state_tx.subscribe()
   }
 
   pub fn init_sync(&self, collab: &Collab) {

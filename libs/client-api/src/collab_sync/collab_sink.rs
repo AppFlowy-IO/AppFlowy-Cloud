@@ -11,13 +11,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{broadcast, watch, Mutex};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
 
 #[derive(Clone, Debug)]
 pub enum SinkState {
-  Init,
   /// The sink is syncing the messages to the remote.
   Syncing,
   /// All the messages are synced to the remote.
@@ -26,10 +25,6 @@ pub enum SinkState {
 }
 
 impl SinkState {
-  pub fn is_init(&self) -> bool {
-    matches!(self, SinkState::Init)
-  }
-
   pub fn is_syncing(&self) -> bool {
     matches!(self, SinkState::Syncing)
   }
@@ -60,7 +55,7 @@ pub struct CollabSink<Sink> {
   /// Sending `false` will stop the [CollabSinkRunner].
   notifier: Arc<watch::Sender<SinkSignal>>,
   config: SinkConfig,
-  state_notifier: Arc<watch::Sender<SinkState>>,
+  sync_state_tx: broadcast::Sender<SinkState>,
   pause: AtomicBool,
   object: SyncObject,
   flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
@@ -85,13 +80,12 @@ where
     object: SyncObject,
     sink: Sink,
     notifier: watch::Sender<SinkSignal>,
-    sync_state_tx: watch::Sender<SinkState>,
+    sync_state_tx: broadcast::Sender<SinkState>,
     config: SinkConfig,
     pause: bool,
   ) -> Self {
     let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
-    let state_notifier = Arc::new(sync_state_tx);
     let sender = Arc::new(Mutex::new(sink));
     let msg_queue = SinkQueue::new();
     let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
@@ -151,7 +145,7 @@ where
       message_queue,
       msg_id_counter,
       notifier,
-      state_notifier,
+      sync_state_tx,
       config,
       pause: AtomicBool::new(pause),
       object,
@@ -167,9 +161,7 @@ where
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
-    if !self.state_notifier.borrow().is_syncing() {
-      let _ = self.state_notifier.send(SinkState::Syncing);
-    }
+    let _ = self.sync_state_tx.send(SinkState::Syncing);
 
     let mut msg_queue = self.message_queue.lock();
     let msg_id = self.msg_id_counter.next();
@@ -187,9 +179,7 @@ where
   /// When queue the init message, the sink will clear all the pending messages and send the init
   /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
-    if !self.state_notifier.borrow().is_syncing() {
-      let _ = self.state_notifier.send(SinkState::Syncing);
-    }
+    let _ = self.sync_state_tx.send(SinkState::Syncing);
 
     // Clear all the pending messages and send the init message immediately.
     self.clear();
@@ -230,7 +220,7 @@ where
   pub fn pause(&self) {
     self.pause_ping.store(true, Ordering::SeqCst);
     self.pause.store(true, Ordering::SeqCst);
-    let _ = self.state_notifier.send(SinkState::Pause);
+    let _ = self.sync_state_tx.send(SinkState::Pause);
   }
 
   pub fn resume(&self) {
@@ -287,7 +277,7 @@ where
 
     // If there are no non-ping messages left in the queue, it indicates all messages have been sent
     if all_non_ping_messages_sent {
-      match self.state_notifier.send(SinkState::Finished) {
+      match self.sync_state_tx.send(SinkState::Finished) {
         Ok(_) => trace!("{}: all messages sent", self.object.object_id),
         Err(err) => {
           error!(

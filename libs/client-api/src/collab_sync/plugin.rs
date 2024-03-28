@@ -9,11 +9,11 @@ use collab_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
+
 use tokio_stream::StreamExt;
 
-use crate::collab_sync::{SinkConfig, SyncControl};
-use tokio_stream::wrappers::WatchStream;
-use tracing::trace;
+use crate::collab_sync::{SinkConfig, SinkState, SyncControl};
+use tracing::{info, trace, warn};
 
 use crate::af_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -63,13 +63,25 @@ where
       pause,
     );
 
-    let mut sync_state_stream = WatchStream::new(sync_queue.subscribe_sync_state());
+    let mut sync_state_stream = sync_queue.subscribe_sync_state();
     af_spawn(async move {
-      while let Some(new_state) = sync_state_stream.next().await {
+      while let Ok(sink_state) = sync_state_stream.recv().await {
         if let Some(local_collab) = weak_local_collab.upgrade() {
-          if let Some(local_collab) = local_collab.try_lock() {
-            local_collab.set_sync_state(new_state);
+          match local_collab.try_lock() {
+            None => {
+              warn!("failed to lock collab when updating sync state")
+            },
+            Some(collab) => {
+              info!("update sync state: {:?}", sink_state);
+              let sink_state = match sink_state {
+                SinkState::Syncing => SyncState::Syncing,
+                _ => SyncState::SyncFinished,
+              };
+              collab.set_sync_state(sink_state);
+            },
           }
+        } else {
+          break;
         }
       }
     });
@@ -111,11 +123,6 @@ where
       object,
       channel,
     }
-  }
-
-  pub fn subscribe_sync_state(&self) -> WatchStream<SyncState> {
-    let rx = self.sync_queue.subscribe_sync_state();
-    WatchStream::new(rx)
   }
 }
 

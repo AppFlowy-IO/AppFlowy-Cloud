@@ -1,5 +1,6 @@
 use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
@@ -64,15 +65,17 @@ where
     );
 
     let mut sync_state_stream = sync_queue.subscribe_sync_state();
+    let object_id = object.object_id.clone();
     af_spawn(async move {
       while let Ok(sink_state) = sync_state_stream.recv().await {
         if let Some(local_collab) = weak_local_collab.upgrade() {
-          match local_collab.try_lock() {
-            None => {
-              warn!("failed to lock collab when updating sync state")
-            },
+          match local_collab.try_lock_for(Duration::from_secs(2)) {
+            None => warn!(
+              "{} failed to lock collab when updating sync state",
+              object_id
+            ),
             Some(collab) => {
-              info!("update sync state: {:?}", sink_state);
+              info!("{} update sync state: {:?}", object_id, sink_state);
               let sink_state = match sink_state {
                 SinkState::Syncing => SyncState::Syncing,
                 _ => SyncState::SyncFinished,

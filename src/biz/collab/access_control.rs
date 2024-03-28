@@ -1,7 +1,7 @@
 use crate::api::workspace::COLLAB_PATTERN;
-use crate::biz::casbin::access_control::Action;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
+use access_control::access::Action;
 use actix_router::{Path, ResourceDef, Url};
 use actix_web::http::Method;
 use app_error::AppError;

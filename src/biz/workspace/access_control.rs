@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use crate::api::workspace::{
   WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
 };
-use crate::biz::casbin::access_control::Action;
 use crate::state::UserCache;
+use access_control::access::Action;
 use actix_router::{Path, ResourceDef, Url};
 use anyhow::anyhow;
 use app_error::AppError;

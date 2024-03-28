@@ -4,9 +4,11 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use crate::biz::casbin::access_control::{enable_access_control, AccessControl};
+use access_control::access::{enable_access_control, AccessControl};
 
-use crate::biz::casbin::RealtimeCollabAccessControlImpl;
+use crate::biz::casbin::{
+  CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
+};
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
@@ -213,8 +215,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   );
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
-  let collab_access_control = access_control.new_collab_access_control();
-  let workspace_access_control = access_control.new_workspace_access_control();
+  let collab_access_control = CollabAccessControlImpl::new(access_control.clone());
+  let workspace_access_control = WorkspaceAccessControlImpl::new(access_control.clone());
   let collab_cache = CollabCache::new(redis_client.clone(), pg_pool.clone());
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {

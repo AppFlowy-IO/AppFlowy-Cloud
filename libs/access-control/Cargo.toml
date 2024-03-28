@@ -1,0 +1,25 @@
+[package]
+name = "access-control"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-http.workspace = true
+app-error.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+casbin.workspace = true
+database.workspace = true
+database-entity.workspace = true
+futures-util.workspace = true
+lazy_static.workspace = true
+prometheus-client.workspace = true
+redis.workspace = true
+sqlx = { workspace = true, default-features = false, features = ["postgres"] }
+tracing.workspace = true
+tokio = { workspace = true, features = [
+    "macros",
+    "rt",
+    "time",
+] }
+tokio-stream.workspace = true

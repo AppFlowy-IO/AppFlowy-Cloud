@@ -1,9 +1,9 @@
-use crate::biz::casbin::access_control::{
+use crate::access::{
   load_group_policies, ActionVariant, ObjectType, ToACAction, POLICY_FIELD_INDEX_OBJECT,
   POLICY_FIELD_INDEX_SUBJECT,
 };
-use crate::biz::casbin::metrics::MetricsCalState;
-use crate::biz::casbin::request::{GroupPolicyRequest, PolicyRequest, WorkspacePolicyRequest};
+use crate::metrics::MetricsCalState;
+use crate::request::{GroupPolicyRequest, PolicyRequest, WorkspacePolicyRequest};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
@@ -223,8 +223,8 @@ impl EnforcerGroup for NoEnforceGroup {
 
 #[cfg(test)]
 mod tests {
-  use crate::biz::casbin::access_control::{casbin_model, Action, ActionVariant, ObjectType};
-  use crate::biz::casbin::enforcer::{AFEnforcer, EnforcerGroup, NoEnforceGroup};
+  use crate::access::{casbin_model, Action, ActionVariant, ObjectType};
+  use crate::enforcer::{AFEnforcer, EnforcerGroup, NoEnforceGroup};
   use async_trait::async_trait;
   use casbin::{CoreApi, MemoryAdapter};
   use database_entity::dto::{AFAccessLevel, AFRole};

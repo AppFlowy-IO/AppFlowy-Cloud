@@ -1,4 +1,4 @@
-use crate::biz::casbin::access_control::{ActionVariant, ObjectType, ToACAction};
+use crate::access::{ActionVariant, ObjectType, ToACAction};
 
 pub struct GroupPolicyRequest<'a> {
   pub guid: &'a str,

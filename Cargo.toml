@@ -164,6 +164,7 @@ bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
 collab = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
+collab-document = { version = "0.1.0" }
 tracing = { version = "0.1.40"}
 collab-entity = { version = "0.1.0" }
 gotrue = { path = "libs/gotrue" }
@@ -184,11 +185,10 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "354a94be31e89f98cc52ab85991c7a11b091e898" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "354a94be31e89f98cc52ab85991c7a11b091e898" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "354a94be31e89f98cc52ab85991c7a11b091e898" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "354a94be31e89f98cc52ab85991c7a11b091e898" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "174aa119e55b1458c2c63df4fe0373dc9bb6d71c" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "174aa119e55b1458c2c63df4fe0373dc9bb6d71c" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "174aa119e55b1458c2c63df4fe0373dc9bb6d71c" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "174aa119e55b1458c2c63df4fe0373dc9bb6d71c" }
 
 [features]
-custom_env= []
 ai_enable = []

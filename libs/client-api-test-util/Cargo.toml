@@ -14,6 +14,7 @@ tokio-stream = "0.1.14"
 tracing.workspace = true
 collab-folder.workspace = true
 collab = { workspace = true, features = ["async-plugin"] }
+collab-document.workspace = true
 client-api = { path = "../client-api", features = ["collab-sync", "test_util"] }
 once_cell = "1.19.0"
 tempfile = "3.9.0"

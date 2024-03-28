@@ -19,6 +19,7 @@ use database_entity::dto::{
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
+
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::ops::DerefMut;

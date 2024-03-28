@@ -294,6 +294,7 @@ where
           },
           CollabType::DatabaseRow => {},
           CollabType::UserAwareness => {},
+          CollabType::Empty => {},
         }
       }
     }

@@ -11,6 +11,7 @@ use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
+
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use database_entity::dto::{
@@ -480,6 +481,22 @@ impl TestClient {
     collab_type: CollabType,
   ) -> String {
     let object_id = Uuid::new_v4().to_string();
+    // assert_eq!(
+    //   collab_type,
+    //   CollabType::Document,
+    //   "only support document yet"
+    // );
+    //
+    // let document_data = default_document_data();
+    // let collab = Arc::new(MutexCollab::new(
+    //   CollabOrigin::Empty,
+    //   &object_id,
+    //   vec![],
+    //   false,
+    // ));
+    // let _ = Document::create_with_data(collab.clone(), document_data).unwrap();
+    // let encode_collab = collab.encode_collab_v1();
+
     self
       .create_and_edit_collab_with_data(object_id.clone(), workspace_id, collab_type, None)
       .await;

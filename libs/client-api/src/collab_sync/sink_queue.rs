@@ -1,13 +1,11 @@
 use anyhow::Error;
+use collab_rt_entity::{MsgId, SinkMessage};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
-
-use collab_rt_entity::{MsgId, SinkMessage};
+use tracing::trace;
 
 pub(crate) struct SinkQueue<Msg> {
-  #[allow(dead_code)]
-  uid: i64,
   queue: BinaryHeap<QueueItem<Msg>>,
 }
 
@@ -15,14 +13,14 @@ impl<Msg> SinkQueue<Msg>
 where
   Msg: SinkMessage,
 {
-  pub(crate) fn new(uid: i64) -> Self {
+  pub(crate) fn new() -> Self {
     Self {
-      uid,
       queue: Default::default(),
     }
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
+    trace!("📩 queue: {}", msg);
     self.queue.push(QueueItem::new(msg, msg_id));
   }
 }
@@ -50,7 +48,6 @@ where
 #[derive(Debug, Clone)]
 pub(crate) struct QueueItem<Msg> {
   inner: Msg,
-  // TODO(nathan): user inner's msg_id
   msg_id: MsgId,
 }
 

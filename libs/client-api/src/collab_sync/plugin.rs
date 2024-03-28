@@ -1,6 +1,7 @@
 use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::{Arc, Weak};
 
+use crate::collab_sync::{SinkConfig, SinkState, SyncControl};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
@@ -10,13 +11,9 @@ use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
 use tokio_stream::StreamExt;
-
-use crate::collab_sync::SyncControl;
-use tokio_stream::wrappers::WatchStream;
 use tracing::trace;
 
 use crate::af_spawn;
-use crate::collab_sync::sink_config::SinkConfig;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
@@ -53,7 +50,7 @@ where
     pause: bool,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
-    let weak_local_collab = collab.clone();
+    let _weak_local_collab = collab.clone();
     let sync_queue = SyncControl::new(
       object.clone(),
       origin,
@@ -64,16 +61,23 @@ where
       pause,
     );
 
-    let mut sync_state_stream = WatchStream::new(sync_queue.subscribe_sync_state());
-    af_spawn(async move {
-      while let Some(new_state) = sync_state_stream.next().await {
-        if let Some(local_collab) = weak_local_collab.upgrade() {
-          if let Some(local_collab) = local_collab.try_lock() {
-            local_collab.set_sync_state(new_state);
+    if let Some(local_collab) = collab.upgrade() {
+      let mut sync_state_stream = sync_queue.subscribe_sync_state();
+      let weak_state = Arc::downgrade(local_collab.lock().get_state());
+      af_spawn(async move {
+        while let Ok(sink_state) = sync_state_stream.recv().await {
+          if let Some(state) = weak_state.upgrade() {
+            let sync_state = match sink_state {
+              SinkState::Syncing => SyncState::Syncing,
+              _ => SyncState::SyncFinished,
+            };
+            state.set_sync_state(sync_state);
+          } else {
+            break;
           }
         }
-      }
-    });
+      });
+    }
 
     let sync_queue = Arc::new(sync_queue);
     let weak_local_collab = collab;
@@ -112,11 +116,6 @@ where
       object,
       channel,
     }
-  }
-
-  pub fn subscribe_sync_state(&self) -> WatchStream<SyncState> {
-    let rx = self.sync_queue.subscribe_sync_state();
-    WatchStream::new(rx)
   }
 }
 

@@ -1,5 +1,3 @@
-use crate::collab::util::generate_random_string;
-use client_api::collab_sync::NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC;
 use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
@@ -279,8 +277,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
 }
 
 #[tokio::test]
-async fn init_sync_when_missing_updates_test() {
-  let text = generate_random_string(1024);
+async fn second_client_missing_broadcast_and_then_pull_missing_updates_test() {
   let collab_type = CollabType::Document;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
@@ -299,20 +296,7 @@ async fn init_sync_when_missing_updates_test() {
     )
     .await;
 
-  // Client_1 makes the first edit by inserting "task 1".
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("1", "task 1");
-  client_1
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-
-  // Client_2 opens the collaboration, triggering an initial sync to receive "task 1".
+  // after client 2 finish init sync and then disable receive message
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
@@ -320,95 +304,85 @@ async fn init_sync_when_missing_updates_test() {
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
-
-  // Validate both clients have "task 1" after the initial sync.
-  assert_eq!(
-    client_1.get_edit_collab_json(&object_id).await,
-    json!({ "1": "task 1" })
-  );
-  assert_eq!(
-    client_2.get_edit_collab_json(&object_id).await,
-    json!({ "1": "task 1" })
-  );
-
-  // Simulate client_2 missing updates by enabling skip_realtime_message.
   client_2.ws_client.disable_receive_message();
-  client_1
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
 
-  // Client_1 inserts "task 2", which client_2 misses due to skipping realtime messages.
-  for _ in 0..2 * NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
-    client_1
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .collab
-      .lock()
-      .insert("2", text.clone());
-  }
+  // Client_1 makes the first edit by inserting "task 1".
   client_1
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-
-  client_2
     .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
     .lock()
-    .insert("3", "task 3");
-  client_2
+    .insert("content", "hello world");
+  client_1
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
 
-  // Validate client_1's view includes "task 2", and "task 3", while client_2 missed key2 and key3.
-  assert_client_collab_include_value(
-    &mut client_1,
-    &object_id,
-    json!({ "1": "task 1", "2": text.clone(), "3": "task 3" }),
-  )
-  .await
-  .unwrap();
-  assert_eq!(
-    client_2.get_edit_collab_json(&object_id).await,
-    json!({ "1": "task 1", "3": "task 3" })
-  );
-
-  // client_2 resumes receiving messages
-  //
-  // 1. **Client 1 Initiates a Sync**: This action sends a sync message to the server.
-  // 2. **Server Broadcasts to Client 2**: The server, upon receiving the sync message
-  // from Client 1, broadcasts a message to Client 2.
-  // 3. **Sequence Number Check**: The sequence number (seq num) of the broadcast message received
-  // by Client 2 is checked against the sequence number of the sync message from Client 1.
-  // 4. **Condition for Init Sync**: If the sequence number of Client 2's broadcast message is
-  // less than the sequence number of the sync message from Client 1, this condition triggers an
-  // initialization sync for Client 2.
-  //
-  // This ensures that all clients are synchronized and have the latest information, with the initiation sync being triggered based on the comparison of sequence numbers to maintain consistency across the system.
-  println!("client_2 enable_receive_message");
+  // sleep two seconds to make sure missing the server broadcast message
+  sleep(Duration::from_secs(2)).await;
+  // after a period of time, client 2 should trigger init sync
   client_2.ws_client.enable_receive_message();
+
+  let expected_json = json!({
+    "content": "hello world"
+  });
+  assert_client_collab_include_value(&mut client_2, &object_id, expected_json)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn client_pending_update_test() {
+  let collab_type = CollabType::Document;
+  let mut client_1 = TestClient::new_user().await;
+  let mut client_2 = TestClient::new_user().await;
+  // Create a collaborative document with client_1 and invite client_2 to collaborate.
+  let workspace_id = client_1.workspace_id().await;
+  let object_id = client_1
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .await;
+  client_1
+    .add_collab_member(
+      &workspace_id,
+      &object_id,
+      &client_2,
+      AFAccessLevel::ReadAndWrite,
+    )
+    .await;
+
+  // after client 2 finish init sync and then disable receive message
+  client_2
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+  client_2.ws_client.disable_receive_message();
+
+  // Client_1 makes the first edit by inserting "task 1".
   client_1
     .collabs
     .get_mut(&object_id)
     .unwrap()
     .collab
     .lock()
-    .insert("4", "task 4");
+    .insert("content", "hello world");
   client_1
     .wait_object_sync_complete(&object_id)
     .await
     .unwrap();
 
-  assert_client_collab_include_value(
-    &mut client_2,
-    &object_id,
-    json!({ "1": "task 1", "2": text.clone(), "3": "task 3", "4": "task 4" }),
-  )
-  .await
-  .unwrap();
+  // sleep two seconds to make sure missing the server broadcast message
+  sleep(Duration::from_secs(2)).await;
+  // after a period of time, client 2 should trigger init sync
+  client_2.ws_client.enable_receive_message();
+
+  let expected_json = json!({
+    "content": "hello world"
+  });
+  assert_client_collab_include_value(&mut client_2, &object_id, expected_json)
+    .await
+    .unwrap();
 }

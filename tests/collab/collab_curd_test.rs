@@ -46,7 +46,7 @@ async fn batch_insert_collab_success_test() {
     .map(|i| CollabParams {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap(),
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Empty,
       override_if_exist: false,
     })
     .collect::<Vec<_>>();
@@ -91,7 +91,7 @@ async fn create_collab_params_compatibility_serde_test() {
     object_id: "object_id".to_string(),
     encoded_collab_v1: vec![0, 200],
     workspace_id: "workspace_id".to_string(),
-    collab_type: CollabType::Document,
+    collab_type: CollabType::Empty,
   });
 
   let new_version_create_params =
@@ -133,7 +133,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     inner: CollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Empty,
       override_if_exist: false,
     },
     workspace_id: workspace_id.clone(),
@@ -158,7 +158,7 @@ async fn create_collab_compatibility_with_json_params_test() {
       workspace_id,
       inner: QueryCollab {
         object_id: object_id.clone(),
-        collab_type: CollabType::Document,
+        collab_type: CollabType::Empty,
       },
     })
     .send()
@@ -190,7 +190,7 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
     params_list: vec![CollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Empty,
       override_if_exist: false,
     }],
   }
@@ -220,7 +220,7 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
       workspace_id,
       inner: QueryCollab {
         object_id: object_id.clone(),
-        collab_type: CollabType::Document,
+        collab_type: CollabType::Empty,
       },
     })
     .send()

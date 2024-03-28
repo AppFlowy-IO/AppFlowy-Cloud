@@ -1,7 +1,7 @@
 use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 
+use crate::collab_sync::{SinkConfig, SinkState, SyncControl};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
@@ -10,11 +10,8 @@ use collab_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
-
 use tokio_stream::StreamExt;
-
-use crate::collab_sync::{SinkConfig, SinkState, SyncControl};
-use tracing::{info, trace, warn};
+use tracing::trace;
 
 use crate::af_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -53,7 +50,7 @@ where
     pause: bool,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
-    let weak_local_collab = collab.clone();
+    let _weak_local_collab = collab.clone();
     let sync_queue = SyncControl::new(
       object.clone(),
       origin,
@@ -64,30 +61,23 @@ where
       pause,
     );
 
-    let mut sync_state_stream = sync_queue.subscribe_sync_state();
-    let object_id = object.object_id.clone();
-    af_spawn(async move {
-      while let Ok(sink_state) = sync_state_stream.recv().await {
-        if let Some(local_collab) = weak_local_collab.upgrade() {
-          match local_collab.try_lock_for(Duration::from_secs(2)) {
-            None => warn!(
-              "{} failed to lock collab when updating sync state",
-              object_id
-            ),
-            Some(collab) => {
-              info!("{} update sync state: {:?}", object_id, sink_state);
-              let sink_state = match sink_state {
-                SinkState::Syncing => SyncState::Syncing,
-                _ => SyncState::SyncFinished,
-              };
-              collab.set_sync_state(sink_state);
-            },
+    if let Some(local_collab) = collab.upgrade() {
+      let mut sync_state_stream = sync_queue.subscribe_sync_state();
+      let weak_state = Arc::downgrade(local_collab.lock().get_state());
+      af_spawn(async move {
+        while let Ok(sink_state) = sync_state_stream.recv().await {
+          if let Some(state) = weak_state.upgrade() {
+            let sync_state = match sink_state {
+              SinkState::Syncing => SyncState::Syncing,
+              _ => SyncState::SyncFinished,
+            };
+            state.set_sync_state(sync_state);
+          } else {
+            break;
           }
-        } else {
-          break;
         }
-      }
-    });
+      });
+    }
 
     let sync_queue = Arc::new(sync_queue);
     let weak_local_collab = collab;

@@ -277,14 +277,11 @@ where
 
     // If there are no non-ping messages left in the queue, it indicates all messages have been sent
     if all_non_ping_messages_sent {
-      match self.sync_state_tx.send(SinkState::Finished) {
-        Ok(_) => trace!("{}: all messages sent", self.object.object_id),
-        Err(err) => {
-          error!(
-            "Failed to send SinkState::Finished for object_id '{}': {}",
-            self.object.object_id, err
-          );
-        },
+      if let Err(err) = self.sync_state_tx.send(SinkState::Finished) {
+        error!(
+          "Failed to send SinkState::Finished for object_id '{}': {}",
+          self.object.object_id, err
+        );
       }
     } else {
       trace!(

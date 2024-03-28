@@ -56,6 +56,13 @@ jobs:
           sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml
           cat docker-compose.yml
 
+      - uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Run Docker-Compose
         run: |
           docker compose up -d

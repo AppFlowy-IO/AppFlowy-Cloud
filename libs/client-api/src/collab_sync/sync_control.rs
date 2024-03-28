@@ -408,6 +408,7 @@ where
         .await
     {
       if let Some(lock_guard) = collab.try_lock() {
+        trace!("Start pull missing updates for {}", object.object_id);
         start_sync(origin.clone(), object, &lock_guard, sink);
       }
     }
@@ -498,6 +499,9 @@ impl LastSyncTime {
 }
 
 /// Check if the update is contiguous.
+///
+/// when client send updates to the server, the seq_num should be increased otherwise which means the
+/// sever might lack of some updates for given client.
 pub fn check_update_contiguous(
   object_id: &str,
   current_seq_num: u32,
@@ -510,8 +514,8 @@ pub fn check_update_contiguous(
     current_seq_num,
   );
 
-  // If the previous seq_num is 0, which means the doc is not synced before.
-  if prev_seq_num == 0 {
+  // if the seq_num is 0, it means the client is just connected to the server.
+  if prev_seq_num == 0 && current_seq_num == 0 {
     return Ok(());
   }
 

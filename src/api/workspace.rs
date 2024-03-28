@@ -627,7 +627,7 @@ async fn create_collab_snapshot_handler(
     .collab_access_control_storage
     .get_collab_encoded(
       &uid,
-      QueryCollabParams::new(&object_id, collab_type, &workspace_id),
+      QueryCollabParams::new(&object_id, collab_type.clone(), &workspace_id),
       false,
     )
     .await?
@@ -640,6 +640,7 @@ async fn create_collab_snapshot_handler(
       object_id,
       workspace_id,
       encoded_collab_v1,
+      collab_type,
     })
     .await?;
 

@@ -208,7 +208,7 @@ impl SnapshotCommandRunner {
     match command {
       SnapshotCommand::InsertSnapshot(params) => {
         let mut queue = self.queue.write().await;
-        let item = queue.generate_item(params.workspace_id, params.object_id);
+        let item = queue.generate_item(params.workspace_id, params.object_id, params.collab_type);
         let key = SnapshotKey::from_object_id(&item.object_id);
         queue.push_item(item);
         drop(queue);
@@ -242,11 +242,11 @@ impl SnapshotCommandRunner {
       Ok(Some(data)) => {
         // This step is not necessary, but use it to check if the data is valid. Will be removed
         // in the future.
-        match check_encoded_collab_data(&next_item.object_id, &data) {
+        match check_encoded_collab_data(&next_item.object_id, &data, &next_item.collab_type) {
           Ok(_) => data,
           Err(err) => {
             error!(
-              "Can not decode the data into collab when writing snapshot: {}, {}",
+              "Collab doc state is not correct when creating snapshot: {},{}",
               next_item.object_id, err
             );
             return Ok(());

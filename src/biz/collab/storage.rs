@@ -9,6 +9,7 @@ use collab::core::collab::DocStateSource;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
+use collab_entity::CollabType;
 use collab_rt::command::{RTCommand, RTCommandSender};
 use database::collab::{
   is_collab_exists, CollabStorage, CollabStorageAccessControl, DatabaseResult,
@@ -316,14 +317,27 @@ where
   }
 }
 
-pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), anyhow::Error> {
+pub fn check_encoded_collab_data(
+  object_id: &str,
+  data: &[u8],
+  collab_type: &CollabType,
+) -> Result<(), anyhow::Error> {
   let encoded_collab = EncodedCollab::decode_from_bytes(data)?;
-  let _ = Collab::new_with_doc_state(
+  let collab = Collab::new_with_doc_state(
     CollabOrigin::Empty,
     object_id,
     DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
     vec![],
     false,
   )?;
+
+  match collab_type {
+    CollabType::Document => collab_document::document::Document::validate(&collab)?,
+    CollabType::Database => {},
+    CollabType::Folder => collab_folder::Folder::validate(&collab)?,
+    CollabType::DatabaseRow => {},
+    _ => {},
+  }
+
   Ok(())
 }

@@ -137,12 +137,14 @@ where
             let cloned_workspace_id = self.workspace_id.clone();
             let cloned_object_id = object_id.to_string();
             let storage = self.storage.clone();
+            let collab_type = self.collab_type.clone();
             event!(Level::DEBUG, "Creating collab snapshot");
             let _ = tokio::task::spawn_blocking(move || {
               let params = InsertSnapshotParams {
                 object_id: cloned_object_id,
                 encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap(),
                 workspace_id: cloned_workspace_id,
+                collab_type,
               };
 
               tokio::spawn(async move {

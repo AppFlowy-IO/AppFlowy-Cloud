@@ -113,9 +113,13 @@ impl CollabCache {
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
-    if let Err(err) = check_encoded_collab_data(&params.object_id, &params.encoded_collab_v1) {
+    if let Err(err) = check_encoded_collab_data(
+      &params.object_id,
+      &params.encoded_collab_v1,
+      &params.collab_type,
+    ) {
       let msg = format!(
-        "Can not decode the data into collab:{}, {}",
+        "collab doc state is not correct:{},{}",
         params.object_id, err
       );
       return Err(AppError::InvalidRequest(msg));

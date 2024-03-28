@@ -1,9 +1,9 @@
 use crate::util::channel_ext::UnboundedSenderSink;
 use crate::RealtimeAccessControl;
 use async_trait::async_trait;
-use collab_rt_entity::collab_msg::{ClientCollabMessage, CollabSinkMessage};
-use collab_rt_entity::message::{MessageByObjectId, RealtimeMessage};
 use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::{ClientCollabMessage, SinkMessage};
+use collab_rt_entity::{MessageByObjectId, RealtimeMessage};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};

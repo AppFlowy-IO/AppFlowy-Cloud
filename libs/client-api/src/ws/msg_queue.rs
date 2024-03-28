@@ -1,6 +1,6 @@
 use client_websocket::Message;
-use collab_rt_entity::collab_msg::{ClientCollabMessage, MsgId};
-use collab_rt_entity::message::RealtimeMessage;
+use collab_rt_entity::RealtimeMessage;
+use collab_rt_entity::{ClientCollabMessage, MsgId};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::{Arc, Weak};
 use std::time::Duration;

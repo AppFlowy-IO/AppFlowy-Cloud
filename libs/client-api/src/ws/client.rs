@@ -434,7 +434,7 @@ fn handle_collab_message(
       if let Some(channels) = collab_channels.read().get(&object_id) {
         for channel in channels.iter() {
           if let Some(channel) = channel.upgrade() {
-            trace!("🌐receive server message: {}", collab_msg);
+            trace!("🌐receive server: {}", collab_msg);
             channel.forward_to_stream(collab_msg.clone());
           }
         }

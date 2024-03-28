@@ -174,15 +174,15 @@ pub enum CollabMessage {
   ServerBroadcast(BroadcastSync),
 }
 
-impl crate::CollabMessage {
-  pub fn msg_id(&self) -> Option<crate::MsgId> {
+impl CollabMessage {
+  pub fn msg_id(&self) -> Option<MsgId> {
     match self {
-      crate::CollabMessage::ClientInitSync(value) => Some(value.msg_id),
-      crate::CollabMessage::ClientUpdateSync(value) => Some(value.msg_id),
-      crate::CollabMessage::ClientAck(value) => Some(value.msg_id),
-      crate::CollabMessage::ServerInitSync(value) => Some(value.msg_id),
-      crate::CollabMessage::ServerBroadcast(_) => None,
-      crate::CollabMessage::AwarenessSync(_) => None,
+      CollabMessage::ClientInitSync(value) => Some(value.msg_id),
+      CollabMessage::ClientUpdateSync(value) => Some(value.msg_id),
+      CollabMessage::ClientAck(value) => Some(value.msg_id),
+      CollabMessage::ServerInitSync(value) => Some(value.msg_id),
+      CollabMessage::ServerBroadcast(_) => None,
+      CollabMessage::AwarenessSync(_) => None,
     }
   }
 
@@ -191,12 +191,12 @@ impl crate::CollabMessage {
   }
   pub fn payload(&self) -> &Bytes {
     match self {
-      crate::CollabMessage::ClientInitSync(value) => &value.payload,
-      crate::CollabMessage::ClientUpdateSync(value) => &value.payload,
-      crate::CollabMessage::ClientAck(value) => &value.payload,
-      crate::CollabMessage::ServerInitSync(value) => &value.payload,
-      crate::CollabMessage::ServerBroadcast(value) => &value.payload,
-      crate::CollabMessage::AwarenessSync(value) => &value.payload,
+      CollabMessage::ClientInitSync(value) => &value.payload,
+      CollabMessage::ClientUpdateSync(value) => &value.payload,
+      CollabMessage::ClientAck(value) => &value.payload,
+      CollabMessage::ServerInitSync(value) => &value.payload,
+      CollabMessage::ServerBroadcast(value) => &value.payload,
+      CollabMessage::AwarenessSync(value) => &value.payload,
     }
   }
   pub fn is_empty(&self) -> bool {
@@ -204,12 +204,12 @@ impl crate::CollabMessage {
   }
   pub fn origin(&self) -> &CollabOrigin {
     match self {
-      crate::CollabMessage::ClientInitSync(value) => &value.origin,
-      crate::CollabMessage::ClientUpdateSync(value) => &value.origin,
-      crate::CollabMessage::ClientAck(value) => &value.origin,
-      crate::CollabMessage::ServerInitSync(value) => &value.origin,
-      crate::CollabMessage::ServerBroadcast(value) => &value.origin,
-      crate::CollabMessage::AwarenessSync(value) => &value.origin,
+      CollabMessage::ClientInitSync(value) => &value.origin,
+      CollabMessage::ClientUpdateSync(value) => &value.origin,
+      CollabMessage::ClientAck(value) => &value.origin,
+      CollabMessage::ServerInitSync(value) => &value.origin,
+      CollabMessage::ServerBroadcast(value) => &value.origin,
+      CollabMessage::AwarenessSync(value) => &value.origin,
     }
   }
 
@@ -219,83 +219,66 @@ impl crate::CollabMessage {
 
   pub fn object_id(&self) -> &str {
     match self {
-      crate::CollabMessage::ClientInitSync(value) => &value.object_id,
-      crate::CollabMessage::ClientUpdateSync(value) => &value.object_id,
-      crate::CollabMessage::ClientAck(value) => &value.object_id,
-      crate::CollabMessage::ServerInitSync(value) => &value.object_id,
-      crate::CollabMessage::ServerBroadcast(value) => &value.object_id,
-      crate::CollabMessage::AwarenessSync(value) => &value.object_id,
+      CollabMessage::ClientInitSync(value) => &value.object_id,
+      CollabMessage::ClientUpdateSync(value) => &value.object_id,
+      CollabMessage::ClientAck(value) => &value.object_id,
+      CollabMessage::ServerInitSync(value) => &value.object_id,
+      CollabMessage::ServerBroadcast(value) => &value.object_id,
+      CollabMessage::AwarenessSync(value) => &value.object_id,
     }
   }
 }
 
-impl Display for crate::CollabMessage {
+impl Display for CollabMessage {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      crate::CollabMessage::ClientInitSync(value) => Display::fmt(&value, f),
-      crate::CollabMessage::ClientUpdateSync(value) => Display::fmt(&value, f),
-      crate::CollabMessage::ClientAck(value) => Display::fmt(&value, f),
-      crate::CollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
-      crate::CollabMessage::ServerBroadcast(value) => Display::fmt(&value, f),
-      crate::CollabMessage::AwarenessSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientInitSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientUpdateSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientAck(value) => Display::fmt(&value, f),
+      CollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+      CollabMessage::ServerBroadcast(value) => Display::fmt(&value, f),
+      CollabMessage::AwarenessSync(value) => Display::fmt(&value, f),
     }
   }
 }
 
-impl From<ClientCollabMessage> for crate::CollabMessage {
-  fn from(value: ClientCollabMessage) -> Self {
-    match value {
-      ClientCollabMessage::ClientInitSync { data, .. } => {
-        crate::CollabMessage::ClientInitSync(data)
-      },
-      ClientCollabMessage::ClientUpdateSync { data, .. } => {
-        crate::CollabMessage::ClientUpdateSync(data)
-      },
-      ClientCollabMessage::ServerInitSync(data) => crate::CollabMessage::ServerInitSync(data),
-      ClientCollabMessage::ClientAwarenessSync(data) => {
-        crate::CollabMessage::ClientUpdateSync(data)
-      },
-    }
-  }
-}
-
-impl From<CollabAck> for crate::CollabMessage {
+impl From<CollabAck> for CollabMessage {
   fn from(value: CollabAck) -> Self {
-    crate::CollabMessage::ClientAck(value)
+    CollabMessage::ClientAck(value)
   }
 }
 
-impl From<BroadcastSync> for crate::CollabMessage {
+impl From<BroadcastSync> for CollabMessage {
   fn from(value: BroadcastSync) -> Self {
-    crate::CollabMessage::ServerBroadcast(value)
+    CollabMessage::ServerBroadcast(value)
   }
 }
 
-impl From<InitSync> for crate::CollabMessage {
+impl From<InitSync> for CollabMessage {
   fn from(value: InitSync) -> Self {
-    crate::CollabMessage::ClientInitSync(value)
+    CollabMessage::ClientInitSync(value)
   }
 }
 
-impl From<UpdateSync> for crate::CollabMessage {
+impl From<UpdateSync> for CollabMessage {
   fn from(value: UpdateSync) -> Self {
-    crate::CollabMessage::ClientUpdateSync(value)
+    CollabMessage::ClientUpdateSync(value)
   }
 }
 
-impl From<AwarenessSync> for crate::CollabMessage {
+impl From<AwarenessSync> for CollabMessage {
   fn from(value: AwarenessSync) -> Self {
-    crate::CollabMessage::AwarenessSync(value)
+    CollabMessage::AwarenessSync(value)
   }
 }
 
-impl From<ServerInit> for crate::CollabMessage {
+impl From<ServerInit> for CollabMessage {
   fn from(value: ServerInit) -> Self {
-    crate::CollabMessage::ServerInitSync(value)
+    CollabMessage::ServerInitSync(value)
   }
 }
 
-impl TryFrom<RealtimeMessage> for crate::CollabMessage {
+impl TryFrom<RealtimeMessage> for CollabMessage {
   type Error = anyhow::Error;
 
   fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
@@ -306,8 +289,8 @@ impl TryFrom<RealtimeMessage> for crate::CollabMessage {
   }
 }
 
-impl From<crate::CollabMessage> for RealtimeMessage {
-  fn from(msg: crate::CollabMessage) -> Self {
+impl From<CollabMessage> for RealtimeMessage {
+  fn from(msg: CollabMessage) -> Self {
     Self::Collab(msg)
   }
 }

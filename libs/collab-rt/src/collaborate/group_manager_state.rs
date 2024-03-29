@@ -119,7 +119,6 @@ impl GroupManagementState {
     if let Some(entry) = entry {
       let group = entry.1;
       group.stop().await;
-      group.flush_collab().await;
     } else {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);

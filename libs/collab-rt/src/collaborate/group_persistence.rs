@@ -1,18 +1,19 @@
 use crate::collaborate::group::EditState;
 use crate::data_validation::validate_collab;
+
 use anyhow::anyhow;
 use app_error::AppError;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
-use std::ops::Deref;
-use std::rc::Rc;
+
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
-use tokio::time::interval;
-use tracing::{error, info};
+use tokio::sync::{mpsc, Mutex};
+use tokio::time::{interval, sleep};
+use tracing::{error, info, warn};
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -20,7 +21,7 @@ pub(crate) struct GroupPersistence<S> {
   storage: Arc<S>,
   uid: i64,
   edit_state: Rc<EditState>,
-  collab: Rc<Mutex<Collab>>,
+  collab: Weak<Mutex<Collab>>,
   collab_type: CollabType,
 }
 
@@ -34,7 +35,7 @@ where
     uid: i64,
     storage: Arc<S>,
     edit_state: Rc<EditState>,
-    collab: Rc<Mutex<Collab>>,
+    collab: Weak<Mutex<Collab>>,
     collab_type: CollabType,
   ) -> Self {
     Self {
@@ -48,38 +49,91 @@ where
     }
   }
 
-  pub async fn run(self) {
-    let mut interval = interval(Duration::from_secs(3 * 60));
+  pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<Rc<Mutex<Collab>>>) {
+    // defer start saving after 5 seconds
+    sleep(Duration::from_secs(5)).await;
+    let mut interval = interval(Duration::from_secs(180)); // 3 minutes
+
     loop {
-      interval.tick().await;
-
-      if self.edit_state.should_save_to_disk(100, 3 * 60) {
-        let result = if let Ok(lock_guard) = self.collab.try_lock() {
-          get_encode_collab(&self.object_id, lock_guard.deref(), &self.collab_type)
-        } else {
-          continue;
-        };
-
-        if let Ok(params) = result {
-          info!("[realtime] save collab to disk: {}", self.object_id);
-          match self
-            .storage
-            .insert_or_update_collab(&self.workspace_id, &self.uid, params)
-            .await
-            .map_err(|err| {
-              error!("fail to create new collab in plugin: {:?}", err);
-              err
-            }) {
-            Ok(_) => {
-              self.edit_state.tick();
-            },
-            Err(err) => {
-              error!("fail to save collab to disk: {:?}", err)
-            },
+      tokio::select! {
+        _ = interval.tick() => {
+          if self.attempt_collab_save().await {
+            break;
           }
+        },
+        collab = destroy_group_rx.recv() => {
+          if let Some(collab) = collab {
+            self.force_save(collab).await;
+          }
+          break;
         }
       }
     }
+  }
+
+  async fn force_save(&self, collab: Rc<Mutex<Collab>>) {
+    let lock_guard = collab.lock().await;
+    let result = get_encode_collab(&self.object_id, &lock_guard, &self.collab_type);
+    drop(lock_guard);
+
+    match result {
+      Ok(params) => {
+        info!("[realtime] save collab to disk: {}", self.object_id);
+        match self
+          .storage
+          .insert_or_update_collab(&self.workspace_id, &self.uid, params)
+          .await
+        {
+          Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
+          Err(err) => error!("fail to save collab to disk: {:?}", err),
+        }
+      },
+      Err(err) => {
+        warn!("fail to encode collab: {:?}", err);
+      },
+    }
+  }
+
+  /// return true if the collab has been dropped. Otherwise, return false
+  async fn attempt_collab_save(&self) -> bool {
+    let collab = match self.collab.upgrade() {
+      Some(collab) => collab,
+      None => return true, // End the loop if the collab has been dropped
+    };
+
+    // Check if conditions for saving to disk are not met
+    if !self.edit_state.should_save_to_disk() {
+      // 100 edits or 1 hour
+      return false;
+    }
+
+    // Attempt to lock the collab; skip saving if unable
+    let lock_guard = match collab.try_lock() {
+      Ok(lock) => lock,
+      Err(_) => return false,
+    };
+    let result = get_encode_collab(&self.object_id, &lock_guard, &self.collab_type);
+    drop(lock_guard);
+
+    match result {
+      Ok(params) => {
+        info!("[realtime] save collab to disk: {}", self.object_id);
+        match self
+          .storage
+          .insert_or_update_collab(&self.workspace_id, &self.uid, params)
+          .await
+        {
+          Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
+          Err(err) => error!("fail to save collab to disk: {:?}", err),
+        }
+      },
+      Err(err) => {
+        warn!("fail to encode collab: {:?}", err);
+      },
+    }
+
+    // Continue the loop
+    false
   }
 }
 

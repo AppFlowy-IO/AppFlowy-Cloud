@@ -21,7 +21,7 @@ use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
 
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::Mutex;
+use tokio::sync::{mpsc, Mutex};
 use tracing::trace;
 
 /// A group used to manage a single [Collab] object
@@ -37,6 +37,7 @@ pub struct CollabGroup {
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
   metrics_calculate: CollabMetricsCalculate,
+  destroy_group_tx: mpsc::Sender<Rc<Mutex<Collab>>>,
 }
 
 impl Drop for CollabGroup {
@@ -58,10 +59,10 @@ impl CollabGroup {
   where
     S: CollabStorage,
   {
-    let edit_state = Rc::new(EditState::new());
+    let edit_state = Rc::new(EditState::new(100, 600));
     let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone());
     broadcast.observe_collab_changes(&mut collab).await;
-
+    let (destroy_group_tx, rx) = mpsc::channel(1);
     let rc_collab = Rc::new(Mutex::new(collab));
 
     tokio::task::spawn_local(
@@ -71,10 +72,10 @@ impl CollabGroup {
         uid,
         storage,
         edit_state.clone(),
-        rc_collab.clone(),
+        Rc::downgrade(&rc_collab),
         collab_type.clone(),
       )
-      .run(),
+      .run(rx),
     );
 
     Self {
@@ -85,6 +86,7 @@ impl CollabGroup {
       broadcast,
       subscribers: Default::default(),
       metrics_calculate,
+      destroy_group_tx,
     }
   }
 
@@ -163,12 +165,7 @@ impl CollabGroup {
     for mut entry in self.subscribers.iter_mut() {
       entry.value_mut().stop().await;
     }
-  }
-
-  /// Flush the [Collab] to the storage.
-  /// When there is no subscriber, perform the flush in a blocking task.
-  pub async fn flush_collab(&self) {
-    self.collab.lock().await.flush();
+    let _ = self.destroy_group_tx.send(self.collab.clone()).await;
   }
 
   /// Returns the timeout duration in seconds for different collaboration types.
@@ -201,14 +198,19 @@ pub(crate) struct EditState {
   edit_counter: AtomicU32,
   prev_edit_count: AtomicU32,
   prev_flush_timestamp: AtomicI64,
+
+  max_edit_count: u32,
+  max_secs: i64,
 }
 
 impl EditState {
-  fn new() -> Self {
+  fn new(max_edit_count: u32, max_secs: i64) -> Self {
     Self {
       edit_counter: AtomicU32::new(0),
       prev_edit_count: Default::default(),
       prev_flush_timestamp: AtomicI64::new(chrono::Utc::now().timestamp()),
+      max_edit_count,
+      max_secs,
     }
   }
 
@@ -236,37 +238,47 @@ impl EditState {
       .store(chrono::Utc::now().timestamp(), Ordering::SeqCst);
   }
 
-  /// Determines whether a flush operation should be performed based on edit count and time interval.
-  ///
-  /// This function checks two conditions to decide if flushing is necessary:
-  /// 1. Time-based: Compares the current time with the last flush time. A flush is needed if the time
-  /// elapsed since the last flush is greater than or equal to `max_interval`.
-  ///
-  /// 2. Edit count-based: Compares the current edit count with the last flush edit count. A flush is
-  /// required if the number of new edits since the last flush is greater than or equal to `max_edit_count`.
-  ///
-  /// # Arguments
-  /// * `max_edit_count` - The maximum number of edits allowed before a flush is triggered.
-  /// * `max_secs` - The maximum time interval (in seconds) allowed before a flush is triggered.
-  pub(crate) fn should_save_to_disk(&self, max_edit_count: u32, max_secs: i64) -> bool {
+  pub(crate) fn should_save_to_disk(&self) -> bool {
     let current_edit_count = self.edit_counter.load(Ordering::SeqCst);
     let prev_edit_count = self.prev_edit_count.load(Ordering::SeqCst);
 
-    if prev_edit_count == 0 && current_edit_count > 1 {
+    // Immediately return true if it's the first save after more than one edit
+    if prev_edit_count == 0 && current_edit_count > 0 {
       return true;
     }
 
-    // compare current edit count with last flush edit count
-    if current_edit_count > prev_edit_count {
-      return (current_edit_count - prev_edit_count) >= max_edit_count;
-    }
+    // Check if the edit count exceeds the maximum allowed since the last save
+    let edit_count_exceeded = (current_edit_count > prev_edit_count)
+      && ((current_edit_count - prev_edit_count) >= self.max_edit_count);
 
+    // Calculate the time since the last flush and check if it exceeds the maximum allowed
     let now = chrono::Utc::now().timestamp();
-    let prev = self.prev_flush_timestamp.load(Ordering::SeqCst);
-    if now > prev && current_edit_count != prev_edit_count {
-      return now - prev >= max_secs;
-    }
+    let prev_flush_timestamp = self.prev_flush_timestamp.load(Ordering::SeqCst);
+    let time_exceeded =
+      (now > prev_flush_timestamp) && (now - prev_flush_timestamp >= self.max_secs);
 
-    false
+    // Determine if we should save based on either condition being met
+    edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::collaborate::group::EditState;
+
+  #[test]
+  fn edit_state_test() {
+    let edit_state = EditState::new(10, 10);
+    edit_state.increment_edit_count();
+    assert!(edit_state.should_save_to_disk());
+    edit_state.tick();
+
+    for _ in 0..10 {
+      edit_state.increment_edit_count();
+    }
+    assert!(edit_state.should_save_to_disk());
+    assert!(edit_state.should_save_to_disk());
+    edit_state.tick();
+    assert!(!edit_state.should_save_to_disk());
   }
 }

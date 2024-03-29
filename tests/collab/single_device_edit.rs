@@ -542,7 +542,7 @@ async fn post_realtime_message_test() {
       // the big doc_state will force the init_sync using the http request.
       // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
       new_user
-        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Document, doc_state)
+        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Empty, doc_state)
         .await;
 
       new_user

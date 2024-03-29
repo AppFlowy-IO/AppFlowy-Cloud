@@ -48,11 +48,11 @@ async fn success_batch_get_collab_test() {
     },
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Folder,
+      collab_type: CollabType::Empty,
     },
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Database,
+      collab_type: CollabType::Empty,
     },
   ];
 

@@ -14,7 +14,12 @@ use database_entity::dto::{
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
   AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult,
   CollabMemberIdentify, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams,
+<<<<<<< HEAD
   QueryCollab, QueryCollabMembers, QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+=======
+  QueryCollab, QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
+  UpdateCollabMemberParams,
+>>>>>>> eb1aa08 (fix: cargo fmt)
 };
 use futures_util::StreamExt;
 use gotrue::grant::PasswordGrant;
@@ -276,6 +281,7 @@ impl Client {
 
     if let AuthProvider::Google = provider {
       url
+<<<<<<< HEAD
         .query_pairs_mut()
           // In many cases, especially for server-side applications or mobile apps that might need to
           // interact with Google services on behalf of the user without the user being actively
@@ -287,6 +293,19 @@ impl Client {
           // 2. consent: The authorization server prompts the user for consent before returning information to the client
           // 3. select_account: The authorization server prompts the user to select a user account.
         .append_pair("prompt", "consent");
+=======
+				.query_pairs_mut()
+				// In many cases, especially for server-side applications or mobile apps that might need to
+				// interact with Google services on behalf of the user without the user being actively
+				// engaged, access_type=offline is preferred to ensure long-term access.
+				.append_pair("access_type", "offline")
+				// In Google OAuth2.0, the prompt parameter is used to control the OAuth2.0 flow's behavior.
+				// It determines if the user is re-prompted for authentication and/or consent.
+				// 1. none: The authorization server does not display any authentication or consent user interface pages.
+				// 2. consent: The authorization server prompts the user for consent before returning information to the client
+				// 3. select_account: The authorization server prompts the user to select a user account.
+				.append_pair("prompt", "consent");
+>>>>>>> eb1aa08 (fix: cargo fmt)
     }
 
     Ok(url.to_string())
@@ -916,6 +935,30 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+<<<<<<< HEAD
+=======
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_collab(
+    &self,
+    params: QueryCollabParams,
+  ) -> Result<EncodedCollab, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, &params.workspace_id, &params.object_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<EncodedCollab>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+>>>>>>> eb1aa08 (fix: cargo fmt)
   #[instrument(level = "debug", skip_all, err)]
   pub async fn batch_get_collab(
     &self,

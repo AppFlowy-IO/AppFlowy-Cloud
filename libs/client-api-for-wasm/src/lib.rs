@@ -41,9 +41,7 @@ impl ClientAPI {
     let configuration = ClientConfiguration::default();
     configuration
       .to_owned()
-      .with_compression_buffer_size(config.configuration.compression_buffer_size);
-    configuration
-      .to_owned()
+      .with_compression_buffer_size(config.configuration.compression_buffer_size)
       .with_compression_quality(config.configuration.compression_quality);
 >>>>>>> eb1aa08 (fix: cargo fmt)
 

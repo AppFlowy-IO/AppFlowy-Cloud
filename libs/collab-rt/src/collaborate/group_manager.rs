@@ -1,7 +1,7 @@
 use crate::client_msg_router::ClientMessageRouter;
 use crate::collaborate::group::CollabGroup;
 use crate::collaborate::group_manager_state::GroupManagementState;
-use crate::collaborate::plugin::CollabStoragePlugin;
+use crate::collaborate::plugin::LoadCollabPlugin;
 use crate::error::RealtimeError;
 use crate::RealtimeAccessControl;
 use collab::core::origin::CollabOrigin;
@@ -104,7 +104,7 @@ where
     collab_type: CollabType,
   ) {
     let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
-    let plugin = CollabStoragePlugin::new(
+    let plugin = LoadCollabPlugin::new(
       uid,
       workspace_id,
       collab_type.clone(),
@@ -115,17 +115,22 @@ where
     collab.initialize().await;
 
     // The lifecycle of the collab is managed by the group.
+    debug!(
+      "[realtime]: {} create group:{}:{}",
+      uid, object_id, collab_type
+    );
     let group = Rc::new(
       CollabGroup::new(
+        uid,
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type,
         collab,
         self.metrics_calculate.clone(),
+        self.storage.clone(),
       )
       .await,
     );
-    debug!("[realtime]: {} create group:{}", uid, object_id);
     self.state.insert_group(object_id, group.clone()).await;
   }
 }

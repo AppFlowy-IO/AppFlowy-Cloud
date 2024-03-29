@@ -71,6 +71,8 @@ semver = "1.0.22"
 
 # collab
 collab = { version = "0.1.0", features = ["async-plugin"] }
+collab-document = { version = "0.1.0" }
+collab-folder = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
 
 #Local crate
@@ -162,6 +164,7 @@ bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
 collab = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
+collab-document = { version = "0.1.0" }
 tracing = { version = "0.1.40"}
 collab-entity = { version = "0.1.0" }
 gotrue = { path = "libs/gotrue" }
@@ -182,11 +185,10 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46911ccbf321f7ad19b0e547e38edfd9fece48a9" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46911ccbf321f7ad19b0e547e38edfd9fece48a9" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46911ccbf321f7ad19b0e547e38edfd9fece48a9" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "46911ccbf321f7ad19b0e547e38edfd9fece48a9" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
 
 [features]
-custom_env= []
 ai_enable = []

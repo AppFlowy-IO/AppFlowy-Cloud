@@ -380,7 +380,13 @@ impl SeqNumCounter {
         }
         prev
       },
-      Err(prev) => prev,
+      Err(prev) => {
+        // If the seq_num is less than the current seq_num, we should reset the equal_counter.
+        // Because the server might be restarted and the seq_num is reset to 0.
+        self.equal_counter.store(0, Ordering::SeqCst);
+        self.counter.store(seq_num, Ordering::SeqCst);
+        prev
+      },
     }
   }
 

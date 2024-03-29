@@ -8,7 +8,7 @@ use collab::preclude::Collab;
 use collab_rt_protocol::{handle_message, Error};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::Ordering;
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -23,6 +23,7 @@ use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
 
+use crate::collaborate::group::EditState;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
@@ -43,12 +44,7 @@ pub struct CollabBroadcast {
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
-  /// Use `seq_num_counter` to assign a sequence number (`seq_num`) to each broadcast/ack message.
-  /// Clients rely on `seq_num` to verify message ordering. A non-continuous sequence suggests
-  /// missing updates, prompting the client to request an initial synchronization.
-  /// Continuous sequence numbers ensure the client receives and displays updates in the correct order.
-  ///
-  seq_num_counter: Rc<AtomicU32>,
+  edit_state: Rc<EditState>,
   /// The last modified time of the document.
   pub modified_at: Rc<parking_lot::Mutex<Instant>>,
 }
@@ -66,7 +62,7 @@ impl CollabBroadcast {
   ///
   /// The overflow of the incoming events that needs to be propagates will be buffered up to a
   /// provided `buffer_capacity` size.
-  pub fn new(object_id: &str, buffer_capacity: usize) -> Self {
+  pub fn new(object_id: &str, buffer_capacity: usize, edit_state: Rc<EditState>) -> Self {
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
@@ -75,7 +71,7 @@ impl CollabBroadcast {
       sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
-      seq_num_counter: Rc::new(Default::default()),
+      edit_state,
       modified_at: Rc::new(parking_lot::Mutex::new(Instant::now())),
     }
   }
@@ -86,7 +82,7 @@ impl CollabBroadcast {
       let cloned_oid = self.object_id.clone();
       let broadcast_sink = self.sender.clone();
       let modified_at = self.modified_at.clone();
-      let seq_num_counter = self.seq_num_counter.clone();
+      let edit_state = self.edit_state.clone();
 
       // Observer the document's update and broadcast it to all subscribers. When one of the clients
       // sends an update to the document that alters its state, the document observer will trigger
@@ -96,14 +92,8 @@ impl CollabBroadcast {
         .get_mut_awareness()
         .doc_mut()
         .observe_update_v1(move |txn, event| {
-          // Increment the sequence number counter and assign the new value to the `seq_num` field of the
-          // broadcast message. This sequence number is used by the client to verify the order of the
-          // messages and to request a full synchronization if any messages are missing.
-          let seq_num = seq_num_counter
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-              Some(current + 1)
-            })
-            .unwrap();
+          let seq_num = edit_state.increment_edit_count();
+
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
           let payload = gen_update_message(&event.update);
@@ -226,7 +216,7 @@ impl CollabBroadcast {
     let stream_stop_tx = {
       let (stream_stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
       let object_id = self.object_id.clone();
-      let seq_num_counter = self.seq_num_counter.clone();
+      let edit_state = self.edit_state.clone();
 
       // the stream will continue to receive messages from the client and it will stop if the stop_rx
       // receives a message. If the client's message alter the document state, it will trigger the
@@ -251,7 +241,7 @@ impl CollabBroadcast {
                   break
                 },
                 Some(collab) => {
-                  handle_client_messages(&object_id, message_map, &mut sink, collab, &metrics_calculate, &seq_num_counter).await;
+                  handle_client_messages(&object_id, message_map, &mut sink, collab, &metrics_calculate, &edit_state).await;
                 }
               }
             }
@@ -276,7 +266,7 @@ async fn handle_client_messages<Sink>(
   sink: &mut Sink,
   collab: Rc<Mutex<Collab>>,
   metrics_calculate: &CollabMetricsCalculate,
-  seq_num_counter: &Rc<AtomicU32>,
+  edit_state: &Rc<EditState>,
 ) where
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
@@ -302,7 +292,7 @@ async fn handle_client_messages<Sink>(
         &collab_message,
         &collab,
         metrics_calculate,
-        seq_num_counter,
+        edit_state,
       )
       .await
       {
@@ -334,11 +324,11 @@ async fn handle_one_client_message(
   collab_msg: &ClientCollabMessage,
   collab: &Mutex<Collab>,
   metrics_calculate: &CollabMetricsCalculate,
-  seq_num_counter: &Rc<AtomicU32>,
+  edit_state: &Rc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let msg_id = collab_msg.msg_id();
   let message_origin = collab_msg.origin().clone();
-  let seq_num = seq_num_counter.load(Ordering::SeqCst);
+  let seq_num = edit_state.edit_count();
 
   // If the payload is empty, we don't need to apply any updates to the document.
   // Currently, only the ping message should has an empty payload.

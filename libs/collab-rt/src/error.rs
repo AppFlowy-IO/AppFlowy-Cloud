@@ -41,6 +41,9 @@ pub enum RealtimeError {
   #[error("group is not exist: {0}")]
   GroupNotFound(String),
 
+  #[error("Lack of required collab data: {0}")]
+  NoRequiredCollabData(String),
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }

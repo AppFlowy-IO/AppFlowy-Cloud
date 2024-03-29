@@ -148,6 +148,7 @@ pub struct InsertSnapshotParams {
   pub encoded_collab_v1: Vec<u8>,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
+  pub collab_type: CollabType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

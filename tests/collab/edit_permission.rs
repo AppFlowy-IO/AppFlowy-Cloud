@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn recv_updates_without_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -47,7 +47,7 @@ async fn recv_updates_without_permission_test() {
 
 // #[tokio::test]
 // async fn recv_remote_updates_with_readonly_permission_test() {
-//   let collab_type = CollabType::Document;
+//   let collab_type = CollabType::Empty;
 //   let mut client_1 = TestClient::new_user().await;
 //   let mut client_2 = TestClient::new_user().await;
 //
@@ -101,7 +101,7 @@ async fn recv_updates_without_permission_test() {
 
 // #[tokio::test]
 // async fn init_sync_with_readonly_permission_test() {
-//   let collab_type = CollabType::Document;
+//   let collab_type = CollabType::Empty;
 //   let mut client_1 = TestClient::new_user().await;
 //   let mut client_2 = TestClient::new_user().await;
 //
@@ -157,7 +157,7 @@ async fn recv_updates_without_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_readonly_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -213,7 +213,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_read_and_write_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -270,7 +270,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_full_access_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -325,7 +325,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_full_access_then_readonly_permission() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -411,7 +411,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
   let object_id = Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let workspace_id = owner.workspace_id().await;
   owner
     .create_and_edit_collab_with_data(object_id.clone(), &workspace_id, collab_type.clone(), None)
@@ -504,7 +504,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
 async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let workspace_id = owner.workspace_id().await;
   let object_id = owner
     .create_and_edit_collab(&workspace_id, collab_type.clone())

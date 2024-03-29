@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 pub const COLLAB_SNAPSHOT_LIMIT: i64 = 30;
 pub const SNAPSHOT_PER_HOUR: i64 = 6;
-pub type DatabaseResult<T, E = AppError> = core::result::Result<T, E>;
+pub type AppResult<T, E = AppError> = core::result::Result<T, E>;
 
 /// [CollabStorageAccessControl] is a trait that provides access control when accessing the storage
 /// of the Collab object.
@@ -64,7 +64,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-  ) -> DatabaseResult<()>;
+  ) -> AppResult<()>;
 
   /// Insert/update a new collaboration in the storage.
   ///
@@ -81,7 +81,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
-  ) -> DatabaseResult<()>;
+  ) -> AppResult<()>;
 
   /// Retrieves a collaboration from the storage.
   ///
@@ -97,7 +97,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     uid: &i64,
     params: QueryCollabParams,
     is_collab_init: bool,
-  ) -> DatabaseResult<EncodedCollab>;
+  ) -> AppResult<EncodedCollab>;
 
   async fn batch_get_collab(
     &self,
@@ -114,26 +114,21 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
-  async fn delete_collab(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    object_id: &str,
-  ) -> DatabaseResult<()>;
+  async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()>;
   async fn should_create_snapshot(&self, oid: &str) -> bool;
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta>;
-  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()>;
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta>;
+  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()>;
 
   async fn get_collab_snapshot(
     &self,
     workspace_id: &str,
     object_id: &str,
     snapshot_id: &i64,
-  ) -> DatabaseResult<SnapshotData>;
+  ) -> AppResult<SnapshotData>;
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
-  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas>;
+  async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas>;
 }
 
 #[async_trait]
@@ -150,7 +145,7 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-  ) -> DatabaseResult<()> {
+  ) -> AppResult<()> {
     self
       .as_ref()
       .insert_or_update_collab(workspace_id, uid, params)
@@ -163,7 +158,7 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
-  ) -> DatabaseResult<()> {
+  ) -> AppResult<()> {
     self
       .as_ref()
       .insert_or_update_collab_with_transaction(workspace_id, uid, params, transaction)
@@ -175,7 +170,7 @@ where
     uid: &i64,
     params: QueryCollabParams,
     is_collab_init: bool,
-  ) -> DatabaseResult<EncodedCollab> {
+  ) -> AppResult<EncodedCollab> {
     self
       .as_ref()
       .get_collab_encoded(uid, params, is_collab_init)
@@ -190,12 +185,7 @@ where
     self.as_ref().batch_get_collab(uid, queries).await
   }
 
-  async fn delete_collab(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    object_id: &str,
-  ) -> DatabaseResult<()> {
+  async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()> {
     self
       .as_ref()
       .delete_collab(workspace_id, uid, object_id)
@@ -206,11 +196,11 @@ where
     self.as_ref().should_create_snapshot(oid).await
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
     self.as_ref().create_snapshot(params).await
   }
 
-  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()> {
+  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()> {
     self.as_ref().queue_snapshot(params).await
   }
 
@@ -219,14 +209,14 @@ where
     workspace_id: &str,
     object_id: &str,
     snapshot_id: &i64,
-  ) -> DatabaseResult<SnapshotData> {
+  ) -> AppResult<SnapshotData> {
     self
       .as_ref()
       .get_collab_snapshot(workspace_id, object_id, snapshot_id)
       .await
   }
 
-  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+  async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.as_ref().get_collab_snapshot_list(oid).await
   }
 }

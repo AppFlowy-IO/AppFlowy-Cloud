@@ -1,3 +1,4 @@
+use collab_entity::CollabType;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
@@ -16,7 +17,12 @@ impl PendingQueue {
     }
   }
 
-  pub(crate) fn generate_item(&mut self, workspace_id: String, object_id: String) -> PendingItem {
+  pub(crate) fn generate_item(
+    &mut self,
+    workspace_id: String,
+    object_id: String,
+    collab_type: CollabType,
+  ) -> PendingItem {
     let seq = self
       .id_gen
       .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -24,6 +30,7 @@ impl PendingQueue {
       workspace_id,
       object_id,
       seq,
+      collab_type,
     }
   }
 
@@ -50,6 +57,7 @@ pub(crate) struct PendingItem {
   pub(crate) workspace_id: String,
   pub(crate) object_id: String,
   pub(crate) seq: i64,
+  pub(crate) collab_type: CollabType,
 }
 
 impl PartialEq<Self> for PendingItem {

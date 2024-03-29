@@ -107,6 +107,9 @@ pub enum AppError {
   #[cfg(feature = "bincode_error")]
   #[error(transparent)]
   BincodeError(#[from] bincode::Error),
+
+  #[error("{0}")]
+  NoRequiredData(String),
 }
 
 impl AppError {
@@ -164,6 +167,7 @@ impl AppError {
       AppError::TokioJoinError(_) => ErrorCode::Internal,
       #[cfg(feature = "bincode_error")]
       AppError::BincodeError(_) => ErrorCode::Internal,
+      AppError::NoRequiredData(_) => ErrorCode::NoRequiredData,
     }
   }
 }
@@ -268,6 +272,7 @@ pub enum ErrorCode {
   SerdeError = 1022,
   NetworkError = 1023,
   UserUnAuthorized = 1024,
+  NoRequiredData = 1025,
 }
 
 impl ErrorCode {

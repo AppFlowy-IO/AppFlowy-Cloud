@@ -146,14 +146,6 @@ pub async fn insert_into_af_collab(
         "Insert new af_collab failed: {}:{}:{}",
         uid, params.object_id, params.collab_type
       ))?;
-
-      event!(
-        tracing::Level::TRACE,
-        "did insert new collab row: {}:{}:{}",
-        uid,
-        workspace_id,
-        params.object_id,
-      );
     },
   }
 
@@ -169,7 +161,7 @@ pub async fn select_blob_from_af_collab<'a, E>(
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let partition_key = partition_key(&collab_type);
+  let partition_key = partition_key(collab_type);
   sqlx::query_scalar!(
     r#"
         SELECT blob

@@ -2,6 +2,7 @@ mod client_msg_router;
 mod collaborate;
 pub mod command;
 pub mod connect_state;
+pub mod data_validation;
 pub mod error;
 mod metrics;
 mod permission;

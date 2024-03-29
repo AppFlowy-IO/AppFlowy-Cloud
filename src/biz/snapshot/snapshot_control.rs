@@ -2,20 +2,17 @@ use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::snapshot::cache::SnapshotCache;
 use crate::biz::snapshot::queue::PendingQueue;
 use crate::state::RedisClient;
+use anyhow::anyhow;
 use app_error::AppError;
 use async_stream::stream;
+use collab_rt::data_validation::validate_encode_collab;
 use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, select_snapshot,
-  should_create_snapshot, DatabaseResult, COLLAB_SNAPSHOT_LIMIT,
+  should_create_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT,
 };
 use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
 use futures_util::StreamExt;
-
 use sqlx::PgPool;
-
-use crate::biz::collab::storage::check_encoded_collab_data;
-
-use anyhow::anyhow;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -91,10 +88,7 @@ impl SnapshotControl {
       .unwrap_or(false)
   }
 
-  pub async fn create_snapshot(
-    &self,
-    params: InsertSnapshotParams,
-  ) -> DatabaseResult<AFSnapshotMeta> {
+  pub async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
     params.validate()?;
 
     debug!("create snapshot for object:{}", params.object_id);
@@ -117,7 +111,7 @@ impl SnapshotControl {
     }
   }
 
-  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> DatabaseResult<SnapshotData> {
+  pub async fn get_collab_snapshot(&self, snapshot_id: &i64) -> AppResult<SnapshotData> {
     match select_snapshot(&self.pg_pool, snapshot_id).await? {
       None => Err(AppError::RecordNotFound(format!(
         "Can't find the snapshot with id:{}",
@@ -132,7 +126,7 @@ impl SnapshotControl {
   }
 
   /// Returns list of snapshots for given object_id in descending order of creation time.
-  pub async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+  pub async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     let metas = get_all_collab_snapshot_meta(&self.pg_pool, oid).await?;
     Ok(metas)
   }
@@ -242,7 +236,7 @@ impl SnapshotCommandRunner {
       Ok(Some(data)) => {
         // This step is not necessary, but use it to check if the data is valid. Will be removed
         // in the future.
-        match check_encoded_collab_data(&next_item.object_id, &data, &next_item.collab_type) {
+        match validate_encode_collab(&next_item.object_id, &data, &next_item.collab_type) {
           Ok(_) => data,
           Err(err) => {
             error!(

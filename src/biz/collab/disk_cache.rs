@@ -3,7 +3,7 @@ use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use database::collab::{
   batch_select_collab_blob, delete_collab, insert_into_af_collab, is_collab_exists,
-  select_blob_from_af_collab, DatabaseResult,
+  select_blob_from_af_collab, AppResult,
 };
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use sqlx::{PgPool, Transaction};
@@ -22,7 +22,7 @@ impl CollabDiskCache {
     Self { pg_pool }
   }
 
-  pub async fn is_exist(&self, object_id: &str) -> DatabaseResult<bool> {
+  pub async fn is_exist(&self, object_id: &str) -> AppResult<bool> {
     let is_exist = is_collab_exists(object_id, &self.pg_pool).await?;
     Ok(is_exist)
   }
@@ -33,7 +33,7 @@ impl CollabDiskCache {
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
-  ) -> DatabaseResult<()> {
+  ) -> AppResult<()> {
     insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
     Ok(())
   }
@@ -95,7 +95,7 @@ impl CollabDiskCache {
     batch_select_collab_blob(&self.pg_pool, queries).await
   }
 
-  pub async fn delete_collab(&self, object_id: &str) -> DatabaseResult<()> {
+  pub async fn delete_collab(&self, object_id: &str) -> AppResult<()> {
     delete_collab(&self.pg_pool, object_id).await?;
     Ok(())
   }

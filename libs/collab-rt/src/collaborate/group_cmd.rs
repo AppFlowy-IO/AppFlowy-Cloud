@@ -68,7 +68,7 @@ where
             let group = self.group_manager.get_group(&object_id).await;
             if let Err(_err) = match group {
               None => ret.send(None),
-              Some(group) => ret.send(Some(group.encode_collab().await)),
+              Some(group) => ret.send(group.encode_collab().await.ok()),
             } {
               warn!("Send encode collab fail");
             }

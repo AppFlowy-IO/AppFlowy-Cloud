@@ -9,7 +9,7 @@ pub enum RealtimeError {
   YAwareness(#[from] collab::core::awareness::Error),
 
   #[error("failed to deserialize message: {0}")]
-  DecodingError(#[from] yrs::encoding::read::Error),
+  YrsDecodingError(#[from] yrs::encoding::read::Error),
 
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
@@ -40,6 +40,9 @@ pub enum RealtimeError {
 
   #[error("group is not exist: {0}")]
   GroupNotFound(String),
+
+  #[error("Lack of required collab data: {0}")]
+  NoRequiredCollabData(String),
 
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),

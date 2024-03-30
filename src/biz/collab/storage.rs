@@ -5,19 +5,17 @@ use crate::biz::snapshot::SnapshotControl;
 use anyhow::Context;
 use app_error::AppError;
 use async_trait::async_trait;
-use collab::core::collab::DocStateSource;
+
 use collab::core::collab_plugin::EncodedCollab;
-use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
+
 use collab_rt::command::{RTCommand, RTCommandSender};
-use database::collab::{
-  is_collab_exists, CollabStorage, CollabStorageAccessControl, DatabaseResult,
-};
+use database::collab::{is_collab_exists, AppResult, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
+
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -151,7 +149,7 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-  ) -> DatabaseResult<()> {
+  ) -> AppResult<()> {
     params.validate()?;
     let mut transaction = self
       .cache
@@ -178,7 +176,7 @@ where
     uid: &i64,
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
-  ) -> DatabaseResult<()> {
+  ) -> AppResult<()> {
     params.validate()?;
 
     let is_collab_exist_in_db =
@@ -215,7 +213,7 @@ where
     uid: &i64,
     params: QueryCollabParams,
     is_collab_init: bool,
-  ) -> DatabaseResult<EncodedCollab> {
+  ) -> AppResult<EncodedCollab> {
     params.validate()?;
 
     // Check if the user has enough permissions to access the collab
@@ -267,12 +265,7 @@ where
     results
   }
 
-  async fn delete_collab(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    object_id: &str,
-  ) -> DatabaseResult<()> {
+  async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()> {
     if !self
       .access_control
       .enforce_delete(workspace_id, uid, object_id)
@@ -291,11 +284,11 @@ where
     self.snapshot_control.should_create_snapshot(oid).await
   }
 
-  async fn create_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<AFSnapshotMeta> {
+  async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
     self.snapshot_control.create_snapshot(params).await
   }
 
-  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> DatabaseResult<()> {
+  async fn queue_snapshot(&self, params: InsertSnapshotParams) -> AppResult<()> {
     self.snapshot_control.queue_snapshot(params).await
   }
 
@@ -304,26 +297,14 @@ where
     workspace_id: &str,
     object_id: &str,
     snapshot_id: &i64,
-  ) -> DatabaseResult<SnapshotData> {
+  ) -> AppResult<SnapshotData> {
     self
       .snapshot_control
       .get_snapshot(workspace_id, object_id, snapshot_id)
       .await
   }
 
-  async fn get_collab_snapshot_list(&self, oid: &str) -> DatabaseResult<AFSnapshotMetas> {
+  async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.snapshot_control.get_collab_snapshot_list(oid).await
   }
-}
-
-pub fn check_encoded_collab_data(object_id: &str, data: &[u8]) -> Result<(), anyhow::Error> {
-  let encoded_collab = EncodedCollab::decode_from_bytes(data)?;
-  let _ = Collab::new_with_doc_state(
-    CollabOrigin::Empty,
-    object_id,
-    DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
-    vec![],
-    false,
-  )?;
-  Ok(())
 }

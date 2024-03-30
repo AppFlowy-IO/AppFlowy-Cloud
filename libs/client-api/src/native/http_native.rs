@@ -5,7 +5,7 @@ use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
-use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::HttpRealtimeMessage;
 use database_entity::dto::CollabParams;
 use futures_util::stream;
 use prost::Message;

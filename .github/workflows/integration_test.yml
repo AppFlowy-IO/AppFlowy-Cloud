@@ -4,8 +4,9 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    types: [ opened, synchronize, reopened ]
     branches: [ main ]
+  pull_request_target:
+    types: [ opened, synchronize, reopened ]
 
 env:
   LOCALHOST_URL: http://localhost
@@ -55,6 +56,13 @@ jobs:
           sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
           sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml
           cat docker-compose.yml
+
+      - uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
 
       - name: Run Docker-Compose
         run: |

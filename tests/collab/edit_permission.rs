@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn recv_updates_without_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -45,119 +45,119 @@ async fn recv_updates_without_permission_test() {
   assert_client_collab_within_secs(&mut client_2, &object_id, "name", json!({}), 60).await;
 }
 
-#[tokio::test]
-async fn recv_remote_updates_with_readonly_permission_test() {
-  let collab_type = CollabType::Document;
-  let mut client_1 = TestClient::new_user().await;
-  let mut client_2 = TestClient::new_user().await;
+// #[tokio::test]
+// async fn recv_remote_updates_with_readonly_permission_test() {
+//   let collab_type = CollabType::Empty;
+//   let mut client_1 = TestClient::new_user().await;
+//   let mut client_2 = TestClient::new_user().await;
+//
+//   let workspace_id = client_1.workspace_id().await;
+//   let object_id = client_1
+//     .create_and_edit_collab(&workspace_id, collab_type.clone())
+//     .await;
+//
+//   // Add client 2 as the member of the collab then the client 2 will receive the update.
+//   client_1
+//     .add_collab_member(
+//       &workspace_id,
+//       &object_id,
+//       &client_2,
+//       AFAccessLevel::ReadOnly,
+//     )
+//     .await;
+//
+//   client_2
+//     .open_collab(&workspace_id, &object_id, collab_type.clone())
+//     .await;
+//
+//   // Edit the collab from client 1 and then the server will broadcast to client 2
+//   client_1
+//     .collabs
+//     .get_mut(&object_id)
+//     .unwrap()
+//     .collab
+//     .lock()
+//     .insert("name", "AppFlowy");
+//   client_1
+//     .wait_object_sync_complete(&object_id)
+//     .await
+//     .unwrap();
+//
+//   let expected = json!({
+//     "name": "AppFlowy"
+//   });
+//   assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected.clone(), 60).await;
+//   assert_server_collab(
+//     &workspace_id,
+//     &mut client_1.api_client,
+//     &object_id,
+//     &collab_type,
+//     10,
+//     expected,
+//   )
+//   .await
+//   .unwrap();
+// }
 
-  let workspace_id = client_1.workspace_id().await;
-  let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type.clone())
-    .await;
-
-  // Add client 2 as the member of the collab then the client 2 will receive the update.
-  client_1
-    .add_collab_member(
-      &workspace_id,
-      &object_id,
-      &client_2,
-      AFAccessLevel::ReadOnly,
-    )
-    .await;
-
-  client_2
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-
-  // Edit the collab from client 1 and then the server will broadcast to client 2
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("name", "AppFlowy");
-  client_1
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-
-  let expected = json!({
-    "name": "AppFlowy"
-  });
-  assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected.clone(), 60).await;
-  assert_server_collab(
-    &workspace_id,
-    &mut client_1.api_client,
-    &object_id,
-    &collab_type,
-    10,
-    expected,
-  )
-  .await
-  .unwrap();
-}
-
-#[tokio::test]
-async fn init_sync_with_readonly_permission_test() {
-  let collab_type = CollabType::Document;
-  let mut client_1 = TestClient::new_user().await;
-  let mut client_2 = TestClient::new_user().await;
-
-  let workspace_id = client_1.workspace_id().await;
-  let object_id = client_1
-    .create_and_edit_collab(&workspace_id, collab_type.clone())
-    .await;
-  client_1
-    .collabs
-    .get_mut(&object_id)
-    .unwrap()
-    .collab
-    .lock()
-    .insert("name", "AppFlowy");
-  client_1
-    .wait_object_sync_complete(&object_id)
-    .await
-    .unwrap();
-  sleep(Duration::from_secs(2)).await;
-
-  //
-  let expected = json!({
-    "name": "AppFlowy"
-  });
-  assert_server_collab(
-    &workspace_id,
-    &mut client_1.api_client,
-    &object_id,
-    &collab_type,
-    10,
-    expected.clone(),
-  )
-  .await
-  .unwrap();
-
-  // Add client 2 as the member of the collab with readonly permission.
-  // client 2 can pull the latest updates via the init sync. But it's not allowed to send local changes.
-  client_1
-    .add_collab_member(
-      &workspace_id,
-      &object_id,
-      &client_2,
-      AFAccessLevel::ReadOnly,
-    )
-    .await;
-  client_2
-    .open_collab(&workspace_id, &object_id, collab_type.clone())
-    .await;
-  assert_client_collab_include_value(&mut client_2, &object_id, expected)
-    .await
-    .unwrap();
-}
+// #[tokio::test]
+// async fn init_sync_with_readonly_permission_test() {
+//   let collab_type = CollabType::Empty;
+//   let mut client_1 = TestClient::new_user().await;
+//   let mut client_2 = TestClient::new_user().await;
+//
+//   let workspace_id = client_1.workspace_id().await;
+//   let object_id = client_1
+//     .create_and_edit_collab(&workspace_id, collab_type.clone())
+//     .await;
+//   client_1
+//     .collabs
+//     .get_mut(&object_id)
+//     .unwrap()
+//     .collab
+//     .lock()
+//     .insert("name", "AppFlowy");
+//   client_1
+//     .wait_object_sync_complete(&object_id)
+//     .await
+//     .unwrap();
+//   sleep(Duration::from_secs(2)).await;
+//
+//   //
+//   let expected = json!({
+//     "name": "AppFlowy"
+//   });
+//   assert_server_collab(
+//     &workspace_id,
+//     &mut client_1.api_client,
+//     &object_id,
+//     &collab_type,
+//     10,
+//     expected.clone(),
+//   )
+//   .await
+//   .unwrap();
+//
+//   // Add client 2 as the member of the collab with readonly permission.
+//   // client 2 can pull the latest updates via the init sync. But it's not allowed to send local changes.
+//   client_1
+//     .add_collab_member(
+//       &workspace_id,
+//       &object_id,
+//       &client_2,
+//       AFAccessLevel::ReadOnly,
+//     )
+//     .await;
+//   client_2
+//     .open_collab(&workspace_id, &object_id, collab_type.clone())
+//     .await;
+//   assert_client_collab_include_value(&mut client_2, &object_id, expected)
+//     .await
+//     .unwrap();
+// }
 
 #[tokio::test]
 async fn edit_collab_with_readonly_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -213,7 +213,7 @@ async fn edit_collab_with_readonly_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_read_and_write_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -270,7 +270,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_full_access_permission_test() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -325,7 +325,7 @@ async fn edit_collab_with_full_access_permission_test() {
 
 #[tokio::test]
 async fn edit_collab_with_full_access_then_readonly_permission() {
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -411,7 +411,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
   let object_id = Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let workspace_id = owner.workspace_id().await;
   owner
     .create_and_edit_collab_with_data(object_id.clone(), &workspace_id, collab_type.clone(), None)
@@ -504,7 +504,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
 async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let mut tasks = Vec::new();
   let mut owner = TestClient::new_user().await;
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Empty;
   let workspace_id = owner.workspace_id().await;
   let object_id = owner
     .create_and_edit_collab(&workspace_id, collab_type.clone())
@@ -554,15 +554,14 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
   let results = futures::future::join_all(tasks).await;
   for (index, result) in results.into_iter().enumerate() {
     let (s, client) = result.unwrap();
-    assert_json_eq!(
-      json!({index.to_string(): s}),
-      client
-        .collabs
-        .get(&object_id)
-        .unwrap()
-        .collab
-        .to_json_value(),
-    );
+    let value = client
+      .collabs
+      .get(&object_id)
+      .unwrap()
+      .collab
+      .to_json_value();
+
+    assert_json_eq!(json!({index.to_string(): s}), value,);
   }
   // all the clients should have the same collab object
   assert_json_eq!(

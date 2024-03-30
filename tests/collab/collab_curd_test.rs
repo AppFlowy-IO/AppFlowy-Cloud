@@ -1,6 +1,7 @@
 use app_error::ErrorCode;
 use assert_json_diff::assert_json_include;
 use collab::core::collab_plugin::EncodedCollab;
+use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database_entity::dto::{
   BatchCreateCollabParams, CollabParams, CreateCollabParams, QueryCollab, QueryCollabParams,
@@ -46,7 +47,7 @@ async fn batch_insert_collab_success_test() {
     .map(|i| CollabParams {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap(),
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Empty,
       override_if_exist: false,
     })
     .collect::<Vec<_>>();
@@ -87,9 +88,14 @@ async fn batch_insert_collab_success_test() {
 #[tokio::test]
 async fn create_collab_params_compatibility_serde_test() {
   // This test is to make sure that the CreateCollabParams is compatible with the old InsertCollabParams
+  let object_id = uuid::Uuid::new_v4().to_string();
+  let encoded_collab_v1 = default_document_collab_data(&object_id)
+    .encode_to_bytes()
+    .unwrap();
+
   let old_version_value = json!(InsertCollabParams {
-    object_id: "object_id".to_string(),
-    encoded_collab_v1: vec![0, 200],
+    object_id: object_id.clone(),
+    encoded_collab_v1: encoded_collab_v1.clone(),
     workspace_id: "workspace_id".to_string(),
     collab_type: CollabType::Document,
   });
@@ -100,8 +106,11 @@ async fn create_collab_params_compatibility_serde_test() {
   let new_version_value = serde_json::to_value(new_version_create_params.clone()).unwrap();
   assert_json_include!(actual: new_version_value.clone(), expected: old_version_value.clone());
 
-  assert_eq!(new_version_create_params.object_id, "object_id".to_string());
-  assert_eq!(new_version_create_params.encoded_collab_v1, vec![0, 200]);
+  assert_eq!(new_version_create_params.object_id, object_id);
+  assert_eq!(
+    new_version_create_params.encoded_collab_v1,
+    encoded_collab_v1
+  );
   assert_eq!(
     new_version_create_params.workspace_id,
     "workspace_id".to_string()
@@ -133,7 +142,7 @@ async fn create_collab_compatibility_with_json_params_test() {
     inner: CollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Empty,
       override_if_exist: false,
     },
     workspace_id: workspace_id.clone(),
@@ -158,7 +167,7 @@ async fn create_collab_compatibility_with_json_params_test() {
       workspace_id,
       inner: QueryCollab {
         object_id: object_id.clone(),
-        collab_type: CollabType::Document,
+        collab_type: CollabType::Empty,
       },
     })
     .send()
@@ -190,7 +199,7 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
     params_list: vec![CollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
-      collab_type: CollabType::Document,
+      collab_type: CollabType::Empty,
       override_if_exist: false,
     }],
   }
@@ -220,7 +229,7 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
       workspace_id,
       inner: QueryCollab {
         object_id: object_id.clone(),
-        collab_type: CollabType::Document,
+        collab_type: CollabType::Empty,
       },
     })
     .send()

@@ -1,35 +1,33 @@
 use anyhow::Error;
+use collab_rt_entity::{MsgId, SinkMessage};
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::ops::{Deref, DerefMut};
-
-use collab_rt_entity::collab_msg::{CollabSinkMessage, MsgId};
+use tracing::trace;
 
 pub(crate) struct SinkQueue<Msg> {
-  #[allow(dead_code)]
-  uid: i64,
   queue: BinaryHeap<QueueItem<Msg>>,
 }
 
 impl<Msg> SinkQueue<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
-  pub(crate) fn new(uid: i64) -> Self {
+  pub(crate) fn new() -> Self {
     Self {
-      uid,
       queue: Default::default(),
     }
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
+    trace!("📩 queue: {}", msg);
     self.queue.push(QueueItem::new(msg, msg_id));
   }
 }
 
 impl<Msg> Deref for SinkQueue<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   type Target = BinaryHeap<QueueItem<Msg>>;
 
@@ -40,7 +38,7 @@ where
 
 impl<Msg> DerefMut for SinkQueue<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   fn deref_mut(&mut self) -> &mut Self::Target {
     &mut self.queue
@@ -50,13 +48,12 @@ where
 #[derive(Debug, Clone)]
 pub(crate) struct QueueItem<Msg> {
   inner: Msg,
-  // TODO(nathan): user inner's msg_id
   msg_id: MsgId,
 }
 
 impl<Msg> QueueItem<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   pub fn new(msg: Msg, msg_id: MsgId) -> Self {
     Self { inner: msg, msg_id }
@@ -77,11 +74,12 @@ where
 
 impl<Msg> QueueItem<Msg>
 where
-  Msg: CollabSinkMessage,
+  Msg: SinkMessage,
 {
   pub fn mergeable(&self) -> bool {
     self.inner.mergeable()
   }
+
   pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
     self.inner.merge(other.message(), max_size)
   }

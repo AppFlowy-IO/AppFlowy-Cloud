@@ -558,6 +558,7 @@ dependencies = [
  "client-api-test-util",
  "client-websocket",
  "collab",
+ "collab-document",
  "collab-entity",
  "collab-folder",
  "collab-rt",
@@ -1356,6 +1357,7 @@ dependencies = [
  "client-api",
  "client-websocket",
  "collab",
+ "collab-document",
  "collab-entity",
  "collab-folder",
  "database-entity",
@@ -1400,7 +1402,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c08d23f5a1f9f0de9465a3b248aedeaf8cd65381#c08d23f5a1f9f0de9465a3b248aedeaf8cd65381"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1424,7 +1426,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c08d23f5a1f9f0de9465a3b248aedeaf8cd65381#c08d23f5a1f9f0de9465a3b248aedeaf8cd65381"
 dependencies = [
  "anyhow",
  "collab",
@@ -1443,7 +1445,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c08d23f5a1f9f0de9465a3b248aedeaf8cd65381#c08d23f5a1f9f0de9465a3b248aedeaf8cd65381"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1458,7 +1460,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=409058aad0969c4d4429151317428a3d17f341d1#409058aad0969c4d4429151317428a3d17f341d1"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c08d23f5a1f9f0de9465a3b248aedeaf8cd65381#c08d23f5a1f9f0de9465a3b248aedeaf8cd65381"
 dependencies = [
  "anyhow",
  "chrono",

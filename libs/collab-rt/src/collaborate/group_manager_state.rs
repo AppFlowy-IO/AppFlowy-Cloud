@@ -6,6 +6,7 @@ use collab_rt_entity::user::RealtimeUser;
 use dashmap::mapref::one::RefMut;
 use dashmap::try_result::TryResult;
 use dashmap::DashMap;
+
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -118,7 +119,6 @@ impl GroupManagementState {
     if let Some(entry) = entry {
       let group = entry.1;
       group.stop().await;
-      group.flush_collab().await;
     } else {
       // Log error if the group doesn't exist
       error!("Group for object_id:{} not found", object_id);

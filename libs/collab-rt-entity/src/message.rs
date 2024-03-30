@@ -1,13 +1,17 @@
-use crate::collab_msg::{ClientCollabMessage, CollabMessage, ServerCollabMessage};
 use anyhow::{anyhow, Error};
 use bincode::{DefaultOptions, Options};
 use std::collections::HashMap;
 
+use crate::client_message::ClientCollabMessage;
+use crate::server_message::ServerCollabMessage;
 use crate::user::UserMessage;
+use crate::{AwarenessSync, BroadcastSync, CollabAck, InitSync, ServerInit, UpdateSync};
 #[cfg(feature = "rt_compress")]
 use brotli::{CompressorReader, Decompressor};
+use bytes::Bytes;
+use collab::core::origin::CollabOrigin;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 #[cfg(feature = "rt_compress")]
 use std::io::Read;
 
@@ -159,139 +163,134 @@ pub enum SystemMessage {
   DuplicateConnection,
 }
 
-#[cfg(test)]
-mod tests {
-  use crate::collab_msg::{ClientCollabMessage, CollabMessage, InitSync};
-  use crate::message::{RealtimeMessage, SystemMessage};
-  use crate::user::UserMessage;
-  use bytes::Bytes;
-  use collab::core::origin::CollabOrigin;
-  use collab_entity::CollabType;
-  use serde::{Deserialize, Serialize};
-  use std::fs::File;
-  use std::io::{Read, Write};
+pub type MsgId = u64;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CollabMessage {
+  ClientInitSync(InitSync),
+  ClientUpdateSync(UpdateSync),
+  ClientAck(CollabAck),
+  ServerInitSync(ServerInit),
+  AwarenessSync(AwarenessSync),
+  ServerBroadcast(BroadcastSync),
+}
 
-  #[derive(Debug, Clone, Serialize, Deserialize)]
-  #[cfg_attr(
-    feature = "actix_message",
-    derive(actix::Message),
-    rtype(result = "()")
-  )]
-  pub enum RealtimeMessageV1 {
-    Collab(CollabMessage),
-    User(UserMessage),
-    System(SystemMessage),
-  }
-
-  #[test]
-  fn decode_0149_realtime_message_test() {
-    let collab_init = read_message_from_file("migration/0149/client_init").unwrap();
-    assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
-    if let RealtimeMessage::Collab(CollabMessage::ClientInitSync(init)) = collab_init {
-      assert_eq!(init.object_id, "object id 1");
-      assert_eq!(init.collab_type, CollabType::Document);
-      assert_eq!(init.workspace_id, "workspace id 1");
-      assert_eq!(init.msg_id, 1);
-      assert_eq!(init.payload, vec![1, 2, 3, 4]);
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
-    }
-
-    let collab_update = read_message_from_file("migration/0149/collab_update").unwrap();
-    assert!(matches!(collab_update, RealtimeMessage::Collab(_)));
-    if let RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(update)) = collab_update {
-      assert_eq!(update.object_id, "object id 1");
-      assert_eq!(update.msg_id, 10);
-      assert_eq!(update.payload, Bytes::from(vec![5, 6, 7, 8]));
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
-    }
-
-    let client_collab_v1 = read_message_from_file("migration/0149/client_collab_v1").unwrap();
-    assert!(matches!(
-      client_collab_v1,
-      RealtimeMessage::ClientCollabV1(_)
-    ));
-    if let RealtimeMessage::ClientCollabV1(messages) = client_collab_v1 {
-      assert_eq!(messages.len(), 1);
-      if let ClientCollabMessage::ClientUpdateSync { data } = &messages[0] {
-        assert_eq!(data.object_id, "object id 1");
-        assert_eq!(data.msg_id, 10);
-        assert_eq!(data.payload, Bytes::from(vec![5, 6, 7, 8]));
-      } else {
-        panic!("Failed to decode RealtimeMessage from file");
-      }
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
+impl CollabMessage {
+  pub fn msg_id(&self) -> Option<MsgId> {
+    match self {
+      CollabMessage::ClientInitSync(value) => Some(value.msg_id),
+      CollabMessage::ClientUpdateSync(value) => Some(value.msg_id),
+      CollabMessage::ClientAck(value) => Some(value.msg_id),
+      CollabMessage::ServerInitSync(value) => Some(value.msg_id),
+      CollabMessage::ServerBroadcast(_) => None,
+      CollabMessage::AwarenessSync(_) => None,
     }
   }
 
-  #[test]
-  fn decode_0147_realtime_message_test() {
-    let collab_init = read_message_from_file("migration/0147/client_init").unwrap();
-    assert!(matches!(collab_init, RealtimeMessage::Collab(_)));
-    if let RealtimeMessage::Collab(CollabMessage::ClientInitSync(init)) = collab_init {
-      assert_eq!(init.object_id, "object id 1");
-      assert_eq!(init.collab_type, CollabType::Document);
-      assert_eq!(init.workspace_id, "workspace id 1");
-      assert_eq!(init.msg_id, 1);
-      assert_eq!(init.payload, vec![1, 2, 3, 4]);
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
-    }
-
-    let collab_update = read_message_from_file("migration/0147/collab_update").unwrap();
-    assert!(matches!(collab_update, RealtimeMessage::Collab(_)));
-    if let RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(update)) = collab_update {
-      assert_eq!(update.object_id, "object id 1");
-      assert_eq!(update.msg_id, 10);
-      assert_eq!(update.payload, Bytes::from(vec![5, 6, 7, 8]));
-    } else {
-      panic!("Failed to decode RealtimeMessage from file");
+  pub fn len(&self) -> usize {
+    self.payload().len()
+  }
+  pub fn payload(&self) -> &Bytes {
+    match self {
+      CollabMessage::ClientInitSync(value) => &value.payload,
+      CollabMessage::ClientUpdateSync(value) => &value.payload,
+      CollabMessage::ClientAck(value) => &value.payload,
+      CollabMessage::ServerInitSync(value) => &value.payload,
+      CollabMessage::ServerBroadcast(value) => &value.payload,
+      CollabMessage::AwarenessSync(value) => &value.payload,
     }
   }
-
-  #[test]
-  fn decode_version_2_collab_message_with_version_1_test_1() {
-    let version_2 = RealtimeMessage::Collab(CollabMessage::ClientInitSync(InitSync::new(
-      CollabOrigin::Empty,
-      "1".to_string(),
-      CollabType::Document,
-      "w1".to_string(),
-      1,
-      vec![0u8, 3],
-    )));
-
-    let version_2_bytes = version_2.encode().unwrap();
-    let version_1: RealtimeMessageV1 = bincode::deserialize(&version_2_bytes).unwrap();
-    match (version_1, version_2) {
-      (
-        RealtimeMessageV1::Collab(CollabMessage::ClientInitSync(init_1)),
-        RealtimeMessage::Collab(CollabMessage::ClientInitSync(init_2)),
-      ) => {
-        assert_eq!(init_1, init_2);
-      },
-      _ => panic!("Failed to convert RealtimeMessage2 to RealtimeMessage"),
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+  pub fn origin(&self) -> &CollabOrigin {
+    match self {
+      CollabMessage::ClientInitSync(value) => &value.origin,
+      CollabMessage::ClientUpdateSync(value) => &value.origin,
+      CollabMessage::ClientAck(value) => &value.origin,
+      CollabMessage::ServerInitSync(value) => &value.origin,
+      CollabMessage::ServerBroadcast(value) => &value.origin,
+      CollabMessage::AwarenessSync(value) => &value.origin,
     }
   }
 
-  #[allow(dead_code)]
-  fn write_message_to_file(
-    message: &RealtimeMessage,
-    file_path: &str,
-  ) -> Result<(), Box<dyn std::error::Error>> {
-    let data = message.encode().unwrap();
-    let mut file = File::create(file_path)?;
-    file.write_all(&data)?;
-    Ok(())
+  pub fn uid(&self) -> Option<i64> {
+    self.origin().client_user_id()
   }
 
-  #[allow(dead_code)]
-  fn read_message_from_file(file_path: &str) -> Result<RealtimeMessage, anyhow::Error> {
-    let mut file = File::open(file_path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    let message = RealtimeMessage::decode(&buffer)?;
-    Ok(message)
+  pub fn object_id(&self) -> &str {
+    match self {
+      CollabMessage::ClientInitSync(value) => &value.object_id,
+      CollabMessage::ClientUpdateSync(value) => &value.object_id,
+      CollabMessage::ClientAck(value) => &value.object_id,
+      CollabMessage::ServerInitSync(value) => &value.object_id,
+      CollabMessage::ServerBroadcast(value) => &value.object_id,
+      CollabMessage::AwarenessSync(value) => &value.object_id,
+    }
+  }
+}
+
+impl Display for CollabMessage {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      CollabMessage::ClientInitSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientUpdateSync(value) => Display::fmt(&value, f),
+      CollabMessage::ClientAck(value) => Display::fmt(&value, f),
+      CollabMessage::ServerInitSync(value) => Display::fmt(&value, f),
+      CollabMessage::ServerBroadcast(value) => Display::fmt(&value, f),
+      CollabMessage::AwarenessSync(value) => Display::fmt(&value, f),
+    }
+  }
+}
+
+impl From<CollabAck> for CollabMessage {
+  fn from(value: CollabAck) -> Self {
+    CollabMessage::ClientAck(value)
+  }
+}
+
+impl From<BroadcastSync> for CollabMessage {
+  fn from(value: BroadcastSync) -> Self {
+    CollabMessage::ServerBroadcast(value)
+  }
+}
+
+impl From<InitSync> for CollabMessage {
+  fn from(value: InitSync) -> Self {
+    CollabMessage::ClientInitSync(value)
+  }
+}
+
+impl From<UpdateSync> for CollabMessage {
+  fn from(value: UpdateSync) -> Self {
+    CollabMessage::ClientUpdateSync(value)
+  }
+}
+
+impl From<AwarenessSync> for CollabMessage {
+  fn from(value: AwarenessSync) -> Self {
+    CollabMessage::AwarenessSync(value)
+  }
+}
+
+impl From<ServerInit> for CollabMessage {
+  fn from(value: ServerInit) -> Self {
+    CollabMessage::ServerInitSync(value)
+  }
+}
+
+impl TryFrom<RealtimeMessage> for CollabMessage {
+  type Error = anyhow::Error;
+
+  fn try_from(value: RealtimeMessage) -> Result<Self, Self::Error> {
+    match value {
+      RealtimeMessage::Collab(msg) => Ok(msg),
+      _ => Err(anyhow!("Invalid message type.")),
+    }
+  }
+}
+
+impl From<CollabMessage> for RealtimeMessage {
+  fn from(msg: CollabMessage) -> Self {
+    Self::Collab(msg)
   }
 }

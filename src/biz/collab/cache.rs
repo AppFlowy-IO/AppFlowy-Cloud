@@ -1,11 +1,11 @@
 use crate::biz::collab::disk_cache::CollabDiskCache;
 use crate::biz::collab::mem_cache::CollabMemCache;
-use crate::biz::collab::storage::check_encoded_collab_data;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 
 use crate::state::RedisClient;
 
+use collab_rt::data_validation::validate_encode_collab;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
@@ -113,9 +113,13 @@ impl CollabCache {
     params: CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
-    if let Err(err) = check_encoded_collab_data(&params.object_id, &params.encoded_collab_v1) {
+    if let Err(err) = validate_encode_collab(
+      &params.object_id,
+      &params.encoded_collab_v1,
+      &params.collab_type,
+    ) {
       let msg = format!(
-        "Can not decode the data into collab:{}, {}",
+        "collab doc state is not correct:{},{}",
         params.object_id, err
       );
       return Err(AppError::InvalidRequest(msg));

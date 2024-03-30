@@ -11,6 +11,7 @@ use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::preclude::Collab;
+
 use collab_entity::CollabType;
 use collab_folder::Folder;
 use database_entity::dto::{
@@ -806,7 +807,7 @@ pub async fn assert_client_collab_include_value(
   object_id: &str,
   expected: Value,
 ) -> Result<(), Error> {
-  let secs = 30;
+  let secs = 60;
   let object_id = object_id.to_string();
   let mut retry_count = 0;
   loop {

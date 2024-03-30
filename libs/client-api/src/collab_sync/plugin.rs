@@ -154,6 +154,7 @@ where
     let payload = Message::Awareness(update.clone()).encode_v1();
     self.sync_queue.queue_msg(|msg_id| {
       let update_sync = UpdateSync::new(origin.clone(), object_id.to_string(), payload, msg_id);
+      #[cfg(feature = "sync_verbose_log")]
       trace!("queue local state: {}", update_sync);
       ClientCollabMessage::new_update_sync(update_sync)
     });

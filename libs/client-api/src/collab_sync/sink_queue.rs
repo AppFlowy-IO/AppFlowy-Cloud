@@ -20,6 +20,7 @@ where
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("📩 queue: {}", msg);
     self.queue.push(QueueItem::new(msg, msg_id));
   }

@@ -65,6 +65,7 @@ pub struct CollabSink<Sink> {
 
 impl<Sink> Drop for CollabSink<Sink> {
   fn drop(&mut self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("Drop CollabSink {}", self.object.object_id);
     let _ = self.notifier.send(SinkSignal::Stop);
   }
@@ -284,6 +285,7 @@ where
         );
       }
     } else {
+      #[cfg(feature = "sync_verbose_log")]
       trace!(
         "{}: pending count:{} ids:{}",
         self.object.object_id,
@@ -337,6 +339,7 @@ where
         self.last_sync.update_timestamp().await;
         match sender.send(messages).await {
           Ok(_) => {
+            #[cfg(feature = "sync_verbose_log")]
             trace!(
               "🔥client sending {} messages {:?}",
               self.object.object_id,
@@ -402,6 +405,7 @@ where
 
       if cfg!(debug_assertions) {
         for (msg_id, merged_ids) in merged_ids {
+          #[cfg(feature = "sync_verbose_log")]
           trace!(
             "{}: merged {:?} messages into: {:?}",
             self.object.object_id,

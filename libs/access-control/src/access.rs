@@ -1,15 +1,13 @@
-use crate::biz::casbin::collab_ac::CollabAccessControlImpl;
-use crate::biz::casbin::enforcer::{AFEnforcer, NoEnforceGroup};
+use crate::enforcer::{AFEnforcer, NoEnforceGroup};
 
-use crate::biz::casbin::workspace_ac::WorkspaceAccessControlImpl;
 use std::cmp::Ordering;
 
 use app_error::AppError;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
 
-use crate::biz::casbin::adapter::PgAdapter;
-use crate::biz::casbin::metrics::{tick_metric, AccessControlMetrics};
+use crate::adapter::PgAdapter;
+use crate::metrics::{tick_metric, AccessControlMetrics};
 use actix_http::Method;
 use anyhow::anyhow;
 
@@ -73,14 +71,6 @@ impl AccessControl {
 
   pub fn subscribe_change(&self) -> broadcast::Receiver<AccessControlChange> {
     self.change_tx.subscribe()
-  }
-
-  pub fn new_collab_access_control(&self) -> CollabAccessControlImpl {
-    CollabAccessControlImpl::new(self.clone())
-  }
-
-  pub fn new_workspace_access_control(&self) -> WorkspaceAccessControlImpl {
-    WorkspaceAccessControlImpl::new(self.clone())
   }
 
   pub async fn update_policy(

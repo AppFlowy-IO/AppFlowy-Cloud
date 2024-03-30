@@ -237,22 +237,6 @@ impl ObjectType<'_> {
   }
 }
 
-/// Represents the action type that is stored in the access control policy.
-#[derive(Debug)]
-pub enum ActionType {
-  Role(AFRole),
-  Level(AFAccessLevel),
-}
-
-impl ToACAction for ActionType {
-  fn to_action(&self) -> &str {
-    match self {
-      ActionType::Role(role) => role.to_action(),
-      ActionType::Level(level) => level.to_action(),
-    }
-  }
-}
-
 /// Represents the actions that can be performed on objects.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Action {
@@ -289,7 +273,7 @@ impl ToRedisArgs for Action {
   where
     W: ?Sized + RedisWrite,
   {
-    self.to_action().write_redis_args(out)
+    self.as_enforce_act().write_redis_args(out)
   }
 }
 
@@ -305,18 +289,22 @@ impl FromRedisValue for Action {
   }
 }
 
-impl ToACAction for Action {
-  fn to_action(&self) -> &str {
-    match self {
-      Action::Read => "read",
-      Action::Write => "write",
-      Action::Delete => "delete",
-    }
+impl AsRef<str> for Action {
+  fn as_ref(&self) -> &str {
+    self.as_enforce_act()
   }
 }
 
-impl ToACAction for &Action {
-  fn to_action(&self) -> &str {
+impl Acts for Action {
+  fn as_family_acts(&self) -> Vec<&'static str> {
+    match self {
+      Action::Read => vec!["read"],
+      Action::Write => vec!["write"],
+      Action::Delete => vec!["delete"],
+    }
+  }
+
+  fn as_enforce_act(&self) -> &str {
     match self {
       Action::Read => "read",
       Action::Write => "write",
@@ -342,25 +330,71 @@ pub enum ActionVariant<'a> {
   FromAction(&'a Action),
 }
 
-impl ToACAction for ActionVariant<'_> {
-  fn to_action(&self) -> &str {
+impl Acts for ActionVariant<'_> {
+  fn as_family_acts(&self) -> Vec<&'static str> {
     match self {
-      ActionVariant::FromRole(role) => role.to_action(),
-      ActionVariant::FromAccessLevel(level) => level.to_action(),
-      ActionVariant::FromAction(action) => action.to_action(),
+      ActionVariant::FromRole(role) => role.as_family_acts(),
+      ActionVariant::FromAccessLevel(level) => level.as_family_acts(),
+      ActionVariant::FromAction(action) => action.as_family_acts(),
+    }
+  }
+
+  fn as_enforce_act(&self) -> &str {
+    match self {
+      ActionVariant::FromRole(role) => role.as_enforce_act(),
+      ActionVariant::FromAccessLevel(level) => level.as_enforce_act(),
+      ActionVariant::FromAction(action) => action.as_enforce_act(),
     }
   }
 }
-
-pub trait ToACAction {
-  fn to_action(&self) -> &str;
+/// Defines behavior for objects that can translate to a set of action identifiers.
+///
+/// - `as_family_acts`: Returns a list of action identifiers that represent the permissions
+///   granted by the role or access level. It's used when generating policies for a group of roles
+///   or access levels.
+///
+/// - `as_enforce_act`: Returns a single action identifier that represents the primary
+///   permission or capability associated with the role or access level. This method is
+///   typically used for enforcing access control decisions based on a singular, most
+///   relevant action.
+pub trait Acts {
+  fn as_family_acts(&self) -> Vec<&'static str>;
+  fn as_enforce_act(&self) -> &str;
 }
+
 pub trait FromACAction {
   fn from_action(action: &str) -> Self;
 }
 
-impl ToACAction for AFAccessLevel {
-  fn to_action(&self) -> &str {
+impl Acts for AFAccessLevel {
+  /// maps different access levels to a set of predefined action
+  /// identifiers that represent permissions. It starts with a base action applicable
+  /// to all access levels and extends this set based on the access level:
+  ///
+  /// - `ReadOnly`: Only includes the base action (`"10"`), indicating minimum permissions.
+  /// - `ReadAndComment`: Adds `"20"` to the base action, allowing reading and commenting.
+  /// - `ReadAndWrite`: Extends permissions to include `"20"` and `"30"`, enabling reading, commenting, and writing.
+  /// - `FullAccess`: Grants all possible actions by including `"20"`, `"30"`, and `"50"`, representing the highest level of access.
+  ///
+  fn as_family_acts(&self) -> Vec<&'static str> {
+    // Base action for all levels
+    let mut actions = vec!["10"];
+    match self {
+      AFAccessLevel::ReadOnly => (),
+      AFAccessLevel::ReadAndComment => {
+        actions.push("20");
+      },
+      AFAccessLevel::ReadAndWrite => {
+        actions.extend_from_slice(&["20", "30"]);
+      },
+      AFAccessLevel::FullAccess => {
+        actions.extend_from_slice(&["20", "30", "50"]);
+      },
+    }
+    actions
+  }
+
+  fn as_enforce_act(&self) -> &str {
     match self {
       AFAccessLevel::ReadOnly => "10",
       AFAccessLevel::ReadAndComment => "20",
@@ -376,8 +410,31 @@ impl FromACAction for AFAccessLevel {
   }
 }
 
-impl ToACAction for AFRole {
-  fn to_action(&self) -> &str {
+impl Acts for AFRole {
+  /// Returns a vector of action identifiers associated with a user's role.
+  ///
+  /// The function maps each role to a set of actions, reflecting a permission hierarchy
+  /// where higher roles inherit the permissions of the lower ones. The roles are defined
+  /// as follows:
+  /// - `Owner`: Has the highest level of access, including all possible actions (`"1"`, `"2"`, and `"3"`).
+  /// - `Member`: Can perform a subset of actions allowed for owners, excluding the most privileged ones (`"2"` and `"3"`).
+  /// - `Guest`: Has the least level of access, limited to the least privileged actions (`"3"` only).
+  ///
+  fn as_family_acts(&self) -> Vec<&'static str> {
+    match self {
+      AFRole::Owner => {
+        vec!["1", "2", "3"]
+      },
+      AFRole::Member => {
+        vec!["2", "3"]
+      },
+      AFRole::Guest => {
+        vec!["3"]
+      },
+    }
+  }
+
+  fn as_enforce_act(&self) -> &str {
     match self {
       AFRole::Owner => "1",
       AFRole::Member => "2",
@@ -416,12 +473,12 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
   let mut grouping_policies = Vec::new();
   for level in &af_access_levels {
     // All levels can read
-    grouping_policies.push([level.to_action(), Action::Read.to_action()].to_vec());
+    grouping_policies.push([level.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
     if level.can_write() {
-      grouping_policies.push([level.to_action(), Action::Write.to_action()].to_vec());
+      grouping_policies.push([level.as_enforce_act(), Action::Write.as_enforce_act()].to_vec());
     }
     if level.can_delete() {
-      grouping_policies.push([level.to_action(), Action::Delete.to_action()].to_vec());
+      grouping_policies.push([level.as_enforce_act(), Action::Delete.as_enforce_act()].to_vec());
     }
   }
 
@@ -429,16 +486,16 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
   for role in &af_roles {
     match role {
       AFRole::Owner => {
-        grouping_policies.push([role.to_action(), Action::Delete.to_action()].to_vec());
-        grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
-        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        grouping_policies.push([role.as_enforce_act(), Action::Delete.as_enforce_act()].to_vec());
+        grouping_policies.push([role.as_enforce_act(), Action::Write.as_enforce_act()].to_vec());
+        grouping_policies.push([role.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
       },
       AFRole::Member => {
-        grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
-        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        grouping_policies.push([role.as_enforce_act(), Action::Write.as_enforce_act()].to_vec());
+        grouping_policies.push([role.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
       },
       AFRole::Guest => {
-        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        grouping_policies.push([role.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
       },
     }
   }

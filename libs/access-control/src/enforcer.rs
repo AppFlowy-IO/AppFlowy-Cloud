@@ -1,5 +1,5 @@
 use crate::access::{
-  load_group_policies, ActionVariant, ObjectType, ToACAction, POLICY_FIELD_INDEX_OBJECT,
+  load_group_policies, ActionVariant, Acts, ObjectType, POLICY_FIELD_INDEX_OBJECT,
   POLICY_FIELD_INDEX_SUBJECT,
 };
 use crate::metrics::MetricsCalState;
@@ -54,19 +54,22 @@ where
     act: ActionVariant<'_>,
   ) -> Result<(), AppError> {
     validate_obj_action(&obj, &act)?;
-    let policy = vec![
-      uid.to_string(),
-      obj.policy_object(),
-      act.to_action().to_string(),
-    ];
-    // only one policy per user per object. So remove the old policy and add the new one.
-    trace!("[access control]: add policy:{}", policy.join(","));
-    let mut write_guard = self.enforcer.write().await;
-    let _result = write_guard
-      .add_policy(policy)
+
+    let policies = act
+      .as_family_acts()
+      .into_iter()
+      .map(|act| vec![uid.to_string(), obj.policy_object(), act.to_string()])
+      .collect::<Vec<Vec<_>>>();
+
+    trace!("[access control]: add policy:{:?}", policies);
+    self
+      .enforcer
+      .write()
+      .await
+      .add_policies(policies)
       .await
       .map_err(|e| AppError::Internal(anyhow!("fail to add policy: {e:?}")))?;
-    drop(write_guard);
+
     Ok(())
   }
 
@@ -117,12 +120,12 @@ where
 
     // 1. First, check workspace-level permissions.
     let workspace_policy_request = WorkspacePolicyRequest::new(workspace_id, uid, &obj, &act);
-    let segments = workspace_policy_request.into_segments();
+    let policy = workspace_policy_request.to_policy();
     let mut result = self
       .enforcer
       .read()
       .await
-      .enforce(segments)
+      .enforce(policy)
       .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
 
     // 2. Fallback to group policy if workspace-level check fails.
@@ -133,7 +136,7 @@ where
           .enforcer
           .read()
           .await
-          .enforce(policy_request.into_segments())
+          .enforce(policy_request.to_policy())
           .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
       }
     }
@@ -141,12 +144,12 @@ where
     // 3. Finally, enforce object-specific policy if previous checks fail.
     if !result {
       let policy_request = PolicyRequest::new(*uid, &obj, &act);
-      let segments = policy_request.into_segments();
+      let policy = policy_request.to_policy();
       result = self
         .enforcer
         .read()
         .await
-        .enforce(segments)
+        .enforce(policy)
         .map_err(|e| AppError::Internal(anyhow!("enforce: {e:?}")))?;
     }
 
@@ -192,7 +195,7 @@ fn validate_obj_action(obj: &ObjectType<'_>, act: &ActionVariant) -> Result<(), 
     _ => Err(AppError::Internal(anyhow!(
       "invalid object type and action type combination: object={:?}, action={:?}",
       obj,
-      act.to_action()
+      act.as_enforce_act()
     ))),
   }
 }

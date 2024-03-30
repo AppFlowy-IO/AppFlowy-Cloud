@@ -1,4 +1,4 @@
-use crate::access::{ActionVariant, ObjectType, ToACAction};
+use crate::access::{ActionVariant, Acts, ObjectType};
 
 pub struct GroupPolicyRequest<'a> {
   pub guid: &'a str,
@@ -18,11 +18,11 @@ impl GroupPolicyRequest<'_> {
       action,
     }
   }
-  pub fn into_segments(self) -> Vec<String> {
+  pub fn to_policy(&self) -> Vec<String> {
     vec![
       self.guid.to_string(),
       self.object_type.policy_object(),
-      self.action.to_action().to_string(),
+      self.action.as_enforce_act().to_string(),
     ]
   }
 }
@@ -49,14 +49,14 @@ impl<'a> WorkspacePolicyRequest<'a> {
     }
   }
 
-  pub fn into_segments(self) -> Vec<String> {
+  pub fn to_policy(&self) -> Vec<String> {
     match self.object_type {
       ObjectType::Workspace(_) => {
         // If the object type is a workspace, then keep using the original object type
         vec![
           self.uid.to_string(),
           self.object_type.policy_object(),
-          self.action.to_action().to_string(),
+          self.action.as_enforce_act().to_string(),
         ]
       },
       ObjectType::Collab(_) => {
@@ -65,7 +65,7 @@ impl<'a> WorkspacePolicyRequest<'a> {
         vec![
           self.uid.to_string(),
           object_type.policy_object(),
-          self.action.to_action().to_string(),
+          self.action.as_enforce_act().to_string(),
         ]
       },
     }
@@ -87,11 +87,11 @@ impl<'a> PolicyRequest<'a> {
     }
   }
 
-  pub fn into_segments(self) -> Vec<String> {
+  pub fn to_policy(&self) -> Vec<String> {
     vec![
       self.uid.to_string(),
       self.object_type.policy_object(),
-      self.action.to_action().to_string(),
+      self.action.as_enforce_act().to_string(),
     ]
   }
 }

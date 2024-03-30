@@ -35,6 +35,7 @@ pub struct SyncControl<Sink, Stream> {
 
 impl<Sink, Stream> Drop for SyncControl<Sink, Stream> {
   fn drop(&mut self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("Drop SyncQueue {}", self.object.object_id);
   }
 }
@@ -115,11 +116,13 @@ where
   }
 
   pub fn pause(&self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("pause {} sync", self.object.object_id);
     self.sink.pause();
   }
 
   pub fn resume(&self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("resume {} sync", self.object.object_id);
     self.sink.resume();
   }

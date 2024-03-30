@@ -12,6 +12,7 @@ use database::collab::select_collab_member_access_level;
 use database::pg_row::AFCollabMemberAccessLevelRow;
 use database::pg_row::AFWorkspaceMemberPermRow;
 use database::workspace::select_workspace_member_perm_stream;
+use database_entity::dto::AFRole;
 use futures_util::stream::BoxStream;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -72,6 +73,36 @@ async fn load_workspace_policies(
     ]
     .to_vec();
     policies.push(policy);
+
+    match member_permission.role {
+      AFRole::Owner => {
+        // when the member is owner, also add the member/guest policy
+        // when enforcing Member/Guest, then if the user is owner, it also can pass the access control.
+        for role in [AFRole::Member, AFRole::Guest].iter() {
+          let action = role.to_action();
+          let policy = [
+            uid.to_string(),
+            object_type.policy_object(),
+            action.to_string(),
+          ]
+          .to_vec();
+          policies.push(policy);
+        }
+      },
+      AFRole::Member => {
+        // when the member is member, also add the guest policy. it's used when enforcing role.
+        // when enforcing Guest, then if the user is member, it also can pass the access control.
+        let action = AFRole::Guest.to_action();
+        let policy = [
+          uid.to_string(),
+          object_type.policy_object(),
+          action.to_string(),
+        ]
+        .to_vec();
+        policies.push(policy);
+      },
+      AFRole::Guest => {},
+    }
   }
 
   Ok(policies)

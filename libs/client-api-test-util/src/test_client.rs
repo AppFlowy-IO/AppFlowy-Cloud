@@ -270,6 +270,12 @@ impl TestClient {
       .await
       .unwrap()
   }
+  pub async fn try_get_workspace_members(
+    &self,
+    workspace_id: &str,
+  ) -> Result<Vec<AFWorkspaceMember>, AppResponseError> {
+    self.api_client.get_workspace_members(workspace_id).await
+  }
 
   pub async fn add_collab_member(
     &self,

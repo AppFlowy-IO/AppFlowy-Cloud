@@ -408,3 +408,29 @@ async fn owner_leave_workspace_test() {
   // owner of workspace cannot leave the workspace
   assert_eq!(err.code, ErrorCode::NotEnoughPermissions);
 }
+
+#[tokio::test]
+async fn add_workspace_member_and_then_member_get_member_list() {
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let member = TestClient::new_user_without_ws_conn().await;
+  let guest = TestClient::new_user_without_ws_conn().await;
+
+  let workspace_id = owner.workspace_id().await;
+  owner
+    .add_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await;
+  owner
+    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .await;
+
+  // member should be able to get the member list of the workspace
+  let members = member.get_workspace_members(&workspace_id).await;
+  assert_eq!(members.len(), 3);
+
+  // guest should not be able to get the member list of the workspace
+  let error = guest
+    .try_get_workspace_members(&workspace_id)
+    .await
+    .unwrap_err();
+  assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
+}

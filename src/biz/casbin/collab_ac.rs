@@ -1,8 +1,6 @@
-use crate::biz::casbin::access_control::ObjectType;
-use crate::biz::casbin::access_control::{
-  enable_access_control, AccessControl, Action, ActionVariant,
-};
 use crate::biz::collab::access_control::CollabAccessControl;
+use access_control::access::ObjectType;
+use access_control::access::{enable_access_control, AccessControl, Action, ActionVariant};
 use app_error::AppError;
 use async_trait::async_trait;
 

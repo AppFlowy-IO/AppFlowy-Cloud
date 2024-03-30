@@ -189,6 +189,7 @@ fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
   // Prepend the start sign and append the end sign to the log message
   let log_msg = format!("{}\n{}\n{}", start_sign, log_msg, end_sign);
 
+  #[cfg(feature = "sync_verbose_log")]
   debug!("Aggregate message list:\n{}", log_msg);
 }
 
@@ -220,10 +221,8 @@ fn calculate_next_tick_duration(
   num_init_sync: usize,
   default_interval: Duration,
 ) -> Duration {
-  if cfg!(feature = "test_fast_sync") {
-    Duration::from_secs(1)
-  } else if num_messages == 0 {
-    Duration::from_secs(4)
+  if num_messages == 0 {
+    Duration::from_secs(2)
   } else {
     match num_init_sync {
       0 => default_interval,

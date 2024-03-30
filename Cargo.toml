@@ -99,7 +99,7 @@ tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
 scraper = "0.17.1"
 client-api-test-util = { path = "libs/client-api-test-util" }
-client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "test_fast_sync"] }
+client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "sync_verbose_log"] }
 opener = "0.6.1"
 image = "0.23.14"
 collab-folder = { version = "0.1.0" }

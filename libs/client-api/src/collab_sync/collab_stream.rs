@@ -36,6 +36,7 @@ pub struct ObserveCollab<Sink, Stream> {
 
 impl<Sink, Stream> Drop for ObserveCollab<Sink, Stream> {
   fn drop(&mut self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("Drop SyncStream {}", self.object_id);
   }
 }
@@ -229,6 +230,7 @@ where
         .await
     {
       if let Some(lock_guard) = collab.try_lock() {
+        #[cfg(feature = "sync_verbose_log")]
         trace!("Start pull missing updates for {}", object.object_id);
         start_sync(origin.clone(), object, &lock_guard, sink);
       }
@@ -321,6 +323,7 @@ pub(crate) fn check_update_contiguous(
   seq_num_counter: &Arc<SeqNumCounter>,
 ) -> Result<(), SyncError> {
   let prev_seq_num = seq_num_counter.fetch_update(current_seq_num);
+  #[cfg(feature = "sync_verbose_log")]
   trace!(
     "receive {} seq_num, prev:{}, current:{}",
     object_id,

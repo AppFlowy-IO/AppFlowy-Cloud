@@ -41,7 +41,7 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
     -> Result<(), AppError>;
 
-  async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
+  async fn remove_all_roles(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
 }
 
 #[derive(Clone)]
@@ -73,7 +73,7 @@ where
             (Method::POST, AFRole::Owner),
             (Method::DELETE, AFRole::Owner),
             (Method::PUT, AFRole::Owner),
-            (Method::GET, AFRole::Member),
+            (Method::GET, AFRole::Owner),
           ]
           .into(),
         ),

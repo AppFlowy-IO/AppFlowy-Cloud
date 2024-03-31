@@ -1571,7 +1571,6 @@ dependencies = [
  "collab",
  "serde",
  "thiserror",
- "tracing",
  "yrs",
 ]
 

@@ -30,7 +30,7 @@ use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use tracing::{error, info, trace, warn};
+use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
@@ -89,14 +89,11 @@ impl CollabBroadcast {
       // an update event. This event is then broadcast to all connected clients. After broadcasting, all
       // connected clients will receive the update and apply it to their local document state.
       let doc_sub = collab
-        .get_mut_awareness()
-        .doc_mut()
+        .get_doc()
         .observe_update_v1(move |txn, event| {
           let seq_num = edit_state.increment_edit_count();
-
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
-          info!("txn origin: {}", origin);
 
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
@@ -117,6 +114,7 @@ impl CollabBroadcast {
         if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
           trace!("awareness update:{}", awareness_update);
           let payload = Message::Awareness(awareness_update).encode_v1();
+          // TODO(nathan): replace the origin from awareness transaction
           let msg = AwarenessSync::new(cloned_oid.clone(), payload);
           if let Err(err) = broadcast_sink.send(msg.into()) {
             trace!("fail to broadcast awareness:{}", err);

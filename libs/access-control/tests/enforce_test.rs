@@ -386,6 +386,15 @@ async fn cmp_owner_role_test() {
       .enforce_policy(
         workspace_id,
         &uid,
+        ObjectType::Workspace(workspace_id),
+        ActionVariant::FromRole(&role),
+      )
+      .await
+      .unwrap());
+    assert!(enforcer
+      .enforce_policy(
+        workspace_id,
+        &uid,
         ObjectType::Collab(object_1),
         ActionVariant::FromRole(&role),
       )
@@ -417,12 +426,31 @@ async fn cmp_member_role_test() {
         .enforce_policy(
           workspace_id,
           &uid,
+          ObjectType::Workspace(workspace_id),
+          ActionVariant::FromRole(&role),
+        )
+        .await
+        .unwrap());
+
+      assert!(!enforcer
+        .enforce_policy(
+          workspace_id,
+          &uid,
           ObjectType::Collab(object_1),
           ActionVariant::FromRole(&role),
         )
         .await
         .unwrap());
     } else {
+      assert!(enforcer
+        .enforce_policy(
+          workspace_id,
+          &uid,
+          ObjectType::Workspace(workspace_id),
+          ActionVariant::FromRole(&role),
+        )
+        .await
+        .unwrap());
       assert!(enforcer
         .enforce_policy(
           workspace_id,

@@ -72,7 +72,7 @@ jobs:
 
       - name: Run tests
         run: |
-          RUST_LOG="info" cargo test
+          RUST_LOG="trace" DISABLE_CI_TEST_LOG="false" cargo test
 
       - name: Install Node.js
         uses: actions/setup-node@v2

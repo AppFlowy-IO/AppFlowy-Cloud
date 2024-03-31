@@ -1,5 +1,5 @@
 use crate::af_spawn;
-use crate::collab_sync::collab_stream::{check_update_contiguous, SeqNumCounter};
+use crate::collab_sync::collab_stream::{check_ack_broadcast_contiguous, SeqNumCounter};
 use crate::collab_sync::ping::PingSyncRunner;
 use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
@@ -266,8 +266,18 @@ where
 
     if is_valid {
       if let ServerCollabMessage::ClientAck(ack) = server_message {
-        // Check the seq_num is contiguous.
-        check_update_contiguous(&self.object.object_id, ack.seq_num, seq_num_counter)?;
+        seq_num_counter.store_ack_seq_num(ack.seq_num);
+
+        let ack_seq_num = ack.seq_num;
+        let broadcast_seq_num = seq_num_counter.get_broadcast_seq_num();
+        check_ack_broadcast_contiguous(&self.object.object_id, ack_seq_num, broadcast_seq_num)?;
+
+        if seq_num_counter.should_init_sync() {
+          return Err(SyncError::MissingUpdates(format!(
+            "{} ping exceeds, should start init sync",
+            &self.object.object_id,
+          )));
+        }
       }
     }
 

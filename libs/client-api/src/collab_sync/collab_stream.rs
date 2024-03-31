@@ -2,7 +2,7 @@ use crate::af_spawn;
 use crate::collab_sync::{
   start_sync, CollabSink, SyncError, SyncObject, NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC,
 };
-use anyhow::anyhow;
+
 use bytes::Bytes;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
@@ -158,7 +158,15 @@ where
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
           if let Err(err) = Self::validate_broadcast(object, data, seq_num_counter).await {
             if err.is_missing_updates() {
-              Self::pull_missing_updates(origin, object, collab, sink, last_init_time).await;
+              Self::pull_missing_updates(
+                origin,
+                object,
+                collab,
+                sink,
+                last_init_time,
+                seq_num_counter,
+              )
+              .await;
               return Ok(());
             }
           }
@@ -179,7 +187,15 @@ where
           Err(err) => {
             // Update the last sync time if the message is valid.
             if err.is_missing_updates() {
-              Self::pull_missing_updates(origin, object, collab, sink, last_init_time).await;
+              Self::pull_missing_updates(
+                origin,
+                object,
+                collab,
+                sink,
+                last_init_time,
+                seq_num_counter,
+              )
+              .await;
             } else {
               error!("Error while validating response: {}", err);
             }
@@ -217,7 +233,10 @@ where
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
     last_sync_time: &LastSyncTime,
+    seq_num_counter: &Arc<SeqNumCounter>,
   ) {
+    seq_num_counter.reset_equal_counter();
+
     let debounce_duration = if cfg!(debug_assertions) {
       Duration::from_secs(2)
     } else {
@@ -242,7 +261,23 @@ where
     broadcast_sync: &BroadcastSync,
     seq_num_counter: &Arc<SeqNumCounter>,
   ) -> Result<(), SyncError> {
-    check_update_contiguous(&object.object_id, broadcast_sync.seq_num, seq_num_counter)?;
+    if let CollabOrigin::Client(client) = &broadcast_sync.origin {
+      if client.device_id == object.device_id {
+        let prev_broadcast_num = seq_num_counter.store_broadcast_seq_num(broadcast_sync.seq_num);
+
+        if broadcast_sync.seq_num > prev_broadcast_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
+          return Err(SyncError::MissingUpdates(format!(
+            "{} missing broadcast updates, should start init sync",
+            object.object_id,
+          )));
+        }
+
+        let ack_seq_num = seq_num_counter.get_ack_seq_num();
+        let broadcast_seq_num = broadcast_sync.seq_num;
+        check_ack_broadcast_contiguous(&object.object_id, ack_seq_num, broadcast_seq_num)?;
+      }
+    }
+
     Ok(())
   }
 
@@ -315,61 +350,45 @@ impl LastSyncTime {
   }
 }
 
-/// Check if the update is contiguous.
-///
-/// when client send updates to the server, the seq_num should be increased otherwise which means the
-/// sever might lack of some updates for given client.
-pub(crate) fn check_update_contiguous(
+pub(crate) fn check_ack_broadcast_contiguous(
   object_id: &str,
-  current_seq_num: u32,
-  seq_num_counter: &Arc<SeqNumCounter>,
+  ack_seq_num: u32,
+  broadcast_seq_num: u32,
 ) -> Result<(), SyncError> {
-  let prev_seq_num = seq_num_counter.fetch_update(current_seq_num);
   #[cfg(feature = "sync_verbose_log")]
   trace!(
-    "receive {} seq_num, prev:{}, current:{}",
+    "receive {} seq_num, ack:{}, broadcast:{}",
     object_id,
-    prev_seq_num,
-    current_seq_num,
+    ack_seq_num,
+    broadcast_seq_num,
   );
 
-  // if the seq_num is 0, it means the client is just connected to the server.
-  if prev_seq_num == 0 && current_seq_num == 0 {
+  if broadcast_seq_num == 0 {
     return Ok(());
   }
 
-  if current_seq_num < prev_seq_num {
-    return Err(SyncError::Internal(anyhow!(
-      "{} invalid seq_num, prev:{}, current:{}",
-      object_id,
-      prev_seq_num,
-      current_seq_num,
-    )));
-  }
-
-  if current_seq_num > prev_seq_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC
-    || seq_num_counter.should_init_sync()
-  {
-    seq_num_counter.reset_counter();
+  if ack_seq_num > broadcast_seq_num + 6 {
     return Err(SyncError::MissingUpdates(format!(
       "{} missing {} updates, should start init sync",
       object_id,
-      current_seq_num - prev_seq_num,
+      ack_seq_num - broadcast_seq_num,
     )));
   }
+
   Ok(())
 }
 
 #[derive(Default)]
 pub struct SeqNumCounter {
-  pub counter: AtomicU32,
+  pub broadcast_seq_counter: AtomicU32,
+  pub ack_seq_counter: AtomicU32,
   pub equal_counter: AtomicU32,
 }
 
 impl SeqNumCounter {
-  pub fn fetch_update(&self, seq_num: u32) -> u32 {
+  pub fn store_ack_seq_num(&self, seq_num: u32) -> u32 {
     match self
-      .counter
+      .ack_seq_counter
       .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
         if seq_num >= current {
           Some(seq_num)
@@ -389,10 +408,25 @@ impl SeqNumCounter {
         // If the seq_num is less than the current seq_num, we should reset the equal_counter.
         // Because the server might be restarted and the seq_num is reset to 0.
         self.equal_counter.store(0, Ordering::SeqCst);
-        self.counter.store(seq_num, Ordering::SeqCst);
+        self.ack_seq_counter.store(seq_num, Ordering::SeqCst);
         prev
       },
     }
+  }
+
+  pub fn store_broadcast_seq_num(&self, seq_num: u32) -> u32 {
+    self
+      .broadcast_seq_counter
+      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_current| Some(seq_num))
+      .unwrap()
+  }
+
+  pub fn get_ack_seq_num(&self) -> u32 {
+    self.ack_seq_counter.load(Ordering::SeqCst)
+  }
+
+  pub fn get_broadcast_seq_num(&self) -> u32 {
+    self.broadcast_seq_counter.load(Ordering::SeqCst)
   }
 
   pub fn should_init_sync(&self) -> bool {
@@ -400,7 +434,7 @@ impl SeqNumCounter {
     self.equal_counter.load(Ordering::SeqCst) >= 8
   }
 
-  pub fn reset_counter(&self) {
+  pub fn reset_equal_counter(&self) {
     self.equal_counter.store(0, Ordering::SeqCst);
   }
 }

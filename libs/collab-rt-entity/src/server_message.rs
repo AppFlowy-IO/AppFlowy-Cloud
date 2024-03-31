@@ -270,7 +270,7 @@ impl Display for CollabAck {
 /// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct BroadcastSync {
-  pub(crate) origin: CollabOrigin,
+  pub origin: CollabOrigin,
   pub(crate) object_id: String,
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))

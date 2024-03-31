@@ -420,11 +420,13 @@ async fn add_workspace_member_and_then_member_get_member_list() {
 
   let workspace_id = owner.workspace_id().await;
   owner
-    .add_workspace_member(&workspace_id, &member, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await
+    .unwrap();
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .await
+    .unwrap();
 
   // member should be able to get the member list of the workspace
   let members = member.get_workspace_members(&workspace_id).await;

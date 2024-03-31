@@ -1,23 +1,20 @@
+use crate::act::{Action, ActionVariant, Acts};
+use crate::adapter::PgAdapter;
 use crate::enforcer::{AFEnforcer, NoEnforceGroup};
+use crate::metrics::{tick_metric, AccessControlMetrics};
 
-use std::cmp::Ordering;
-
+use anyhow::anyhow;
 use app_error::AppError;
+use casbin::rhai::ImmutableString;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
-
-use crate::adapter::PgAdapter;
-use crate::metrics::{tick_metric, AccessControlMetrics};
-use actix_http::Method;
-use anyhow::anyhow;
+use lazy_static::lazy_static;
 
 use sqlx::PgPool;
 
-use lazy_static::lazy_static;
-use redis::{ErrorKind, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use std::sync::Arc;
-
 use tokio::sync::broadcast;
+use tracing::trace;
 
 #[derive(Debug, Clone)]
 pub enum AccessControlChange {
@@ -52,9 +49,13 @@ impl AccessControl {
   ) -> Result<Self, AppError> {
     let model = casbin_model().await?;
     let adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
-    let enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
+    let mut enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
       AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
     })?;
+    enforcer.add_function(
+      "cmpRoleOrLevel",
+      |r: ImmutableString, p: ImmutableString| cmp_role_or_level(r.as_str(), p.as_str()),
+    );
 
     let enforcer = Arc::new(AFEnforcer::new(enforcer, NoEnforceGroup).await?);
     tick_metric(
@@ -191,8 +192,44 @@ g = _, _ # role and access level rule
 e = some(where (p.eft == allow))
 
 [matchers]
-m = r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)
+m = r.sub == p.sub && p.obj == r.obj && (g(p.act, r.act) || cmpRoleOrLevel(r.act, p.act))
 "###;
+
+pub async fn casbin_model() -> Result<DefaultModel, AppError> {
+  let model = casbin::DefaultModel::from_str(MODEL_CONF)
+    .await
+    .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
+  Ok(model)
+}
+
+/// Compares role or access level between a request and a policy.
+///
+/// it is designed to compare roles or access levels specified in the request and policy.
+/// It supports two prefixes: "r:" for roles and "l:" for access levels. When the prefixes match,
+/// it compares the values to determine if the policy's role or level is greater than or equal to
+/// the request's role or level.
+///
+/// # Arguments
+/// * `r_act` - The role or access level from the request, prefixed with "r:" for roles or "l:" for levels.
+/// * `p_act` - The role or access level from the policy, prefixed with "r:" for roles or "l:" for levels.
+///
+pub fn cmp_role_or_level(r_act: &str, p_act: &str) -> bool {
+  trace!("cmp_role_or_level: r: {} p: {}", r_act, p_act);
+
+  if r_act.starts_with("r:") && p_act.starts_with("r:") {
+    let r = AFRole::from_enforce_act(r_act);
+    let p = AFRole::from_enforce_act(p_act);
+    return p >= r;
+  }
+
+  if r_act.starts_with("l:") && p_act.starts_with("l:") {
+    let r = AFAccessLevel::from_enforce_act(r_act);
+    let p = AFAccessLevel::from_enforce_act(p_act);
+    return p >= r;
+  }
+
+  false
+}
 
 /// Represents the entity stored at the index of the access control policy.
 /// `subject_id, object_id, role/action`
@@ -237,217 +274,6 @@ impl ObjectType<'_> {
   }
 }
 
-/// Represents the actions that can be performed on objects.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Action {
-  Read,
-  Write,
-  Delete,
-}
-
-impl PartialOrd for Action {
-  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl Ord for Action {
-  fn cmp(&self, other: &Self) -> Ordering {
-    match (self, other) {
-      // Read
-      (Action::Read, Action::Read) => Ordering::Equal,
-      (Action::Read, _) => Ordering::Less,
-      (_, Action::Read) => Ordering::Greater,
-      // Write
-      (Action::Write, Action::Write) => Ordering::Equal,
-      (Action::Write, Action::Delete) => Ordering::Less,
-      // Delete
-      (Action::Delete, Action::Write) => Ordering::Greater,
-      (Action::Delete, Action::Delete) => Ordering::Equal,
-    }
-  }
-}
-
-impl ToRedisArgs for Action {
-  fn write_redis_args<W>(&self, out: &mut W)
-  where
-    W: ?Sized + RedisWrite,
-  {
-    self.as_enforce_act().write_redis_args(out)
-  }
-}
-
-impl FromRedisValue for Action {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    let s: String = FromRedisValue::from_redis_value(v)?;
-    match s.as_str() {
-      "read" => Ok(Action::Read),
-      "write" => Ok(Action::Write),
-      "delete" => Ok(Action::Delete),
-      _ => Err(RedisError::from((ErrorKind::TypeError, "invalid action"))),
-    }
-  }
-}
-
-impl AsRef<str> for Action {
-  fn as_ref(&self) -> &str {
-    self.as_enforce_act()
-  }
-}
-
-impl Acts for Action {
-  fn as_family_acts(&self) -> Vec<&'static str> {
-    match self {
-      Action::Read => vec!["read"],
-      Action::Write => vec!["write"],
-      Action::Delete => vec!["delete"],
-    }
-  }
-
-  fn as_enforce_act(&self) -> &str {
-    match self {
-      Action::Read => "read",
-      Action::Write => "write",
-      Action::Delete => "delete",
-    }
-  }
-}
-
-impl From<&Method> for Action {
-  fn from(method: &Method) -> Self {
-    match *method {
-      Method::POST => Action::Write,
-      Method::PUT => Action::Write,
-      Method::DELETE => Action::Delete,
-      _ => Action::Read,
-    }
-  }
-}
-
-pub enum ActionVariant<'a> {
-  FromRole(&'a AFRole),
-  FromAccessLevel(&'a AFAccessLevel),
-  FromAction(&'a Action),
-}
-
-impl Acts for ActionVariant<'_> {
-  fn as_family_acts(&self) -> Vec<&'static str> {
-    match self {
-      ActionVariant::FromRole(role) => role.as_family_acts(),
-      ActionVariant::FromAccessLevel(level) => level.as_family_acts(),
-      ActionVariant::FromAction(action) => action.as_family_acts(),
-    }
-  }
-
-  fn as_enforce_act(&self) -> &str {
-    match self {
-      ActionVariant::FromRole(role) => role.as_enforce_act(),
-      ActionVariant::FromAccessLevel(level) => level.as_enforce_act(),
-      ActionVariant::FromAction(action) => action.as_enforce_act(),
-    }
-  }
-}
-/// Defines behavior for objects that can translate to a set of action identifiers.
-///
-/// - `as_family_acts`: Returns a list of action identifiers that represent the permissions
-///   granted by the role or access level. It's used when generating policies for a group of roles
-///   or access levels.
-///
-/// - `as_enforce_act`: Returns a single action identifier that represents the primary
-///   permission or capability associated with the role or access level. This method is
-///   typically used for enforcing access control decisions based on a singular, most
-///   relevant action.
-pub trait Acts {
-  fn as_family_acts(&self) -> Vec<&'static str>;
-  fn as_enforce_act(&self) -> &str;
-}
-
-pub trait FromACAction {
-  fn from_action(action: &str) -> Self;
-}
-
-impl Acts for AFAccessLevel {
-  /// maps different access levels to a set of predefined action
-  /// identifiers that represent permissions. It starts with a base action applicable
-  /// to all access levels and extends this set based on the access level:
-  ///
-  /// - `ReadOnly`: Only includes the base action (`"10"`), indicating minimum permissions.
-  /// - `ReadAndComment`: Adds `"20"` to the base action, allowing reading and commenting.
-  /// - `ReadAndWrite`: Extends permissions to include `"20"` and `"30"`, enabling reading, commenting, and writing.
-  /// - `FullAccess`: Grants all possible actions by including `"20"`, `"30"`, and `"50"`, representing the highest level of access.
-  ///
-  fn as_family_acts(&self) -> Vec<&'static str> {
-    // Base action for all levels
-    let mut actions = vec!["10"];
-    match self {
-      AFAccessLevel::ReadOnly => (),
-      AFAccessLevel::ReadAndComment => {
-        actions.push("20");
-      },
-      AFAccessLevel::ReadAndWrite => {
-        actions.extend_from_slice(&["20", "30"]);
-      },
-      AFAccessLevel::FullAccess => {
-        actions.extend_from_slice(&["20", "30", "50"]);
-      },
-    }
-    actions
-  }
-
-  fn as_enforce_act(&self) -> &str {
-    match self {
-      AFAccessLevel::ReadOnly => "10",
-      AFAccessLevel::ReadAndComment => "20",
-      AFAccessLevel::ReadAndWrite => "30",
-      AFAccessLevel::FullAccess => "50",
-    }
-  }
-}
-
-impl FromACAction for AFAccessLevel {
-  fn from_action(action: &str) -> Self {
-    Self::from(action)
-  }
-}
-
-impl Acts for AFRole {
-  /// Returns a vector of action identifiers associated with a user's role.
-  ///
-  /// The function maps each role to a set of actions, reflecting a permission hierarchy
-  /// where higher roles inherit the permissions of the lower ones. The roles are defined
-  /// as follows:
-  /// - `Owner`: Has the highest level of access, including all possible actions (`"1"`, `"2"`, and `"3"`).
-  /// - `Member`: Can perform a subset of actions allowed for owners, excluding the most privileged ones (`"2"` and `"3"`).
-  /// - `Guest`: Has the least level of access, limited to the least privileged actions (`"3"` only).
-  ///
-  fn as_family_acts(&self) -> Vec<&'static str> {
-    match self {
-      AFRole::Owner => {
-        vec!["1", "2", "3"]
-      },
-      AFRole::Member => {
-        vec!["2", "3"]
-      },
-      AFRole::Guest => {
-        vec!["3"]
-      },
-    }
-  }
-
-  fn as_enforce_act(&self) -> &str {
-    match self {
-      AFRole::Owner => "1",
-      AFRole::Member => "2",
-      AFRole::Guest => "3",
-    }
-  }
-}
-impl FromACAction for AFRole {
-  fn from_action(action: &str) -> Self {
-    Self::from(action)
-  }
-}
-
 lazy_static! {
   static ref ENABLE_ACCESS_CONTROL: bool = {
     match std::env::var("APPFLOWY_ACCESS_CONTROL") {
@@ -473,12 +299,12 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
   let mut grouping_policies = Vec::new();
   for level in &af_access_levels {
     // All levels can read
-    grouping_policies.push([level.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
+    grouping_policies.push([level.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
     if level.can_write() {
-      grouping_policies.push([level.as_enforce_act(), Action::Write.as_enforce_act()].to_vec());
+      grouping_policies.push([level.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
     }
     if level.can_delete() {
-      grouping_policies.push([level.as_enforce_act(), Action::Delete.as_enforce_act()].to_vec());
+      grouping_policies.push([level.to_enforce_act(), Action::Delete.to_enforce_act()].to_vec());
     }
   }
 
@@ -486,16 +312,16 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
   for role in &af_roles {
     match role {
       AFRole::Owner => {
-        grouping_policies.push([role.as_enforce_act(), Action::Delete.as_enforce_act()].to_vec());
-        grouping_policies.push([role.as_enforce_act(), Action::Write.as_enforce_act()].to_vec());
-        grouping_policies.push([role.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Delete.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
       AFRole::Member => {
-        grouping_policies.push([role.as_enforce_act(), Action::Write.as_enforce_act()].to_vec());
-        grouping_policies.push([role.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
       AFRole::Guest => {
-        grouping_policies.push([role.as_enforce_act(), Action::Read.as_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
     }
   }
@@ -509,11 +335,4 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
     .await
     .map_err(|e| AppError::Internal(anyhow!("Failed to add grouping policies: {}", e)))?;
   Ok(())
-}
-
-pub(crate) async fn casbin_model() -> Result<DefaultModel, AppError> {
-  let model = casbin::DefaultModel::from_str(MODEL_CONF)
-    .await
-    .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
-  Ok(model)
 }

@@ -1,4 +1,4 @@
-use access_control::access::{AccessControl, ActionVariant, ObjectType};
+use access_control::access::{AccessControl, ObjectType};
 
 use crate::biz::pg_listener::PostgresDBListener;
 use database::pg_row::AFCollabMemberRow;
@@ -7,6 +7,7 @@ use database_entity::dto::AFRole;
 use serde::Deserialize;
 use sqlx::PgPool;
 
+use access_control::act::ActionVariant;
 use tokio::sync::broadcast;
 use tracing::error;
 use tracing::log::warn;

@@ -1,4 +1,4 @@
-use crate::access::{Acts, ObjectType};
+use crate::access::ObjectType;
 
 use async_trait::async_trait;
 
@@ -13,6 +13,7 @@ use database::pg_row::AFCollabMemberAccessLevelRow;
 use database::pg_row::AFWorkspaceMemberPermRow;
 use database::workspace::select_workspace_member_perm_stream;
 
+use crate::act::Acts;
 use futures_util::stream::BoxStream;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -43,7 +44,7 @@ async fn load_collab_policies(
   while let Some(Ok(member_access_lv)) = stream.next().await {
     let uid = member_access_lv.uid;
     let object_type = ObjectType::Collab(&member_access_lv.oid);
-    let acts = member_access_lv.access_level.as_family_acts();
+    let acts = member_access_lv.access_level.to_family_acts();
 
     for act in acts {
       let policy = [
@@ -107,14 +108,13 @@ async fn load_workspace_policies(
     let uid = member_permission.uid;
     let workspace_id = member_permission.workspace_id.to_string();
     let object_type = ObjectType::Workspace(&workspace_id);
-    let acts = member_permission.role.as_family_acts();
+    let acts = member_permission.role.to_family_acts();
     for act in acts {
-      let policy = [
+      let policy = vec![
         uid.to_string(),
         object_type.policy_object(),
         act.to_string(),
-      ]
-      .to_vec();
+      ];
       policies.push(policy);
     }
   }

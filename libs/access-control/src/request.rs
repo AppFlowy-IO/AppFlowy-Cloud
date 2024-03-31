@@ -1,4 +1,5 @@
-use crate::access::{ActionVariant, Acts, ObjectType};
+use crate::access::ObjectType;
+use crate::act::ActionVariant;
 
 pub struct GroupPolicyRequest<'a> {
   pub guid: &'a str,
@@ -22,7 +23,7 @@ impl GroupPolicyRequest<'_> {
     vec![
       self.guid.to_string(),
       self.object_type.policy_object(),
-      self.action.as_enforce_act().to_string(),
+      self.action.to_enforce_act().to_string(),
     ]
   }
 }
@@ -56,7 +57,7 @@ impl<'a> WorkspacePolicyRequest<'a> {
         vec![
           self.uid.to_string(),
           self.object_type.policy_object(),
-          self.action.as_enforce_act().to_string(),
+          self.action.to_enforce_act().to_string(),
         ]
       },
       ObjectType::Collab(_) => {
@@ -65,7 +66,7 @@ impl<'a> WorkspacePolicyRequest<'a> {
         vec![
           self.uid.to_string(),
           object_type.policy_object(),
-          self.action.as_enforce_act().to_string(),
+          self.action.to_enforce_act().to_string(),
         ]
       },
     }
@@ -91,7 +92,7 @@ impl<'a> PolicyRequest<'a> {
     vec![
       self.uid.to_string(),
       self.object_type.policy_object(),
-      self.action.as_enforce_act().to_string(),
+      self.action.to_enforce_act().to_string(),
     ]
   }
 }

@@ -136,7 +136,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       region: get_env_var("APPFLOWY_S3_REGION", ""),
     },
     casbin: CasbinSetting {
-      pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
+      pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "20").parse()?,
     },
     appflowy_ai: AppFlowyAISetting {
       url: get_env_var("APPFLOWY_AI_URL", "http://localhost:5001").into(),

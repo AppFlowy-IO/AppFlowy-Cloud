@@ -41,7 +41,11 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
     -> Result<(), AppError>;
 
-  async fn remove_all_roles(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
+  async fn remove_user_from_workspace(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<(), AppError>;
 }
 
 #[derive(Clone)]

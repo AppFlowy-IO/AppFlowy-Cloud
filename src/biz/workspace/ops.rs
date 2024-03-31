@@ -321,7 +321,7 @@ pub async fn remove_workspace_members(
       .map_err(AppResponseError::from)
     {
       workspace_access_control
-        .remove_role(&uid, workspace_id)
+        .remove_user_from_workspace(&uid, workspace_id)
         .await?;
     }
   }

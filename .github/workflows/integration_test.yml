@@ -6,6 +6,10 @@ on:
   pull_request_target:
     types: [ opened, synchronize, reopened ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   LOCALHOST_URL: http://localhost
   LOCALHOST_WS: ws://localhost/ws
@@ -55,20 +59,13 @@ jobs:
           sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml
           cat docker-compose.yml
 
-      - uses: actions/cache@v2
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
       - name: Run Docker-Compose
         run: |
           docker compose up -d
 
       - name: Run tests
         run: |
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test
+          RUST_LOG="trace" DISABLE_CI_TEST_LOG="false" cargo test
 
       - name: Install Node.js
         uses: actions/setup-node@v2

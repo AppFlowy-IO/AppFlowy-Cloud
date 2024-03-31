@@ -71,7 +71,7 @@ where
     &self,
     user: &RealtimeUser,
     object_id: &str,
-    origin: &CollabOrigin,
+    message_origin: &CollabOrigin,
     client_msg_router: &mut ClientMessageRouter,
   ) -> Result<(), RealtimeError> {
     // Lock the group and subscribe the user to the group.
@@ -83,7 +83,9 @@ where
         object_id,
         self.access_control.clone(),
       );
-      group.subscribe(user, origin.clone(), sink, stream).await;
+      group
+        .subscribe(user, message_origin.clone(), sink, stream)
+        .await;
       // explicitly drop the group to release the lock.
       drop(group);
 

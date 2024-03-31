@@ -12,7 +12,7 @@ use crate::api::workspace::{
   WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
 };
 use crate::state::UserCache;
-use access_control::access::Action;
+use access_control::act::Action;
 use actix_router::{Path, ResourceDef, Url};
 use anyhow::anyhow;
 use app_error::AppError;
@@ -41,7 +41,11 @@ pub trait WorkspaceAccessControl: Send + Sync + 'static {
   async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
     -> Result<(), AppError>;
 
-  async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
+  async fn remove_user_from_workspace(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<(), AppError>;
 }
 
 #[derive(Clone)]
@@ -73,7 +77,7 @@ where
             (Method::POST, AFRole::Owner),
             (Method::DELETE, AFRole::Owner),
             (Method::PUT, AFRole::Owner),
-            (Method::GET, AFRole::Member),
+            (Method::GET, AFRole::Owner),
           ]
           .into(),
         ),

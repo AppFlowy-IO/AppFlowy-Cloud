@@ -1,9 +1,10 @@
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
+use access_control::access::AccessControl;
 use access_control::access::ObjectType;
-use access_control::access::{AccessControl, Action, ActionVariant};
+use access_control::act::{Action, ActionVariant};
 use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::dto::{AFAccessLevel, AFRole};
+use database_entity::dto::AFRole;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -61,7 +62,6 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
     workspace_id: &Uuid,
     role: AFRole,
   ) -> Result<(), AppError> {
-    let access_level = AFAccessLevel::from(&role);
     self
       .access_control
       .update_policy(
@@ -70,19 +70,15 @@ impl WorkspaceAccessControl for WorkspaceAccessControlImpl {
         ActionVariant::FromRole(&role),
       )
       .await?;
-    self
-      .access_control
-      .update_policy(
-        uid,
-        ObjectType::Collab(&workspace_id.to_string()),
-        ActionVariant::FromAccessLevel(&access_level),
-      )
-      .await?;
     Ok(())
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn remove_role(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError> {
+  async fn remove_user_from_workspace(
+    &self,
+    uid: &i64,
+    workspace_id: &Uuid,
+  ) -> Result<(), AppError> {
     self
       .access_control
       .remove_policy(uid, &ObjectType::Workspace(&workspace_id.to_string()))

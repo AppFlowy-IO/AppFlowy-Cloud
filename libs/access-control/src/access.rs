@@ -228,6 +228,13 @@ pub fn cmp_role_or_level(r_act: &str, p_act: &str) -> bool {
     return p >= r;
   }
 
+  if r_act.starts_with("l:") && p_act.starts_with("r:") {
+    let r = AFAccessLevel::from_enforce_act(r_act);
+    let role = AFRole::from_enforce_act(p_act);
+    let p = AFAccessLevel::from(&role);
+    return p >= r;
+  }
+
   false
 }
 

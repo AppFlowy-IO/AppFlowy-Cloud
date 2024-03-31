@@ -362,6 +362,7 @@ impl Ord for AFRole {
   fn cmp(&self, other: &Self) -> Ordering {
     let left = i32::from(self);
     let right = i32::from(other);
+    // lower value has higher priority
     left.cmp(&right).reverse()
   }
 }
@@ -410,12 +411,6 @@ impl From<&AFRole> for AFAccessLevel {
       AFRole::Member => AFAccessLevel::ReadAndWrite,
       AFRole::Guest => AFAccessLevel::ReadOnly,
     }
-  }
-}
-
-impl From<AFRole> for AFAccessLevel {
-  fn from(value: AFRole) -> Self {
-    AFAccessLevel::from(&value)
   }
 }
 

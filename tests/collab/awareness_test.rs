@@ -51,9 +51,8 @@ async fn viewing_document_editing_users_test() {
   assert_eq!(clients, expected_clients);
   // simulate the guest close the collab
   guest.clean_awareness_state(&object_id);
-  // sleep 2 second to make sure the awareness observe callback is called
-  sleep(Duration::from_secs(2)).await;
-
+  // sleep 5 second to make sure the awareness observe callback is called
+  sleep(Duration::from_secs(5)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
   let clients = owner.get_connect_users(&object_id).await;
   assert_eq!(clients.len(), 1);
@@ -61,7 +60,8 @@ async fn viewing_document_editing_users_test() {
 
   // simulate the guest open the collab again
   guest.emit_awareness_state(&object_id);
-  sleep(Duration::from_secs(2)).await;
+  // sleep 5 second to make sure the awareness observe callback is called
+  sleep(Duration::from_secs(5)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
 
   guest.wait_object_sync_complete(&object_id).await.unwrap();

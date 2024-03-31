@@ -5,7 +5,7 @@ use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::{AppError, ErrorCode};
 use async_trait::async_trait;
-use collab::core::collab_plugin::EncodedCollab;
+use collab_rt_entity::EncodedCollab;
 use collab_rt_entity::HttpRealtimeMessage;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures_util::stream;

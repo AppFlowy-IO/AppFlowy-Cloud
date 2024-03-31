@@ -4,7 +4,7 @@ use crate::Client;
 use app_error::gotrue::GoTrueError;
 use app_error::ErrorCode;
 use async_trait::async_trait;
-use collab::core::collab_plugin::EncodedCollab;
+use collab_rt_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use reqwest::Method;

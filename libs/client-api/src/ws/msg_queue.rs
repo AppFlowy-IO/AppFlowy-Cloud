@@ -221,7 +221,9 @@ fn calculate_next_tick_duration(
   num_init_sync: usize,
   default_interval: Duration,
 ) -> Duration {
-  if num_messages == 0 {
+  if cfg!(feature = "test_util") {
+    Duration::from_secs(1)
+  } else if num_messages == 0 {
     Duration::from_secs(2)
   } else {
     match num_init_sync {

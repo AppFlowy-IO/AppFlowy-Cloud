@@ -149,7 +149,7 @@ where
     collab_message: &ClientCollabMessage,
   ) -> Result<(), RealtimeError> {
     let object_id = collab_message.object_id();
-    let origin = collab_message.origin();
+    let message_origin = collab_message.origin();
     match self.client_msg_router_by_user.get_mut(user) {
       None => {
         warn!("The client stream: {} is not found", user);
@@ -158,7 +158,12 @@ where
       Some(mut client_msg_router) => {
         self
           .group_manager
-          .subscribe_group(user, object_id, origin, client_msg_router.value_mut())
+          .subscribe_group(
+            user,
+            object_id,
+            message_origin,
+            client_msg_router.value_mut(),
+          )
           .await
       },
     }

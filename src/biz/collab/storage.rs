@@ -16,6 +16,7 @@ use database_entity::dto::{
 };
 use itertools::{Either, Itertools};
 
+use collab_rt::data_validation::validate_encode_collab;
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -57,43 +58,44 @@ where
     }
   }
 
-  /// Check if the user has enough permissions to insert collab
-  /// 1. If the collab already exists, check if the user has enough permissions to update collab
-  /// 2. If the collab doesn't exist, check if the user has enough permissions to create collab.
-  async fn check_collab_permission(
+  async fn check_write_workspace_permission(
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: &CollabParams,
-    is_collab_exist: bool,
   ) -> Result<(), AppError> {
-    if is_collab_exist {
-      // If the collab already exists, check if the user has enough permissions to update collab
-      let can_write = self
-        .access_control
-        .enforce_write_collab(workspace_id, uid, &params.object_id)
-        .await?;
+    // If the collab doesn't exist, check if the user has enough permissions to create collab.
+    // If the user is the owner or member of the workspace, the user can create collab.
+    let can_write_workspace = self
+      .access_control
+      .enforce_write_workspace(uid, workspace_id)
+      .await?;
 
-      if !can_write {
-        return Err(AppError::NotEnoughPermissions {
-          user: uid.to_string(),
-          action: format!("update collab:{}", params.object_id),
-        });
-      }
-    } else {
-      // If the collab doesn't exist, check if the user has enough permissions to create collab.
-      // If the user is the owner or member of the workspace, the user can create collab.
-      let can_write_workspace = self
-        .access_control
-        .enforce_write_workspace(uid, workspace_id)
-        .await?;
+    if !can_write_workspace {
+      return Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!("write workspace:{}", workspace_id),
+      });
+    }
+    Ok(())
+  }
 
-      if !can_write_workspace {
-        return Err(AppError::NotEnoughPermissions {
-          user: uid.to_string(),
-          action: format!("write workspace:{}", workspace_id),
-        });
-      }
+  async fn check_write_collab_permission(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    object_id: &str,
+  ) -> Result<(), AppError> {
+    // If the collab already exists, check if the user has enough permissions to update collab
+    let can_write = self
+      .access_control
+      .enforce_write_collab(workspace_id, uid, object_id)
+      .await?;
+
+    if !can_write {
+      return Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!("update collab:{}", object_id),
+      });
     }
     Ok(())
   }
@@ -178,27 +180,39 @@ where
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> AppResult<()> {
     params.validate()?;
+    if let Err(err) = validate_encode_collab(
+      &params.object_id,
+      &params.encoded_collab_v1,
+      &params.collab_type,
+    ) {
+      return Err(AppError::NoRequiredData(format!(
+        "collab doc state is not correct:{},{}",
+        params.object_id, err
+      )));
+    }
 
-    let is_collab_exist_in_db =
-      is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
-
-    // When the collab is not exist in the database, and the user passes the permission check,
-    // which means the user has the permission to create the collab, we should update the policy
-    if !is_collab_exist_in_db {
+    let is_exist = is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
+    if is_exist {
+      self
+        .check_write_workspace_permission(workspace_id, uid)
+        .await?;
+      self
+        .check_write_collab_permission(workspace_id, uid, &params.object_id)
+        .await?;
       trace!(
         "Update policy for user:{} to create collab:{}",
         uid,
         params.object_id
       );
+    } else {
+      self
+        .check_write_workspace_permission(workspace_id, uid)
+        .await?;
       self
         .access_control
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
-
-    self
-      .check_collab_permission(workspace_id, uid, &params, is_collab_exist_in_db)
-      .await?;
 
     self
       .cache

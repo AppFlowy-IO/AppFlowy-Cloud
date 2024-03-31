@@ -89,13 +89,12 @@ impl CollabBroadcast {
       // an update event. This event is then broadcast to all connected clients. After broadcasting, all
       // connected clients will receive the update and apply it to their local document state.
       let doc_sub = collab
-        .get_mut_awareness()
-        .doc_mut()
+        .get_doc()
         .observe_update_v1(move |txn, event| {
           let seq_num = edit_state.increment_edit_count();
-
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
+
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
 
@@ -115,6 +114,7 @@ impl CollabBroadcast {
         if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
           trace!("awareness update:{}", awareness_update);
           let payload = Message::Awareness(awareness_update).encode_v1();
+          // TODO(nathan): replace the origin from awareness transaction
           let msg = AwarenessSync::new(cloned_oid.clone(), payload);
           if let Err(err) = broadcast_sink.send(msg.into()) {
             trace!("fail to broadcast awareness:{}", err);
@@ -187,6 +187,7 @@ impl CollabBroadcast {
       // the receiver will continue to receive updates from the document observer and forward the update to
       // connected subscriber using its Sink. The loop will break if the stop_rx receives a message.
       let mut receiver = self.sender.subscribe();
+      let cloned_user = user.clone();
       tokio::spawn(async move {
         loop {
           select! {
@@ -198,12 +199,12 @@ impl CollabBroadcast {
                     continue;
                   }
 
-                  trace!("[realtime]: send {}", message);
+                  trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
                   if let Err(err) = sink.send(message).await {
                     error!("fail to broadcast message:{}", err);
                   }
                 }
-                Err( _) => break,
+                Err(_) => break,
               }
             },
           }
@@ -339,7 +340,11 @@ async fn handle_one_client_message(
     let resp = CollabAck::new(message_origin, object_id.to_string(), msg_id, seq_num);
     Ok(resp)
   } else {
-    trace!("Applying client updates: {}", collab_msg);
+    trace!(
+      "Applying client updates: {}, origin:{}",
+      collab_msg,
+      message_origin
+    );
     let ack = handle_one_message_payload(
       object_id,
       message_origin,
@@ -359,7 +364,7 @@ async fn handle_one_client_message(
 /// Handle the message sent from the client
 async fn handle_one_message_payload(
   object_id: &str,
-  origin: CollabOrigin,
+  message_origin: CollabOrigin,
   msg_id: MsgId,
   payload: &[u8],
   collab: &Mutex<Collab>,
@@ -392,7 +397,7 @@ async fn handle_one_message_payload(
   for msg in reader {
     match msg {
       Ok(msg) => {
-        let result = handle_message(&origin, &ServerSyncProtocol, &mut collab_lock, msg);
+        let result = handle_message(&message_origin, &ServerSyncProtocol, &mut collab_lock, msg);
         match result {
           Ok(payload) => {
             metrics_calculate
@@ -401,8 +406,13 @@ async fn handle_one_message_payload(
             // One ClientCollabMessage can have multiple Yrs [Message] in it, but we only need to
             // send one ack back to the client.
             if ack_response.is_none() {
-              let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id, seq_num)
-                .with_payload(payload.unwrap_or_default());
+              let resp = CollabAck::new(
+                message_origin.clone(),
+                object_id.to_string(),
+                msg_id,
+                seq_num,
+              )
+              .with_payload(payload.unwrap_or_default());
               ack_response = Some(resp);
             }
           },
@@ -412,8 +422,13 @@ async fn handle_one_message_payload(
               .fetch_add(1, Ordering::Relaxed);
             error!("handle collab:{} message error:{}", object_id, err);
             if ack_response.is_none() {
-              let resp = CollabAck::new(origin.clone(), object_id.to_string(), msg_id, seq_num)
-                .with_code(ack_code_from_error(&err));
+              let resp = CollabAck::new(
+                message_origin.clone(),
+                object_id.to_string(),
+                msg_id,
+                seq_num,
+              )
+              .with_code(ack_code_from_error(&err));
               ack_response = Some(resp);
             }
             break;

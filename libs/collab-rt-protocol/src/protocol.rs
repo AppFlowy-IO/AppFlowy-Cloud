@@ -2,7 +2,6 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::TransactionRetry;
-
 use collab::preclude::Collab;
 
 use yrs::updates::decoder::Decode;
@@ -164,7 +163,7 @@ pub trait CollabSyncProtocol {
 
 /// Handles incoming messages from the client/server
 pub fn handle_message<P: CollabSyncProtocol>(
-  origin: &CollabOrigin,
+  message_origin: &CollabOrigin,
   protocol: &P,
   collab: &mut Collab,
   msg: Message,
@@ -173,12 +172,12 @@ pub fn handle_message<P: CollabSyncProtocol>(
     Message::Sync(msg) => match msg {
       SyncMessage::SyncStep1(sv) => protocol.handle_sync_step1(collab.get_awareness(), sv),
       SyncMessage::SyncStep2(update) => protocol.handle_sync_step2(
-        origin,
+        message_origin,
         collab.get_mut_awareness(),
         Update::decode_v1(&update)?,
       ),
       SyncMessage::Update(update) => protocol.handle_update(
-        origin,
+        message_origin,
         collab.get_mut_awareness(),
         Update::decode_v1(&update)?,
       ),

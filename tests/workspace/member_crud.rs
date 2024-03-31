@@ -263,41 +263,44 @@ async fn workspace_add_member() {
 
 #[tokio::test]
 async fn add_workspace_member_and_owner_then_delete_all() {
-  let c1 = TestClient::new_user_without_ws_conn().await;
-  let c2 = TestClient::new_user_without_ws_conn().await;
-  let c3 = TestClient::new_user_without_ws_conn().await;
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let member = TestClient::new_user_without_ws_conn().await;
+  let second_owner = TestClient::new_user_without_ws_conn().await;
 
-  let workspace_id = c1.workspace_id().await;
-
+  let workspace_id = owner.workspace_id().await;
   // add client 2 to client 1's workspace
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Member)
+  owner
+    .add_workspace_member(&workspace_id, &member, AFRole::Member)
     .await;
-  c1.add_workspace_member(&workspace_id, &c3, AFRole::Owner)
+  owner
+    .add_workspace_member(&workspace_id, &second_owner, AFRole::Owner)
     .await;
 
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
-  assert_eq!(members[0].email, c1.email().await);
-  assert_eq!(members[1].email, c2.email().await);
-  assert_eq!(members[2].email, c3.email().await);
+  assert_eq!(members[0].email, owner.email().await);
+  assert_eq!(members[1].email, member.email().await);
+  assert_eq!(members[2].email, second_owner.email().await);
 
   // delete the members
-  c1.try_remove_workspace_member(&workspace_id, &c2)
+  owner
+    .try_remove_workspace_member(&workspace_id, &member)
     .await
     .unwrap();
-  c1.try_remove_workspace_member(&workspace_id, &c3)
+  owner
+    .try_remove_workspace_member(&workspace_id, &second_owner)
     .await
     .unwrap();
-  let members = c1
+  let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
     .await
     .unwrap();
   assert_eq!(members.len(), 1);
-  assert_eq!(members[0].email, c1.email().await);
+  assert_eq!(members[0].email, owner.email().await);
 }
 
 #[tokio::test]

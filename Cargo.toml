@@ -60,7 +60,6 @@ itertools = "0.11"
 uuid = "1.6.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 prost = "0.12.3"
-casbin.workspace = true
 dotenvy = "0.15.7"
 url = "2.5.0"
 brotli = "3.4.0"
@@ -157,7 +156,6 @@ access-control = { path = "libs/access-control" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"
-casbin = { version = "2.2.0", features = ["cached", "runtime-tokio", "incremental"] }
 collab-stream = { path = "libs/collab-stream" }
 serde_json = "1.0.111"
 serde = { version = "1.0.195", features = ["derive"] }
@@ -197,10 +195,10 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c08d23f5a1f9f0de9465a3b248aedeaf8cd65381" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ab468ea96a15863d1e792ea4bed3a8769f3ea8a7" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ab468ea96a15863d1e792ea4bed3a8769f3ea8a7" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ab468ea96a15863d1e792ea4bed3a8769f3ea8a7" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "ab468ea96a15863d1e792ea4bed3a8769f3ea8a7" }
 
 [features]
 ai_enable = []

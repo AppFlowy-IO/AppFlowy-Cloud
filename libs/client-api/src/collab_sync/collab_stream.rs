@@ -247,7 +247,7 @@ where
   }
 
   async fn process_payload(
-    origin: &CollabOrigin,
+    message_origin: &CollabOrigin,
     payload: &Bytes,
     object_id: &str,
     collab: &Arc<MutexCollab>,
@@ -259,19 +259,21 @@ where
       for msg in reader {
         let msg = msg?;
         let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-        if let Some(payload) = handle_message(origin, &ClientSyncProtocol, &mut collab, msg)? {
+        if let Some(payload) =
+          handle_message(message_origin, &ClientSyncProtocol, &mut collab, msg)?
+        {
           let object_id = object_id.to_string();
           sink.queue_msg(|msg_id| {
             if is_server_sync_step_1 {
               ClientCollabMessage::new_server_init_sync(ServerInit::new(
-                origin.clone(),
+                message_origin.clone(),
                 object_id,
                 payload,
                 msg_id,
               ))
             } else {
               ClientCollabMessage::new_update_sync(UpdateSync::new(
-                origin.clone(),
+                message_origin.clone(),
                 object_id,
                 payload,
                 msg_id,

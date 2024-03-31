@@ -22,7 +22,7 @@ use database::collab::CollabStorage;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
-use tracing::trace;
+use tracing::{event, trace};
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
@@ -104,9 +104,7 @@ impl CollabGroup {
   pub async fn remove_user(&self, user: &RealtimeUser) {
     if let Some((_, mut old_sub)) = self.subscribers.remove(user) {
       trace!("{} remove subscriber from group: {}", self.object_id, user);
-      tokio::spawn(async move {
-        old_sub.stop().await;
-      });
+      old_sub.stop().await;
     }
   }
 
@@ -139,6 +137,15 @@ impl CollabGroup {
 
     if let Some(mut old) = self.subscribers.insert((*user).clone(), sub) {
       old.stop().await;
+    }
+
+    if cfg!(debug_assertions) {
+      event!(
+        tracing::Level::TRACE,
+        "{}: add new subscriber, current group member: {}",
+        &self.object_id,
+        self.user_count(),
+      );
     }
 
     trace!(

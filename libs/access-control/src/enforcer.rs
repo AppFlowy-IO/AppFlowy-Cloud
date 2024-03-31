@@ -56,7 +56,7 @@ where
     validate_obj_action(&obj, &act)?;
 
     let policies = act
-      .to_family_acts()
+      .policy_acts()
       .into_iter()
       .map(|act| vec![uid.to_string(), obj.policy_object(), act.to_string()])
       .collect::<Vec<Vec<_>>>();

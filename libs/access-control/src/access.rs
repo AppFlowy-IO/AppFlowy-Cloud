@@ -85,9 +85,9 @@ impl AccessControl {
         uid: *uid,
         oid: obj.object_id().to_string(),
       };
-      let result = self.enforcer.update_policy(uid, obj, act).await;
+      self.enforcer.update_policy(uid, obj, act).await?;
       let _ = self.change_tx.send(change);
-      result
+      Ok(())
     } else {
       Ok(())
     }

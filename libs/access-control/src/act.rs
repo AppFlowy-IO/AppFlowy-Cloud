@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 /// Defines behavior for objects that can translate to a set of action identifiers.
 ///
 pub trait Acts {
-  fn to_family_acts(&self) -> Vec<&'static str>;
+  fn policy_acts(&self) -> Vec<&'static str>;
   fn to_enforce_act(&self) -> &'static str;
   fn from_enforce_act(act: &str) -> Self;
 }
@@ -18,11 +18,11 @@ pub enum ActionVariant<'a> {
 }
 
 impl<'a> ActionVariant<'a> {
-  pub fn to_family_acts(&self) -> Vec<&'static str> {
+  pub fn policy_acts(&self) -> Vec<&'static str> {
     match self {
-      ActionVariant::FromRole(role) => role.to_family_acts(),
-      ActionVariant::FromAccessLevel(level) => level.to_family_acts(),
-      ActionVariant::FromAction(action) => action.to_family_acts(),
+      ActionVariant::FromRole(role) => role.policy_acts(),
+      ActionVariant::FromAccessLevel(level) => level.policy_acts(),
+      ActionVariant::FromAction(action) => action.policy_acts(),
     }
   }
 
@@ -45,7 +45,7 @@ impl Acts for AFAccessLevel {
   /// - `ReadAndWrite`: Extends permissions to include `"20"` and `"30"`, enabling reading, commenting, and writing.
   /// - `FullAccess`: Grants all possible actions by including `"20"`, `"30"`, and `"50"`, representing the highest level of access.
   ///
-  fn to_family_acts(&self) -> Vec<&'static str> {
+  fn policy_acts(&self) -> Vec<&'static str> {
     // Base action for all levels
     match self {
       AFAccessLevel::ReadOnly => vec![self.to_enforce_act()],
@@ -85,7 +85,7 @@ impl Acts for AFRole {
   /// - `Member`: Can perform a subset of actions allowed for owners, excluding the most privileged ones (`"2"` and `"3"`).
   /// - `Guest`: Has the least level of access, limited to the least privileged actions (`"3"` only).
   ///
-  fn to_family_acts(&self) -> Vec<&'static str> {
+  fn policy_acts(&self) -> Vec<&'static str> {
     match self {
       AFRole::Owner => vec![self.to_enforce_act()],
       AFRole::Member => vec![self.to_enforce_act()],
@@ -170,7 +170,7 @@ impl AsRef<str> for Action {
 }
 
 impl Acts for Action {
-  fn to_family_acts(&self) -> Vec<&'static str> {
+  fn policy_acts(&self) -> Vec<&'static str> {
     match self {
       Action::Read => vec!["read"],
       Action::Write => vec!["write"],

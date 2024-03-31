@@ -44,9 +44,7 @@ async fn load_collab_policies(
   while let Some(Ok(member_access_lv)) = stream.next().await {
     let uid = member_access_lv.uid;
     let object_type = ObjectType::Collab(&member_access_lv.oid);
-    let acts = member_access_lv.access_level.to_family_acts();
-
-    for act in acts {
+    for act in member_access_lv.access_level.policy_acts() {
       let policy = [
         uid.to_string(),
         object_type.policy_object(),
@@ -108,8 +106,7 @@ async fn load_workspace_policies(
     let uid = member_permission.uid;
     let workspace_id = member_permission.workspace_id.to_string();
     let object_type = ObjectType::Workspace(&workspace_id);
-    let acts = member_permission.role.to_family_acts();
-    for act in acts {
+    for act in member_permission.role.policy_acts() {
       let policy = vec![
         uid.to_string(),
         object_type.policy_object(),

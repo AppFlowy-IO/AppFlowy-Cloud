@@ -43,16 +43,7 @@ impl Client {
       .await?;
     log_request_id(&resp);
     let resp = AppResponse::<EncodedCollab>::from_response(resp).await?;
-    match resp.into_data() {
-      Ok(data) => Ok(data),
-      Err(err) => {
-        if err.code == ErrorCode::RecordNotFound {
-          // retry after 2 seconds
-        } else {
-          Err(err)
-        }
-      },
-    }
+    resp.into_data()
   }
 
   #[instrument(level = "debug", skip_all, err)]

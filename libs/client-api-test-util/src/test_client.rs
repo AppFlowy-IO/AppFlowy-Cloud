@@ -156,6 +156,9 @@ impl TestClient {
     other_client: &TestClient,
     role: AFRole,
   ) {
+    // TODO(zack): replace with `invite_and_accepted_workspace_member`. Make sure running local test with `cargo run`
+    // and then all the local tasks should be passed.
+    // mark the create_workspace_members_handler with ` #[deprecated(note = "...")]`
     let member = CreateWorkspaceMember {
       email: other_client.email().await,
       role,

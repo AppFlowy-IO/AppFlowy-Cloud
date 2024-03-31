@@ -1,23 +1,20 @@
+use crate::act::{Action, ActionVariant, Acts};
+use crate::adapter::PgAdapter;
 use crate::enforcer::{AFEnforcer, NoEnforceGroup};
+use crate::metrics::{tick_metric, AccessControlMetrics};
 
-use std::cmp::Ordering;
-
+use anyhow::anyhow;
 use app_error::AppError;
+use casbin::rhai::ImmutableString;
 use casbin::{CoreApi, DefaultModel, Enforcer, MgmtApi};
 use database_entity::dto::{AFAccessLevel, AFRole};
-
-use crate::adapter::PgAdapter;
-use crate::metrics::{tick_metric, AccessControlMetrics};
-use actix_http::Method;
-use anyhow::anyhow;
+use lazy_static::lazy_static;
 
 use sqlx::PgPool;
 
-use lazy_static::lazy_static;
-use redis::{ErrorKind, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use std::sync::Arc;
-
 use tokio::sync::broadcast;
+use tracing::trace;
 
 #[derive(Debug, Clone)]
 pub enum AccessControlChange {
@@ -52,9 +49,13 @@ impl AccessControl {
   ) -> Result<Self, AppError> {
     let model = casbin_model().await?;
     let adapter = PgAdapter::new(pg_pool.clone(), access_control_metrics.clone());
-    let enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
+    let mut enforcer = casbin::Enforcer::new(model, adapter).await.map_err(|e| {
       AppError::Internal(anyhow!("Failed to create access control enforcer: {}", e))
     })?;
+    enforcer.add_function(
+      "cmpRoleOrLevel",
+      |r: ImmutableString, p: ImmutableString| cmp_role_or_level(r.as_str(), p.as_str()),
+    );
 
     let enforcer = Arc::new(AFEnforcer::new(enforcer, NoEnforceGroup).await?);
     tick_metric(
@@ -84,9 +85,9 @@ impl AccessControl {
         uid: *uid,
         oid: obj.object_id().to_string(),
       };
-      let result = self.enforcer.update_policy(uid, obj, act).await;
+      self.enforcer.update_policy(uid, obj, act).await?;
       let _ = self.change_tx.send(change);
-      result
+      Ok(())
     } else {
       Ok(())
     }
@@ -191,8 +192,51 @@ g = _, _ # role and access level rule
 e = some(where (p.eft == allow))
 
 [matchers]
-m = r.sub == p.sub && p.obj == r.obj && g(p.act, r.act)
+m = r.sub == p.sub && p.obj == r.obj && (g(p.act, r.act) || cmpRoleOrLevel(r.act, p.act))
 "###;
+
+pub async fn casbin_model() -> Result<DefaultModel, AppError> {
+  let model = casbin::DefaultModel::from_str(MODEL_CONF)
+    .await
+    .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
+  Ok(model)
+}
+
+/// Compares role or access level between a request and a policy.
+///
+/// it is designed to compare roles or access levels specified in the request and policy.
+/// It supports two prefixes: "r:" for roles and "l:" for access levels. When the prefixes match,
+/// it compares the values to determine if the policy's role or level is greater than or equal to
+/// the request's role or level.
+///
+/// # Arguments
+/// * `r_act` - The role or access level from the request, prefixed with "r:" for roles or "l:" for levels.
+/// * `p_act` - The role or access level from the policy, prefixed with "r:" for roles or "l:" for levels.
+///
+pub fn cmp_role_or_level(r_act: &str, p_act: &str) -> bool {
+  trace!("cmp_role_or_level: r: {} p: {}", r_act, p_act);
+
+  if r_act.starts_with("r:") && p_act.starts_with("r:") {
+    let r = AFRole::from_enforce_act(r_act);
+    let p = AFRole::from_enforce_act(p_act);
+    return p >= r;
+  }
+
+  if r_act.starts_with("l:") && p_act.starts_with("l:") {
+    let r = AFAccessLevel::from_enforce_act(r_act);
+    let p = AFAccessLevel::from_enforce_act(p_act);
+    return p >= r;
+  }
+
+  if r_act.starts_with("l:") && p_act.starts_with("r:") {
+    let r = AFAccessLevel::from_enforce_act(r_act);
+    let role = AFRole::from_enforce_act(p_act);
+    let p = AFAccessLevel::from(&role);
+    return p >= r;
+  }
+
+  false
+}
 
 /// Represents the entity stored at the index of the access control policy.
 /// `subject_id, object_id, role/action`
@@ -237,160 +281,6 @@ impl ObjectType<'_> {
   }
 }
 
-/// Represents the action type that is stored in the access control policy.
-#[derive(Debug)]
-pub enum ActionType {
-  Role(AFRole),
-  Level(AFAccessLevel),
-}
-
-impl ToACAction for ActionType {
-  fn to_action(&self) -> &str {
-    match self {
-      ActionType::Role(role) => role.to_action(),
-      ActionType::Level(level) => level.to_action(),
-    }
-  }
-}
-
-/// Represents the actions that can be performed on objects.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Action {
-  Read,
-  Write,
-  Delete,
-}
-
-impl PartialOrd for Action {
-  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl Ord for Action {
-  fn cmp(&self, other: &Self) -> Ordering {
-    match (self, other) {
-      // Read
-      (Action::Read, Action::Read) => Ordering::Equal,
-      (Action::Read, _) => Ordering::Less,
-      (_, Action::Read) => Ordering::Greater,
-      // Write
-      (Action::Write, Action::Write) => Ordering::Equal,
-      (Action::Write, Action::Delete) => Ordering::Less,
-      // Delete
-      (Action::Delete, Action::Write) => Ordering::Greater,
-      (Action::Delete, Action::Delete) => Ordering::Equal,
-    }
-  }
-}
-
-impl ToRedisArgs for Action {
-  fn write_redis_args<W>(&self, out: &mut W)
-  where
-    W: ?Sized + RedisWrite,
-  {
-    self.to_action().write_redis_args(out)
-  }
-}
-
-impl FromRedisValue for Action {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    let s: String = FromRedisValue::from_redis_value(v)?;
-    match s.as_str() {
-      "read" => Ok(Action::Read),
-      "write" => Ok(Action::Write),
-      "delete" => Ok(Action::Delete),
-      _ => Err(RedisError::from((ErrorKind::TypeError, "invalid action"))),
-    }
-  }
-}
-
-impl ToACAction for Action {
-  fn to_action(&self) -> &str {
-    match self {
-      Action::Read => "read",
-      Action::Write => "write",
-      Action::Delete => "delete",
-    }
-  }
-}
-
-impl ToACAction for &Action {
-  fn to_action(&self) -> &str {
-    match self {
-      Action::Read => "read",
-      Action::Write => "write",
-      Action::Delete => "delete",
-    }
-  }
-}
-
-impl From<&Method> for Action {
-  fn from(method: &Method) -> Self {
-    match *method {
-      Method::POST => Action::Write,
-      Method::PUT => Action::Write,
-      Method::DELETE => Action::Delete,
-      _ => Action::Read,
-    }
-  }
-}
-
-pub enum ActionVariant<'a> {
-  FromRole(&'a AFRole),
-  FromAccessLevel(&'a AFAccessLevel),
-  FromAction(&'a Action),
-}
-
-impl ToACAction for ActionVariant<'_> {
-  fn to_action(&self) -> &str {
-    match self {
-      ActionVariant::FromRole(role) => role.to_action(),
-      ActionVariant::FromAccessLevel(level) => level.to_action(),
-      ActionVariant::FromAction(action) => action.to_action(),
-    }
-  }
-}
-
-pub trait ToACAction {
-  fn to_action(&self) -> &str;
-}
-pub trait FromACAction {
-  fn from_action(action: &str) -> Self;
-}
-
-impl ToACAction for AFAccessLevel {
-  fn to_action(&self) -> &str {
-    match self {
-      AFAccessLevel::ReadOnly => "10",
-      AFAccessLevel::ReadAndComment => "20",
-      AFAccessLevel::ReadAndWrite => "30",
-      AFAccessLevel::FullAccess => "50",
-    }
-  }
-}
-
-impl FromACAction for AFAccessLevel {
-  fn from_action(action: &str) -> Self {
-    Self::from(action)
-  }
-}
-
-impl ToACAction for AFRole {
-  fn to_action(&self) -> &str {
-    match self {
-      AFRole::Owner => "1",
-      AFRole::Member => "2",
-      AFRole::Guest => "3",
-    }
-  }
-}
-impl FromACAction for AFRole {
-  fn from_action(action: &str) -> Self {
-    Self::from(action)
-  }
-}
-
 lazy_static! {
   static ref ENABLE_ACCESS_CONTROL: bool = {
     match std::env::var("APPFLOWY_ACCESS_CONTROL") {
@@ -416,12 +306,12 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
   let mut grouping_policies = Vec::new();
   for level in &af_access_levels {
     // All levels can read
-    grouping_policies.push([level.to_action(), Action::Read.to_action()].to_vec());
+    grouping_policies.push([level.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
     if level.can_write() {
-      grouping_policies.push([level.to_action(), Action::Write.to_action()].to_vec());
+      grouping_policies.push([level.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
     }
     if level.can_delete() {
-      grouping_policies.push([level.to_action(), Action::Delete.to_action()].to_vec());
+      grouping_policies.push([level.to_enforce_act(), Action::Delete.to_enforce_act()].to_vec());
     }
   }
 
@@ -429,16 +319,16 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
   for role in &af_roles {
     match role {
       AFRole::Owner => {
-        grouping_policies.push([role.to_action(), Action::Delete.to_action()].to_vec());
-        grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
-        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Delete.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
       AFRole::Member => {
-        grouping_policies.push([role.to_action(), Action::Write.to_action()].to_vec());
-        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Write.to_enforce_act()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
       AFRole::Guest => {
-        grouping_policies.push([role.to_action(), Action::Read.to_action()].to_vec());
+        grouping_policies.push([role.to_enforce_act(), Action::Read.to_enforce_act()].to_vec());
       },
     }
   }
@@ -452,11 +342,4 @@ pub(crate) async fn load_group_policies(enforcer: &mut Enforcer) -> Result<(), A
     .await
     .map_err(|e| AppError::Internal(anyhow!("Failed to add grouping policies: {}", e)))?;
   Ok(())
-}
-
-pub(crate) async fn casbin_model() -> Result<DefaultModel, AppError> {
-  let model = casbin::DefaultModel::from_str(MODEL_CONF)
-    .await
-    .map_err(|e| AppError::Internal(anyhow!("Failed to create access control model: {}", e)))?;
-  Ok(model)
 }

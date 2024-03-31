@@ -1,7 +1,6 @@
 use crate::api::workspace::COLLAB_PATTERN;
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
-use access_control::access::Action;
 use actix_router::{Path, ResourceDef, Url};
 use actix_web::http::Method;
 use app_error::AppError;
@@ -11,6 +10,7 @@ use database_entity::dto::AFAccessLevel;
 
 use crate::biz::collab::cache::CollabCache;
 
+use access_control::act::Action;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{instrument, trace};

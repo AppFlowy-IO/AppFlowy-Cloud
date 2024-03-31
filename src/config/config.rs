@@ -13,7 +13,6 @@ pub struct Config {
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
-  pub casbin: CasbinSetting,
   pub appflowy_ai: AppFlowyAISetting,
 }
 
@@ -134,9 +133,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       secret_key: get_env_var("APPFLOWY_S3_SECRET_KEY", "minioadmin").into(),
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
-    },
-    casbin: CasbinSetting {
-      pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
     },
     appflowy_ai: AppFlowyAISetting {
       url: get_env_var("APPFLOWY_AI_URL", "http://localhost:5001").into(),

@@ -6,6 +6,7 @@ use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
 use access_control::access::{enable_access_control, AccessControl};
 
+use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::{
   CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
 };
@@ -13,11 +14,6 @@ use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
 use crate::biz::collab::cache::CollabCache;
-
-use crate::biz::actix_ws::server::RealtimeServerActor;
-use crate::biz::casbin::pg_listen::{
-  spawn_listen_on_collab_member_change, spawn_listen_on_workspace_member_change,
-};
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
@@ -197,8 +193,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   // Pg listeners
   info!("Setting up Pg listeners...");
   let pg_listeners = Arc::new(PgListeners::new(&pg_pool).await?);
-  let collab_member_listener = pg_listeners.subscribe_collab_member_change();
-  let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
+  // let collab_member_listener = pg_listeners.subscribe_collab_member_change();
+  // let workspace_member_listener = pg_listeners.subscribe_workspace_member_change();
 
   info!(
     "Setting up access controls, is_enable: {}",
@@ -207,12 +203,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   let access_control =
     AccessControl::new(pg_pool.clone(), metrics.access_control_metrics.clone()).await?;
 
-  spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
-  spawn_listen_on_collab_member_change(
-    pg_pool.clone(),
-    collab_member_listener,
-    access_control.clone(),
-  );
+  // spawn_listen_on_workspace_member_change(workspace_member_listener, access_control.clone());
+  // spawn_listen_on_collab_member_change(
+  //   pg_pool.clone(),
+  //   collab_member_listener,
+  //   access_control.clone(),
+  // );
 
   let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control = CollabAccessControlImpl::new(access_control.clone());

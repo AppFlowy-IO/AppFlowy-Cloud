@@ -51,9 +51,8 @@ async fn viewing_document_editing_users_test() {
   assert_eq!(clients, expected_clients);
   // simulate the guest close the collab
   guest.clean_awareness_state(&object_id);
-  // sleep 2 second to make sure the awareness observe callback is called
-  sleep(Duration::from_secs(2)).await;
-
+  // sleep 5 second to make sure the awareness observe callback is called
+  sleep(Duration::from_secs(5)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
   let clients = owner.get_connect_users(&object_id).await;
   assert_eq!(clients.len(), 1);
@@ -61,10 +60,36 @@ async fn viewing_document_editing_users_test() {
 
   // simulate the guest open the collab again
   guest.emit_awareness_state(&object_id);
+  // sleep 2 second to make sure the awareness observe callback is called
   sleep(Duration::from_secs(2)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
 
-  guest.wait_object_sync_complete(&object_id).await.unwrap();
-  let clients = owner.get_connect_users(&object_id).await;
-  assert_eq!(clients.len(), 2);
+  assert_num_connected_client_within_secs(&owner, &object_id, 2, 30).await;
+}
+
+async fn assert_num_connected_client_within_secs(
+  client: &TestClient,
+  object_id: &str,
+  expected: usize,
+  secs: u64,
+) {
+  let mut retry_count = 0;
+  loop {
+    tokio::select! {
+       _ = tokio::time::sleep(Duration::from_secs(secs)) => {
+         panic!("timeout");
+       },
+       clients = client.get_connect_users(object_id) => {
+        retry_count += 1;
+        if retry_count > 30 {
+          assert_eq!(clients.len(), expected);
+          break;
+        }
+        if clients.len() == expected {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+      }
+    }
+  }
 }

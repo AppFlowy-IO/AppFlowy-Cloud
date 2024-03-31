@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
@@ -351,6 +352,21 @@ impl From<&AFRole> for i32 {
   }
 }
 
+impl PartialOrd for AFRole {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for AFRole {
+  fn cmp(&self, other: &Self) -> Ordering {
+    let left = i32::from(self);
+    let right = i32::from(other);
+    // lower value has higher priority
+    left.cmp(&right).reverse()
+  }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AFPermission {
   /// The permission id
@@ -398,12 +414,6 @@ impl From<&AFRole> for AFAccessLevel {
   }
 }
 
-impl From<AFRole> for AFAccessLevel {
-  fn from(value: AFRole) -> Self {
-    AFAccessLevel::from(&value)
-  }
-}
-
 impl From<i32> for AFAccessLevel {
   fn from(value: i32) -> Self {
     // Can't modify the value of the enum
@@ -440,6 +450,21 @@ impl From<&AFAccessLevel> for i32 {
     *level as i32
   }
 }
+
+impl PartialOrd for AFAccessLevel {
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for AFAccessLevel {
+  fn cmp(&self, other: &Self) -> Ordering {
+    let left = i32::from(self);
+    let right = i32::from(other);
+    left.cmp(&right)
+  }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AFCollabMembers(pub Vec<AFCollabMember>);
 

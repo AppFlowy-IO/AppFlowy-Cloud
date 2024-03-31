@@ -71,7 +71,7 @@ where
     &self,
     user: &RealtimeUser,
     object_id: &str,
-    origin: &CollabOrigin,
+    message_origin: &CollabOrigin,
     client_msg_router: &mut ClientMessageRouter,
   ) -> Result<(), RealtimeError> {
     // Lock the group and subscribe the user to the group.
@@ -83,7 +83,9 @@ where
         object_id,
         self.access_control.clone(),
       );
-      group.subscribe(user, origin.clone(), sink, stream).await;
+      group
+        .subscribe(user, message_origin.clone(), sink, stream)
+        .await;
       // explicitly drop the group to release the lock.
       drop(group);
 
@@ -103,7 +105,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) {
-    let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
+    let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], true);
     let plugin = LoadCollabPlugin::new(
       uid,
       workspace_id,

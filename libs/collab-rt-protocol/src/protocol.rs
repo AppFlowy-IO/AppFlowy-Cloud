@@ -2,9 +2,8 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::core::transaction::TransactionRetry;
-
 use collab::preclude::Collab;
-
+use tracing::info;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};
@@ -110,6 +109,8 @@ pub trait CollabSyncProtocol {
     let mut txn = retry_txn
       .try_get_write_txn_with(origin.clone())
       .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
+    info!("handle_sync_step2 origin: {:?}", txn.origin());
+
     txn
       .try_apply_update(update)
       .map_err(|err| Error::YrsApplyUpdate(format!("sync step2 apply update: {}", err)))?;
@@ -164,7 +165,7 @@ pub trait CollabSyncProtocol {
 
 /// Handles incoming messages from the client/server
 pub fn handle_message<P: CollabSyncProtocol>(
-  origin: &CollabOrigin,
+  message_origin: &CollabOrigin,
   protocol: &P,
   collab: &mut Collab,
   msg: Message,
@@ -173,12 +174,12 @@ pub fn handle_message<P: CollabSyncProtocol>(
     Message::Sync(msg) => match msg {
       SyncMessage::SyncStep1(sv) => protocol.handle_sync_step1(collab.get_awareness(), sv),
       SyncMessage::SyncStep2(update) => protocol.handle_sync_step2(
-        origin,
+        message_origin,
         collab.get_mut_awareness(),
         Update::decode_v1(&update)?,
       ),
       SyncMessage::Update(update) => protocol.handle_update(
-        origin,
+        message_origin,
         collab.get_mut_awareness(),
         Update::decode_v1(&update)?,
       ),

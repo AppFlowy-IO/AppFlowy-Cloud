@@ -16,12 +16,12 @@ async fn main() -> anyhow::Result<()> {
   filters.push(format!("database={}", level));
   filters.push(format!("storage={}", level));
   filters.push(format!("gotrue={}", level));
+  // Load environment variables from .env file
+  dotenvy::dotenv().ok();
+
   let conf =
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
   init_subscriber(&conf.app_env, filters);
-
-  // Load environment variables from .env file
-  dotenvy::dotenv().ok();
 
   let (tx, rx) = tokio::sync::mpsc::channel(1000);
   let state = init_state(&conf, tx)

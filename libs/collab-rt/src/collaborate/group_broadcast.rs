@@ -5,7 +5,7 @@ use anyhow::anyhow;
 
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_rt_protocol::{handle_message, Error};
+use collab_rt_protocol::{handle_message, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::Ordering;
@@ -420,7 +420,7 @@ async fn handle_one_message_payload(
             metrics_calculate
               .apply_update_failed_count
               .fetch_add(1, Ordering::Relaxed);
-            error!("handle collab:{} message error:{}", object_id, err);
+            error!("{} protocol error:{}", object_id, err);
             if ack_response.is_none() {
               let resp = CollabAck::new(
                 message_origin.clone(),
@@ -446,11 +446,12 @@ async fn handle_one_message_payload(
 }
 
 #[inline]
-fn ack_code_from_error(error: &Error) -> AckCode {
+fn ack_code_from_error(error: &RTProtocolError) -> AckCode {
   match error {
-    Error::YrsTransaction(_) => AckCode::Retry,
-    Error::YrsApplyUpdate(_) => AckCode::CannotApplyUpdate,
-    // Error::YrsEncodeState(_) => AckCode::EncodeState,
+    RTProtocolError::YrsTransaction(_) => AckCode::Retry,
+    RTProtocolError::YrsApplyUpdate(_) => AckCode::CannotApplyUpdate,
+    RTProtocolError::YrsEncodeState(_) => AckCode::EncodeState,
+    RTProtocolError::MissUpdates(_) => AckCode::RequireInitSync,
     _ => AckCode::Internal,
   }
 }

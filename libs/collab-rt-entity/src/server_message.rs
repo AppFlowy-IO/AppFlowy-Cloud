@@ -3,10 +3,8 @@ use crate::{CollabMessage, MsgId};
 use anyhow::{anyhow, Error};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-use serde::de::Visitor;
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_repr::Serialize_repr;
-use std::fmt;
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
@@ -162,10 +160,9 @@ pub struct CollabAck {
   #[deprecated(note = "since 0.2.18")]
   pub meta: AckMeta,
   pub payload: Bytes,
-  #[serde(deserialize_with = "deserialize_ack_code")]
-  pub code: AckCode,
+  pub code: u8,
   pub msg_id: MsgId,
-  pub seq_num: u32,
+  seq_num: u32,
 }
 
 impl CollabAck {
@@ -176,7 +173,7 @@ impl CollabAck {
       object_id,
       meta: AckMeta::new(&msg_id),
       payload: Bytes::from(vec![]),
-      code: AckCode::Success,
+      code: AckCode::Success as u8,
       msg_id,
       seq_num,
     }
@@ -188,40 +185,21 @@ impl CollabAck {
   }
 
   pub fn with_code(mut self, code: AckCode) -> Self {
-    self.code = code;
+    self.code = code as u8;
     self
   }
-}
 
-fn deserialize_ack_code<'de, D>(deserializer: D) -> Result<AckCode, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  struct AckCodeVisitor;
-
-  impl<'de> Visitor<'de> for AckCodeVisitor {
-    type Value = AckCode;
-
-    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-      formatter.write_str("an integer between 0 and 4")
-    }
-
-    fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
-    where
-      E: de::Error,
-    {
-      match value {
-        0 => Ok(AckCode::Success),
-        1 => Ok(AckCode::CannotApplyUpdate),
-        2 => Ok(AckCode::Retry),
-        3 => Ok(AckCode::Internal),
-        4 => Ok(AckCode::EncodeState),
-        _ => Ok(AckCode::Internal),
-      }
-    }
+  pub fn get_code(&self) -> AckCode {
+    AckCode::from(self.code)
   }
 
-  deserializer.deserialize_u8(AckCodeVisitor)
+  pub fn get_seq_num(&self) -> Option<u32> {
+    if self.get_code() == AckCode::Success {
+      Some(self.seq_num)
+    } else {
+      None
+    }
+  }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Hash)]
@@ -232,6 +210,21 @@ pub enum AckCode {
   Retry = 2,
   Internal = 3,
   EncodeState = 4,
+  RequireInitSync = 5,
+}
+
+impl From<u8> for AckCode {
+  fn from(value: u8) -> Self {
+    match value {
+      0 => AckCode::Success,
+      1 => AckCode::CannotApplyUpdate,
+      2 => AckCode::Retry,
+      3 => AckCode::Internal,
+      4 => AckCode::EncodeState,
+      5 => AckCode::RequireInitSync,
+      _ => AckCode::Internal,
+    }
+  }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
@@ -270,7 +263,7 @@ impl Display for CollabAck {
 /// of modifying this struct's fields
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct BroadcastSync {
-  pub(crate) origin: CollabOrigin,
+  pub origin: CollabOrigin,
   pub(crate) object_id: String,
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))

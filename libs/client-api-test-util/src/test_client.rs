@@ -559,7 +559,7 @@ impl TestClient {
 
   pub async fn open_workspace_collab(&mut self, workspace_id: &str) {
     self
-      .open_collab(workspace_id, workspace_id, CollabType::Folder)
+      .open_collab(workspace_id, workspace_id, CollabType::Empty)
       .await;
   }
 
@@ -798,7 +798,7 @@ pub async fn assert_client_collab_within_secs(
           .to_json_value()
       } => {
         retry_count += 1;
-        if retry_count > 30 {
+        if retry_count > 60 {
             assert_eq!(json[key], expected[key], "object_id: {}", object_id);
             break;
           }

@@ -227,9 +227,8 @@ fn calculate_next_tick_duration(
     Duration::from_secs(2)
   } else {
     match num_init_sync {
-      0 => default_interval,
-      1..=3 => Duration::from_secs(2),
-      4..=7 => Duration::from_secs(4),
+      0..=3 => default_interval,
+      4..=7 => Duration::from_secs(3),
       _ => Duration::from_secs(6),
     }
   }

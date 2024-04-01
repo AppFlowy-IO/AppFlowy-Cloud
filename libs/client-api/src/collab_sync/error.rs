@@ -1,7 +1,9 @@
+use collab_rt_protocol::RTProtocolError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
   #[error(transparent)]
-  YSync(#[from] collab_rt_protocol::Error),
+  YSync(RTProtocolError),
 
   #[error(transparent)]
   YAwareness(#[from] collab::core::awareness::Error),
@@ -10,7 +12,7 @@ pub enum SyncError {
   DecodingError(#[from] yrs::encoding::read::Error),
 
   #[error("Can not apply update for object:{0}")]
-  CannotApplyUpdate(String),
+  YrsApplyUpdate(String),
 
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
@@ -25,17 +27,30 @@ pub enum SyncError {
   NoWorkspaceId,
 
   #[error("{0}")]
-  MissingUpdates(String),
+  MissUpdates(String),
+
+  #[error("Require init sync")]
+  RequireInitSync,
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
 
+impl From<RTProtocolError> for SyncError {
+  fn from(value: RTProtocolError) -> Self {
+    match value {
+      RTProtocolError::MissUpdates(e) => Self::MissUpdates(e),
+      RTProtocolError::DecodingError(e) => Self::DecodingError(e),
+      RTProtocolError::YAwareness(e) => Self::YAwareness(e),
+      RTProtocolError::YrsApplyUpdate(e) => Self::YrsApplyUpdate(e),
+      RTProtocolError::Internal(e) => Self::Internal(e),
+      _ => Self::YSync(value),
+    }
+  }
+}
+
 impl SyncError {
   pub fn is_cannot_apply_update(&self) -> bool {
-    matches!(self, Self::CannotApplyUpdate(_))
-  }
-  pub fn is_missing_updates(&self) -> bool {
-    matches!(self, Self::MissingUpdates(_))
+    matches!(self, Self::YrsApplyUpdate(_))
   }
 }

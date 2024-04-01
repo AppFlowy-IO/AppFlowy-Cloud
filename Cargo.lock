@@ -1341,7 +1341,6 @@ dependencies = [
  "tokio-retry",
  "tokio-stream",
  "tracing",
- "tsify",
  "url",
  "uuid",
  "wasm-bindgen-futures",

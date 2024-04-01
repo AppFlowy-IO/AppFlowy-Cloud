@@ -12,9 +12,6 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[wasm_bindgen]
 extern "C" {
-  #[wasm_bindgen(js_namespace = window)]
-  fn wasm_trace(level: &str, target: &str, msg: &str);
-
   #[wasm_bindgen(js_namespace = console)]
   fn log(msg: &str);
 
@@ -46,7 +43,7 @@ impl ClientAPI {
     tracing_wasm::set_as_global_default();
     let configuration = ClientConfiguration::default();
 
-    if let Some(compression) = config.configuration {
+    if let Some(compression) = &config.configuration {
       configuration
         .to_owned()
         .with_compression_buffer_size(compression.compression_buffer_size)
@@ -81,6 +78,21 @@ impl ClientAPI {
   // 		message: "Get user success".to_string(),
   // 	}
   // }
+
+  pub async fn sign_up_email_verified(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<bool, ClientResponse> {
+    if let Err(err) = self.client.sign_up(email, password).await {
+      return Err(ClientResponse {
+        code: err.code,
+        message: err.message.to_string(),
+      });
+    }
+
+    Ok(true)
+  }
 
   pub async fn sign_in_password(
     &self,

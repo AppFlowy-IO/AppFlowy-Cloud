@@ -1,7 +1,7 @@
 use crate::collab_sync::sink_queue::SinkQueue;
 use crate::collab_sync::{DefaultMsgIdCounter, SinkSignal, SyncTimestamp};
 use collab::core::origin::CollabOrigin;
-use collab_rt_entity::{ClientCollabMessage, PingSync};
+use collab_rt_entity::{ClientCollabMessage, PingSync, SinkMessage};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -21,7 +21,7 @@ impl PingSyncRunner {
     weak_notify: Weak<watch::Sender<SinkSignal>>,
     sync_timestamp: Arc<SyncTimestamp>,
   ) {
-    let duration = Duration::from_secs(15);
+    let duration = Duration::from_secs(10);
     let mut next_tick = Instant::now() + duration;
     tokio::spawn(async move {
       loop {
@@ -32,7 +32,11 @@ impl PingSyncRunner {
         next_tick = Instant::now() + duration;
 
         match message_queue.upgrade() {
-          None => break,
+          None => {
+            #[cfg(feature = "sync_verbose_log")]
+            warn!("{} message queue dropped", object_id);
+            break;
+          },
           Some(message_queue) => {
             if pause.load(Ordering::SeqCst) {
               continue;
@@ -43,12 +47,12 @@ impl PingSyncRunner {
               }
 
               if let Some(mut queue) = message_queue.try_lock() {
-                if queue.is_empty() {
-                  // slow down the ping sync if there are messages in the queue.
+                let all_non_ping_messages_sent =
+                  !queue.iter().any(|item| !item.message().is_ping_sync());
+
+                // Slow down the ping message if all non-ping messages are sent.
+                if all_non_ping_messages_sent {
                   next_tick = Instant::now() + Duration::from_secs(30);
-                } else {
-                  // No need to send ping sync if there are messages in the queue.
-                  continue;
                 }
 
                 let msg_id = msg_id_counter.next();

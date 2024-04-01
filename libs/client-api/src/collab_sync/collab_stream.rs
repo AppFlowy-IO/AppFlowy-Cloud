@@ -10,8 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
-use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
@@ -265,34 +264,6 @@ where
       }
     }
     Ok(())
-  }
-}
-
-struct LastSyncTime {
-  last_sync: Mutex<Instant>,
-}
-
-impl LastSyncTime {
-  fn new() -> Self {
-    let now = Instant::now();
-    let one_hour = Duration::from_secs(3600);
-    // Use checked_sub to safely attempt subtraction, falling back to 'now' if underflow would occur
-    let one_hour_ago = now.checked_sub(one_hour).unwrap_or(now);
-
-    LastSyncTime {
-      last_sync: Mutex::new(one_hour_ago),
-    }
-  }
-
-  async fn can_proceed_with_sync(&self, debounce_duration: Duration) -> bool {
-    let now = Instant::now();
-    let mut last_sync_locked = self.last_sync.lock().await;
-    if now.duration_since(*last_sync_locked) > debounce_duration {
-      *last_sync_locked = now;
-      true
-    } else {
-      false
-    }
   }
 }
 

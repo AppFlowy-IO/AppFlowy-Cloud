@@ -218,12 +218,18 @@ where
   }
 
   pub fn pause(&self) {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!("{}:{} pause", self.uid, self.object.object_id);
+
     self.pause_ping.store(true, Ordering::SeqCst);
     self.pause.store(true, Ordering::SeqCst);
     let _ = self.sync_state_tx.send(SinkState::Pause);
   }
 
   pub fn resume(&self) {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!("{}:{} resume", self.uid, self.object.object_id);
+
     self.pause_ping.store(false, Ordering::SeqCst);
     self.pause.store(false, Ordering::SeqCst);
   }

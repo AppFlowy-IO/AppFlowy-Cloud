@@ -1,6 +1,7 @@
 use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use crate::collab_sync::{InitSyncReason, SinkConfig, SinkState, SyncControl};
 use collab::core::collab::MutexCollab;
@@ -11,8 +12,9 @@ use collab_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
+use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::{trace, warn};
+use tracing::trace;
 
 use crate::af_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -25,7 +27,7 @@ pub struct SyncPlugin<Sink, Stream, C> {
   #[allow(dead_code)]
   channel: Option<Arc<C>>,
   collab: Weak<MutexCollab>,
-  did_init_sync: AtomicBool,
+  did_init_sync: Arc<AtomicBool>,
 }
 
 impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
@@ -118,8 +120,33 @@ where
       object,
       channel,
       collab,
-      did_init_sync: AtomicBool::new(false),
+      did_init_sync: Arc::new(AtomicBool::new(false)),
     }
+  }
+
+  fn start_init_sync(&self) {
+    if self.did_init_sync.load(Ordering::SeqCst) {
+      return;
+    }
+    let weak_queue = Arc::downgrade(&self.sync_queue);
+    let weak_collab = self.collab.clone();
+    let weak_did_init_sync = self.did_init_sync.clone();
+    tokio::spawn(async move {
+      sleep(Duration::from_secs(2)).await;
+      if let (Some(queue), Some(collab)) = (weak_queue.upgrade(), weak_collab.upgrade()) {
+        if let Some(collab) = collab.try_lock() {
+          if queue.can_queue_init_sync()
+            && queue
+              .init_sync(&collab, InitSyncReason::CollabDidInit)
+              .is_ok()
+          {
+            #[cfg(feature = "sync_verbose_log")]
+            trace!("finish init sync: {}", queue.origin);
+            weak_did_init_sync.store(true, Ordering::SeqCst);
+          }
+        }
+      }
+    });
   }
 }
 
@@ -130,14 +157,8 @@ where
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
-  fn did_init(&self, collab: &Collab, _object_id: &str, _last_sync_at: i64) {
-    if self
-      .sync_queue
-      .init_sync(collab, InitSyncReason::CollabDidInit)
-      .is_ok()
-    {
-      self.did_init_sync.store(true, Ordering::SeqCst);
-    }
+  fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
+    self.start_init_sync();
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {
@@ -154,8 +175,7 @@ where
         ClientCollabMessage::new_update_sync(update_sync)
       });
     } else {
-      #[cfg(feature = "sync_verbose_log")]
-      warn!("{}: should finish init sync", _object_id);
+      self.start_init_sync();
     }
   }
 

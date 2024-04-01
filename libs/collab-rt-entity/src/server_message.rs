@@ -3,10 +3,8 @@ use crate::{CollabMessage, MsgId};
 use anyhow::{anyhow, Error};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
-use serde::de::Visitor;
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_repr::Serialize_repr;
-use std::fmt;
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]

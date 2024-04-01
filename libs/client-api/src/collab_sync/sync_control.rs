@@ -23,7 +23,7 @@ pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 
 pub struct SyncControl<Sink, Stream> {
   object: SyncObject,
-  origin: CollabOrigin,
+  pub(crate) origin: CollabOrigin,
   /// The [CollabSink] is used to send the updates to the remote. It will send the current
   /// update periodically if the timeout is reached or it will send the next update if
   /// it receive previous ack from the remote.
@@ -156,8 +156,6 @@ where
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
   if !sink.can_queue_init_sync() {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("{}: skip queue init sync", sync_object.object_id);
     return Ok(false);
   }
 

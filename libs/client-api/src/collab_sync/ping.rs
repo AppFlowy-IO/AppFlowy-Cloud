@@ -34,7 +34,7 @@ impl PingSyncRunner {
         match message_queue.upgrade() {
           None => {
             #[cfg(feature = "sync_verbose_log")]
-            warn!("{} message queue dropped", object_id);
+            tracing::warn!("{} message queue dropped", object_id);
             break;
           },
           Some(message_queue) => {
@@ -47,12 +47,11 @@ impl PingSyncRunner {
               }
 
               if let Some(mut queue) = message_queue.try_lock() {
-                let all_non_ping_messages_sent =
-                  !queue.iter().any(|item| !item.message().is_ping_sync());
-
-                // Slow down the ping message if all non-ping messages are sent.
-                if all_non_ping_messages_sent {
-                  next_tick = Instant::now() + Duration::from_secs(30);
+                let is_not_empty = queue.iter().any(|item| !item.message().is_ping_sync());
+                if is_not_empty {
+                  #[cfg(feature = "sync_verbose_log")]
+                  tracing::trace!("{} slow down ping", object_id);
+                  next_tick = Instant::now() + Duration::from_secs(20);
                 }
 
                 let msg_id = msg_id_counter.next();

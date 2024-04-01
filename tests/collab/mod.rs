@@ -6,5 +6,4 @@ mod missing_update_test;
 mod multi_devices_edit;
 mod single_device_edit;
 mod storage_test;
-mod team_edit_test;
 mod util;

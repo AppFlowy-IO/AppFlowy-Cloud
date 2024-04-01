@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::watch;
-use tokio::time::sleep;
+use tokio::time::{sleep_until, Instant};
 use tracing::warn;
 
 pub struct PingSyncRunner;
@@ -21,15 +21,16 @@ impl PingSyncRunner {
     weak_notify: Weak<watch::Sender<SinkSignal>>,
     sync_timestamp: Arc<SyncTimestamp>,
   ) {
-    let duration = Duration::from_secs(6);
+    let duration = Duration::from_secs(15);
+    let mut next_tick = Instant::now() + duration;
     tokio::spawn(async move {
-      // Sleep for a duration before starting the loop. The interval tick will finish immediately
-      // for the first time.
-      sleep(duration).await;
-
-      let mut interval = tokio::time::interval(duration);
       loop {
-        interval.tick().await;
+        sleep_until(next_tick).await;
+
+        // Set the next tick to the current time plus the duration.
+        // Otherwise, it might spike the CPU usage.
+        next_tick = Instant::now() + duration;
+
         match message_queue.upgrade() {
           None => break,
           Some(message_queue) => {
@@ -42,7 +43,11 @@ impl PingSyncRunner {
               }
 
               if let Some(mut queue) = message_queue.try_lock() {
-                if !queue.is_empty() {
+                if queue.is_empty() {
+                  // slow down the ping sync if there are messages in the queue.
+                  next_tick = Instant::now() + Duration::from_secs(30);
+                } else {
+                  // No need to send ping sync if there are messages in the queue.
                   continue;
                 }
 
@@ -55,6 +60,7 @@ impl PingSyncRunner {
                 let ping = ClientCollabMessage::ClientPingSync(ping);
                 queue.push_msg(msg_id, ping);
 
+                // notify the sink to proceed next message
                 if let Some(notify) = weak_notify.upgrade() {
                   if let Err(err) = notify.send(SinkSignal::Proceed) {
                     warn!("{} fail to send notify signal: {}", object_id, err);

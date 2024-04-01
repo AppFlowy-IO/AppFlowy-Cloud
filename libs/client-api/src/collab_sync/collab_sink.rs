@@ -88,8 +88,7 @@ where
     let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
     let sender = Arc::new(Mutex::new(sink));
-    let msg_queue = SinkQueue::new();
-    let message_queue = Arc::new(parking_lot::Mutex::new(msg_queue));
+    let message_queue = Arc::new(parking_lot::Mutex::new(SinkQueue::new()));
     let msg_id_counter = Arc::new(msg_id_counter);
     let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
     let pause_ping = Arc::new(AtomicBool::new(false));

@@ -1,11 +1,14 @@
+use crate::http::log_request_id;
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::Client;
 use app_error::gotrue::GoTrueError;
 use app_error::ErrorCode;
 use async_trait::async_trait;
-use database_entity::dto::CollabParams;
+use collab_rt_entity::EncodedCollab;
+use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
-use shared_entity::response::AppResponseError;
+use reqwest::Method;
+use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
 use tracing::instrument;
@@ -21,6 +24,26 @@ impl Client {
       ErrorCode::Unhandled,
       "not implemented",
     ))
+  }
+
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_collab(
+    &self,
+    params: QueryCollabParams,
+  ) -> Result<EncodedCollab, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, &params.workspace_id, &params.object_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    let resp = AppResponse::<EncodedCollab>::from_response(resp).await?;
+    resp.into_data()
   }
 
   #[instrument(level = "debug", skip_all, err)]

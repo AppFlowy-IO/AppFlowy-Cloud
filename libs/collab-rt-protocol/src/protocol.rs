@@ -8,7 +8,7 @@ use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
-use crate::message::{CustomMessage, Error, Message, SyncMessage, SyncMeta};
+use crate::message::{CustomMessage, Message, RTProtocolError, SyncMessage, SyncMeta};
 
 // ***************************
 // Client A  Client B  Server
@@ -32,15 +32,44 @@ use crate::message::{CustomMessage, Error, Message, SyncMessage, SyncMeta};
 #[derive(Clone)]
 pub struct ClientSyncProtocol;
 impl CollabSyncProtocol for ClientSyncProtocol {
-  fn check<E: Encoder>(&self, encoder: &mut E, last_sync_at: i64) -> Result<(), Error> {
+  fn check<E: Encoder>(&self, encoder: &mut E, last_sync_at: i64) -> Result<(), RTProtocolError> {
     let meta = SyncMeta { last_sync_at };
     Message::Custom(CustomMessage::SyncCheck(meta)).encode(encoder);
     Ok(())
   }
+
+  /// Handle reply for a sync-step-1 send from this replica previously. By default just apply
+  /// an update to current `awareness` document instance.
+  fn handle_sync_step2(
+    &self,
+    origin: &CollabOrigin,
+    awareness: &mut Awareness,
+    update: Update,
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    let mut retry_txn = TransactionRetry::new(awareness.doc());
+    let mut txn = retry_txn
+      .try_get_write_txn_with(origin.clone())
+      .map_err(|err| {
+        RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
+      })?;
+    txn.try_apply_update(update).map_err(|err| {
+      RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {}", err))
+    })?;
+
+    // If the client can't apply broadcast from server, which means the client is missing some
+    // updates.
+    if txn.store().pending_update().is_none() {
+      Ok(None)
+    } else {
+      Err(RTProtocolError::MissUpdates(
+        "missing updates when applying update".to_string(),
+      ))
+    }
+  }
 }
 
 pub trait CollabSyncProtocol {
-  fn check<E: Encoder>(&self, _encoder: &mut E, _last_sync_at: i64) -> Result<(), Error> {
+  fn check<E: Encoder>(&self, _encoder: &mut E, _last_sync_at: i64) -> Result<(), RTProtocolError> {
     Ok(())
   }
 
@@ -49,12 +78,12 @@ pub trait CollabSyncProtocol {
     awareness: &Awareness,
     encoder: &mut E,
     sync_before: bool,
-  ) -> Result<(), Error> {
+  ) -> Result<(), RTProtocolError> {
     let (state_vector, awareness_update) = {
       let state_vector = awareness
         .doc()
         .try_transact()
-        .map_err(|e| Error::YrsTransaction(e.to_string()))?
+        .map_err(|e| RTProtocolError::YrsTransaction(e.to_string()))?
         .state_vector();
       let awareness_update = awareness.update()?;
       (state_vector, awareness_update)
@@ -83,14 +112,16 @@ pub trait CollabSyncProtocol {
     &self,
     awareness: &Awareness,
     sv: StateVector,
-  ) -> Result<Option<Vec<u8>>, Error> {
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     let update = awareness
       .doc()
       .try_transact()
-      .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step1. error: {}", err)))?
+      .map_err(|err| {
+        RTProtocolError::YrsTransaction(format!("fail to handle sync step1. error: {}", err))
+      })?
       .try_encode_state_as_update_v1(&sv)
       .map_err(|err| {
-        Error::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
+        RTProtocolError::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
       })?;
     Ok(Some(
       Message::Sync(SyncMessage::SyncStep2(update)).encode_v1(),
@@ -104,19 +135,7 @@ pub trait CollabSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<Option<Vec<u8>>, Error> {
-    let mut retry_txn = TransactionRetry::new(awareness.doc());
-    let mut txn = retry_txn
-      .try_get_write_txn_with(origin.clone())
-      .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
-    txn
-      .try_apply_update(update)
-      .map_err(|err| Error::YrsApplyUpdate(format!("sync step2 apply update: {}", err)))?;
-    txn
-      .try_commit()
-      .map_err(|err| Error::YrsTransaction(format!("sync step2 transaction acquire: {}", err)))?;
-    Ok(None)
-  }
+  ) -> Result<Option<Vec<u8>>, RTProtocolError>;
 
   /// Handle continuous update send from the client. By default just apply an update to a current
   /// `awareness` document instance.
@@ -125,7 +144,7 @@ pub trait CollabSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<Option<Vec<u8>>, Error> {
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     self.handle_sync_step2(origin, awareness, update)
   }
 
@@ -133,9 +152,9 @@ pub trait CollabSyncProtocol {
     &self,
     _awareness: &Awareness,
     deny_reason: Option<String>,
-  ) -> Result<Option<Vec<u8>>, Error> {
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     if let Some(reason) = deny_reason {
-      Err(Error::PermissionDenied { reason })
+      Err(RTProtocolError::PermissionDenied { reason })
     } else {
       Ok(None)
     }
@@ -147,7 +166,7 @@ pub trait CollabSyncProtocol {
     &self,
     awareness: &mut Awareness,
     update: AwarenessUpdate,
-  ) -> Result<Option<Vec<u8>>, Error> {
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     awareness.apply_update(update)?;
     Ok(None)
   }
@@ -156,7 +175,7 @@ pub trait CollabSyncProtocol {
     &self,
     _awareness: &mut Awareness,
     _msg: CustomMessage,
-  ) -> Result<Option<Vec<u8>>, Error> {
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     Ok(None)
   }
 }
@@ -167,7 +186,7 @@ pub fn handle_message<P: CollabSyncProtocol>(
   protocol: &P,
   collab: &mut Collab,
   msg: Message,
-) -> Result<Option<Vec<u8>>, Error> {
+) -> Result<Option<Vec<u8>>, RTProtocolError> {
   match msg {
     Message::Sync(msg) => match msg {
       SyncMessage::SyncStep1(sv) => protocol.handle_sync_step1(collab.get_awareness(), sv),

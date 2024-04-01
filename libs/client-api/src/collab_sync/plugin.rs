@@ -1,7 +1,9 @@
 use collab::core::awareness::{AwarenessUpdate, Event};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 
-use crate::collab_sync::{SinkConfig, SinkState, SyncControl};
+use crate::collab_sync::{InitSyncReason, SinkConfig, SinkState, SyncControl};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
@@ -10,6 +12,7 @@ use collab_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
+use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::trace;
 
@@ -23,6 +26,8 @@ pub struct SyncPlugin<Sink, Stream, C> {
   // Used to keep the lifetime of the channel
   #[allow(dead_code)]
   channel: Option<Arc<C>>,
+  collab: Weak<MutexCollab>,
+  did_init_sync: Arc<AtomicBool>,
 }
 
 impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
@@ -50,7 +55,6 @@ where
     pause: bool,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
-    let _weak_local_collab = collab.clone();
     let sync_queue = SyncControl::new(
       object.clone(),
       origin,
@@ -80,7 +84,7 @@ where
     }
 
     let sync_queue = Arc::new(sync_queue);
-    let weak_local_collab = collab;
+    let weak_local_collab = collab.clone();
     let weak_sync_queue = Arc::downgrade(&sync_queue);
     af_spawn(async move {
       while let Ok(connect_state) = ws_connect_state.recv().await {
@@ -92,7 +96,7 @@ where
             {
               if let Some(local_collab) = local_collab.try_lock() {
                 sync_queue.resume();
-                sync_queue.init_sync(&local_collab);
+                let _ = sync_queue.init_sync(&local_collab, InitSyncReason::NetworkResume);
               }
             } else {
               break;
@@ -115,7 +119,34 @@ where
       sync_queue,
       object,
       channel,
+      collab,
+      did_init_sync: Arc::new(AtomicBool::new(false)),
     }
+  }
+
+  fn start_init_sync(&self) {
+    if self.did_init_sync.load(Ordering::SeqCst) {
+      return;
+    }
+    let weak_queue = Arc::downgrade(&self.sync_queue);
+    let weak_collab = self.collab.clone();
+    let weak_did_init_sync = self.did_init_sync.clone();
+    tokio::spawn(async move {
+      sleep(Duration::from_secs(2)).await;
+      if let (Some(queue), Some(collab)) = (weak_queue.upgrade(), weak_collab.upgrade()) {
+        if let Some(collab) = collab.try_lock() {
+          if queue.can_queue_init_sync()
+            && queue
+              .init_sync(&collab, InitSyncReason::CollabDidInit)
+              .is_ok()
+          {
+            #[cfg(feature = "sync_verbose_log")]
+            trace!("finish init sync: {}", queue.origin);
+            weak_did_init_sync.store(true, Ordering::SeqCst);
+          }
+        }
+      }
+    });
   }
 }
 
@@ -126,22 +157,26 @@ where
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
   C: Send + Sync + 'static,
 {
-  fn did_init(&self, collab: &Collab, _object_id: &str, _last_sync_at: i64) {
-    self.sync_queue.init_sync(collab);
+  fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
+    self.start_init_sync();
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {
-    let update = update.to_vec();
-    let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
-    self.sync_queue.queue_msg(|msg_id| {
-      let update_sync = UpdateSync::new(
-        origin.clone(),
-        self.object.object_id.clone(),
-        payload,
-        msg_id,
-      );
-      ClientCollabMessage::new_update_sync(update_sync)
-    });
+    if self.did_init_sync.load(Ordering::SeqCst) {
+      let update = update.to_vec();
+      let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
+      self.sync_queue.queue_msg(|msg_id| {
+        let update_sync = UpdateSync::new(
+          origin.clone(),
+          self.object.object_id.clone(),
+          payload,
+          msg_id,
+        );
+        ClientCollabMessage::new_update_sync(update_sync)
+      });
+    } else {
+      self.start_init_sync();
+    }
   }
 
   fn receive_local_state(

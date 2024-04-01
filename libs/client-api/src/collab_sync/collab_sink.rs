@@ -1,5 +1,5 @@
 use crate::af_spawn;
-use crate::collab_sync::collab_stream::{check_update_contiguous, SeqNumCounter};
+use crate::collab_sync::collab_stream::SeqNumCounter;
 use crate::collab_sync::ping::PingSyncRunner;
 use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
@@ -218,12 +218,18 @@ where
   }
 
   pub fn pause(&self) {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!("{}:{} pause", self.uid, self.object.object_id);
+
     self.pause_ping.store(true, Ordering::SeqCst);
     self.pause.store(true, Ordering::SeqCst);
     let _ = self.sync_state_tx.send(SinkState::Pause);
   }
 
   pub fn resume(&self) {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!("{}:{} resume", self.uid, self.object.object_id);
+
     self.pause_ping.store(false, Ordering::SeqCst);
     self.pause.store(false, Ordering::SeqCst);
   }
@@ -265,8 +271,10 @@ where
 
     if is_valid {
       if let ServerCollabMessage::ClientAck(ack) = server_message {
-        // Check the seq_num is contiguous.
-        check_update_contiguous(&self.object.object_id, ack.seq_num, seq_num_counter)?;
+        if let Some(seq_num) = ack.get_seq_num() {
+          seq_num_counter.store_ack_seq_num(seq_num);
+          seq_num_counter.check_ack_broadcast_contiguous(&self.object.object_id)?;
+        }
       }
     }
 

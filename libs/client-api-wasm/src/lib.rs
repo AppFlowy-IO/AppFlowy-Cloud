@@ -1,7 +1,7 @@
-mod entities;
-use tracing;
+pub mod entities;
 use crate::entities::{ClientAPIConfig, ClientResponse};
 use client_api::{Client, ClientConfiguration};
+use tracing;
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
@@ -40,16 +40,18 @@ pub struct ClientAPI {
   client: Client,
 }
 
-
 #[wasm_bindgen]
 impl ClientAPI {
   pub fn new(config: ClientAPIConfig) -> ClientAPI {
     tracing_wasm::set_as_global_default();
     let configuration = ClientConfiguration::default();
-    configuration
-      .to_owned()
-      .with_compression_buffer_size(config.configuration.compression_buffer_size)
-      .with_compression_quality(config.configuration.compression_quality);
+
+    if let Some(compression) = config.configuration {
+      configuration
+        .to_owned()
+        .with_compression_buffer_size(compression.compression_buffer_size)
+        .with_compression_quality(compression.compression_quality);
+    }
 
     let client = Client::new(
       config.base_url.as_str(),
@@ -86,14 +88,12 @@ impl ClientAPI {
     password: &str,
   ) -> Result<bool, ClientResponse> {
     if let Err(err) = self.client.sign_in_password(email, password).await {
-      tracing::error!("Sign in failed: {:?}", err);
       return Err(ClientResponse {
         code: err.code,
         message: err.message.to_string(),
       });
     }
 
-    tracing::info!("Sign in success");
     Ok(true)
   }
 }

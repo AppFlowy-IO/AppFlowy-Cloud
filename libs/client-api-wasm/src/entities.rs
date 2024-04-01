@@ -27,7 +27,7 @@ pub struct ClientAPIConfig {
   pub ws_addr: String,
   pub gotrue_url: String,
   pub device_id: String,
-  pub configuration: Configuration,
+  pub configuration: Option<Configuration>,
   pub client_id: String,
 }
 
@@ -39,4 +39,3 @@ pub struct ClientResponse {
 }
 
 from_struct_for_jsvalue!(ClientResponse);
-

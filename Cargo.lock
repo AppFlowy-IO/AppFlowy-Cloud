@@ -1398,6 +1398,7 @@ dependencies = [
  "tracing-core",
  "tracing-wasm",
  "tsify",
+ "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",

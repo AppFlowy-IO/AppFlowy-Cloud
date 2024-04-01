@@ -1,9 +1,11 @@
 use collab::core::awareness::Awareness;
-use collab::core::collab::TransactionExt;
+use collab::core::collab::{TransactionExt, TransactionMutExt};
+use collab::core::origin::CollabOrigin;
+use collab::core::transaction::TransactionRetry;
 use collab_rt_protocol::CollabSyncProtocol;
-use collab_rt_protocol::{CustomMessage, Error, Message, SyncMessage};
+use collab_rt_protocol::{CustomMessage, Message, RTProtocolError, SyncMessage};
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::{ReadTxn, StateVector, Transact};
+use yrs::{ReadTxn, StateVector, Transact, Update};
 
 #[derive(Clone)]
 pub struct ServerSyncProtocol;
@@ -12,14 +14,13 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     &self,
     awareness: &Awareness,
     sv: StateVector,
-  ) -> Result<Option<Vec<u8>>, Error> {
-    let txn = awareness
-      .doc()
-      .try_transact()
-      .map_err(|err| Error::YrsTransaction(format!("fail to handle sync step1. error: {}", err)))?;
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    let txn = awareness.doc().try_transact().map_err(|err| {
+      RTProtocolError::YrsTransaction(format!("fail to handle sync step1. error: {}", err))
+    })?;
 
     let client_step2_update = txn.try_encode_state_as_update_v1(&sv).map_err(|err| {
-      Error::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
+      RTProtocolError::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
     })?;
 
     // Retrieve the latest document state from the client after they return online from offline editing.
@@ -31,11 +32,32 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     Ok(Some(encoder.to_vec()))
   }
 
+  fn handle_sync_step2(
+    &self,
+    origin: &CollabOrigin,
+    awareness: &mut Awareness,
+    update: Update,
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+    let mut retry_txn = TransactionRetry::new(awareness.doc());
+    let mut txn = retry_txn
+      .try_get_write_txn_with(origin.clone())
+      .map_err(|err| {
+        RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
+      })?;
+    txn.try_apply_update(update).map_err(|err| {
+      RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {}", err))
+    })?;
+    txn.try_commit().map_err(|err| {
+      RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
+    })?;
+    Ok(None)
+  }
+
   fn handle_custom_message(
     &self,
     _awareness: &mut Awareness,
     _msg: CustomMessage,
-  ) -> Result<Option<Vec<u8>>, Error> {
+  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
     Ok(None)
   }
 }

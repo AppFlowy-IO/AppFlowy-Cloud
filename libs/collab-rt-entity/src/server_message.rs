@@ -162,10 +162,9 @@ pub struct CollabAck {
   #[deprecated(note = "since 0.2.18")]
   pub meta: AckMeta,
   pub payload: Bytes,
-  #[serde(deserialize_with = "deserialize_ack_code")]
-  pub code: AckCode,
+  pub code: u8,
   pub msg_id: MsgId,
-  pub seq_num: u32,
+  seq_num: u32,
 }
 
 impl CollabAck {
@@ -176,7 +175,7 @@ impl CollabAck {
       object_id,
       meta: AckMeta::new(&msg_id),
       payload: Bytes::from(vec![]),
-      code: AckCode::Success,
+      code: AckCode::Success as u8,
       msg_id,
       seq_num,
     }
@@ -188,8 +187,20 @@ impl CollabAck {
   }
 
   pub fn with_code(mut self, code: AckCode) -> Self {
-    self.code = code;
+    self.code = code as u8;
     self
+  }
+
+  pub fn get_code(&self) -> AckCode {
+    AckCode::from(self.code)
+  }
+
+  pub fn get_seq_num(&self) -> Option<u32> {
+    if self.get_code() == AckCode::Success {
+      Some(self.seq_num)
+    } else {
+      None
+    }
   }
 }
 
@@ -232,6 +243,21 @@ pub enum AckCode {
   Retry = 2,
   Internal = 3,
   EncodeState = 4,
+  RequireInitSync = 5,
+}
+
+impl From<u8> for AckCode {
+  fn from(value: u8) -> Self {
+    match value {
+      0 => AckCode::Success,
+      1 => AckCode::CannotApplyUpdate,
+      2 => AckCode::Retry,
+      3 => AckCode::Internal,
+      4 => AckCode::EncodeState,
+      5 => AckCode::RequireInitSync,
+      _ => AckCode::Internal,
+    }
+  }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]

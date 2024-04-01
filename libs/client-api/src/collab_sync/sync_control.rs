@@ -1,6 +1,9 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::ObserveCollab;
-use crate::collab_sync::{CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncObject};
+use crate::collab_sync::{
+  CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncError, SyncObject,
+};
+use anyhow::anyhow;
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
@@ -17,7 +20,6 @@ use tracing::trace;
 use yrs::updates::encoder::{Encoder, EncoderV1};
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
-pub const NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC: u32 = 1;
 
 pub struct SyncControl<Sink, Stream> {
   object: SyncObject,
@@ -84,28 +86,6 @@ where
       Arc::downgrade(&sink),
     );
 
-    // let weak_sync_state = Arc::downgrade(&sync_state);
-    // let mut sink_state_stream = WatchStream::new(sink_state_rx);
-    // // Subscribe the sink state stream and update the sync state in the background.
-    // af_spawn(async move {
-    //   while let Some(collab_state) = sink_state_stream.next().await {
-    //     if let Some(sync_state) = weak_sync_state.upgrade() {
-    //       match collab_state {
-    //         SinkState::Syncing => {
-    //           let _ = sync_state.send(SyncState::Syncing);
-    //         },
-    //         SinkState::Finished => {
-    //           let _ = sync_state.send(SyncState::SyncFinished);
-    //         },
-    //         SinkState::Init => {
-    //           let _ = sync_state.send(SyncState::InitSyncBegin);
-    //         },
-    //         SinkState::Pause => {},
-    //       }
-    //     }
-    //   }
-    // });
-
     Self {
       object,
       origin,
@@ -131,8 +111,8 @@ where
     self.sync_state_tx.subscribe()
   }
 
-  pub fn init_sync(&self, collab: &Collab) {
-    start_sync(self.origin.clone(), &self.object, collab, &self.sink);
+  pub fn init_sync(&self, collab: &Collab) -> Result<(), SyncError> {
+    start_sync(self.origin.clone(), &self.object, collab, &self.sink)
   }
 
   /// Remove all the messages in the sink queue
@@ -145,10 +125,10 @@ fn gen_sync_state<P: CollabSyncProtocol>(
   awareness: &Awareness,
   protocol: &P,
   sync_before: bool,
-) -> Option<Vec<u8>> {
+) -> Result<Vec<u8>, SyncError> {
   let mut encoder = EncoderV1::new();
-  protocol.start(awareness, &mut encoder, sync_before).ok()?;
-  Some(encoder.to_vec())
+  protocol.start(awareness, &mut encoder, sync_before)?;
+  Ok(encoder.to_vec())
 }
 
 pub fn start_sync<E, Sink>(
@@ -156,26 +136,42 @@ pub fn start_sync<E, Sink>(
   sync_object: &SyncObject,
   collab: &Collab,
   sink: &Arc<CollabSink<Sink>>,
-) where
+) -> Result<(), SyncError>
+where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
+  if !sink.can_queue_init_sync() {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!("{}: skip queue init sync", sync_object.object_id);
+    return Ok(());
+  }
+
+  if let Err(err) = sync_object.collab_type.validate(collab) {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!(
+      "{}: skip queue init sync. error: {}",
+      sync_object.object_id,
+      err
+    );
+    return Err(SyncError::Internal(anyhow!("Lack of required data")));
+  }
+
   let sync_before = collab.get_last_sync_at() > 0;
   let awareness = collab.get_awareness();
-  if let Some(payload) = gen_sync_state(awareness, &ClientSyncProtocol, sync_before) {
-    sink.queue_init_sync(|msg_id| {
-      let init_sync = InitSync::new(
-        origin,
-        sync_object.object_id.clone(),
-        sync_object.collab_type.clone(),
-        sync_object.workspace_id.clone(),
-        msg_id,
-        payload,
-      );
-
-      ClientCollabMessage::new_init_sync(init_sync)
-    })
-  }
+  let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
+  sink.queue_init_sync(|msg_id| {
+    let init_sync = InitSync::new(
+      origin,
+      sync_object.object_id.clone(),
+      sync_object.collab_type.clone(),
+      sync_object.workspace_id.clone(),
+      msg_id,
+      payload,
+    );
+    ClientCollabMessage::new_init_sync(init_sync)
+  });
+  Ok(())
 }
 
 impl<Sink, Stream> Deref for SyncControl<Sink, Stream> {

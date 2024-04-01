@@ -1,14 +1,10 @@
 use crate::af_spawn;
-use crate::collab_sync::{
-  start_sync, CollabSink, SyncError, SyncObject, NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC,
-};
+use crate::collab_sync::{start_sync, CollabSink, SyncError, SyncObject};
 
 use bytes::Bytes;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab_rt_entity::{
-  AckCode, BroadcastSync, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync,
-};
+use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{handle_message, ClientSyncProtocol, Message, MessageReader, SyncMessage};
 use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
@@ -19,8 +15,6 @@ use tokio::sync::Mutex;
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
-
-const DEBOUNCE_DURATION: Duration = Duration::from_secs(10);
 
 /// Use to continuously receive updates from remote.
 pub struct ObserveCollab<Sink, Stream> {
@@ -54,7 +48,6 @@ where
     weak_collab: Weak<MutexCollab>,
     sink: Weak<CollabSink<Sink>>,
   ) -> Self {
-    let last_init_sync = LastSyncTime::new();
     let object_id = object.object_id.clone();
     let cloned_weak_collab = weak_collab.clone();
     let seq_num_counter = Arc::new(SeqNumCounter::default());
@@ -66,7 +59,6 @@ where
       cloned_weak_collab,
       sink,
       cloned_seq_num_counter,
-      last_init_sync,
     ));
     Self {
       object_id,
@@ -85,7 +77,6 @@ where
     weak_collab: Weak<MutexCollab>,
     weak_sink: Weak<CollabSink<Sink>>,
     seq_num_counter: Arc<SeqNumCounter>,
-    last_init_sync: LastSyncTime,
   ) {
     while let Some(collab_message_result) = stream.next().await {
       let collab = match weak_collab.upgrade() {
@@ -116,19 +107,24 @@ where
         &sink,
         msg,
         &seq_num_counter,
-        &last_init_sync,
       )
       .await
       {
-        if error.is_cannot_apply_update() {
-          // TODO(nathan): ask the client to resolve the conflict.
-          error!(
-            "collab:{} can not be synced because of error: {}",
-            object.object_id, error
-          );
-          break;
-        } else {
-          error!("Error while processing message: {}", error);
+        match error {
+          SyncError::MissingUpdates(reason) => {
+            Self::pull_missing_updates(&origin, &object, &collab, &sink, &seq_num_counter, reason)
+              .await;
+          },
+          SyncError::RequireInitSync => {
+            if let Some(lock_guard) = collab.try_lock() {
+              if let Err(err) = start_sync(origin.clone(), &object, &lock_guard, &sink) {
+                error!("Error while start sync: {}", err);
+              }
+            }
+          },
+          _ => {
+            error!("Error while processing message: {}", error);
+          },
         }
       }
     }
@@ -136,19 +132,18 @@ where
 
   /// Continuously handle messages from the remote doc
   async fn process_message(
-    origin: &CollabOrigin,
+    _origin: &CollabOrigin,
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
     msg: ServerCollabMessage,
     seq_num_counter: &Arc<SeqNumCounter>,
-    last_init_time: &LastSyncTime,
   ) -> Result<(), SyncError> {
     // If server return the AckCode::ApplyInternalError, which means the server can not apply the
     // update
     if let ServerCollabMessage::ClientAck(ref ack) = msg {
-      if ack.code == AckCode::CannotApplyUpdate {
-        return Err(SyncError::CannotApplyUpdate(object.object_id.clone()));
+      if ack.get_code() == AckCode::CannotApplyUpdate {
+        return Err(SyncError::YrsApplyUpdate(object.object_id.clone()));
       }
     }
 
@@ -156,51 +151,27 @@ where
     match msg.msg_id() {
       None => {
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
-          if let Err(err) = Self::validate_broadcast(object, data, seq_num_counter).await {
-            if err.is_missing_updates() {
-              Self::pull_missing_updates(
-                origin,
-                object,
-                collab,
-                sink,
-                last_init_time,
-                seq_num_counter,
-              )
-              .await;
-              return Ok(());
-            }
-          }
+          seq_num_counter.store_broadcast_seq_num(data.seq_num);
         }
         Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
         sink.notify();
         Ok(())
       },
       Some(msg_id) => {
-        // Check if the message is acknowledged by the sink.
-        match sink.validate_response(msg_id, &msg, seq_num_counter).await {
-          Ok(is_valid) => {
-            if is_valid {
-              Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
-            }
-            sink.notify();
-          },
-          Err(err) => {
-            // Update the last sync time if the message is valid.
-            if err.is_missing_updates() {
-              Self::pull_missing_updates(
-                origin,
-                object,
-                collab,
-                sink,
-                last_init_time,
-                seq_num_counter,
-              )
-              .await;
-            } else {
-              error!("Error while validating response: {}", err);
-            }
-          },
+        let is_valid = sink
+          .validate_response(msg_id, &msg, seq_num_counter)
+          .await?;
+
+        if let ServerCollabMessage::ClientAck(ack) = &msg {
+          if matches!(ack.get_code(), AckCode::RequireInitSync) {
+            return Err(SyncError::RequireInitSync);
+          }
         }
+
+        if is_valid {
+          Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
+        }
+        sink.notify();
         Ok(())
       },
     }
@@ -212,18 +183,17 @@ where
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
-    if !msg.payload().is_empty() {
-      let msg_origin = msg.origin();
-      ObserveCollab::<Sink, Stream>::process_payload(
-        msg_origin,
-        msg.payload(),
-        object_id,
-        collab,
-        sink,
-      )
-      .await?;
+    if msg.payload().is_empty() {
+      return Ok(());
     }
-    Ok(())
+    ObserveCollab::<Sink, Stream>::process_payload(
+      msg.origin(),
+      msg.payload(),
+      object_id,
+      collab,
+      sink,
+    )
+    .await
   }
 
   #[instrument(level = "trace", skip_all)]
@@ -232,53 +202,21 @@ where
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
-    last_sync_time: &LastSyncTime,
     seq_num_counter: &Arc<SeqNumCounter>,
+    reason: String,
   ) {
     seq_num_counter.reset_equal_counter();
-
-    let debounce_duration = if cfg!(debug_assertions) {
-      Duration::from_secs(2)
-    } else {
-      DEBOUNCE_DURATION
-    };
-
-    if sink.can_queue_init_sync()
-      && last_sync_time
-        .can_proceed_with_sync(debounce_duration)
-        .await
-    {
-      if let Some(lock_guard) = collab.try_lock() {
-        #[cfg(feature = "sync_verbose_log")]
-        trace!("Start pull missing updates for {}", object.object_id);
-        start_sync(origin.clone(), object, &lock_guard, sink);
+    if let Some(lock_guard) = collab.try_lock() {
+      #[cfg(feature = "sync_verbose_log")]
+      trace!(
+        "{} start pull missing updates. reason: {}",
+        object.object_id,
+        reason
+      );
+      if let Err(err) = start_sync(origin.clone(), object, &lock_guard, sink) {
+        error!("Error while start sync: {}", err);
       }
     }
-  }
-
-  async fn validate_broadcast(
-    object: &SyncObject,
-    broadcast_sync: &BroadcastSync,
-    seq_num_counter: &Arc<SeqNumCounter>,
-  ) -> Result<(), SyncError> {
-    if let CollabOrigin::Client(client) = &broadcast_sync.origin {
-      if client.device_id == object.device_id {
-        let prev_broadcast_num = seq_num_counter.store_broadcast_seq_num(broadcast_sync.seq_num);
-
-        if broadcast_sync.seq_num > prev_broadcast_num + NUMBER_OF_UPDATE_TRIGGER_INIT_SYNC {
-          return Err(SyncError::MissingUpdates(format!(
-            "{} missing broadcast updates, should start init sync",
-            object.object_id,
-          )));
-        }
-
-        let ack_seq_num = seq_num_counter.get_ack_seq_num();
-        let broadcast_seq_num = broadcast_sync.seq_num;
-        check_ack_broadcast_contiguous(&object.object_id, ack_seq_num, broadcast_seq_num)?;
-      }
-    }
-
-    Ok(())
   }
 
   async fn process_payload(
@@ -294,27 +232,30 @@ where
       for msg in reader {
         let msg = msg?;
         let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-        if let Some(payload) =
-          handle_message(message_origin, &ClientSyncProtocol, &mut collab, msg)?
-        {
-          let object_id = object_id.to_string();
-          sink.queue_msg(|msg_id| {
-            if is_server_sync_step_1 {
-              ClientCollabMessage::new_server_init_sync(ServerInit::new(
-                message_origin.clone(),
-                object_id,
-                payload,
-                msg_id,
-              ))
-            } else {
-              ClientCollabMessage::new_update_sync(UpdateSync::new(
-                message_origin.clone(),
-                object_id,
-                payload,
-                msg_id,
-              ))
-            }
-          });
+        match handle_message(message_origin, &ClientSyncProtocol, &mut collab, msg)? {
+          Some(payload) => {
+            let object_id = object_id.to_string();
+            sink.queue_msg(|msg_id| {
+              if is_server_sync_step_1 {
+                ClientCollabMessage::new_server_init_sync(ServerInit::new(
+                  message_origin.clone(),
+                  object_id,
+                  payload,
+                  msg_id,
+                ))
+              } else {
+                ClientCollabMessage::new_update_sync(UpdateSync::new(
+                  message_origin.clone(),
+                  object_id,
+                  payload,
+                  msg_id,
+                ))
+              }
+            });
+          },
+          None => {
+            // do nothing
+          },
         }
       }
     }
@@ -348,34 +289,6 @@ impl LastSyncTime {
       false
     }
   }
-}
-
-pub(crate) fn check_ack_broadcast_contiguous(
-  object_id: &str,
-  ack_seq_num: u32,
-  broadcast_seq_num: u32,
-) -> Result<(), SyncError> {
-  #[cfg(feature = "sync_verbose_log")]
-  trace!(
-    "receive {} seq_num, ack:{}, broadcast:{}",
-    object_id,
-    ack_seq_num,
-    broadcast_seq_num,
-  );
-
-  if broadcast_seq_num == 0 {
-    return Ok(());
-  }
-
-  if ack_seq_num > broadcast_seq_num + 6 {
-    return Err(SyncError::MissingUpdates(format!(
-      "{} missing {} updates, should start init sync",
-      object_id,
-      ack_seq_num - broadcast_seq_num,
-    )));
-  }
-
-  Ok(())
 }
 
 #[derive(Default)]
@@ -429,9 +342,31 @@ impl SeqNumCounter {
     self.broadcast_seq_counter.load(Ordering::SeqCst)
   }
 
-  pub fn should_init_sync(&self) -> bool {
-    // when receive 8 continuous equal seq_num, we should start the init sync.
-    self.equal_counter.load(Ordering::SeqCst) >= 8
+  pub fn check_ack_broadcast_contiguous(&self, object_id: &str) -> Result<(), SyncError> {
+    let ack_seq_num = self.ack_seq_counter.load(Ordering::SeqCst);
+    let broadcast_seq_num = self.broadcast_seq_counter.load(Ordering::SeqCst);
+
+    #[cfg(feature = "sync_verbose_log")]
+    trace!(
+      "receive {} seq_num, ack:{}, broadcast:{}",
+      object_id,
+      ack_seq_num,
+      broadcast_seq_num,
+    );
+
+    if ack_seq_num > broadcast_seq_num + 3 {
+      return Err(SyncError::MissingUpdates(format!(
+        "missing {} updates, start init sync",
+        ack_seq_num - broadcast_seq_num,
+      )));
+    }
+
+    if self.equal_counter.load(Ordering::SeqCst) >= 5 {
+      return Err(SyncError::MissingUpdates(
+        "ping exceeds, start init sync".to_string(),
+      ));
+    }
+    Ok(())
   }
 
   pub fn reset_equal_counter(&self) {

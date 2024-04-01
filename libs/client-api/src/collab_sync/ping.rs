@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::watch;
+use tokio::time::sleep;
 use tracing::warn;
 
 pub struct PingSyncRunner;
@@ -20,8 +21,12 @@ impl PingSyncRunner {
     weak_notify: Weak<watch::Sender<SinkSignal>>,
     sync_timestamp: Arc<SyncTimestamp>,
   ) {
-    let duration = Duration::from_secs(10);
+    let duration = Duration::from_secs(6);
     tokio::spawn(async move {
+      // Sleep for a duration before starting the loop. The interval tick will finish immediately
+      // for the first time.
+      sleep(duration).await;
+
       let mut interval = tokio::time::interval(duration);
       loop {
         interval.tick().await;

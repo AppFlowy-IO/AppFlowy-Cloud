@@ -77,7 +77,7 @@ where
             (Method::POST, AFRole::Owner),
             (Method::DELETE, AFRole::Owner),
             (Method::PUT, AFRole::Owner),
-            (Method::GET, AFRole::Owner),
+            (Method::GET, AFRole::Member),
           ]
           .into(),
         ),

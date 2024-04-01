@@ -1,36 +1,20 @@
 mod http;
 pub use http::*;
 
-macro_rules! if_native {
-    ($($item:item)*) => {$(
-        #[cfg(not(target_arch = "wasm32"))]
-        $item
-    )*}
-}
-
-macro_rules! if_wasm {
-    ($($item:item)*) => {$(
-        #[cfg(target_arch = "wasm32")]
-        $item
-    )*}
-}
-
 #[cfg(feature = "collab-sync")]
 pub mod collab_sync;
 
 pub mod notify;
 
-if_native! {
-  mod native;
-  #[allow(unused_imports)]
-  pub use native::*;
-}
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
+#[cfg(not(target_arch = "wasm32"))]
+pub use native::*;
 
-if_wasm! {
-  mod wasm;
-  #[allow(unused_imports)]
-  pub use wasm::*;
-}
+#[cfg(target_arch = "wasm32")]
+mod wasm;
+#[cfg(target_arch = "wasm32")]
+pub use wasm::*;
 
 pub mod ws;
 

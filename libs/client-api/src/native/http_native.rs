@@ -3,10 +3,11 @@ use crate::ws::{WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
-use app_error::AppError;
+use app_error::{AppError, ErrorCode};
 use async_trait::async_trait;
+use collab_rt_entity::EncodedCollab;
 use collab_rt_entity::HttpRealtimeMessage;
-use database_entity::dto::CollabParams;
+use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures_util::stream;
 use prost::Message;
 use reqwest::{Body, Method};
@@ -19,6 +20,49 @@ use tokio_retry::RetryIf;
 use tracing::{event, instrument};
 
 impl Client {
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_collab(
+    &self,
+    params: QueryCollabParams,
+  ) -> Result<EncodedCollab, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/collab/{}",
+      self.base_url, &params.workspace_id, &params.object_id
+    );
+
+    let mut retries = 3; // Maximum number of retries
+    let retry_delay = Duration::from_secs(2);
+    while retries > 0 {
+      let resp = self
+        .http_client_with_auth(Method::GET, &url)
+        .await?
+        .json(&params)
+        .send()
+        .await?;
+      log_request_id(&resp);
+      let response = AppResponse::<EncodedCollab>::from_response(resp).await?;
+
+      // Retry if the record is not found
+      if response.code == ErrorCode::RecordNotFound {
+        retries -= 1;
+        if retries > 0 {
+          tokio::time::sleep(retry_delay).await;
+          continue;
+        } else {
+          return response.into_data();
+        }
+      } else {
+        return response.into_data();
+      }
+    }
+
+    // this part is unreachable by logic
+    Err(AppResponseError::new(
+      ErrorCode::Unhandled,
+      "Exhausted retries to fetch collaboration data.",
+    ))
+  }
+
   #[instrument(level = "debug", skip_all, err)]
   pub async fn post_realtime_msg(
     &self,

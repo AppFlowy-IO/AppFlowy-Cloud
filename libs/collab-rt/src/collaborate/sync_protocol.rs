@@ -4,6 +4,7 @@ use collab::core::origin::CollabOrigin;
 use collab::core::transaction::TransactionRetry;
 use collab_rt_protocol::CollabSyncProtocol;
 use collab_rt_protocol::{CustomMessage, Message, RTProtocolError, SyncMessage};
+
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector, Transact, Update};
 
@@ -47,10 +48,18 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     txn.try_apply_update(update).map_err(|err| {
       RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {}", err))
     })?;
-    txn.try_commit().map_err(|err| {
-      RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
-    })?;
-    Ok(None)
+
+    // If server can't apply updates sent by client, which means the server is missing some updates
+    // from the client or the client is missing some updates from the server.
+    // If the client can't apply broadcast from server, which means the client is missing some
+    // updates.
+    if txn.store().pending_update().is_none() {
+      Ok(None)
+    } else {
+      Err(RTProtocolError::MissUpdates(
+        "missing updates when applying update".to_string(),
+      ))
+    }
   }
 
   fn handle_custom_message(

@@ -18,6 +18,8 @@ async fn client_apply_update_find_missing_update_test() {
     .insert("content", "hello world");
 
   expected_json["content"] = Value::String("hello world".to_string());
+
+  // the collab ping will trigger a init sync with reason InitSyncReason::MissUpdates after a period of time
   assert_client_collab_include_value(&mut client_2, &object_id, expected_json)
     .await
     .unwrap();
@@ -28,7 +30,7 @@ async fn client_ping_find_missing_update_test() {
   let (_client_1, mut client_2, object_id, expected_json) = make_clients().await;
   client_2.ws_client.enable_receive_message();
 
-  //
+  // the collab ping will trigger a init sync with reason InitSyncReason::MissUpdates after a period of time
   assert_client_collab_include_value(&mut client_2, &object_id, expected_json)
     .await
     .unwrap();

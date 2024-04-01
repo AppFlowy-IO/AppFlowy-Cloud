@@ -27,7 +27,7 @@ pub enum SyncError {
   NoWorkspaceId,
 
   #[error("{0}")]
-  MissingUpdates(String),
+  MissUpdates(String),
 
   #[error("Require init sync")]
   RequireInitSync,
@@ -39,7 +39,7 @@ pub enum SyncError {
 impl From<RTProtocolError> for SyncError {
   fn from(value: RTProtocolError) -> Self {
     match value {
-      RTProtocolError::MissingUpdates(e) => Self::MissingUpdates(e),
+      RTProtocolError::MissUpdates(e) => Self::MissUpdates(e),
       RTProtocolError::DecodingError(e) => Self::DecodingError(e),
       RTProtocolError::YAwareness(e) => Self::YAwareness(e),
       RTProtocolError::YrsApplyUpdate(e) => Self::YrsApplyUpdate(e),
@@ -52,8 +52,5 @@ impl From<RTProtocolError> for SyncError {
 impl SyncError {
   pub fn is_cannot_apply_update(&self) -> bool {
     matches!(self, Self::YrsApplyUpdate(_))
-  }
-  pub fn is_missing_updates(&self) -> bool {
-    matches!(self, Self::MissingUpdates(_))
   }
 }

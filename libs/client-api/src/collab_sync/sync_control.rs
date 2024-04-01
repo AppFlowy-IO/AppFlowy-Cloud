@@ -111,14 +111,27 @@ where
     self.sync_state_tx.subscribe()
   }
 
-  pub fn init_sync(&self, collab: &Collab) -> Result<(), SyncError> {
-    start_sync(self.origin.clone(), &self.object, collab, &self.sink)
+  pub fn init_sync(&self, collab: &Collab, reason: InitSyncReason) -> Result<bool, SyncError> {
+    start_sync(
+      self.origin.clone(),
+      &self.object,
+      collab,
+      &self.sink,
+      reason,
+    )
   }
 
   /// Remove all the messages in the sink queue
   pub fn clear(&self) {
     self.sink.clear();
   }
+}
+
+pub enum InitSyncReason {
+  CollabDidInit,
+  MissUpdates(String),
+  RequireInitSync,
+  NetworkResume,
 }
 
 fn gen_sync_state<P: CollabSyncProtocol>(
@@ -136,7 +149,8 @@ pub fn start_sync<E, Sink>(
   sync_object: &SyncObject,
   collab: &Collab,
   sink: &Arc<CollabSink<Sink>>,
-) -> Result<(), SyncError>
+  reason: InitSyncReason,
+) -> Result<bool, SyncError>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
@@ -144,7 +158,7 @@ where
   if !sink.can_queue_init_sync() {
     #[cfg(feature = "sync_verbose_log")]
     trace!("{}: skip queue init sync", sync_object.object_id);
-    return Ok(());
+    return Ok(false);
   }
 
   if let Err(err) = sync_object.collab_type.validate(collab) {
@@ -160,6 +174,30 @@ where
   let sync_before = collab.get_last_sync_at() > 0;
   let awareness = collab.get_awareness();
   let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
+
+  #[cfg(feature = "sync_verbose_log")]
+  match reason {
+    InitSyncReason::CollabDidInit => {
+      trace!(
+        "{} collab did init and then try init sync",
+        &sync_object.object_id,
+      );
+    },
+    InitSyncReason::MissUpdates(reason) => {
+      trace!(
+        "🔥🔥🔥{} start pull missing updates, reason:{}",
+        &sync_object.object_id,
+        reason
+      );
+    },
+    InitSyncReason::RequireInitSync => {
+      trace!("{} retry init sync", &sync_object.object_id,);
+    },
+    InitSyncReason::NetworkResume => {
+      trace!("{} network resume, retry init sync", &sync_object.object_id,);
+    },
+  }
+
   sink.queue_init_sync(|msg_id| {
     let init_sync = InitSync::new(
       origin,
@@ -171,7 +209,7 @@ where
     );
     ClientCollabMessage::new_init_sync(init_sync)
   });
-  Ok(())
+  Ok(true)
 }
 
 impl<Sink, Stream> Deref for SyncControl<Sink, Stream> {

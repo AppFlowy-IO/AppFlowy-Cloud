@@ -204,37 +204,6 @@ impl CollabAck {
   }
 }
 
-fn deserialize_ack_code<'de, D>(deserializer: D) -> Result<AckCode, D::Error>
-where
-  D: Deserializer<'de>,
-{
-  struct AckCodeVisitor;
-
-  impl<'de> Visitor<'de> for AckCodeVisitor {
-    type Value = AckCode;
-
-    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-      formatter.write_str("an integer between 0 and 4")
-    }
-
-    fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
-    where
-      E: de::Error,
-    {
-      match value {
-        0 => Ok(AckCode::Success),
-        1 => Ok(AckCode::CannotApplyUpdate),
-        2 => Ok(AckCode::Retry),
-        3 => Ok(AckCode::Internal),
-        4 => Ok(AckCode::EncodeState),
-        _ => Ok(AckCode::Internal),
-      }
-    }
-  }
-
-  deserializer.deserialize_u8(AckCodeVisitor)
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Serialize_repr, Hash)]
 #[repr(u8)]
 pub enum AckCode {

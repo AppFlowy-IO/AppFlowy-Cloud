@@ -2,7 +2,7 @@ use collab::core::awareness::{AwarenessUpdate, Event};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 
-use crate::collab_sync::{SinkConfig, SinkState, SyncControl};
+use crate::collab_sync::{InitSyncReason, SinkConfig, SinkState, SyncControl};
 use collab::core::collab::MutexCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
@@ -12,7 +12,7 @@ use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
 use tokio_stream::StreamExt;
-use tracing::{error, trace};
+use tracing::{trace, warn};
 
 use crate::af_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -94,7 +94,7 @@ where
             {
               if let Some(local_collab) = local_collab.try_lock() {
                 sync_queue.resume();
-                let _ = sync_queue.init_sync(&local_collab);
+                let _ = sync_queue.init_sync(&local_collab, InitSyncReason::NetworkResume);
               }
             } else {
               break;
@@ -131,7 +131,11 @@ where
   C: Send + Sync + 'static,
 {
   fn did_init(&self, collab: &Collab, _object_id: &str, _last_sync_at: i64) {
-    if self.sync_queue.init_sync(collab).is_ok() {
+    if self
+      .sync_queue
+      .init_sync(collab, InitSyncReason::CollabDidInit)
+      .is_ok()
+    {
       self.did_init_sync.store(true, Ordering::SeqCst);
     }
   }
@@ -151,16 +155,7 @@ where
       });
     } else {
       #[cfg(feature = "sync_verbose_log")]
-      trace!("try init sync when receive local update");
-
-      if let Some(collab) = self.collab.upgrade() {
-        if let Some(local_collab) = collab.try_lock() {
-          match self.sync_queue.init_sync(&local_collab) {
-            Ok(_) => self.did_init_sync.store(true, Ordering::SeqCst),
-            Err(err) => error!("Failed to init sync: {:?}", err),
-          }
-        }
-      }
+      warn!("{}: should finish init sync", _object_id);
     }
   }
 

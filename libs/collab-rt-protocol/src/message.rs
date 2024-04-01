@@ -258,7 +258,7 @@ pub enum RTProtocolError {
   BinCodeSerde(#[from] bincode::Error),
 
   #[error("{0}")]
-  MissingUpdates(String),
+  MissUpdates(String),
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),

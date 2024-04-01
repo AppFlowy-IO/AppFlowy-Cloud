@@ -56,10 +56,12 @@ impl CollabSyncProtocol for ClientSyncProtocol {
       RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {}", err))
     })?;
 
+    // If the client can't apply broadcast from server, which means the client is missing some
+    // updates.
     if txn.store().pending_update().is_none() {
       Ok(None)
     } else {
-      Err(RTProtocolError::MissingUpdates(
+      Err(RTProtocolError::MissUpdates(
         "missing updates when applying update".to_string(),
       ))
     }

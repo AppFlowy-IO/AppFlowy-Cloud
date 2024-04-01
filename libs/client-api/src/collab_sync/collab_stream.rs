@@ -1,5 +1,5 @@
 use crate::af_spawn;
-use crate::collab_sync::{start_sync, CollabSink, SyncError, SyncObject};
+use crate::collab_sync::{start_sync, CollabSink, InitSyncReason, SyncError, SyncObject};
 
 use bytes::Bytes;
 use collab::core::collab::MutexCollab;
@@ -111,13 +111,19 @@ where
       .await
       {
         match error {
-          SyncError::MissingUpdates(reason) => {
+          SyncError::MissUpdates(reason) => {
             Self::pull_missing_updates(&origin, &object, &collab, &sink, &seq_num_counter, reason)
               .await;
           },
           SyncError::RequireInitSync => {
             if let Some(lock_guard) = collab.try_lock() {
-              if let Err(err) = start_sync(origin.clone(), &object, &lock_guard, &sink) {
+              if let Err(err) = start_sync(
+                origin.clone(),
+                &object,
+                &lock_guard,
+                &sink,
+                InitSyncReason::RequireInitSync,
+              ) {
                 error!("Error while start sync: {}", err);
               }
             }
@@ -202,18 +208,17 @@ where
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
-    seq_num_counter: &Arc<SeqNumCounter>,
+    _seq_num_counter: &Arc<SeqNumCounter>,
     reason: String,
   ) {
-    seq_num_counter.reset_equal_counter();
     if let Some(lock_guard) = collab.try_lock() {
-      #[cfg(feature = "sync_verbose_log")]
-      trace!(
-        "{} start pull missing updates. reason: {}",
-        object.object_id,
-        reason
-      );
-      if let Err(err) = start_sync(origin.clone(), object, &lock_guard, sink) {
+      if let Err(err) = start_sync(
+        origin.clone(),
+        object,
+        &lock_guard,
+        sink,
+        InitSyncReason::MissUpdates(reason),
+      ) {
         error!("Error while start sync: {}", err);
       }
     }
@@ -355,21 +360,21 @@ impl SeqNumCounter {
     );
 
     if ack_seq_num > broadcast_seq_num + 3 {
-      return Err(SyncError::MissingUpdates(format!(
+      self.store_broadcast_seq_num(ack_seq_num);
+
+      return Err(SyncError::MissUpdates(format!(
         "missing {} updates, start init sync",
         ack_seq_num - broadcast_seq_num,
       )));
     }
 
     if self.equal_counter.load(Ordering::SeqCst) >= 5 {
-      return Err(SyncError::MissingUpdates(
+      self.equal_counter.store(0, Ordering::SeqCst);
+
+      return Err(SyncError::MissUpdates(
         "ping exceeds, start init sync".to_string(),
       ));
     }
     Ok(())
-  }
-
-  pub fn reset_equal_counter(&self) {
-    self.equal_counter.store(0, Ordering::SeqCst);
   }
 }

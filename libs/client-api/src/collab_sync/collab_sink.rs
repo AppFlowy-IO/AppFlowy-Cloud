@@ -4,7 +4,7 @@ use crate::collab_sync::ping::PingSyncRunner;
 use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
 use collab::core::origin::{CollabClient, CollabOrigin};
-use collab_rt_entity::{AckCode, ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
+use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
 use futures_util::SinkExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

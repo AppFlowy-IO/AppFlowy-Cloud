@@ -7,6 +7,7 @@ use reqwest::StatusCode;
 use serde::Serialize;
 use thiserror::Error;
 
+
 #[derive(Debug, Error, Default)]
 pub enum AppError {
   #[error("Operation completed successfully.")]
@@ -231,14 +232,14 @@ impl From<crate::gotrue::GoTrueError> for AppError {
   }
 }
 
+#[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify, Serialize, serde::Deserialize))]
+#[cfg_attr(not(target_arch = "wasm32"), derive(serde_repr::Serialize_repr, serde_repr::Deserialize_repr))]
 #[derive(
   Eq,
   PartialEq,
   Copy,
   Debug,
   Clone,
-  serde_repr::Serialize_repr,
-  serde_repr::Deserialize_repr,
   Default,
 )]
 #[repr(i32)]

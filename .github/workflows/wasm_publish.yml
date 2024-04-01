@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       working_directory:
-        description: 'Working directory (e.g., libs/client-api-for-wasm)'
+        description: 'Working directory (e.g., libs/client-api-wasm)'
         required: true
-        default: 'libs/client-api-for-wasm'
+        default: 'libs/client-api-wasm'
       package_name:
         description: 'Package name'
         required: true

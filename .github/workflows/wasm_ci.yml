@@ -37,4 +37,4 @@ jobs:
 
       - name: Build with wasm-pack
         run: wasm-pack build
-        working-directory: ./libs/client-api-for-wasm
+        working-directory: ./libs/client-api-wasm

@@ -14,8 +14,8 @@
 # Clone the repository (if you haven't already)
 git clone https://github.com/AppFlowy-IO/AppFlowy-Cloud.git
 
-# Navigate to the client-api-for-wasm directory
-cd libs/client-api-for-wasm
+# Navigate to the client-for-wasm directory
+cd libs/client-api-wasm
 
 # Install the dependencies (if you haven't already)
 cargo install wasm-pack

@@ -1,8 +1,6 @@
 mod entities;
-mod logger;
-
-use crate::entities::{ClientAPIConfig, ClientErrorCode, ClientResponse};
-use crate::logger::init_logger;
+use tracing;
+use crate::entities::{ClientAPIConfig, ClientResponse};
 use client_api::{Client, ClientConfiguration};
 use wasm_bindgen::prelude::*;
 
@@ -16,6 +14,25 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 extern "C" {
   #[wasm_bindgen(js_namespace = window)]
   fn wasm_trace(level: &str, target: &str, msg: &str);
+
+  #[wasm_bindgen(js_namespace = console)]
+  fn log(msg: &str);
+
+  #[wasm_bindgen(js_namespace = console)]
+  fn error(msg: &str);
+
+  #[wasm_bindgen(js_namespace = console)]
+  fn info(msg: &str);
+
+  #[wasm_bindgen(js_namespace = console)]
+  fn debug(msg: &str);
+
+  #[wasm_bindgen(js_namespace = console)]
+  fn warn(msg: &str);
+
+  #[wasm_bindgen(js_namespace = console)]
+  fn trace(msg: &str);
+
 }
 
 #[wasm_bindgen]
@@ -23,27 +40,16 @@ pub struct ClientAPI {
   client: Client,
 }
 
+
 #[wasm_bindgen]
 impl ClientAPI {
-<<<<<<< HEAD
-	pub fn new(config: ClientAPIConfig) -> ClientAPI {
-		init_logger();
-		let configuration = ClientConfiguration::new(config.configuration.compression_quality, config.configuration.compression_buffer_size);
-		let client = Client::new(config.base_url.as_str(), config.ws_addr.as_str(), config.gotrue_url.as_str(), config.device_id.as_str(), configuration, config.client_id.as_str());
-		log::debug!("Client API initialized, config: {:?}", config);
-		ClientAPI {
-			client,
-		}
-	}
-=======
   pub fn new(config: ClientAPIConfig) -> ClientAPI {
-    init_logger();
+    tracing_wasm::set_as_global_default();
     let configuration = ClientConfiguration::default();
     configuration
       .to_owned()
       .with_compression_buffer_size(config.configuration.compression_buffer_size)
       .with_compression_quality(config.configuration.compression_quality);
->>>>>>> eb1aa08 (fix: cargo fmt)
 
     let client = Client::new(
       config.base_url.as_str(),
@@ -53,7 +59,7 @@ impl ClientAPI {
       configuration,
       config.client_id.as_str(),
     );
-    log::debug!("Client API initialized, config: {:?}", config);
+    tracing::debug!("Client API initialized, config: {:?}", config);
     ClientAPI { client }
   }
 
@@ -80,14 +86,14 @@ impl ClientAPI {
     password: &str,
   ) -> Result<bool, ClientResponse> {
     if let Err(err) = self.client.sign_in_password(email, password).await {
-      log::error!("Sign in failed: {:?}", err);
+      tracing::error!("Sign in failed: {:?}", err);
       return Err(ClientResponse {
-        code: ClientErrorCode::from(err.code),
+        code: err.code,
         message: err.message.to_string(),
       });
     }
 
-    log::info!("Sign in success");
+    tracing::info!("Sign in success");
     Ok(true)
   }
 }

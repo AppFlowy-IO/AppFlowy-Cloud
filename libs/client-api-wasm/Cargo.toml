@@ -27,7 +27,9 @@ client-api = { path = "../client-api" }
 lazy_static = "1.4.0"
 wasm-bindgen-futures = "0.4.20"
 tsify = "0.4.5"
-
+tracing.workspace = true
+tracing-core = { version = "0.1.32" }
+tracing-wasm = "0.2.1"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

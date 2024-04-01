@@ -3,7 +3,7 @@ use collab::error::CollabError;
 #[derive(Debug, thiserror::Error)]
 pub enum RealtimeError {
   #[error(transparent)]
-  YSync(#[from] collab_rt_protocol::Error),
+  YSync(#[from] collab_rt_protocol::RTProtocolError),
 
   #[error(transparent)]
   YAwareness(#[from] collab::core::awareness::Error),

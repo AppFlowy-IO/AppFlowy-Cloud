@@ -14,14 +14,12 @@ use database_entity::dto::{
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
   AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult,
   CollabMemberIdentify, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams,
-  QueryCollab, QueryCollabMembers, QueryCollabParams, QuerySnapshotParams, SnapshotData,
-  UpdateCollabMemberParams,
+  QueryCollab, QueryCollabMembers, QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 
-use collab_rt_entity::EncodedCollab;
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
@@ -916,27 +914,6 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  #[instrument(level = "debug", skip_all)]
-  pub async fn get_collab(
-    &self,
-    params: QueryCollabParams,
-  ) -> Result<EncodedCollab, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}",
-      self.base_url, &params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<EncodedCollab>::from_response(resp)
-      .await?
-      .into_data()
   }
 
   #[instrument(level = "debug", skip_all, err)]

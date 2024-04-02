@@ -35,3 +35,5 @@ bincode_error = ["bincode"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"]}
+tsify = "0.4.5"
+wasm-bindgen = "0.2.84"

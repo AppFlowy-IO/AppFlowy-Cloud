@@ -3,14 +3,10 @@ name: AppFlowy-Cloud Integrations
 on:
   push:
     branches: [ main ]
+  pull_request_target:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - unlocked
-      - ready_for_review
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

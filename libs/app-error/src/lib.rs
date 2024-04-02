@@ -231,6 +231,7 @@ impl From<crate::gotrue::GoTrueError> for AppError {
   }
 }
 
+#[cfg_attr(target_arch = "wasm32", derive(tsify::Tsify))]
 #[derive(
   Eq,
   PartialEq,

@@ -332,7 +332,6 @@ impl SeqNumCounter {
 
     if ack_seq_num > broadcast_seq_num + 3 {
       self.store_broadcast_seq_num(ack_seq_num);
-
       return Err(SyncError::MissUpdates(format!(
         "missing {} updates, start init sync",
         ack_seq_num - broadcast_seq_num,
@@ -341,7 +340,6 @@ impl SeqNumCounter {
 
     if self.equal_counter.load(Ordering::SeqCst) >= 5 {
       self.equal_counter.store(0, Ordering::SeqCst);
-
       return Err(SyncError::MissUpdates(
         "ping exceeds, start init sync".to_string(),
       ));

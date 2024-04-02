@@ -215,6 +215,26 @@ impl Client {
     self.token.read().subscribe()
   }
 
+  /// Sign in with magic link
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn sign_in_with_magic_link(
+    &self,
+    email: &str,
+    redirect_to: Option<String>,
+  ) -> Result<(), AppResponseError> {
+    self
+      .gotrue_client
+      .magic_link(
+        &MagicLinkParams {
+          email: email.to_owned(),
+          ..Default::default()
+        },
+        redirect_to,
+      )
+      .await?;
+    Ok(())
+  }
+
   /// Attempts to sign in using a URL, extracting refresh_token from the URL.
   /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///

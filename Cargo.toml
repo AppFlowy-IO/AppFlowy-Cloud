@@ -199,10 +199,10 @@ debug = true
 # will be removed when using yrs 0.18.2 that expose pendings
 yrs = { git = "https://github.com/appflowy/y-crdt", rev = "3f25bb510ca5274e7657d3713fbed41fb46b4487" }
 
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "089e70a87f023f1d5c55316964f8022d082be5bf" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "089e70a87f023f1d5c55316964f8022d082be5bf" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "089e70a87f023f1d5c55316964f8022d082be5bf" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "089e70a87f023f1d5c55316964f8022d082be5bf" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2" }
 
 [features]
 ai_enable = []

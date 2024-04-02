@@ -18,6 +18,7 @@ pub struct WebSocketChannel<T> {
 
 impl<T> Drop for WebSocketChannel<T> {
   fn drop(&mut self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("Drop WebSocketChannel {}", self.object_id);
   }
 }
@@ -53,6 +54,8 @@ where
       while let Some(msg) = rx.recv().await {
         let _ = cloned_sender.send(msg);
       }
+
+      #[cfg(feature = "sync_verbose_log")]
       trace!("WebSocketChannel {} sink closed", object_id);
     });
     BroadcastSink::new(tx)
@@ -70,6 +73,7 @@ where
           break;
         }
       }
+      #[cfg(feature = "sync_verbose_log")]
       trace!("WebSocketChannel {} stream closed", object_id);
     });
     UnboundedReceiverStream::new(rx)

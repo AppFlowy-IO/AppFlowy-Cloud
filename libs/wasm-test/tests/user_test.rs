@@ -19,7 +19,7 @@ async fn wasm_sign_in_success() {
     .sign_in_password(user.email.as_str(), user.password.as_str())
     .await;
 
-  assert!(res.ok());
+  assert!(res.is_ok());
 
   let val = res.unwrap();
 

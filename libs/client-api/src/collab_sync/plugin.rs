@@ -195,10 +195,6 @@ where
       ClientCollabMessage::new_update_sync(update_sync)
     });
   }
-
-  fn reset(&self, _object_id: &str) {
-    self.sync_queue.clear();
-  }
 }
 
 #[derive(Clone, Debug)]

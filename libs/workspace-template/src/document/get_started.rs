@@ -47,7 +47,7 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
         false,
       ));
       let document = Document::create_with_data(collab, document_data)?;
-      let data = document.get_collab().encode_collab_v1();
+      let data = document.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
         object_id: view_id,
         object_type: CollabType::Document,

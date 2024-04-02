@@ -5,8 +5,8 @@ use crate::RealtimeAccessControl;
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::RealtimeMessage;
-use collab_rt_entity::{ClientCollabMessage, SinkMessage};
+use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, SinkMessage};
+use collab_rt_entity::{CollabAck, RealtimeMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 use futures_util::StreamExt;
@@ -131,13 +131,20 @@ where
         self.create_group(first_message).await?;
         self.subscribe_group(user, first_message).await?;
         forward_message_to_group(user, object_id, messages, &self.client_msg_router_by_user).await;
-      } else {
+      } else if let Some(entry) = self.client_msg_router_by_user.get(user) {
         warn!(
           "The group:{} is not found, the client:{} should send the init message first",
           first_message.object_id(),
           user
         );
-        // TODO(nathan): ask the client to send the init message first
+        let origin = first_message.origin().clone();
+        let msg_id = first_message.msg_id();
+        let object_id = first_message.object_id().to_string();
+        let ack = CollabAck::new(origin, object_id, msg_id, 0);
+        entry
+          .value()
+          .send_message(ServerCollabMessage::ClientAck(ack).into())
+          .await;
       }
     }
     Ok(())

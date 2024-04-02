@@ -228,14 +228,14 @@ impl Decode for SyncMessage {
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum RTProtocolError {
   /// Incoming Y-protocol message couldn't be deserialized.
   #[error("failed to deserialize message: {0}")]
   DecodingError(#[from] yrs::encoding::read::Error),
 
   /// Applying incoming Y-protocol awareness update has failed.
   #[error("failed to process awareness update: {0}")]
-  AwarenessEncoding(#[from] collab::core::awareness::Error),
+  YAwareness(#[from] collab::core::awareness::Error),
 
   /// An incoming Y-protocol authorization request has been denied.
   #[error("permission denied to access: {reason}")]
@@ -257,12 +257,15 @@ pub enum Error {
   #[error(transparent)]
   BinCodeSerde(#[from] bincode::Error),
 
+  #[error("{0}")]
+  MissUpdates(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
-impl From<std::io::Error> for Error {
+impl From<std::io::Error> for RTProtocolError {
   fn from(value: std::io::Error) -> Self {
-    Error::Internal(value.into())
+    RTProtocolError::Internal(value.into())
   }
 }
 

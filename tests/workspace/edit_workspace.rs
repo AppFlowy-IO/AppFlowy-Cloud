@@ -37,15 +37,16 @@ async fn edit_workspace_without_permission() {
 }
 
 #[tokio::test]
-async fn init_sync_workspace_with_guest_permission() {
+async fn init_sync_workspace_with_member_permission() {
   let mut owner = TestClient::new_user().await;
   let mut guest = TestClient::new_user().await;
   let workspace_id = owner.workspace_id().await;
   owner.open_workspace_collab(&workspace_id).await;
 
+  // TODO(nathan): write test for AFRole::Guest
   // add client 2 as the member of the workspace then the client 2 will receive the update.
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .add_workspace_member(&workspace_id, &guest, AFRole::Member)
     .await;
   guest.open_workspace_collab(&workspace_id).await;
 
@@ -128,7 +129,7 @@ async fn edit_workspace_with_guest_permission() {
     &mut owner.api_client,
     &workspace_id,
     &CollabType::Folder,
-    5,
+    30,
     json!({
       "name": "zack"
     }),

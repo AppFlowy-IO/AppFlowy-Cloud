@@ -162,6 +162,10 @@ impl ClientMessageRouter {
     (client_sink, client_stream)
   }
 
+  pub async fn send_message(&self, message: RealtimeMessage) {
+    self.sink.do_send(message);
+  }
+
   #[inline]
   async fn access_control<AC>(
     workspace_id: &str,

@@ -82,7 +82,7 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.payload,
       ClientCollabMessage::ServerInitSync(msg) => &msg.payload,
       ClientCollabMessage::ClientAwarenessSync(data) => &data.payload,
-      ClientCollabMessage::ClientPingSync(_) => &EMPTY_BYTES,
+      ClientCollabMessage::ClientPingSync(_data) => &EMPTY_BYTES,
     }
   }
   pub fn device_id(&self) -> Option<String> {

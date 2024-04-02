@@ -144,6 +144,7 @@ members = [
     # services
     "services/collab-history",
     "services/realtime",
+    "libs/client-api-wasm"
 ]
 
 [workspace.dependencies]

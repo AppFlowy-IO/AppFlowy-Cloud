@@ -1,7 +1,6 @@
 pub mod entities;
 use crate::entities::{ClientAPIConfig, ClientResponse};
 use client_api::{Client, ClientConfiguration};
-use tracing;
 use wasm_bindgen::prelude::*;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global

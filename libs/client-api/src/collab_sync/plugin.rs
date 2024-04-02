@@ -32,6 +32,7 @@ pub struct SyncPlugin<Sink, Stream, C> {
 
 impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
   fn drop(&mut self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("Drop sync plugin: {}", self.object.object_id);
   }
 }

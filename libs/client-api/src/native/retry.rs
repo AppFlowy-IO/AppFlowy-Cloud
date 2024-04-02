@@ -1,12 +1,18 @@
+use crate::http::log_request_id;
 use crate::notify::ClientToken;
 use crate::ws::{
   ConnectInfo, ConnectState, ConnectStateNotify, CurrentConnInfo, StateNotify, WSError,
 };
+use crate::Client;
 use app_error::gotrue::GoTrueError;
 use client_websocket::{connect_async, WebSocketStream};
+use collab_rt_entity::EncodedCollab;
+use database_entity::dto::QueryCollabParams;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
 use reqwest::header::HeaderMap;
+use reqwest::Method;
+use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
@@ -148,5 +154,43 @@ impl Condition<WSError> for RetryCondition {
 
     debug!("WSClient should_retry: {}", should_retry);
     should_retry
+  }
+}
+
+pub(crate) struct GetCollabAction {
+  client: Client,
+  params: QueryCollabParams,
+}
+
+impl GetCollabAction {
+  pub fn new(client: Client, params: QueryCollabParams) -> Self {
+    Self { client, params }
+  }
+}
+
+impl Action for GetCollabAction {
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync>>;
+  type Item = EncodedCollab;
+  type Error = AppResponseError;
+
+  fn run(&mut self) -> Self::Future {
+    let client = self.client.clone();
+    let params = self.params.clone();
+
+    Box::pin(async move {
+      let url = format!(
+        "{}/api/workspace/{}/collab/{}",
+        client.base_url, &params.workspace_id, &params.object_id
+      );
+      let resp = client
+        .http_client_with_auth(Method::GET, &url)
+        .await?
+        .json(&params)
+        .send()
+        .await?;
+      log_request_id(&resp);
+      let resp = AppResponse::<EncodedCollab>::from_response(resp).await?;
+      resp.into_data()
+    })
   }
 }

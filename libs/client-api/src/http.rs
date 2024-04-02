@@ -27,6 +27,7 @@ use parking_lot::RwLock;
 use reqwest::{header, StatusCode};
 
 use collab_entity::CollabType;
+
 use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;

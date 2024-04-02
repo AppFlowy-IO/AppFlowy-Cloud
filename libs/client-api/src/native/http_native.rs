@@ -1,9 +1,10 @@
 use crate::http::log_request_id;
+use crate::native::GetCollabAction;
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
-use app_error::{AppError, ErrorCode};
+use app_error::AppError;
 use async_trait::async_trait;
 use collab_rt_entity::EncodedCollab;
 use collab_rt_entity::HttpRealtimeMessage;
@@ -15,8 +16,8 @@ use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::RetryIf;
+use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
+use tokio_retry::{Retry, RetryIf};
 use tracing::{event, instrument};
 
 impl Client {
@@ -25,42 +26,10 @@ impl Client {
     &self,
     params: QueryCollabParams,
   ) -> Result<EncodedCollab, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}",
-      self.base_url, &params.workspace_id, &params.object_id
-    );
-
-    let mut retries = 3; // Maximum number of retries
-    let retry_delay = Duration::from_secs(2);
-    while retries > 0 {
-      let resp = self
-        .http_client_with_auth(Method::GET, &url)
-        .await?
-        .json(&params)
-        .send()
-        .await?;
-      log_request_id(&resp);
-      let response = AppResponse::<EncodedCollab>::from_response(resp).await?;
-
-      // Retry if the record is not found
-      if response.code == ErrorCode::RecordNotFound {
-        retries -= 1;
-        if retries > 0 {
-          tokio::time::sleep(retry_delay).await;
-          continue;
-        } else {
-          return response.into_data();
-        }
-      } else {
-        return response.into_data();
-      }
-    }
-
-    // this part is unreachable by logic
-    Err(AppResponseError::new(
-      ErrorCode::Unhandled,
-      "Exhausted retries to fetch collaboration data.",
-    ))
+    // 2 seconds, 4 seconds, 8 seconds
+    let retry_strategy = ExponentialBackoff::from_millis(2).factor(1000).take(3);
+    let action = GetCollabAction::new(self.clone(), params);
+    Retry::spawn(retry_strategy, action).await
   }
 
   #[instrument(level = "debug", skip_all, err)]

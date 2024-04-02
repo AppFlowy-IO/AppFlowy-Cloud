@@ -1,8 +1,9 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::SeqNumCounter;
-use crate::collab_sync::ping::PingSyncRunner;
+
 use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
+
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
 use futures_util::SinkExt;
@@ -11,6 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
+use crate::collab_sync::ping::PingSyncRunner;
 use tokio::sync::{broadcast, watch, Mutex};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
@@ -95,14 +97,13 @@ where
 
     let last_sync = Arc::new(SyncTimestamp::new());
     let mut interval = interval(SEND_INTERVAL);
-    let weak_notifier = Arc::downgrade(&notifier);
     let weak_flying_messages = Arc::downgrade(&flying_messages);
 
+    let weak_notifier = Arc::downgrade(&notifier);
     let origin = CollabOrigin::Client(CollabClient {
       uid,
       device_id: object.device_id.clone(),
     });
-
     PingSyncRunner::run(
       origin,
       object.object_id.clone(),

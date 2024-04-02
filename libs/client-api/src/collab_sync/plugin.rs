@@ -14,7 +14,7 @@ use collab_rt_protocol::{Message, SyncMessage};
 use futures_util::SinkExt;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::trace;
+use tracing::{error, trace};
 
 use crate::af_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -125,7 +125,7 @@ where
     }
   }
 
-  fn start_init_sync(&self) {
+  fn try_init_sync(&self) {
     if self.did_init_sync.load(Ordering::SeqCst) {
       return;
     }
@@ -159,7 +159,7 @@ where
   C: Send + Sync + 'static,
 {
   fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
-    self.start_init_sync();
+    self.try_init_sync();
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {
@@ -176,7 +176,7 @@ where
         ClientCollabMessage::new_update_sync(update_sync)
       });
     } else {
-      self.start_init_sync();
+      self.try_init_sync();
     }
   }
 
@@ -196,8 +196,20 @@ where
     });
   }
 
-  fn reset(&self, _object_id: &str) {
-    self.sync_queue.clear();
+  fn start_init_sync(&self) {
+    if let Some(collab) = self.collab.upgrade() {
+      if let Some(collab) = collab.try_lock() {
+        if !self.sync_queue.can_queue_init_sync() {
+          return;
+        }
+        if let Err(err) = self
+          .sync_queue
+          .init_sync(&collab, InitSyncReason::CollabDidInit)
+        {
+          error!("Failed to start init sync: {}", err);
+        }
+      }
+    }
   }
 }
 

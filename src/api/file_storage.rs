@@ -19,7 +19,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{event, instrument};
+use tracing::{error, event, instrument};
 
 use crate::state::AppState;
 
@@ -59,7 +59,12 @@ async fn put_blob_handler(
     let mut payload_reader = payload_to_async_read(payload);
     let mut content = vec![0; content_length];
     let n = payload_reader.read_exact(&mut content).await?;
-    assert_eq!(n, content_length);
+    if n != content_length {
+      error!(
+        "Content length is {}, but the actual content is larger",
+        content_length
+      );
+    }
     let res = payload_reader.read_u8().await;
     match res {
       Ok(_) => {

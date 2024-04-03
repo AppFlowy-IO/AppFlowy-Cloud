@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{interval, sleep};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,

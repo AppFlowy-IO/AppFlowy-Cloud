@@ -21,7 +21,7 @@ ENV SQLX_OFFLINE true
 
 # Build the project
 RUN echo "Building with features: ${FEATURES}"
-RUN cargo build --profile=profiling --features "${FEATURES}" --bin appflowy_cloud
+RUN cargo build --profile=release --features "${FEATURES}" --bin appflowy_cloud
 
 
 FROM debian:bookworm-slim AS runtime

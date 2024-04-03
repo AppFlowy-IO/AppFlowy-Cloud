@@ -444,7 +444,7 @@ async fn send_magic_link(
         email: email.to_owned(),
         ..Default::default()
       },
-      Some("/".to_owned()),
+      Some("/web/login".to_owned()),
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))

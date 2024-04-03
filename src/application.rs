@@ -43,7 +43,7 @@ use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 pub struct Application {
   port: u16,
@@ -305,8 +305,11 @@ async fn setup_admin_account(
           .await
           .context("failed to update the admin user")?;
 
-          assert_eq!(result.rows_affected(), 1);
-          info!("Admin user created and set role to supabase_admin");
+          if result.rows_affected() != 1 {
+            warn!("Failed to update the admin user");
+          } else {
+            info!("Admin user created and set role to supabase_admin");
+          }
 
           Ok(gotrue_admin)
         },

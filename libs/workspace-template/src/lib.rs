@@ -125,7 +125,7 @@ impl WorkspaceTemplateBuilder {
         false,
       ));
       let folder = Folder::create(uid, collab, None, folder_data);
-      let data = folder.encode_collab_v1();
+      let data = folder.encode_collab_v1()?;
       Ok::<_, anyhow::Error>(TemplateData {
         object_id: workspace_id,
         object_type: CollabType::Folder,

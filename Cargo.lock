@@ -1326,7 +1326,6 @@ dependencies = [
  "gotrue-entity",
  "governor",
  "mime",
- "mime_guess",
  "parking_lot 0.12.1",
  "prost",
  "reqwest",
@@ -1390,7 +1389,6 @@ dependencies = [
  "client-api",
  "console_error_panic_hook",
  "lazy_static",
- "log",
  "serde",
  "serde_json",
  "tracing",
@@ -1423,7 +1421,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2#9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=a7a990dfc62a766829d28d2a9bb383840d8146f4#a7a990dfc62a766829d28d2a9bb383840d8146f4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1447,7 +1445,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2#9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=a7a990dfc62a766829d28d2a9bb383840d8146f4#a7a990dfc62a766829d28d2a9bb383840d8146f4"
 dependencies = [
  "anyhow",
  "collab",
@@ -1466,7 +1464,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2#9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=a7a990dfc62a766829d28d2a9bb383840d8146f4#a7a990dfc62a766829d28d2a9bb383840d8146f4"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1481,7 +1479,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2#9e519d46bb8c4c5097d8c9dbc8f77707f8041ee2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=a7a990dfc62a766829d28d2a9bb383840d8146f4#a7a990dfc62a766829d28d2a9bb383840d8146f4"
 dependencies = [
  "anyhow",
  "chrono",

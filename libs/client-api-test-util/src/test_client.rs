@@ -522,7 +522,11 @@ impl TestClient {
       ),
     };
 
-    let encoded_collab_v1 = collab.encode_collab_v1().encode_to_bytes().unwrap();
+    let encoded_collab_v1 = collab
+      .encode_collab_v1(|collab| collab_type.validate(collab))
+      .unwrap()
+      .encode_to_bytes()
+      .unwrap();
     self
       .api_client
       .create_collab(CreateCollabParams {

@@ -90,6 +90,7 @@ async fn create_collab_params_compatibility_serde_test() {
   // This test is to make sure that the CreateCollabParams is compatible with the old InsertCollabParams
   let object_id = uuid::Uuid::new_v4().to_string();
   let encoded_collab_v1 = default_document_collab_data(&object_id)
+    .unwrap()
     .encode_to_bytes()
     .unwrap();
 

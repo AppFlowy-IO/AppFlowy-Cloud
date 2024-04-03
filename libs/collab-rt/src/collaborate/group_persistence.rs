@@ -84,7 +84,7 @@ where
           .await
         {
           Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
-          Err(err) => error!("fail to save collab to disk: {:?}", err),
+          Err(err) => warn!("fail to save collab to disk: {:?}", err),
         }
       },
       Err(err) => {
@@ -123,7 +123,7 @@ where
           .await
         {
           Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
-          Err(err) => error!("fail to save collab to disk: {:?}", err),
+          Err(err) => warn!("fail to save collab to disk: {:?}", err),
         }
       },
       Err(err) => {

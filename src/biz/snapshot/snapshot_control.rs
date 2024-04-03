@@ -239,7 +239,7 @@ impl SnapshotCommandRunner {
         match validate_encode_collab(&next_item.object_id, &data, &next_item.collab_type) {
           Ok(_) => data,
           Err(err) => {
-            error!(
+            warn!(
               "Collab doc state is not correct when creating snapshot: {},{}",
               next_item.object_id, err
             );

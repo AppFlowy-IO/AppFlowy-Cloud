@@ -1,4 +1,6 @@
 use client_api_test_util::{generate_unique_email, localhost_client, TestClient};
+use std::sync::Arc;
+use tokio::task::LocalSet;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
@@ -11,17 +13,17 @@ async fn wasm_sign_up_success() {
 
 #[wasm_bindgen_test]
 async fn wasm_sign_in_success() {
-  let test_client = TestClient::new_user().await;
-  let user = test_client.user;
+  let local = LocalSet::new();
+  local
+    .run_until(async {
+      let test_client = TestClient::new_user().await;
+      let user = test_client.user;
+      let res = test_client
+        .api_client
+        .sign_in_password(user.email.as_str(), user.password.as_str())
+        .await;
 
-  let res = test_client
-    .api_client
-    .sign_in_password(user.email.as_str(), user.password.as_str())
+      assert!(res.unwrap());
+    })
     .await;
-
-  assert!(res.is_ok());
-
-  let val = res.unwrap();
-
-  assert!(val);
 }

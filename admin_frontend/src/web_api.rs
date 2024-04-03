@@ -298,7 +298,7 @@ pub async fn login_refresh_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Path(refresh_token): Path<String>,
-) -> Result<CookieJar, WebApiError<'static>> {
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
@@ -316,20 +316,7 @@ pub async fn login_refresh_handler(
     ))
     .await?;
 
-  verify_token_cloud(
-    token.access_token.as_str(),
-    state.appflowy_cloud_url.as_str(),
-  )
-  .await?;
-
-  let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
-  state.session_store.put_user_session(&new_session).await?;
-
-  let mut cookie = Cookie::new("session_id", new_session_id.to_string());
-  cookie.set_path("/");
-
-  Ok(jar.add(cookie))
+  session_login(State(state), token, jar).await
 }
 
 // login and set the cookie

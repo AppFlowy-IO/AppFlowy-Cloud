@@ -3,8 +3,6 @@ name: AppFlowy-Cloud Integrations
 on:
   push:
     branches: [ main ]
-  pull_request_target:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 

@@ -22,20 +22,8 @@ pub fn validate_encode_collab(
   )
   .map_err(|err| RealtimeError::Internal(err.into()))?;
 
-  validate_collab(&collab, collab_type)
-}
-
-pub fn validate_collab(collab: &Collab, collab_type: &CollabType) -> Result<(), RealtimeError> {
-  match collab_type {
-    CollabType::Document => collab_document::document::Document::validate(collab)
-      .map_err(|err| RealtimeError::NoRequiredCollabData(err.to_string()))?,
-    CollabType::Database => {},
-    CollabType::Folder => collab_folder::Folder::validate(collab)
-      .map(|_| ())
-      .map_err(|err| RealtimeError::NoRequiredCollabData(err.to_string()))?,
-    CollabType::DatabaseRow => {},
-    _ => {},
-  }
-
+  collab_type
+    .validate(&collab)
+    .map_err(|err| RealtimeError::NoRequiredCollabData(err.to_string()))?;
   Ok(())
 }

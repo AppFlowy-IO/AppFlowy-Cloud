@@ -4,21 +4,17 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 
-use std::rc::Rc;
-use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
-use std::sync::Arc;
-
 use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
-use crate::metrics::CollabMetricsCalculate;
-
 use crate::collaborate::group_persistence::GroupPersistence;
-use crate::data_validation::validate_collab;
 use crate::error::RealtimeError;
-
+use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
+use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::{mpsc, Mutex};
@@ -92,8 +88,8 @@ impl CollabGroup {
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
     let lock_guard = self.collab.lock().await;
-    validate_collab(&lock_guard, &self.collab_type)?;
-    let encode_collab = lock_guard.try_encode_collab_v1()?;
+    let encode_collab =
+      lock_guard.try_encode_collab_v1(|collab| self.collab_type.validate(collab))?;
     Ok(encode_collab)
   }
 

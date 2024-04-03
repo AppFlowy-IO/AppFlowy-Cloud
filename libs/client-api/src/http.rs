@@ -669,7 +669,7 @@ impl Client {
     Ok(())
   }
 
-  // deprecated
+  #[deprecated(note = "use invite_workspace_members instead")]
   #[instrument(level = "debug", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,

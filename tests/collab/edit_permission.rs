@@ -431,8 +431,9 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
       sleep(Duration::from_secs(i % 3)).await;
 
       owner
-        .add_workspace_member(&workspace_id, &new_member, AFRole::Member)
-        .await;
+        .invite_and_accepted_workspace_member(&workspace_id, &new_member, AFRole::Member)
+        .await
+        .unwrap();
       owner
         .add_collab_member(
           &workspace_id,

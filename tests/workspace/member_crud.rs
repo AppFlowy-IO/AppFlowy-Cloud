@@ -41,8 +41,9 @@ async fn workspace_members_through_invite_or_direct_add() {
   let member_2 = TestClient::new_user_without_ws_conn().await;
   let workspace_id = owner.workspace_id().await;
   owner
-    .add_workspace_member(&workspace_id, &member_1, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &member_1, AFRole::Member)
+    .await
+    .unwrap();
 
   // TODO(Zack): fix { code: OAuthError, message: "code: 500, msg:Error sending magic link, error_id: Some(\"3ec69543-e7b9-496d-92d8-f0b73ff09e0f\")" }
   owner
@@ -68,8 +69,9 @@ async fn add_workspace_members_not_enough_permission() {
 
   // add client 2 to client 1's workspace
   owner
-    .add_workspace_member(&workspace_id, &member_1, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &member_1, AFRole::Member)
+    .await
+    .unwrap();
 
   // client 2 add client 3 to client 1's workspace but permission denied
   let error = member_1
@@ -86,10 +88,12 @@ async fn add_duplicate_workspace_members() {
 
   let workspace_id = c1.workspace_id().await;
 
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Member)
-    .await;
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Member)
-    .await;
+  c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Member)
+    .await
+    .unwrap();
+  c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Member)
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -132,8 +136,9 @@ async fn update_workspace_member_role_not_enough_permission() {
   let workspace_id = c1.workspace_id().await;
 
   // add client 2 to client 1's workspace
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Member)
-    .await;
+  c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Member)
+    .await
+    .unwrap();
 
   // client 2 want to update client 2's role to owner
   let error = c2
@@ -151,8 +156,9 @@ async fn update_workspace_member_role_from_guest_to_member() {
 
   // add client 2 to client 1's workspace
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .await
+    .unwrap();
   let members = owner
     .api_client
     .get_workspace_members(&workspace_id)
@@ -189,16 +195,19 @@ async fn workspace_add_member() {
 
   // add client 2 to client 1's workspace
   owner
-    .add_workspace_member(&workspace_id, &other_owner, AFRole::Owner)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &other_owner, AFRole::Owner)
+    .await
+    .unwrap();
 
   // add client 3 to client 1's workspace
   other_owner
-    .add_workspace_member(&workspace_id, &member, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await
+    .unwrap();
   other_owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .await
+    .unwrap();
 
   let members = owner
     .api_client
@@ -270,11 +279,13 @@ async fn add_workspace_member_and_owner_then_delete_all() {
   let workspace_id = owner.workspace_id().await;
   // add client 2 to client 1's workspace
   owner
-    .add_workspace_member(&workspace_id, &member, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await
+    .unwrap();
   owner
-    .add_workspace_member(&workspace_id, &second_owner, AFRole::Owner)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &second_owner, AFRole::Owner)
+    .await
+    .unwrap();
 
   let members = owner
     .api_client
@@ -325,8 +336,9 @@ async fn workspace_second_owner_can_not_delete_origin_owner() {
   let c1 = TestClient::new_user_without_ws_conn().await;
   let c2 = TestClient::new_user_without_ws_conn().await;
   let workspace_id = c1.workspace_id().await;
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Owner)
-    .await;
+  c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Owner)
+    .await
+    .unwrap();
 
   let error = c2
     .try_remove_workspace_member(&workspace_id, &c1)
@@ -347,8 +359,9 @@ async fn user_workspace_info() {
   );
 
   let c2 = TestClient::new_user_without_ws_conn().await;
-  c1.add_workspace_member(&workspace_id, &c2, AFRole::Owner)
-    .await;
+  c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Owner)
+    .await
+    .unwrap();
 
   // c2 should have 2 workspaces
   let info = c2.get_user_workspace_info().await;
@@ -361,8 +374,9 @@ async fn get_user_workspace_info_after_open_workspace() {
   let workspace_id_c1 = c1.workspace_id().await;
 
   let c2 = TestClient::new_user_without_ws_conn().await;
-  c1.add_workspace_member(&workspace_id_c1, &c2, AFRole::Owner)
-    .await;
+  c1.invite_and_accepted_workspace_member(&workspace_id_c1, &c2, AFRole::Owner)
+    .await
+    .unwrap();
 
   let info = c2.get_user_workspace_info().await;
   let workspace_id_c2 = c1.workspace_id().await;
@@ -386,8 +400,9 @@ async fn member_leave_workspace_test() {
   let workspace_id_c1 = c1.workspace_id().await;
 
   let c2 = TestClient::new_user().await;
-  c1.add_workspace_member(&workspace_id_c1, &c2, AFRole::Member)
-    .await;
+  c1.invite_and_accepted_workspace_member(&workspace_id_c1, &c2, AFRole::Member)
+    .await
+    .unwrap();
   c2.api_client
     .leave_workspace(&workspace_id_c1)
     .await
@@ -420,11 +435,13 @@ async fn add_workspace_member_and_then_member_get_member_list() {
 
   let workspace_id = owner.workspace_id().await;
   owner
-    .add_workspace_member(&workspace_id, &member, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &member, AFRole::Member)
+    .await
+    .unwrap();
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .await
+    .unwrap();
 
   // member should be able to get the member list of the workspace
   let members = member.get_workspace_members(&workspace_id).await;

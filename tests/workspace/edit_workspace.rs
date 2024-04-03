@@ -46,8 +46,9 @@ async fn init_sync_workspace_with_member_permission() {
   // TODO(nathan): write test for AFRole::Guest
   // add client 2 as the member of the workspace then the client 2 will receive the update.
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Member)
+    .await
+    .unwrap();
   guest.open_workspace_collab(&workspace_id).await;
 
   owner
@@ -89,8 +90,9 @@ async fn edit_workspace_with_guest_permission() {
 
   // add client 2 as the member of the workspace then the client 2 can receive the update.
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Guest)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Guest)
+    .await
+    .unwrap();
 
   owner
     .collabs

@@ -23,8 +23,7 @@ use database_entity::dto::{
 use mime::Mime;
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
-  WorkspaceSpaceUsage,
+  BlobMetadata, WorkspaceMemberChangeset, WorkspaceMemberInvitation, WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
@@ -148,26 +147,6 @@ impl TestClient {
 
   pub async fn user_with_new_device(registered_user: User) -> Self {
     Self::new(registered_user, true).await
-  }
-
-  pub async fn add_workspace_member(
-    &self,
-    workspace_id: &str,
-    other_client: &TestClient,
-    role: AFRole,
-  ) {
-    // TODO(zack): replace with `invite_and_accepted_workspace_member`. Make sure running local test with `cargo run`
-    // and then all the local tasks should be passed.
-    // mark the create_workspace_members_handler with ` #[deprecated(note = "...")]`
-    let member = CreateWorkspaceMember {
-      email: other_client.email().await,
-      role,
-    };
-    self
-      .api_client
-      .add_workspace_members(workspace_id, vec![member])
-      .await
-      .unwrap();
   }
 
   pub async fn get_user_workspace_info(&self) -> AFUserWorkspaceInfo {

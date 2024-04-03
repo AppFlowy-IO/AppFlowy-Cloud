@@ -289,7 +289,7 @@ impl SnapshotCommandRunner {
         Ok(())
       },
       Err(e) => {
-        self.queue.write().await.push_item(next_item);
+        // self.queue.write().await.push_item(next_item);
         Err(e)
       },
     }

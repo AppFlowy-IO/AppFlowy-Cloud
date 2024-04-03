@@ -171,7 +171,7 @@ where
     Ok(())
   }
 
-  #[instrument(level = "trace", skip(self, params), oid = %params.oid, err)]
+  #[instrument(level = "trace", skip(self, params), oid = %params.oid, ty = %params.collab_type, err)]
   async fn insert_or_update_collab_with_transaction(
     &self,
     workspace_id: &str,

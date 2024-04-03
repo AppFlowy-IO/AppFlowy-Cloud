@@ -12,8 +12,9 @@ async fn viewing_document_editing_users_test() {
 
   let workspace_id = owner.workspace_id().await;
   owner
-    .add_workspace_member(&workspace_id, &guest, AFRole::Member)
-    .await;
+    .invite_and_accepted_workspace_member(&workspace_id, &guest, AFRole::Member)
+    .await
+    .unwrap();
 
   let object_id = owner
     .create_and_edit_collab(&workspace_id, collab_type.clone())

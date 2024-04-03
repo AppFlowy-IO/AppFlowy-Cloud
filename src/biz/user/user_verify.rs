@@ -8,7 +8,7 @@ use database::user::{create_user, is_user_exist};
 use database_entity::dto::AFRole;
 use sqlx::types::uuid;
 use std::ops::DerefMut;
-use tracing::{event, instrument};
+use tracing::{event, instrument, trace};
 use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
@@ -64,6 +64,8 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
       &state.collab_access_control_storage,
     )
     .await?;
+  } else {
+    trace!("user already exists:{},{}", user.id, user.email);
   }
   txn
     .commit()

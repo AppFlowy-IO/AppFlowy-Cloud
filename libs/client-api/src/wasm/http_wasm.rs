@@ -91,7 +91,7 @@ where
   T: Future + 'static,
   T::Output: Send + 'static,
 {
-  tokio::task::spawn_local(future)
+  tokio::spawn(future)
 }
 
 #[async_trait]

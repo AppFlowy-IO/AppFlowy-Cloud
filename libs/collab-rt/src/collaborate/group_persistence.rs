@@ -1,5 +1,4 @@
 use crate::collaborate::group::EditState;
-use crate::data_validation::validate_collab;
 
 use anyhow::anyhow;
 use app_error::AppError;
@@ -146,10 +145,8 @@ fn get_encode_collab(
   collab: &Collab,
   collab_type: &CollabType,
 ) -> Result<CollabParams, AppError> {
-  validate_collab(collab, collab_type).map_err(|err| AppError::NoRequiredData(err.to_string()))?;
-
   let result = collab
-    .try_encode_collab_v1()
+    .try_encode_collab_v1(|collab| collab_type.validate(collab))
     .map_err(|err| AppError::Internal(anyhow!("fail to encode collab to bytes: {:?}", err)))?
     .encode_to_bytes();
 

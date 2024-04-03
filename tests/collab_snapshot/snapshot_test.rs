@@ -1,3 +1,4 @@
+use anyhow::Error;
 use assert_json_diff::assert_json_eq;
 use collab::core::collab::{DocStateSource, MutexCollab};
 use collab::core::collab_plugin::EncodedCollab;
@@ -144,7 +145,7 @@ fn test_collab_data(uid: i64, oid: &str) -> (EncodedCollab, Value) {
     collab.insert_with_txn(txn, "2", "c");
   });
   (
-    collab.encode_collab_v1(),
+    collab.encode_collab_v1(|_| Ok::<(), Error>(())).unwrap(),
     json!({
       "0": "a",
       "1": "b",

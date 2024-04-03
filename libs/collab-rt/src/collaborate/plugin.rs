@@ -1,4 +1,3 @@
-use crate::data_validation::validate_collab;
 use crate::error::RealtimeError;
 use crate::RealtimeAccessControl;
 use app_error::AppError;
@@ -176,9 +175,9 @@ where
         vec![],
         false,
       ) {
-        if validate_collab(&collab, collab_type).is_ok() {
-          return Some(encoded_collab);
-        }
+        // TODO(nathan): this check is not necessary, can be removed in the future.
+        collab_type.validate(&collab).ok()?;
+        return Some(encoded_collab);
       }
     }
   }

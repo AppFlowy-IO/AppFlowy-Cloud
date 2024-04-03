@@ -97,11 +97,13 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  sleep(Duration::from_millis(1000)).await;
-
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
   trace!("client 2 disconnect: {:?}", client_2.device_id);
   client_2.disconnect().await;
-  sleep(Duration::from_millis(1000)).await;
+  sleep(Duration::from_millis(2000)).await;
 
   client_2
     .collabs
@@ -115,22 +117,10 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   let expected_json = json!({
     "name": "workspace2"
   });
-  assert_client_collab_within_secs(
-    &mut client_1,
-    &object_id,
-    "name",
-    expected_json.clone(),
-    120,
-  )
-  .await;
-  assert_client_collab_within_secs(
-    &mut client_2,
-    &object_id,
-    "name",
-    expected_json.clone(),
-    120,
-  )
-  .await;
+  assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
+    .await;
+  assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
+    .await;
 }
 
 #[tokio::test]

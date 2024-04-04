@@ -512,7 +512,6 @@ impl TestClient {
         object_id: object_id.clone(),
         encoded_collab_v1,
         collab_type: collab_type.clone(),
-        override_if_exist: false,
         workspace_id: workspace_id.to_string(),
       })
       .await
@@ -583,6 +582,7 @@ impl TestClient {
       )
       .unwrap(),
     );
+    collab.lock().emit_awareness_state();
 
     let ws_connect_state = self.ws_client.subscribe_connect_state();
     let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);

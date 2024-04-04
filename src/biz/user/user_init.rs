@@ -41,7 +41,6 @@ where
           object_id,
           encoded_collab_v1,
           collab_type: template.object_type,
-          override_if_exist: false,
         },
         txn,
       )

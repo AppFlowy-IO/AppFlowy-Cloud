@@ -22,10 +22,6 @@ pub struct CreateCollabParams {
   pub encoded_collab_v1: Vec<u8>,
 
   pub collab_type: CollabType,
-
-  /// Determine whether to override the collab if it exists. Default is false.
-  #[serde(default)]
-  pub override_if_exist: bool,
 }
 
 impl From<(String, CollabParams)> for CreateCollabParams {
@@ -35,7 +31,6 @@ impl From<(String, CollabParams)> for CreateCollabParams {
       object_id: collab_params.object_id,
       encoded_collab_v1: collab_params.encoded_collab_v1,
       collab_type: collab_params.collab_type,
-      override_if_exist: collab_params.override_if_exist,
     }
   }
 }
@@ -47,7 +42,6 @@ impl CreateCollabParams {
         object_id: self.object_id,
         encoded_collab_v1: self.encoded_collab_v1,
         collab_type: self.collab_type,
-        override_if_exist: self.override_if_exist,
       },
       self.workspace_id,
     )
@@ -68,9 +62,6 @@ pub struct CollabParams {
   #[validate(custom = "validate_not_empty_payload")]
   pub encoded_collab_v1: Vec<u8>,
   pub collab_type: CollabType,
-  /// Determine whether to override the collab if it exists. Default is false.
-  #[serde(default)]
-  pub override_if_exist: bool,
 }
 
 impl CollabParams {
@@ -84,13 +75,7 @@ impl CollabParams {
       object_id,
       collab_type,
       encoded_collab_v1,
-      override_if_exist: false,
     }
-  }
-
-  pub fn override_collab_if_exist(mut self, override_if_exist: bool) -> Self {
-    self.override_if_exist = override_if_exist;
-    self
   }
 
   pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {

@@ -152,7 +152,6 @@ fn get_encode_collab(
         object_id: object_id.to_string(),
         encoded_collab_v1,
         collab_type: collab_type.clone(),
-        override_if_exist: false,
       };
 
       Ok(params)

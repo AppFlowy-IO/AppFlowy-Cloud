@@ -223,7 +223,7 @@ pub async fn forward_message_to_group(
       .stream_tx
       .send(RealtimeMessage::ClientCollabV2([pair].into()));
     if let Err(err) = err {
-      warn!("Send user:{} message to group error: {}", user.uid, err,);
+      warn!("Send user:{} message to group:{}", user.uid, err);
       client_msg_router.remove(user);
     }
   }

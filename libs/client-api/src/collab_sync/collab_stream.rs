@@ -91,10 +91,7 @@ where
       let msg = match collab_message_result {
         Ok(msg) => msg,
         Err(err) => {
-          warn!(
-            "Stream error: {}, stop receive incoming changes",
-            err.into()
-          );
+          warn!("Stream error:{}, stop receive incoming changes", err.into());
           break;
         },
       };

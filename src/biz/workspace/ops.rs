@@ -180,7 +180,7 @@ pub async fn invite_workspace_members(
           email: invitation.email.clone(),
           ..Default::default()
         },
-        Some("/web/home#redirect_to=invite".to_owned()),
+        Some("/web/login#redirect_to=invite".to_owned()),
       )
       .await?;
 

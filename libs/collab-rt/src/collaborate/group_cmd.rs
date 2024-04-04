@@ -28,7 +28,11 @@ pub enum GroupCommand {
 pub type GroupCommandSender = tokio::sync::mpsc::Sender<GroupCommand>;
 pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 
-pub struct GroupCommandRunner<S, AC> {
+pub struct GroupCommandRunner<S, AC>
+where
+  AC: RealtimeAccessControl,
+  S: CollabStorage,
+{
   pub group_manager: Arc<GroupManager<S, AC>>,
   pub client_msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   pub access_control: Arc<AC>,
@@ -40,7 +44,7 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
-  pub async fn run(mut self, object_id: String) {
+  pub async fn run(mut self, object_id: String, notify: Arc<tokio::sync::Notify>) {
     let mut receiver = self.recv.take().expect("Only take once");
     let stream = stream! {
       while let Some(msg) = receiver.recv().await {
@@ -49,6 +53,7 @@ where
       trace!("Collab group:{} command runner is stopped", object_id);
     };
 
+    notify.notify_one();
     stream
       .for_each(|command| async {
         match command {

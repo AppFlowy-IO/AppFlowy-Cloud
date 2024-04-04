@@ -88,7 +88,7 @@ where
         }
       },
       Err(err) => {
-        warn!("fail to encode collab {} error:{:?}", self.object_id, err);
+        warn!("fail to encode collab {}=>{:?}", self.object_id, err);
       },
     }
   }
@@ -127,10 +127,7 @@ where
         }
       },
       Err(err) => {
-        warn!(
-          "attempt to encode collab {} error:{:?}",
-          self.object_id, err
-        );
+        warn!("attempt to encode collab {}=>{:?}", self.object_id, err);
       },
     }
 

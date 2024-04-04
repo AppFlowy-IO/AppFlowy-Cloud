@@ -16,6 +16,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, trace};
 
@@ -154,6 +155,7 @@ where
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(entry) => {
               let (new_sender, recv) = tokio::sync::mpsc::channel(2000);
+              let notify = Arc::new(Notify::new());
               let runner = GroupCommandRunner {
                 group_manager: group_manager.clone(),
                 client_msg_router_by_user: client_msg_router_by_user.clone(),
@@ -162,8 +164,12 @@ where
               };
 
               let object_id = entry.key().clone();
-              tokio::task::spawn_local(runner.run(object_id));
+              let clone_notify = notify.clone();
+              tokio::task::spawn_local(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
+
+              // wait for the runner to be ready to handle the message.
+              notify.notified().await;
               new_sender
             },
           },
@@ -177,7 +183,9 @@ where
           })
           .await
         {
-          error!("Send message to group error: {}", err);
+          // it should not happen. Because the receiver is always running before acquiring the sender.
+          // Otherwise, the GroupCommandRunner might not be ready to handle the message.
+          error!("Send message to group fail: {}", err);
         }
       }
 

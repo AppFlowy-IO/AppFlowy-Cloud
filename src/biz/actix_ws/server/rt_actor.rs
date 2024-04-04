@@ -6,7 +6,7 @@ use collab_rt::{CollabRealtimeServer, RealtimeAccessControl};
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 use std::ops::Deref;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[derive(Clone)]
 pub struct RealtimeServerActor<S, AC>(pub CollabRealtimeServer<S, AC>);
@@ -27,6 +27,7 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
+    info!("realtime server started");
     ctx.set_mailbox_capacity(3000);
   }
 }
@@ -36,7 +37,7 @@ where
   AC: RealtimeAccessControl + Unpin,
 {
   fn restarting(&mut self, _ctx: &mut Context<RealtimeServerActor<S, AC>>) {
-    warn!("restarting");
+    error!("realtime server is restarting");
   }
 }
 

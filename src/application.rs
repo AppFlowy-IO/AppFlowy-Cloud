@@ -24,7 +24,7 @@ use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
-use actix::Actor;
+use actix::Supervisor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -114,8 +114,7 @@ pub async fn run(
   )
   .unwrap();
 
-  let realtime_server_actor = RealtimeServerActor(realtime_server).start();
-
+  let realtime_server_actor = Supervisor::start(|_| RealtimeServerActor(realtime_server));
   let mut server = HttpServer::new(move || {
     App::new()
        // Middleware is registered for each App, scope, or Resource and executed in opposite order as registration

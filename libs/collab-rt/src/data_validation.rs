@@ -5,7 +5,9 @@ use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
+use tracing::instrument;
 
+#[instrument(level = "trace", skip(data), fields(len = %data.len()))]
 pub fn validate_encode_collab(
   object_id: &str,
   data: &[u8],

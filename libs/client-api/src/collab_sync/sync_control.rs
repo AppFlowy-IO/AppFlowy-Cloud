@@ -1,7 +1,7 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::ObserveCollab;
 use crate::collab_sync::{
-  CollabSink, CollabSinkRunner, SinkSignal, SinkState, SyncError, SyncObject,
+  CollabSink, CollabSinkRunner, CollabSyncState, SinkSignal, SyncError, SyncObject,
 };
 use anyhow::anyhow;
 use collab::core::awareness::Awareness;
@@ -32,7 +32,7 @@ pub struct SyncControl<Sink, Stream> {
   /// the updates from the remote.
   #[allow(dead_code)]
   observe_collab: ObserveCollab<Sink, Stream>,
-  sync_state_tx: broadcast::Sender<SinkState>,
+  sync_state_tx: broadcast::Sender<CollabSyncState>,
 }
 
 impl<Sink, Stream> Drop for SyncControl<Sink, Stream> {
@@ -107,10 +107,11 @@ where
     self.sink.resume();
   }
 
-  pub fn subscribe_sync_state(&self) -> broadcast::Receiver<SinkState> {
+  pub fn subscribe_sync_state(&self) -> broadcast::Receiver<CollabSyncState> {
     self.sync_state_tx.subscribe()
   }
 
+  /// Returns bool indicating whether the init sync is queued.
   pub fn init_sync(&self, collab: &Collab, reason: InitSyncReason) -> Result<bool, SyncError> {
     start_sync(
       self.origin.clone(),
@@ -155,7 +156,7 @@ where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
 {
-  if !sink.can_queue_init_sync() {
+  if !sink.should_queue_init_sync() {
     return Ok(false);
   }
 

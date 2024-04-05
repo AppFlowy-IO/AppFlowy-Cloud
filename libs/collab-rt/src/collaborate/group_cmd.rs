@@ -9,6 +9,7 @@ use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, SinkMessage};
 use collab_rt_entity::{CollabAck, RealtimeMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
+
 use futures_util::StreamExt;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
@@ -52,7 +53,6 @@ where
       }
       trace!("Collab group:{} command runner is stopped", object_id);
     };
-
     notify.notify_one();
     stream
       .for_each(|command| async {
@@ -194,7 +194,7 @@ where
         self
           .group_manager
           .create_group(uid, &data.workspace_id, object_id, data.collab_type.clone())
-          .await;
+          .await?;
 
         Ok(())
       },

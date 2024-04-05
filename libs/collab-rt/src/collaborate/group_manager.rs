@@ -1,20 +1,21 @@
 use crate::client_msg_router::ClientMessageRouter;
-use crate::collaborate::group::CollabGroup;
+use crate::collaborate::group::{CollabGroup, MutexCollab};
 use crate::collaborate::group_manager_state::GroupManagementState;
-use crate::collaborate::plugin::LoadCollabPlugin;
+
 use crate::error::RealtimeError;
+use crate::metrics::CollabMetricsCalculate;
 use crate::RealtimeAccessControl;
+use app_error::AppError;
+use collab::core::collab::DocStateSource;
+use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
-use std::rc::Rc;
-
 use database::collab::CollabStorage;
-
-use crate::metrics::CollabMetricsCalculate;
-
+use database_entity::dto::QueryCollabParams;
 use std::sync::Arc;
 use tracing::{debug, instrument, trace};
 
@@ -59,7 +60,7 @@ where
     self.state.contains_group(object_id).await
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Rc<CollabGroup>> {
+  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
     self.state.get_group(object_id).await
   }
 
@@ -105,35 +106,205 @@ where
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
-  ) {
-    let mut collab = Collab::new_with_origin(CollabOrigin::Server, object_id, vec![], false);
-    let plugin = LoadCollabPlugin::new(
-      uid,
-      workspace_id,
-      collab_type.clone(),
-      self.storage.clone(),
-      self.access_control.clone(),
-    );
-    collab.add_plugin(Box::new(plugin));
-    collab.initialize().await;
+  ) -> Result<(), RealtimeError> {
+    let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
+    let result = load_collab(uid, object_id, params, self.storage.clone()).await;
+    let mutex_collab = {
+      let collab = match result {
+        Ok(collab) => collab,
+        Err(err) => {
+          if err.is_record_not_found() {
+            MutexCollab::new(Collab::new_with_origin(
+              CollabOrigin::Server,
+              object_id,
+              vec![],
+              false,
+            ))
+          } else {
+            return Err(RealtimeError::Internal(err.into()));
+          }
+        },
+      };
+      collab.lock().initialize();
+      collab
+    };
 
-    // The lifecycle of the collab is managed by the group.
     debug!(
       "[realtime]: {} create group:{}:{}",
       uid, object_id, collab_type
     );
-    let group = Rc::new(
+    let group = Arc::new(
       CollabGroup::new(
         uid,
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type,
-        collab,
+        mutex_collab,
         self.metrics_calculate.clone(),
         self.storage.clone(),
       )
       .await,
     );
     self.state.insert_group(object_id, group.clone()).await;
+    Ok(())
   }
+}
+
+async fn load_collab<S>(
+  uid: i64,
+  object_id: &str,
+  params: QueryCollabParams,
+  storage: Arc<S>,
+) -> Result<MutexCollab, AppError>
+where
+  S: CollabStorage,
+{
+  let encode_collab = storage
+    .get_collab_encoded(&uid, params.clone(), true)
+    .await?;
+  let result = Collab::new_with_doc_state(
+    CollabOrigin::Server,
+    object_id,
+    DocStateSource::FromDocState(encode_collab.doc_state.to_vec()),
+    vec![],
+    false,
+  )
+  .map(MutexCollab::new);
+  match result {
+    Ok(collab) => Ok(collab),
+    Err(err) => load_collab_from_snapshot(object_id, params, storage)
+      .await
+      .ok_or_else(|| AppError::Internal(err.into())),
+  }
+}
+
+async fn load_collab_from_snapshot<S>(
+  object_id: &str,
+  params: QueryCollabParams,
+  storage: Arc<S>,
+) -> Option<MutexCollab>
+where
+  S: CollabStorage,
+{
+  let encode_collab = get_latest_snapshot(
+    &params.workspace_id,
+    object_id,
+    &storage,
+    &params.collab_type,
+  )
+  .await?;
+  let collab = Collab::new_with_doc_state(
+    CollabOrigin::Server,
+    object_id,
+    DocStateSource::FromDocState(encode_collab.doc_state.to_vec()),
+    vec![],
+    false,
+  )
+  .ok()?;
+  Some(MutexCollab::new(collab))
+}
+
+//
+// async fn load_collab_data<S>(
+//   workspace_id: &str,
+//   uid: &i64,
+//   object_id: &str,
+//   collab_type: CollabType,
+//   collab: &MutexCollab,
+//   storage: Arc<S>,
+// ) where
+//   S: CollabStorage,
+// {
+//   let params = QueryCollabParams::new(object_id, collab_type, workspace_id);
+//   match storage.get_collab_encoded(uid, params, true).await {
+//     Ok(encoded_collab_v1) => {
+//       match init_collab(object_id, &encoded_collab_v1, doc) {
+//         Ok(_) => {
+//           // Attempt to create a snapshot for the collaboration object. When creating this snapshot, it is
+//           // assumed that the 'encoded_collab_v1' is already in a valid format. Therefore, there is no need
+//           // to verify the outcome of the 'encode_to_bytes' operation.
+//           if storage.should_create_snapshot(object_id).await {
+//             let cloned_workspace_id = workspace_id.to_string();
+//             let cloned_object_id = object_id.to_string();
+//             let storage = storage.clone();
+//             let collab_type = collab_type.clone();
+//             event!(Level::DEBUG, "Creating collab snapshot");
+//             let _ = tokio::task::spawn_blocking(move || {
+//               let params = InsertSnapshotParams {
+//                 object_id: cloned_object_id,
+//                 encoded_collab_v1: encoded_collab_v1.encode_to_bytes().unwrap(),
+//                 workspace_id: cloned_workspace_id,
+//                 collab_type,
+//               };
+//
+//               tokio::spawn(async move {
+//                 if let Err(err) = storage.queue_snapshot(params).await {
+//                   error!("create snapshot {:?}", err);
+//                 }
+//               });
+//             })
+//             .await;
+//           }
+//         },
+//         Err(err) => {
+//           let span = span!(Level::ERROR, "restore_collab_from_snapshot", object_id = %object_id, error = %err);
+//           async {
+//             match get_latest_snapshot(workspace_id, object_id, &storage, &collab_type).await {
+//               None => error!("No snapshot found for collab"),
+//               Some(encoded_collab) => match init_collab(object_id, &encoded_collab, doc).await {
+//                 Ok(_) => info!("Restore collab with snapshot success"),
+//                 Err(err) => {
+//                   error!("Restore collab with snapshot failed: {:?}", err);
+//                 },
+//               },
+//             }
+//           }
+//           .instrument(span)
+//           .await;
+//         },
+//       }
+//     },
+//     Err(err) => match &err {
+//       AppError::RecordNotFound(_) => {
+//         event!(
+//           Level::DEBUG,
+//           "Can't find the collab:{} from realtime editing",
+//           object_id
+//         );
+//       },
+//       _ => error!("{}", err),
+//     },
+//   }
+// }
+
+async fn get_latest_snapshot<S>(
+  workspace_id: &str,
+  object_id: &str,
+  storage: &S,
+  collab_type: &CollabType,
+) -> Option<EncodedCollab>
+where
+  S: CollabStorage,
+{
+  let metas = storage.get_collab_snapshot_list(object_id).await.ok()?.0;
+  for meta in metas {
+    let snapshot_data = storage
+      .get_collab_snapshot(workspace_id, &meta.object_id, &meta.snapshot_id)
+      .await
+      .ok()?;
+    if let Ok(encoded_collab) = EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1) {
+      if let Ok(collab) = Collab::new_with_doc_state(
+        CollabOrigin::Empty,
+        object_id,
+        DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
+        vec![],
+        false,
+      ) {
+        // TODO(nathan): this check is not necessary, can be removed in the future.
+        collab_type.validate(&collab).ok()?;
+        return Some(encoded_collab);
+      }
+    }
+  }
+  None
 }

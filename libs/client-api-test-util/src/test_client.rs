@@ -533,7 +533,7 @@ impl TestClient {
     );
 
     collab.lock().add_plugin(Box::new(sync_plugin));
-    collab.lock().initialize().await;
+    collab.lock().initialize();
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.clone(), test_collab);
 
@@ -600,7 +600,7 @@ impl TestClient {
     );
 
     collab.lock().add_plugin(Box::new(sync_plugin));
-    futures::executor::block_on(collab.lock().initialize());
+    collab.lock().initialize();
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.to_string(), test_collab);
   }

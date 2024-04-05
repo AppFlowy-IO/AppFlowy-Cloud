@@ -12,13 +12,21 @@ use collab_rt_entity::MessageByObjectId;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
+use lazy_static::lazy_static;
 use std::future::Future;
+use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use tokio::runtime;
+use tokio::runtime::Runtime;
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, trace};
+
+lazy_static! {
+  pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
+}
 
 #[derive(Clone)]
 pub struct CollabRealtimeServer<S, AC> {
@@ -59,7 +67,6 @@ where
     spawn_rt_command(command_recv, &group_sender_by_object_id);
 
     spawn_metrics(&metrics, &metrics_calculate, &storage);
-
     Ok(Self {
       group_manager,
       connect_state,
@@ -165,7 +172,7 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              tokio::task::spawn_local(runner.run(object_id, clone_notify));
+              COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.
@@ -224,4 +231,12 @@ fn spawn_period_check_inactive_group<S, AC>(
       }
     }
   });
+}
+
+pub fn default_tokio_runtime() -> io::Result<Runtime> {
+  runtime::Builder::new_multi_thread()
+    .thread_name("collab-rt")
+    .enable_io()
+    .enable_time()
+    .build()
 }

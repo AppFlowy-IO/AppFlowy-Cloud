@@ -17,52 +17,26 @@ use tokio::sync::{broadcast, watch, Mutex};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
 
-#[derive(Clone, Debug)]
-pub enum SinkState {
-  /// The sink is syncing the messages to the remote.
-  Syncing,
-  /// All the messages are synced to the remote.
-  Finished,
-  Pause,
-}
-
-impl SinkState {
-  pub fn is_syncing(&self) -> bool {
-    matches!(self, SinkState::Syncing)
-  }
-}
-
-#[derive(Clone)]
-pub enum SinkSignal {
-  Stop,
-  Proceed,
-  ProcessAfterMillis(u64),
-}
-
 pub(crate) const SEND_INTERVAL: Duration = Duration::from_secs(8);
-
 pub const COLLAB_SINK_DELAY_MILLIS: u64 = 500;
 
 pub struct CollabSink<Sink> {
   #[allow(dead_code)]
   uid: i64,
+  config: SinkConfig,
+  object: SyncObject,
   /// The [Sink] is used to send the messages to the remote. It might be a websocket sink or
   /// other sink that implements the [SinkExt] trait.
   sender: Arc<Mutex<Sink>>,
   /// The [SinkQueue] is used to queue the messages that are waiting to be sent to the
   /// remote. It will merge the messages if possible.
   message_queue: Arc<parking_lot::Mutex<SinkQueue<ClientCollabMessage>>>,
-  msg_id_counter: Arc<DefaultMsgIdCounter>,
+  flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
   notifier: Arc<watch::Sender<SinkSignal>>,
-  config: SinkConfig,
-  sync_state_tx: broadcast::Sender<SinkState>,
-  pause: AtomicBool,
-  object: SyncObject,
-  flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
-  last_sync: Arc<SyncTimestamp>,
-  pause_ping: Arc<AtomicBool>,
+  sync_state_tx: broadcast::Sender<CollabSyncState>,
+  state: Arc<CollabSinkState>,
 }
 
 impl<Sink> Drop for CollabSink<Sink> {
@@ -83,19 +57,15 @@ where
     object: SyncObject,
     sink: Sink,
     notifier: watch::Sender<SinkSignal>,
-    sync_state_tx: broadcast::Sender<SinkState>,
+    sync_state_tx: broadcast::Sender<CollabSyncState>,
     config: SinkConfig,
     pause: bool,
   ) -> Self {
-    let msg_id_counter = DefaultMsgIdCounter::new();
     let notifier = Arc::new(notifier);
     let sender = Arc::new(Mutex::new(sink));
     let message_queue = Arc::new(parking_lot::Mutex::new(SinkQueue::new()));
-    let msg_id_counter = Arc::new(msg_id_counter);
     let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
-    let pause_ping = Arc::new(AtomicBool::new(false));
-
-    let last_sync = Arc::new(SyncTimestamp::new());
+    let state = Arc::new(CollabSinkState::new(pause));
     let mut interval = interval(SEND_INTERVAL);
     let weak_flying_messages = Arc::downgrade(&flying_messages);
 
@@ -107,14 +77,12 @@ where
     PingSyncRunner::run(
       origin,
       object.object_id.clone(),
-      msg_id_counter.clone(),
       Arc::downgrade(&message_queue),
-      pause_ping.clone(),
       weak_notifier,
-      last_sync.clone(),
+      state.clone(),
     );
 
-    let cloned_last_sync = last_sync.clone();
+    let cloned_state = state.clone();
     let weak_notifier = Arc::downgrade(&notifier);
     af_spawn(async move {
       // Initial delay to make sure the first tick waits for SEND_INTERVAL
@@ -126,7 +94,11 @@ where
             // Removing the flying messages allows for the re-sending of the top k messages in the message queue.
             if let Some(flying_messages) = weak_flying_messages.upgrade() {
               // remove all the flying messages if the last sync is expired within the SEND_INTERVAL.
-              if cloned_last_sync.is_time_for_next_sync(SEND_INTERVAL).await {
+              if cloned_state
+                .latest_sync
+                .is_time_for_next_sync(SEND_INTERVAL)
+                .await
+              {
                 flying_messages.lock().clear();
               }
             }
@@ -142,17 +114,14 @@ where
 
     Self {
       uid,
+      object,
       sender,
       message_queue,
-      msg_id_counter,
       notifier,
       sync_state_tx,
       config,
-      pause: AtomicBool::new(pause),
-      object,
       flying_messages,
-      last_sync,
-      pause_ping,
+      state,
     }
   }
 
@@ -162,10 +131,9 @@ where
   /// [PartialOrd] trait. Check out the [CollabMessage] for more details.
   ///
   pub fn queue_msg(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
-    let _ = self.sync_state_tx.send(SinkState::Syncing);
-
+    let _ = self.sync_state_tx.send(CollabSyncState::Syncing);
     let mut msg_queue = self.message_queue.lock();
-    let msg_id = self.msg_id_counter.next();
+    let msg_id = self.state.id_counter.next();
     let new_msg = f(msg_id);
     msg_queue.push_msg(msg_id, new_msg);
     drop(msg_queue);
@@ -180,20 +148,27 @@ where
   /// When queue the init message, the sink will clear all the pending messages and send the init
   /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
-    let _ = self.sync_state_tx.send(SinkState::Syncing);
-
+    let _ = self.sync_state_tx.send(CollabSyncState::Syncing);
     // Clear all the pending messages and send the init message immediately.
     self.clear();
 
     // When the client is connected, remove all pending messages and send the init message.
     let mut msg_queue = self.message_queue.lock();
-    let msg_id = self.msg_id_counter.next();
+    let msg_id = self.state.id_counter.next();
     let init_sync = f(msg_id);
     msg_queue.push_msg(msg_id, init_sync);
+    self.state.did_queue_int_sync.store(true, Ordering::SeqCst);
     let _ = self.notifier.send(SinkSignal::Proceed);
   }
 
-  pub fn can_queue_init_sync(&self) -> bool {
+  pub fn did_queue_init_sync(&self) -> bool {
+    self.state.did_queue_int_sync.load(Ordering::SeqCst)
+  }
+
+  /// Returns bool value to indicate whether the init sync message should be queued.
+  /// The init sync message should be queued if the message queue is empty or the first message
+  /// is not the init sync message.
+  pub fn should_queue_init_sync(&self) -> bool {
     let msg_queue = self.message_queue.lock();
     if let Some(msg) = msg_queue.peek() {
       if msg.message().is_client_init_sync() {
@@ -222,17 +197,17 @@ where
     #[cfg(feature = "sync_verbose_log")]
     trace!("{}:{} pause", self.uid, self.object.object_id);
 
-    self.pause_ping.store(true, Ordering::SeqCst);
-    self.pause.store(true, Ordering::SeqCst);
-    let _ = self.sync_state_tx.send(SinkState::Pause);
+    self.state.pause_ping.store(true, Ordering::SeqCst);
+    self.state.pause.store(true, Ordering::SeqCst);
+    let _ = self.sync_state_tx.send(CollabSyncState::Pause);
   }
 
   pub fn resume(&self) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("{}:{} resume", self.uid, self.object.object_id);
 
-    self.pause_ping.store(false, Ordering::SeqCst);
-    self.pause.store(false, Ordering::SeqCst);
+    self.state.pause_ping.store(false, Ordering::SeqCst);
+    self.state.pause.store(false, Ordering::SeqCst);
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
@@ -286,7 +261,7 @@ where
 
     // If there are no non-ping messages left in the queue, it indicates all messages have been sent
     if all_non_ping_messages_sent {
-      if let Err(err) = self.sync_state_tx.send(SinkState::Finished) {
+      if let Err(err) = self.sync_state_tx.send(CollabSyncState::Finished) {
         error!(
           "Failed to send SinkState::Finished for object_id '{}': {}",
           self.object.object_id, err
@@ -310,7 +285,9 @@ where
   }
 
   async fn process_next_msg(&self) {
-    if self.pause.load(Ordering::SeqCst) {
+    if self.state.pause.load(Ordering::SeqCst) {
+      // If the sink is paused, sleep for a while and try later.
+      sleep(Duration::from_secs(2)).await;
       return;
     }
 
@@ -326,17 +303,16 @@ where
           return;
         },
       };
-      get_next_batch_item(&self.object.object_id, &mut flying_messages, &mut msg_queue)
+      get_next_batch_item(&self.state, &mut flying_messages, &mut msg_queue)
     };
-
-    if items.is_empty() {
-      return;
-    }
-
     self.send_immediately(items).await;
   }
 
   async fn send_immediately(&self, items: Vec<QueueItem<ClientCollabMessage>>) {
+    if items.is_empty() {
+      return;
+    }
+
     let message_ids = items.iter().map(|item| item.msg_id()).collect::<Vec<_>>();
     let messages = items
       .into_iter()
@@ -344,7 +320,7 @@ where
       .collect::<Vec<_>>();
     match self.sender.try_lock() {
       Ok(mut sender) => {
-        self.last_sync.update_timestamp().await;
+        self.state.latest_sync.update_timestamp().await;
         match sender.send(messages).await {
           Ok(_) => {
             #[cfg(feature = "sync_verbose_log")]
@@ -433,46 +409,46 @@ where
 }
 
 fn get_next_batch_item(
-  _object_id: &str,
+  state: &Arc<CollabSinkState>,
   flying_messages: &mut HashSet<MsgId>,
   msg_queue: &mut SinkQueue<ClientCollabMessage>,
 ) -> Vec<QueueItem<ClientCollabMessage>> {
   let mut next_sending_items = vec![];
   let mut requeue_items = vec![];
+
   while let Some(item) = msg_queue.pop() {
-    if next_sending_items.len() > 20 {
+    // If we've already selected 20 items for sending, or if the current message
+    // is already being sent (exists in flying_messages), we requeue the current item
+    // and break out of the loop to prevent sending too many messages at once or
+    // sending the same message twice.
+    if next_sending_items.len() >= 20 || flying_messages.contains(&item.msg_id()) {
       requeue_items.push(item);
       break;
     }
 
-    if flying_messages.contains(&item.msg_id()) {
-      // because the messages in msg_queue are ordered by priority, so if the message is in the
-      // flying messages, it means the message is sending to the remote. So don't send the following
-      // messages.
-      requeue_items.push(item);
-      break;
-    } else {
-      let is_init_sync = item.message().is_client_init_sync();
+    // Check if the current item is an initial synchronization message.
+    let is_init_sync = item.message().is_client_init_sync();
+
+    // Determine if the message should be sent. Messages are sent if the initial sync
+    // has already been queued (did_queue_int_sync is true) or if it's an initial sync message.
+    // This ensures that initial sync messages are prioritized and that other messages
+    // are only sent after the initial sync has been queued.
+    if state.did_queue_int_sync.load(Ordering::SeqCst) || is_init_sync {
       next_sending_items.push(item.clone());
       requeue_items.push(item);
-
-      // only send one message if the message is init sync message.
+      // If the current item is an initial sync message, we've prioritized it for sending,
+      // so break the loop to handle its sending immediately.
       if is_init_sync {
         break;
       }
+    } else {
+      // If the current message does not meet the conditions for immediate sending
+      // (e.g., initial sync hasn't been queued yet and this isn't an initial sync message),
+      // we requeue it to attempt sending later.
+      requeue_items.push(item);
     }
   }
-  // if !requeue_items.is_empty() {
-  //   trace!(
-  //     "requeue {} messages: ids=>{}",
-  //     object_id,
-  //     requeue_items
-  //       .iter()
-  //       .map(|item| { item.msg_id().to_string() })
-  //       .collect::<Vec<_>>()
-  //       .join(",")
-  //   );
-  // }
+
   msg_queue.extend(requeue_items);
   let message_ids = next_sending_items
     .iter()
@@ -562,4 +538,47 @@ impl SyncTimestamp {
     let mut last_sync_locked = self.last_sync.lock().await;
     *last_sync_locked = Instant::now();
   }
+}
+
+pub(crate) struct CollabSinkState {
+  pub(crate) pause: AtomicBool,
+  pub(crate) latest_sync: SyncTimestamp,
+  pub(crate) pause_ping: AtomicBool,
+  pub(crate) id_counter: DefaultMsgIdCounter,
+  pub(crate) did_queue_int_sync: AtomicBool,
+}
+
+impl CollabSinkState {
+  fn new(pause: bool) -> Self {
+    let msg_id_counter = DefaultMsgIdCounter::new();
+    CollabSinkState {
+      pause: AtomicBool::new(pause),
+      latest_sync: SyncTimestamp::new(),
+      pause_ping: AtomicBool::new(false),
+      id_counter: msg_id_counter,
+      did_queue_int_sync: Default::default(),
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub enum CollabSyncState {
+  /// The sink is syncing the messages to the remote.
+  Syncing,
+  /// All the messages are synced to the remote.
+  Finished,
+  Pause,
+}
+
+impl CollabSyncState {
+  pub fn is_syncing(&self) -> bool {
+    matches!(self, CollabSyncState::Syncing)
+  }
+}
+
+#[derive(Clone)]
+pub enum SinkSignal {
+  Stop,
+  Proceed,
+  ProcessAfterMillis(u64),
 }

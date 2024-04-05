@@ -274,6 +274,8 @@ pub enum ErrorCode {
   NetworkError = 1023,
   UserUnAuthorized = 1024,
   NoRequiredData = 1025,
+  WorkspaceLimitExceeded = 1026,
+  WorkspaceMemberLimitExceeded = 1027,
 }
 
 impl ErrorCode {

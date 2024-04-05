@@ -142,7 +142,6 @@ where
     Ok(resp)
   }
 }
-
 #[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
 pub struct AppResponseError {
   pub code: ErrorCode,

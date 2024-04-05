@@ -1,4 +1,5 @@
-use client_api::error::ErrorCode;
+use client_api::entity::AFUserProfile;
+use client_api::error::{AppResponseError, ErrorCode};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::JsValue;
@@ -39,3 +40,35 @@ pub struct ClientResponse {
 }
 
 from_struct_for_jsvalue!(ClientResponse);
+impl From<AppResponseError> for ClientResponse {
+  fn from(err: AppResponseError) -> Self {
+    ClientResponse {
+      code: err.code,
+      message: err.message.to_string(),
+    }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct User {
+  pub uid: i64,
+  pub uuid: String,
+  pub email: Option<String>,
+  pub name: Option<String>,
+  pub latest_workspace_id: String,
+}
+
+from_struct_for_jsvalue!(User);
+
+impl From<AFUserProfile> for User {
+  fn from(profile: AFUserProfile) -> Self {
+    User {
+      uid: profile.uid,
+      uuid: profile.uuid.to_string(),
+      email: profile.email,
+      name: profile.name,
+      latest_workspace_id: profile.latest_workspace_id.to_string(),
+    }
+  }
+}

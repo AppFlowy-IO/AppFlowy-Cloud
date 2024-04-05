@@ -500,6 +500,7 @@ impl TestClient {
         .unwrap(),
       ),
     };
+    collab.lock().emit_awareness_state();
 
     let encoded_collab_v1 = collab
       .encode_collab_v1(|collab| collab_type.validate(collab))

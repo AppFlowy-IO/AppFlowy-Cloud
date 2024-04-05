@@ -1,0 +1,16 @@
+name: Test Pull Request Auto CI
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Test Pull Request Auto CI
+        run: echo "Test Pull Request Auto CI"

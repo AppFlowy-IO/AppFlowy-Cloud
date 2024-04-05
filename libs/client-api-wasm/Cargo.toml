@@ -5,7 +5,7 @@ authors = ["Admin"]
 edition = "2018"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 
 [features]
@@ -36,5 +36,7 @@ uuid.workspace = true
 wasm-bindgen-test = "0.3.34"
 
 [profile.release]
+panic = "abort"
+lto = true
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"

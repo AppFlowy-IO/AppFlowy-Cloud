@@ -7,13 +7,21 @@ on:
         description: 'Working directory (e.g., libs/client-api-wasm)'
         required: true
         default: 'libs/client-api-wasm'
-      package_name:
-        description: 'Package name'
+      which_package:
+        description: 'Which package to publish'
         required: true
         default: '@appflowyinc/client-api-wasm'
+        type: choice
+        options:
+          - '@appflowyinc/client-api-wasm'
       package_version:
         description: 'Package version'
         required: true
+      publish_args:
+        description: 'Publish arguments (e.g., --tag alpha)'
+        required: false
+        default: ''
+
 env:
   NODE_VERSION: '20.12.0'
   RUST_TOOLCHAIN: "1.75"
@@ -46,7 +54,7 @@ jobs:
       - name: Update package.json
         run: |
           cd ${{ github.event.inputs.working_directory }}/pkg
-          jq '.name = "${{ github.event.inputs.package_name }}" | .version = "${{ github.event.inputs.package_version }}"' package.json > package.json.tmp
+          jq '.name = "${{ github.event.inputs.which_package }}" | .version = "${{ github.event.inputs.package_version }}"' package.json > package.json.tmp
           mv package.json.tmp package.json
 
       - name: Configure npm for wasm-pack
@@ -55,7 +63,7 @@ jobs:
       - name: Publish package
         run: |
           npm config set access public
-          wasm-pack publish
+          wasm-pack publish ${{ github.event.inputs.publish_args }}
         working-directory: ${{ github.event.inputs.working_directory }}/pkg
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

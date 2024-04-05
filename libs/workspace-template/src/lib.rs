@@ -19,6 +19,8 @@ use tokio::sync::RwLock;
 pub trait WorkspaceTemplate {
   fn layout(&self) -> ViewLayout;
 
+  async fn create(&self, object_id: String) -> Result<TemplateData>;
+
   async fn create_workspace_view(
     &self,
     uid: i64,

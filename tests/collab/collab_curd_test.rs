@@ -48,7 +48,6 @@ async fn batch_insert_collab_success_test() {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: mock_encoded_collab_v1[i].encode_to_bytes().unwrap(),
       collab_type: CollabType::Empty,
-      override_if_exist: false,
     })
     .collect::<Vec<_>>();
 
@@ -144,7 +143,6 @@ async fn create_collab_compatibility_with_json_params_test() {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
       collab_type: CollabType::Empty,
-      override_if_exist: false,
     },
     workspace_id: workspace_id.clone(),
   };
@@ -201,7 +199,6 @@ async fn batch_create_collab_compatibility_with_uncompress_params_test() {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab.encode_to_bytes().unwrap(),
       collab_type: CollabType::Empty,
-      override_if_exist: false,
     }],
   }
   .to_bytes()

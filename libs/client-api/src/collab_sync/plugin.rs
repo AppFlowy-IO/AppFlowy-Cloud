@@ -1,23 +1,28 @@
-use collab::core::awareness::{AwarenessUpdate, Event};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Weak};
-use std::time::Duration;
+use crate::collab_sync::{CollabSyncState, InitSyncReason, SinkConfig, SyncControl};
 
-use crate::collab_sync::{InitSyncReason, SinkConfig, SinkState, SyncControl};
+use crate::af_spawn;
+use crate::ws::{ConnectState, WSConnectStateReceiver};
+use anyhow::anyhow;
+use collab::core::awareness::{AwarenessUpdate, Event};
 use collab::core::collab::MutexCollab;
+
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
+
 use futures_util::SinkExt;
-use tokio::time::sleep;
+
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+use tokio_retry::strategy::FixedInterval;
+use tokio_retry::{Action, Retry};
 use tokio_stream::StreamExt;
 use tracing::{error, trace};
-
-use crate::af_spawn;
-use crate::ws::{ConnectState, WSConnectStateReceiver};
 use yrs::updates::encoder::Encode;
 
 pub struct SyncPlugin<Sink, Stream, C> {
@@ -27,7 +32,6 @@ pub struct SyncPlugin<Sink, Stream, C> {
   #[allow(dead_code)]
   channel: Option<Arc<C>>,
   collab: Weak<MutexCollab>,
-  did_init_sync: Arc<AtomicBool>,
 }
 
 impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
@@ -73,7 +77,7 @@ where
         while let Ok(sink_state) = sync_state_stream.recv().await {
           if let Some(state) = weak_state.upgrade() {
             let sync_state = match sink_state {
-              SinkState::Syncing => SyncState::Syncing,
+              CollabSyncState::Syncing => SyncState::Syncing,
               _ => SyncState::SyncFinished,
             };
             state.set_sync_state(sync_state);
@@ -121,33 +125,7 @@ where
       object,
       channel,
       collab,
-      did_init_sync: Arc::new(AtomicBool::new(false)),
     }
-  }
-
-  fn try_init_sync(&self) {
-    if self.did_init_sync.load(Ordering::SeqCst) {
-      return;
-    }
-    let weak_queue = Arc::downgrade(&self.sync_queue);
-    let weak_collab = self.collab.clone();
-    let weak_did_init_sync = self.did_init_sync.clone();
-    tokio::spawn(async move {
-      sleep(Duration::from_secs(2)).await;
-      if let (Some(queue), Some(collab)) = (weak_queue.upgrade(), weak_collab.upgrade()) {
-        if let Some(collab) = collab.try_lock() {
-          if queue.can_queue_init_sync()
-            && queue
-              .init_sync(&collab, InitSyncReason::CollabDidInit)
-              .is_ok()
-          {
-            #[cfg(feature = "sync_verbose_log")]
-            trace!("finish init sync: {}", queue.origin);
-            weak_did_init_sync.store(true, Ordering::SeqCst);
-          }
-        }
-      }
-    });
   }
 }
 
@@ -159,25 +137,32 @@ where
   C: Send + Sync + 'static,
 {
   fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
-    self.try_init_sync();
+    // Most of the time, it should be successful to queue init sync by 1st time.
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10);
+    let action = InitSyncAction {
+      sync_queue: Arc::downgrade(&self.sync_queue),
+      collab: self.collab.clone(),
+    };
+
+    tokio::spawn(async move {
+      if let Err(err) = Retry::spawn(retry_strategy, action).await {
+        error!("Failed to start init sync: {}", err);
+      }
+    });
   }
 
   fn receive_local_update(&self, origin: &CollabOrigin, _object_id: &str, update: &[u8]) {
-    if self.did_init_sync.load(Ordering::SeqCst) {
-      let update = update.to_vec();
-      let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
-      self.sync_queue.queue_msg(|msg_id| {
-        let update_sync = UpdateSync::new(
-          origin.clone(),
-          self.object.object_id.clone(),
-          payload,
-          msg_id,
-        );
-        ClientCollabMessage::new_update_sync(update_sync)
-      });
-    } else {
-      self.try_init_sync();
-    }
+    let update = update.to_vec();
+    let payload = Message::Sync(SyncMessage::Update(update)).encode_v1();
+    self.sync_queue.queue_msg(|msg_id| {
+      let update_sync = UpdateSync::new(
+        origin.clone(),
+        self.object.object_id.clone(),
+        payload,
+        msg_id,
+      );
+      ClientCollabMessage::new_update_sync(update_sync)
+    });
   }
 
   fn receive_local_state(
@@ -199,7 +184,7 @@ where
   fn start_init_sync(&self) {
     if let Some(collab) = self.collab.upgrade() {
       if let Some(collab) = collab.try_lock() {
-        if !self.sync_queue.can_queue_init_sync() {
+        if !self.sync_queue.should_queue_init_sync() {
           return;
         }
         if let Err(err) = self
@@ -245,5 +230,50 @@ impl From<CollabObject> for SyncObject {
       collab_type: collab_object.collab_type,
       device_id: collab_object.device_id,
     }
+  }
+}
+
+pub(crate) struct InitSyncAction<Sink, Stream> {
+  sync_queue: Weak<SyncControl<Sink, Stream>>,
+  collab: Weak<MutexCollab>,
+}
+
+impl<E, Sink, Stream> Action for InitSyncAction<Sink, Stream>
+where
+  E: Into<anyhow::Error> + Send + Sync + 'static,
+  Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
+  Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
+{
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync>>;
+  type Item = ();
+  type Error = anyhow::Error;
+
+  fn run(&mut self) -> Self::Future {
+    let weak_queue = self.sync_queue.clone();
+    let weak_collab = self.collab.clone();
+    Box::pin(async move {
+      if let (Some(queue), Some(collab)) = (weak_queue.upgrade(), weak_collab.upgrade()) {
+        if let Some(collab) = collab.try_lock() {
+          if queue.did_queue_init_sync() {
+            return Ok(());
+          }
+          let is_queue = queue.init_sync(&collab, InitSyncReason::CollabDidInit)?;
+          if is_queue {
+            #[cfg(feature = "sync_verbose_log")]
+            trace!("finish init sync: {}", queue.origin);
+            return Ok(());
+          } else {
+            return Err(anyhow!("Failed to queue init sync"));
+          }
+        } else {
+          // If failed to lock collab, return Err. it will start a new retry in the next iteration base
+          // on the retry strategy
+          return Err(anyhow!("Failed to lock collab"));
+        }
+      }
+
+      // If the queue or collab is dropped, return Ok to stop retrying.
+      Ok(())
+    })
   }
 }

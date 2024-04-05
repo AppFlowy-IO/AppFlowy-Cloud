@@ -3,6 +3,9 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
+use std::ops::{Deref, DerefMut};
+use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
 use crate::collaborate::group_persistence::GroupPersistence;
@@ -12,11 +15,9 @@ use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
-use std::sync::Arc;
 
 use futures_util::{SinkExt, StreamExt};
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use tokio::sync::{mpsc, Mutex};
 use tracing::{event, trace};
 
@@ -24,7 +25,7 @@ use tracing::{event, trace};
 pub struct CollabGroup {
   pub workspace_id: String,
   pub object_id: String,
-  collab: Rc<Mutex<Collab>>,
+  collab: MutexCollab,
   collab_type: CollabType,
   /// A broadcast used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
   /// to subscribes.
@@ -33,7 +34,7 @@ pub struct CollabGroup {
   /// broadcast.
   subscribers: DashMap<RealtimeUser, Subscription>,
   metrics_calculate: CollabMetricsCalculate,
-  destroy_group_tx: mpsc::Sender<Rc<Mutex<Collab>>>,
+  destroy_group_tx: mpsc::Sender<MutexCollab>,
 }
 
 impl Drop for CollabGroup {
@@ -55,11 +56,11 @@ impl CollabGroup {
   where
     S: CollabStorage,
   {
-    let edit_state = Rc::new(EditState::new(100, 600));
+    let edit_state = Arc::new(EditState::new(100, 600));
     let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone());
     broadcast.observe_collab_changes(&mut collab).await;
     let (destroy_group_tx, rx) = mpsc::channel(1);
-    let rc_collab = Rc::new(Mutex::new(collab));
+    let arc_collab = MutexCollab::new(collab);
 
     tokio::task::spawn_local(
       GroupPersistence::new(
@@ -68,7 +69,7 @@ impl CollabGroup {
         uid,
         storage,
         edit_state.clone(),
-        Rc::downgrade(&rc_collab),
+        arc_collab.downgrade(),
         collab_type.clone(),
       )
       .run(rx),
@@ -78,7 +79,7 @@ impl CollabGroup {
       workspace_id,
       object_id,
       collab_type,
-      collab: rc_collab,
+      collab: arc_collab,
       broadcast,
       subscribers: Default::default(),
       metrics_calculate,
@@ -127,7 +128,7 @@ impl CollabGroup {
       subscriber_origin,
       sink,
       stream,
-      Rc::downgrade(&self.collab),
+      self.collab.downgrade(),
       self.metrics_calculate.clone(),
     );
 
@@ -262,6 +263,44 @@ impl EditState {
 
     // Determine if we should save based on either condition being met
     edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
+  }
+}
+
+/// [MutexCollab] is a wrapper around [Rc] and [Mutex] to allow for shared ownership of a [Collab]
+/// It does nothing just impl [Send] and [Sync] for [Collab]
+#[derive(Clone)]
+pub(crate) struct MutexCollab(Rc<Mutex<Collab>>);
+impl MutexCollab {
+  pub(crate) fn new(collab: Collab) -> Self {
+    #[allow(clippy::arc_with_non_send_sync)]
+    Self(Rc::new(Mutex::new(collab)))
+  }
+
+  pub(crate) fn downgrade(&self) -> WeakMutexCollab {
+    WeakMutexCollab(Rc::downgrade(&self.0))
+  }
+}
+
+impl Deref for MutexCollab {
+  type Target = Rc<Mutex<Collab>>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+
+impl DerefMut for MutexCollab {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
+  }
+}
+
+unsafe impl Send for MutexCollab {}
+unsafe impl Sync for MutexCollab {}
+pub(crate) struct WeakMutexCollab(Weak<Mutex<Collab>>);
+impl WeakMutexCollab {
+  pub(crate) fn upgrade(&self) -> Option<MutexCollab> {
+    self.0.upgrade().map(MutexCollab)
   }
 }
 

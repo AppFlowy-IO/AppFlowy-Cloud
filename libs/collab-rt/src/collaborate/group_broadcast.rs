@@ -1,5 +1,6 @@
 use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 
@@ -9,6 +10,7 @@ use collab_rt_protocol::{handle_message, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::Ordering;
+
 use tokio::select;
 use tokio::sync::broadcast::error::SendError;
 use tokio::sync::broadcast::{channel, Sender};
@@ -23,7 +25,7 @@ use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
 
-use crate::collaborate::group::EditState;
+use crate::collaborate::group::{EditState, MutexCollab, WeakMutexCollab};
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
@@ -44,7 +46,7 @@ pub struct CollabBroadcast {
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
   doc_subscription: Mutex<Option<UpdateSubscription>>,
-  edit_state: Rc<EditState>,
+  edit_state: Arc<EditState>,
   /// The last modified time of the document.
   pub modified_at: Rc<parking_lot::Mutex<Instant>>,
 }
@@ -62,7 +64,7 @@ impl CollabBroadcast {
   ///
   /// The overflow of the incoming events that needs to be propagates will be buffered up to a
   /// provided `buffer_capacity` size.
-  pub fn new(object_id: &str, buffer_capacity: usize, edit_state: Rc<EditState>) -> Self {
+  pub fn new(object_id: &str, buffer_capacity: usize, edit_state: Arc<EditState>) -> Self {
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
@@ -171,7 +173,7 @@ impl CollabBroadcast {
     subscriber_origin: CollabOrigin,
     mut sink: Sink,
     mut stream: Stream,
-    collab: Weak<Mutex<Collab>>,
+    collab: WeakMutexCollab,
     metrics_calculate: CollabMetricsCalculate,
   ) -> Subscription
   where
@@ -265,9 +267,9 @@ async fn handle_client_messages<Sink>(
   object_id: &str,
   message_map: MessageByObjectId,
   sink: &mut Sink,
-  collab: Rc<Mutex<Collab>>,
+  collab: MutexCollab,
   metrics_calculate: &CollabMetricsCalculate,
-  edit_state: &Rc<EditState>,
+  edit_state: &Arc<EditState>,
 ) where
   Sink: SinkExt<CollabMessage> + Unpin + 'static,
   <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error,
@@ -325,7 +327,7 @@ async fn handle_one_client_message(
   collab_msg: &ClientCollabMessage,
   collab: &Mutex<Collab>,
   metrics_calculate: &CollabMetricsCalculate,
-  edit_state: &Rc<EditState>,
+  edit_state: &Arc<EditState>,
 ) -> Result<CollabAck, RealtimeError> {
   let msg_id = collab_msg.msg_id();
   let message_origin = collab_msg.origin().clone();

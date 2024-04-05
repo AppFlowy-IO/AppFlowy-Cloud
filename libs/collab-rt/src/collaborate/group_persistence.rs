@@ -1,4 +1,4 @@
-use crate::collaborate::group::EditState;
+use crate::collaborate::group::{EditState, MutexCollab, WeakMutexCollab};
 
 use anyhow::anyhow;
 use app_error::AppError;
@@ -7,10 +7,9 @@ use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
-use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
 use tracing::{info, warn};
 
@@ -19,8 +18,8 @@ pub(crate) struct GroupPersistence<S> {
   object_id: String,
   storage: Arc<S>,
   uid: i64,
-  edit_state: Rc<EditState>,
-  collab: Weak<Mutex<Collab>>,
+  edit_state: Arc<EditState>,
+  collab: WeakMutexCollab,
   collab_type: CollabType,
 }
 
@@ -33,8 +32,8 @@ where
     object_id: String,
     uid: i64,
     storage: Arc<S>,
-    edit_state: Rc<EditState>,
-    collab: Weak<Mutex<Collab>>,
+    edit_state: Arc<EditState>,
+    collab: WeakMutexCollab,
     collab_type: CollabType,
   ) -> Self {
     Self {
@@ -48,7 +47,7 @@ where
     }
   }
 
-  pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<Rc<Mutex<Collab>>>) {
+  pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<MutexCollab>) {
     // defer start saving after 5 seconds
     sleep(Duration::from_secs(5)).await;
     let mut interval = interval(Duration::from_secs(180)); // 3 minutes
@@ -70,7 +69,7 @@ where
     }
   }
 
-  async fn force_save(&self, collab: Rc<Mutex<Collab>>) {
+  async fn force_save(&self, collab: MutexCollab) {
     let lock_guard = collab.lock().await;
     let result = get_encode_collab(&self.object_id, &lock_guard, &self.collab_type);
     drop(lock_guard);
@@ -153,7 +152,6 @@ fn get_encode_collab(
         object_id: object_id.to_string(),
         encoded_collab_v1,
         collab_type: collab_type.clone(),
-        override_if_exist: false,
       };
 
       Ok(params)

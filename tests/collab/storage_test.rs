@@ -17,7 +17,6 @@ async fn success_insert_collab_test() {
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
     collab_type: CollabType::Empty,
-    override_if_exist: false,
     workspace_id: workspace_id.clone(),
     encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
   })
@@ -75,7 +74,6 @@ async fn success_batch_get_collab_test() {
       object_id: object_id.clone(),
       encoded_collab_v1: encode_collab.clone(),
       collab_type: collab_type.clone(),
-      override_if_exist: false,
       workspace_id: workspace_id.clone(),
     })
     .await
@@ -133,7 +131,6 @@ async fn success_part_batch_get_collab_test() {
         object_id: object_id.clone(),
         encoded_collab_v1: encode_collab.clone(),
         collab_type: collab_type.clone(),
-        override_if_exist: false,
         workspace_id: workspace_id.clone(),
       })
       .await
@@ -160,7 +157,6 @@ async fn success_delete_collab_test() {
     object_id: object_id.clone(),
     encoded_collab_v1: encode_collab,
     collab_type: CollabType::Empty,
-    override_if_exist: false,
     workspace_id: workspace_id.clone(),
   })
   .await
@@ -194,7 +190,6 @@ async fn fail_insert_collab_with_empty_payload_test() {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: vec![],
       collab_type: CollabType::Empty,
-      override_if_exist: false,
       workspace_id: workspace_id.clone(),
     })
     .await
@@ -216,7 +211,6 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
       object_id,
       encoded_collab_v1: encode_collab,
       collab_type: CollabType::Empty,
-      override_if_exist: false,
       workspace_id: workspace_id.clone(),
     })
     .await

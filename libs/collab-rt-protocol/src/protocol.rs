@@ -77,7 +77,7 @@ pub trait CollabSyncProtocol {
     &self,
     awareness: &Awareness,
     encoder: &mut E,
-    sync_before: bool,
+    _sync_before: bool,
   ) -> Result<(), RTProtocolError> {
     let (state_vector, awareness_update) = {
       let state_vector = awareness
@@ -92,14 +92,14 @@ pub trait CollabSyncProtocol {
     // 1. encode doc state vector
     Message::Sync(SyncMessage::SyncStep1(state_vector)).encode(encoder);
 
-    // 2. ff the sync_before is false, which means the doc is not synced before, then we need to
-    // send the full update to the server.
-    if !sync_before {
-      if let Ok(txn) = awareness.doc().try_transact() {
-        let update = txn.encode_state_as_update_v1(&StateVector::default());
-        Message::Sync(SyncMessage::SyncStep2(update)).encode(encoder);
-      }
-    }
+    // // 2. if the sync_before is false, which means the doc is not synced before, then we need to
+    // // send the full update to the server.
+    // if !sync_before {
+    //   if let Ok(txn) = awareness.doc().try_transact() {
+    //     let update = txn.encode_state_as_update_v1(&StateVector::default());
+    //     Message::Sync(SyncMessage::SyncStep2(update)).encode(encoder);
+    //   }
+    // }
 
     // 3. encode awareness update
     Message::Awareness(awareness_update).encode(encoder);

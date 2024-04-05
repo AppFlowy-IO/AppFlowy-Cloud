@@ -2,10 +2,11 @@ use app_error::ErrorCode;
 use client_api_test_util::TestClient;
 use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::Doc;
+use collab_document::blocks::DocumentData;
 use collab_entity::CollabType;
 use database_entity::dto::CreateCollabParams;
-use workspace_template::document::get_started::GetStartedDocumentTemplate;
-use workspace_template::WorkspaceTemplateBuilder;
+use workspace_template::document::get_started::{DocumentTemplate, GetStartedDocumentTemplate};
+use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
 #[tokio::test]
 async fn insert_empty_data_test() {
@@ -27,7 +28,6 @@ async fn insert_empty_data_test() {
       object_id: object_id.clone(),
       encoded_collab_v1: vec![],
       collab_type,
-      override_if_exist: false,
     };
     let error = test_client
       .api_client
@@ -59,7 +59,6 @@ async fn insert_invalid_data_test() {
       object_id: object_id.clone(),
       encoded_collab_v1: encoded_collab_v1.clone(),
       collab_type: collab_type.clone(),
-      override_if_exist: false,
     };
     let error = test_client
       .api_client
@@ -72,6 +71,30 @@ async fn insert_invalid_data_test() {
       "collab_type: {:?}",
       collab_type
     );
+  }
+}
+
+#[tokio::test]
+async fn load_document_test() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = uuid::Uuid::new_v4().to_string();
+
+  for file in [include_str!("../test_asset/document/empty_lines.json")] {
+    let document_data: DocumentData = serde_json::from_str(file).unwrap();
+    let template = DocumentTemplate::from_data(document_data)
+      .create(object_id.clone())
+      .await
+      .unwrap();
+
+    let data = template.object_data.encode_to_bytes().unwrap();
+    let params = CreateCollabParams {
+      workspace_id: workspace_id.clone(),
+      object_id: object_id.clone(),
+      encoded_collab_v1: data,
+      collab_type: template.object_type,
+    };
+    test_client.api_client.create_collab(params).await.unwrap();
   }
 }
 
@@ -103,7 +126,6 @@ async fn insert_folder_data_success_test() {
       object_id: object_id.clone(),
       encoded_collab_v1: data,
       collab_type: template.object_type,
-      override_if_exist: false,
     };
     test_client.api_client.create_collab(params).await.unwrap();
   }

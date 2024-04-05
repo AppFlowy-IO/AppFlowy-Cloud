@@ -1,8 +1,8 @@
 use crate::collab_sync::sink_queue::SinkQueue;
-use crate::collab_sync::{DefaultMsgIdCounter, SinkSignal, SyncTimestamp};
+use crate::collab_sync::{CollabSinkState, SinkSignal};
 use collab::core::origin::CollabOrigin;
 use collab_rt_entity::{ClientCollabMessage, PingSync, SinkMessage};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::watch;
@@ -17,11 +17,9 @@ impl PingSyncRunner {
   pub(crate) fn run(
     origin: CollabOrigin,
     object_id: String,
-    msg_id_counter: Arc<DefaultMsgIdCounter>,
     message_queue: Weak<parking_lot::Mutex<SinkQueue<ClientCollabMessage>>>,
-    pause: Arc<AtomicBool>,
     weak_notify: Weak<watch::Sender<SinkSignal>>,
-    sync_timestamp: Arc<SyncTimestamp>,
+    state: Arc<CollabSinkState>,
   ) {
     let duration = if cfg!(feature = "test_fast_sync") {
       Duration::from_secs(10)
@@ -45,11 +43,11 @@ impl PingSyncRunner {
             break;
           },
           Some(message_queue) => {
-            if pause.load(Ordering::SeqCst) {
+            if state.pause.load(Ordering::SeqCst) {
               continue;
             } else {
               // Skip this iteration if a message was sent recently, within the specified duration.
-              if !sync_timestamp.is_time_for_next_sync(duration).await {
+              if !state.latest_sync.is_time_for_next_sync(duration).await {
                 continue;
               }
 
@@ -61,7 +59,7 @@ impl PingSyncRunner {
                   next_tick = Instant::now() + Duration::from_secs(30);
                 }
 
-                let msg_id = msg_id_counter.next();
+                let msg_id = state.id_counter.next();
                 let ping = PingSync {
                   origin: origin.clone(),
                   object_id: object_id.clone(),

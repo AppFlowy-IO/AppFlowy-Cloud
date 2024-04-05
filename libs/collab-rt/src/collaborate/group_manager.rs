@@ -9,11 +9,12 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
+use std::rc::Rc;
 
 use database::collab::CollabStorage;
 
 use crate::metrics::CollabMetricsCalculate;
-use std::rc::Rc;
+
 use std::sync::Arc;
 use tracing::{debug, instrument, trace};
 

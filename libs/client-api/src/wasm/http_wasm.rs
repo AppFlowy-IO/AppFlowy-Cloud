@@ -1,8 +1,10 @@
 use crate::http::log_request_id;
 use crate::ws::{WSClientHttpSender, WSError};
 use crate::Client;
+use crate::RefreshTokenRetryCondition;
+use again::RetryPolicy;
 use app_error::gotrue::GoTrueError;
-use app_error::ErrorCode;
+use app_error::{AppError, ErrorCode};
 use async_trait::async_trait;
 use collab_rt_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
@@ -11,7 +13,8 @@ use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
-use tracing::instrument;
+use std::time::Duration;
+use tracing::{event, instrument};
 
 impl Client {
   pub async fn create_collab_list(
@@ -67,6 +70,42 @@ impl Client {
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
+    // let policy = RetryPolicy::fixed(Duration::from_secs(2)).with_max_retries(4).with_jitter(false);
+    // let refresh_token = self
+    //   .token
+    //   .read()
+    //   .as_ref()
+    //   .ok_or(GoTrueError::NotLoggedIn(
+    //     "fail to refresh user token".to_owned(),
+    //   ))?
+    //   .refresh_token
+    //   .as_str()
+    //   .to_owned();
+    // match policy.retry_if(move || {
+    //   let grant = Grant::RefreshToken(RefreshTokenGrant { refresh_token: refresh_token.clone() });
+    //   async move {
+    //     self
+    //       .gotrue_client
+    //       .token(&grant).await
+    //   }
+    //
+    // }, RefreshTokenRetryCondition).await {
+    //   Ok(new_token) => {
+    //     event!(tracing::Level::INFO, "refresh token success");
+    //     self.token.write().set(new_token);
+    //     Ok(())
+    //   },
+    //   Err(err) => {
+    //     let err = AppError::from(err);
+    //     event!(tracing::Level::ERROR, "refresh token failed: {}", err);
+    //
+    //     // If the error is an OAuth error, unset the token.
+    //     if err.is_unauthorized() {
+    //       self.token.write().unset();
+    //     }
+    //     Err(err.into())
+    //   },
+    // }
     let refresh_token = self
       .token
       .read()

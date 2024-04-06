@@ -56,7 +56,6 @@ pub trait WSClientHttpSender: Send + Sync {
 
 type WeakChannel = Weak<WebSocketChannel<ServerCollabMessage>>;
 type ChannelByObjectId = HashMap<String, Vec<WeakChannel>>;
-type AFRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub(crate) type StateNotify = parking_lot::Mutex<ConnectStateNotify>;
@@ -78,7 +77,6 @@ pub struct WSClient {
   channels: Arc<RwLock<ChannelByObjectId>>,
   ping: Arc<Mutex<Option<ServerFixIntervalPing>>>,
   stop_ws_msg_loop_tx: Mutex<Option<oneshot::Sender<()>>>,
-  rate_limiter: Arc<tokio::sync::RwLock<AFRateLimiter>>,
   aggregate_queue: Arc<AggregateMessageQueue>,
 
   #[cfg(debug_assertions)]
@@ -95,7 +93,6 @@ impl WSClient {
     let ping = Arc::new(Mutex::new(None));
     let http_sender = Arc::new(http_sender);
     let (user_channel, _) = channel(1);
-    let rate_limiter = gen_rate_limiter(20);
     let (rt_msg_sender, _) = channel(config.buffer_capacity);
     let aggregate_queue = Arc::new(AggregateMessageQueue::new(MAXIMUM_BATCH_MESSAGE_SIZE));
     WSClient {
@@ -109,7 +106,6 @@ impl WSClient {
       channels,
       ping,
       stop_ws_msg_loop_tx: Mutex::new(None),
-      rate_limiter: Arc::new(tokio::sync::RwLock::new(rate_limiter)),
       aggregate_queue,
 
       #[cfg(debug_assertions)]
@@ -218,7 +214,6 @@ impl WSClient {
     let mut ws_msg_rx = self.ws_msg_sender.subscribe();
     let weak_state_notify = Arc::downgrade(&self.state_notify);
     let weak_http_sender = Arc::downgrade(&self.http_sender);
-    let rate_limiter = self.rate_limiter.clone();
     let device_id = device_id.to_string();
 
     let handle_error = move |err| {
@@ -246,7 +241,6 @@ impl WSClient {
               }
            }
            Some(msg) = aggregate_msg_rx.recv() => {
-              rate_limiter.read().await.until_ready().fuse().await;
               if let Err(err) = send_message(&mut sink, &device_id, msg, &weak_http_sender).await {
                 if err.should_stop() {
                   break;
@@ -269,7 +263,6 @@ impl WSClient {
     #[cfg(debug_assertions)]
     let cloned_skip_realtime_message = self.skip_realtime_message.clone();
     let user_message_tx = self.user_channel.as_ref().clone();
-    let rate_limiter = self.rate_limiter.clone();
     af_spawn(async move {
       while let Some(Ok(ws_msg)) = stream.next().await {
         match ws_msg {
@@ -296,9 +289,7 @@ impl WSClient {
                   let _ = user_message_tx.send(user_message);
                 },
                 RealtimeMessage::System(sys_message) => match sys_message {
-                  SystemMessage::RateLimit(limit) => {
-                    *rate_limiter.write().await = gen_rate_limiter(limit);
-                  },
+                  SystemMessage::RateLimit(limit) => {},
                   SystemMessage::KickOff => {
                     break;
                   },
@@ -445,17 +436,6 @@ fn handle_collab_message(
     warn!("channels are closed");
   }
 }
-fn gen_rate_limiter(
-  mut times_per_sec: u32,
-) -> RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware> {
-  // make sure the rate limiter is not zero
-  if times_per_sec == 0 {
-    times_per_sec = 1;
-  }
-  let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
-  RateLimiter::direct(quota)
-}
-
 #[cfg(debug_assertions)]
 impl WSClient {
   pub fn disable_receive_message(&self) {

@@ -15,14 +15,22 @@ use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::SystemMessage;
 use database::collab::CollabStorage;
 use database::pg_row::AFUserNotification;
+use governor::clock::DefaultClock;
+use governor::middleware::NoOpMiddleware;
+use governor::state::{InMemoryState, NotKeyed};
+use governor::{Quota, RateLimiter};
 use semver::Version;
+use std::num::NonZeroU32;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{debug, error, trace, warn};
 
 const MAX_MESSAGES_PER_INTERVAL: usize = 10;
 const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
 
+type WSRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
 pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl> {
   user: RealtimeUser,
   hb: Instant,
@@ -34,6 +42,7 @@ pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl>
   interval_start: Instant,
   #[allow(dead_code)]
   client_version: Version,
+  rate_limiter: Arc<RwLock<WSRateLimiter>>,
 }
 
 impl<S, AC> RealtimeClient<S, AC>
@@ -49,6 +58,7 @@ where
     client_timeout: Duration,
     client_version: Version,
   ) -> Self {
+    let rate_limiter = gen_rate_limiter(10);
     Self {
       user,
       hb: Instant::now(),
@@ -59,6 +69,7 @@ where
       message_count: 0,
       interval_start: Instant::now(),
       client_version,
+      rate_limiter: Arc::new(RwLock::new(rate_limiter)),
     }
   }
 
@@ -137,24 +148,33 @@ where
     if let Some(mut recv) = self.user_change_recv.take() {
       actix::spawn(async move {
         while let Some(notification) = recv.recv().await {
+          // Extract the user object from the notification payload.
           if let Some(user) = notification.payload {
             trace!("Receive user change: {:?}", user);
-
-            // The RealtimeMessage uses bincode to do serde. But bincode doesn't support the Serde
-            // deserialize_any method. So it needs to serialize the metadata to json string.
+            // Since bincode serialization is used for RealtimeMessage but does not support the
+            // Serde `deserialize_any` method, the user metadata is serialized into a JSON string.
+            // This step ensures compatibility and flexibility for the metadata field.
             let metadata = serde_json::to_string(&user.metadata).ok();
+
+            // Construct a UserMessage with the user's details, including the serialized metadata.
             let msg = UserMessage::ProfileChange(AFUserChange {
               uid: user.uid,
               name: user.name,
               email: user.email,
               metadata,
             });
+
+            // Attempt to send the constructed message to the recipient. Handle errors appropriately,
+            // notably breaking out of the loop if the recipient's mailbox is closed, indicating
+            // that no further messages can be sent.
             if let Err(err) = recipient.send(RealtimeMessage::User(msg)).await {
               match err {
                 MailboxError::Closed => {
+                  // If the recipient's mailbox is closed, stop listening for further notifications.
                   break;
                 },
                 MailboxError::Timeout => {
+                  // Log a timeout error if the message could not be sent within the expected time frame.
                   error!("User change message recipient send timeout");
                 },
               }
@@ -164,30 +184,37 @@ where
       });
     }
 
-    self
-      .server
-      .send(Connect {
-        socket: ctx.address().recipient(),
-        user: self.user.clone(),
-      })
-      .into_actor(self)
-      .then(|res, _session, ctx| {
-        match res {
-          Ok(Ok(_)) => {
-            trace!("ws client send connect message to server success")
-          },
-          Ok(Err(err)) => {
-            error!("ws client send connect message to server error: {:?}", err);
-            ctx.stop();
-          },
-          Err(err) => {
-            error!("ws client send connect message to server error: {:?}", err);
-            ctx.stop();
-          },
-        }
-        fut::ready(())
-      })
-      .wait(ctx);
+    // Asynchronously sends a `Connect` message to the server actor, indicating a new websocket connection attempt.
+    // The `Connect` message includes the address of the current actor (as a recipient for further communication)
+    // and the user details associated with this connection attempt.
+    self.server
+        .send(Connect {
+          socket: ctx.address().recipient(),
+          user: self.user.clone(),
+        })
+        // Converts the future into an actor future, allowing it to be handled within the actor context.
+        .into_actor(self)
+        // Process the server response. The result `res` can be either an acknowledgement (Ok) or an error (Err).
+        // The `then` combinator is used to handle these outcomes and decide on subsequent actions.
+        .then(|res, _session, ctx| {
+          match res {
+            // In case of successful connection acknowledgement from the server,
+            // log a trace message indicating the successful connection attempt.
+            Ok(Ok(_)) => {
+              trace!("WebSocket client successfully sent connect message to server.")
+            },
+            // If the server responded with an error, or sending the message resulted in an error,
+            // log the error and stop the current actor. This halts further processing in case of failure.
+            Ok(Err(err)) | Err(err) => {
+              error!("WebSocket client failed to send connect message to server: {:?}", err);
+              ctx.stop();
+            },
+          }
+          fut::ready(())
+        })
+        // Await the completion of the above future before proceeding, ensuring that the actor processes
+        // it in sequence. This is necessary for handling the asynchronous send operation within the actor's context.
+        .wait(ctx);
   }
 
   fn stopping(&mut self, _ctx: &mut Self::Context) -> Running {
@@ -228,6 +255,7 @@ where
     }
   }
 }
+// self.rate_limiter.read().await.until_ready().fuse().await;
 
 /// Handle the messages sent from the client
 impl<S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<S, AC>
@@ -293,4 +321,14 @@ impl RealtimeClientWebsocketSink for RealtimeClientWebsocketSinkImpl {
   fn do_send(&self, message: RealtimeMessage) {
     self.0.do_send(message);
   }
+}
+
+fn gen_rate_limiter(
+  mut times_per_sec: u32,
+) -> RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware> {
+  if times_per_sec == 0 {
+    times_per_sec = 1;
+  }
+  let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
+  RateLimiter::direct(quota)
 }

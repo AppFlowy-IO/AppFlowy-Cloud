@@ -1,6 +1,6 @@
 use crate::client_msg_router::ClientMessageRouter;
-use crate::collaborate::group_manager::GroupManager;
 use crate::error::RealtimeError;
+use crate::group::manager::GroupManager;
 use crate::RealtimeAccessControl;
 use async_stream::stream;
 use collab::core::collab_plugin::EncodedCollab;
@@ -9,10 +9,14 @@ use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, SinkMessage};
 use collab_rt_entity::{CollabAck, RealtimeMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
+
 use futures_util::StreamExt;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};
 
+/// Using [GroupCommand] to interact with the group
+/// - HandleClientCollabMessage: Handle the client message
+/// - EncodeCollab: Encode the collab
 pub enum GroupCommand {
   HandleClientCollabMessage {
     user: RealtimeUser,
@@ -28,13 +32,17 @@ pub enum GroupCommand {
 pub type GroupCommandSender = tokio::sync::mpsc::Sender<GroupCommand>;
 pub type GroupCommandReceiver = tokio::sync::mpsc::Receiver<GroupCommand>;
 
+/// Each group has a command runner to handle the group command. GroupCommandRunner is designed to run
+/// in tokio multi-thread runtime. It will receive the group command from the receiver and handle the
+/// command.
+///
 pub struct GroupCommandRunner<S, AC>
 where
   AC: RealtimeAccessControl,
   S: CollabStorage,
 {
   pub group_manager: Arc<GroupManager<S, AC>>,
-  pub client_msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
+  pub msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
   pub access_control: Arc<AC>,
   pub recv: Option<GroupCommandReceiver>,
 }
@@ -52,7 +60,6 @@ where
       }
       trace!("Collab group:{} command runner is stopped", object_id);
     };
-
     notify.notify_one();
     stream
       .for_each(|command| async {
@@ -107,7 +114,7 @@ where
       return Ok(());
     }
     // 1.Check the client is connected with the websocket server.
-    if self.client_msg_router_by_user.get(user).is_none() {
+    if self.msg_router_by_user.get(user).is_none() {
       // 1. **Client Not Connected**: This case occurs when there is an attempt to interact with a
       // WebSocket server, but the client has not established a connection with the server. The action
       // or message intended for the server cannot proceed because there is no active connection.
@@ -127,7 +134,7 @@ where
         let first_message = messages.first().unwrap();
         self.subscribe_group(user, first_message).await?;
       }
-      forward_message_to_group(user, object_id, messages, &self.client_msg_router_by_user).await;
+      forward_message_to_group(user, object_id, messages, &self.msg_router_by_user).await;
     } else {
       let first_message = messages.first().unwrap();
       // If there is no existing group for the given object_id and the message is an 'init message',
@@ -135,8 +142,8 @@ where
       if first_message.is_client_init_sync() {
         self.create_group(first_message).await?;
         self.subscribe_group(user, first_message).await?;
-        forward_message_to_group(user, object_id, messages, &self.client_msg_router_by_user).await;
-      } else if let Some(entry) = self.client_msg_router_by_user.get(user) {
+        forward_message_to_group(user, object_id, messages, &self.msg_router_by_user).await;
+      } else if let Some(entry) = self.msg_router_by_user.get(user) {
         warn!(
           "The group:{} is not found, the client:{} should send the init message first",
           first_message.object_id(),
@@ -162,7 +169,7 @@ where
   ) -> Result<(), RealtimeError> {
     let object_id = collab_message.object_id();
     let message_origin = collab_message.origin();
-    match self.client_msg_router_by_user.get_mut(user) {
+    match self.msg_router_by_user.get_mut(user) {
       None => {
         warn!("The client stream: {} is not found", user);
         Ok(())
@@ -194,7 +201,7 @@ where
         self
           .group_manager
           .create_group(uid, &data.workspace_id, object_id, data.collab_type.clone())
-          .await;
+          .await?;
 
         Ok(())
       },

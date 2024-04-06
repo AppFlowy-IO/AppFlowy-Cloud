@@ -19,7 +19,6 @@ sqlx = { workspace = true, default-features = false, features = ["postgres"] }
 tracing.workspace = true
 tokio = { workspace = true, features = [
     "macros",
-    "rt",
     "time",
 ] }
 tokio-stream.workspace = true

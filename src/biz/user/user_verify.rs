@@ -5,11 +5,12 @@ use anyhow::{Context, Result};
 use app_error::AppError;
 use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
+use database::workspace::select_workspace;
 use database_entity::dto::AFRole;
 use sqlx::types::uuid;
 use std::ops::DerefMut;
 use tracing::{event, instrument, trace};
-use uuid::Uuid;
+
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
@@ -44,21 +45,18 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
     event!(tracing::Level::INFO, "create new user:{}", new_uid);
     let workspace_id =
       create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
+    let workspace_row = select_workspace(txn.deref_mut(), &workspace_id).await?;
 
     // It's essential to cache the user's role because subsequent actions will rely on this cached information.
     state
       .workspace_access_control
-      .insert_role(
-        &new_uid,
-        &Uuid::parse_str(&workspace_id).unwrap(),
-        AFRole::Owner,
-      )
+      .insert_role(&new_uid, &workspace_id, AFRole::Owner)
       .await?;
 
     // Create a workspace with the GetStarted template
     initialize_workspace_for_user(
       new_uid,
-      &workspace_id,
+      &workspace_row,
       &mut txn,
       vec![GetStartedDocumentTemplate],
       &state.collab_access_control_storage,

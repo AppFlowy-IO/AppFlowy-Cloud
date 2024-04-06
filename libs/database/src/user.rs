@@ -90,7 +90,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   user_uuid: &Uuid,
   email: &str,
   name: &str,
-) -> Result<String, AppError> {
+) -> Result<Uuid, AppError> {
   let name = {
     if name.is_empty() {
       email
@@ -132,7 +132,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   .fetch_one(executor)
   .await?;
 
-  Ok(row.workspace_id.to_string())
+  Ok(row.workspace_id)
 }
 
 #[inline]

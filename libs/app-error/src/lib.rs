@@ -276,6 +276,7 @@ pub enum ErrorCode {
   NoRequiredData = 1025,
   WorkspaceLimitExceeded = 1026,
   WorkspaceMemberLimitExceeded = 1027,
+  FileStorageLimitExceeded = 1028,
 }
 
 impl ErrorCode {

@@ -1,18 +1,12 @@
 use futures_util::{SinkExt, StreamExt};
-use governor::clock::DefaultClock;
-use governor::middleware::NoOpMiddleware;
-use governor::state::{InMemoryState, NotKeyed};
-use governor::{Quota, RateLimiter};
 use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 
 use futures_util::stream::{SplitSink, SplitStream};
-use futures_util::FutureExt;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use semver::Version;
-use std::num::NonZeroU32;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::broadcast::{channel, Receiver, Sender};
@@ -289,7 +283,7 @@ impl WSClient {
                   let _ = user_message_tx.send(user_message);
                 },
                 RealtimeMessage::System(sys_message) => match sys_message {
-                  SystemMessage::RateLimit(limit) => {},
+                  SystemMessage::RateLimit(_limit) => {},
                   SystemMessage::KickOff => {
                     break;
                   },

@@ -5,7 +5,7 @@ use actix::{
   MailboxError, Recipient, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
-use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError};
+use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -97,11 +97,7 @@ where
     server: Addr<RealtimeServerActor<S, AC>>,
     bytes: Bytes,
   ) -> Result<(), RealtimeError> {
-    let message = tokio::task::spawn_blocking(move || {
-      RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal)
-    })
-    .await
-    .map_err(|err| RealtimeError::Internal(err.into()))??;
+    let message = RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal)?;
     let mut client_message = Some(ClientMessage {
       user: user.clone(),
       message,
@@ -132,6 +128,37 @@ where
       }
     }
     Ok(())
+  }
+}
+
+impl<S, AC> RealtimeClient<S, AC>
+where
+  AC: RealtimeAccessControl + Unpin,
+  S: CollabStorage + Unpin,
+{
+  fn handle_binary(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, bytes: Bytes) {
+    let fut = Self::send_binary_to_server(self.user.clone(), self.server.clone(), bytes);
+    let act_fut = fut::wrap_future::<_, Self>(fut);
+    ctx.spawn(act_fut.map(|res, _act, _ctx| {
+      if let Err(e) = res {
+        error!("Error forwarding binary message: {}", e);
+      }
+    }));
+  }
+
+  fn handle_ping(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, msg: &Bytes) {
+    self.hb = Instant::now();
+    ctx.pong(msg);
+  }
+
+  fn handle_close(
+    &mut self,
+    ctx: &mut WebsocketContext<RealtimeClient<S, AC>>,
+    reason: Option<CloseReason>,
+  ) {
+    debug!("Websocket closing for ({:?}): {:?}", self.user.uid, reason);
+    ctx.close(reason);
+    ctx.stop();
   }
 }
 
@@ -204,9 +231,13 @@ where
               trace!("WebSocket client successfully sent connect message to server.")
             },
             // If the server responded with an error, or sending the message resulted in an error,
-            // log the error and stop the current actor. This halts further processing in case of failure.
-            Ok(Err(err)) | Err(err) => {
-              error!("WebSocket client failed to send connect message to server: {:?}", err);
+            // log the error and stop the current actor.
+            Ok(Err(err)) => {
+              error!("ws client send connect message to server error: {:?}", err);
+              ctx.stop();
+            },
+            Err(err) => {
+              error!("ws client send connect message to server error: {:?}", err);
               ctx.stop();
             },
           }
@@ -246,12 +277,8 @@ where
     }
 
     match msg.encode() {
-      Ok(data) => {
-        ctx.binary(Bytes::from(data));
-      },
-      Err(err) => {
-        error!("Error encoding message: {}", err);
-      },
+      Ok(data) => ctx.binary(Bytes::from(data)),
+      Err(err) => error!("Error encoding message: {}", err),
     }
   }
 }
@@ -276,37 +303,19 @@ where
       return;
     }
 
-    let msg = match msg {
-      Err(err) => {
-        error!("Websocket stream error: {}", err);
-        if let ProtocolError::Overflow = err {
-          ctx.stop();
-        }
-        return;
-      },
-      Ok(msg) => msg,
-    };
-    match msg {
-      ws::Message::Ping(msg) => {
-        self.hb = Instant::now();
-        ctx.pong(&msg);
-      },
+    if let Err(err) = &msg {
+      if let ProtocolError::Overflow = err {
+        ctx.stop();
+      }
+      return;
+    }
+
+    match msg.unwrap() {
+      ws::Message::Ping(msg) => self.handle_ping(ctx, &msg),
       ws::Message::Pong(_) => self.hb = Instant::now(),
       ws::Message::Text(_) => {},
-      ws::Message::Binary(bytes) => {
-        let fut = Self::send_binary_to_server(self.user.clone(), self.server.clone(), bytes);
-        let act_fut = fut::wrap_future::<_, Self>(fut);
-        ctx.spawn(act_fut.map(|res, _act, _ctx| {
-          if let Err(e) = res {
-            error!("Error forwarding binary message: {}", e);
-          }
-        }));
-      },
-      ws::Message::Close(reason) => {
-        debug!("Websocket closing for ({:?}): {:?}", self.user.uid, reason);
-        ctx.close(reason);
-        ctx.stop();
-      },
+      ws::Message::Binary(bytes) => self.handle_binary(ctx, bytes),
+      ws::Message::Close(reason) => self.handle_close(ctx, reason),
       ws::Message::Continuation(_) => {},
       ws::Message::Nop => (),
     }

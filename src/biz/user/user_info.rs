@@ -1,6 +1,6 @@
 use anyhow::Context;
 use app_error::AppError;
-use database::workspace::{select_user_profile, select_user_workspace, select_workspace};
+use database::workspace::{select_all_user_workspaces, select_user_profile, select_workspace};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -48,7 +48,7 @@ pub async fn get_user_workspace_info(
   let user_profile = AFUserProfile::try_from(row)?;
 
   // Get all workspaces that the user can access to
-  let workspaces = select_user_workspace(txn.deref_mut(), uuid)
+  let workspaces = select_all_user_workspaces(txn.deref_mut(), uuid)
     .await?
     .into_iter()
     .flat_map(|row| AFWorkspace::try_from(row).ok())

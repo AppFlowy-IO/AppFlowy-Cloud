@@ -13,4 +13,4 @@ thiserror = "1.0.58"
 anyhow = "1.0.81"
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt", "test-util"] }
+tokio = { workspace = true, features = ["macros", "test-util"] }

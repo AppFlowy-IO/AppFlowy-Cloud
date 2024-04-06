@@ -13,9 +13,9 @@ tokio = { workspace = true, features = ["sync"] }
 tokio-stream = "0.1.14"
 tracing.workspace = true
 collab-folder.workspace = true
-collab = { workspace = true, features = ["async-plugin"] }
+collab = { workspace = true }
 collab-document.workspace = true
-client-api = { path = "../client-api", features = ["collab-sync", "test_util"] }
+client-api = { path = "../client-api", features = ["test_util"] }
 once_cell = "1.19.0"
 tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
@@ -37,3 +37,7 @@ anyhow = "1.0.80"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = ["console"] }
+
+
+[features]
+collab-sync = ["client-api/collab-sync"]

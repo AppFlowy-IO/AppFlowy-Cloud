@@ -69,7 +69,7 @@ futures.workspace = true
 semver = "1.0.22"
 
 # collab
-collab = { version = "0.1.0", features = ["async-plugin"] }
+collab = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
@@ -97,7 +97,7 @@ once_cell = "1.19.0"
 tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
 scraper = "0.17.1"
-client-api-test-util = { path = "libs/client-api-test-util" }
+client-api-test-util = { path = "libs/client-api-test-util", features = ["collab-sync"] }
 client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "sync_verbose_log","test_fast_sync"] }
 opener = "0.6.1"
 image = "0.23.14"

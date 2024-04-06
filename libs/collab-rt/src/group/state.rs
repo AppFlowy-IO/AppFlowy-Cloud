@@ -1,5 +1,5 @@
-use crate::collaborate::group::CollabGroup;
 use crate::error::RealtimeError;
+use crate::group::group_init::CollabGroup;
 
 use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;
@@ -8,7 +8,7 @@ use dashmap::try_result::TryResult;
 use dashmap::DashMap;
 
 use std::collections::HashSet;
-use std::rc::Rc;
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -16,7 +16,7 @@ use tracing::{error, event, warn};
 
 #[derive(Default, Clone)]
 pub(crate) struct GroupManagementState {
-  group_by_object_id: Rc<DashMap<String, Rc<CollabGroup>>>,
+  group_by_object_id: Arc<DashMap<String, Arc<CollabGroup>>>,
   /// Keep track of all [Collab] objects that a user is subscribed to.
   editing_by_user: Arc<DashMap<RealtimeUser, HashSet<Editing>>>,
   metrics_calculate: CollabMetricsCalculate,
@@ -25,7 +25,7 @@ pub(crate) struct GroupManagementState {
 impl GroupManagementState {
   pub(crate) fn new(metrics_calculate: CollabMetricsCalculate) -> Self {
     Self {
-      group_by_object_id: Rc::new(DashMap::new()),
+      group_by_object_id: Arc::new(DashMap::new()),
       editing_by_user: Arc::new(DashMap::new()),
       metrics_calculate,
     }
@@ -53,7 +53,7 @@ impl GroupManagementState {
     inactive_group_ids
   }
 
-  pub async fn get_group(&self, object_id: &str) -> Option<Rc<CollabGroup>> {
+  pub async fn get_group(&self, object_id: &str) -> Option<Arc<CollabGroup>> {
     let mut attempts = 0;
     let max_attempts = 3;
     let retry_delay = Duration::from_millis(100);
@@ -80,7 +80,7 @@ impl GroupManagementState {
   pub(crate) async fn get_mut_group(
     &self,
     object_id: &str,
-  ) -> Option<RefMut<String, Rc<CollabGroup>>> {
+  ) -> Option<RefMut<String, Arc<CollabGroup>>> {
     let mut attempts = 0;
     let max_attempts = 3;
     let retry_delay = Duration::from_millis(300);
@@ -102,7 +102,7 @@ impl GroupManagementState {
     }
   }
 
-  pub(crate) async fn insert_group(&self, object_id: &str, group: Rc<CollabGroup>) {
+  pub(crate) async fn insert_group(&self, object_id: &str, group: Arc<CollabGroup>) {
     self.group_by_object_id.insert(object_id.to_string(), group);
     self
       .metrics_calculate

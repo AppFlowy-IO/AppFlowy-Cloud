@@ -1,6 +1,6 @@
-use crate::collaborate::group::{EditState, MutexCollab, WeakMutexCollab};
-use crate::collaborate::sync_protocol::ServerSyncProtocol;
 use crate::error::RealtimeError;
+use crate::group::group_init::{EditState, MutexCollab, WeakMutexCollab};
+use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
 use crate::rt_server::COLLAB_RUNTIME;
 use anyhow::anyhow;

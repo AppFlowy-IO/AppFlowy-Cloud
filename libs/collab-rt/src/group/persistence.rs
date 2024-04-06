@@ -1,4 +1,4 @@
-use crate::collaborate::group::{EditState, MutexCollab, WeakMutexCollab};
+use crate::group::group_init::{EditState, MutexCollab, WeakMutexCollab};
 
 use anyhow::anyhow;
 use app_error::AppError;

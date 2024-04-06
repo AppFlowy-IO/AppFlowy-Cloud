@@ -7,9 +7,9 @@ use std::ops::{Deref, DerefMut};
 
 use std::sync::{Arc, Weak};
 
-use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
-use crate::collaborate::group_persistence::GroupPersistence;
 use crate::error::RealtimeError;
+use crate::group::broadcast::{CollabBroadcast, Subscription};
+use crate::group::persistence::GroupPersistence;
 use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
@@ -298,6 +298,8 @@ impl DerefMut for MutexCollab {
 
 unsafe impl Send for MutexCollab {}
 unsafe impl Sync for MutexCollab {}
+
+#[derive(Clone)]
 pub(crate) struct WeakMutexCollab(Weak<Mutex<Collab>>);
 impl WeakMutexCollab {
   pub(crate) fn upgrade(&self) -> Option<MutexCollab> {
@@ -309,7 +311,7 @@ unsafe impl Sync for WeakMutexCollab {}
 
 #[cfg(test)]
 mod tests {
-  use crate::collaborate::group::EditState;
+  use crate::group::group_init::EditState;
 
   #[test]
   fn edit_state_test() {

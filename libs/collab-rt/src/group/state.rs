@@ -1,5 +1,5 @@
-use crate::collaborate::group::CollabGroup;
 use crate::error::RealtimeError;
+use crate::group::group_init::CollabGroup;
 
 use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;

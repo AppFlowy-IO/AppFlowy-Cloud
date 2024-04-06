@@ -1,6 +1,6 @@
 use crate::client_msg_router::ClientMessageRouter;
-use crate::collaborate::group::{CollabGroup, MutexCollab};
-use crate::collaborate::group_manager_state::GroupManagementState;
+use crate::group::group_init::{CollabGroup, MutexCollab};
+use crate::group::state::GroupManagementState;
 
 use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
@@ -10,7 +10,8 @@ use collab::core::collab::DocStateSource;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 
-use collab::preclude::Collab;
+use crate::group::plugin::HistoryPlugin;
+use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
@@ -125,6 +126,16 @@ where
           }
         },
       };
+
+      let plugins: Vec<Box<dyn CollabPlugin>> = vec![Box::new(HistoryPlugin::new(
+        workspace_id.to_string(),
+        object_id.to_string(),
+        collab_type.clone(),
+        collab.downgrade(),
+        self.storage.clone(),
+      ))];
+
+      collab.lock().add_plugins(plugins);
       collab.lock().initialize();
       collab
     };

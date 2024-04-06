@@ -1,9 +1,9 @@
 use crate::client_msg_router::{ClientMessageRouter, RealtimeClientWebsocketSink};
-use crate::collaborate::group_cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
-use crate::collaborate::group_manager::GroupManager;
 use crate::command::{spawn_rt_command, RTCommandReceiver};
 use crate::connect_state::ConnectState;
 use crate::error::RealtimeError;
+use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
+use crate::group::manager::GroupManager;
 use crate::metrics::CollabMetricsCalculate;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeAccessControl};
 use anyhow::Result;
@@ -165,7 +165,7 @@ where
               let notify = Arc::new(Notify::new());
               let runner = GroupCommandRunner {
                 group_manager: group_manager.clone(),
-                client_msg_router_by_user: client_msg_router_by_user.clone(),
+                msg_router_by_user: client_msg_router_by_user.clone(),
                 access_control: access_control.clone(),
                 recv: Some(recv),
               };

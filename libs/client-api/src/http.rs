@@ -4,6 +4,7 @@ use shared_entity::dto::workspace_dto::{
   CreateWorkspaceParam, PatchWorkspaceParam, WorkspaceMemberInvitation,
 };
 use std::fmt::{Display, Formatter};
+#[cfg(feature = "enable_brotli")]
 use std::io::Read;
 
 use app_error::AppError;
@@ -23,7 +24,6 @@ use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
-use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 use reqwest::{header, StatusCode};
@@ -1294,11 +1294,11 @@ impl Client {
           builder
             .header(
               crate::http::X_COMPRESSION_TYPE,
-              HeaderValue::from_static(crate::http::X_COMPRESSION_TYPE_BROTLI),
+              reqwest::header::HeaderValue::from_static(crate::http::X_COMPRESSION_TYPE_BROTLI),
             )
             .header(
               crate::http::X_COMPRESSION_BUFFER_SIZE,
-              HeaderValue::from(self.config.compression_buffer_size),
+              reqwest::header::HeaderValue::from(self.config.compression_buffer_size),
             )
         })
     }

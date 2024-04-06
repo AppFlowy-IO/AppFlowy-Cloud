@@ -1,14 +1,15 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
-use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceParam, PatchWorkspaceParam, WorkspaceMemberInvitation,
 };
 use std::fmt::{Display, Formatter};
+#[cfg(feature = "enable_brotli")]
 use std::io::Read;
 
 use app_error::AppError;
 use bytes::Bytes;
+use collab_entity::CollabType;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
   AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
@@ -19,18 +20,13 @@ use database_entity::dto::{
 use futures_util::StreamExt;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
-
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
-use reqwest::{header, StatusCode};
-
-use collab_entity::CollabType;
-
-use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;
+use reqwest::{header, StatusCode};
 use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -138,6 +134,27 @@ impl Client {
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
     let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 5, 0));
+
+    #[cfg(debug_assertions)]
+    {
+      let feature_flags = [
+        ("sync_verbose_log", cfg!(feature = "sync_verbose_log")),
+        ("enable_brotli", cfg!(feature = "enable_brotli")),
+        // Add more features here as needed.
+      ];
+
+      let enabled_features: Vec<&str> = feature_flags
+        .iter()
+        .filter_map(|&(name, enabled)| if enabled { Some(name) } else { None })
+        .collect();
+
+      trace!(
+        "Client version: {}, features: {:?}",
+        client_version,
+        enabled_features
+      );
+    }
+
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
@@ -1268,20 +1285,26 @@ impl Client {
     method: Method,
     url: &str,
   ) -> Result<RequestBuilder, AppResponseError> {
-    self
-      .http_client_with_auth(method, url)
-      .await
-      .map(|builder| {
-        builder
-          .header(
-            X_COMPRESSION_TYPE,
-            HeaderValue::from_static(X_COMPRESSION_TYPE_BROTLI),
-          )
-          .header(
-            X_COMPRESSION_BUFFER_SIZE,
-            HeaderValue::from(self.config.compression_buffer_size),
-          )
-      })
+    #[cfg(feature = "enable_brotli")]
+    {
+      self
+        .http_client_with_auth(method, url)
+        .await
+        .map(|builder| {
+          builder
+            .header(
+              crate::http::X_COMPRESSION_TYPE,
+              reqwest::header::HeaderValue::from_static(crate::http::X_COMPRESSION_TYPE_BROTLI),
+            )
+            .header(
+              crate::http::X_COMPRESSION_BUFFER_SIZE,
+              reqwest::header::HeaderValue::from(self.config.compression_buffer_size),
+            )
+        })
+    }
+
+    #[cfg(not(feature = "enable_brotli"))]
+    self.http_client_with_auth(method, url).await
   }
 
   pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
@@ -1313,13 +1336,14 @@ pub(crate) fn log_request_id(resp: &reqwest::Response) {
   }
 }
 
+#[cfg(feature = "enable_brotli")]
 pub async fn spawn_blocking_brotli_compress(
   data: Vec<u8>,
   quality: u32,
   buffer_size: usize,
 ) -> Result<Vec<u8>, AppError> {
   tokio::task::spawn_blocking(move || {
-    let mut compressor = CompressorReader::new(&*data, buffer_size, quality, 22);
+    let mut compressor = brotli::CompressorReader::new(&*data, buffer_size, quality, 22);
     let mut compressed_data = Vec::new();
     compressor
       .read_to_end(&mut compressed_data)
@@ -1328,4 +1352,13 @@ pub async fn spawn_blocking_brotli_compress(
   })
   .await
   .map_err(AppError::from)?
+}
+
+#[cfg(not(feature = "enable_brotli"))]
+pub async fn spawn_blocking_brotli_compress(
+  data: Vec<u8>,
+  _quality: u32,
+  _buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  Ok(data)
 }

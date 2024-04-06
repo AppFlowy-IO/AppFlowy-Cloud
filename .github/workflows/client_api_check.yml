@@ -27,7 +27,7 @@ jobs:
 
       - name: Build ClientAPI
         working-directory: ./libs/client-api
-        run: cargo build
+        run: cargo build --features "enable_brotli"
 
       - name: Build ClientAPI WASM
         working-directory: ./libs/client-api

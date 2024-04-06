@@ -22,7 +22,7 @@ serde_json.workspace = true
 redis = { version = "0.25.2", features = [ "aio", "tokio-comp", "connection-manager"] }
 uuid = { version = "1.6", features = ["v4"] }
 dotenvy = "0.15"
-reqwest = "0.11"
+reqwest = "0.11.27"
 tower-service = "0.3"
 tower-http = { version = "0.5", features = ["cors", "fs"] }
 tower = "0.4"

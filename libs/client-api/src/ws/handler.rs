@@ -11,6 +11,7 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{trace, warn};
 
 pub struct WebSocketChannel<T> {
+  #[allow(dead_code)]
   object_id: String,
   rt_msg_sender: Sender<Vec<ClientCollabMessage>>,
   receiver: Sender<T>,
@@ -49,6 +50,7 @@ where
   pub fn sink(&self) -> BroadcastSink<Vec<ClientCollabMessage>> {
     let (tx, mut rx) = unbounded_channel::<Vec<ClientCollabMessage>>();
     let cloned_sender = self.rt_msg_sender.clone();
+    #[cfg(feature = "sync_verbose_log")]
     let object_id = self.object_id.clone();
     af_spawn(async move {
       while let Some(msg) = rx.recv().await {
@@ -65,6 +67,7 @@ where
   pub fn stream(&self) -> UnboundedReceiverStream<Result<T, anyhow::Error>> {
     let (tx, rx) = unbounded_channel::<Result<T, anyhow::Error>>();
     let mut recv = self.receiver.subscribe();
+    #[cfg(feature = "sync_verbose_log")]
     let object_id = self.object_id.clone();
     af_spawn(async move {
       while let Ok(msg) = recv.recv().await {

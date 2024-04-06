@@ -8,7 +8,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-reqwest = { version = "0.11.23", default-features = false, features = ["stream","json"] }
+reqwest = { version = "0.11.27", features = ["stream","json"] }
 anyhow = "1.0.79"
 serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
@@ -21,7 +21,7 @@ uuid = "1.6.1"
 futures-util = "0.3.30"
 futures-core = "0.3.30"
 parking_lot = "0.12.1"
-brotli = "3.4.0"
+brotli = { version = "3.4.0", optional = true }
 async-trait = { version = "0.1.77" }
 prost = "0.12.3"
 bincode = "1.3.3"
@@ -68,3 +68,4 @@ test_util = ["scraper"]
 template = ["workspace-template"]
 sync_verbose_log = []
 test_fast_sync = []
+enable_brotli = ["brotli"]

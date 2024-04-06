@@ -7,7 +7,7 @@ use database::collab::CollabStorage;
 use database_entity::dto::InsertSnapshotParams;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, trace};
 use yrs::TransactionMut;
 
 /// [HistoryPlugin] will be moved to history collab server. For now, it's temporarily placed here.
@@ -83,8 +83,9 @@ where
               workspace_id,
               collab_type,
             };
-            if let Err(err) = storage.queue_snapshot(params).await {
-              error!("Failed to create snapshot: {:?}", err);
+            match storage.queue_snapshot(params).await {
+              Ok(_) => trace!("Successfully queued snapshot creation"),
+              Err(err) => error!("Failed to create snapshot: {:?}", err),
             }
           },
           Err(e) => error!("Failed to encode collaboration data: {:?}", e),

@@ -4,6 +4,7 @@ use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
 use bytes::Bytes;
+#[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::{DocStateSource, MutexCollab};
@@ -475,7 +476,7 @@ impl TestClient {
     object_id
   }
 
-  #[allow(clippy::await_holding_lock)]
+  #[allow(unused_variables)]
   pub async fn create_and_edit_collab_with_data(
     &mut self,
     object_id: String,
@@ -484,8 +485,6 @@ impl TestClient {
     encoded_collab_v1: Option<EncodedCollab>,
   ) {
     // Subscribe to object
-    let handler = self.ws_client.subscribe_collab(object_id.clone()).unwrap();
-    let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = match encoded_collab_v1 {
       None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![], false)),
@@ -518,25 +517,28 @@ impl TestClient {
       .await
       .unwrap();
 
-    let ws_connect_state = self.ws_client.subscribe_connect_state();
-    let object = SyncObject::new(&object_id, workspace_id, collab_type, &self.device_id);
-    let sync_plugin = SyncPlugin::new(
-      origin.clone(),
-      object,
-      Arc::downgrade(&collab),
-      sink,
-      SinkConfig::default(),
-      stream,
-      Some(handler),
-      !self.ws_client.is_connected(),
-      ws_connect_state,
-    );
-
-    collab.lock().add_plugin(Box::new(sync_plugin));
-    collab.lock().initialize().await;
+    #[cfg(feature = "collab-sync")]
+    {
+      let handler = self.ws_client.subscribe_collab(object_id.clone()).unwrap();
+      let (sink, stream) = (handler.sink(), handler.stream());
+      let ws_connect_state = self.ws_client.subscribe_connect_state();
+      let object = SyncObject::new(&object_id, workspace_id, collab_type, &self.device_id);
+      let sync_plugin = SyncPlugin::new(
+        origin.clone(),
+        object,
+        Arc::downgrade(&collab),
+        sink,
+        SinkConfig::default(),
+        stream,
+        Some(handler),
+        !self.ws_client.is_connected(),
+        ws_connect_state,
+      );
+      collab.lock().add_plugin(Box::new(sync_plugin));
+    }
+    collab.lock().initialize();
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.clone(), test_collab);
-
     self.wait_object_sync_complete(&object_id).await.unwrap();
   }
 
@@ -558,7 +560,7 @@ impl TestClient {
       .await
   }
 
-  #[allow(clippy::await_holding_lock)]
+  #[allow(unused_variables)]
   pub async fn open_collab_with_doc_state(
     &mut self,
     workspace_id: &str,
@@ -567,11 +569,6 @@ impl TestClient {
     doc_state: Vec<u8>,
   ) {
     // Subscribe to object
-    let handler = self
-      .ws_client
-      .subscribe_collab(object_id.to_string())
-      .unwrap();
-    let (sink, stream) = (handler.sink(), handler.stream());
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = Arc::new(
       MutexCollab::new_with_doc_state(
@@ -585,22 +582,30 @@ impl TestClient {
     );
     collab.lock().emit_awareness_state();
 
-    let ws_connect_state = self.ws_client.subscribe_connect_state();
-    let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
-    let sync_plugin = SyncPlugin::new(
-      origin.clone(),
-      object,
-      Arc::downgrade(&collab),
-      sink,
-      SinkConfig::default(),
-      stream,
-      Some(handler),
-      !self.ws_client.is_connected(),
-      ws_connect_state,
-    );
+    #[cfg(feature = "collab-sync")]
+    {
+      let handler = self
+        .ws_client
+        .subscribe_collab(object_id.to_string())
+        .unwrap();
+      let (sink, stream) = (handler.sink(), handler.stream());
+      let ws_connect_state = self.ws_client.subscribe_connect_state();
+      let object = SyncObject::new(object_id, workspace_id, collab_type, &self.device_id);
+      let sync_plugin = SyncPlugin::new(
+        origin.clone(),
+        object,
+        Arc::downgrade(&collab),
+        sink,
+        SinkConfig::default(),
+        stream,
+        Some(handler),
+        !self.ws_client.is_connected(),
+        ws_connect_state,
+      );
 
-    collab.lock().add_plugin(Box::new(sync_plugin));
-    futures::executor::block_on(collab.lock().initialize());
+      collab.lock().add_plugin(Box::new(sync_plugin));
+    }
+    collab.lock().initialize();
     let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.to_string(), test_collab);
   }

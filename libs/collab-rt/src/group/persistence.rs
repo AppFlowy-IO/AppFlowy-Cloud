@@ -1,4 +1,4 @@
-use crate::collaborate::group::{EditState, MutexCollab, WeakMutexCollab};
+use crate::group::group_init::{EditState, MutexCollab, WeakMutexCollab};
 
 use anyhow::anyhow;
 use app_error::AppError;
@@ -70,9 +70,7 @@ where
   }
 
   async fn force_save(&self, collab: MutexCollab) {
-    let lock_guard = collab.lock().await;
-    let result = get_encode_collab(&self.object_id, &lock_guard, &self.collab_type);
-    drop(lock_guard);
+    let result = get_encode_collab(&self.object_id, &collab.lock(), &self.collab_type);
 
     match result {
       Ok(params) => {
@@ -106,12 +104,12 @@ where
     }
 
     // Attempt to lock the collab; skip saving if unable
-    let lock_guard = match collab.try_lock() {
-      Ok(lock) => lock,
-      Err(_) => return false,
+    let result = {
+      match collab.try_lock() {
+        Some(lock) => get_encode_collab(&self.object_id, &lock, &self.collab_type),
+        None => return false,
+      }
     };
-    let result = get_encode_collab(&self.object_id, &lock_guard, &self.collab_type);
-    drop(lock_guard);
 
     match result {
       Ok(params) => {

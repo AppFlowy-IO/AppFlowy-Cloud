@@ -4,21 +4,23 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use std::ops::{Deref, DerefMut};
-use std::rc::{Rc, Weak};
-use std::sync::Arc;
 
-use crate::collaborate::group_broadcast::{CollabBroadcast, Subscription};
-use crate::collaborate::group_persistence::GroupPersistence;
+use std::sync::{Arc, Weak};
+
 use crate::error::RealtimeError;
+use crate::group::broadcast::{CollabBroadcast, Subscription};
+use crate::group::persistence::GroupPersistence;
 use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
 
+use crate::rt_server::COLLAB_RUNTIME;
 use futures_util::{SinkExt, StreamExt};
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tracing::{event, trace};
 
 /// A group used to manage a single [Collab] object
@@ -49,7 +51,7 @@ impl CollabGroup {
     workspace_id: String,
     object_id: String,
     collab_type: CollabType,
-    mut collab: Collab,
+    collab: MutexCollab,
     metrics_calculate: CollabMetricsCalculate,
     storage: Arc<S>,
   ) -> Self
@@ -57,19 +59,17 @@ impl CollabGroup {
     S: CollabStorage,
   {
     let edit_state = Arc::new(EditState::new(100, 600));
-    let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone());
-    broadcast.observe_collab_changes(&mut collab).await;
+    let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone(), &collab).await;
     let (destroy_group_tx, rx) = mpsc::channel(1);
-    let arc_collab = MutexCollab::new(collab);
 
-    tokio::task::spawn_local(
+    COLLAB_RUNTIME.spawn(
       GroupPersistence::new(
         workspace_id.clone(),
         object_id.clone(),
         uid,
         storage,
         edit_state.clone(),
-        arc_collab.downgrade(),
+        collab.downgrade(),
         collab_type.clone(),
       )
       .run(rx),
@@ -79,7 +79,7 @@ impl CollabGroup {
       workspace_id,
       object_id,
       collab_type,
-      collab: arc_collab,
+      collab,
       broadcast,
       subscribers: Default::default(),
       metrics_calculate,
@@ -88,9 +88,10 @@ impl CollabGroup {
   }
 
   pub async fn encode_collab(&self) -> Result<EncodedCollab, RealtimeError> {
-    let lock_guard = self.collab.lock().await;
-    let encode_collab =
-      lock_guard.try_encode_collab_v1(|collab| self.collab_type.validate(collab))?;
+    let encode_collab = self
+      .collab
+      .lock()
+      .try_encode_collab_v1(|collab| self.collab_type.validate(collab))?;
     Ok(encode_collab)
   }
 
@@ -269,20 +270,20 @@ impl EditState {
 /// [MutexCollab] is a wrapper around [Rc] and [Mutex] to allow for shared ownership of a [Collab]
 /// It does nothing just impl [Send] and [Sync] for [Collab]
 #[derive(Clone)]
-pub(crate) struct MutexCollab(Rc<Mutex<Collab>>);
+pub(crate) struct MutexCollab(Arc<Mutex<Collab>>);
 impl MutexCollab {
   pub(crate) fn new(collab: Collab) -> Self {
     #[allow(clippy::arc_with_non_send_sync)]
-    Self(Rc::new(Mutex::new(collab)))
+    Self(Arc::new(Mutex::new(collab)))
   }
 
   pub(crate) fn downgrade(&self) -> WeakMutexCollab {
-    WeakMutexCollab(Rc::downgrade(&self.0))
+    WeakMutexCollab(Arc::downgrade(&self.0))
   }
 }
 
 impl Deref for MutexCollab {
-  type Target = Rc<Mutex<Collab>>;
+  type Target = Arc<Mutex<Collab>>;
 
   fn deref(&self) -> &Self::Target {
     &self.0
@@ -297,16 +298,20 @@ impl DerefMut for MutexCollab {
 
 unsafe impl Send for MutexCollab {}
 unsafe impl Sync for MutexCollab {}
+
+#[derive(Clone)]
 pub(crate) struct WeakMutexCollab(Weak<Mutex<Collab>>);
 impl WeakMutexCollab {
   pub(crate) fn upgrade(&self) -> Option<MutexCollab> {
     self.0.upgrade().map(MutexCollab)
   }
 }
+unsafe impl Send for WeakMutexCollab {}
+unsafe impl Sync for WeakMutexCollab {}
 
 #[cfg(test)]
 mod tests {
-  use crate::collaborate::group::EditState;
+  use crate::group::group_init::EditState;
 
   #[test]
   fn edit_state_test() {

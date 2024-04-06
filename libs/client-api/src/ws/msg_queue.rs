@@ -6,7 +6,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::{sleep_until, Instant};
-use tracing::{debug, error, trace};
+use tracing::{error, trace};
 
 pub type AggregateMessagesSender = mpsc::Sender<Message>;
 pub type AggregateMessagesReceiver = mpsc::Receiver<Message>;
@@ -89,6 +89,7 @@ async fn handle_tick(
   }
 
   if cfg!(debug_assertions) {
+    #[cfg(feature = "sync_verbose_log")]
     log_message_map(&messages_map);
   }
 
@@ -169,6 +170,7 @@ async fn next_batch_message(
 }
 
 #[inline]
+#[cfg(feature = "sync_verbose_log")]
 fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
   // Define start and end signs
   let start_sign = "----- Start of Message List -----";
@@ -188,9 +190,7 @@ fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
 
   // Prepend the start sign and append the end sign to the log message
   let log_msg = format!("{}\n{}\n{}", start_sign, log_msg, end_sign);
-
-  #[cfg(feature = "sync_verbose_log")]
-  debug!("Aggregate message list:\n{}", log_msg);
+  tracing::debug!("Aggregate message list:\n{}", log_msg);
 }
 
 #[derive(Eq, PartialEq, Hash)]

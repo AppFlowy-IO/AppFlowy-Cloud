@@ -7,11 +7,6 @@ edition = "2018"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-
-[features]
-default = []
-
-
 [dependencies]
 wasm-bindgen = "0.2.84"
 
@@ -30,6 +25,7 @@ tracing.workspace = true
 tracing-core = { version = "0.1.32" }
 tracing-wasm = "0.2.1"
 uuid.workspace = true
+wee_alloc = { version = "0.4.5", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
@@ -37,3 +33,8 @@ wasm-bindgen-test = "0.3.34"
 [profile.release]
 # Tell `rustc` to optimize for small code size.
 opt-level = "s"
+
+
+[features]
+default = []
+enable_wee_alloc = ["wee_alloc"]

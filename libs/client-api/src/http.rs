@@ -137,16 +137,21 @@ impl Client {
 
     #[cfg(debug_assertions)]
     {
-      let mut features = vec![];
-      #[cfg(feature = "sync_verbose_log")]
-      features.push("sync_verbose_log");
-      #[cfg(feature = "enable_brotli")]
-      features.push("enable_brotli");
+      let feature_flags = [
+        ("sync_verbose_log", cfg!(feature = "sync_verbose_log")),
+        ("enable_brotli", cfg!(feature = "enable_brotli")),
+        // Add more features here as needed.
+      ];
+
+      let enabled_features: Vec<&str> = feature_flags
+        .iter()
+        .filter_map(|&(name, enabled)| if enabled { Some(name) } else { None })
+        .collect();
 
       trace!(
         "Client version: {}, features: {:?}",
         client_version,
-        features
+        enabled_features
       );
     }
 

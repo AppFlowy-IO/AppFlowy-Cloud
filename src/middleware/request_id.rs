@@ -1,11 +1,10 @@
-use actix_http::header::HeaderName;
+use actix_http::header::{HeaderName, HeaderValue};
 use std::future::{ready, Ready};
 use tracing::{span, Instrument, Level};
 
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use futures_util::future::LocalBoxFuture;
-use reqwest::header::HeaderValue;
 
 const X_REQUEST_ID: &str = "x-request-id";
 pub struct RequestIdMiddleware;

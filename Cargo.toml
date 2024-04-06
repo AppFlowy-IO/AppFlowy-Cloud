@@ -7,10 +7,10 @@ edition = "2021"
 
 [dependencies]
 actix = "0.13.3"
-actix-web = { version = "4.4.1", default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
+actix-web = { version = "4.5.1", default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-http = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-rt = "2.9.0"
-actix-web-actors = { version = "4.2.0" }
+actix-web-actors = { version = "4.3" }
 actix-service = "2.0.2"
 actix-identity = "0.6.0"
 actix-router = "0.5.2"
@@ -164,7 +164,7 @@ bytes = "1.5.0"
 workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4"] }
 anyhow = "1.0.79"
-actix-http = { version = "3.5.1", default-features = false }
+actix-http = { version = "3.6.0", default-features = false }
 tokio = { version = "1.36.0", features = ["sync"] }
 tokio-stream = "0.1.14"
 futures-util = "0.3.30"

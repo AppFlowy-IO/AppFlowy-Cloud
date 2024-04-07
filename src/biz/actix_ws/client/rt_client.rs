@@ -1,20 +1,17 @@
 use crate::biz::actix_ws::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
-use crate::biz::actix_ws::server::RealtimeServerActor;
 use actix::{
-  fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, ContextFutureSpawner, Handler,
-  MailboxError, Recipient, Running, StreamHandler, WrapFuture,
+  fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, ContextFutureSpawner,
+  Handler, MailboxError, Recipient, ResponseFuture, Running, StreamHandler, WrapFuture,
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
-
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab_rt::error::RealtimeError;
-use collab_rt::{RealtimeAccessControl, RealtimeClientWebsocketSink};
-use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
+use collab_rt::RealtimeClientWebsocketSink;
+use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::SystemMessage;
-use database::collab::CollabStorage;
-use database::pg_row::AFUserNotification;
+
 use governor::clock::DefaultClock;
 use governor::middleware::NoOpMiddleware;
 use governor::state::{InMemoryState, NotKeyed};
@@ -23,34 +20,42 @@ use semver::Version;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
+use tokio::sync::mpsc;
 use tracing::{debug, error, trace, warn};
 
+pub type HandlerResult = ResponseFuture<anyhow::Result<(), RealtimeError>>;
+pub trait RealtimeServer:
+  Actor<Context = Context<Self>>
+  + Handler<ClientMessage, Result = HandlerResult>
+  + Handler<Connect, Result = HandlerResult>
+  + Handler<Disconnect, Result = HandlerResult>
+{
+}
+
 type WSRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
-pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl> {
+pub struct RealtimeClient<S: RealtimeServer> {
   user: RealtimeUser,
   hb: Instant,
-  pub server: Addr<RealtimeServerActor<S, AC>>,
+  pub server: Addr<S>,
   heartbeat_interval: Duration,
   client_timeout: Duration,
-  user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
+  external_source: Option<mpsc::Receiver<RealtimeMessage>>,
   #[allow(dead_code)]
   client_version: Version,
   rate_limiter: Arc<WSRateLimiter>,
 }
 
-impl<S, AC> RealtimeClient<S, AC>
+impl<S> RealtimeClient<S>
 where
-  S: CollabStorage + Unpin,
-  AC: RealtimeAccessControl + Unpin,
+  S: RealtimeServer,
 {
   pub fn new(
     user: RealtimeUser,
-    user_change_recv: tokio::sync::mpsc::Receiver<AFUserNotification>,
-    server: Addr<RealtimeServerActor<S, AC>>,
+    server: Addr<S>,
     heartbeat_interval: Duration,
     client_timeout: Duration,
     client_version: Version,
+    external_source: mpsc::Receiver<RealtimeMessage>,
   ) -> Self {
     let rate_limiter = gen_rate_limiter(20);
     Self {
@@ -59,7 +64,7 @@ where
       server,
       heartbeat_interval,
       client_timeout,
-      user_change_recv: Some(user_change_recv),
+      external_source: Some(external_source),
       client_version,
       rate_limiter: Arc::new(rate_limiter),
     }
@@ -85,12 +90,11 @@ where
   }
 }
 
-impl<S, AC> RealtimeClient<S, AC>
+impl<S> RealtimeClient<S>
 where
-  AC: RealtimeAccessControl + Unpin,
-  S: CollabStorage + Unpin,
+  S: RealtimeServer,
 {
-  fn handle_binary(&mut self, _ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, bytes: Bytes) {
+  fn handle_binary(&mut self, _ctx: &mut WebsocketContext<RealtimeClient<S>>, bytes: Bytes) {
     match RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal) {
       Ok(message) => {
         let client_message = ClientMessage {
@@ -119,14 +123,14 @@ where
     }
   }
 
-  fn handle_ping(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, msg: &Bytes) {
+  fn handle_ping(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S>>, msg: &Bytes) {
     self.hb = Instant::now();
     ctx.pong(msg);
   }
 
   fn handle_close(
     &mut self,
-    ctx: &mut WebsocketContext<RealtimeClient<S, AC>>,
+    ctx: &mut WebsocketContext<RealtimeClient<S>>,
     reason: Option<CloseReason>,
   ) {
     debug!("Websocket closing for ({:?}): {:?}", self.user.uid, reason);
@@ -135,53 +139,37 @@ where
   }
 }
 
-impl<S, P> Actor for RealtimeClient<S, P>
+impl<S> Actor for RealtimeClient<S>
 where
-  S: Unpin + CollabStorage,
-  P: RealtimeAccessControl + Unpin,
+  S: RealtimeServer,
 {
   type Context = ws::WebsocketContext<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
     self.hb(ctx);
     let recipient = ctx.address().recipient();
-    if let Some(mut recv) = self.user_change_recv.take() {
+    if let Some(mut external_source) = self.external_source.take() {
       actix::spawn(async move {
-        while let Some(notification) = recv.recv().await {
-          // Extract the user object from the notification payload.
-          if let Some(user) = notification.payload {
-            trace!("Receive user change: {:?}", user);
-            // Since bincode serialization is used for RealtimeMessage but does not support the
-            // Serde `deserialize_any` method, the user metadata is serialized into a JSON string.
-            // This step ensures compatibility and flexibility for the metadata field.
-            let metadata = serde_json::to_string(&user.metadata).ok();
-
-            // Construct a UserMessage with the user's details, including the serialized metadata.
-            let msg = UserMessage::ProfileChange(AFUserChange {
-              uid: user.uid,
-              name: user.name,
-              email: user.email,
-              metadata,
-            });
-
-            // Attempt to send the constructed message to the recipient. Handle errors appropriately,
-            // notably breaking out of the loop if the recipient's mailbox is closed, indicating
-            // that no further messages can be sent.
-            if let Err(err) = recipient.send(RealtimeMessage::User(msg)).await {
-              match err {
-                MailboxError::Closed => {
-                  // If the recipient's mailbox is closed, stop listening for further notifications.
-                  break;
-                },
-                MailboxError::Timeout => {
-                  // Log a timeout error if the message could not be sent within the expected time frame.
-                  error!("User change message recipient send timeout");
-                },
-              }
+        while let Some(message) = external_source.recv().await {
+          // Attempt to send the constructed message to the recipient. Handle errors appropriately,
+          // notably breaking out of the loop if the recipient's mailbox is closed, indicating
+          // that no further messages can be sent.
+          if let Err(err) = recipient.send(message).await {
+            match err {
+              MailboxError::Closed => {
+                // If the recipient's mailbox is closed, stop listening for further notifications.
+                break;
+              },
+              MailboxError::Timeout => {
+                // Log a timeout error if the message could not be sent within the expected time frame.
+                error!("User change message recipient send timeout");
+              },
             }
           }
         }
       });
+    } else {
+      error!("External source is empty, it should be only called once");
     }
 
     // Asynchronously sends a `Connect` message to the server actor, indicating a new websocket connection attempt.
@@ -230,10 +218,9 @@ where
 }
 
 /// Handle message sent from the server
-impl<S, AC> Handler<RealtimeMessage> for RealtimeClient<S, AC>
+impl<S> Handler<RealtimeMessage> for RealtimeClient<S>
 where
-  S: Unpin + CollabStorage,
-  AC: RealtimeAccessControl + Unpin,
+  S: RealtimeServer,
 {
   type Result = ();
 
@@ -254,10 +241,9 @@ where
 }
 
 /// Handle the messages sent from the client
-impl<S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<S, AC>
+impl<S> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<S>
 where
-  S: Unpin + CollabStorage,
-  AC: RealtimeAccessControl + Unpin,
+  S: RealtimeServer,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     if self.rate_limiter.check().is_err() {

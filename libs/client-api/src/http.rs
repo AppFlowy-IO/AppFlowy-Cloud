@@ -359,14 +359,14 @@ impl Client {
   }
 
   #[inline]
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppResponseError> {
     let user = self.gotrue_client.user_info(access_token).await?;
     let is_new = self.verify_token_cloud(access_token).await?;
     Ok((user, is_new))
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   #[inline]
   async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppResponseError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
@@ -376,7 +376,7 @@ impl Client {
   }
 
   // Invites another user by sending a magic link to the user's email address.
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn invite(&self, email: &str) -> Result<(), AppResponseError> {
     self
       .gotrue_client
@@ -391,7 +391,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_user(&self, email: &str, password: &str) -> Result<User, AppResponseError> {
     Ok(
       self
@@ -409,7 +409,7 @@ impl Client {
     )
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_email_verified_user(
     &self,
     email: &str,
@@ -501,7 +501,7 @@ impl Client {
     }
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_profile(&self) -> Result<AFUserProfile, AppResponseError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
@@ -515,7 +515,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_user_workspace_info(&self) -> Result<AFUserWorkspaceInfo, AppResponseError> {
     let url = format!("{}/api/user/workspace", self.base_url);
     let resp = self
@@ -529,7 +529,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}", self.base_url, workspace_id);
     let resp = self
@@ -542,7 +542,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_workspace(
     &self,
     params: CreateWorkspaceParam,
@@ -560,7 +560,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn patch_workspace(&self, params: PatchWorkspaceParam) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
@@ -573,7 +573,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
@@ -587,7 +587,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace/{}/open", self.base_url, workspace_id);
     let resp = self
@@ -601,7 +601,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn leave_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}/leave", self.base_url, workspace_id);
     let resp = self
@@ -614,7 +614,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_members<W: AsRef<str>>(
     &self,
     workspace_id: W,
@@ -635,6 +635,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all, err)]
   pub async fn invite_workspace_members(
     &self,
     workspace_id: &str,
@@ -652,6 +653,7 @@ impl Client {
     Ok(())
   }
 
+  #[instrument(level = "info", skip_all, err)]
   pub async fn list_workspace_invitations(
     &self,
     status: Option<AFWorkspaceInvitationStatus>,
@@ -687,7 +689,7 @@ impl Client {
   }
 
   #[deprecated(note = "use invite_workspace_members instead")]
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,
     workspace_id: W,
@@ -710,7 +712,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_workspace_member<T: AsRef<str>>(
     &self,
     workspace_id: T,
@@ -732,7 +734,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn remove_workspace_members<T: AsRef<str>>(
     &self,
     workspace_id: T,
@@ -775,7 +777,7 @@ impl Client {
     Ok(is_new)
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
     match self.gotrue_client.sign_up(email, password, None).await? {
       Authenticated(access_token_resp) => {
@@ -789,14 +791,14 @@ impl Client {
     }
   }
 
-  #[instrument(level = "debug", skip_all)]
+  #[instrument(level = "info", skip_all)]
   pub async fn sign_out(&self) -> Result<(), AppResponseError> {
     self.gotrue_client.logout(&self.access_token()?).await?;
     self.token.write().unset();
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_user(&self, params: UpdateUserParams) -> Result<(), AppResponseError> {
     let gotrue_params = UpdateGotrueUserParams::new()
       .with_opt_email(params.email.clone())
@@ -822,7 +824,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_collab(&self, params: CreateCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
@@ -918,7 +920,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_collab(&self, params: CreateCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
@@ -934,7 +936,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn batch_get_collab(
     &self,
     workspace_id: &str,
@@ -957,7 +959,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
@@ -973,7 +975,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn add_collab_member(
     &self,
     params: InsertCollabMemberParams,
@@ -992,7 +994,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_collab_member(
     &self,
     params: CollabMemberIdentify,
@@ -1013,7 +1015,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_collab_member(
     &self,
     params: UpdateCollabMemberParams,
@@ -1032,7 +1034,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn remove_collab_member(
     &self,
     params: CollabMemberIdentify,
@@ -1051,7 +1053,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_collab_members(
     &self,
     params: QueryCollabMembers,
@@ -1072,6 +1074,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all)]
   pub fn ws_url(&self) -> String {
     format!("{}/v1", self.ws_addr)
   }
@@ -1095,6 +1098,7 @@ impl Client {
     )
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn put_blob<T: Into<Bytes>>(
     &self,
     url: &str,
@@ -1119,6 +1123,7 @@ impl Client {
   }
 
   /// Only expose this method for testing
+  #[instrument(level = "info", skip_all)]
   #[cfg(debug_assertions)]
   pub async fn put_blob_with_content_length<T: Into<Bytes>>(
     &self,
@@ -1143,6 +1148,7 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
+  #[instrument(level = "info", skip_all)]
   pub async fn get_blob(&self, url: &str) -> Result<(Mime, Vec<u8>), AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::GET, url)
@@ -1191,6 +1197,7 @@ impl Client {
     }
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn get_blob_metadata(&self, url: &str) -> Result<BlobMetadata, AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::GET, url)
@@ -1204,6 +1211,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn delete_blob(&self, url: &str) -> Result<(), AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::DELETE, url)
@@ -1214,6 +1222,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn get_workspace_usage(
     &self,
     workspace_id: &str,
@@ -1307,6 +1316,7 @@ impl Client {
     self.http_client_with_auth(method, url).await
   }
 
+  #[instrument(level = "info", skip_all)]
   pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
     format!(
       "{}/api/workspace/{}/batch/collab",

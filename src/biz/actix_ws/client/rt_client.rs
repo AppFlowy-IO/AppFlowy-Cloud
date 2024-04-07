@@ -6,7 +6,7 @@ use actix::{
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
-use anyhow::anyhow;
+
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab_rt::error::RealtimeError;
@@ -23,12 +23,8 @@ use semver::Version;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-use tokio::time::sleep;
-use tracing::{debug, error, trace, warn};
 
-const MAX_MESSAGES_PER_INTERVAL: usize = 10;
-const RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
+use tracing::{debug, error, trace, warn};
 
 type WSRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
 pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl> {
@@ -38,11 +34,9 @@ pub struct RealtimeClient<S: Unpin + 'static, AC: Unpin + RealtimeAccessControl>
   heartbeat_interval: Duration,
   client_timeout: Duration,
   user_change_recv: Option<tokio::sync::mpsc::Receiver<AFUserNotification>>,
-  message_count: usize,
-  interval_start: Instant,
   #[allow(dead_code)]
   client_version: Version,
-  rate_limiter: Arc<RwLock<WSRateLimiter>>,
+  rate_limiter: Arc<WSRateLimiter>,
 }
 
 impl<S, AC> RealtimeClient<S, AC>
@@ -58,7 +52,7 @@ where
     client_timeout: Duration,
     client_version: Version,
   ) -> Self {
-    let rate_limiter = gen_rate_limiter(10);
+    let rate_limiter = gen_rate_limiter(20);
     Self {
       user,
       hb: Instant::now(),
@@ -66,10 +60,8 @@ where
       heartbeat_interval,
       client_timeout,
       user_change_recv: Some(user_change_recv),
-      message_count: 0,
-      interval_start: Instant::now(),
       client_version,
-      rate_limiter: Arc::new(RwLock::new(rate_limiter)),
+      rate_limiter: Arc::new(rate_limiter),
     }
   }
 
@@ -91,44 +83,6 @@ where
       ctx.ping(b"");
     });
   }
-
-  async fn send_binary_to_server(
-    user: RealtimeUser,
-    server: Addr<RealtimeServerActor<S, AC>>,
-    bytes: Bytes,
-  ) -> Result<(), RealtimeError> {
-    let message = RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal)?;
-    let mut client_message = Some(ClientMessage {
-      user: user.clone(),
-      message,
-    });
-    let mut attempts = 0;
-    const MAX_RETRIES: usize = 3;
-    const RETRY_DELAY: Duration = Duration::from_millis(500);
-    while attempts < MAX_RETRIES {
-      if let Some(message_to_send) = client_message.take() {
-        match server.try_send(message_to_send) {
-          Ok(_) => return Ok(()),
-          Err(err) if attempts < MAX_RETRIES - 1 => {
-            client_message = Some(err.into_inner());
-            attempts += 1;
-            sleep(RETRY_DELAY).await;
-          },
-          Err(err) => {
-            return Err(RealtimeError::Internal(anyhow!(
-              "Failed to send message to server after retries: {:?}",
-              err
-            )));
-          },
-        }
-      } else {
-        return Err(RealtimeError::Internal(anyhow!(
-          "Unexpected empty client message"
-        )));
-      }
-    }
-    Ok(())
-  }
 }
 
 impl<S, AC> RealtimeClient<S, AC>
@@ -136,14 +90,33 @@ where
   AC: RealtimeAccessControl + Unpin,
   S: CollabStorage + Unpin,
 {
-  fn handle_binary(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, bytes: Bytes) {
-    let fut = Self::send_binary_to_server(self.user.clone(), self.server.clone(), bytes);
-    let act_fut = fut::wrap_future::<_, Self>(fut);
-    ctx.spawn(act_fut.map(|res, _act, _ctx| {
-      if let Err(e) = res {
-        error!("Error forwarding binary message: {}", e);
-      }
-    }));
+  fn handle_binary(&mut self, _ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, bytes: Bytes) {
+    match RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal) {
+      Ok(message) => {
+        let client_message = ClientMessage {
+          user: self.user.clone(),
+          message,
+        };
+        if let Err(err) = self.server.try_send(client_message) {
+          warn!("Error sending message to server: {}", err);
+        }
+
+        // let server = self.server.clone();
+        // let fut = async move {
+        //   server.try_send(client_message);
+        //   Ok::<(), RealtimeError>(())
+        // };
+        // let act_fut = fut::wrap_future::<_, Self>(fut);
+        // ctx.spawn(act_fut.map(|res, _act, _ctx| {
+        //   if let Err(e) = res {
+        //     error!("Handle realtime message error: {}", e);
+        //   }
+        // }));
+      },
+      Err(err) => {
+        error!("Error decoding message: {}", err);
+      },
+    }
   }
 
   fn handle_ping(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S, AC>>, msg: &Bytes) {
@@ -221,8 +194,6 @@ where
         })
         // Converts the future into an actor future, allowing it to be handled within the actor context.
         .into_actor(self)
-        // Process the server response. The result `res` can be either an acknowledgement (Ok) or an error (Err).
-        // The `then` combinator is used to handle these outcomes and decide on subsequent actions.
         .then(|res, _session, ctx| {
           match res {
             // In case of successful connection acknowledgement from the server,
@@ -266,23 +237,21 @@ where
 {
   type Result = ();
 
-  fn handle(&mut self, msg: RealtimeMessage, ctx: &mut Self::Context) {
-    if let RealtimeMessage::System(SystemMessage::DuplicateConnection) = &msg {
+  fn handle(&mut self, message: RealtimeMessage, ctx: &mut Self::Context) {
+    match message.encode() {
+      Ok(data) => ctx.binary(Bytes::from(data)),
+      Err(err) => error!("Error encoding message: {}", err),
+    }
+
+    if let RealtimeMessage::System(SystemMessage::DuplicateConnection) = &message {
       let reason = CloseReason {
         code: CloseCode::Normal,
         description: Some("Duplicate connection".to_string()),
       };
       ctx.close(Some(reason));
-      ctx.stop();
-    }
-
-    match msg.encode() {
-      Ok(data) => ctx.binary(Bytes::from(data)),
-      Err(err) => error!("Error encoding message: {}", err),
     }
   }
 }
-// self.rate_limiter.read().await.until_ready().fuse().await;
 
 /// Handle the messages sent from the client
 impl<S, AC> StreamHandler<Result<ws::Message, ws::ProtocolError>> for RealtimeClient<S, AC>
@@ -291,15 +260,8 @@ where
   AC: RealtimeAccessControl + Unpin,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-    let now = Instant::now();
-    if now.duration_since(self.interval_start) > RATE_LIMIT_INTERVAL {
-      self.message_count = 0;
-      self.interval_start = now;
-    }
-
-    self.message_count += 1;
-    if self.message_count > MAX_MESSAGES_PER_INTERVAL {
-      // TODO(nathan): inform the client to slow down
+    if self.rate_limiter.check().is_err() {
+      error!("Rate limit exceeded for user: {}", self.user);
       return;
     }
 

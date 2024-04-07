@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 #[derive(Clone)]
-pub struct CollabRealtimeServer<S, AC> {
+pub struct CollaborationServer<S, AC> {
   /// Keep track of all collab groups
   group_manager: Arc<GroupManager<S, AC>>,
   connect_state: ConnectState,
@@ -40,7 +40,7 @@ pub struct CollabRealtimeServer<S, AC> {
   metrics_calculate: CollabMetricsCalculate,
 }
 
-impl<S, AC> CollabRealtimeServer<S, AC>
+impl<S, AC> CollaborationServer<S, AC>
 where
   S: CollabStorage,
   AC: RealtimeAccessControl,

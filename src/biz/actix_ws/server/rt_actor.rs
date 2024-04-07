@@ -1,18 +1,25 @@
-use crate::biz::actix_ws::client::rt_client::RealtimeClientWebsocketSinkImpl;
+use crate::biz::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
 use crate::biz::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
 use actix::{Actor, Context, Handler, ResponseFuture};
 use collab_rt::error::RealtimeError;
-use collab_rt::{CollabRealtimeServer, RealtimeAccessControl};
+use collab_rt::{CollaborationServer, RealtimeAccessControl};
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 use std::ops::Deref;
 use tracing::{error, info, warn};
 
 #[derive(Clone)]
-pub struct RealtimeServerActor<S, AC>(pub CollabRealtimeServer<S, AC>);
+pub struct RealtimeServerActor<S, AC>(pub CollaborationServer<S, AC>);
+
+impl<S, AC> RealtimeServer for RealtimeServerActor<S, AC>
+where
+  S: CollabStorage + Unpin,
+  AC: RealtimeAccessControl + Unpin,
+{
+}
 
 impl<S, AC> Deref for RealtimeServerActor<S, AC> {
-  type Target = CollabRealtimeServer<S, AC>;
+  type Target = CollaborationServer<S, AC>;
 
   fn deref(&self) -> &Self::Target {
     &self.0

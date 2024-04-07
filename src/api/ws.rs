@@ -10,11 +10,14 @@ use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
 use app_error::AppError;
-use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
+use collab_rt_entity::RealtimeMessage;
 use semver::Version;
 use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, instrument, trace};
 
 pub fn ws_scope() -> Scope {
@@ -107,7 +110,6 @@ async fn start_connect(
 
   match result {
     Ok(uid) => {
-      let user_change_recv = state.pg_listeners.subscribe_user_change(uid);
       debug!(
         "🚀new websocket connect: uid={}, device_id={}, client_version:{}",
         uid, device_id, client_version
@@ -115,14 +117,18 @@ async fn start_connect(
 
       let session_id = uuid::Uuid::new_v4().to_string();
       let realtime_user = RealtimeUser::new(uid, device_id, session_id, connect_at);
+      let (tx, external_source) = mpsc::channel(100);
       let client = RealtimeClient::new(
         realtime_user,
-        user_change_recv,
         server.get_ref().clone(),
         Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
         Duration::from_secs(state.config.websocket.client_timeout as u64),
         client_version,
+        external_source,
       );
+
+      // Receive user change notifications and send them to the client.
+      listen_on_user_change(state, uid, tx);
 
       match ws::WsResponseBuilder::new(client, request, payload)
         .frame_size(MAX_FRAME_SIZE * 2)
@@ -142,6 +148,32 @@ async fn start_connect(
       Err(AppResponseError::from(err).into())
     },
   }
+}
+
+fn listen_on_user_change(state: &Data<AppState>, uid: i64, tx: Sender<RealtimeMessage>) {
+  let mut user_change_recv = state.pg_listeners.subscribe_user_change(uid);
+  actix::spawn(async move {
+    while let Some(notification) = user_change_recv.recv().await {
+      // Extract the user object from the notification payload.
+      if let Some(user) = notification.payload {
+        trace!("Receive user change: {:?}", user);
+        // Since bincode serialization is used for RealtimeMessage but does not support the
+        // Serde `deserialize_any` method, the user metadata is serialized into a JSON string.
+        // This step ensures compatibility and flexibility for the metadata field.
+        let metadata = serde_json::to_string(&user.metadata).ok();
+        // Construct a UserMessage with the user's details, including the serialized metadata.
+        let msg = UserMessage::ProfileChange(AFUserChange {
+          uid: user.uid,
+          name: user.name,
+          email: user.email,
+          metadata,
+        });
+        if tx.send(RealtimeMessage::User(msg)).await.is_err() {
+          break;
+        }
+      }
+    }
+  });
 }
 
 struct ConnectInfo {

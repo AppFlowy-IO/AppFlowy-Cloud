@@ -32,7 +32,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use collab_rt::command::{RTCommandReceiver, RTCommandSender};
-use collab_rt::CollabRealtimeServer;
+use collab_rt::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -106,7 +106,7 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollabRealtimeServer::<_, _>::new(
+  let realtime_server = CollaborationServer::<_, _>::new(
     storage.clone(),
     RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),

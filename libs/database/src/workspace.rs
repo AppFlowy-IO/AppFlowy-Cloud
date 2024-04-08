@@ -588,19 +588,19 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
     AFWorkspaceRow,
     r#"
       SELECT
-        workspace_id,
-        database_storage_id,
-        owner_uid,
-        (SELECT name FROM public.af_user WHERE uid = owner_uid) AS owner_name,
-        created_at,
-        workspace_type,
-        deleted_at,
-        workspace_name,
-        icon
-      FROM public.af_workspace
-      WHERE workspace_id IN (
-        SELECT workspace_id FROM public.af_workspace_member
-        WHERE af_workspace_member.uid = (SELECT uid FROM public.af_user WHERE uuid = $1)
+        w.workspace_id,
+        w.database_storage_id,
+        w.owner_uid,
+        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,
+        w.created_at,
+        w.workspace_type,
+        w.deleted_at,
+        w.workspace_name,
+        w.icon
+      FROM af_workspace w
+      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
+      WHERE wm.uid = (
+         SELECT uid FROM public.af_user WHERE uuid = $1
       );
     "#,
     user_uuid

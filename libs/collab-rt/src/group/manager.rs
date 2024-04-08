@@ -108,6 +108,7 @@ where
     object_id: &str,
     collab_type: CollabType,
   ) -> Result<(), RealtimeError> {
+    let mut is_new_collab = false;
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
     let result = load_collab(uid, object_id, params, self.storage.clone()).await;
     let mutex_collab = {
@@ -115,6 +116,7 @@ where
         Ok(collab) => collab,
         Err(err) => {
           if err.is_record_not_found() {
+            is_new_collab = true;
             MutexCollab::new(Collab::new_with_origin(
               CollabOrigin::Server,
               object_id,
@@ -133,6 +135,7 @@ where
         collab_type.clone(),
         collab.downgrade(),
         self.storage.clone(),
+        is_new_collab,
       ))];
 
       collab.lock().add_plugins(plugins);
@@ -153,6 +156,7 @@ where
         mutex_collab,
         self.metrics_calculate.clone(),
         self.storage.clone(),
+        is_new_collab,
       )
       .await,
     );

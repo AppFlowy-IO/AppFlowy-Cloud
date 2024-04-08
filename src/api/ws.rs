@@ -125,6 +125,7 @@ async fn start_connect(
         Duration::from_secs(state.config.websocket.client_timeout as u64),
         client_version,
         external_source,
+        10,
       );
 
       // Receive user change notifications and send them to the client.

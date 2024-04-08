@@ -7,12 +7,14 @@ use app_error::AppError;
 use async_stream::stream;
 use collab_rt::data_validation::validate_encode_collab;
 use database::collab::{
-  create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, select_snapshot,
-  should_create_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT,
+  create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
+  select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,
 };
 use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams, SnapshotData};
 use futures_util::StreamExt;
-use sqlx::PgPool;
+
+use chrono::{DateTime, Utc};
+use sqlx::{Acquire, PgPool};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -77,15 +79,30 @@ impl SnapshotControl {
     }
   }
 
-  pub async fn should_create_snapshot(&self, oid: &str) -> bool {
+  pub async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
     if oid.is_empty() {
       warn!("unexpected empty object id when checking should_create_snapshot");
-      return false;
+      return Ok(false);
     }
 
-    should_create_snapshot(oid, &self.pg_pool)
-      .await
-      .unwrap_or(false)
+    let latest_created_at = self.latest_snapshot_time(oid).await?;
+    // Subtracting a fixed duration that is known not to cause underflow. If `checked_sub_signed` returns `None`,
+    // it indicates an error in calculation, thus defaulting to creating a snapshot just in case.
+    let threshold_time = Utc::now().checked_sub_signed(chrono::Duration::hours(SNAPSHOT_PER_HOUR));
+
+    match (latest_created_at, threshold_time) {
+      // Return true if the latest snapshot is older than the threshold time, indicating a new snapshot should be created.
+      (Some(time), Some(threshold_time)) => {
+        trace!(
+          "latest snapshot time: {}, threshold time: {}",
+          time,
+          threshold_time
+        );
+        Ok(time < threshold_time)
+      },
+      // If there's no latest snapshot time available, assume a snapshot should be created.
+      _ => Ok(true),
+    }
   }
 
   pub async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {
@@ -159,6 +176,13 @@ impl SnapshotControl {
         object_id: object_id.to_string(),
       }),
     }
+  }
+
+  async fn latest_snapshot_time(&self, oid: &str) -> Result<Option<DateTime<Utc>>, AppError> {
+    let mut pool_conn = self.pg_pool.acquire().await?;
+    let conn = pool_conn.acquire().await?;
+    let time = latest_snapshot_time(oid, conn).await?;
+    Ok(time)
   }
 }
 

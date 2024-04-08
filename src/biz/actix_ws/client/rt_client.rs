@@ -11,7 +11,6 @@ use collab_rt::error::RealtimeError;
 use collab_rt::RealtimeClientWebsocketSink;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::SystemMessage;
-
 use governor::clock::DefaultClock;
 use governor::middleware::NoOpMiddleware;
 use governor::state::{InMemoryState, NotKeyed};
@@ -32,7 +31,7 @@ pub trait RealtimeServer:
 {
 }
 
-type WSRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
+type BinaryRateLimiter = RateLimiter<NotKeyed, InMemoryState, DefaultClock, NoOpMiddleware>;
 pub struct RealtimeClient<S: RealtimeServer> {
   user: RealtimeUser,
   hb: Instant,
@@ -41,8 +40,12 @@ pub struct RealtimeClient<S: RealtimeServer> {
   client_timeout: Duration,
   external_source: Option<mpsc::Receiver<RealtimeMessage>>,
   #[allow(dead_code)]
+  /// Indicates the version of the client, used for compatibility checks with the server.
   client_version: Version,
-  rate_limiter: Arc<WSRateLimiter>,
+  /// To prevent overwhelming the server with too many messages at once, each client has a rate-limiting
+  /// mechanism. This limits the number of messages a client can send per second, ensuring the server's
+  /// mailbox does not get full from receiving too many messages at the same time.
+  binary_rate_limiter: Arc<BinaryRateLimiter>,
 }
 
 impl<S> RealtimeClient<S>
@@ -56,8 +59,9 @@ where
     client_timeout: Duration,
     client_version: Version,
     external_source: mpsc::Receiver<RealtimeMessage>,
+    rate_limit_times_per_sec: u32,
   ) -> Self {
-    let rate_limiter = gen_rate_limiter(20);
+    let rate_limiter = gen_rate_limiter(rate_limit_times_per_sec);
     Self {
       user,
       hb: Instant::now(),
@@ -66,7 +70,7 @@ where
       client_timeout,
       external_source: Some(external_source),
       client_version,
-      rate_limiter: Arc::new(rate_limiter),
+      binary_rate_limiter: Arc::new(rate_limiter),
     }
   }
 
@@ -88,6 +92,21 @@ where
       ctx.ping(b"");
     });
   }
+
+  pub fn try_send(&self, message: RealtimeMessage) -> Result<(), RealtimeError> {
+    if self.binary_rate_limiter.check().is_err() {
+      trace!("Rate limit exceeded for user: {}", self.user);
+      return Err(RealtimeError::TooManyMessage(self.user.to_string()));
+    }
+
+    self
+      .server
+      .try_send(ClientMessage {
+        user: self.user.clone(),
+        message,
+      })
+      .map_err(|err| RealtimeError::Internal(err.into()))
+  }
 }
 
 impl<S> RealtimeClient<S>
@@ -97,11 +116,7 @@ where
   fn handle_binary(&mut self, _ctx: &mut WebsocketContext<RealtimeClient<S>>, bytes: Bytes) {
     match RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal) {
       Ok(message) => {
-        let client_message = ClientMessage {
-          user: self.user.clone(),
-          message,
-        };
-        if let Err(err) = self.server.try_send(client_message) {
+        if let Err(err) = self.try_send(message) {
           warn!("Error sending message to server: {}", err);
         }
 
@@ -246,11 +261,6 @@ where
   S: RealtimeServer,
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-    if self.rate_limiter.check().is_err() {
-      error!("Rate limit exceeded for user: {}", self.user);
-      return;
-    }
-
     if let Err(err) = &msg {
       if let ProtocolError::Overflow = err {
         ctx.stop();
@@ -288,4 +298,33 @@ fn gen_rate_limiter(
   }
   let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
   RateLimiter::direct(quota)
+}
+
+#[cfg(test)]
+mod tests {
+  use std::time::Duration;
+  use tokio::time::sleep;
+
+  #[tokio::test]
+  async fn rate_limit_test() {
+    let rate_limiter = super::gen_rate_limiter(10);
+    for i in 0..=10 {
+      if i == 10 {
+        assert!(rate_limiter.check().is_err());
+      } else {
+        assert!(rate_limiter.check().is_ok());
+      }
+    }
+    assert!(rate_limiter.check().is_err());
+    assert!(rate_limiter.check().is_err());
+
+    sleep(Duration::from_secs(1)).await;
+    for i in 0..=10 {
+      if i == 10 {
+        assert!(rate_limiter.check().is_err());
+      } else {
+        assert!(rate_limiter.check().is_ok());
+      }
+    }
+  }
 }

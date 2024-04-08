@@ -369,15 +369,12 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
-  info!(
-    "Connecting to postgres database with setting: {:?}",
-    setting
-  );
+  info!("Connecting to postgres database with setting: {}", setting);
   PgPoolOptions::new()
     .max_connections(setting.max_connections)
     .acquire_timeout(Duration::from_secs(10))
-    .max_lifetime(Duration::from_secs(60 * 60))
-    .idle_timeout(Duration::from_secs(60))
+    .max_lifetime(Duration::from_secs(30 * 60))
+    .idle_timeout(Duration::from_secs(30))
     .connect_with(setting.with_db())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))

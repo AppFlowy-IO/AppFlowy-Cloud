@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -48,14 +48,14 @@ where
   }
 
   pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<MutexCollab>) {
-    // defer start saving after 5 seconds
+    let mut interval = interval(Duration::from_secs(60));
+    // TODO(nathan): remove this sleep when creating a new collab, applying all the updates
+    // workarounds for the issue that the collab doesn't contain the required data when first created
     sleep(Duration::from_secs(5)).await;
-    let mut interval = interval(Duration::from_secs(180)); // 3 minutes
-
     loop {
       tokio::select! {
         _ = interval.tick() => {
-          if self.attempt_collab_save().await {
+          if self.attempt_collab_save().await.is_err() {
             break;
           }
         },
@@ -70,18 +70,22 @@ where
   }
 
   async fn force_save(&self, collab: MutexCollab) {
-    let result = get_encode_collab(&self.object_id, &collab.lock(), &self.collab_type);
+    if !self.edit_state.is_edit() {
+      trace!("skip force save collab to disk: {}", self.object_id);
+      return;
+    }
 
+    let result = get_encode_collab(&self.object_id, &collab.lock(), &self.collab_type);
     match result {
       Ok(params) => {
-        info!("[realtime] save collab to disk: {}", self.object_id);
+        info!("[realtime] force save collab to disk: {}", self.object_id);
         match self
           .storage
           .insert_or_update_collab(&self.workspace_id, &self.uid, params)
           .await
         {
           Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
-          Err(err) => warn!("fail to save collab to disk: {:?}", err),
+          Err(err) => warn!("fail to force save collab to disk: {:?}", err),
         }
       },
       Err(err) => {
@@ -91,23 +95,23 @@ where
   }
 
   /// return true if the collab has been dropped. Otherwise, return false
-  async fn attempt_collab_save(&self) -> bool {
-    let collab = match self.collab.upgrade() {
-      Some(collab) => collab,
-      None => return true, // End the loop if the collab has been dropped
-    };
-
+  async fn attempt_collab_save(&self) -> Result<(), AppError> {
     // Check if conditions for saving to disk are not met
     if !self.edit_state.should_save_to_disk() {
-      // 100 edits or 1 hour
-      return false;
+      trace!("skip save collab to disk: {}", self.object_id);
+      return Ok(());
     }
+
+    let collab = match self.collab.upgrade() {
+      Some(collab) => collab,
+      None => return Err(AppError::Internal(anyhow!("collab has been dropped"))),
+    };
 
     // Attempt to lock the collab; skip saving if unable
     let result = {
       match collab.try_lock() {
         Some(lock) => get_encode_collab(&self.object_id, &lock, &self.collab_type),
-        None => return false,
+        None => return Ok(()),
       }
     };
 
@@ -128,8 +132,7 @@ where
       },
     }
 
-    // Continue the loop
-    false
+    Ok(())
   }
 }
 

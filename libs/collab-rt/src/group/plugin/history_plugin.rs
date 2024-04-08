@@ -53,13 +53,15 @@ where
   S: CollabStorage,
 {
   fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
-    self.edit_count.fetch_add(1, Ordering::SeqCst);
-    // If the collab is not new, we only create a snapshot after 10 edits.
-    if !self.is_new_collab {
-      let old = self.edit_count.load(Ordering::SeqCst);
-      if old < 10 {
-        return;
-      }
+    if self.is_new_collab {
+      trace!("skip snapshot creation for new collab");
+      return;
+    }
+
+    let old = self.edit_count.fetch_add(1, Ordering::SeqCst);
+    if old < 10 {
+      trace!("skip snapshot creation, edit_count: {}", old);
+      return;
     }
 
     if self.did_create_snapshot.load(Ordering::Relaxed) {

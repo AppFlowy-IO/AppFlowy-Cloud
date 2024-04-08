@@ -86,8 +86,23 @@ impl SnapshotControl {
     }
 
     let latest_created_at = self.latest_snapshot_time(oid).await?;
-    let hours = Utc::now() - chrono::Duration::hours(SNAPSHOT_PER_HOUR);
-    Ok(latest_created_at.map(|t| t < hours).unwrap_or(true))
+    // Subtracting a fixed duration that is known not to cause underflow. If `checked_sub_signed` returns `None`,
+    // it indicates an error in calculation, thus defaulting to creating a snapshot just in case.
+    let threshold_time = Utc::now().checked_sub_signed(chrono::Duration::hours(SNAPSHOT_PER_HOUR));
+
+    match (latest_created_at, threshold_time) {
+      // Return true if the latest snapshot is older than the threshold time, indicating a new snapshot should be created.
+      (Some(time), Some(threshold_time)) => {
+        trace!(
+          "latest snapshot time: {}, threshold time: {}",
+          time,
+          threshold_time
+        );
+        Ok(time < threshold_time)
+      },
+      // If there's no latest snapshot time available, assume a snapshot should be created.
+      _ => Ok(true),
+    }
   }
 
   pub async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta> {

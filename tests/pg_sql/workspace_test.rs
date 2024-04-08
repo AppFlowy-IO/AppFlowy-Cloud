@@ -1,4 +1,4 @@
-use crate::pg_sql::util::{setup_db, test_create_user};
+use crate::pg_sql::util::{insert_auth_user, setup_db, test_create_user};
 use sqlx::PgPool;
 
 #[sqlx::test(migrations = false)]
@@ -9,6 +9,7 @@ async fn basic_test(pool: PgPool) -> sqlx::Result<()> {
   let name = user_uuid.to_string();
   let email = format!("{}@appflowy.io", name);
 
+  insert_auth_user(&pool, user_uuid).await.unwrap();
   test_create_user(&pool, user_uuid, &email, &name)
     .await
     .unwrap();

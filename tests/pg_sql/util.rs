@@ -37,7 +37,7 @@ pub async fn test_create_user(
   name: &str,
 ) -> anyhow::Result<()> {
   let uid = ID_GEN.write().await.next_id();
-  database::user::create_user(pool, uid, &user_uuid, &email, &name)
+  database::user::create_user(pool, uid, &user_uuid, email, &name)
     .await
     .unwrap();
   Ok(())

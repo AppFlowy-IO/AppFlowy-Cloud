@@ -9,11 +9,13 @@ pub async fn setup_db(pool: &PgPool) -> anyhow::Result<()> {
   // migration scripts.
   sqlx::query(r#"create schema auth"#).execute(pool).await?;
   sqlx::query(
-    r#"create table auth.users(
-id uuid NOT NULL UNIQUE,
-deleted_at timestamptz null,
-CONSTRAINT users_pkey PRIMARY KEY (id)
-)"#,
+    r#"
+      CREATE TABLE auth.users(
+        id uuid NOT NULL UNIQUE,
+        deleted_at timestamptz null,
+        CONSTRAINT users_pkey PRIMARY KEY (id)
+      )
+    "#,
   )
   .execute(pool)
   .await?;
@@ -23,6 +25,19 @@ CONSTRAINT users_pkey PRIMARY KEY (id)
     .run(pool)
     .await
     .unwrap();
+  Ok(())
+}
+
+pub async fn insert_auth_user(pool: &PgPool, user_uuid: Uuid) -> anyhow::Result<()> {
+  sqlx::query(
+    r#"
+      INSERT INTO auth.users (id)
+      VALUES ($1)
+    "#,
+  )
+  .bind(user_uuid)
+  .execute(pool)
+  .await?;
   Ok(())
 }
 

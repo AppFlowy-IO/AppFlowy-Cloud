@@ -9,10 +9,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 bytes.workspace = true
-collab = { version = "0.1.0"}
-collab-folder = { version = "0.1.0"}
-collab-document = { version = "0.1.0"}
-collab-entity = { version = "0.1.0"}
+collab = { version = "0.1.0" }
+collab-folder = { version = "0.1.0" }
+collab-document = { version = "0.1.0" }
+collab-entity = { version = "0.1.0" }
 collab-database = { version = "0.1.0" }
 async-trait = "0.1.77"
 anyhow.workspace = true
@@ -24,4 +24,4 @@ nanoid = "0.4.0"
 serde = { version = "1.0.195", features = ["derive"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"]}
+getrandom = { version = "0.2", features = ["js"] }

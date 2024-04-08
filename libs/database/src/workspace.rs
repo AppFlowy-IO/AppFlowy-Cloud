@@ -577,38 +577,6 @@ pub async fn update_updated_at_of_workspace<'a, E: Executor<'a, Database = Postg
   Ok(())
 }
 
-/// Returns a list of workspaces that the user is a member of.
-#[inline]
-pub async fn select_user_workspace<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, AppError> {
-  let workspaces = sqlx::query_as!(
-    AFWorkspaceRow,
-    r#"
-      SELECT
-        w.workspace_id,
-        w.database_storage_id,
-        w.owner_uid,
-        (SELECT name FROM public.af_user WHERE uid = w.owner_uid) AS owner_name,
-        w.created_at,
-        w.workspace_type,
-        w.deleted_at,
-        w.workspace_name,
-        w.icon
-      FROM af_workspace w
-      JOIN af_workspace_member wm ON w.workspace_id = wm.workspace_id
-      WHERE wm.uid = (
-         SELECT uid FROM public.af_user WHERE uuid = $1
-      );
-    "#,
-    user_uuid
-  )
-  .fetch_all(executor)
-  .await?;
-  Ok(workspaces)
-}
-
 /// Returns a list of workspaces that the user is part of.
 /// User may owner or non-owner.
 #[inline]

@@ -32,7 +32,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use collab_rt::command::{RTCommandReceiver, RTCommandSender};
-use collab_rt::CollabRealtimeServer;
+use collab_rt::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -106,7 +106,7 @@ pub async fn run(
     ));
 
   // Initialize metrics that which are registered in the registry.
-  let realtime_server = CollabRealtimeServer::<_, _>::new(
+  let realtime_server = CollaborationServer::<_, _>::new(
     storage.clone(),
     RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
@@ -369,15 +369,12 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {
-  info!(
-    "Connecting to postgres database with setting: {:?}",
-    setting
-  );
+  info!("Connecting to postgres database with setting: {}", setting);
   PgPoolOptions::new()
     .max_connections(setting.max_connections)
     .acquire_timeout(Duration::from_secs(10))
-    .max_lifetime(Duration::from_secs(60 * 60))
-    .idle_timeout(Duration::from_secs(60))
+    .max_lifetime(Duration::from_secs(30 * 60))
+    .idle_timeout(Duration::from_secs(30))
     .connect_with(setting.with_db())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))

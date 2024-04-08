@@ -1,8 +1,6 @@
 use anyhow::Context;
 use app_error::AppError;
-use database::workspace::{
-  select_all_user_workspaces, select_user_profile, select_workspace,
-};
+use database::workspace::{select_all_user_workspaces, select_user_profile, select_workspace};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo, AFWorkspace};
 use serde_json::json;
 use shared_entity::dto::auth_dto::UpdateUserParams;

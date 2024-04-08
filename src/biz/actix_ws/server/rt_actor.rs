@@ -1,18 +1,25 @@
-use crate::biz::actix_ws::client::rt_client::RealtimeClientWebsocketSinkImpl;
+use crate::biz::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
 use crate::biz::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
 use actix::{Actor, Context, Handler, ResponseFuture};
 use collab_rt::error::RealtimeError;
-use collab_rt::{CollabRealtimeServer, RealtimeAccessControl};
+use collab_rt::{CollaborationServer, RealtimeAccessControl};
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 use std::ops::Deref;
 use tracing::{error, info, warn};
 
 #[derive(Clone)]
-pub struct RealtimeServerActor<S, AC>(pub CollabRealtimeServer<S, AC>);
+pub struct RealtimeServerActor<S, AC>(pub CollaborationServer<S, AC>);
+
+impl<S, AC> RealtimeServer for RealtimeServerActor<S, AC>
+where
+  S: CollabStorage + Unpin,
+  AC: RealtimeAccessControl + Unpin,
+{
+}
 
 impl<S, AC> Deref for RealtimeServerActor<S, AC> {
-  type Target = CollabRealtimeServer<S, AC>;
+  type Target = CollaborationServer<S, AC>;
 
   fn deref(&self) -> &Self::Target {
     &self.0
@@ -28,7 +35,7 @@ where
 
   fn started(&mut self, ctx: &mut Self::Context) {
     info!("realtime server started");
-    ctx.set_mailbox_capacity(3000);
+    ctx.set_mailbox_capacity(6000);
   }
 }
 impl<S, AC> actix::Supervised for RealtimeServerActor<S, AC>
@@ -36,8 +43,9 @@ where
   S: 'static + Unpin,
   AC: RealtimeAccessControl + Unpin,
 {
-  fn restarting(&mut self, _ctx: &mut Context<RealtimeServerActor<S, AC>>) {
+  fn restarting(&mut self, ctx: &mut Context<RealtimeServerActor<S, AC>>) {
     error!("realtime server is restarting");
+    ctx.set_mailbox_capacity(6000);
   }
 }
 

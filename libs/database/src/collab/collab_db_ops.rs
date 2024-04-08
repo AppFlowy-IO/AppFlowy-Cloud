@@ -286,7 +286,21 @@ pub async fn create_snapshot(
 /// snapshot should be created, based on a predefined interval (SNAPSHOT_PER_HOUR).
 ///
 #[inline]
-pub async fn should_create_snapshot<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn latest_snapshot_time<'a, E: Executor<'a, Database = Postgres>>(
+  oid: &str,
+  executor: E,
+) -> Result<Option<chrono::DateTime<Utc>>, sqlx::Error> {
+  let latest_snapshot_time: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
+    "SELECT created_at FROM af_collab_snapshot
+         WHERE oid = $1 ORDER BY created_at DESC LIMIT 1",
+  )
+  .bind(oid)
+  .fetch_optional(executor)
+  .await?;
+  Ok(latest_snapshot_time)
+}
+#[inline]
+pub async fn should_create_snapshot2<'a, E: Executor<'a, Database = Postgres>>(
   oid: &str,
   executor: E,
 ) -> Result<bool, sqlx::Error> {

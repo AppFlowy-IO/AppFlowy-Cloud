@@ -19,7 +19,7 @@ use database::collab::CollabStorage;
 use crate::rt_server::COLLAB_RUNTIME;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use tokio::sync::mpsc;
 use tracing::{event, trace};
 
@@ -46,6 +46,7 @@ impl Drop for CollabGroup {
 }
 
 impl CollabGroup {
+  #[allow(clippy::too_many_arguments)]
   pub async fn new<S>(
     uid: i64,
     workspace_id: String,
@@ -54,11 +55,12 @@ impl CollabGroup {
     collab: MutexCollab,
     metrics_calculate: CollabMetricsCalculate,
     storage: Arc<S>,
+    is_new_collab: bool,
   ) -> Self
   where
     S: CollabStorage,
   {
-    let edit_state = Arc::new(EditState::new(100, 600));
+    let edit_state = Arc::new(EditState::new(100, 360, is_new_collab));
     let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone(), &collab).await;
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
@@ -206,16 +208,18 @@ pub(crate) struct EditState {
 
   max_edit_count: u32,
   max_secs: i64,
+  is_new: AtomicBool,
 }
 
 impl EditState {
-  fn new(max_edit_count: u32, max_secs: i64) -> Self {
+  fn new(max_edit_count: u32, max_secs: i64, is_new: bool) -> Self {
     Self {
       edit_counter: AtomicU32::new(0),
       prev_edit_count: Default::default(),
       prev_flush_timestamp: AtomicI64::new(chrono::Utc::now().timestamp()),
       max_edit_count,
       max_secs,
+      is_new: AtomicBool::new(is_new),
     }
   }
 
@@ -243,13 +247,22 @@ impl EditState {
       .store(chrono::Utc::now().timestamp(), Ordering::SeqCst);
   }
 
+  pub(crate) fn is_edit(&self) -> bool {
+    self.edit_counter.load(Ordering::SeqCst) != self.prev_edit_count.load(Ordering::SeqCst)
+  }
+
   pub(crate) fn should_save_to_disk(&self) -> bool {
     let current_edit_count = self.edit_counter.load(Ordering::SeqCst);
     let prev_edit_count = self.prev_edit_count.load(Ordering::SeqCst);
 
-    // Immediately return true if it's the first save after more than one edit
-    if prev_edit_count == 0 && current_edit_count > 0 {
+    // If the collab is new, save it to disk and reset the flag
+    if self.is_new.load(Ordering::SeqCst) {
+      self.is_new.store(false, Ordering::SeqCst);
       return true;
+    }
+
+    if current_edit_count == prev_edit_count {
+      return false;
     }
 
     // Check if the edit count exceeds the maximum allowed since the last save
@@ -315,7 +328,7 @@ mod tests {
 
   #[test]
   fn edit_state_test() {
-    let edit_state = EditState::new(10, 10);
+    let edit_state = EditState::new(10, 10, true);
     edit_state.increment_edit_count();
     assert!(edit_state.should_save_to_disk());
     edit_state.tick();

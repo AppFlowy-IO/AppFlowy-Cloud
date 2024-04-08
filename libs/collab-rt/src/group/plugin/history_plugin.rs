@@ -5,8 +5,9 @@ use collab::preclude::CollabPlugin;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::InsertSnapshotParams;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use tokio::time::sleep;
 use tracing::{error, trace};
 use yrs::TransactionMut;
 
@@ -18,6 +19,8 @@ pub struct HistoryPlugin<S> {
   storage: Arc<S>,
   did_create_snapshot: AtomicBool,
   weak_collab: WeakMutexCollab,
+  edit_count: AtomicU32,
+  is_new_collab: bool,
 }
 
 impl<S> HistoryPlugin<S>
@@ -30,6 +33,7 @@ where
     collab_type: CollabType,
     weak_collab: WeakMutexCollab,
     storage: Arc<S>,
+    is_new_collab: bool,
   ) -> Self {
     Self {
       workspace_id,
@@ -38,6 +42,8 @@ where
       storage,
       did_create_snapshot: Default::default(),
       weak_collab,
+      edit_count: Default::default(),
+      is_new_collab,
     }
   }
 }
@@ -47,12 +53,21 @@ where
   S: CollabStorage,
 {
   fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, _update: &[u8]) {
+    if self.is_new_collab {
+      trace!("skip snapshot creation for new collab");
+      return;
+    }
+
+    let old = self.edit_count.fetch_add(1, Ordering::SeqCst);
+    if old < 20 {
+      trace!("skip snapshot creation, edit_count: {}", old);
+      return;
+    }
+
     if self.did_create_snapshot.load(Ordering::Relaxed) {
-      // Snapshot already created, no further action needed
       return;
     }
     self.did_create_snapshot.store(true, Ordering::SeqCst);
-
     let storage = self.storage.clone();
     let weak_collab = self.weak_collab.clone();
     let collab_type = self.collab_type.clone();
@@ -60,9 +75,18 @@ where
     let workspace_id = self.workspace_id.clone();
 
     COLLAB_RUNTIME.spawn(async move {
-      if !storage.should_create_snapshot(&object_id).await {
-        // Condition for creating snapshot not met, exit early
-        return;
+      sleep(std::time::Duration::from_secs(2)).await;
+      match storage.should_create_snapshot(&object_id).await {
+        Ok(should_do) => {
+          if should_do {
+            trace!("trying to queue snapshot for object_id: {}", object_id);
+          } else {
+            return;
+          }
+        },
+        Err(err) => {
+          trace!("Failed to check if snapshot should be created: {:?}", err);
+        },
       }
 
       // Attempt to encode collaboration data for snapshot

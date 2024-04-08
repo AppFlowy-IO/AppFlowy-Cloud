@@ -44,6 +44,15 @@ pub enum RealtimeError {
   #[error("Lack of required collab data: {0}")]
   NoRequiredCollabData(String),
 
+  #[error("{0} send too many messages")]
+  TooManyMessage(String),
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
+}
+
+impl RealtimeError {
+  pub fn is_too_many_message(&self) -> bool {
+    matches!(self, RealtimeError::TooManyMessage(_))
+  }
 }

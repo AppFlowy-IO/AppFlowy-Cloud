@@ -46,6 +46,7 @@ impl Drop for CollabGroup {
 }
 
 impl CollabGroup {
+  #[allow(clippy::too_many_arguments)]
   pub async fn new<S>(
     uid: i64,
     workspace_id: String,

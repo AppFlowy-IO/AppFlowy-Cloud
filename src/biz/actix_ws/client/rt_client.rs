@@ -57,7 +57,7 @@ where
     client_version: Version,
     external_source: mpsc::Receiver<RealtimeMessage>,
   ) -> Self {
-    let rate_limiter = gen_rate_limiter(20);
+    let rate_limiter = gen_rate_limiter(10);
     Self {
       user,
       hb: Instant::now(),
@@ -247,7 +247,7 @@ where
 {
   fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
     if self.rate_limiter.check().is_err() {
-      error!("Rate limit exceeded for user: {}", self.user);
+      trace!("Rate limit exceeded for user: {}", self.user);
       return;
     }
 
@@ -288,4 +288,33 @@ fn gen_rate_limiter(
   }
   let quota = Quota::per_second(NonZeroU32::new(times_per_sec).unwrap());
   RateLimiter::direct(quota)
+}
+
+#[cfg(test)]
+mod tests {
+  use std::time::Duration;
+  use tokio::time::sleep;
+
+  #[tokio::test]
+  async fn rate_limit_test() {
+    let rate_limiter = super::gen_rate_limiter(10);
+    for i in 0..=10 {
+      if i == 10 {
+        assert!(rate_limiter.check().is_err());
+      } else {
+        assert!(rate_limiter.check().is_ok());
+      }
+    }
+    assert!(rate_limiter.check().is_err());
+    assert!(rate_limiter.check().is_err());
+
+    sleep(Duration::from_secs(1)).await;
+    for i in 0..=10 {
+      if i == 10 {
+        assert!(rate_limiter.check().is_err());
+      } else {
+        assert!(rate_limiter.check().is_ok());
+      }
+    }
+  }
 }

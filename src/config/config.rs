@@ -2,6 +2,7 @@ use anyhow::Context;
 use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
+use std::fmt::Display;
 use std::str::FromStr;
 
 #[derive(Clone, Debug)]
@@ -65,8 +66,22 @@ pub struct ApplicationSetting {
 pub struct DatabaseSetting {
   pub pg_conn_opts: PgConnectOptions,
   pub require_ssl: bool,
+  /// PostgreSQL has a maximum of 115 connections to the database, 15 connections are reserved to
+  /// the super user to maintain the integrity of the PostgreSQL database, and 100 PostgreSQL
+  /// connections are reserved for system applications.
+  /// When we exceed the limit of the database connection, then it shows an error message.
   pub max_connections: u32,
   pub database_name: String,
+}
+
+impl Display for DatabaseSetting {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+        f,
+        "DatabaseSetting {{ pg_conn_opts: {:?}, require_ssl: {}, max_connections: {}, database_name: {} }}",
+        self.pg_conn_opts, self.require_ssl, self.max_connections, self.database_name
+        )
+  }
 }
 
 impl DatabaseSetting {

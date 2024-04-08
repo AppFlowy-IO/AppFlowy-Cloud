@@ -53,7 +53,7 @@ impl AggregateMessageQueue {
     let maximum_payload_size = self.maximum_payload_size;
     let weak_queue = Arc::downgrade(&self.queue);
     let weak_seen_ids = Arc::downgrade(&self.seen_ids);
-    let interval_duration = Duration::from_millis(500);
+    let interval_duration = Duration::from_millis(1000);
     let mut next_tick = Instant::now() + interval_duration;
     tokio::spawn(async move {
       loop {
@@ -83,7 +83,7 @@ async fn handle_tick(
   maximum_payload_size: usize,
   weak_seen_ids: Weak<Mutex<HashSet<SeenId>>>,
 ) -> (usize, usize) {
-  let (did_sent_seen_ids, messages_map) = next_batch_message(5, maximum_payload_size, queue).await;
+  let (did_sent_seen_ids, messages_map) = next_batch_message(10, maximum_payload_size, queue).await;
   if messages_map.is_empty() {
     return (0, 0);
   }

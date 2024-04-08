@@ -294,7 +294,7 @@ where
     Ok(())
   }
 
-  async fn should_create_snapshot(&self, oid: &str) -> bool {
+  async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
     self.snapshot_control.should_create_snapshot(oid).await
   }
 

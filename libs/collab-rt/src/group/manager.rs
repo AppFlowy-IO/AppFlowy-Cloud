@@ -135,6 +135,7 @@ where
         collab_type.clone(),
         collab.downgrade(),
         self.storage.clone(),
+        is_new_collab,
       ))];
 
       collab.lock().add_plugins(plugins);

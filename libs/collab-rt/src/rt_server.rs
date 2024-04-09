@@ -172,7 +172,7 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              COLLAB_RUNTIME.spawn(runner.run(object_id, clone_notify));
+              rt_spawn(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.
@@ -239,4 +239,22 @@ pub fn default_tokio_runtime() -> io::Result<Runtime> {
     .enable_io()
     .enable_time()
     .build()
+}
+
+#[cfg(feature = "multi-thread")]
+pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+where
+  T: Future + Send + 'static,
+  T::Output: Send + 'static,
+{
+  COLLAB_RUNTIME.spawn(future)
+}
+
+#[cfg(not(feature = "multi-thread"))]
+pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+where
+  T: Future + 'static,
+  T::Output: Send + 'static,
+{
+  tokio::task::spawn_local(future)
 }

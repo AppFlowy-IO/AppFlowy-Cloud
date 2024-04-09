@@ -187,6 +187,8 @@ where
       },
     }
   }
+
+  #[instrument(level = "info", skip_all)]
   async fn create_group(&self, collab_message: &ClientCollabMessage) -> Result<(), RealtimeError> {
     let object_id = collab_message.object_id();
     match collab_message {

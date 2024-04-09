@@ -1,4 +1,6 @@
 use lazy_static::lazy_static;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -50,10 +52,29 @@ pub async fn test_create_user(
   user_uuid: Uuid,
   email: &str,
   name: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<TestUser> {
+  insert_auth_user(pool, user_uuid).await.unwrap();
   let uid = ID_GEN.write().await.next_id();
-  database::user::create_user(pool, uid, &user_uuid, email, name)
+  let workspace_id = database::user::create_user(pool, uid, &user_uuid, email, name)
     .await
     .unwrap();
-  Ok(())
+
+  Ok(TestUser {
+    uid,
+    workspace_id: workspace_id.to_string(),
+  })
+}
+
+pub struct TestUser {
+  pub uid: i64,
+  pub workspace_id: String,
+}
+
+pub fn generate_random_bytes(size: usize) -> Vec<u8> {
+  let s: String = thread_rng()
+    .sample_iter(&Alphanumeric)
+    .take(size)
+    .map(char::from)
+    .collect();
+  s.into_bytes()
 }

@@ -1,4 +1,4 @@
-use crate::rt_server::COLLAB_RUNTIME;
+use crate::rt_server::rt_spawn;
 use crate::util::channel_ext::UnboundedSenderSink;
 use crate::RealtimeAccessControl;
 use async_trait::async_trait;
@@ -73,7 +73,7 @@ impl ClientMessageRouter {
     let sink_workspace_id = workspace_id.to_string();
     let uid = user.uid;
     let client_sink = UnboundedSenderSink::<T>::new(client_sink_tx);
-    COLLAB_RUNTIME.spawn(async move {
+    rt_spawn(async move {
       while let Some(msg) = client_sink_rx.recv().await {
         let result = sink_access_control
           .can_read_collab(&sink_workspace_id, &uid, &target_object_id)
@@ -102,7 +102,7 @@ impl ClientMessageRouter {
     // forward the message to the subscriber which is the broadcast channel [CollabBroadcast].
     let (client_msg_rx, rx) = tokio::sync::mpsc::channel(100);
     let client_stream = ReceiverStream::new(rx);
-    COLLAB_RUNTIME.spawn(async move {
+    rt_spawn(async move {
       while let Some(Ok(realtime_msg)) = stream_rx.next().await {
         match realtime_msg.transform() {
           Ok(messages_by_oid) => {

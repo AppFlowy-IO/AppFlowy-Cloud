@@ -16,7 +16,7 @@ use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
 
-use crate::rt_server::COLLAB_RUNTIME;
+use crate::rt_server::rt_spawn;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
@@ -64,7 +64,7 @@ impl CollabGroup {
     let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone(), &collab).await;
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
-    COLLAB_RUNTIME.spawn(
+    rt_spawn(
       GroupPersistence::new(
         workspace_id.clone(),
         object_id.clone(),

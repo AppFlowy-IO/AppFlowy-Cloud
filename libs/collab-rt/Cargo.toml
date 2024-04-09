@@ -14,14 +14,14 @@ tracing = "0.1.40"
 futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
-tokio = { workspace = true, features = ["net", "sync", "macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["net", "sync", "macros"] }
 async-trait = "0.1.77"
 serde.workspace = true
 serde_json.workspace = true
 thiserror = "1.0.56"
 anyhow = "1"
 
-collab = { version = "0.1.0"}
+collab = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
@@ -42,3 +42,6 @@ lazy_static = "1.4.0"
 
 [dev-dependencies]
 rand = "0.8.5"
+
+[features]
+multi-thread = ["tokio/rt-multi-thread"]

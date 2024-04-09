@@ -12,9 +12,13 @@ async fn realtime_connect_test() {
   let connect_info = c.ws_connect_info().await.unwrap();
   tokio::spawn(async move { ws_client.connect(&c.ws_url(), connect_info).await });
   let connect_future = async {
-    while let Ok(state) = state.recv().await {
-      if state == ConnectState::Connected {
-        break;
+    loop {
+      match state.recv().await {
+        Ok(ConnectState::Connected) => {
+          break;
+        },
+        Ok(_) => {},
+        Err(err) => panic!("Receiver Error: {:?}", err),
       }
     }
   };
@@ -42,9 +46,13 @@ async fn realtime_connect_after_token_exp_test() {
   tokio::spawn(async move { ws_client.connect(&c.ws_url(), connect_info).await });
 
   let connect_future = async {
-    while let Ok(state) = state.recv().await {
-      if state == ConnectState::Connected {
-        break;
+    loop {
+      match state.recv().await {
+        Ok(ConnectState::Connected) => {
+          break;
+        },
+        Ok(_) => {},
+        Err(err) => panic!("Receiver Error: {:?}", err),
       }
     }
   };

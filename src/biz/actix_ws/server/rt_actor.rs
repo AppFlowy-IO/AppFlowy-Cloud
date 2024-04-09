@@ -35,7 +35,7 @@ where
 
   fn started(&mut self, ctx: &mut Self::Context) {
     info!("realtime server started");
-    ctx.set_mailbox_capacity(1);
+    ctx.set_mailbox_capacity(3000);
   }
 }
 impl<S, AC> actix::Supervised for RealtimeServerActor<S, AC>
@@ -45,7 +45,7 @@ where
 {
   fn restarting(&mut self, ctx: &mut Context<RealtimeServerActor<S, AC>>) {
     error!("realtime server is restarting");
-    ctx.set_mailbox_capacity(30);
+    ctx.set_mailbox_capacity(3000);
   }
 }
 

@@ -5,6 +5,7 @@ use actix::{
 };
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab_rt::error::RealtimeError;
@@ -20,6 +21,7 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
+use tokio::time::sleep;
 use tracing::{debug, error, trace, warn};
 
 pub type HandlerResult = ResponseFuture<anyhow::Result<(), RealtimeError>>;
@@ -113,29 +115,59 @@ impl<S> RealtimeClient<S>
 where
   S: RealtimeServer,
 {
-  fn handle_binary(&mut self, _ctx: &mut WebsocketContext<RealtimeClient<S>>, bytes: Bytes) {
-    match RealtimeMessage::decode(bytes.as_ref()).map_err(RealtimeError::Internal) {
-      Ok(message) => {
-        if let Err(err) = self.try_send(message) {
-          warn!("Error sending message to server: {}", err);
-        }
-
-        // let server = self.server.clone();
-        // let fut = async move {
-        //   server.try_send(client_message);
-        //   Ok::<(), RealtimeError>(())
-        // };
-        // let act_fut = fut::wrap_future::<_, Self>(fut);
-        // ctx.spawn(act_fut.map(|res, _act, _ctx| {
-        //   if let Err(e) = res {
-        //     error!("Handle realtime message error: {}", e);
-        //   }
-        // }));
-      },
-      Err(err) => {
-        error!("Error decoding message: {}", err);
-      },
+  fn handle_binary(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S>>, bytes: Bytes) {
+    // Immediately return if rate limit is exceeded.
+    if let Err(e) = self.binary_rate_limiter.check() {
+      trace!("Rate limit exceeded for user: {}, error: {}", self.user, e);
+      return;
     }
+    let server = self.server.clone();
+    let user = self.user.clone();
+
+    let fut = async move {
+      match tokio::task::spawn_blocking(move || RealtimeMessage::decode(&bytes)).await {
+        Ok(Ok(decoded_message)) => {
+          let mut client_message = Some(ClientMessage {
+            user,
+            message: decoded_message,
+          });
+
+          let mut attempts = 0;
+          const MAX_RETRIES: usize = 3;
+          const RETRY_DELAY: Duration = Duration::from_millis(500);
+          while attempts < MAX_RETRIES {
+            if let Some(message_to_send) = client_message.take() {
+              match server.try_send(message_to_send) {
+                Ok(_) => return Ok(()),
+                Err(err) if attempts < MAX_RETRIES - 1 => {
+                  client_message = Some(err.into_inner());
+                  attempts += 1;
+                  sleep(RETRY_DELAY).await;
+                },
+                Err(err) => {
+                  return Err(anyhow!(
+                    "Failed to send message to server after retries: {:?}",
+                    err
+                  ));
+                },
+              }
+            } else {
+              return Err(anyhow!("Unexpected empty client message"));
+            }
+          }
+          Ok(())
+        },
+        Ok(Err(decode_err)) => Err(anyhow!("Error decoding message: {}", decode_err)),
+        Err(spawn_err) => Err(anyhow!("Error spawning blocking task: {}", spawn_err)),
+      }
+    };
+
+    let act_fut = fut::wrap_future::<_, Self>(fut);
+    ctx.spawn(act_fut.map(|res, _act, _ctx| {
+      if let Err(e) = res {
+        error!("{}", e);
+      }
+    }));
   }
 
   fn handle_ping(&mut self, ctx: &mut WebsocketContext<RealtimeClient<S>>, msg: &Bytes) {

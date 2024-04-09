@@ -241,6 +241,10 @@ pub fn default_tokio_runtime() -> io::Result<Runtime> {
     .build()
 }
 
+/// When the CollaborationServer operates within an actix-web actor, utilizing tokio::spawn for
+/// task execution confines all tasks to the same thread, attributable to the actor's reliance on a
+/// single-threaded Tokio runtime. To circumvent this limitation and enable task execution across
+/// multiple threads, we've incorporated a multi-thread feature.
 #[cfg(feature = "multi-thread")]
 pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where

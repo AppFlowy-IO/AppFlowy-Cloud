@@ -1,4 +1,4 @@
-use crate::rt_server::{rt_spawn};
+use crate::rt_server::rt_spawn;
 use crate::util::channel_ext::UnboundedSenderSink;
 use crate::RealtimeAccessControl;
 use async_trait::async_trait;

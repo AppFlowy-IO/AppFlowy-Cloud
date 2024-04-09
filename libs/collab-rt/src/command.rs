@@ -1,5 +1,5 @@
 use crate::group::cmd::{GroupCommand, GroupCommandSender};
-use crate::rt_server::{rt_spawn};
+use crate::rt_server::rt_spawn;
 use collab::core::collab_plugin::EncodedCollab;
 use dashmap::DashMap;
 use std::sync::Arc;

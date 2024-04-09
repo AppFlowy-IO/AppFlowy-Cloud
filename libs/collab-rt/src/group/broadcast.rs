@@ -2,7 +2,7 @@ use crate::error::RealtimeError;
 use crate::group::group_init::{EditState, MutexCollab, WeakMutexCollab};
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
-use crate::rt_server::{rt_spawn};
+use crate::rt_server::rt_spawn;
 use anyhow::anyhow;
 use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
 use collab::core::origin::CollabOrigin;

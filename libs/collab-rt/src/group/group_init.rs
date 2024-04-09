@@ -16,7 +16,7 @@ use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
 
-use crate::rt_server::{rt_spawn};
+use crate::rt_server::rt_spawn;
 use futures_util::{SinkExt, StreamExt};
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};

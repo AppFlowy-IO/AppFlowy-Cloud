@@ -18,7 +18,7 @@ use collab_rt_entity::CollabMessage;
 use database::collab::CollabStorage;
 use database_entity::dto::QueryCollabParams;
 use std::sync::Arc;
-use tracing::{debug, instrument, trace};
+use tracing::{instrument, trace};
 
 pub struct GroupManager<S, AC> {
   state: GroupManagementState,
@@ -143,9 +143,11 @@ where
       collab
     };
 
-    debug!(
+    trace!(
       "[realtime]: {} create group:{}:{}",
-      uid, object_id, collab_type
+      uid,
+      object_id,
+      collab_type
     );
     let group = Arc::new(
       CollabGroup::new(
@@ -165,6 +167,7 @@ where
   }
 }
 
+#[instrument(level = "trace", skip_all)]
 async fn load_collab<S>(
   uid: i64,
   object_id: &str,

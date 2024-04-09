@@ -1,5 +1,5 @@
 use crate::group::group_init::WeakMutexCollab;
-use crate::rt_server::COLLAB_RUNTIME;
+use crate::rt_server::rt_spawn;
 
 use collab::preclude::CollabPlugin;
 use collab_entity::CollabType;
@@ -74,7 +74,7 @@ where
     let object_id = self.object_id.clone();
     let workspace_id = self.workspace_id.clone();
 
-    COLLAB_RUNTIME.spawn(async move {
+    rt_spawn(async move {
       sleep(std::time::Duration::from_secs(2)).await;
       match storage.should_create_snapshot(&object_id).await {
         Ok(should_do) => {

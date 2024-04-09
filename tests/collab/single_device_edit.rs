@@ -7,6 +7,7 @@ use serde_json::json;
 use std::collections::HashMap;
 
 use std::time::Duration;
+
 use tokio::time::sleep;
 
 use collab_rt_entity::MAXIMUM_REALTIME_MESSAGE_SIZE;
@@ -643,3 +644,45 @@ async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
   }
   let _results = futures::future::join_all(tasks).await;
 }
+
+// #[tokio::test]
+// async fn simulate_50_user_connect_and_then_sync_document_test() {
+//   let users = Arc::new(RwLock::new(vec![]));
+//   let mut tasks = vec![];
+//   for i in 0..50 {
+//     let task = tokio::spawn(async move {
+//       let new_user = TestClient::new_user().await;
+//       // sleep to make sure it do not trigger register user too fast in gotrue
+//       sleep(Duration::from_secs(i % 5)).await;
+//       new_user
+//     });
+//     tasks.push(task);
+//   }
+//   let results = futures::future::join_all(tasks).await;
+//   for result in results {
+//     users.write().await.push(result.unwrap());
+//   }
+//
+//   let text = generate_random_string(1024 * 1024 * 3);
+//   let mut tasks = Vec::new();
+//   for i in 0..100 {
+//     let cloned_text = text.clone();
+//     let cloned_users = users.clone();
+//     let task = tokio::spawn(async move {
+//       let object_id = Uuid::new_v4().to_string();
+//       sleep(Duration::from_secs(1)).await;
+//       let workspace_id = cloned_users.read().await[i % 50].workspace_id().await;
+//       let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
+//       cloned_users.write().await[i % 50]
+//         .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Empty, doc_state)
+//         .await;
+//       sleep(Duration::from_secs(6)).await;
+//     });
+//     tasks.push(task);
+//   }
+//
+//   let results = futures::future::join_all(tasks).await;
+//   for result in results {
+//     result.unwrap();
+//   }
+// }

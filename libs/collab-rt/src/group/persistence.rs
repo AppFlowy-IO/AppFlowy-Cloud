@@ -78,13 +78,16 @@ where
     let result = get_encode_collab(&self.object_id, &collab.lock(), &self.collab_type);
     match result {
       Ok(params) => {
-        info!("[realtime] force save collab to disk: {}", self.object_id);
         match self
           .storage
           .insert_or_update_collab(&self.workspace_id, &self.uid, params)
           .await
         {
-          Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
+          Ok(_) => {
+            info!("[realtime] force save collab to disk: {}", self.object_id);
+            // Update the edit state on successful save
+            self.edit_state.tick();
+          },
           Err(err) => warn!("fail to force save collab to disk: {:?}", err),
         }
       },
@@ -117,13 +120,16 @@ where
 
     match result {
       Ok(params) => {
-        info!("[realtime] save collab to disk: {}", self.object_id);
         match self
           .storage
           .insert_or_update_collab(&self.workspace_id, &self.uid, params)
           .await
         {
-          Ok(_) => self.edit_state.tick(), // Update the edit state on successful save
+          Ok(_) => {
+            info!("[realtime] save collab to disk: {}", self.object_id);
+            // Update the edit state on successful save
+            self.edit_state.tick();
+          },
           Err(err) => warn!("fail to save collab to disk: {:?}", err),
         }
       },

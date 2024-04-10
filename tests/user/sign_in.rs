@@ -101,3 +101,11 @@ async fn sign_in_with_url() {
   let is_new = c.sign_in_with_url(&sign_in_url).await.unwrap();
   assert!(is_new);
 }
+
+#[tokio::test]
+async fn sign_in_with_magic_link() {
+  let c = localhost_client();
+  let email = generate_unique_email();
+  let resp = c.sign_in_with_magic_link(&email, None).await;
+  assert!(resp.is_ok());
+}

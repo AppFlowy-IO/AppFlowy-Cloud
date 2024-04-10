@@ -13,7 +13,7 @@ async fn client_apply_update_find_missing_update_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("content", "hello world");
 
@@ -71,7 +71,7 @@ async fn make_clients() -> (TestClient, TestClient, String, Value) {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("title", "hello world");
   client_1

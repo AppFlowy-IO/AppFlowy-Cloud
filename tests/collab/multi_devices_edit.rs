@@ -25,7 +25,7 @@ async fn sync_collab_content_after_reconnect_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert(&i.to_string(), i.to_string());
   }
@@ -86,7 +86,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "workspace1");
   client_1
@@ -109,7 +109,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "workspace2");
   client_2.reconnect().await;
@@ -145,7 +145,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .collabs
     .get_mut(&object_id_1)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "object 1");
   device_1
@@ -158,7 +158,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .collabs
     .get_mut(&object_id_2)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "object 2");
   device_2
@@ -230,7 +230,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), format!("Task {}", i));
     } else {
@@ -238,7 +238,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), format!("Task {}", i));
     }

@@ -49,7 +49,7 @@ pub struct TestClient {
 pub struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
-  pub collab: Arc<MutexCollab>,
+  pub mutex_collab: Arc<MutexCollab>,
 }
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
@@ -114,7 +114,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .get_awareness()
       .get_states()
@@ -131,7 +131,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .clean_awareness_state();
   }
@@ -141,7 +141,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .emit_awareness_state();
   }
@@ -315,7 +315,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .subscribe_sync_state();
 
@@ -487,9 +487,14 @@ impl TestClient {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = match encoded_collab_v1 {
-      None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![], false)),
-      Some(data) => Arc::new(
-        MutexCollab::new_with_doc_state(
+      None => Arc::new(MutexCollab::new(Collab::new_with_origin(
+        origin.clone(),
+        &object_id,
+        vec![],
+        false,
+      ))),
+      Some(data) => Arc::new(MutexCollab::new(
+        Collab::new_with_doc_state(
           origin.clone(),
           &object_id,
           DocStateSource::FromDocState(data.doc_state.to_vec()),
@@ -497,15 +502,21 @@ impl TestClient {
           false,
         )
         .unwrap(),
-      ),
+      )),
     };
-    collab.lock().emit_awareness_state();
 
-    let encoded_collab_v1 = collab
-      .encode_collab_v1(|collab| collab_type.validate(collab))
-      .unwrap()
-      .encode_to_bytes()
-      .unwrap();
+    let encoded_collab_v1 = {
+      let mut lock_guard = collab.lock();
+      lock_guard.emit_awareness_state();
+      let data = lock_guard
+        .encode_collab_v1(|collab| collab_type.validate(collab))
+        .unwrap()
+        .encode_to_bytes()
+        .unwrap();
+      drop(lock_guard);
+      data
+    };
+
     self
       .api_client
       .create_collab(CreateCollabParams {
@@ -537,7 +548,10 @@ impl TestClient {
       collab.lock().add_plugin(Box::new(sync_plugin));
     }
     collab.lock().initialize();
-    let test_collab = TestCollab { origin, collab };
+    let test_collab = TestCollab {
+      origin,
+      mutex_collab: collab,
+    };
     self.collabs.insert(object_id.clone(), test_collab);
     self.wait_object_sync_complete(&object_id).await.unwrap();
   }
@@ -570,8 +584,8 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Arc::new(
-      MutexCollab::new_with_doc_state(
+    let collab = Arc::new(MutexCollab::new(
+      Collab::new_with_doc_state(
         origin.clone(),
         object_id,
         DocStateSource::FromDocState(doc_state),
@@ -579,7 +593,7 @@ impl TestClient {
         false,
       )
       .unwrap(),
-    );
+    ));
     collab.lock().emit_awareness_state();
 
     #[cfg(feature = "collab-sync")]
@@ -606,7 +620,10 @@ impl TestClient {
       collab.lock().add_plugin(Box::new(sync_plugin));
     }
     collab.lock().initialize();
-    let test_collab = TestCollab { origin, collab };
+    let test_collab = TestCollab {
+      origin,
+      mutex_collab: collab,
+    };
     self.collabs.insert(object_id.to_string(), test_collab);
   }
 
@@ -641,7 +658,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .to_json_value()
   }
@@ -782,7 +799,7 @@ pub async fn assert_client_collab_within_secs(
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .collab
+          .mutex_collab
           .lock()
           .to_json_value()
       } => {
@@ -818,7 +835,7 @@ pub async fn assert_client_collab_include_value(
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .collab
+          .mutex_collab
           .lock()
           .to_json_value()
       } => {

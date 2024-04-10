@@ -31,7 +31,7 @@ async fn realtime_write_single_collab_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert(&i.to_string(), i.to_string());
   }
@@ -79,7 +79,7 @@ async fn collab_write_small_chunk_of_data_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert(&i.to_string(), i.to_string());
 
@@ -119,7 +119,7 @@ async fn collab_write_big_chunk_of_data_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("big_text", s.clone());
 
@@ -194,7 +194,7 @@ async fn realtime_write_multiple_collab_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), i.to_string());
     }
@@ -244,7 +244,7 @@ async fn second_connect_override_first_connect_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("1", "a");
 
@@ -264,7 +264,7 @@ async fn second_connect_override_first_connect_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("2", "b");
   new_client
@@ -319,7 +319,7 @@ async fn same_device_multiple_connect_in_order_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert(&i.to_string(), i);
     sleep(Duration::from_millis(500)).await;
@@ -371,7 +371,7 @@ async fn two_direction_peer_sync_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
   client_1
@@ -383,7 +383,7 @@ async fn two_direction_peer_sync_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("support platform", "macOS, Windows, Linux, iOS, Android");
   client_2
@@ -428,7 +428,7 @@ async fn multiple_collab_edit_test() {
     .collabs
     .get_mut(&object_id_1)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("title", "I am client 1");
   client_1
@@ -440,7 +440,7 @@ async fn multiple_collab_edit_test() {
     .collabs
     .get_mut(&object_id_2)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("title", "I am client 2");
   client_2
@@ -494,7 +494,7 @@ async fn simulate_multiple_user_edit_collab_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert("string", random_str.clone());
       let expected_json = json!({
@@ -505,15 +505,16 @@ async fn simulate_multiple_user_edit_collab_test() {
         .wait_object_sync_complete(&object_id)
         .await
         .unwrap();
-      (
-        expected_json,
-        new_user
-          .collabs
-          .get(&object_id)
-          .unwrap()
-          .collab
-          .to_json_value(),
-      )
+
+      let json = new_user
+        .collabs
+        .get(&object_id)
+        .unwrap()
+        .mutex_collab
+        .lock()
+        .to_json_value();
+
+      (expected_json, json)
     });
     tasks.push(task);
   }
@@ -591,7 +592,7 @@ async fn collab_flush_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert(&i.to_string(), i.to_string());
     sleep(Duration::from_millis(300)).await;
@@ -634,7 +635,7 @@ async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .collab
+          .mutex_collab
           .lock()
           .insert(&i.to_string(), i.to_string());
         sleep(Duration::from_millis(30)).await;

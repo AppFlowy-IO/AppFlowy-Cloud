@@ -1,12 +1,12 @@
 use crate::client_msg_router::ClientMessageRouter;
-use crate::group::group_init::{CollabGroup, MutexCollab};
+use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
 
 use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
 use crate::RealtimeAccessControl;
 use app_error::AppError;
-use collab::core::collab::DocStateSource;
+use collab::core::collab::{DocStateSource, MutexCollab};
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 

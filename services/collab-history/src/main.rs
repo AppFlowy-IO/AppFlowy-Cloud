@@ -7,6 +7,7 @@ use tracing::info;
 
 mod api;
 mod app;
+mod biz;
 mod config;
 mod error;
 mod models;

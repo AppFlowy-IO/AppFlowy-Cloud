@@ -216,6 +216,12 @@ impl Client {
   }
 
   /// Sign in with magic link
+  ///
+  /// User will receive an email with a magic link to sign in.
+  /// The redirect_to parameter is optional. If provided, the user will be redirected to the specified URL after signing in.
+  /// If not, the user will be redirected to the appflowy-flutter:// by default
+  ///
+  /// The redirect_to should be the scheme of the app, e.g., appflowy-flutter://
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_in_with_magic_link(
     &self,

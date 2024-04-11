@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "appflowy_history"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
 
 [dependencies]
 collab.workspace = true
@@ -12,7 +18,7 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-redis = { workspace = true, features = [ "aio", "tokio-comp", "connection-manager"] }
+redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager"] }
 dotenvy = "0.15.0"
 axum = "0.7.4"
 thiserror = "1.0.58"
@@ -22,3 +28,8 @@ tower-http = { version = "0.5", features = ["cors", "fs"] }
 tower = "0.4"
 serde_repr = "0.1.18"
 collab-stream.workspace = true
+chrono = "0.4.37"
+uuid = { version = "1.6.1", features = ["v4"] }
+
+[dev-dependencies]
+assert-json-diff = "2.0.2"

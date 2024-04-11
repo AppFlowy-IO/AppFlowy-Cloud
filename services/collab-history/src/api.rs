@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::error::HistoryError;
 use crate::response::APIResponse;
 use crate::AppState;
 use axum::extract::State;
@@ -11,6 +11,6 @@ pub fn router() -> Router<AppState> {
 
 pub async fn hello_handler(
   State(_state): State<AppState>,
-) -> axum::response::Result<APIResponse<()>, Error> {
+) -> axum::response::Result<APIResponse<()>, HistoryError> {
   Ok(APIResponse::new(()).with_message("hello".to_string()))
 }

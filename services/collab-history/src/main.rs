@@ -4,7 +4,6 @@ use redis::aio::ConnectionManager;
 use tokio::net::TcpListener;
 
 use tracing::info;
-
 mod api;
 mod app;
 mod biz;

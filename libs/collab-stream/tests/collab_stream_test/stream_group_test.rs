@@ -8,7 +8,50 @@ async fn single_group_read_message_test() {
   let workspace_id = "w1";
   let oid = format!("o{}", random_i64());
   let client = stream_client().await;
-  let mut group = client.group_stream(workspace_id, &oid, "g1").await.unwrap();
+  let mut group = client
+    .collab_update_stream(workspace_id, &oid, "g1")
+    .await
+    .unwrap();
+  let random_uid = random_i64();
+  let msg = Message {
+    uid: random_uid,
+    raw_data: vec![1, 2, 3, 4, 5],
+  };
+
+  {
+    let client = stream_client().await;
+    let mut group = client
+      .collab_update_stream(workspace_id, &oid, "g2")
+      .await
+      .unwrap();
+    group.insert_message(msg).await.unwrap();
+  }
+
+  let messages = group
+    .consumer_messages("consumer1", ConsumeOptions::Empty)
+    .await
+    .unwrap();
+  assert_eq!(messages.len(), 1);
+  assert_eq!(messages[0].raw_data, vec![1, 2, 3, 4, 5]);
+  assert_eq!(messages[0].uid, random_uid);
+
+  // after the message was consumed, it should not be available anymore
+  assert!(group
+    .consumer_messages("consumer1", ConsumeOptions::Count(1))
+    .await
+    .unwrap()
+    .is_empty());
+}
+
+#[tokio::test]
+async fn single_group_async_read_message_test() {
+  let workspace_id = "w1";
+  let oid = format!("o{}", random_i64());
+  let client = stream_client().await;
+  let mut group = client
+    .collab_update_stream(workspace_id, &oid, "g1")
+    .await
+    .unwrap();
 
   let random_uid = random_i64();
   let msg = Message {
@@ -18,7 +61,10 @@ async fn single_group_read_message_test() {
 
   {
     let client = stream_client().await;
-    let mut group = client.group_stream(workspace_id, &oid, "g2").await.unwrap();
+    let mut group = client
+      .collab_update_stream(workspace_id, &oid, "g2")
+      .await
+      .unwrap();
     group.insert_message(msg).await.unwrap();
   }
 
@@ -42,8 +88,8 @@ async fn single_group_read_message_test() {
 async fn different_group_read_message_test() {
   let oid = format!("o{}", random_i64());
   let client = stream_client().await;
-  let mut group_1 = client.group_stream("w1", &oid, "g1").await.unwrap();
-  let mut group_2 = client.group_stream("w1", &oid, "g2").await.unwrap();
+  let mut group_1 = client.collab_update_stream("w1", &oid, "g1").await.unwrap();
+  let mut group_2 = client.collab_update_stream("w1", &oid, "g2").await.unwrap();
 
   let random_uid = random_i64();
   let msg = Message {
@@ -53,7 +99,7 @@ async fn different_group_read_message_test() {
 
   {
     let client = stream_client().await;
-    let mut group = client.group_stream("w1", &oid, "g2").await.unwrap();
+    let mut group = client.collab_update_stream("w1", &oid, "g2").await.unwrap();
     group.insert_message(msg).await.unwrap();
   }
 
@@ -72,11 +118,17 @@ async fn different_group_read_message_test() {
 async fn read_specific_num_of_message_test() {
   let object_id = format!("o{}", random_i64());
   let client = stream_client().await;
-  let mut group_1 = client.group_stream("w1", &object_id, "g1").await.unwrap();
+  let mut group_1 = client
+    .collab_update_stream("w1", &object_id, "g1")
+    .await
+    .unwrap();
   let mut uids = vec![];
   {
     let client = stream_client().await;
-    let mut group = client.group_stream("w1", &object_id, "g2").await.unwrap();
+    let mut group = client
+      .collab_update_stream("w1", &object_id, "g2")
+      .await
+      .unwrap();
     let mut messages = vec![];
     for _i in 0..5 {
       let random_uid = random_i64();
@@ -105,11 +157,17 @@ async fn read_specific_num_of_message_test() {
 async fn read_all_message_test() {
   let object_id = format!("o{}", random_i64());
   let client = stream_client().await;
-  let mut group = client.group_stream("w1", &object_id, "g1").await.unwrap();
+  let mut group = client
+    .collab_update_stream("w1", &object_id, "g1")
+    .await
+    .unwrap();
   let mut uids = vec![];
   {
     let client = stream_client().await;
-    let mut group = client.group_stream("w1", &object_id, "g2").await.unwrap();
+    let mut group = client
+      .collab_update_stream("w1", &object_id, "g2")
+      .await
+      .unwrap();
     let mut messages = vec![];
     for _i in 0..5 {
       let random_uid = random_i64();

@@ -1,19 +1,22 @@
 use assert_json_diff::assert_json_eq;
-use collab::core::collab::DocStateSource;
+use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, ReadTxn, StateVector, Update};
 use collab_entity::CollabType;
 use collab_history::biz::history::CollabHistory;
+use collab_history::biz::open_handle::OpenCollabHandle;
 use collab_history::biz::snapshot::CollabSnapshot;
 use serde_json::json;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::test]
 async fn generate_snapshot_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  let history = CollabHistory::new(&object_id, vec![], CollabType::Empty).unwrap();
+  let open_collab = Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty).unwrap());
+  let history = CollabHistory::new(open_collab).unwrap();
 
   let updates = update_sequence_for_values(
     &object_id,
@@ -27,18 +30,20 @@ async fn generate_snapshot_test() {
   let ctx = history.gen_state_snapshot().await.unwrap();
   assert_eq!(ctx.snapshots.len(), 3);
 
-  let collab = Collab::new_with_doc_state(
+  // decode the doc_state_v2 and check if the state is correct
+  let collab = Collab::new_with_source(
     CollabOrigin::Empty,
     &object_id,
-    DocStateSource::FromDocState(ctx.state.doc_state_v2.clone()),
+    DataSource::DocStateV2(ctx.state.doc_state_v2.clone()),
     vec![],
     true,
   )
   .unwrap();
-  // assert_json_eq!(
-  //   collab.to_json_value(),
-  //   json!("") // json!({"map":{"0":"a","1":"b","2":"c"}})
-  // );
+  assert_json_eq!(
+    collab.to_json_value(),
+    json!({"map":{"0":"a","1":"b","2":"c"}})
+  );
+
   for (i, snapshot) in ctx.snapshots.into_iter().enumerate() {
     let json = json_from_snapshot(&history, &snapshot, &object_id);
     match i {
@@ -59,7 +64,8 @@ async fn generate_snapshot_test() {
 #[tokio::test]
 async fn snapshot_before_apply_update_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  let history = CollabHistory::new(&object_id, vec![], CollabType::Empty).unwrap();
+  let open_collab = Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty).unwrap());
+  let history = CollabHistory::new(open_collab).unwrap();
   let updates = update_sequence_for_values(
     &object_id,
     vec!["a".to_string(), "b".to_string(), "c".to_string()],

@@ -1,6 +1,5 @@
-mod control_stream;
 pub mod history;
-mod manager;
+pub mod manager;
+pub mod open_handle;
 mod persistence;
 pub mod snapshot;
-mod update_stream;

@@ -1,3 +1,4 @@
+use crate::biz::open_handle::OpenCollabHandle;
 use crate::biz::persistence::HistoryPersistence;
 use crate::error::HistoryError;
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
@@ -5,23 +6,23 @@ use collab::preclude::{ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicI64, AtomicU32};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, warn};
 
 pub struct SnapshotGenerator {
-  collab: WeakMutexCollab,
+  open_collab: Weak<OpenCollabHandle>,
   collab_type: CollabType,
   apply_update_count: AtomicU32,
   pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
 }
 
 impl SnapshotGenerator {
-  pub fn new(collab: WeakMutexCollab, collab_type: CollabType) -> Self {
+  pub fn new(open_collab: Weak<OpenCollabHandle>, collab_type: CollabType) -> Self {
     Self {
-      collab,
+      open_collab,
       collab_type,
       apply_update_count: Default::default(),
       pending_snapshots: Default::default(),
@@ -42,10 +43,16 @@ impl SnapshotGenerator {
     // in the future, we can use a more sophisticated algorithm to determine when to generate a snapshot.
     if prev_apply_update_count + 1 >= gen_snapshot_threshold(&self.collab_type) {
       let pending_snapshots = self.pending_snapshots.clone();
-      let weak_collab = self.collab.clone();
+      let weak_handle = self.open_collab.clone();
       tokio::spawn(async move {
-        if let Some(collab) = weak_collab.upgrade() {
-          attempt_gen_snapshot(collab, pending_snapshots, 3, Duration::from_secs(2)).await;
+        if let Some(handle) = weak_handle.upgrade() {
+          attempt_gen_snapshot(
+            &handle.mutex_collab,
+            pending_snapshots,
+            3,
+            Duration::from_secs(2),
+          )
+          .await;
         } else {
           warn!("collab is dropped. cannot generate snapshot")
         }
@@ -79,14 +86,14 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
 // Assume gen_snapshot and other relevant functions and types are defined elsewhere.
 // Helper function to perform the snapshot generation with retries.
 async fn attempt_gen_snapshot(
-  collab: MutexCollab,
+  collab: &MutexCollab,
   pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
   max_retries: usize,
   delay: Duration,
 ) {
   let mut retries = 0;
   while retries < max_retries {
-    match gen_snapshot(&collab, 1) {
+    match gen_snapshot(collab, 1) {
       Ok(snapshot) => {
         pending_snapshots.write().await.push(snapshot);
         return;

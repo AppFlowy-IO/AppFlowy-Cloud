@@ -1,9 +1,13 @@
 use crate::app::create_app;
+use std::sync::Arc;
 
 use redis::aio::ConnectionManager;
 use tokio::net::TcpListener;
 
+use crate::biz::manager::OpenCollabManager;
+
 use tracing::info;
+
 mod api;
 mod app;
 mod biz;
@@ -32,4 +36,5 @@ async fn main() {
 #[derive(Clone)]
 pub struct AppState {
   pub redis_client: ConnectionManager,
+  pub open_collab_manager: Arc<OpenCollabManager>,
 }

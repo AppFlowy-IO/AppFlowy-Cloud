@@ -1,7 +1,10 @@
+use crate::biz::manager::OpenCollabManager;
 use crate::config::Config;
 use crate::{api, AppState};
 use axum::http::Method;
 use axum::Router;
+use collab_stream::client::CollabRedisStream;
+use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
@@ -16,7 +19,14 @@ pub(crate) async fn create_app() -> Router<()> {
     .await
     .expect("failed to get redis connection manager");
 
-  let state = AppState { redis_client };
+  let collab_redis_stream =
+    CollabRedisStream::new_with_connection_manager(redis_client.clone()).await;
+  let open_collab_manager = Arc::new(OpenCollabManager::new(collab_redis_stream).await);
+
+  let state = AppState {
+    redis_client,
+    open_collab_manager,
+  };
 
   let cors = CorsLayer::new()
         // allow `GET` and `POST` when accessing the resource

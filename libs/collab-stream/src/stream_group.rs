@@ -3,23 +3,18 @@ use crate::model::{Message, MessageId, StreamMessage, StreamMessageByStreamKey};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamMaxlen, StreamPendingData, StreamPendingReply, StreamReadOptions};
 use redis::{pipe, AsyncCommands, RedisError, RedisResult};
+use std::sync::mpsc;
 
 #[derive(Clone)]
-pub struct CollabStreamGroup {
+pub struct StreamGroup {
   connection_manager: ConnectionManager,
   stream_key: String,
   group_name: String,
 }
 
-impl CollabStreamGroup {
-  pub fn new(
-    workspace_id: &str,
-    oid: &str,
-    group_name: &str,
-    connection_manager: ConnectionManager,
-  ) -> Self {
+impl StreamGroup {
+  pub fn new(stream_key: String, group_name: &str, connection_manager: ConnectionManager) -> Self {
     let group_name = group_name.to_string();
-    let stream_key = format!("af_collab-{}-{}", workspace_id, oid);
     Self {
       group_name,
       connection_manager,

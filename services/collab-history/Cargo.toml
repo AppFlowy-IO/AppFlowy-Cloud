@@ -32,6 +32,7 @@ collab-stream.workspace = true
 chrono = "0.4.37"
 uuid = { version = "1.6.1", features = ["v4"] }
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
+dashmap = "5.5.3"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

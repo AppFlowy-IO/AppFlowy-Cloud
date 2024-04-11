@@ -1,42 +1,25 @@
+use crate::biz::open_handle::OpenCollabHandle;
 use crate::biz::snapshot::{gen_snapshot, CollabSnapshot, CollabStateSnapshot, SnapshotGenerator};
 use crate::error::HistoryError;
-use collab::core::collab::{DocStateSource, MutexCollab};
-use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
-use collab::preclude::{Collab, ReadTxn, Snapshot, StateVector, Update};
-use collab_entity::CollabType;
+use collab::preclude::{ReadTxn, Snapshot, StateVector, Update};
 use serde_json::Value;
-use std::ops::Deref;
+use std::sync::Arc;
 
 pub struct CollabHistory {
-  object_id: String,
-  collab_type: CollabType,
-  mutex_collab: MutexCollab,
+  open_collab_handle: Arc<OpenCollabHandle>,
   snapshot_generator: SnapshotGenerator,
 }
 
 impl CollabHistory {
-  pub fn new(
-    object_id: &str,
-    doc_state: Vec<u8>,
-    collab_type: CollabType,
-  ) -> Result<Self, HistoryError> {
-    let collab = Collab::new_with_doc_state(
-      CollabOrigin::Empty,
-      object_id,
-      DocStateSource::FromDocState(doc_state),
-      vec![],
-      true,
-    )?;
-
-    let mutex_collab = MutexCollab::new(collab);
-    let snapshot_generator = SnapshotGenerator::new(mutex_collab.downgrade(), collab_type.clone());
+  pub fn new(open_collab_handle: Arc<OpenCollabHandle>) -> Result<Self, HistoryError> {
+    let weak_open_collab = Arc::downgrade(&open_collab_handle);
+    let snapshot_generator =
+      SnapshotGenerator::new(weak_open_collab, open_collab_handle.collab_type.clone());
     Ok(Self {
-      object_id: object_id.to_string(),
-      mutex_collab,
       snapshot_generator,
-      collab_type,
+      open_collab_handle,
     })
   }
 
@@ -44,12 +27,12 @@ impl CollabHistory {
   /// Generate a snapshot of the current state of the collab
   /// Only for testing purposes. We use [SnapshotGenerator] to generate snapshot
   pub fn gen_snapshot(&self, uid: i64) -> Result<CollabSnapshot, HistoryError> {
-    gen_snapshot(&self.mutex_collab, uid)
+    gen_snapshot(&self.open_collab_handle.mutex_collab, uid)
   }
 
   pub async fn gen_state_snapshot(&self) -> Result<SnapshotContext, HistoryError> {
     let (doc_state_v2, state_vector) = {
-      let lock_guard = self.mutex_collab.lock();
+      let lock_guard = self.open_collab_handle.mutex_collab.lock();
       let txn = lock_guard.try_transaction()?;
       // TODO(nathan): reduce the size of doc_state_v2 by encoding the previous [CollabStateSnapshot] doc_state_v2
       let doc_state_v2 = txn.encode_state_as_update_v2(&StateVector::default());
@@ -66,7 +49,7 @@ impl CollabHistory {
       .collect();
 
     let state = CollabStateSnapshot::new(
-      self.object_id.clone(),
+      self.open_collab_handle.object_id.clone(),
       doc_state_v2,
       state_vector,
       chrono::Utc::now().timestamp(),
@@ -79,7 +62,7 @@ impl CollabHistory {
   /// due to its reduced data size. This optimization helps in minimizing the storage and
   /// transmission overhead, making the process more efficient.
   pub fn encode_update_v2(&self, snapshot: &Snapshot) -> Result<Vec<u8>, HistoryError> {
-    let lock_guard = self.mutex_collab.lock();
+    let lock_guard = self.open_collab_handle.mutex_collab.lock();
     let txn = lock_guard.try_transaction()?;
     let mut encoder = EncoderV2::new();
     txn
@@ -91,7 +74,7 @@ impl CollabHistory {
   /// Apply an update to the collab.
   /// The update is encoded in the v1 format.
   pub fn apply_update_v1(&self, update: &[u8]) -> Result<(), HistoryError> {
-    let lock_guard = self.mutex_collab.lock();
+    let lock_guard = self.open_collab_handle.mutex_collab.lock();
     let mut txn = lock_guard.try_transaction_mut()?;
     let decode_update =
       Update::decode_v1(update).map_err(|err| HistoryError::Internal(err.into()))?;
@@ -105,7 +88,7 @@ impl CollabHistory {
 
   #[cfg(debug_assertions)]
   pub fn json(&self) -> Value {
-    let lock_guard = self.mutex_collab.lock();
+    let lock_guard = self.open_collab_handle.mutex_collab.lock();
     lock_guard.to_json_value()
   }
 }

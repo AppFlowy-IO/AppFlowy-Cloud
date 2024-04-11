@@ -13,6 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 collab.workspace = true
+collab-entity.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -30,6 +31,7 @@ serde_repr = "0.1.18"
 collab-stream.workspace = true
 chrono = "0.4.37"
 uuid = { version = "1.6.1", features = ["v4"] }
+sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

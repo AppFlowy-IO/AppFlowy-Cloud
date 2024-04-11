@@ -174,15 +174,22 @@ pub async fn invite_workspace_members(
     .context("Begin transaction to invite workspace members")?;
 
   for invitation in invitations {
-    gotrue_client
-      .magic_link(
-        &MagicLinkParams {
-          email: invitation.email.clone(),
-          ..Default::default()
-        },
-        Some("/web/login#redirect_to=invite".to_owned()),
-      )
-      .await?;
+    let cloned_email = invitation.email.clone();
+    let cloned_gotrue_client = gotrue_client.clone();
+    tokio::spawn(async move {
+      if let Err(err) = cloned_gotrue_client
+        .magic_link(
+          &MagicLinkParams {
+            email: cloned_email,
+            ..Default::default()
+          },
+          Some("/web/login#redirect_to=invite".to_owned()),
+        )
+        .await
+      {
+        tracing::error!("Failed to send magic link to invitee: {}", err);
+      }
+    });
 
     // Generate a link such that when clicked, the user is added to the workspace.
     insert_workspace_invitation(

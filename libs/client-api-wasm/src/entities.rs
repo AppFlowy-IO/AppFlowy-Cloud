@@ -1,6 +1,10 @@
 use client_api::entity::AFUserProfile;
 use client_api::error::{AppResponseError, ErrorCode};
+use collab_entity::CollabType;
+use collab_rt_entity::EncodedCollab;
+use database_entity::dto::{QueryCollab, QueryCollabParams};
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use tsify::Tsify;
 use wasm_bindgen::JsValue;
 
@@ -8,7 +12,13 @@ macro_rules! from_struct_for_jsvalue {
   ($type:ty) => {
     impl From<$type> for JsValue {
       fn from(value: $type) -> Self {
-        JsValue::from_str(&serde_json::to_string(&value).unwrap())
+        match serde_wasm_bindgen::to_value(&value) {
+          Ok(js_value) => js_value,
+          Err(err) => {
+            tracing::error!("Failed to convert User to JsValue: {:?}", err);
+            JsValue::NULL
+          },
+        }
       }
     }
   };
@@ -52,23 +62,94 @@ impl From<AppResponseError> for ClientResponse {
 #[derive(Tsify, Serialize, Deserialize)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 pub struct User {
-  pub uid: i64,
+  pub uid: String,
   pub uuid: String,
   pub email: Option<String>,
   pub name: Option<String>,
   pub latest_workspace_id: String,
+  pub icon_url: Option<String>,
 }
 
 from_struct_for_jsvalue!(User);
-
 impl From<AFUserProfile> for User {
   fn from(profile: AFUserProfile) -> Self {
     User {
-      uid: profile.uid,
+      uid: profile.uid.to_string(),
       uuid: profile.uuid.to_string(),
       email: profile.email,
       name: profile.name,
       latest_workspace_id: profile.latest_workspace_id.to_string(),
+      icon_url: None,
+    }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct ClientQueryCollabParams {
+  pub workspace_id: String,
+  pub object_id: String,
+  #[tsify(type = "0 | 1 | 2 | 3 | 4 | 5")]
+  pub collab_type: i32,
+}
+
+impl Into<QueryCollabParams> for ClientQueryCollabParams {
+  fn into(self) -> QueryCollabParams {
+    QueryCollabParams {
+      workspace_id: self.workspace_id,
+      inner: QueryCollab {
+        collab_type: CollabType::from_number(self.collab_type),
+        object_id: self.object_id,
+      },
+    }
+  }
+}
+
+trait FromNumber {
+  fn from_number(n: i32) -> Self
+  where
+    Self: Sized;
+}
+
+impl FromNumber for CollabType {
+  fn from_number(n: i32) -> CollabType {
+    match n {
+      0 => CollabType::Document,
+      1 => CollabType::Database,
+      2 => CollabType::WorkspaceDatabase,
+      3 => CollabType::Folder,
+      4 => CollabType::DatabaseRow,
+      5 => CollabType::UserAwareness,
+      _ => CollabType::Empty,
+    }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize, Default)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct ClientEncodeCollab {
+  pub state_vector: Vec<u8>,
+  pub doc_state: Vec<u8>,
+  #[serde(default)]
+  pub version: ClientEncoderVersion,
+}
+
+#[derive(Tsify, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ClientEncoderVersion {
+  #[default]
+  V1 = 0,
+  V2 = 1,
+}
+
+from_struct_for_jsvalue!(ClientEncodeCollab);
+
+impl From<EncodedCollab> for ClientEncodeCollab {
+  fn from(collab: EncodedCollab) -> Self {
+    ClientEncodeCollab {
+      state_vector: collab.state_vector.to_vec(),
+      doc_state: collab.doc_state.to_vec(),
+      version: ClientEncoderVersion::V1,
     }
   }
 }

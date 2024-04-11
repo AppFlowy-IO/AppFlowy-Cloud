@@ -25,3 +25,18 @@ async fn wasm_sign_in_success() {
 
   assert!(val);
 }
+
+#[wasm_bindgen_test]
+async fn wasm_logout_success() {
+  let test_client = TestClient::new_user().await;
+  let user = test_client.user;
+
+  test_client
+    .api_client
+    .sign_in_password(user.email.as_str(), user.password.as_str())
+    .await
+    .unwrap();
+  let res = test_client.api_client.sign_out().await;
+
+  assert!(res.is_ok());
+}

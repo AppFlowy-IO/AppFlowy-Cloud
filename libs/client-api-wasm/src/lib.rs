@@ -1,6 +1,7 @@
 pub mod entities;
 
 use crate::entities::*;
+use client_api::entity::QueryCollabParams;
 use client_api::notify::TokenState;
 use client_api::{Client, ClientConfiguration};
 use std::sync::Arc;
@@ -115,10 +116,7 @@ impl ClientAPI {
 
   pub async fn get_user(&self) -> Result<User, ClientResponse> {
     match self.client.get_profile().await {
-      Ok(profile) => {
-        tracing::debug!("User profile: {:?}", profile.metadata);
-        Ok(User::from(profile))
-      },
+      Ok(profile) => Ok(User::from(profile)),
       Err(err) => Err(ClientResponse::from(err)),
     }
   }
@@ -126,6 +124,17 @@ impl ClientAPI {
   pub fn restore_token(&self, token: &str) -> Result<(), ClientResponse> {
     match self.client.restore_token(token) {
       Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn get_collab(
+    &self,
+    params: ClientQueryCollabParams,
+  ) -> Result<ClientEncodeCollab, ClientResponse> {
+    tracing::debug!("get_collab: {:?}", params);
+    match self.client.get_collab(params.into()).await {
+      Ok(data) => Ok(ClientEncodeCollab::from(data)),
       Err(err) => Err(ClientResponse::from(err)),
     }
   }

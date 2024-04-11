@@ -181,7 +181,7 @@ impl Action for GetCollabAction {
 
     Box::pin(async move {
       let url = format!(
-        "{}/api/workspace/{}/collab/{}",
+        "{}/v1/api/workspace/{}/collab/{}",
         client.base_url, &params.workspace_id, &params.object_id
       );
       let resp = client

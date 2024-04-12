@@ -41,6 +41,7 @@ pub const WORKSPACE_PATTERN: &str = "/api/workspace";
 pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member";
 pub const WORKSPACE_INVITE_PATTERN: &str = "/api/workspace/{workspace_id}/invite";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
+pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{object_id}";
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
@@ -85,6 +86,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_handler))
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
+    )
+    .service(
+      web::resource("/v1/{workspace_id}/collab/{object_id}")
+        .route(web::get().to(v1_get_collab_handler))
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
@@ -576,6 +581,8 @@ async fn create_collab_list_handler(
 
   Ok(Json(AppResponse::Ok()))
 }
+
+// Deprecated
 async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
@@ -589,6 +596,37 @@ async fn get_collab_handler(
   let data = state
     .collab_access_control_storage
     .get_collab_encoded(&uid, payload.into_inner(), false)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
+async fn v1_get_collab_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(String, String)>,
+  query: web::Query<CollabTypeParam>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<EncodedCollab>>> {
+  let (workspace_id, object_id) = path.into_inner();
+  let collab_type = query.into_inner().collab_type;
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let param = QueryCollabParams {
+    workspace_id,
+    inner: QueryCollab {
+      object_id,
+      collab_type,
+    },
+  };
+
+  let data = state
+    .collab_access_control_storage
+    .get_collab_encoded(&uid, param, false)
     .await
     .map_err(AppResponseError::from)?;
 

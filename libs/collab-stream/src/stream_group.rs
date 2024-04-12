@@ -61,9 +61,13 @@ impl StreamGroup {
 
   /// Inserts multiple messages into the Redis stream using a pipeline.
   ///
-  pub async fn insert_messages(&mut self, messages: Vec<Message>) -> Result<(), StreamError> {
+  pub async fn insert_messages<T: Into<Message>>(
+    &mut self,
+    messages: Vec<T>,
+  ) -> Result<(), StreamError> {
     let mut pipe = pipe();
     for message in messages {
+      let message = message.into();
       let tuple = message.into_tuple_array();
       pipe.xadd(&self.stream_key, "*", tuple.as_slice());
     }

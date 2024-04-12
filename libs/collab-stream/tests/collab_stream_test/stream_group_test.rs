@@ -223,7 +223,7 @@ async fn read_all_message_test() {
   // ack all messages.
   let message_ids = consumer_messages
     .iter()
-    .map(|m| m.message_id.to_string())
+    .map(|m| m.id.to_string())
     .collect::<Vec<_>>();
   group.ack_messages(&message_ids).await.unwrap();
   let pending = group.pending_reply().await.unwrap();

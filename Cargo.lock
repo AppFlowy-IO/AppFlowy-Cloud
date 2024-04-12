@@ -1699,10 +1699,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "collab-entity",
  "futures",
  "rand 0.8.5",
  "redis 0.25.2",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",

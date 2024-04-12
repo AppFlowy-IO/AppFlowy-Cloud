@@ -23,6 +23,13 @@ impl CollabRedisStream {
     CollabStream::new(workspace_id, oid, self.connection_manager.clone())
   }
 
+  pub async fn collab_control_stream(&self, group_name: &str) -> Result<StreamGroup, StreamError> {
+    let stream_key = "af_collab_control".to_string();
+    let mut group = StreamGroup::new(stream_key, group_name, self.connection_manager.clone());
+    group.ensure_consumer_group("0").await?;
+    Ok(group)
+  }
+
   pub async fn collab_update_stream(
     &self,
     workspace_id: &str,

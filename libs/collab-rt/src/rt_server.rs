@@ -22,7 +22,7 @@ use tokio::runtime;
 use tokio::runtime::Runtime;
 use tokio::sync::Notify;
 use tokio::time::interval;
-use tracing::{error, trace};
+use tracing::{error, info, trace};
 
 lazy_static! {
   pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
@@ -51,6 +51,10 @@ where
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
+    if cfg!(feature = "multi-thread") {
+      info!("CollaborationServer with multi-thread feature enabled");
+    }
+
     let metrics_calculate = CollabMetricsCalculate::default();
     let connect_state = ConnectState::new();
     let access_control = Arc::new(access_control);

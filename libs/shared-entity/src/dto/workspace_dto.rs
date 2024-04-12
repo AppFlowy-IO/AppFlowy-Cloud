@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use collab_entity::CollabType;
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
@@ -99,4 +100,9 @@ pub struct PatchWorkspaceParam {
   pub workspace_id: Uuid,
   pub workspace_name: Option<String>,
   pub workspace_icon: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CollabTypeParam {
+  pub collab_type: CollabType,
 }

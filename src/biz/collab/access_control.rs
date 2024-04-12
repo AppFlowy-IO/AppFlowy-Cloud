@@ -1,4 +1,4 @@
-use crate::api::workspace::COLLAB_PATTERN;
+use crate::api::workspace::{COLLAB_PATTERN, V1_COLLAB_PATTERN};
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use actix_router::{Path, ResourceDef, Url};
@@ -61,15 +61,26 @@ where
       skip_resources: vec![
         // Skip access control when trying to create a collab
         (Method::POST, ResourceDef::new(COLLAB_PATTERN)),
+        (Method::POST, ResourceDef::new(V1_COLLAB_PATTERN)),
       ],
-      require_access_levels: vec![(
-        ResourceDef::new(COLLAB_PATTERN),
-        [
-          // Only the user with FullAccess can delete the collab
-          (Method::DELETE, AFAccessLevel::FullAccess),
-        ]
-        .into(),
-      )],
+      require_access_levels: vec![
+        (
+          ResourceDef::new(COLLAB_PATTERN),
+          [
+            // Only the user with FullAccess can delete the collab
+            (Method::DELETE, AFAccessLevel::FullAccess),
+          ]
+          .into(),
+        ),
+        (
+          ResourceDef::new(V1_COLLAB_PATTERN),
+          [
+            // Only the user with FullAccess can delete the collab
+            (Method::DELETE, AFAccessLevel::FullAccess),
+          ]
+          .into(),
+        ),
+      ],
       access_control,
       collab_cache,
     }

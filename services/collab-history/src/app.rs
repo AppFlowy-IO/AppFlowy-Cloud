@@ -1,15 +1,16 @@
-use crate::biz::manager::OpenCollabManager;
+use crate::api;
 use crate::config::Config;
-use crate::{api, AppState};
+use crate::core::manager::OpenCollabManager;
 use axum::http::Method;
 use axum::Router;
 use collab_stream::client::CollabRedisStream;
+use redis::aio::ConnectionManager;
 use std::sync::Arc;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
-pub(crate) async fn create_app() -> Router<()> {
+pub async fn create_app() -> Router<()> {
   let config = Config::from_env();
   info!("config loaded: {:?}", &config);
 
@@ -36,4 +37,10 @@ pub(crate) async fn create_app() -> Router<()> {
   Router::new()
     .nest_service("/api", api::router().with_state(state.clone()))
     .layer(ServiceBuilder::new().layer(cors))
+}
+
+#[derive(Clone)]
+pub struct AppState {
+  pub redis_client: ConnectionManager,
+  pub open_collab_manager: Arc<OpenCollabManager>,
 }

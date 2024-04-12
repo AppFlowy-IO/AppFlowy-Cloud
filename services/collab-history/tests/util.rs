@@ -1,5 +1,6 @@
 use anyhow::Context;
 use collab_stream::client::CollabRedisStream;
+use rand::{thread_rng, Rng};
 
 pub async fn redis_client() -> redis::Client {
   let redis_uri = "redis://localhost:6379";
@@ -14,4 +15,11 @@ pub async fn redis_stream() -> CollabRedisStream {
     .await
     .context("failed to create stream client")
     .unwrap()
+}
+
+#[allow(dead_code)]
+pub fn random_i64() -> i64 {
+  let mut rng = thread_rng();
+  let num: i64 = rng.gen();
+  num
 }

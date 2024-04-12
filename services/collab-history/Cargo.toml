@@ -36,3 +36,5 @@ dashmap = "5.5.3"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
+rand = "0.8.5"
+serial_test = "3.0.0"

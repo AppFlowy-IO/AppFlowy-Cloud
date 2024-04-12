@@ -1,6 +1,6 @@
+use crate::app::AppState;
 use crate::error::HistoryError;
 use crate::response::APIResponse;
-use crate::AppState;
 use axum::extract::State;
 use axum::routing::get;
 use axum::Router;

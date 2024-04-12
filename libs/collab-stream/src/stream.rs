@@ -1,5 +1,5 @@
 use crate::error::StreamError;
-use crate::model::{Message, MessageId, StreamMessage, StreamMessageByStreamKey};
+use crate::model::{MessageId, StreamBinary, StreamMessage, StreamMessageByStreamKey};
 use redis::aio::ConnectionManager;
 use redis::streams::{StreamMaxlen, StreamReadOptions};
 use redis::{pipe, AsyncCommands, RedisError};
@@ -19,7 +19,7 @@ impl CollabStream {
   }
 
   /// Inserts a single message into the Redis stream.
-  pub async fn insert_message(&mut self, message: Message) -> Result<MessageId, StreamError> {
+  pub async fn insert_message(&mut self, message: StreamBinary) -> Result<MessageId, StreamError> {
     let tuple = message.into_tuple_array();
     let message_id = self
       .connection_manager
@@ -30,7 +30,7 @@ impl CollabStream {
 
   /// Inserts multiple messages into the Redis stream using a pipeline.
   ///
-  pub async fn insert_messages(&mut self, messages: Vec<Message>) -> Result<(), StreamError> {
+  pub async fn insert_messages(&mut self, messages: Vec<StreamBinary>) -> Result<(), StreamError> {
     let mut pipe = pipe();
     for message in messages {
       let tuple = message.into_tuple_array();
@@ -83,7 +83,7 @@ impl CollabStream {
     Ok(messages.pop())
   }
 
-  pub async fn read_all_message(&mut self) -> Result<Vec<Message>, StreamError> {
+  pub async fn read_all_message(&mut self) -> Result<Vec<StreamBinary>, StreamError> {
     let read_messages: Vec<StreamMessage> =
       self.connection_manager.xrange_all(&self.stream_key).await?;
     Ok(read_messages.into_iter().map(Into::into).collect())

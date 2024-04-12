@@ -1,5 +1,5 @@
 use crate::collab_stream_test::test_util::{random_i64, stream_client};
-use collab_stream::model::Message;
+use collab_stream::model::StreamBinary;
 
 #[tokio::test]
 async fn read_single_message_test() {
@@ -13,11 +13,7 @@ async fn read_single_message_test() {
     tx.send(msg).await.unwrap();
   });
 
-  let msg = Message {
-    uid: 3,
-    raw_data: vec![1, 2, 3],
-  };
-
+  let msg = StreamBinary(vec![1, 2, 3]);
   {
     let client_1 = stream_client().await;
     let mut stream_1 = client_1.stream("w1", &oid).await;
@@ -25,7 +21,7 @@ async fn read_single_message_test() {
   }
 
   let msg = rx.recv().await.unwrap().unwrap();
-  assert_eq!(msg.raw_data, vec![1, 2, 3]);
+  assert_eq!(msg.data, vec![1, 2, 3]);
 }
 
 #[tokio::test]
@@ -39,28 +35,16 @@ async fn read_multiple_messages_test() {
     let client_1 = stream_client().await;
     let mut stream_1 = client_1.stream("w1", &oid).await;
     let messages = vec![
-      Message {
-        uid: 1001,
-        raw_data: vec![1, 2, 3],
-      },
-      Message {
-        uid: 1002,
-        raw_data: vec![4, 5, 6],
-      },
-      Message {
-        uid: 1003,
-        raw_data: vec![7, 8, 9],
-      },
+      StreamBinary(vec![1, 2, 3]),
+      StreamBinary(vec![4, 5, 6]),
+      StreamBinary(vec![7, 8, 9]),
     ];
     stream_1.insert_messages(messages).await.unwrap();
   }
 
   let msg = stream_2.read_all_message().await.unwrap();
   assert_eq!(msg.len(), 3);
-  assert_eq!(msg[0].raw_data, vec![1, 2, 3]);
-  assert_eq!(msg[0].uid, 1001);
-  assert_eq!(msg[1].raw_data, vec![4, 5, 6]);
-  assert_eq!(msg[1].uid, 1002);
-  assert_eq!(msg[2].raw_data, vec![7, 8, 9]);
-  assert_eq!(msg[2].uid, 1003);
+  assert_eq!(*msg[0], vec![1, 2, 3]);
+  assert_eq!(*msg[1], vec![4, 5, 6]);
+  assert_eq!(*msg[2], vec![7, 8, 9]);
 }

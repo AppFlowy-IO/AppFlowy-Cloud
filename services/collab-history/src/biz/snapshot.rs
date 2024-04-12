@@ -1,21 +1,22 @@
-use crate::biz::open_handle::OpenCollabHandle;
-use crate::biz::persistence::HistoryPersistence;
+use crate::core::open_handle::OpenCollabHandle;
+
 use crate::error::HistoryError;
-use collab::core::collab::{MutexCollab, WeakMutexCollab};
+use collab::core::collab::MutexCollab;
 use collab::preclude::{ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicI64, AtomicU32};
+use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, warn};
 
+#[derive(Clone)]
 pub struct SnapshotGenerator {
   open_collab: Weak<OpenCollabHandle>,
   collab_type: CollabType,
-  apply_update_count: AtomicU32,
+  apply_update_count: Arc<AtomicU32>,
   pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
 }
 
@@ -129,7 +130,7 @@ pub fn gen_snapshot(mutex_collab: &MutexCollab, uid: i64) -> Result<CollabSnapsh
 /// locating the nearest `CollabStateSnapshot` whose `created_at` timestamp
 /// is less than or equal to the `CollabSnapshot`'s `created_at`.
 /// This `CollabStateSnapshot` is then used to restore the Collab's state to the snapshot's timestamp.
-pub struct CollabStateSnapshot {
+pub struct CollabSnapshotState {
   pub snapshot_id: String,
   /// Unique identifier of the collaborative document.
   pub object_id: String,
@@ -144,7 +145,7 @@ pub struct CollabStateSnapshot {
   pub dependency_snapshot_id: Option<String>,
 }
 
-impl CollabStateSnapshot {
+impl CollabSnapshotState {
   pub fn new(
     object_id: String,
     doc_state_v2: Vec<u8>,

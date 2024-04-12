@@ -1,20 +1,9 @@
-use crate::app::create_app;
-use std::sync::Arc;
-
 use redis::aio::ConnectionManager;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use crate::biz::manager::OpenCollabManager;
-
+use collab_history::app::create_app;
 use tracing::info;
-
-mod api;
-mod app;
-mod biz;
-mod config;
-mod error;
-mod models;
-mod response;
 
 #[tokio::main]
 async fn main() {
@@ -31,10 +20,4 @@ async fn main() {
   axum::serve(listener, create_app().await)
     .await
     .expect("failed to run server");
-}
-
-#[derive(Clone)]
-pub struct AppState {
-  pub redis_client: ConnectionManager,
-  pub open_collab_manager: Arc<OpenCollabManager>,
 }

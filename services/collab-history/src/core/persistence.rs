@@ -1,4 +1,4 @@
-use crate::biz::snapshot::{CollabSnapshot, CollabStateSnapshot};
+use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState};
 use crate::error::HistoryError;
 use sqlx::PgPool;
 
@@ -9,8 +9,8 @@ pub struct HistoryPersistence {
 impl HistoryPersistence {
   pub async fn save_snapshot(
     &self,
-    state: CollabStateSnapshot,
-    snapshots: Vec<CollabSnapshot>,
+    _state: CollabSnapshotState,
+    _snapshots: Vec<CollabSnapshot>,
   ) -> Result<(), HistoryError> {
     todo!()
   }

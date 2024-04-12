@@ -5,8 +5,8 @@ use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, ReadTxn, StateVector, Update};
 use collab_entity::CollabType;
 use collab_history::biz::history::CollabHistory;
-use collab_history::biz::open_handle::OpenCollabHandle;
 use collab_history::biz::snapshot::CollabSnapshot;
+use collab_history::core::open_handle::OpenCollabHandle;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,15 +15,16 @@ use tokio::time::sleep;
 #[tokio::test]
 async fn generate_snapshot_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  let open_collab = Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty).unwrap());
-  let history = CollabHistory::new(open_collab).unwrap();
+  let open_collab =
+    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None).unwrap());
+  let history = CollabHistory::new(open_collab.clone()).unwrap();
 
   let updates = update_sequence_for_values(
     &object_id,
     vec!["a".to_string(), "b".to_string(), "c".to_string()],
   );
   for update in updates {
-    history.apply_update_v1(&update).unwrap();
+    open_collab.apply_update_v1(&update).unwrap();
     sleep(Duration::from_millis(400)).await;
   }
 
@@ -64,8 +65,9 @@ async fn generate_snapshot_test() {
 #[tokio::test]
 async fn snapshot_before_apply_update_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  let open_collab = Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty).unwrap());
-  let history = CollabHistory::new(open_collab).unwrap();
+  let open_collab =
+    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None).unwrap());
+  let history = CollabHistory::new(open_collab.clone()).unwrap();
   let updates = update_sequence_for_values(
     &object_id,
     vec!["a".to_string(), "b".to_string(), "c".to_string()],
@@ -76,7 +78,7 @@ async fn snapshot_before_apply_update_test() {
     // before applying the update, generate a snapshot which will be used to encode the update.
     // the snapshot update can be used to restore the state of the collab.
     let snapshot = history.gen_snapshot(1).unwrap();
-    history.apply_update_v1(&update).unwrap();
+    open_collab.apply_update_v1(&update).unwrap();
     snapshots.push(snapshot);
   }
 

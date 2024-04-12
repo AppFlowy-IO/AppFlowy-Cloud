@@ -53,6 +53,7 @@ impl DerefMut for PendingQueue {
   }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct PendingItem {
   pub(crate) workspace_id: String,
   pub(crate) object_id: String,

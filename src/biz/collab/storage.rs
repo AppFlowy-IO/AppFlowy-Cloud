@@ -184,7 +184,9 @@ where
       &params.object_id,
       &params.encoded_collab_v1,
       &params.collab_type,
-    ) {
+    )
+    .await
+    {
       return Err(AppError::NoRequiredData(format!(
         "collab doc state is not correct:{},{}",
         params.object_id, err

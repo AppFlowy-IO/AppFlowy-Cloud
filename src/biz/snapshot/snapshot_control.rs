@@ -14,6 +14,7 @@ use database_entity::dto::{AFSnapshotMeta, AFSnapshotMetas, InsertSnapshotParams
 use futures_util::StreamExt;
 
 use chrono::{DateTime, Utc};
+
 use sqlx::{Acquire, PgPool};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -249,50 +250,49 @@ impl SnapshotCommandRunner {
   }
 
   async fn process_next_batch(&self) -> Result<(), AppError> {
-    let next_item = match self.queue.write().await.pop() {
+    let mut queue = self.queue.write().await;
+
+    let next_item = match queue.pop() {
       Some(item) => item,
-      None => return Ok(()), // No items to process
+      None => return Ok(()),
     };
 
-    let key = SnapshotKey::from_object_id(&next_item.object_id);
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
+    let key = SnapshotKey::from_object_id(&next_item.object_id);
+
+    // Attempt to fetch the collab data from the cache
     let encoded_collab_v1 = match self.cache.try_get(&key.0).await {
-      Ok(Some(data)) => {
-        // This step is not necessary, but use it to check if the data is valid. Will be removed
-        // in the future.
-        match validate_encode_collab(&next_item.object_id, &data, &next_item.collab_type) {
-          Ok(_) => data,
-          Err(err) => {
-            warn!(
-              "Collab doc state is not correct when creating snapshot: {},{}",
-              next_item.object_id, err
-            );
-            return Ok(());
-          },
-        }
-      },
-      Ok(None) => {
-        warn!("Failed to get snapshot from cache: {}", key.0);
-        return Ok(());
-      },
+      Ok(Some(data)) => data,
+      Ok(None) => return Ok(()), // Cache miss, no data to process
       Err(_) => {
-        if cfg!(debug_assertions) {
-          error!("Failed to get snapshot from cache: {}", key.0);
-        }
-        self.queue.write().await.push_item(next_item);
+        queue.push_item(next_item); // Push back to queue on error
         return Ok(());
       },
     };
 
+    // Validate collab data before processing
+    let result = validate_encode_collab(
+      &next_item.object_id,
+      &encoded_collab_v1,
+      &next_item.collab_type,
+    )
+    .await;
+
+    if result.is_err() {
+      return Ok(());
+    }
+
+    // Start a transaction
     let transaction = match self.pg_pool.try_begin().await {
       Ok(Some(tx)) => tx,
       _ => {
         debug!("Failed to start transaction to write snapshot, retrying later");
-        self.queue.write().await.push_item(next_item);
+        queue.push_item(next_item);
         return Ok(());
       },
     };
 
+    // Create the snapshot and enforce limits
     match create_snapshot_and_maintain_limit(
       transaction,
       &next_item.workspace_id,
@@ -306,16 +306,13 @@ impl SnapshotCommandRunner {
         trace!(
           "successfully created snapshot for {}, remaining task: {}",
           next_item.object_id,
-          self.queue.read().await.len()
+          queue.len()
         );
         let _ = self.cache.remove(&key.0).await;
         self.success_attempts.fetch_add(1, Ordering::Relaxed);
         Ok(())
       },
-      Err(e) => {
-        // self.queue.write().await.push_item(next_item);
-        Err(e)
-      },
+      Err(e) => Err(e), // Return the error if snapshot creation fails
     }
   }
 }

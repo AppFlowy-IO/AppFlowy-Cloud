@@ -3,7 +3,7 @@ use crate::biz::collab::mem_cache::CollabMemCache;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 
-use crate::state::RedisClient;
+use crate::state::RedisConnectionManager;
 
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
 use futures_util::{stream, StreamExt};
@@ -23,7 +23,7 @@ pub struct CollabCache {
 }
 
 impl CollabCache {
-  pub fn new(redis_client: RedisClient, pg_pool: PgPool) -> Self {
+  pub fn new(redis_client: RedisConnectionManager, pg_pool: PgPool) -> Self {
     let mem_cache = CollabMemCache::new(redis_client.clone());
     let disk_cache = CollabDiskCache::new(pg_pool.clone());
     Self {
@@ -34,18 +34,14 @@ impl CollabCache {
     }
   }
 
-  pub async fn get_collab_encoded(
+  pub async fn get_collab_encode_data(
     &self,
     uid: &i64,
     params: QueryCollabParams,
   ) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
-    if let Some(encoded_collab) = self
-      .mem_cache
-      .get_encode_collab_from_mem(&params.object_id)
-      .await
-    {
+    if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&params.object_id).await {
       event!(
         Level::DEBUG,
         "Get encoded collab:{} from cache",
@@ -65,9 +61,10 @@ impl CollabCache {
     // spawn a task to insert the encoded collab into the memory cache
     let cloned_encode_collab = encode_collab.clone();
     let mem_cache = self.mem_cache.clone();
+    let timestamp = chrono::Utc::now().timestamp();
     tokio::spawn(async move {
       mem_cache
-        .insert_encode_collab(object_id, cloned_encode_collab)
+        .insert_encode_collab(object_id, cloned_encode_collab, timestamp)
         .await;
     });
     Ok(encode_collab)
@@ -85,7 +82,7 @@ impl CollabCache {
       .then(|params| async move {
         match self
           .mem_cache
-          .get_encode_collab_bytes(&params.object_id)
+          .get_encode_collab_data(&params.object_id)
           .await
         {
           None => Either::Left(params),
@@ -110,7 +107,7 @@ impl CollabCache {
     results
   }
 
-  pub async fn insert_collab_encoded(
+  pub async fn insert_encode_collab_data(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -124,10 +121,14 @@ impl CollabCache {
       .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
       .await?;
 
-    self
-      .mem_cache
-      .insert_encode_collab_bytes(object_id, encoded_collab)
-      .await;
+    let timestamp = chrono::Utc::now().timestamp();
+    let mem_cache = self.mem_cache.clone();
+    tokio::spawn(async move {
+      mem_cache
+        .insert_encode_collab_data(object_id, encoded_collab, timestamp)
+        .await;
+    });
+
     Ok(())
   }
 

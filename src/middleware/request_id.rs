@@ -64,6 +64,7 @@ where
         path = %req.match_pattern().unwrap_or_default(),
         method = %req.method(),
         client_version = client_info.client_version,
+        device_id = client_info.device_id,
         payload_size = client_info.payload_size
       );
 
@@ -110,15 +111,22 @@ fn get_client_info(req: &ServiceRequest) -> ClientInfo {
     .get("client-version")
     .and_then(|val| val.to_str().ok());
 
+  let device_id = req
+    .headers()
+    .get("device_id")
+    .and_then(|val| val.to_str().ok());
+
   ClientInfo {
     payload_size,
     client_version,
+    device_id,
   }
 }
 
 struct ClientInfo<'a> {
   payload_size: usize,
   client_version: Option<&'a str>,
+  device_id: Option<&'a str>,
 }
 
 #[inline]

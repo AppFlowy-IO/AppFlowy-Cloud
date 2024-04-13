@@ -5,6 +5,9 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use redis::aio::ConnectionManager;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[allow(dead_code)]
 pub fn generate_random_bytes(size: usize) -> Vec<u8> {
@@ -46,8 +49,27 @@ pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> Encoded
 
 #[allow(dead_code)]
 pub async fn redis_client() -> redis::Client {
-  let redis_uri = get_env_var("REDIS_URL", "redis://localhost:6379");
+  let redis_uri = get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379");
   redis::Client::open(redis_uri)
     .context("failed to connect to redis")
     .unwrap()
+}
+
+pub async fn redis_connection_manager() -> ConnectionManager {
+  let mut attempt = 0;
+  let max_attempts = 5;
+  let mut wait_time = 500;
+  loop {
+    match redis_client().await.get_connection_manager().await {
+      Ok(manager) => return manager,
+      Err(err) => {
+        if attempt >= max_attempts {
+          panic!("{:?}", err); // Exceeded maximum attempts, return the last error.
+        }
+        sleep(Duration::from_millis(wait_time)).await;
+        wait_time *= 2;
+        attempt += 1;
+      },
+    }
+  }
 }

@@ -1,4 +1,4 @@
-use crate::collab::util::{redis_client, test_encode_collab_v1};
+use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::mem_cache::CollabMemCache;
 use client_api_test_util::*;
@@ -223,8 +223,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
 
 #[tokio::test]
 async fn collab_mem_cache_read_write_test() {
-  let redis_client = redis_client().await;
-  let conn = redis_client.get_connection_manager().await.unwrap();
+  let conn = redis_connection_manager().await;
 
   let mem_cache = CollabMemCache::new(conn);
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
@@ -246,8 +245,7 @@ async fn collab_mem_cache_read_write_test() {
 
 #[tokio::test]
 async fn collab_mem_cache_insert_override_test() {
-  let redis_client = redis_client().await;
-  let conn = redis_client.get_connection_manager().await.unwrap();
+  let conn = redis_connection_manager().await;
 
   let mem_cache = CollabMemCache::new(conn);
   let object_id = uuid::Uuid::new_v4().to_string();

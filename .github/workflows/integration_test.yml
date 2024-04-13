@@ -13,6 +13,7 @@ concurrency:
 env:
   LOCALHOST_URL: http://localhost
   LOCALHOST_WS: ws://localhost/ws
+  REDIS_URL: redis://redis:6379
   LOCALHOST_GOTRUE: http://localhost/gotrue
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres
   SQLX_OFFLINE: true

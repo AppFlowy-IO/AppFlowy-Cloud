@@ -125,6 +125,10 @@ impl CollabMemCache {
     let key_exists: bool = conn.exists(&object_id).await?;
     // Start a watch on the object_id to monitor for changes during this transaction
     if key_exists {
+      // WATCH command is used to monitor one or more keys for modifications, establishing a condition
+      // for executing a subsequent transaction (with MULTI/EXEC). If any of the watched keys are
+      // altered by another client before the current client executes EXEC, the transaction will be
+      // aborted by Redis (the EXEC will return nil indicating the transaction was not processed).
       redis::cmd("WATCH")
         .arg(&object_id)
         .query_async::<_, ()>(&mut *conn)
@@ -162,6 +166,7 @@ impl CollabMemCache {
     }
     .await;
 
+    // Always reset Watch State
     redis::cmd("UNWATCH")
       .query_async::<_, ()>(&mut *conn)
       .await?;

@@ -34,7 +34,7 @@ impl CollabCache {
     }
   }
 
-  pub async fn get_collab_encoded(
+  pub async fn get_collab_encode_data(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -61,9 +61,10 @@ impl CollabCache {
     // spawn a task to insert the encoded collab into the memory cache
     let cloned_encode_collab = encode_collab.clone();
     let mem_cache = self.mem_cache.clone();
+    let timestamp = chrono::Utc::now().timestamp();
     tokio::spawn(async move {
       mem_cache
-        .insert_encode_collab(object_id, cloned_encode_collab)
+        .insert_encode_collab(object_id, cloned_encode_collab, timestamp)
         .await;
     });
     Ok(encode_collab)
@@ -106,7 +107,7 @@ impl CollabCache {
     results
   }
 
-  pub async fn insert_collab_encoded(
+  pub async fn insert_encode_collab_data(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -120,10 +121,14 @@ impl CollabCache {
       .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
       .await?;
 
-    self
-      .mem_cache
-      .insert_encode_collab_data(object_id, encoded_collab)
-      .await;
+    let timestamp = chrono::Utc::now().timestamp();
+    let mem_cache = self.mem_cache.clone();
+    tokio::spawn(async move {
+      mem_cache
+        .insert_encode_collab_data(object_id, encoded_collab, timestamp)
+        .await;
+    });
+
     Ok(())
   }
 

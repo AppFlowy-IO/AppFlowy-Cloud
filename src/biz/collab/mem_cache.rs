@@ -37,14 +37,8 @@ impl CollabMemCache {
   }
 
   pub async fn get_encode_collab_data(&self, object_id: &str) -> Option<Vec<u8>> {
-    let result = self
-      .connection_manager
-      .lock()
-      .await
-      .get::<_, Option<Vec<u8>>>(object_id)
-      .await;
-    match result {
-      Ok(bytes) => bytes,
+    match self.get_data_with_timestamp(object_id).await {
+      Ok(data) => data.map(|(_, bytes)| bytes),
       Err(err) => {
         error!("Failed to get encoded collab from redis: {:?}", err);
         None
@@ -73,12 +67,20 @@ impl CollabMemCache {
   }
 
   #[instrument(level = "trace", skip_all, fields(object_id=%object_id))]
-  pub async fn insert_encode_collab(&self, object_id: String, encoded_collab: EncodedCollab) {
+  pub async fn insert_encode_collab(
+    &self,
+    object_id: String,
+    encoded_collab: EncodedCollab,
+    timestamp: i64,
+  ) {
     trace!("Inserting encode collab into cache: {}", object_id);
     let result = tokio::task::spawn_blocking(move || encoded_collab.encode_to_bytes()).await;
     match result {
       Ok(Ok(bytes)) => {
-        if let Err(err) = self.insert_data(object_id, bytes).await {
+        if let Err(err) = self
+          .insert_data_with_timestamp(object_id, bytes, timestamp)
+          .await
+        {
           error!("Failed to cache encoded collab: {:?}", err);
         }
       },
@@ -91,26 +93,20 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn insert_encode_collab_data(&self, object_id: String, data: Vec<u8>) {
-    if let Err(err) = self.insert_data(object_id, data).await {
+  pub async fn insert_encode_collab_data(&self, object_id: String, data: Vec<u8>, timestamp: i64) {
+    if let Err(err) = self
+      .insert_data_with_timestamp(object_id, data, timestamp)
+      .await
+    {
       error!("Failed to cache encoded collab bytes: {:?}", err);
     }
-  }
-
-  /// Set bytes in redis with a 3 days expiration.
-  async fn insert_data(&self, object_id: String, bytes: Vec<u8>) -> redis::RedisResult<()> {
-    self
-      .connection_manager
-      .lock()
-      .await
-      .set_ex::<_, Vec<u8>, ()>(object_id, bytes, 259200)
-      .await
   }
 
   /// Inserts data into Redis with a conditional timestamp.
   ///
   /// inserts data associated with an `object_id` into Redis only if the new timestamp is greater than the timestamp
   /// currently stored in Redis for the same `object_id`. It uses Redis transactions to ensure that the operation is atomic.
+  /// the data will be expired after 3 days.
   ///
   /// # Arguments
   /// * `object_id` - A string identifier for the data object.
@@ -185,7 +181,7 @@ impl CollabMemCache {
   /// The function returns `Ok(None)` if no data is found for the given `object_id`.
   async fn get_data_with_timestamp(
     &self,
-    object_id: String,
+    object_id: &str,
   ) -> redis::RedisResult<Option<(i64, Vec<u8>)>> {
     let mut conn = self.connection_manager.lock().await;
     // Attempt to retrieve the data from Redis

@@ -212,7 +212,7 @@ where
 
     self
       .cache
-      .insert_collab_encoded(workspace_id, uid, params, transaction)
+      .insert_encode_collab_data(workspace_id, uid, params, transaction)
       .await?;
     Ok(())
   }
@@ -248,7 +248,7 @@ where
       }
     }
 
-    let encode_collab = self.cache.get_collab_encoded(uid, params).await?;
+    let encode_collab = self.cache.get_collab_encode_data(uid, params).await?;
     Ok(encode_collab)
   }
 

@@ -1,7 +1,7 @@
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::snapshot::cache::SnapshotCache;
 use crate::biz::snapshot::queue::PendingQueue;
-use crate::state::RedisClient;
+use crate::state::RedisConnectionManager;
 use anyhow::anyhow;
 use app_error::AppError;
 use async_stream::stream;
@@ -43,7 +43,7 @@ pub struct SnapshotControl {
 
 impl SnapshotControl {
   pub async fn new(
-    redis_client: RedisClient,
+    redis_client: RedisConnectionManager,
     pg_pool: PgPool,
     collab_metrics: Arc<CollabMetrics>,
   ) -> Self {

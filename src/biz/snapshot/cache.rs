@@ -1,4 +1,4 @@
-use crate::state::RedisClient;
+use crate::state::RedisConnectionManager;
 use anyhow::anyhow;
 use app_error::AppError;
 use redis::AsyncCommands;
@@ -7,11 +7,11 @@ use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub(crate) struct SnapshotCache {
-  redis_client: Arc<Mutex<RedisClient>>,
+  redis_client: Arc<Mutex<RedisConnectionManager>>,
 }
 
 impl SnapshotCache {
-  pub fn new(redis_client: Arc<Mutex<RedisClient>>) -> Self {
+  pub fn new(redis_client: Arc<Mutex<RedisConnectionManager>>) -> Self {
     Self { redis_client }
   }
 

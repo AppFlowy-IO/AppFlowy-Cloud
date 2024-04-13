@@ -57,15 +57,20 @@ impl CollabCache {
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
     let object_id = params.object_id.clone();
-    let encoded_collab = self
+    let encode_collab = self
       .disk_cache
       .get_collab_encoded_from_disk(uid, params)
       .await?;
-    self
-      .mem_cache
-      .insert_encode_collab(object_id, &encoded_collab)
-      .await;
-    Ok(encoded_collab)
+
+    // spawn a task to insert the encoded collab into the memory cache
+    let cloned_encode_collab = encode_collab.clone();
+    let mem_cache = self.mem_cache.clone();
+    tokio::spawn(async move {
+      mem_cache
+        .insert_encode_collab(object_id, cloned_encode_collab)
+        .await;
+    });
+    Ok(encode_collab)
   }
 
   pub async fn batch_get_encode_collab(

@@ -55,6 +55,7 @@ pub async fn redis_client() -> redis::Client {
     .unwrap()
 }
 
+#[allow(dead_code)]
 pub async fn redis_connection_manager() -> ConnectionManager {
   let mut attempt = 0;
   let max_attempts = 5;

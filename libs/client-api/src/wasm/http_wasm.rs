@@ -10,6 +10,7 @@ use collab_rt_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use reqwest::Method;
+use shared_entity::dto::workspace_dto::CollabTypeParam;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
@@ -35,13 +36,14 @@ impl Client {
     params: QueryCollabParams,
   ) -> Result<EncodedCollab, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/{}/collab/{}",
+      "{}/api/workspace/v1/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
     );
+    let collab_type = params.collab_type.clone();
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .json(&params)
+      .query(&CollabTypeParam { collab_type })
       .send()
       .await?;
     log_request_id(&resp);

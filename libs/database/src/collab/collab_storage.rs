@@ -92,7 +92,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<RawData>` - Returns the data of the collaboration if found, `Err` otherwise.
-  async fn get_collab_encoded(
+  async fn get_encode_collab(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -165,7 +165,7 @@ where
       .await
   }
 
-  async fn get_collab_encoded(
+  async fn get_encode_collab(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -173,7 +173,7 @@ where
   ) -> AppResult<EncodedCollab> {
     self
       .as_ref()
-      .get_collab_encoded(uid, params, is_collab_init)
+      .get_encode_collab(uid, params, is_collab_init)
       .await
   }
 

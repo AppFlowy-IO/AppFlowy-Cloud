@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
-use tracing::{info, trace, warn};
+use tracing::{trace, warn};
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -55,89 +55,77 @@ where
     loop {
       tokio::select! {
         _ = interval.tick() => {
-          if self.attempt_collab_save().await.is_err() {
+          if self.attempt_save().await.is_err() {
             break;
           }
         },
-        collab = destroy_group_rx.recv() => {
-          if let Some(collab) = collab {
-            self.force_save(collab).await;
-          }
+        _collab = destroy_group_rx.recv() => {
+          self.force_save().await;
           break;
         }
       }
     }
   }
 
-  async fn force_save(&self, collab: MutexCollab) {
+  async fn force_save(&self) {
     if !self.edit_state.is_edit() {
       trace!("skip force save collab to disk: {}", self.object_id);
       return;
     }
-
-    let result = get_encode_collab(&self.object_id, &collab.lock(), &self.collab_type);
-    match result {
-      Ok(params) => {
-        match self
-          .storage
-          .insert_or_update_collab(&self.workspace_id, &self.uid, params)
-          .await
-        {
-          Ok(_) => {
-            info!("[realtime] force save collab to disk: {}", self.object_id);
-            // Update the edit state on successful save
-            self.edit_state.tick();
-          },
-          Err(err) => warn!("fail to force save collab to disk: {:?}", err),
-        }
-      },
-      Err(err) => {
-        warn!("fail to encode collab {}=>{:?}", self.object_id, err);
-      },
+    if let Err(err) = self.save().await {
+      warn!("fail to force save: {}:{:?}", self.object_id, err);
     }
   }
 
   /// return true if the collab has been dropped. Otherwise, return false
-  async fn attempt_collab_save(&self) -> Result<(), AppError> {
+  async fn attempt_save(&self) -> Result<(), AppError> {
     // Check if conditions for saving to disk are not met
     if !self.edit_state.should_save_to_disk() {
       trace!("skip save collab to disk: {}", self.object_id);
       return Ok(());
     }
 
-    let collab = match self.collab.upgrade() {
+    self.save().await?;
+    Ok(())
+  }
+
+  async fn save(&self) -> Result<(), AppError> {
+    let mutex_collab = self.collab.clone();
+    let object_id = self.object_id.clone();
+    let collab_type = self.collab_type.clone();
+    let collab = match mutex_collab.upgrade() {
       Some(collab) => collab,
       None => return Err(AppError::Internal(anyhow!("collab has been dropped"))),
     };
 
-    // Attempt to lock the collab; skip saving if unable
-    let result = {
-      match collab.try_lock() {
-        Some(lock) => get_encode_collab(&self.object_id, &lock, &self.collab_type),
-        None => return Ok(()),
-      }
-    };
+    let result = tokio::task::spawn_blocking(move || {
+      // Attempt to lock the collab; skip saving if unable
+      let lock_guard = collab.try_lock()?;
+      let params = get_encode_collab(&object_id, &lock_guard, &collab_type).ok()?;
+      Some(params)
+    })
+    .await;
 
     match result {
-      Ok(params) => {
+      Ok(Some(params)) => {
         match self
           .storage
           .insert_or_update_collab(&self.workspace_id, &self.uid, params)
           .await
         {
           Ok(_) => {
-            info!("[realtime] save collab to disk: {}", self.object_id);
+            trace!("[realtime] save collab to disk: {}", self.object_id);
             // Update the edit state on successful save
             self.edit_state.tick();
           },
           Err(err) => warn!("fail to save collab to disk: {:?}", err),
         }
       },
-      Err(err) => {
-        warn!("attempt to encode collab {}=>{:?}", self.object_id, err);
+      Ok(None) => {
+        // required lock failed or get encode collab failed, skip saving
       },
+      Err(err) => warn!("attempt to encode collab {}=>{:?}", self.object_id, err),
     }
-
     Ok(())
   }
 }

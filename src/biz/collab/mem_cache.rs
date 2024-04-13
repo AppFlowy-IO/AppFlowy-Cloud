@@ -72,13 +72,17 @@ impl CollabMemCache {
   }
 
   #[instrument(level = "trace", skip_all, fields(object_id=%object_id))]
-  pub async fn insert_encode_collab(&self, object_id: String, encoded_collab: &EncodedCollab) {
+  pub async fn insert_encode_collab(&self, object_id: String, encoded_collab: EncodedCollab) {
     trace!("Inserting encode collab into cache: {}", object_id);
-    match encoded_collab.encode_to_bytes() {
-      Ok(bytes) => {
+    let result = tokio::task::spawn_blocking(move || encoded_collab.encode_to_bytes()).await;
+    match result {
+      Ok(Ok(bytes)) => {
         if let Err(err) = self.set_bytes_in_redis(object_id, bytes).await {
           error!("Failed to cache encoded collab: {:?}", err);
         }
+      },
+      Ok(Err(err)) => {
+        error!("Failed to encode collab to bytes: {:?}", err);
       },
       Err(e) => {
         error!("Failed to encode collab to bytes: {:?}", e);

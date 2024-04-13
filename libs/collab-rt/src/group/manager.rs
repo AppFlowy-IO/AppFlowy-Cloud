@@ -178,7 +178,7 @@ where
   S: CollabStorage,
 {
   let encode_collab = storage
-    .get_collab_encoded(&uid, params.clone(), true)
+    .get_encode_collab(&uid, params.clone(), true)
     .await?;
   let result = Collab::new_with_doc_state(
     CollabOrigin::Server,

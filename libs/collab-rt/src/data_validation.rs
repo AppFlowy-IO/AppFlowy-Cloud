@@ -1,11 +1,25 @@
 use crate::error::RealtimeError;
+use async_trait::async_trait;
 
 use collab::core::collab::DocStateSource;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
+use database_entity::dto::CollabParams;
 use tracing::instrument;
+
+#[async_trait]
+pub trait CollabValidator {
+  async fn check_encode_collab(&self) -> Result<(), RealtimeError>;
+}
+
+#[async_trait]
+impl CollabValidator for CollabParams {
+  async fn check_encode_collab(&self) -> Result<(), RealtimeError> {
+    validate_encode_collab(&self.object_id, &self.encoded_collab_v1, &self.collab_type).await
+  }
+}
 
 #[instrument(level = "trace", skip(data), fields(len = %data.len()))]
 pub async fn validate_encode_collab(

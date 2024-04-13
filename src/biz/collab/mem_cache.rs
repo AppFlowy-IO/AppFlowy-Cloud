@@ -106,7 +106,7 @@ impl CollabMemCache {
   ///
   /// inserts data associated with an `object_id` into Redis only if the new timestamp is greater than the timestamp
   /// currently stored in Redis for the same `object_id`. It uses Redis transactions to ensure that the operation is atomic.
-  /// the data will be expired after 3 days.
+  /// the data will be expired after 7 days.
   ///
   /// # Arguments
   /// * `object_id` - A string identifier for the data object.
@@ -154,7 +154,7 @@ impl CollabMemCache {
             .atomic()
             .set(&object_id, data)
             .ignore()
-            .expire(&object_id, 259200) // Setting the expiration to 3 days
+            .expire(&object_id, 604800) // Setting the expiration to 7 days
             .ignore();
         pipeline.query_async(conn.deref_mut()).await?;
       }

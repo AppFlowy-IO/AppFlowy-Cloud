@@ -22,7 +22,7 @@ use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-pub type RedisClient = redis::aio::ConnectionManager;
+pub type RedisConnectionManager = redis::aio::ConnectionManager;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -31,7 +31,7 @@ pub struct AppState {
   pub user_cache: UserCache,
   pub id_gen: Arc<RwLock<Snowflake>>,
   pub gotrue_client: gotrue::api::Client,
-  pub redis_client: RedisClient,
+  pub redis_connection_manager: RedisConnectionManager,
   pub collab_cache: CollabCache,
   pub collab_access_control_storage: Arc<CollabAccessControlStorage>,
   pub collab_access_control: CollabAccessControlImpl,

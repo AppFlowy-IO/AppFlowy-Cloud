@@ -221,23 +221,75 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
 
 // #[tokio::test]
 // async fn collab_mem_cache_read_write_test() {
-//   let redis_client = redis_client().await;
-//   let conn = redis_client.get_connection_manager().await.unwrap();
+//   let conn = redis_connection_manager().await;
 //
 //   let mem_cache = CollabMemCache::new(conn);
 //   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
 //
 //   let object_id = uuid::Uuid::new_v4().to_string();
+//   let timestamp = chrono::Utc::now().timestamp();
 //   mem_cache
-//     .insert_encode_collab_bytes(object_id.clone(), encode_collab.encode_to_bytes().unwrap())
+//     .insert_encode_collab_data(
+//       object_id.clone(),
+//       encode_collab.encode_to_bytes().unwrap(),
+//       timestamp,
+//     )
 //     .await;
+//
+//   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
+//   assert_eq!(encode_collab_from_cache.state_vector, vec![1, 2, 3]);
+//   assert_eq!(encode_collab_from_cache.doc_state, vec![4, 5, 6]);
+// }
+//
+// #[tokio::test]
+// async fn collab_mem_cache_insert_override_test() {
+//   let conn = redis_connection_manager().await;
+//
+//   let mem_cache = CollabMemCache::new(conn);
+//   let object_id = uuid::Uuid::new_v4().to_string();
+//   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
+//   let mut timestamp = chrono::Utc::now().timestamp();
+//   mem_cache
+//     .insert_encode_collab_data(
+//       object_id.clone(),
+//       encode_collab.encode_to_bytes().unwrap(),
+//       timestamp,
+//     )
+//     .await;
+//
+//   // the following insert should not override the previous one because the timestamp is older
+//   // than the previous one
+//   timestamp -= 100;
+//   mem_cache
+//     .insert_encode_collab_data(
+//       object_id.clone(),
+//       EncodedCollab::new_v1(vec![6, 7, 8], vec![9, 10, 11])
+//         .encode_to_bytes()
+//         .unwrap(),
+//       timestamp,
+//     )
+//     .await;
+//
+//   // check that the previous insert is still in the cache
 //   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
 //   assert_eq!(encode_collab_from_cache.doc_state, encode_collab.doc_state);
-//   assert_eq!(
-//     encode_collab_from_cache.state_vector,
-//     encode_collab.state_vector
-//   );
+//   assert_eq!(encode_collab_from_cache.state_vector, vec![1, 2, 3]);
+//   assert_eq!(encode_collab_from_cache.doc_state, vec![4, 5, 6]);
 //
-//   assert_eq!(encode_collab.state_vector, vec![1, 2, 3]);
-//   assert_eq!(encode_collab.doc_state, vec![4, 5, 6]);
+//   // the following insert should override the previous one because the timestamp is newer
+//   timestamp += 500;
+//   mem_cache
+//     .insert_encode_collab_data(
+//       object_id.clone(),
+//       EncodedCollab::new_v1(vec![12, 13, 14], vec![15, 16, 17])
+//         .encode_to_bytes()
+//         .unwrap(),
+//       timestamp,
+//     )
+//     .await;
+//
+//   // check that the previous insert is overridden
+//   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
+//   assert_eq!(encode_collab_from_cache.doc_state, vec![15, 16, 17]);
+//   assert_eq!(encode_collab_from_cache.state_vector, vec![12, 13, 14]);
 // }

@@ -239,7 +239,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
-    redis_client,
+    redis_connection_manager: redis_client,
     collab_cache,
     collab_access_control_storage: collab_storage,
     collab_access_control,

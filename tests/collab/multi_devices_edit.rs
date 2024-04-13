@@ -117,9 +117,10 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
   let expected_json = json!({
     "name": "workspace2"
   });
-  assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
-    .await;
+
   assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
+    .await;
+  assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
     .await;
 }
 

@@ -1,5 +1,3 @@
-use redis::aio::ConnectionManager;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 
 use collab_history::app::create_app;
@@ -17,7 +15,9 @@ async fn main() {
     .await
     .expect("failed to bind to port");
   info!("listening on: {:?}", listener);
-  axum::serve(listener, create_app().await)
+
+  let app = create_app().await.unwrap();
+  axum::serve(listener, app)
     .await
     .expect("failed to run server");
 }

@@ -1,8 +1,8 @@
 use anyhow::Context;
-use appflowy_cloud::config::config::get_env_var;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
+use infra::env_util::get_env_var;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 

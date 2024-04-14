@@ -4,7 +4,7 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
-use collab_stream::client::CollabRedisStream;
+
 use collab_stream::stream_group::{ReadOption, StreamGroup};
 use std::time::Duration;
 use tokio::time::interval;

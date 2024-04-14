@@ -117,6 +117,6 @@ services:
 #      dockerfile: ./libs/collab-history/Dockerfile
 #    environment:
 #      - RUST_LOG=${RUST_LOG:-info}
-#      - COLLAB_HISTORY_REDIS_URL=${COLLAB_HISTORY_REDIS_URL:-redis://redis:6379}
+#      - APPFLOWY_HISTORY_REDIS_URL=${APPFLOWY_HISTORY_REDIS_URL:-redis://redis:6379}
 volumes:
   postgres_data:

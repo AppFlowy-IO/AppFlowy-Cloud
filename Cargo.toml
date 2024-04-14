@@ -176,6 +176,7 @@ collab = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
+infra = { path = "libs/infra" }
 tracing = { version = "0.1.40" }
 gotrue = { path = "libs/gotrue" }
 redis = "0.25.2"

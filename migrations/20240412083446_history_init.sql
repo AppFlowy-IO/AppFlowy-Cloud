@@ -2,10 +2,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
        
 -- create af_snapshot_meta table
 CREATE TABLE IF NOT EXISTS af_snapshot_meta(
-    oid TEXT NOT NULL REFERENCES af_collab(oid) ON DELETE CASCADE,
+    oid TEXT NOT NULL,
+    workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
     snapshot BYTEA NOT NULL,
     partition_key INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    metadata JSONB,
     PRIMARY KEY (oid, partition_key)
 ) PARTITION BY LIST (partition_key);
 CREATE TABLE af_snapshot_meta_document PARTITION OF af_snapshot_meta FOR
@@ -24,7 +26,8 @@ VALUES IN (5);
 -- create af_snapshot_state table
 CREATE TABLE IF NOT EXISTS af_snapshot_state(
     snapshot_id UUID NOT NULL DEFAULT uuid_generate_v4(),
-    oid TEXT NOT NULL REFERENCES af_collab(oid) ON DELETE CASCADE,
+    workspace_id UUID NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
+    oid TEXT NOT NULL,
     doc_state BYTEA NOT NULL,
     doc_state_version INTEGER,
     deps_snapshot_id UUID,

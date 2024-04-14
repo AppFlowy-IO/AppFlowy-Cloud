@@ -1600,6 +1600,7 @@ dependencies = [
  "collab-stream",
  "dashmap",
  "dotenvy",
+ "infra",
  "rand 0.8.5",
  "redis 0.25.2",
  "serde",
@@ -3101,6 +3102,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

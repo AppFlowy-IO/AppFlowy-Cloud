@@ -15,10 +15,7 @@ use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
-pub async fn create_app() -> Result<Router<()>, Error> {
-  let config = Config::from_env()?;
-  info!("config loaded: {:?}", &config);
-
+pub async fn create_app(config: Config) -> Result<Router<()>, Error> {
   // Postgres
   info!("Preparing to run database migrations...");
   let pg_pool = get_connection_pool(&config.db_settings).await?;

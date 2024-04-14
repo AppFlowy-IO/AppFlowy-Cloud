@@ -16,6 +16,8 @@ use app_error::AppError;
 use bytes::BytesMut;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
+use collab_rt::data_validation::{validate_encode_collab, CollabValidator};
+
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use database::collab::CollabStorage;
@@ -30,7 +32,7 @@ use std::time::Duration;
 use tokio::time::{sleep, Instant};
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{event, instrument};
+use tracing::{error, event, instrument};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -41,6 +43,7 @@ pub const WORKSPACE_PATTERN: &str = "/api/workspace";
 pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member";
 pub const WORKSPACE_INVITE_PATTERN: &str = "/api/workspace/{workspace_id}/invite";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
+pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{object_id}";
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
@@ -85,6 +88,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_handler))
         .route(web::put().to(update_collab_handler))
         .route(web::delete().to(delete_collab_handler)),
+    )
+    .service(
+      web::resource("/v1/{workspace_id}/collab/{object_id}")
+        .route(web::get().to(v1_get_collab_handler))
     )
     .service(
       web::resource("/{workspace_id}/batch/collab")
@@ -470,7 +477,10 @@ async fn batch_create_collab_handler(
               ))
             })?;
             params.validate().map_err(AppError::from)?;
-            collab_params_list.push(params);
+            match params.check_encode_collab().await {
+              Ok(_) => collab_params_list.push(params),
+              Err(err) => error!("Failed to validate collab params: {:?}", err),
+            }
 
             payload_buffer = payload_buffer[4 + size..].to_vec();
           }
@@ -496,15 +506,24 @@ async fn batch_create_collab_handler(
     .map_err(AppError::from)?;
   for params in collab_params_list {
     let object_id = params.object_id.clone();
-    state
-      .collab_access_control_storage
-      .insert_or_update_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
-      .await?;
+    if validate_encode_collab(
+      &params.object_id,
+      &params.encoded_collab_v1,
+      &params.collab_type,
+    )
+    .await
+    .is_ok()
+    {
+      state
+        .collab_access_control_storage
+        .insert_or_update_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+        .await?;
 
-    state
-      .collab_access_control
-      .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
-      .await?;
+      state
+        .collab_access_control
+        .update_access_level_policy(&uid, &object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
   }
 
   transaction
@@ -549,7 +568,15 @@ async fn create_collab_list_handler(
     params_list,
   } = params;
 
-  if params_list.is_empty() {
+  let mut valid_items = Vec::with_capacity(params_list.len());
+  for params in params_list {
+    match params.check_encode_collab().await {
+      Ok(_) => valid_items.push(params),
+      Err(err) => error!("Failed to validate collab params: {:?}", err),
+    }
+  }
+
+  if valid_items.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
 
@@ -560,7 +587,7 @@ async fn create_collab_list_handler(
     .context("acquire transaction to upsert collab")
     .map_err(AppError::from)?;
 
-  for params in params_list {
+  for params in valid_items {
     let _object_id = params.object_id.clone();
     state
       .collab_access_control_storage
@@ -576,6 +603,8 @@ async fn create_collab_list_handler(
 
   Ok(Json(AppResponse::Ok()))
 }
+
+// Deprecated
 async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
@@ -588,7 +617,38 @@ async fn get_collab_handler(
     .map_err(AppResponseError::from)?;
   let data = state
     .collab_access_control_storage
-    .get_collab_encoded(&uid, payload.into_inner(), false)
+    .get_encode_collab(&uid, payload.into_inner(), false)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  Ok(Json(AppResponse::Ok().with_data(data)))
+}
+
+async fn v1_get_collab_handler(
+  user_uuid: UserUuid,
+  path: web::Path<(String, String)>,
+  query: web::Query<CollabTypeParam>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<EncodedCollab>>> {
+  let (workspace_id, object_id) = path.into_inner();
+  let collab_type = query.into_inner().collab_type;
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let param = QueryCollabParams {
+    workspace_id,
+    inner: QueryCollab {
+      object_id,
+      collab_type,
+    },
+  };
+
+  let data = state
+    .collab_access_control_storage
+    .get_encode_collab(&uid, param, false)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -627,7 +687,7 @@ async fn create_collab_snapshot_handler(
     .map_err(AppResponseError::from)?;
   let encoded_collab_v1 = state
     .collab_access_control_storage
-    .get_collab_encoded(
+    .get_encode_collab(
       &uid,
       QueryCollabParams::new(&object_id, collab_type.clone(), &workspace_id),
       false,

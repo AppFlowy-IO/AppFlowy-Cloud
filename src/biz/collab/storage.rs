@@ -16,7 +16,7 @@ use database_entity::dto::{
 };
 use itertools::{Either, Itertools};
 
-use collab_rt::data_validation::validate_encode_collab;
+use collab_rt::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::ops::DerefMut;
@@ -153,6 +153,13 @@ where
     params: CollabParams,
   ) -> AppResult<()> {
     params.validate()?;
+    if let Err(err) = params.check_encode_collab().await {
+      return Err(AppError::NoRequiredData(format!(
+        "collab doc state is not correct:{},{}",
+        params.object_id, err
+      )));
+    }
+
     let mut transaction = self
       .cache
       .pg_pool()
@@ -180,17 +187,6 @@ where
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> AppResult<()> {
     params.validate()?;
-    if let Err(err) = validate_encode_collab(
-      &params.object_id,
-      &params.encoded_collab_v1,
-      &params.collab_type,
-    ) {
-      return Err(AppError::NoRequiredData(format!(
-        "collab doc state is not correct:{},{}",
-        params.object_id, err
-      )));
-    }
-
     let is_exist = is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
     if is_exist {
       self
@@ -216,13 +212,13 @@ where
 
     self
       .cache
-      .insert_collab_encoded(workspace_id, uid, params, transaction)
+      .insert_encode_collab_data(workspace_id, uid, params, transaction)
       .await?;
     Ok(())
   }
 
   #[instrument(level = "trace", skip_all, fields(oid = %params.object_id, is_collab_init = %is_collab_init))]
-  async fn get_collab_encoded(
+  async fn get_encode_collab(
     &self,
     uid: &i64,
     params: QueryCollabParams,
@@ -252,7 +248,7 @@ where
       }
     }
 
-    let encode_collab = self.cache.get_collab_encoded(uid, params).await?;
+    let encode_collab = self.cache.get_collab_encode_data(uid, params).await?;
     Ok(encode_collab)
   }
 

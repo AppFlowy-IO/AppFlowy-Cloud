@@ -6,6 +6,8 @@ use tokio::select;
 /// 1. AppFlowy Cloud
 /// 2. AppFlowy History
 ///
+/// Before running this command, make sure the other dependencies servers are running. For example,
+/// Redis, Postgres, etc.
 #[tokio::main]
 async fn main() -> Result<()> {
   let appflowy_cloud_bin_name = "appflowy_cloud";

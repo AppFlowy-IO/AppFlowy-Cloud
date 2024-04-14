@@ -28,7 +28,7 @@ async fn generate_snapshot_test() {
     sleep(Duration::from_millis(400)).await;
   }
 
-  let ctx = history.gen_snapshot_context().await.unwrap();
+  let ctx = history.gen_snapshot_context().await.unwrap().unwrap();
   assert_eq!(ctx.snapshots.len(), 3);
 
   // decode the doc_state_v2 and check if the state is correct

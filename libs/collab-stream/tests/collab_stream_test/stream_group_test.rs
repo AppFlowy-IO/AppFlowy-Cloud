@@ -20,7 +20,7 @@ async fn single_group_read_message_test() {
       .collab_update_stream(workspace_id, &oid, "g2")
       .await
       .unwrap();
-    group.insert_message(msg).await.unwrap();
+    group.insert_binary(msg).await.unwrap();
   }
 
   let messages = group
@@ -56,7 +56,7 @@ async fn single_group_async_read_message_test() {
       .collab_update_stream(workspace_id, &oid, "g2")
       .await
       .unwrap();
-    group.insert_message(msg).await.unwrap();
+    group.insert_binary(msg).await.unwrap();
   }
 
   let messages = group
@@ -86,7 +86,7 @@ async fn different_group_read_message_test() {
   {
     let client = stream_client().await;
     let mut group = client.collab_update_stream("w1", &oid, "g2").await.unwrap();
-    group.insert_message(msg).await.unwrap();
+    group.insert_binary(msg).await.unwrap();
   }
 
   let (result1, result2) = join(

@@ -195,15 +195,19 @@ impl StreamBinary {
   }
 }
 
-impl From<Vec<u8>> for StreamBinary {
-  fn from(v: Vec<u8>) -> Self {
-    Self(v)
+impl TryFrom<Vec<u8>> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+    Ok(Self(value))
   }
 }
 
-impl From<&[u8]> for StreamBinary {
-  fn from(v: &[u8]) -> Self {
-    Self(v.to_vec())
+impl TryFrom<&[u8]> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    Ok(Self(value.to_vec()))
   }
 }
 
@@ -293,9 +297,33 @@ impl CollabControlEvent {
 }
 
 impl TryFrom<CollabControlEvent> for StreamBinary {
-  type Error = serde_json::Error;
+  type Error = StreamError;
 
   fn try_from(value: CollabControlEvent) -> Result<Self, Self::Error> {
+    let raw_data = value.encode()?;
+    Ok(StreamBinary(raw_data))
+  }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CollabUpdateEvent {
+  UpdateV1 { encode_update: Vec<u8> },
+}
+
+impl CollabUpdateEvent {
+  pub fn encode(&self) -> Result<Vec<u8>, bincode::Error> {
+    bincode::serialize(self)
+  }
+
+  pub fn decode(data: &[u8]) -> Result<Self, bincode::Error> {
+    bincode::deserialize(data)
+  }
+}
+
+impl TryFrom<CollabUpdateEvent> for StreamBinary {
+  type Error = StreamError;
+
+  fn try_from(value: CollabUpdateEvent) -> Result<Self, Self::Error> {
     let raw_data = value.encode()?;
     Ok(StreamBinary(raw_data))
   }

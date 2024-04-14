@@ -36,6 +36,7 @@ dashmap = "5.5.3"
 infra.workspace = true
 database.workspace = true
 parking_lot = "0.12.1"
+bincode.workspace = true
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

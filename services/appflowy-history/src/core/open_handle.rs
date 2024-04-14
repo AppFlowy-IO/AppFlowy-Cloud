@@ -10,7 +10,7 @@ use collab_stream::stream_group::{ReadOption, StreamGroup};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::error;
+use tracing::{error, trace};
 
 pub struct OpenCollabHandle {
   pub object_id: String,
@@ -70,6 +70,13 @@ impl OpenCollabHandle {
       history,
       history_persistence,
     })
+  }
+
+  pub async fn gen_history(&self) -> Result<(), HistoryError> {
+    if let Some(history_persistence) = &self.history_persistence {
+      save_history(self.history.clone(), history_persistence.clone()).await;
+    }
+    Ok(())
   }
 
   /// Apply an update to the collab.
@@ -155,20 +162,28 @@ fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<Hi
       if let (Some(history), Some(history_persistence)) =
         (history.upgrade(), history_persistence.upgrade())
       {
-        match history.gen_snapshot_context().await {
-          Ok(ctx) => {
-            if let Err(err) = history_persistence
-              .save_snapshot(ctx.state, ctx.snapshots, ctx.collab_type)
-              .await
-            {
-              error!("Failed to save snapshot: {:?}", err);
-            }
-          },
-          Err(err) => error!("Failed to generate snapshot context: {:?}", err),
-        }
+        save_history(history, history_persistence).await;
       } else {
         break;
       }
     }
   });
+}
+
+#[inline]
+async fn save_history(history: Arc<CollabHistory>, history_persistence: Arc<HistoryPersistence>) {
+  match history.gen_snapshot_context().await {
+    Ok(Some(ctx)) => {
+      if let Err(err) = history_persistence
+        .save_snapshot(ctx.state, ctx.snapshots, ctx.collab_type)
+        .await
+      {
+        error!("Failed to save snapshot: {:?}", err);
+      }
+    },
+    Ok(None) => {
+      trace!("No snapshot to save");
+    },
+    Err(err) => error!("Failed to generate snapshot context: {:?}", err),
+  }
 }

@@ -95,11 +95,15 @@ impl StreamGroup {
   }
 
   /// Inserts a single message into the Redis stream.
-  pub async fn insert_message<T: Into<StreamBinary>>(
+  pub async fn insert_message<T: TryInto<StreamBinary, Error = StreamError>>(
     &mut self,
     message: T,
   ) -> Result<(), StreamError> {
-    let message = message.into();
+    let message = message.try_into()?;
+    self.insert_binary(message).await
+  }
+
+  pub async fn insert_binary(&mut self, message: StreamBinary) -> Result<(), StreamError> {
     let tuple = message.into_tuple_array();
     self
       .connection_manager

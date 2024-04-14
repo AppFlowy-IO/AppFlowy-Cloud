@@ -98,6 +98,14 @@ async fn handle_control_event(
     },
     CollabControlEvent::Close { object_id } => {
       trace!("Close collab: {}", object_id);
+      if let Some(handle) = handles.get(&object_id) {
+        if let Err(err) = handle.gen_history().await {
+          error!(
+            "Failed to generate history when receiving close event: {:?}",
+            err
+          );
+        }
+      }
     },
   }
 }

@@ -3,7 +3,7 @@ use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use collab::preclude::updates::encoder::Encode;
 use collab::preclude::{ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
-use database::history::SnapshotMeta;
+use database::history::model::SnapshotMeta;
 use parking_lot::RwLock;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU32;
@@ -79,9 +79,9 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
     CollabType::UserAwareness => 50,
     CollabType::Empty => {
       if cfg!(debug_assertions) {
-        1
-      } else {
         10
+      } else {
+        50
       }
     },
   }

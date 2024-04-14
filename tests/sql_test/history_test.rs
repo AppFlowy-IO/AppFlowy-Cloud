@@ -1,8 +1,8 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use collab_entity::CollabType;
-use database::history::{
+use database::history::model::{SnapshotMeta, SnapshotState};
+use database::history::ops::{
   get_latest_snapshot, get_latest_snapshot_state, get_snapshot_meta_list, insert_history,
-  SnapshotMeta, SnapshotState,
 };
 use sqlx::PgPool;
 use uuid::Uuid;

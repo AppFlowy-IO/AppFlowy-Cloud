@@ -4,5 +4,5 @@ pub mod biz;
 pub mod config;
 pub mod core;
 pub mod error;
-pub(crate) mod models;
+pub mod models;
 pub mod response;

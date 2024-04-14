@@ -1,7 +1,8 @@
 use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState};
 use crate::error::HistoryError;
 use collab_entity::CollabType;
-use database::history::{insert_history, SnapshotMeta};
+use database::history::model::SnapshotMeta;
+use database::history::ops::insert_history;
 use sqlx::PgPool;
 use uuid::Uuid;
 

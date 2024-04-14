@@ -6,7 +6,10 @@ use collab::core::collab::MutexCollab;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
 use collab::preclude::{CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
+use database::history::model::{RepeatedSnapshotMeta, SnapshotMeta};
+use database::history::ops::get_snapshot_meta_list;
 use serde_json::Value;
+use sqlx::PgPool;
 
 pub struct CollabHistory {
   object_id: String,
@@ -43,13 +46,25 @@ impl CollabHistory {
     gen_snapshot(&self.mutex_collab, &self.object_id)
   }
 
-  pub async fn gen_snapshot_context(&self) -> Result<SnapshotContext, HistoryError> {
+  pub async fn gen_snapshot_context(&self) -> Result<Option<SnapshotContext>, HistoryError> {
     let mutex_collab = self.mutex_collab.clone();
     let snapshot_generator = self.snapshot_generator.clone();
     let object_id = self.object_id.clone();
     let collab_type = self.collab_type.clone();
 
     tokio::task::spawn_blocking(move || {
+      let timestamp = chrono::Utc::now().timestamp();
+      let snapshots: Vec<CollabSnapshot> = snapshot_generator.take_pending_snapshots()
+          .into_iter()
+          // Remove the snapshots which created_at is bigger than the current timestamp
+          .filter(|snapshot| snapshot.created_at <= timestamp)
+          .collect();
+
+      // If there are no snapshots, we don't need to generate a new snapshot
+      if snapshots.is_empty() {
+        return Ok(None);
+      }
+
       let (doc_state, state_vector) = {
         let lock_guard = mutex_collab.lock();
         let txn = lock_guard.try_transaction()?;
@@ -60,13 +75,6 @@ impl CollabHistory {
         (doc_state_v2, state_vector)
       };
 
-      let timestamp = chrono::Utc::now().timestamp();
-      let snapshots = snapshot_generator.take_pending_snapshots()
-          .into_iter()
-          // Remove the snapshots which created_at is bigger than the current timestamp
-          .filter(|snapshot| snapshot.created_at <= timestamp)
-          .collect();
-
       let state = CollabSnapshotState::new(
         object_id,
         doc_state,
@@ -74,11 +82,11 @@ impl CollabHistory {
         state_vector,
         chrono::Utc::now().timestamp(),
       );
-      Ok(SnapshotContext {
+      Ok(Some(SnapshotContext {
         collab_type,
         state,
         snapshots,
-      })
+      }))
     })
     .await
     .map_err(|err| HistoryError::Internal(err.into()))?
@@ -118,4 +126,26 @@ impl CollabPlugin for CountUpdatePlugin {
   fn receive_update(&self, _object_id: &str, _txn: &TransactionMut, update: &[u8]) {
     self.snapshot_generator.did_apply_update(update);
   }
+}
+
+pub async fn get_snapshots(
+  object_id: &str,
+  collab_type: &CollabType,
+  pg_pool: &PgPool,
+) -> Result<RepeatedSnapshotMeta, HistoryError> {
+  let metas = get_snapshot_meta_list(object_id, collab_type, pg_pool)
+    .await
+    .unwrap();
+
+  let metas = metas
+    .into_iter()
+    .map(|meta| SnapshotMeta {
+      oid: meta.oid,
+      snapshot: meta.snapshot,
+      snapshot_version: meta.snapshot_version,
+      created_at: meta.created_at,
+    })
+    .collect::<Vec<_>>();
+
+  Ok(RepeatedSnapshotMeta { items: metas })
 }

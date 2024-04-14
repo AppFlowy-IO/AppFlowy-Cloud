@@ -1,5 +1,5 @@
 pub(crate) mod api;
-pub mod app;
+pub mod application;
 pub mod biz;
 mod config;
 pub mod core;

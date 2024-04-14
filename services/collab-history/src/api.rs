@@ -1,4 +1,4 @@
-use crate::app::AppState;
+use crate::application::AppState;
 use crate::error::HistoryError;
 use crate::response::APIResponse;
 use axum::extract::State;

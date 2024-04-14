@@ -16,8 +16,8 @@ use tokio::time::sleep;
 async fn generate_snapshot_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let open_collab =
-    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None).unwrap());
-  let history = CollabHistory::new(open_collab.clone()).unwrap();
+    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None, None).unwrap());
+  let history = &open_collab.history;
 
   let updates = update_sequence_for_values(
     &object_id,
@@ -28,14 +28,14 @@ async fn generate_snapshot_test() {
     sleep(Duration::from_millis(400)).await;
   }
 
-  let ctx = history.gen_state_snapshot().await.unwrap();
+  let ctx = history.gen_snapshot_context().await.unwrap();
   assert_eq!(ctx.snapshots.len(), 3);
 
   // decode the doc_state_v2 and check if the state is correct
   let collab = Collab::new_with_source(
     CollabOrigin::Empty,
     &object_id,
-    DataSource::DocStateV2(ctx.state.doc_state_v2.clone()),
+    DataSource::DocStateV2(ctx.state.doc_state.clone()),
     vec![],
     true,
   )
@@ -46,7 +46,7 @@ async fn generate_snapshot_test() {
   );
 
   for (i, snapshot) in ctx.snapshots.into_iter().enumerate() {
-    let json = json_from_snapshot(&history, &snapshot, &object_id);
+    let json = json_from_snapshot(history, &snapshot, &object_id);
     match i {
       0 => {
         assert_json_eq!(json, json!({"map":{"0":"a"}}));
@@ -66,8 +66,8 @@ async fn generate_snapshot_test() {
 async fn snapshot_before_apply_update_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let open_collab =
-    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None).unwrap());
-  let history = CollabHistory::new(open_collab.clone()).unwrap();
+    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None, None).unwrap());
+  let history = &open_collab.history;
   let updates = update_sequence_for_values(
     &object_id,
     vec!["a".to_string(), "b".to_string(), "c".to_string()],
@@ -84,7 +84,7 @@ async fn snapshot_before_apply_update_test() {
 
   snapshots.push(history.gen_snapshot(1).unwrap());
   for (i, snapshot) in snapshots.into_iter().enumerate() {
-    let json = json_from_snapshot(&history, &snapshot, &object_id);
+    let json = json_from_snapshot(history, &snapshot, &object_id);
     match i {
       0 => {
         assert_json_eq!(json, json!({}));

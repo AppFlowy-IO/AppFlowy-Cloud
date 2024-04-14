@@ -34,6 +34,8 @@ uuid = { version = "1.6.1", features = ["v4"] }
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono", "migrate"] }
 dashmap = "5.5.3"
 infra.workspace = true
+database.workspace = true
+parking_lot = "0.12.1"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

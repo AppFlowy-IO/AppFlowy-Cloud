@@ -1,6 +1,6 @@
 use tokio::net::TcpListener;
 
-use collab_history::app::create_app;
+use collab_history::application::create_app;
 use tracing::info;
 
 #[tokio::main]

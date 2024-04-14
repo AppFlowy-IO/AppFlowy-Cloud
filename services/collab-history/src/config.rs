@@ -2,7 +2,6 @@ use anyhow::{Context, Error};
 use infra::env_util::get_env_var;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::str::FromStr;
-use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct Config {

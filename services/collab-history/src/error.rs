@@ -7,6 +7,9 @@ pub enum HistoryError {
   CollabError(#[from] collab::error::CollabError),
 
   #[error(transparent)]
+  PersistenceError(#[from] sqlx::Error),
+
+  #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
 

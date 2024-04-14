@@ -1,38 +1,39 @@
-use crate::core::open_handle::OpenCollabHandle;
-
 use crate::error::HistoryError;
-use collab::core::collab::MutexCollab;
+use collab::core::collab::{MutexCollab, WeakMutexCollab};
+use collab::preclude::updates::encoder::Encode;
 use collab::preclude::{ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
+use database::history::SnapshotMeta;
+use parking_lot::RwLock;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU32;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, warn};
 
 #[derive(Clone)]
 pub struct SnapshotGenerator {
-  open_collab: Weak<OpenCollabHandle>,
+  object_id: String,
+  mutex_collab: WeakMutexCollab,
   collab_type: CollabType,
   apply_update_count: Arc<AtomicU32>,
   pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
 }
 
 impl SnapshotGenerator {
-  pub fn new(open_collab: Weak<OpenCollabHandle>, collab_type: CollabType) -> Self {
+  pub fn new(object_id: &str, mutex_collab: WeakMutexCollab, collab_type: CollabType) -> Self {
     Self {
-      open_collab,
+      object_id: object_id.to_string(),
+      mutex_collab,
       collab_type,
       apply_update_count: Default::default(),
       pending_snapshots: Default::default(),
     }
   }
 
-  pub async fn take_pending_snapshots(&self) -> Vec<CollabSnapshot> {
-    let mut pending_snapshots = self.pending_snapshots.write().await;
-    std::mem::take(&mut *pending_snapshots)
+  pub fn take_pending_snapshots(&self) -> Vec<CollabSnapshot> {
+    std::mem::take(&mut *self.pending_snapshots.write())
   }
 
   pub fn did_apply_update(&self, _update: &[u8]) {
@@ -44,11 +45,13 @@ impl SnapshotGenerator {
     // in the future, we can use a more sophisticated algorithm to determine when to generate a snapshot.
     if prev_apply_update_count + 1 >= gen_snapshot_threshold(&self.collab_type) {
       let pending_snapshots = self.pending_snapshots.clone();
-      let weak_handle = self.open_collab.clone();
+      let mutex_collab = self.mutex_collab.clone();
+      let object_id = self.object_id.clone();
       tokio::spawn(async move {
-        if let Some(handle) = weak_handle.upgrade() {
+        if let Some(mutex_collab) = mutex_collab.upgrade() {
           attempt_gen_snapshot(
-            &handle.mutex_collab,
+            &mutex_collab,
+            &object_id,
             pending_snapshots,
             3,
             Duration::from_secs(2),
@@ -88,15 +91,16 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
 // Helper function to perform the snapshot generation with retries.
 async fn attempt_gen_snapshot(
   collab: &MutexCollab,
+  object_id: &str,
   pending_snapshots: Arc<RwLock<Vec<CollabSnapshot>>>,
   max_retries: usize,
   delay: Duration,
 ) {
   let mut retries = 0;
   while retries < max_retries {
-    match gen_snapshot(collab, 1) {
+    match gen_snapshot(collab, object_id) {
       Ok(snapshot) => {
-        pending_snapshots.write().await.push(snapshot);
+        pending_snapshots.write().push(snapshot);
         return;
       },
       Err(err) => {
@@ -113,14 +117,17 @@ async fn attempt_gen_snapshot(
   warn!("Exceeded maximum retry attempts for snapshot generation");
 }
 
-pub fn gen_snapshot(mutex_collab: &MutexCollab, uid: i64) -> Result<CollabSnapshot, HistoryError> {
+pub fn gen_snapshot(
+  mutex_collab: &MutexCollab,
+  object_id: &str,
+) -> Result<CollabSnapshot, HistoryError> {
   let lock_guard = mutex_collab.lock();
   let txn = lock_guard.try_transaction()?;
   let snapshot = txn.snapshot();
   drop(txn);
 
   let timestamp = chrono::Utc::now().timestamp();
-  Ok(CollabSnapshot::new(uid, snapshot, timestamp))
+  Ok(CollabSnapshot::new(object_id, snapshot, timestamp))
 }
 
 /// Represents the state of a collaborative object (Collab) at a specific timestamp.
@@ -135,7 +142,8 @@ pub struct CollabSnapshotState {
   /// Unique identifier of the collaborative document.
   pub object_id: String,
   /// Binary representation of the Collab's state.
-  pub doc_state_v2: Vec<u8>,
+  pub doc_state: Vec<u8>,
+  pub doc_state_version: i32,
   pub state_vector: StateVector,
   /// Timestamp indicating when this snapshot was created, measured in milliseconds since the Unix epoch.
   pub created_at: i64,
@@ -148,7 +156,8 @@ pub struct CollabSnapshotState {
 impl CollabSnapshotState {
   pub fn new(
     object_id: String,
-    doc_state_v2: Vec<u8>,
+    doc_state: Vec<u8>,
+    doc_state_version: i32,
     state_vector: StateVector,
     created_at: i64,
   ) -> Self {
@@ -156,7 +165,8 @@ impl CollabSnapshotState {
     Self {
       snapshot_id,
       object_id,
-      doc_state_v2,
+      doc_state,
+      doc_state_version,
       state_vector,
       created_at,
       dependency_snapshot_id: None,
@@ -168,8 +178,7 @@ impl CollabSnapshotState {
 /// This snapshot is identified by a unique ID and linked to a specific `CollabStateSnapshot`.
 /// It represents a milestone or version of the Collab that can be referenced or reverted to.
 pub struct CollabSnapshot {
-  /// Unique identifier for the snapshot, typically representing a version or revision number.
-  pub uid: i64,
+  pub object_id: String,
   /// Snapshot data capturing the Collab's state at the time of the snapshot.
   pub snapshot: Snapshot,
   /// Timestamp indicating when this snapshot was created, measured in milliseconds since the Unix epoch.
@@ -184,11 +193,23 @@ impl Deref for CollabSnapshot {
 }
 
 impl CollabSnapshot {
-  pub fn new(uid: i64, snapshot: Snapshot, created_at: i64) -> Self {
+  pub fn new(object_id: &str, snapshot: Snapshot, created_at: i64) -> Self {
     Self {
-      uid,
       snapshot,
+      object_id: object_id.to_string(),
       created_at,
+    }
+  }
+}
+
+impl From<CollabSnapshot> for SnapshotMeta {
+  fn from(snapshot: CollabSnapshot) -> Self {
+    let snapshot_data = snapshot.encode_v1();
+    Self {
+      oid: snapshot.object_id,
+      snapshot: snapshot_data,
+      snapshot_version: 1,
+      created_at: snapshot.created_at,
     }
   }
 }

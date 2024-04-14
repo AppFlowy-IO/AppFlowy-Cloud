@@ -8,12 +8,12 @@ use collab_stream::client::CollabRedisStream;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
-use std::borrow::Cow;
+
 use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{info, trace};
+use tracing::info;
 
 pub async fn create_app() -> Result<Router<()>, Error> {
   let config = Config::from_env()?;
@@ -33,11 +33,13 @@ pub async fn create_app() -> Result<Router<()>, Error> {
 
   let collab_redis_stream =
     CollabRedisStream::new_with_connection_manager(redis_client.clone()).await;
-  let open_collab_manager = Arc::new(OpenCollabManager::new(collab_redis_stream).await);
+  let open_collab_manager =
+    Arc::new(OpenCollabManager::new(collab_redis_stream, pg_pool.clone()).await);
 
   let state = AppState {
     redis_client,
     open_collab_manager,
+    pg_pool,
   };
 
   let cors = CorsLayer::new()
@@ -56,21 +58,11 @@ pub async fn create_app() -> Result<Router<()>, Error> {
 pub struct AppState {
   pub redis_client: ConnectionManager,
   pub open_collab_manager: Arc<OpenCollabManager>,
+  pub pg_pool: PgPool,
 }
 
 async fn migrate(pool: &PgPool) -> Result<(), Error> {
-  let mut migrations = sqlx::migrate!("./migrations");
-  if cfg!(debug_assertions) {
-    trace!(
-      "Running migrations: {:?}",
-      migrations
-        .iter()
-        .map(|m| &m.description)
-        .collect::<Vec<&Cow<'static, str>>>()
-    );
-  }
-
-  migrations
+  sqlx::migrate!("../../migrations")
     .set_ignore_missing(true)
     .run(pool)
     .await

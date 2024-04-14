@@ -127,8 +127,13 @@ async fn read_specific_num_of_message_test() {
     .await
     .unwrap();
   assert_eq!(messages.len(), 5);
-  for i in 0..5 {
-    assert_eq!(messages[i].data, vec![1, 2, 3, 4, 5]);
+
+  for message in messages {
+    assert_eq!(
+      message.data,
+      vec![1, 2, 3, 4, 5],
+      "Message data does not match expected pattern"
+    );
   }
 }
 
@@ -156,7 +161,11 @@ async fn read_all_message_test() {
 
   // get all the message in the group
   let messages = group.get_all_message().await.unwrap();
-  for i in 0..5 {
-    assert_eq!(messages[i].data, vec![1, 2, 3, 4, 5]);
+  for message in messages {
+    assert_eq!(
+      message.data,
+      vec![1, 2, 3, 4, 5],
+      "Message data does not match expected pattern"
+    );
   }
 }

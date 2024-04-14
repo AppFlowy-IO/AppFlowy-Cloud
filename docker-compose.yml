@@ -132,7 +132,7 @@ services:
 #    restart: on-failure
 #    build:
 #      context: .
-#      dockerfile: ./services/collab-history/Dockerfile
+#      dockerfile: ./services/appflowy-history/Dockerfile
 #    image: appflowyinc/collab_history:${COLLAB_HISTORY_VERSION:-latest}
 #    environment:
 #      - RUST_LOG=${RUST_LOG:-info}

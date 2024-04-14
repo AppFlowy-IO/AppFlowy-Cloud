@@ -669,6 +669,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "appflowy-history"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert-json-diff",
+ "axum",
+ "chrono",
+ "collab",
+ "collab-entity",
+ "collab-stream",
+ "dashmap",
+ "database",
+ "dotenvy",
+ "infra",
+ "parking_lot 0.12.1",
+ "rand 0.8.5",
+ "redis 0.25.2",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serial_test",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1585,39 +1618,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "collab-history"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "assert-json-diff",
- "axum",
- "chrono",
- "collab",
- "collab-entity",
- "collab-stream",
- "dashmap",
- "database",
- "dotenvy",
- "infra",
- "parking_lot 0.12.1",
- "rand 0.8.5",
- "redis 0.25.2",
- "serde",
- "serde_json",
- "serde_repr",
- "serial_test",
- "sqlx",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
- "tower-service",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -6890,6 +6890,14 @@ dependencies = [
  "rusticata-macros",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
 ]
 
 [[package]]

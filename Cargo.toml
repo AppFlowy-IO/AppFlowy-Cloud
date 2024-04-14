@@ -143,9 +143,10 @@ members = [
     "libs/appflowy-ai",
     "libs/collab-rt",
     # services
-    "services/collab-history",
+    "services/appflowy-history",
     "services/realtime",
-    "libs/client-api-wasm"
+    "libs/client-api-wasm",
+    "xtask"
 ]
 
 [workspace.dependencies]

@@ -1,7 +1,7 @@
 use tokio::net::TcpListener;
 
-use collab_history::application::create_app;
-use collab_history::config::Environment;
+use appflowy_history::application::create_app;
+use appflowy_history::config::Environment;
 use tracing::info;
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::layer::SubscriberExt;
@@ -10,7 +10,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() {
   dotenvy::dotenv().ok();
-  let config = collab_history::config::Config::from_env().expect("failed to load config");
+  let config = appflowy_history::config::Config::from_env().expect("failed to load config");
   info!("config loaded: {:?}", &config);
 
   // Initialize logger

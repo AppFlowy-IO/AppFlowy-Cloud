@@ -1,12 +1,12 @@
+use appflowy_history::biz::history::CollabHistory;
+use appflowy_history::biz::snapshot::CollabSnapshot;
+use appflowy_history::core::open_handle::OpenCollabHandle;
 use assert_json_diff::assert_json_eq;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, ReadTxn, StateVector, Update};
 use collab_entity::CollabType;
-use collab_history::biz::history::CollabHistory;
-use collab_history::biz::snapshot::CollabSnapshot;
-use collab_history::core::open_handle::OpenCollabHandle;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;

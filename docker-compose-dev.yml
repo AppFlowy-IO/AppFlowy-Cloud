@@ -114,7 +114,7 @@ services:
 #    restart: on-failure
 #    build:
 #      context: .
-#      dockerfile: ./libs/collab-history/Dockerfile
+#      dockerfile: ./libs/appflowy-history/Dockerfile
 #    environment:
 #      - RUST_LOG=${RUST_LOG:-info}
 #      - APPFLOWY_HISTORY_REDIS_URL=${APPFLOWY_HISTORY_REDIS_URL:-redis://redis:6379}

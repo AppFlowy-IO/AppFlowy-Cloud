@@ -1,8 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use tokio::process::Command;
 use tokio::select;
-use tokio::time::{sleep, Duration};
 
+/// Using 'cargo run --package xtask' to run servers in parallel.
+/// 1. AppFlowy Cloud
+/// 2. AppFlowy History
+///
 #[tokio::main]
 async fn main() -> Result<()> {
   let appflowy_cloud_bin_name = "appflowy_cloud";
@@ -12,12 +15,12 @@ async fn main() -> Result<()> {
   kill_existing_process(appflowy_history_bin_name).await?;
 
   let mut appflowy_cloud_cmd = Command::new("cargo")
-    .args(&["run", "--features", "ai_enable"])
+    .args(["run", "--features", "ai_enable"])
     .spawn()
     .context("Failed to start AppFlowy-Cloud process")?;
 
   let mut appflowy_history_cmd = Command::new("cargo")
-    .args(&[
+    .args([
       "run",
       "--manifest-path",
       "./services/appflowy-history/Cargo.toml",

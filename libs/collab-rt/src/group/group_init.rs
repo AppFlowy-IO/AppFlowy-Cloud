@@ -189,7 +189,7 @@ impl CollabGroup {
       CollabType::Document => 10 * 60, // 10 minutes
       CollabType::Database | CollabType::DatabaseRow => 60 * 60, // 1 hour
       CollabType::WorkspaceDatabase | CollabType::Folder | CollabType::UserAwareness => 2 * 60 * 60, // 2 hours,
-      CollabType::Empty => {
+      CollabType::Unknown => {
         10 * 60 // 10 minutes
       },
     }

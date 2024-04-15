@@ -77,7 +77,7 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
     CollabType::Folder => 20,
     CollabType::DatabaseRow => 10,
     CollabType::UserAwareness => 50,
-    CollabType::Empty => {
+    CollabType::Unknown => {
       if cfg!(debug_assertions) {
         10
       } else {

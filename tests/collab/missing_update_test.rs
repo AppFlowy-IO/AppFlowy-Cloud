@@ -39,7 +39,7 @@ async fn client_ping_find_missing_update_test() {
 /// Create two clients and the first client makes an edit to the collaborative document.
 /// The second client did do init sync but disable receive message, so it will miss the first edit.
 async fn make_clients() -> (TestClient, TestClient, String, Value) {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
   // Create a collaborative document with client_1 and invite client_2 to collaborate.

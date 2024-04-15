@@ -16,7 +16,7 @@ async fn create_snapshot_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let object_id = Uuid::new_v4().to_string();
   let (data, expected) = test_collab_data(test_client.uid().await, &object_id);
 
@@ -49,7 +49,7 @@ async fn get_snapshot_data_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let object_id = Uuid::new_v4().to_string();
   let (data, _) = test_collab_data(test_client.uid().await, &object_id);
 
@@ -107,7 +107,7 @@ async fn snapshot_limit_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
 
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let object_id = Uuid::new_v4().to_string();
   let (data, _) = test_collab_data(test_client.uid().await, &object_id);
 

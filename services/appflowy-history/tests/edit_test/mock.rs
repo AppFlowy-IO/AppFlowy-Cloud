@@ -29,7 +29,7 @@ pub async fn mock_event(workspace_id: &str, object_id: &str) -> StreamEventMock 
   let open_event = CollabControlEvent::Open {
     workspace_id: workspace_id.clone(),
     object_id: object_id.clone(),
-    collab_type: CollabType::Empty,
+    collab_type: CollabType::Unknown,
     doc_state,
   };
 

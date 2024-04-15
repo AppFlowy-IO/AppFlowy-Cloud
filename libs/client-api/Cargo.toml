@@ -59,7 +59,7 @@ features = ["tungstenite"]
 wasm-bindgen-futures = "0.4.40"
 getrandom = { version = "0.2", features = ["js"]}
 tokio = { workspace = true, features = ["sync"]}
-again = "0.1.2"
+again = { version = "0.1.2" }
 
 [features]
 collab-sync = ["collab", "yrs"]

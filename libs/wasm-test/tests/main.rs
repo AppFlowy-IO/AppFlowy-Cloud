@@ -7,3 +7,6 @@ mod conn_test;
 
 // #[cfg(target_arch = "wasm32")]
 // mod user_test;
+
+// #[cfg(target_arch = "wasm32")]
+// mod collab_test;

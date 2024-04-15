@@ -1,6 +1,11 @@
 pub mod entities;
-use crate::entities::{ClientAPIConfig, ClientResponse};
+
+use crate::entities::*;
+use client_api::entity::QueryCollabParams;
+use client_api::notify::TokenState;
 use client_api::{Client, ClientConfiguration};
+use std::sync::Arc;
+use tracing;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "enable_wee_alloc")]
@@ -27,11 +32,16 @@ extern "C" {
   #[wasm_bindgen(js_namespace = console)]
   fn trace(msg: &str);
 
+  #[wasm_bindgen(js_namespace = window)]
+  fn refresh_token(token: &str);
+
+  #[wasm_bindgen(js_namespace = window)]
+  fn invalid_token();
 }
 
 #[wasm_bindgen]
 pub struct ClientAPI {
-  client: Client,
+  client: Arc<Client>,
 }
 
 #[wasm_bindgen]
@@ -55,54 +65,77 @@ impl ClientAPI {
       configuration,
       config.client_id.as_str(),
     );
+
     tracing::debug!("Client API initialized, config: {:?}", config);
-    ClientAPI { client }
+    ClientAPI {
+      client: Arc::new(client),
+    }
   }
 
-  // pub async fn get_user(&self) -> ClientResponse {
-  // 	if let Err(err) = self.client.get_profile().await {
-  // 		log::error!("Get user failed: {:?}", err);
-  // 		return ClientResponse<bool> {
-  // 			code: ClientErrorCode::from(err.code),
-  // 			message: err.message.to_string(),
-  // 			data: None
-  // 		}
-  // 	}
-  //
-  // 	log::info!("Get user success");
-  // 	ClientResponse {
-  // 		code: ClientErrorCode::Ok,
-  // 		message: "Get user success".to_string(),
-  // 	}
-  // }
+  pub fn subscribe(&self) {
+    let mut rx = self.client.subscribe_token_state();
+    let client = self.client.clone();
 
-  pub async fn sign_up_email_verified(
-    &self,
-    email: &str,
-    password: &str,
-  ) -> Result<bool, ClientResponse> {
-    if let Err(err) = self.client.sign_up(email, password).await {
-      return Err(ClientResponse {
-        code: err.code,
-        message: err.message.to_string(),
-      });
+    wasm_bindgen_futures::spawn_local(async move {
+      while let Ok(state) = rx.recv().await {
+        match state {
+          TokenState::Refresh => {
+            if let Ok(token) = client.get_token() {
+              refresh_token(token.as_str());
+            } else {
+              invalid_token();
+            }
+          },
+          TokenState::Invalid => {
+            invalid_token();
+          },
+        }
+      }
+    });
+  }
+  pub async fn login(&self, email: &str, password: &str) -> Result<(), ClientResponse> {
+    match self.client.sign_in_password(email, password).await {
+      Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
     }
-
-    Ok(true)
   }
 
-  pub async fn sign_in_password(
-    &self,
-    email: &str,
-    password: &str,
-  ) -> Result<bool, ClientResponse> {
-    if let Err(err) = self.client.sign_in_password(email, password).await {
-      return Err(ClientResponse {
-        code: err.code,
-        message: err.message.to_string(),
-      });
+  pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), ClientResponse> {
+    match self.client.sign_up(email, password).await {
+      Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
     }
+  }
 
-    Ok(true)
+  pub async fn logout(&self) -> Result<(), ClientResponse> {
+    match self.client.sign_out().await {
+      Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn get_user(&self) -> Result<User, ClientResponse> {
+    match self.client.get_profile().await {
+      Ok(profile) => Ok(User::from(profile)),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub fn restore_token(&self, token: &str) -> Result<(), ClientResponse> {
+    match self.client.restore_token(token) {
+      Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn get_collab(
+    &self,
+    params: ClientQueryCollabParams,
+  ) -> Result<ClientEncodeCollab, ClientResponse> {
+    tracing::debug!("get_collab: {:?}", params);
+    match self.client.get_collab(params.into()).await {
+      Ok(data) => Ok(ClientEncodeCollab::from(data)),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
   }
 }

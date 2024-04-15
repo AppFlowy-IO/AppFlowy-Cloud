@@ -25,6 +25,7 @@ FROM debian:bookworm-slim AS runtime
 WORKDIR /app/services/appflowy-history
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl \
+    && apt-get protobuf-compiler -y \
     # Clean up
     && apt-get autoremove -y \
     && apt-get clean -y \

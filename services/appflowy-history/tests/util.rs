@@ -104,11 +104,11 @@ impl TestRpcClient {
   }
 }
 
-pub async fn run_test_server() -> TestRpcClient {
+pub async fn run_test_server(control_stream_key: String) -> TestRpcClient {
   let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
   let addr = listener.local_addr().unwrap();
   let mut config = Config::from_env().expect("failed to load config");
-  config.stream_settings.control_key = uuid::Uuid::new_v4().to_string();
+  config.stream_settings.control_key = control_stream_key;
 
   let cloned_config = config.clone();
   tokio::spawn(async move {

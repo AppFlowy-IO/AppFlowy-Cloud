@@ -1,4 +1,4 @@
-use crate::edit_test::mock::mock_event;
+use crate::edit_test::mock::mock_continuously_edit_updates;
 use crate::util::{check_doc_state_json, redis_stream, run_test_server};
 use collab_entity::CollabType;
 use tonic_proto::history::SnapshotRequest;
@@ -8,8 +8,9 @@ async fn apply_update_stream_updates_test() {
   let redis_stream = redis_stream().await;
   let workspace_id = uuid::Uuid::new_v4().to_string();
   let object_id = uuid::Uuid::new_v4().to_string();
-  let mock = mock_event(&workspace_id, &object_id, 30).await;
-  let client = run_test_server().await;
+  let mock = mock_continuously_edit_updates(&workspace_id, &object_id, 30).await;
+  let client = run_test_server(uuid::Uuid::new_v4().to_string()).await;
+
   let control_stream_key = client.config.stream_settings.control_key.clone();
   let mut control_group = redis_stream
     .collab_control_stream(&control_stream_key, "appflowy_cloud")

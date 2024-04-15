@@ -1,4 +1,4 @@
-use crate::group::group_init::{EditState, MutexCollab, WeakMutexCollab};
+use crate::group::group_init::EditState;
 
 use anyhow::anyhow;
 use app_error::AppError;
@@ -7,6 +7,7 @@ use collab_entity::CollabType;
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
+use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;

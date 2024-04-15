@@ -7,7 +7,7 @@ use bytes::Bytes;
 #[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
-use collab::core::collab::{DocStateSource, MutexCollab};
+use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -49,7 +49,7 @@ pub struct TestClient {
 pub struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
-  pub collab: Arc<MutexCollab>,
+  pub mutex_collab: Arc<MutexCollab>,
 }
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
@@ -114,7 +114,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .get_awareness()
       .get_states()
@@ -131,7 +131,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .clean_awareness_state();
   }
@@ -141,7 +141,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .emit_awareness_state();
   }
@@ -174,7 +174,7 @@ impl TestClient {
     Folder::from_collab_doc_state(
       uid,
       CollabOrigin::Empty,
-      DocStateSource::FromDocState(data.doc_state.to_vec()),
+      DataSource::DocStateV1(data.doc_state.to_vec()),
       &workspace_id,
       vec![],
     )
@@ -315,7 +315,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .subscribe_sync_state();
 
@@ -487,25 +487,36 @@ impl TestClient {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = match encoded_collab_v1 {
-      None => Arc::new(MutexCollab::new(origin.clone(), &object_id, vec![], false)),
-      Some(data) => Arc::new(
-        MutexCollab::new_with_doc_state(
+      None => Arc::new(MutexCollab::new(Collab::new_with_origin(
+        origin.clone(),
+        &object_id,
+        vec![],
+        false,
+      ))),
+      Some(data) => Arc::new(MutexCollab::new(
+        Collab::new_with_source(
           origin.clone(),
           &object_id,
-          DocStateSource::FromDocState(data.doc_state.to_vec()),
+          DataSource::DocStateV1(data.doc_state.to_vec()),
           vec![],
           false,
         )
         .unwrap(),
-      ),
+      )),
     };
-    collab.lock().emit_awareness_state();
 
-    let encoded_collab_v1 = collab
-      .encode_collab_v1(|collab| collab_type.validate(collab))
-      .unwrap()
-      .encode_to_bytes()
-      .unwrap();
+    let encoded_collab_v1 = {
+      let mut lock_guard = collab.lock();
+      lock_guard.emit_awareness_state();
+      let data = lock_guard
+        .encode_collab_v1(|collab| collab_type.validate(collab))
+        .unwrap()
+        .encode_to_bytes()
+        .unwrap();
+      drop(lock_guard);
+      data
+    };
+
     self
       .api_client
       .create_collab(CreateCollabParams {
@@ -537,7 +548,10 @@ impl TestClient {
       collab.lock().add_plugin(Box::new(sync_plugin));
     }
     collab.lock().initialize();
-    let test_collab = TestCollab { origin, collab };
+    let test_collab = TestCollab {
+      origin,
+      mutex_collab: collab,
+    };
     self.collabs.insert(object_id.clone(), test_collab);
     self.wait_object_sync_complete(&object_id).await.unwrap();
   }
@@ -570,16 +584,16 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Arc::new(
-      MutexCollab::new_with_doc_state(
+    let collab = Arc::new(MutexCollab::new(
+      Collab::new_with_source(
         origin.clone(),
         object_id,
-        DocStateSource::FromDocState(doc_state),
+        DataSource::DocStateV1(doc_state),
         vec![],
         false,
       )
       .unwrap(),
-    );
+    ));
     collab.lock().emit_awareness_state();
 
     #[cfg(feature = "collab-sync")]
@@ -606,7 +620,10 @@ impl TestClient {
       collab.lock().add_plugin(Box::new(sync_plugin));
     }
     collab.lock().initialize();
-    let test_collab = TestCollab { origin, collab };
+    let test_collab = TestCollab {
+      origin,
+      mutex_collab: collab,
+    };
     self.collabs.insert(object_id.to_string(), test_collab);
   }
 
@@ -641,7 +658,7 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .to_json_value()
   }
@@ -669,10 +686,10 @@ pub async fn assert_server_snapshot(
           Ok(snapshot_data) => {
           let encoded_collab_v1 =
             EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1).unwrap();
-          let json = Collab::new_with_doc_state(
+          let json = Collab::new_with_source(
             CollabOrigin::Empty,
             &object_id,
-            DocStateSource::FromDocState(encoded_collab_v1.doc_state.to_vec()),
+            DataSource::DocStateV1(encoded_collab_v1.doc_state.to_vec()),
             vec![],
             false,
           )
@@ -727,10 +744,10 @@ pub async fn assert_server_collab(
 
       match &result {
         Ok(data) => {
-          let json = Collab::new_with_doc_state(
+          let json = Collab::new_with_source(
             CollabOrigin::Empty,
             &object_id,
-            DocStateSource::FromDocState(data.doc_state.to_vec()),
+            DataSource::DocStateV1(data.doc_state.to_vec()),
             vec![],
             false,
           )
@@ -782,7 +799,7 @@ pub async fn assert_client_collab_within_secs(
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .collab
+          .mutex_collab
           .lock()
           .to_json_value()
       } => {
@@ -818,7 +835,7 @@ pub async fn assert_client_collab_include_value(
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .collab
+          .mutex_collab
           .lock()
           .to_json_value()
       } => {
@@ -848,10 +865,10 @@ pub async fn get_collab_json_from_server(
     .await
     .unwrap();
 
-  Collab::new_with_doc_state(
+  Collab::new_with_source(
     CollabOrigin::Empty,
     object_id,
-    DocStateSource::FromDocState(bytes.doc_state.to_vec()),
+    DataSource::DocStateV1(bytes.doc_state.to_vec()),
     vec![],
     false,
   )

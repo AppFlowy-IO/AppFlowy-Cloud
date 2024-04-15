@@ -8,14 +8,7 @@ use crate::config::config::Environment;
 ///
 /// It should only be called once!
 pub fn init_subscriber(app_env: &Environment, filters: Vec<String>) {
-  let env_filter = Some(filters.join(","));
-  let env_filter = match env_filter {
-    None => {
-      dbg!("Using default env filter");
-      EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"))
-    },
-    Some(env_filter) => EnvFilter::new(env_filter),
-  };
+  let env_filter = EnvFilter::new(filters.join(","));
 
   let builder = tracing_subscriber::fmt()
     .with_target(true)

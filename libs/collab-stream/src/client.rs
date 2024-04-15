@@ -1,36 +1,49 @@
 use crate::error::StreamError;
 use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream::CollabStream;
-use crate::stream_group::CollabStreamGroup;
+use crate::stream_group::StreamGroup;
 use redis::aio::ConnectionManager;
 
-pub struct CollabStreamClient {
+pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
+
+#[derive(Clone)]
+pub struct CollabRedisStream {
   connection_manager: ConnectionManager,
 }
 
-impl CollabStreamClient {
+impl CollabRedisStream {
   pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
     let connection_manager = redis_client.get_connection_manager().await?;
-    Ok(Self { connection_manager })
+    Ok(Self::new_with_connection_manager(connection_manager).await)
+  }
+
+  pub async fn new_with_connection_manager(connection_manager: ConnectionManager) -> Self {
+    Self { connection_manager }
   }
 
   pub async fn stream(&self, workspace_id: &str, oid: &str) -> CollabStream {
     CollabStream::new(workspace_id, oid, self.connection_manager.clone())
   }
 
-  pub async fn group_stream(
+  pub async fn collab_control_stream(
+    &self,
+    key: &str,
+    group_name: &str,
+  ) -> Result<StreamGroup, StreamError> {
+    let mut group = StreamGroup::new(key.to_string(), group_name, self.connection_manager.clone());
+    group.ensure_consumer_group().await?;
+    Ok(group)
+  }
+
+  pub async fn collab_update_stream(
     &self,
     workspace_id: &str,
     oid: &str,
     group_name: &str,
-  ) -> Result<CollabStreamGroup, StreamError> {
-    let mut group = CollabStreamGroup::new(
-      workspace_id,
-      oid,
-      group_name,
-      self.connection_manager.clone(),
-    );
-    group.ensure_consumer_group("0").await?;
+  ) -> Result<StreamGroup, StreamError> {
+    let stream_key = format!("af_collab_update-{}-{}", workspace_id, oid);
+    let mut group = StreamGroup::new(stream_key, group_name, self.connection_manager.clone());
+    group.ensure_consumer_group().await?;
     Ok(group)
   }
 }

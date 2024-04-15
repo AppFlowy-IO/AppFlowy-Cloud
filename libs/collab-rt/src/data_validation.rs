@@ -1,7 +1,7 @@
 use crate::error::RealtimeError;
 use async_trait::async_trait;
 
-use collab::core::collab::DocStateSource;
+use collab::core::collab::DataSource;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
@@ -34,10 +34,10 @@ pub async fn validate_encode_collab(
   tokio::task::spawn_blocking(move || {
     let encoded_collab =
       EncodedCollab::decode_from_bytes(&data).map_err(|err| RealtimeError::Internal(err.into()))?;
-    let collab = Collab::new_with_doc_state(
+    let collab = Collab::new_with_source(
       CollabOrigin::Empty,
       &object_id,
-      DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
+      DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
       vec![],
       false,
     )

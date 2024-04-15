@@ -18,7 +18,7 @@ async fn edit_workspace_without_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
   client_1
@@ -55,7 +55,7 @@ async fn init_sync_workspace_with_member_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
   owner
@@ -98,7 +98,7 @@ async fn edit_workspace_with_guest_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "zack");
   owner
@@ -115,7 +115,7 @@ async fn edit_workspace_with_guest_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "nathan");
 

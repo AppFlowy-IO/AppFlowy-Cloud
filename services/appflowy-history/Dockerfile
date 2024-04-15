@@ -18,11 +18,11 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 COPY . .
 
-WORKDIR /app/services/collab-history
-RUN cargo build --release --bin collab-history
+WORKDIR /app/services/appflowy-history
+RUN cargo build --release --bin appflowy_history
 
 FROM debian:bookworm-slim AS runtime
-WORKDIR /app/services/collab-history
+WORKDIR /app/services/appflowy-history
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl \
     # Clean up
@@ -31,7 +31,7 @@ RUN apt-get update -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/
-COPY --from=builder /app/target/release/collab-history /usr/local/bin/collab-history
+COPY --from=builder /app/target/release/appflowy_history /usr/local/bin/appflowy_history
 ENV APP_ENVIRONMENT production
 ENV RUST_BACKTRACE 1
-CMD ["collab-history"]
+CMD ["appflowy_history"]

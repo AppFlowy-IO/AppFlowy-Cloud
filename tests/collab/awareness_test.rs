@@ -6,7 +6,7 @@ use tokio::time::sleep;
 
 #[tokio::test]
 async fn viewing_document_editing_users_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut owner = TestClient::new_user().await;
   let mut guest = TestClient::new_user().await;
 

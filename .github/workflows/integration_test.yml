@@ -54,15 +54,10 @@ jobs:
           # the wasm-pack headless tests will run on random ports, so we need to allow all origins
           sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
 
-      - name: Disable appflowyinc images
-        run: |
-          sed -i '/image: appflowyinc\/appflowy_cloud:/d' docker-compose.yml
-          sed -i '/image: appflowyinc\/admin_frontend:/d' docker-compose.yml
-          cat docker-compose.yml
 
       - name: Run Docker-Compose
         run: |
-          docker compose up -d
+          docker-compose -f docker-compose-ci.yml up
 
       - name: Run tests
         run: |

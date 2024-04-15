@@ -16,6 +16,7 @@ pub struct Config {
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
+  pub grpc_history: GrpcHistorySetting,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -101,6 +102,11 @@ impl DatabaseSetting {
   }
 }
 
+#[derive(Clone, Debug)]
+pub struct GrpcHistorySetting {
+  pub addrs: String,
+}
+
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let config = Config {
@@ -152,6 +158,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     appflowy_ai: AppFlowyAISetting {
       url: get_env_var("APPFLOWY_AI_URL", "http://localhost:5001").into(),
+    },
+    grpc_history: GrpcHistorySetting {
+      addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),
     },
   };
   Ok(config)

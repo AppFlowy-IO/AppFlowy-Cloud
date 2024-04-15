@@ -1,5 +1,6 @@
 use crate::response::{APIResponse, Code};
 use axum::response::IntoResponse;
+use tonic::Status;
 
 #[derive(thiserror::Error, Debug)]
 pub enum HistoryError {
@@ -27,5 +28,13 @@ impl IntoResponse for HistoryError {
       .with_message(message)
       .with_code(code)
       .into_response()
+  }
+}
+
+impl From<HistoryError> for Status {
+  fn from(value: HistoryError) -> Self {
+    let code = value.code();
+    let message = value.to_string();
+    Status::new(code.into(), message)
   }
 }

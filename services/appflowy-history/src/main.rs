@@ -1,14 +1,16 @@
 use tokio::net::TcpListener;
+use tonic::transport::Server;
 
 use appflowy_history::application::create_app;
 use appflowy_history::config::Environment;
+
 use tracing::info;
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
   dotenvy::dotenv().ok();
   let config = appflowy_history::config::Config::from_env().expect("failed to load config");
   info!("config loaded: {:?}", &config);
@@ -17,13 +19,10 @@ async fn main() {
   init_subscriber(&config.app_env);
 
   // Start the server
-  let listener = TcpListener::bind("0.0.0.0:3100")
-    .await
-    .expect("failed to bind to port");
-  let app = create_app(config).await.unwrap();
-  axum::serve(listener, app)
-    .await
-    .expect("failed to run server");
+  let server = create_app(config).await.unwrap();
+  let addr = "[::1]:50051".parse()?;
+  server.serve(addr).await?;
+  Ok(())
 }
 
 pub fn init_subscriber(app_env: &Environment) {

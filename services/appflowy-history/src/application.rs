@@ -3,19 +3,25 @@ use crate::config::{Config, DatabaseSetting};
 use crate::core::manager::OpenCollabManager;
 use anyhow::Error;
 use axum::http::Method;
-use axum::Router;
 use collab_stream::client::CollabRedisStream;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
+use crate::api::HistoryImpl;
 use std::sync::Arc;
 use std::time::Duration;
+use tonic::transport::server::{Router, Routes, RoutesBuilder};
+use tonic::transport::Server;
+use tonic::{Request, Response, Status};
+use tonic_proto::history::history_server::{History, HistoryServer};
+use tonic_proto::history::{RepeatedSnapshotMeta, SnapshotRequest};
+use tower::layer::util::Identity;
 use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
-pub async fn create_app(config: Config) -> Result<Router<()>, Error> {
+pub async fn create_app(config: Config) -> Result<Router<Identity>, Error> {
   // Postgres
   info!("Preparing to run database migrations...");
   let pg_pool = get_connection_pool(&config.db_settings).await?;
@@ -39,16 +45,8 @@ pub async fn create_app(config: Config) -> Result<Router<()>, Error> {
     pg_pool,
   };
 
-  let cors = CorsLayer::new()
-        // allow `GET` and `POST` when accessing the resource
-        .allow_methods([Method::GET, Method::POST])
-        // allow requests from any origin
-        .allow_origin(Any);
-  Ok(
-    Router::new()
-      .nest_service("/api", api::router().with_state(state.clone()))
-      .layer(ServiceBuilder::new().layer(cors)),
-  )
+  let history_impl = HistoryImpl { state };
+  Ok(Server::builder().add_service(HistoryServer::new(history_impl)))
 }
 
 #[derive(Clone)]

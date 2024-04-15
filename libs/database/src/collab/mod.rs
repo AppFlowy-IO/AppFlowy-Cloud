@@ -15,6 +15,6 @@ pub(crate) fn partition_key(collab_type: &CollabType) -> i32 {
     CollabType::DatabaseRow => 4,
     CollabType::UserAwareness => 5,
     // TODO(nathan): create a partition table for CollabType::Empty
-    CollabType::Empty => 0,
+    CollabType::Unknown => 0,
   }
 }

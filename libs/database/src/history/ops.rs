@@ -1,9 +1,9 @@
 use crate::collab::partition_key;
-use crate::history::model::{SnapshotInfo, SnapshotMeta};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, PgPool, Postgres};
 use std::ops::DerefMut;
+use tonic_proto::history::{SnapshotInfo, SnapshotMeta};
 use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]

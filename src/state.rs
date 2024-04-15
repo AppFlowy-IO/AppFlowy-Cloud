@@ -43,6 +43,9 @@ pub struct AppState {
   pub gotrue_admin: GoTrueAdmin,
   #[cfg(feature = "ai_enable")]
   pub appflowy_ai_client: appflowy_ai::client::AppFlowyAIClient,
+  #[cfg(feature = "history")]
+  pub grpc_history_client:
+    tonic_proto::history::history_client::HistoryClient<tonic::transport::Channel>,
 }
 
 impl AppState {

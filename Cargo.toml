@@ -59,7 +59,6 @@ prometheus-client.workspace = true
 itertools = "0.11"
 uuid = "1.6.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
-prost = "0.12.3"
 dotenvy = "0.15.7"
 url = "2.5.0"
 brotli = "3.4.0"
@@ -68,6 +67,9 @@ async-stream.workspace = true
 futures.workspace = true
 semver = "1.0.22"
 governor = { version = "0.6.3" }
+tonic.workspace = true
+prost.workspace = true
+tonic-proto.workspace = true
 
 # collab
 collab = { version = "0.1.0" }
@@ -91,6 +93,7 @@ collab-rt-entity.workspace = true
 collab-stream.workspace = true
 collab-rt.workspace = true
 serde_repr = "0.1.18"
+tonic-build = "0.11.0"
 
 
 [dev-dependencies]
@@ -147,7 +150,7 @@ members = [
     "services/appflowy-history",
     "services/realtime",
     # xtask
-    "xtask",
+    "xtask", "libs/tonic-proto",
 ]
 
 [workspace.dependencies]
@@ -189,6 +192,9 @@ async-stream = "0.3.5"
 reqwest = "0.11.27"
 collab-rt = { path = "libs/collab-rt" }
 lazy_static = "1.4.0"
+tonic = "0.11"
+prost = "0.12"
+tonic-proto = { path = "libs/tonic-proto" }
 
 [profile.release]
 lto = true
@@ -203,10 +209,11 @@ debug = true
 # will be removed when using yrs 0.18.2 that expose pendings
 yrs = { git = "https://github.com/appflowy/y-crdt", rev = "3f25bb510ca5274e7657d3713fbed41fb46b4487" }
 
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "3f7bc378af0ee5ca4e25e4746acaa66fab6df79f" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "3f7bc378af0ee5ca4e25e4746acaa66fab6df79f" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "3f7bc378af0ee5ca4e25e4746acaa66fab6df79f" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "3f7bc378af0ee5ca4e25e4746acaa66fab6df79f" }
 
 [features]
 ai_enable = []
+history = []

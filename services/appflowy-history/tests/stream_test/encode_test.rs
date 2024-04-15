@@ -16,7 +16,7 @@ use tokio::time::sleep;
 async fn generate_snapshot_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let open_collab =
-    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None, None).unwrap());
+    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Unknown, None, None).unwrap());
   let history = &open_collab.history;
 
   let updates = update_sequence_for_values(
@@ -66,7 +66,7 @@ async fn generate_snapshot_test() {
 async fn snapshot_before_apply_update_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
   let open_collab =
-    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Empty, None, None).unwrap());
+    Arc::new(OpenCollabHandle::new(&object_id, vec![], CollabType::Unknown, None, None).unwrap());
   let history = &open_collab.history;
   let updates = update_sequence_for_values(
     &object_id,

@@ -10,7 +10,7 @@ use tracing::trace;
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
 
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
@@ -71,7 +71,7 @@ async fn sync_collab_content_after_reconnect_test() {
 
 #[tokio::test]
 async fn same_client_with_diff_devices_edit_same_collab_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let registered_user = generate_unique_registered_user().await;
   let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
   let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
@@ -127,7 +127,7 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
 #[tokio::test]
 async fn same_client_with_diff_devices_edit_diff_collab_test() {
   let registered_user = generate_unique_registered_user().await;
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut device_1 = TestClient::user_with_new_device(registered_user.clone()).await;
   let mut device_2 = TestClient::user_with_new_device(registered_user.clone()).await;
 
@@ -200,7 +200,7 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
 
 #[tokio::test]
 async fn edit_document_with_both_clients_offline_then_online_sync_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 

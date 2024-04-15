@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = test_client
@@ -60,7 +60,7 @@ async fn realtime_write_single_collab_test() {
 }
 #[tokio::test]
 async fn collab_write_small_chunk_of_data_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4().to_string();
@@ -106,7 +106,7 @@ async fn collab_write_small_chunk_of_data_test() {
 
 #[tokio::test]
 async fn collab_write_big_chunk_of_data_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4().to_string();
@@ -147,7 +147,7 @@ async fn write_big_chunk_data_init_sync_test() {
   let workspace_id = test_client.workspace_id().await;
   let object_id = Uuid::new_v4().to_string();
   let big_text = generate_random_string((MAXIMUM_REALTIME_MESSAGE_SIZE / 2) as usize);
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let doc_state = make_big_collab_doc_state(&object_id, "big_text", big_text.clone());
 
   // the big doc_state will force the init_sync using the http request.
@@ -180,7 +180,7 @@ async fn realtime_write_multiple_collab_test() {
   let workspace_id = test_client.workspace_id().await;
   let mut object_ids = vec![];
   for _ in 0..5 {
-    let collab_type = CollabType::Empty;
+    let collab_type = CollabType::Unknown;
 
     let object_id = test_client
       .create_and_edit_collab(&workspace_id, collab_type.clone())
@@ -232,7 +232,7 @@ async fn realtime_write_multiple_collab_test() {
 async fn second_connect_override_first_connect_test() {
   // Different TestClient with same device connect, the last one will
   // take over the connection.
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut client = TestClient::new_user().await;
   let workspace_id = client.workspace_id().await;
 
@@ -300,7 +300,7 @@ async fn second_connect_override_first_connect_test() {
 
 #[tokio::test]
 async fn same_device_multiple_connect_in_order_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut old_client = TestClient::new_user().await;
   let workspace_id = old_client.workspace_id().await;
 
@@ -343,7 +343,7 @@ async fn same_device_multiple_connect_in_order_test() {
 
 #[tokio::test]
 async fn two_direction_peer_sync_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
 
   let mut client_1 = TestClient::new_user().await;
   let workspace_id = client_1.workspace_id().await;
@@ -405,7 +405,7 @@ async fn two_direction_peer_sync_test() {
 
 #[tokio::test]
 async fn multiple_collab_edit_test() {
-  let collab_type = CollabType::Empty;
+  let collab_type = CollabType::Unknown;
   let mut client_1 = TestClient::new_user().await;
   let workspace_id_1 = client_1.workspace_id().await;
   let object_id_1 = client_1
@@ -481,7 +481,7 @@ async fn simulate_multiple_user_edit_collab_test() {
   for _i in 0..5 {
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user().await;
-      let collab_type = CollabType::Empty;
+      let collab_type = CollabType::Unknown;
       let workspace_id = new_user.workspace_id().await;
       let object_id = Uuid::new_v4().to_string();
 
@@ -544,7 +544,7 @@ async fn post_realtime_message_test() {
       // the big doc_state will force the init_sync using the http request.
       // It will trigger the POST_REALTIME_MESSAGE_STREAM_HANDLER to handle the request.
       new_user
-        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Empty, doc_state)
+        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Unknown, doc_state)
         .await;
 
       new_user
@@ -675,7 +675,7 @@ async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
 //       let workspace_id = cloned_users.read().await[i % 50].workspace_id().await;
 //       let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
 //       cloned_users.write().await[i % 50]
-//         .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Empty, doc_state)
+//         .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Unknown, doc_state)
 //         .await;
 //       sleep(Duration::from_secs(6)).await;
 //     });

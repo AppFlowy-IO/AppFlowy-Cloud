@@ -184,7 +184,7 @@ async fn ack_partial_message_test() {
     CollabControlEvent::Open {
       workspace_id: "w1".to_string(),
       object_id: "2".to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
       doc_state: vec![],
     },
     recv_event
@@ -195,7 +195,7 @@ fn mock_event(object_id: String) -> CollabControlEvent {
   CollabControlEvent::Open {
     workspace_id: "w1".to_string(),
     object_id,
-    collab_type: CollabType::Empty,
+    collab_type: CollabType::Unknown,
     doc_state: vec![],
   }
 }

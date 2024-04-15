@@ -98,29 +98,9 @@ impl Into<QueryCollabParams> for ClientQueryCollabParams {
     QueryCollabParams {
       workspace_id: self.workspace_id,
       inner: QueryCollab {
-        collab_type: CollabType::from_number(self.collab_type),
+        collab_type: CollabType::from(self.collab_type),
         object_id: self.object_id,
       },
-    }
-  }
-}
-
-trait FromNumber {
-  fn from_number(n: i32) -> Self
-  where
-    Self: Sized;
-}
-
-impl FromNumber for CollabType {
-  fn from_number(n: i32) -> CollabType {
-    match n {
-      0 => CollabType::Document,
-      1 => CollabType::Database,
-      2 => CollabType::WorkspaceDatabase,
-      3 => CollabType::Folder,
-      4 => CollabType::DatabaseRow,
-      5 => CollabType::UserAwareness,
-      _ => CollabType::Empty,
     }
   }
 }

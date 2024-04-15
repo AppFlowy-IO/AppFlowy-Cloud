@@ -4,6 +4,8 @@ use crate::stream::CollabStream;
 use crate::stream_group::StreamGroup;
 use redis::aio::ConnectionManager;
 
+pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
+
 #[derive(Clone)]
 pub struct CollabRedisStream {
   connection_manager: ConnectionManager,
@@ -23,9 +25,12 @@ impl CollabRedisStream {
     CollabStream::new(workspace_id, oid, self.connection_manager.clone())
   }
 
-  pub async fn collab_control_stream(&self, group_name: &str) -> Result<StreamGroup, StreamError> {
-    let stream_key = "af_collab_control".to_string();
-    let mut group = StreamGroup::new(stream_key, group_name, self.connection_manager.clone());
+  pub async fn collab_control_stream(
+    &self,
+    key: &str,
+    group_name: &str,
+  ) -> Result<StreamGroup, StreamError> {
+    let mut group = StreamGroup::new(key.to_string(), group_name, self.connection_manager.clone());
     group.ensure_consumer_group().await?;
     Ok(group)
   }

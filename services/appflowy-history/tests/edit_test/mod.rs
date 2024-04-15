@@ -2,6 +2,7 @@ use crate::edit_test::mock::mock_event;
 use crate::util::{redis_stream, setup_db};
 use appflowy_history::core::manager::OpenCollabManager;
 
+use collab_stream::client::CONTROL_STREAM_KEY;
 use sqlx::PgPool;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -19,7 +20,7 @@ async fn test(pool: PgPool) {
   let mock = mock_event(&workspace_id, &object_id).await;
 
   let mut control_group = redis_stream
-    .collab_control_stream("appflowy_cloud")
+    .collab_control_stream(CONTROL_STREAM_KEY, "appflowy_cloud")
     .await
     .unwrap();
 

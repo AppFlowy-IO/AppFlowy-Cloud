@@ -7,18 +7,19 @@ use serial_test::serial;
 #[tokio::test]
 #[serial]
 async fn single_reader_single_sender_test() {
+  let control_stream_key = uuid::Uuid::new_v4().to_string();
   let redis_stream = redis_stream().await;
   let recv_group_name = format!("recv-{}", uuid::Uuid::new_v4());
   let send_group_name = format!("send-{}", uuid::Uuid::new_v4());
   let mut recv_group = redis_stream
-    .collab_control_stream(&recv_group_name)
+    .collab_control_stream(&control_stream_key, &recv_group_name)
     .await
     .unwrap();
   // clear before starting the test. Otherwise, the receive group may have messages from previous tests
   recv_group.clear().await.unwrap();
 
   let mut send_group = redis_stream
-    .collab_control_stream(&send_group_name)
+    .collab_control_stream(&control_stream_key, &send_group_name)
     .await
     .unwrap();
 
@@ -40,30 +41,35 @@ async fn single_reader_single_sender_test() {
     .consumer_messages("consumer1", ReadOption::Count(10))
     .await
     .unwrap();
-  assert!(messages.is_empty());
+  assert!(
+    messages.is_empty(),
+    "No more messages should be available, but got {}",
+    messages.len()
+  );
 }
 
 #[tokio::test]
 #[serial]
 async fn multiple_readers_single_sender_test() {
+  let control_stream_key = uuid::Uuid::new_v4().to_string();
   let redis_stream = redis_stream().await;
   let recv_group_1 = format!("recv-{}", uuid::Uuid::new_v4());
   let recv_group_2 = format!("recv-{}", uuid::Uuid::new_v4());
   let send_group = format!("send-{}", uuid::Uuid::new_v4());
   let mut recv_group_1 = redis_stream
-    .collab_control_stream(&recv_group_1)
+    .collab_control_stream(&control_stream_key, &recv_group_1)
     .await
     .unwrap();
   recv_group_1.clear().await.unwrap();
 
   let mut recv_group_2 = redis_stream
-    .collab_control_stream(&recv_group_2)
+    .collab_control_stream(&control_stream_key, &recv_group_2)
     .await
     .unwrap();
   recv_group_2.clear().await.unwrap();
 
   let mut send_group = redis_stream
-    .collab_control_stream(&send_group)
+    .collab_control_stream(&control_stream_key, &send_group)
     .await
     .unwrap();
 
@@ -92,10 +98,11 @@ async fn multiple_readers_single_sender_test() {
 #[tokio::test]
 #[serial]
 async fn reading_pending_event_test() {
+  let control_stream_key = uuid::Uuid::new_v4().to_string();
   let redis_stream = redis_stream().await;
   let send_group_name = format!("send-{}", uuid::Uuid::new_v4());
   let mut send_group = redis_stream
-    .collab_control_stream(&send_group_name)
+    .collab_control_stream(&control_stream_key, &send_group_name)
     .await
     .unwrap();
   let send_event = mock_event("object_id".to_string());
@@ -104,7 +111,7 @@ async fn reading_pending_event_test() {
 
   let recv_group_name = format!("recv-{}", uuid::Uuid::new_v4());
   let mut recv_group = redis_stream
-    .collab_control_stream(&recv_group_name)
+    .collab_control_stream(&control_stream_key, &recv_group_name)
     .await
     .unwrap();
 
@@ -126,15 +133,16 @@ async fn reading_pending_event_test() {
 #[tokio::test]
 #[serial]
 async fn ack_partial_message_test() {
+  let control_stream_key = uuid::Uuid::new_v4().to_string();
   let redis_stream = redis_stream().await;
   let send_group_name = format!("send-{}", uuid::Uuid::new_v4());
   let mut send_group = redis_stream
-    .collab_control_stream(&send_group_name)
+    .collab_control_stream(&control_stream_key, &send_group_name)
     .await
     .unwrap();
   let recv_group_name = format!("recv-{}", uuid::Uuid::new_v4());
   let mut recv_group = redis_stream
-    .collab_control_stream(&recv_group_name)
+    .collab_control_stream(&control_stream_key, &recv_group_name)
     .await
     .unwrap();
   recv_group.clear().await.unwrap();

@@ -2,7 +2,7 @@ use crate::biz::persistence::HistoryPersistence;
 use crate::core::open_handle::OpenCollabHandle;
 use crate::error::HistoryError;
 use collab_entity::CollabType;
-use collab_stream::client::CollabRedisStream;
+use collab_stream::client::{CollabRedisStream, CONTROL_STREAM_KEY};
 use collab_stream::model::CollabControlEvent;
 use collab_stream::stream_group::ReadOption;
 use dashmap::mapref::entry::Entry;
@@ -37,7 +37,10 @@ async fn spawn_control_group(
   handles: Weak<DashMap<String, Arc<OpenCollabHandle>>>,
   pg_pool: PgPool,
 ) {
-  let mut control_group = redis_stream.collab_control_stream("history").await.unwrap();
+  let mut control_group = redis_stream
+    .collab_control_stream(CONTROL_STREAM_KEY, "history")
+    .await
+    .unwrap();
   let mut interval = interval(Duration::from_secs(1));
   tokio::spawn(async move {
     loop {

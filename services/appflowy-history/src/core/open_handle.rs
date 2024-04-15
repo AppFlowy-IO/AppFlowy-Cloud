@@ -1,16 +1,19 @@
 use crate::biz::history::CollabHistory;
 use crate::biz::persistence::HistoryPersistence;
 use crate::error::HistoryError;
+
 use collab::core::collab::{DataSource, MutexCollab, TransactionMutExt, WeakMutexCollab};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
+use collab_stream::model::CollabUpdateEvent;
 use collab_stream::stream_group::{ReadOption, StreamGroup};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::{error, trace};
+use tonic_proto::history::HistoryState;
+use tracing::error;
 
 pub struct OpenCollabHandle {
   pub object_id: String,
@@ -72,6 +75,19 @@ impl OpenCollabHandle {
     })
   }
 
+  pub async fn history_state(&self) -> Result<HistoryState, HistoryError> {
+    let lock_guard = self
+      .mutex_collab
+      .try_lock()
+      .ok_or(HistoryError::TryLockFail)?;
+    let encode_collab = lock_guard.encode_collab_v1(|collab| self.collab_type.validate(collab))?;
+    Ok(HistoryState {
+      object_id: self.object_id.clone(),
+      doc_state: encode_collab.doc_state.to_vec(),
+      doc_state_version: 1,
+    })
+  }
+
   pub async fn gen_history(&self) -> Result<(), HistoryError> {
     if let Some(history_persistence) = &self.history_persistence {
       save_history(self.history.clone(), history_persistence.clone()).await;
@@ -103,7 +119,7 @@ fn spawn_recv_update(
     return;
   }
   let mut update_stream = update_stream.unwrap();
-  let mut interval = interval(Duration::from_secs(5));
+  let mut interval = interval(Duration::from_secs(2));
   let object_id = object_id.to_string();
   let collab_type = collab_type.clone();
   tokio::spawn(async move {
@@ -115,12 +131,22 @@ fn spawn_recv_update(
       {
         let weak_mutex_collab = mutex_collab.clone();
         match tokio::task::spawn_blocking(move || {
-          for message in &messages {
-            if let Ok(update) = Update::decode_v1(&message.data) {
-              if let Some(mutex_collab) = weak_mutex_collab.upgrade() {
-                let lock_guard = mutex_collab.lock();
-                let mut txn = lock_guard.try_transaction_mut()?;
-                txn.try_apply_update(update)?;
+          if let Some(mutex_collab) = weak_mutex_collab.upgrade() {
+            let lock_guard = mutex_collab.lock();
+            for message in &messages {
+              match CollabUpdateEvent::decode(&message.data) {
+                Ok(event) => match event {
+                  CollabUpdateEvent::UpdateV1 { encode_update } => {
+                    match Update::decode_v1(&encode_update) {
+                      Ok(update) => {
+                        let mut txn = lock_guard.try_transaction_mut()?;
+                        txn.try_apply_update(update)?;
+                      },
+                      Err(err) => error!("Failed to decode update: {:?}", err),
+                    }
+                  },
+                },
+                Err(err) => error!("Failed to decode update event: {:?}", err),
               }
             }
           }
@@ -181,9 +207,7 @@ async fn save_history(history: Arc<CollabHistory>, history_persistence: Arc<Hist
         error!("Failed to save snapshot: {:?}", err);
       }
     },
-    Ok(None) => {
-      trace!("No snapshot to save");
-    },
+    Ok(None) => {},
     Err(err) => error!("Failed to generate snapshot context: {:?}", err),
   }
 }

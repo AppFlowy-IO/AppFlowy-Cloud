@@ -7,6 +7,8 @@ package history;
 
 service History {
     rpc GetSnapshots (SnapshotRequest) returns (RepeatedSnapshotMeta);
+    rpc GetInMemoryHistory (SnapshotRequest) returns (HistoryState);
+    rpc GetInDiskHistory (SnapshotMeta) returns (HistoryState);
 }
 
 message SnapshotRequest {
@@ -43,10 +45,13 @@ message SnapshotState {
     google.protobuf.StringValue deps_snapshot_id = 4; // Optional dependency snapshot ID
 }
 
-// SnapshotInfo represents detailed information about a snapshot, including document state.
 message SnapshotInfo {
+    HistoryState history_state = 1;
+    bytes snapshot = 2;  // Additional field specific to SnapshotInfo representing the snapshot data
+}
+
+message HistoryState {
     string object_id = 1;                  // Unique identifier for the object
-    bytes snapshot = 2;                    // The snapshot data as raw binary data
-    bytes doc_state = 3;                   // The document state as raw binary data
-    int32 doc_state_version = 4;           // Version of the document state format, with decoding instructions based on version
+    bytes doc_state = 2;                   // The document state as raw binary data
+    int32 doc_state_version = 3;           // Version of the document state format, with decoding instructions based on version
 }

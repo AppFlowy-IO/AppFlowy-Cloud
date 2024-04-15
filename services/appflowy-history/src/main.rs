@@ -1,57 +1,12 @@
+use appflowy_history::application::run_server;
+use appflowy_history::config::Config;
+use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use tonic::transport::Server;
-
-use appflowy_history::application::create_app;
-use appflowy_history::config::Environment;
-
-use tracing::info;
-use tracing::subscriber::set_global_default;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-  dotenvy::dotenv().ok();
-  let config = appflowy_history::config::Config::from_env().expect("failed to load config");
-  info!("config loaded: {:?}", &config);
-
-  // Initialize logger
-  init_subscriber(&config.app_env);
-
-  // Start the server
-  let server = create_app(config).await.unwrap();
-  let addr = "[::1]:50051".parse()?;
-  server.serve(addr).await?;
-  Ok(())
-}
-
-pub fn init_subscriber(app_env: &Environment) {
-  let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
-  let mut filters = vec![];
-  filters.push(format!("collab_history={}", level));
-
-  let env_filter = EnvFilter::new(filters.join(","));
-
-  let builder = tracing_subscriber::fmt()
-    .with_target(true)
-    .with_max_level(tracing::Level::TRACE)
-    .with_thread_ids(false)
-    .with_file(false);
-
-  match app_env {
-    Environment::Local => {
-      let subscriber = builder
-        .with_ansi(true)
-        .with_target(false)
-        .with_file(false)
-        .pretty()
-        .finish()
-        .with(env_filter);
-      set_global_default(subscriber).unwrap();
-    },
-    Environment::Production => {
-      let subscriber = builder.json().finish().with(env_filter);
-      set_global_default(subscriber).unwrap();
-    },
-  }
+  let addr = "[::1]:50051".parse::<SocketAddr>()?;
+  let listener = TcpListener::bind(addr).await?;
+  let config = Config::from_env().expect("failed to load config");
+  run_server(listener, config).await
 }

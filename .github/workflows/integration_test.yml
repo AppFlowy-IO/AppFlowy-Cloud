@@ -57,7 +57,7 @@ jobs:
 
       - name: Run Docker-Compose
         run: |
-          docker-compose -f docker-compose-ci.yml up
+          docker compose -f docker-compose-ci.yml up
 
       - name: Run tests
         run: |

@@ -2,15 +2,18 @@ use crate::biz::persistence::HistoryPersistence;
 use crate::core::open_handle::OpenCollabHandle;
 use crate::error::HistoryError;
 use collab_entity::CollabType;
-use collab_stream::client::{CollabRedisStream, CONTROL_STREAM_KEY};
+use collab_stream::client::CollabRedisStream;
 use collab_stream::model::CollabControlEvent;
 use collab_stream::stream_group::ReadOption;
 use dashmap::mapref::entry::Entry;
+
+use crate::config::StreamSetting;
 use dashmap::DashMap;
 use sqlx::PgPool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
+use tonic_proto::history::{HistoryState, SnapshotRequest};
 use tracing::{error, trace};
 use uuid::Uuid;
 
@@ -22,12 +25,32 @@ pub struct OpenCollabManager {
 }
 
 impl OpenCollabManager {
-  pub async fn new(redis_stream: CollabRedisStream, pg_pool: PgPool) -> Self {
+  pub async fn new(
+    redis_stream: CollabRedisStream,
+    pg_pool: PgPool,
+    setting: &StreamSetting,
+  ) -> Self {
     let handles = Arc::new(DashMap::new());
-    spawn_control_group(redis_stream.clone(), Arc::downgrade(&handles), pg_pool).await;
+    spawn_control_group(
+      redis_stream.clone(),
+      Arc::downgrade(&handles),
+      pg_pool,
+      setting,
+    )
+    .await;
     Self {
       handles,
       redis_stream,
+    }
+  }
+
+  pub async fn get_in_memory_history(
+    &self,
+    req: SnapshotRequest,
+  ) -> Result<HistoryState, HistoryError> {
+    match self.handles.get(&req.object_id) {
+      None => Err(HistoryError::RecordNotFound(req.object_id)),
+      Some(handle) => handle.history_state().await,
     }
   }
 }
@@ -36,9 +59,10 @@ async fn spawn_control_group(
   redis_stream: CollabRedisStream,
   handles: Weak<DashMap<String, Arc<OpenCollabHandle>>>,
   pg_pool: PgPool,
+  setting: &StreamSetting,
 ) {
   let mut control_group = redis_stream
-    .collab_control_stream(CONTROL_STREAM_KEY, "history")
+    .collab_control_stream(&setting.control_key, "history")
     .await
     .unwrap();
   let mut interval = interval(Duration::from_secs(1));
@@ -70,6 +94,7 @@ async fn handle_control_event(
   handles: &Arc<DashMap<String, Arc<OpenCollabHandle>>>,
   pg_pool: &PgPool,
 ) {
+  trace!("Received control event: {:?}", event);
   match event {
     CollabControlEvent::Open {
       workspace_id,
@@ -79,6 +104,7 @@ async fn handle_control_event(
     } => match handles.entry(object_id.clone()) {
       Entry::Occupied(_) => {},
       Entry::Vacant(entry) => {
+        trace!("Opening collab: {}", object_id);
         match init_collab_handle(
           redis_stream,
           pg_pool,
@@ -122,7 +148,6 @@ async fn init_collab_handle(
   collab_type: CollabType,
   doc_state: Vec<u8>,
 ) -> Result<OpenCollabHandle, HistoryError> {
-  trace!("Opening collab: {}", object_id);
   let group_name = format!("history_{}:{}", workspace_id, object_id);
   let update_stream = redis_stream
     .collab_update_stream(workspace_id, object_id, &group_name)

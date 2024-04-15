@@ -10,6 +10,12 @@ pub enum HistoryError {
   #[error(transparent)]
   PersistenceError(#[from] sqlx::Error),
 
+  #[error("Try lock fail")]
+  TryLockFail,
+
+  #[error("Record not found:{0}")]
+  RecordNotFound(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

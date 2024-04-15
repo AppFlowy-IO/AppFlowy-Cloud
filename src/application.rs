@@ -234,7 +234,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
 
   #[cfg(feature = "history")]
   let grpc_history_client =
-    tonic_proto::history::history_client::HistoryClient::connect(&config.grpc_history.addrs)
+    tonic_proto::history::history_client::HistoryClient::connect(config.grpc_history.addrs.clone())
       .await?;
 
   info!("Application state initialized");

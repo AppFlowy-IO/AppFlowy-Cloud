@@ -170,7 +170,7 @@ async fn ack_partial_message_test() {
     .unwrap();
   assert!(messages.is_empty());
 
-  let pending = recv_group.pending_reply().await.unwrap().unwrap();
+  let pending = recv_group.get_pending().await.unwrap().unwrap();
   assert_eq!(pending.consumers.len(), 1);
   assert_eq!(pending.consumers[0].pending, 1);
   let messages = recv_group

@@ -6,7 +6,7 @@ use redis::streams::{
   StreamReadOptions,
 };
 use redis::{pipe, AsyncCommands, RedisError, RedisResult};
-use tracing::error;
+use tracing::{error, trace};
 
 #[derive(Clone)]
 pub struct StreamGroup {
@@ -162,13 +162,19 @@ impl StreamGroup {
     }
   }
 
+  /// Get unacknowledged messages
+  ///
+  /// `min_idle_time` indicates the minimum amount of time a message should have been idle
+  /// (i.e., not acknowledged) before it can be claimed by another consumer. "Idle" time is
+  /// essentially how long the message has been unacknowledged since its last delivery to any consumer.
+  ///
   pub async fn get_unacked_messages(
     &mut self,
     consumer_name: &str,
     start_id: &str,
   ) -> Result<Vec<StreamMessage>, StreamError> {
     let opts = StreamClaimOptions::default()
-      .idle(2000)
+      .idle(500)
       .with_force()
       .retry(2);
 
@@ -178,13 +184,14 @@ impl StreamGroup {
         &self.stream_key,
         &self.group_name,
         consumer_name,
-        10,
+        500,
         &[start_id],
         opts,
       )
       .await?;
 
     let mut messages = vec![];
+    trace!("Claimed messages: {}", result.ids.len());
     for id in result.ids {
       match StreamMessage::try_from(id) {
         Ok(message) => messages.push(message),
@@ -204,7 +211,7 @@ impl StreamGroup {
     Ok(read_messages.into_iter().collect())
   }
 
-  pub async fn pending_reply(&mut self) -> Result<Option<StreamPendingData>, StreamError> {
+  pub async fn get_pending(&mut self) -> Result<Option<StreamPendingData>, StreamError> {
     let reply: StreamPendingReply = self
       .connection_manager
       .xpending(&self.stream_key, &self.group_name)

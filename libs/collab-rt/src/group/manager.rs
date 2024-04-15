@@ -1,12 +1,12 @@
 use crate::client_msg_router::ClientMessageRouter;
-use crate::group::group_init::{CollabGroup, MutexCollab};
+use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
 
 use crate::error::RealtimeError;
 use crate::metrics::CollabMetricsCalculate;
 use crate::RealtimeAccessControl;
 use app_error::AppError;
-use collab::core::collab::DocStateSource;
+use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 
@@ -180,10 +180,10 @@ where
   let encode_collab = storage
     .get_encode_collab(&uid, params.clone(), true)
     .await?;
-  let result = Collab::new_with_doc_state(
+  let result = Collab::new_with_source(
     CollabOrigin::Server,
     object_id,
-    DocStateSource::FromDocState(encode_collab.doc_state.to_vec()),
+    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     vec![],
     false,
   )
@@ -211,10 +211,10 @@ where
     &params.collab_type,
   )
   .await?;
-  let collab = Collab::new_with_doc_state(
+  let collab = Collab::new_with_source(
     CollabOrigin::Server,
     object_id,
-    DocStateSource::FromDocState(encode_collab.doc_state.to_vec()),
+    DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     vec![],
     false,
   )
@@ -238,10 +238,10 @@ where
       .await
       .ok()?;
     if let Ok(encoded_collab) = EncodedCollab::decode_from_bytes(&snapshot_data.encoded_collab_v1) {
-      if let Ok(collab) = Collab::new_with_doc_state(
+      if let Ok(collab) = Collab::new_with_source(
         CollabOrigin::Empty,
         object_id,
-        DocStateSource::FromDocState(encoded_collab.doc_state.to_vec()),
+        DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
         vec![],
         false,
       ) {

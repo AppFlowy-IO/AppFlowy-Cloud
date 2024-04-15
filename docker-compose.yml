@@ -40,6 +40,8 @@ services:
   redis:
     restart: on-failure
     image: redis
+    ports:
+      - "6379:6379"
 
   gotrue:
     restart: on-failure
@@ -130,11 +132,11 @@ services:
 #    restart: on-failure
 #    build:
 #      context: .
-#      dockerfile: ./services/collab-history/Dockerfile
+#      dockerfile: ./services/appflowy-history/Dockerfile
 #    image: appflowyinc/collab_history:${COLLAB_HISTORY_VERSION:-latest}
 #    environment:
 #      - RUST_LOG=${RUST_LOG:-info}
-#      - COLLAB_HISTORY_REDIS_URL=${COLLAB_HISTORY_REDIS_URL:-redis://redis:6379}
+#      - APPFLOWY_HISTORY_REDIS_URL=${APPFLOWY_HISTORY_REDIS_URL:-redis://redis:6379}
 volumes:
   postgres_data:
   minio_data:

@@ -5,6 +5,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
@@ -26,12 +27,12 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
     let data = tokio::task::spawn_blocking(|| {
       let json_str = include_str!("../../assets/read_me.json");
       let document_data = JsonToDocumentParser::json_str_to_document(json_str).unwrap();
-      let collab = Arc::new(MutexCollab::new(
+      let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
         CollabOrigin::Empty,
         &object_id,
         vec![],
         false,
-      ));
+      )));
       let document = Document::create_with_data(collab, document_data)?;
       let data = document.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
@@ -90,12 +91,12 @@ impl WorkspaceTemplate for DocumentTemplate {
   }
 
   async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
-    let collab = Arc::new(MutexCollab::new(
+    let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
       CollabOrigin::Empty,
       &object_id,
       vec![],
       false,
-    ));
+    )));
     let document = Document::create_with_data(collab, self.0.clone())?;
     let data = document.encode_collab()?;
     Ok(TemplateData {

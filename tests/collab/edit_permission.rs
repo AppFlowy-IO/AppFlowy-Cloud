@@ -35,7 +35,7 @@ async fn recv_updates_without_permission_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
   client_1
@@ -186,7 +186,7 @@ async fn edit_collab_with_readonly_permission_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
   assert_client_collab_include_value(
@@ -241,7 +241,7 @@ async fn edit_collab_with_read_and_write_permission_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
   client_2
@@ -298,7 +298,7 @@ async fn edit_collab_with_full_access_permission_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
     .insert("name", "AppFlowy");
 
@@ -353,7 +353,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert("title", "hello world");
     client_2
@@ -377,7 +377,7 @@ async fn edit_collab_with_full_access_then_readonly_permission() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert("subtitle", "Writing Rust, fun");
   }
@@ -453,7 +453,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), random_str.clone());
       new_member
@@ -484,7 +484,8 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
       .collabs
       .get(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
+      .lock()
       .to_json_value()
   );
 
@@ -495,7 +496,7 @@ async fn multiple_user_with_read_and_write_permission_edit_same_collab_test() {
         .collabs
         .get(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab.lock()
         .to_json_value()
     );
   }
@@ -540,7 +541,7 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), random_str.clone());
 
@@ -559,7 +560,8 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
       .collabs
       .get(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
+      .lock()
       .to_json_value();
 
     assert_json_eq!(json!({index.to_string(): s}), value,);
@@ -571,7 +573,8 @@ async fn multiple_user_with_read_only_permission_edit_same_collab_test() {
       .collabs
       .get(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
+      .lock()
       .to_json_value(),
   );
 }

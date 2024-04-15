@@ -1,25 +1,23 @@
 use crate::error::StreamError;
-use crate::model::{Message, MessageId, StreamMessage, StreamMessageByStreamKey};
+use crate::model::{MessageId, StreamBinary, StreamMessage, StreamMessageByStreamKey};
 use redis::aio::ConnectionManager;
-use redis::streams::{StreamMaxlen, StreamPendingData, StreamPendingReply, StreamReadOptions};
+use redis::streams::{
+  StreamClaimOptions, StreamClaimReply, StreamMaxlen, StreamPendingData, StreamPendingReply,
+  StreamReadOptions,
+};
 use redis::{pipe, AsyncCommands, RedisError, RedisResult};
+use tracing::error;
 
 #[derive(Clone)]
-pub struct CollabStreamGroup {
+pub struct StreamGroup {
   connection_manager: ConnectionManager,
   stream_key: String,
   group_name: String,
 }
 
-impl CollabStreamGroup {
-  pub fn new(
-    workspace_id: &str,
-    oid: &str,
-    group_name: &str,
-    connection_manager: ConnectionManager,
-  ) -> Self {
+impl StreamGroup {
+  pub fn new(stream_key: String, group_name: &str, connection_manager: ConnectionManager) -> Self {
     let group_name = group_name.to_string();
-    let stream_key = format!("af_collab-{}-{}", workspace_id, oid);
     Self {
       group_name,
       connection_manager,
@@ -28,12 +26,11 @@ impl CollabStreamGroup {
   }
 
   /// Ensures the consumer group exists, creating it if necessary.
-  /// start_id:  
-  ///   Use '$' if you want new messages or '0' to read from the beginning.
-  pub async fn ensure_consumer_group(&mut self, start_id: &str) -> Result<(), StreamError> {
+  pub async fn ensure_consumer_group(&mut self) -> Result<(), StreamError> {
     let _: RedisResult<()> = self
       .connection_manager
-      .xgroup_create_mkstream(&self.stream_key, &self.group_name, start_id)
+       //Use '$' if you want new messages or '0' to read from the beginning.
+      .xgroup_create_mkstream(&self.stream_key, &self.group_name, "0")
       .await;
 
     Ok(())
@@ -46,7 +43,7 @@ impl CollabStreamGroup {
   /// using XACK once they have been successfully processed. If you don't acknowledge a message,
   /// it remains in the pending state for that consumer. Redis keeps track of these messages so you
   /// can handle message failures or retries.
-  pub async fn ack_messages(&mut self, message_ids: &[String]) -> Result<(), StreamError> {
+  pub async fn ack_message_ids(&mut self, message_ids: &[String]) -> Result<(), StreamError> {
     self
       .connection_manager
       .xack(&self.stream_key, &self.group_name, message_ids)
@@ -54,25 +51,64 @@ impl CollabStreamGroup {
     Ok(())
   }
 
-  /// Inserts a single message into the Redis stream.
-  pub async fn insert_message(&mut self, message: Message) -> Result<MessageId, StreamError> {
-    let tuple = message.into_tuple_array();
-    let message_id = self
-      .connection_manager
-      .xadd(&self.stream_key, "*", tuple.as_slice())
-      .await?;
-    Ok(message_id)
+  /// Acknowledges messages processed by a consumer.
+  ///
+  /// In Redis streams, when a message is delivered to a consumer using XREADGROUP, it moves into
+  /// a pending state for that consumer. Redis expects you to manually acknowledge these messages
+  /// using XACK once they have been successfully processed. If you don't acknowledge a message,
+  /// it remains in the pending state for that consumer. Redis keeps track of these messages so you
+  /// can handle message failures or retries.
+  pub async fn ack_messages(&mut self, messages: &[StreamMessage]) -> Result<(), StreamError> {
+    if messages.is_empty() {
+      return Ok(());
+    }
+
+    let message_ids = messages
+      .iter()
+      .map(|m| m.id.to_string())
+      .collect::<Vec<String>>();
+    self.ack_message_ids(&message_ids).await
   }
 
-  /// Inserts multiple messages into the Redis stream using a pipeline.
+  /// Inserts multiple messages into the Redis stream
+  /// the order of messages submitted through a pipeline is guaranteed to be executed in the order
+  /// they are added to the pipeline.
   ///
-  pub async fn insert_messages(&mut self, messages: Vec<Message>) -> Result<(), StreamError> {
+  /// Pipelining is effective for inserting multiple messages as it significantly reduces the latency
+  /// associated with multiple independent network requests.
+  pub async fn insert_messages<T: Into<StreamBinary>>(
+    &mut self,
+    messages: Vec<T>,
+  ) -> Result<(), StreamError> {
+    if messages.is_empty() {
+      return Ok(());
+    }
+
     let mut pipe = pipe();
     for message in messages {
+      let message = message.into();
       let tuple = message.into_tuple_array();
       pipe.xadd(&self.stream_key, "*", tuple.as_slice());
     }
     pipe.query_async(&mut self.connection_manager).await?;
+    Ok(())
+  }
+
+  /// Inserts a single message into the Redis stream.
+  pub async fn insert_message<T: TryInto<StreamBinary, Error = StreamError>>(
+    &mut self,
+    message: T,
+  ) -> Result<(), StreamError> {
+    let message = message.try_into()?;
+    self.insert_binary(message).await
+  }
+
+  pub async fn insert_binary(&mut self, message: StreamBinary) -> Result<(), StreamError> {
+    let tuple = message.into_tuple_array();
+    self
+      .connection_manager
+      .xadd(&self.stream_key, "*", tuple.as_slice())
+      .await?;
     Ok(())
   }
 
@@ -95,19 +131,22 @@ impl CollabStreamGroup {
   pub async fn consumer_messages(
     &mut self,
     consumer_name: &str,
-    option: ConsumeOptions,
+    option: ReadOption,
   ) -> Result<Vec<StreamMessage>, StreamError> {
     let mut options = StreamReadOptions::default()
       .group(&self.group_name, consumer_name)
       .block(100);
 
-    let mut message_id = ">".to_string();
+    let message_id;
     match option {
-      ConsumeOptions::Empty => {},
-      ConsumeOptions::Count(count) => {
+      ReadOption::Undelivered => {
+        message_id = ">".to_string();
+      },
+      ReadOption::Count(count) => {
+        message_id = ">".to_string();
         options = options.count(count);
       },
-      ConsumeOptions::After(after) => {
+      ReadOption::After(after) => {
         message_id = after.to_string();
       },
     }
@@ -123,24 +162,38 @@ impl CollabStreamGroup {
     }
   }
 
-  /// Get messages starting from a specific message id.
-  /// returns list of messages excluding the message with the start_id
-  pub async fn get_messages_starting_from_id(
+  pub async fn get_unacked_messages(
     &mut self,
-    start_id: Option<String>,
-    count: usize,
+    consumer_name: &str,
+    start_id: &str,
   ) -> Result<Vec<StreamMessage>, StreamError> {
-    let options = StreamReadOptions::default().count(count).block(100);
-    let message_id = start_id.unwrap_or_else(|| "0".to_string());
-    let map: StreamMessageByStreamKey = self
+    let opts = StreamClaimOptions::default()
+      .idle(2000)
+      .with_force()
+      .retry(2);
+
+    let result: StreamClaimReply = self
       .connection_manager
-      .xread_options(&[&self.stream_key], &[message_id], &options)
+      .xclaim_options(
+        &self.stream_key,
+        &self.group_name,
+        consumer_name,
+        10,
+        &[start_id],
+        opts,
+      )
       .await?;
 
-    match map.0.into_iter().next() {
-      None => Ok(Vec::with_capacity(0)),
-      Some((_, messages)) => Ok(messages),
+    let mut messages = vec![];
+    for id in result.ids {
+      match StreamMessage::try_from(id) {
+        Ok(message) => messages.push(message),
+        Err(err) => {
+          error!("{:?}", err);
+        },
+      }
     }
+    Ok(messages)
   }
 
   /// Reads all messages from the stream
@@ -163,6 +216,10 @@ impl CollabStreamGroup {
     }
   }
 
+  /// Clears all messages from the specified Redis stream.
+  ///
+  /// Use the `XTRIM` command to truncate the Redis stream to a maximum length of zero, effectively
+  /// removing all entries from the stream.
   pub async fn clear(&mut self) -> Result<(), RedisError> {
     self
       .connection_manager
@@ -172,8 +229,8 @@ impl CollabStreamGroup {
   }
 }
 
-pub enum ConsumeOptions {
-  Empty,
+pub enum ReadOption {
+  Undelivered,
   Count(usize),
   After(MessageId),
 }

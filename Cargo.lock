@@ -669,6 +669,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "appflowy-history"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "assert-json-diff",
+ "axum",
+ "bincode",
+ "chrono",
+ "collab",
+ "collab-entity",
+ "collab-stream",
+ "dashmap",
+ "database",
+ "dotenvy",
+ "infra",
+ "parking_lot 0.12.1",
+ "rand 0.8.5",
+ "redis 0.25.2",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serial_test",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1512,7 +1546,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=5f66f8c921646d7d8762cafc8bbec72d56c2e157#5f66f8c921646d7d8762cafc8bbec72d56c2e157"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c2465c540efb1dcd30c71415640814ac211ba348#c2465c540efb1dcd30c71415640814ac211ba348"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1536,7 +1570,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=5f66f8c921646d7d8762cafc8bbec72d56c2e157#5f66f8c921646d7d8762cafc8bbec72d56c2e157"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c2465c540efb1dcd30c71415640814ac211ba348#c2465c540efb1dcd30c71415640814ac211ba348"
 dependencies = [
  "anyhow",
  "collab",
@@ -1555,7 +1589,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=5f66f8c921646d7d8762cafc8bbec72d56c2e157#5f66f8c921646d7d8762cafc8bbec72d56c2e157"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c2465c540efb1dcd30c71415640814ac211ba348#c2465c540efb1dcd30c71415640814ac211ba348"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1570,7 +1604,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=5f66f8c921646d7d8762cafc8bbec72d56c2e157#5f66f8c921646d7d8762cafc8bbec72d56c2e157"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=c2465c540efb1dcd30c71415640814ac211ba348#c2465c540efb1dcd30c71415640814ac211ba348"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1585,28 +1619,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "collab-history"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "collab",
- "collab-stream",
- "dotenvy",
- "redis 0.25.2",
- "serde",
- "serde_json",
- "serde_repr",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
- "tower-service",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1693,10 +1705,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "collab-entity",
  "futures",
  "rand 0.8.5",
  "redis 0.25.2",
  "serde",
+ "serde_json",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -2053,6 +2067,7 @@ dependencies = [
  "app-error",
  "async-trait",
  "base64 0.21.7",
+ "bincode",
  "bytes",
  "chrono",
  "collab",
@@ -3091,6 +3106,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -5127,6 +5143,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "serial_test"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "953ad9342b3aaca7cb43c45c097dd008d4907070394bd0751a0aa8817e5a018d"
+dependencies = [
+ "dashmap",
+ "futures",
+ "lazy_static",
+ "log",
+ "parking_lot 0.12.1",
+ "serial_test_derive",
+]
+
+[[package]]
+name = "serial_test_derive"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b93fb4adc70021ac1b47f7d45e8cc4169baaa7ea58483bc5b721d19a26202212"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "servo_arc"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6292,9 +6333,9 @@ checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "uuid"
-version = "1.6.1"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
+checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
 dependencies = [
  "getrandom 0.2.12",
  "serde",
@@ -6851,6 +6892,14 @@ dependencies = [
  "rusticata-macros",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tokio",
 ]
 
 [[package]]

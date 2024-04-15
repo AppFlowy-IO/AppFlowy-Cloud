@@ -1,8 +1,8 @@
 use anyhow::Context;
-use appflowy_cloud::config::config::get_env_var;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
+
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use redis::aio::ConnectionManager;
@@ -49,7 +49,7 @@ pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> Encoded
 
 #[allow(dead_code)]
 pub async fn redis_client() -> redis::Client {
-  let redis_uri = get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379");
+  let redis_uri = "redis://localhost:6379";
   redis::Client::open(redis_uri)
     .context("failed to connect to redis")
     .unwrap()

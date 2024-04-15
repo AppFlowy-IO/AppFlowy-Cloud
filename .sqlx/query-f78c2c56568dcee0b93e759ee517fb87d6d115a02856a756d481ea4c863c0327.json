@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT snapshot_id, oid, doc_state, doc_state_version, deps_snapshot_id, created_at\n        FROM af_snapshot_state\n        WHERE oid = $1 AND partition_key = $2 AND created_at >= $3\n        ORDER BY created_at ASC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "snapshot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "oid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "doc_state",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "doc_state_version",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "deps_snapshot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "f78c2c56568dcee0b93e759ee517fb87d6d115a02856a756d481ea4c863c0327"
+}

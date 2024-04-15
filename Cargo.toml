@@ -142,10 +142,12 @@ members = [
     "libs/wasm-test",
     "libs/appflowy-ai",
     "libs/collab-rt",
+    "libs/client-api-wasm",
     # services
-    "services/collab-history",
+    "services/appflowy-history",
     "services/realtime",
-    "libs/client-api-wasm"
+    # xtask
+    "xtask",
 ]
 
 [workspace.dependencies]
@@ -176,6 +178,7 @@ collab = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
+infra = { path = "libs/infra" }
 tracing = { version = "0.1.40" }
 gotrue = { path = "libs/gotrue" }
 redis = "0.25.2"
@@ -200,10 +203,10 @@ debug = true
 # will be removed when using yrs 0.18.2 that expose pendings
 yrs = { git = "https://github.com/appflowy/y-crdt", rev = "3f25bb510ca5274e7657d3713fbed41fb46b4487" }
 
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "5f66f8c921646d7d8762cafc8bbec72d56c2e157" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "5f66f8c921646d7d8762cafc8bbec72d56c2e157" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "5f66f8c921646d7d8762cafc8bbec72d56c2e157" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "5f66f8c921646d7d8762cafc8bbec72d56c2e157" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "c2465c540efb1dcd30c71415640814ac211ba348" }
 
 [features]
 ai_enable = []

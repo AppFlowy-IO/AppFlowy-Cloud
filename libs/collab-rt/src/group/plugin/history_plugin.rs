@@ -1,6 +1,6 @@
-use crate::group::group_init::WeakMutexCollab;
 use crate::rt_server::rt_spawn;
 
+use collab::core::collab::WeakMutexCollab;
 use collab::preclude::CollabPlugin;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;

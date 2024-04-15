@@ -2,20 +2,24 @@ use crate::response::{APIResponse, Code};
 use axum::response::IntoResponse;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub enum HistoryError {
+  #[error(transparent)]
+  CollabError(#[from] collab::error::CollabError),
+
+  #[error(transparent)]
+  PersistenceError(#[from] sqlx::Error),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }
 
-impl Error {
+impl HistoryError {
   pub fn code(&self) -> Code {
-    match self {
-      Error::Internal(_) => Code::Unhandled,
-    }
+    Code::Unhandled
   }
 }
 
-impl IntoResponse for Error {
+impl IntoResponse for HistoryError {
   fn into_response(self) -> axum::response::Response {
     let code = self.code();
     let message = self.to_string();

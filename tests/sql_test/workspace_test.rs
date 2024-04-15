@@ -1,4 +1,4 @@
-use crate::pg_sql::util::{generate_random_bytes, setup_db, test_create_user};
+use crate::sql_test::util::{generate_random_bytes, setup_db, test_create_user};
 use collab_entity::CollabType;
 use database::collab::insert_into_af_collab;
 use database_entity::dto::CollabParams;

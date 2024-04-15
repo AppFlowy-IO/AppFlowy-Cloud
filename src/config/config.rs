@@ -1,4 +1,5 @@
 use anyhow::Context;
+use infra::env_util::get_env_var;
 use secrecy::Secret;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
@@ -154,17 +155,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
   };
   Ok(config)
-}
-
-pub fn get_env_var(key: &str, default: &str) -> String {
-  std::env::var(key).unwrap_or_else(|e| {
-    tracing::warn!(
-      "failed to read environment variable: {}, using default value: {}",
-      e,
-      default
-    );
-    default.to_owned()
-  })
 }
 
 /// The possible runtime environment for our application.

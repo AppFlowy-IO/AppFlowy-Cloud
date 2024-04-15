@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
   timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
@@ -120,12 +121,12 @@ impl WorkspaceTemplateBuilder {
         private: Default::default(),
       };
 
-      let collab = Arc::new(MutexCollab::new(
+      let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
         CollabOrigin::Empty,
         &workspace_id,
         vec![],
         false,
-      ));
+      )));
       let folder = Folder::create(uid, collab, None, folder_data);
       let data = folder.encode_collab_v1()?;
       Ok::<_, anyhow::Error>(TemplateData {

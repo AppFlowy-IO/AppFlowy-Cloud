@@ -38,9 +38,6 @@ until curl localhost:9999/health; do
   sleep 1
 done
 
-# Kill any existing instances
-pkill -f appflowy_cloud || true
-
 # Generate protobuf files for collab-rt-entity crate.
 # To run sqlx prepare, we need to build the collab-rt-entity crate first
 ./build/code_gen.sh
@@ -56,25 +53,7 @@ then
   cargo sqlx prepare --workspace
 fi
 
-# Maximum number of restart attempts
-MAX_RESTARTS=5
-RESTARTS=0
-# Start the server and restart it on failure
-while [ "$RESTARTS" -lt "$MAX_RESTARTS" ]; do
-  RUST_LOG=trace RUST_BACKTRACE=full cargo run --features="ai_enable" &
-  PID=$!
-  wait $PID || {
-    RESTARTS=$((RESTARTS+1))
-    echo "Server crashed! Attempting to restart ($RESTARTS/$MAX_RESTARTS)"
-    sleep 5
-  }
-done
-
-if [ "$RESTARTS" -eq "$MAX_RESTARTS" ]; then
-  echo "Server failed to start after $MAX_RESTARTS attempts, exiting."
-  exit 1
-fi
-
+cargo run --package xtask
 
 # revert to require signup email verification
 export GOTRUE_MAILER_AUTOCONFIRM=false

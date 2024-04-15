@@ -1,11 +1,9 @@
 use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
 use collab_entity::CollabType;
 use dashmap::DashMap;
-use std::ops::{Deref, DerefMut};
 
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use crate::error::RealtimeError;
 use crate::group::broadcast::{CollabBroadcast, Subscription};
@@ -17,8 +15,9 @@ use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
 
 use crate::rt_server::rt_spawn;
+use collab::core::collab::MutexCollab;
 use futures_util::{SinkExt, StreamExt};
-use parking_lot::Mutex;
+
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use tokio::sync::mpsc;
 use tracing::{event, trace};
@@ -279,48 +278,6 @@ impl EditState {
     edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
   }
 }
-
-/// [MutexCollab] is a wrapper around [Rc] and [Mutex] to allow for shared ownership of a [Collab]
-/// It does nothing just impl [Send] and [Sync] for [Collab]
-#[derive(Clone)]
-pub(crate) struct MutexCollab(Arc<Mutex<Collab>>);
-impl MutexCollab {
-  pub(crate) fn new(collab: Collab) -> Self {
-    #[allow(clippy::arc_with_non_send_sync)]
-    Self(Arc::new(Mutex::new(collab)))
-  }
-
-  pub(crate) fn downgrade(&self) -> WeakMutexCollab {
-    WeakMutexCollab(Arc::downgrade(&self.0))
-  }
-}
-
-impl Deref for MutexCollab {
-  type Target = Arc<Mutex<Collab>>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl DerefMut for MutexCollab {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
-  }
-}
-
-unsafe impl Send for MutexCollab {}
-unsafe impl Sync for MutexCollab {}
-
-#[derive(Clone)]
-pub(crate) struct WeakMutexCollab(Weak<Mutex<Collab>>);
-impl WeakMutexCollab {
-  pub(crate) fn upgrade(&self) -> Option<MutexCollab> {
-    self.0.upgrade().map(MutexCollab)
-  }
-}
-unsafe impl Send for WeakMutexCollab {}
-unsafe impl Sync for WeakMutexCollab {}
 
 #[cfg(test)]
 mod tests {

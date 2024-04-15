@@ -21,7 +21,7 @@ async fn collab_owner_permission_test() {
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
     encoded_collab_v1: encode_collab,
-    collab_type: CollabType::Empty,
+    collab_type: CollabType::Unknown,
     workspace_id: workspace_id.clone(),
   })
   .await
@@ -52,7 +52,7 @@ async fn update_collab_member_permission_test() {
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
     encoded_collab_v1: encode_collab.clone(),
-    collab_type: CollabType::Empty,
+    collab_type: CollabType::Unknown,
     workspace_id: workspace_id.clone(),
   })
   .await
@@ -89,7 +89,7 @@ async fn add_collab_member_test() {
     .create_collab(CreateCollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
       workspace_id: workspace_id.clone(),
     })
     .await
@@ -135,7 +135,7 @@ async fn add_collab_member_then_remove_test() {
     .create_collab(CreateCollabParams {
       object_id: object_id.clone(),
       encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
       workspace_id: workspace_id.clone(),
     })
     .await

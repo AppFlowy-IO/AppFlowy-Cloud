@@ -18,7 +18,7 @@ async fn success_insert_collab_test() {
   let encode_collab = test_encode_collab_v1(&object_id, "title", "hello world");
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
-    collab_type: CollabType::Empty,
+    collab_type: CollabType::Unknown,
     workspace_id: workspace_id.clone(),
     encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
   })
@@ -45,15 +45,15 @@ async fn success_batch_get_collab_test() {
   let queries = vec![
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
     },
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
     },
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
     },
   ];
 
@@ -95,15 +95,15 @@ async fn success_part_batch_get_collab_test() {
   let queries = vec![
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
     },
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
     },
     QueryCollab {
       object_id: Uuid::new_v4().to_string(),
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
     },
   ];
 
@@ -158,7 +158,7 @@ async fn success_delete_collab_test() {
   c.create_collab(CreateCollabParams {
     object_id: object_id.clone(),
     encoded_collab_v1: encode_collab,
-    collab_type: CollabType::Empty,
+    collab_type: CollabType::Unknown,
     workspace_id: workspace_id.clone(),
   })
   .await
@@ -191,7 +191,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
     .create_collab(CreateCollabParams {
       object_id: Uuid::new_v4().to_string(),
       encoded_collab_v1: vec![],
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
       workspace_id: workspace_id.clone(),
     })
     .await
@@ -212,7 +212,7 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
     .create_collab(CreateCollabParams {
       object_id,
       encoded_collab_v1: encode_collab,
-      collab_type: CollabType::Empty,
+      collab_type: CollabType::Unknown,
       workspace_id: workspace_id.clone(),
     })
     .await

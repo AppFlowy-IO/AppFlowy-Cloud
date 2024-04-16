@@ -54,11 +54,15 @@ jobs:
           # the wasm-pack headless tests will run on random ports, so we need to allow all origins
           sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
 
+      - name: install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
 
       - name: Run Docker-Compose
         run: |
-          docker compose up -d
-      #          docker compose -f docker-compose-ci.yml up -d
+          #          docker compose up -d
+               docker compose -f docker-compose-ci.yml up -d
 
       - name: Run tests
         run: |

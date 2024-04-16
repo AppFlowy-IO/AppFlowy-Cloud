@@ -37,5 +37,5 @@ RUN apt-get update -y \
 WORKDIR /app/
 COPY --from=builder /app/target/release/appflowy_history /usr/local/bin/appflowy_history
 ENV APP_ENVIRONMENT production
-ENV RUST_BACKTRACE 1
+ENV RUST_BACKTRACE  1
 CMD ["appflowy_history"]

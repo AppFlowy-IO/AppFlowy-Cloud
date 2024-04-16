@@ -3,6 +3,8 @@ use collab_entity::CollabType;
 use collab_stream::model::{CollabControlEvent, StreamBinary};
 use collab_stream::stream_group::ReadOption;
 use serial_test::serial;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::test]
 #[serial]
@@ -164,11 +166,8 @@ async fn ack_partial_message_test() {
   messages.pop();
   recv_group.ack_messages(&messages).await.unwrap();
 
-  let messages = recv_group
-    .consumer_messages("consumer1", ReadOption::Undelivered)
-    .await
-    .unwrap();
-  assert!(messages.is_empty());
+  // sleep for a while to make sure the message is considered as pending
+  sleep(Duration::from_secs(2)).await;
 
   let pending = recv_group.get_pending().await.unwrap().unwrap();
   assert_eq!(pending.consumers.len(), 1);

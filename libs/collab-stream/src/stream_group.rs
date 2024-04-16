@@ -47,6 +47,9 @@ impl StreamGroup {
     &mut self,
     message_ids: Vec<T>,
   ) -> Result<(), StreamError> {
+    if message_ids.is_empty() {
+      return Ok(());
+    }
     let message_ids = message_ids
       .into_iter()
       .map(|m| m.to_string())
@@ -202,6 +205,13 @@ impl StreamGroup {
       .with_force()
       .retry(2);
 
+    // If the start_id and end_id are the same, we only need to claim one message.
+    let mut ids = Vec::with_capacity(2);
+    ids.push(start_id);
+    if start_id != end_id {
+      ids.push(end_id);
+    }
+
     let result: StreamClaimReply = self
       .connection_manager
       .xclaim_options(
@@ -209,7 +219,7 @@ impl StreamGroup {
         &self.group_name,
         consumer_name,
         500,
-        &[start_id, end_id],
+        &ids,
         opts,
       )
       .await?;

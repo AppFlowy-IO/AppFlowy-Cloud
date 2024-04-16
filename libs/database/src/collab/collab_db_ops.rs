@@ -143,8 +143,8 @@ pub async fn insert_into_af_collab(
       .execute(tx.deref_mut())
       .await
       .context(format!(
-        "Insert new af_collab failed: {}:{}:{}",
-        uid, params.object_id, params.collab_type
+        "Insert new af_collab failed: {}:{}:{}, workspace_id:{}",
+        uid, params.object_id, params.collab_type, workspace_id
       ))?;
     },
   }

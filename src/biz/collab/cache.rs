@@ -132,6 +132,18 @@ impl CollabCache {
     Ok(())
   }
 
+  pub async fn insert_encode_collab_data_in_mem(
+    &self,
+    params: CollabParams,
+  ) -> Result<(), AppError> {
+    let timestamp = chrono::Utc::now().timestamp();
+    self
+      .mem_cache
+      .insert_encode_collab_data(params.object_id, params.encoded_collab_v1, timestamp)
+      .await;
+    Ok(())
+  }
+
   pub fn get_hit_rate(&self) -> f64 {
     let hits = self.hits.load(Ordering::Relaxed) as f64;
     let total_attempts = self.total_attempts.load(Ordering::Relaxed) as f64;

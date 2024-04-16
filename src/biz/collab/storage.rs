@@ -150,6 +150,7 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    write_immediately: bool,
   ) -> AppResult<()> {
     params.validate()?;
     if let Err(err) = params.check_encode_collab().await {
@@ -181,22 +182,27 @@ where
         .await?;
     }
 
-    let mut transaction = self
-      .cache
-      .pg_pool()
-      .begin()
-      .await
-      .context("acquire transaction to upsert collab")
-      .map_err(AppError::from)?;
-    self
-      .cache
-      .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
-      .await?;
-    transaction
-      .commit()
-      .await
-      .context("fail to commit the transaction to upsert collab")
-      .map_err(AppError::from)?;
+    if write_immediately {
+      let mut transaction = self
+        .cache
+        .pg_pool()
+        .begin()
+        .await
+        .context("acquire transaction to upsert collab")
+        .map_err(AppError::from)?;
+      self
+        .cache
+        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
+        .await?;
+      transaction
+        .commit()
+        .await
+        .context("fail to commit the transaction to upsert collab")
+        .map_err(AppError::from)?;
+    } else {
+      // queue
+    }
+
     Ok(())
   }
 

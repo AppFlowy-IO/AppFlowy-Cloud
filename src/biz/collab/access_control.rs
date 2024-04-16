@@ -129,7 +129,7 @@ where
       trace!("Skip access control for the request");
       return Ok(());
     }
-    let collab_exists = self.collab_cache.is_exist_in_disk(oid).await?;
+    let collab_exists = self.collab_cache.is_exist(oid).await?;
     if !collab_exists {
       // If the collab does not exist, we should not enforce the access control
       return Ok(());
@@ -199,7 +199,7 @@ where
     uid: &i64,
     oid: &str,
   ) -> Result<bool, AppError> {
-    let collab_exists = self.cache.is_exist_in_disk(oid).await?;
+    let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       // If the collab does not exist, we should not enforce the access control. We consider the user
       // has the permission to read the collab
@@ -217,7 +217,7 @@ where
     uid: &i64,
     oid: &str,
   ) -> Result<bool, AppError> {
-    let collab_exists = self.cache.is_exist_in_disk(oid).await?;
+    let collab_exists = self.cache.is_exist(oid).await?;
     if !collab_exists {
       // If the collab does not exist, we should not enforce the access control. we consider the user
       // has the permission to write the collab

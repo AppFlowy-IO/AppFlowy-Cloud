@@ -75,7 +75,7 @@ pub trait CollabStorage: Send + Sync + 'static {
   /// # Returns
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was created successfully, `Err` otherwise.
-  async fn insert_or_update_collab_with_transaction(
+  async fn insert_new_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -152,7 +152,7 @@ where
       .await
   }
 
-  async fn insert_or_update_collab_with_transaction(
+  async fn insert_new_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -161,7 +161,7 @@ where
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_or_update_collab_with_transaction(workspace_id, uid, params, transaction)
+      .insert_new_collab_with_transaction(workspace_id, uid, params, transaction)
       .await
   }
 

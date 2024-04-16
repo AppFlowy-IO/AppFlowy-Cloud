@@ -36,6 +36,9 @@ jobs:
         with:
           workspaces: |
             AppFlowy-Cloud
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-clippy-
 
       - name: Copy and rename dev.env to .env
         run: cp dev.env .env
@@ -49,4 +52,4 @@ jobs:
           cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features --tests -- -D warnings

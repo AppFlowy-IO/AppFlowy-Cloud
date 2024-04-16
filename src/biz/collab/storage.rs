@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use collab::core::collab_plugin::EncodedCollab;
 
 use collab_rt::command::{RTCommand, RTCommandSender};
-use database::collab::{is_collab_exists, AppResult, CollabStorage, CollabStorageAccessControl};
+use database::collab::{AppResult, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
@@ -19,7 +19,6 @@ use itertools::{Either, Itertools};
 use collab_rt::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
-use std::ops::DerefMut;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -159,6 +158,28 @@ where
         params.object_id, err
       )));
     }
+    let is_exist = self.cache.is_exist(&params.object_id).await?;
+    if is_exist {
+      self
+        .check_write_workspace_permission(workspace_id, uid)
+        .await?;
+      self
+        .check_write_collab_permission(workspace_id, uid, &params.object_id)
+        .await?;
+    } else {
+      self
+        .check_write_workspace_permission(workspace_id, uid)
+        .await?;
+      trace!(
+        "Update policy for user:{} to create collab:{}",
+        uid,
+        params.object_id
+      );
+      self
+        .access_control
+        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+        .await?;
+    }
 
     let mut transaction = self
       .cache
@@ -168,7 +189,8 @@ where
       .context("acquire transaction to upsert collab")
       .map_err(AppError::from)?;
     self
-      .insert_or_update_collab_with_transaction(workspace_id, uid, params, &mut transaction)
+      .cache
+      .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
       .await?;
     transaction
       .commit()
@@ -179,7 +201,7 @@ where
   }
 
   #[instrument(level = "trace", skip(self, params), oid = %params.oid, ty = %params.collab_type, err)]
-  async fn insert_or_update_collab_with_transaction(
+  async fn insert_new_collab_with_transaction(
     &self,
     workspace_id: &str,
     uid: &i64,
@@ -187,29 +209,13 @@ where
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> AppResult<()> {
     params.validate()?;
-    let is_exist = is_collab_exists(&params.object_id, transaction.deref_mut()).await?;
-    if is_exist {
-      self
-        .check_write_workspace_permission(workspace_id, uid)
-        .await?;
-      self
-        .check_write_collab_permission(workspace_id, uid, &params.object_id)
-        .await?;
-      trace!(
-        "Update policy for user:{} to create collab:{}",
-        uid,
-        params.object_id
-      );
-    } else {
-      self
-        .check_write_workspace_permission(workspace_id, uid)
-        .await?;
-      self
-        .access_control
-        .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
-        .await?;
-    }
-
+    self
+      .check_write_workspace_permission(workspace_id, uid)
+      .await?;
+    self
+      .access_control
+      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+      .await?;
     self
       .cache
       .insert_encode_collab_data(workspace_id, uid, params, transaction)

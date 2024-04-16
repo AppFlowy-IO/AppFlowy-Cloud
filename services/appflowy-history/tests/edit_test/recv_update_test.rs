@@ -9,7 +9,8 @@ async fn apply_update_stream_updates_test() {
   let workspace_id = uuid::Uuid::new_v4().to_string();
   let object_id = uuid::Uuid::new_v4().to_string();
   let mock = mock_test_data(&workspace_id, &object_id, 30).await;
-  let client = run_test_server(uuid::Uuid::new_v4().to_string()).await;
+  let control_stream_key = uuid::Uuid::new_v4().to_string();
+  let client = run_test_server(control_stream_key).await;
 
   let control_stream_key = client.config.stream_settings.control_key.clone();
   let mut control_group = redis_stream

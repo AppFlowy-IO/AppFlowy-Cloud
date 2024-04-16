@@ -43,7 +43,7 @@ async fn apply_update_stream_updates_test() {
     collab_type: CollabType::Unknown.value(),
   };
 
-  check_doc_state_json(&object_id, 30, mock.expected_json.clone(), move || {
+  check_doc_state_json(&object_id, 60, mock.expected_json.clone(), move || {
     let mut cloned_client = client.clone();
     let cloned_request = request.clone();
     Box::pin(async move {

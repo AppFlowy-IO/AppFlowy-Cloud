@@ -175,4 +175,5 @@ async fn init_collab_handle(
     Some(update_stream),
     Some(persistence),
   )
+  .await
 }

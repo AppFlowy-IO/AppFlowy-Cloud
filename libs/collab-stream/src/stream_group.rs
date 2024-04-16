@@ -5,7 +5,7 @@ use redis::streams::{
   StreamClaimOptions, StreamClaimReply, StreamMaxlen, StreamPendingData, StreamPendingReply,
   StreamReadOptions,
 };
-use redis::{pipe, AsyncCommands, RedisError, RedisResult};
+use redis::{pipe, AsyncCommands, RedisResult};
 use tracing::{error, trace};
 
 #[derive(Clone)]
@@ -43,10 +43,17 @@ impl StreamGroup {
   /// using XACK once they have been successfully processed. If you don't acknowledge a message,
   /// it remains in the pending state for that consumer. Redis keeps track of these messages so you
   /// can handle message failures or retries.
-  pub async fn ack_message_ids(&mut self, message_ids: &[String]) -> Result<(), StreamError> {
+  pub async fn ack_message_ids<T: ToString>(
+    &mut self,
+    message_ids: Vec<T>,
+  ) -> Result<(), StreamError> {
+    let message_ids = message_ids
+      .into_iter()
+      .map(|m| m.to_string())
+      .collect::<Vec<String>>();
     self
       .connection_manager
-      .xack(&self.stream_key, &self.group_name, message_ids)
+      .xack(&self.stream_key, &self.group_name, &message_ids)
       .await?;
     Ok(())
   }
@@ -67,7 +74,7 @@ impl StreamGroup {
       .iter()
       .map(|m| m.id.to_string())
       .collect::<Vec<String>>();
-    self.ack_message_ids(&message_ids).await
+    self.ack_message_ids(message_ids).await
   }
 
   /// Inserts multiple messages into the Redis stream
@@ -244,7 +251,7 @@ impl StreamGroup {
   ///
   /// Use the `XTRIM` command to truncate the Redis stream to a maximum length of zero, effectively
   /// removing all entries from the stream.
-  pub async fn clear(&mut self) -> Result<(), RedisError> {
+  pub async fn clear(&mut self) -> Result<(), StreamError> {
     self
       .connection_manager
       .xtrim(&self.stream_key, StreamMaxlen::Equals(0))

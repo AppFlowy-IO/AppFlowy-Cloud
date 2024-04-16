@@ -2,7 +2,7 @@ use crate::biz::history::CollabHistory;
 use crate::biz::persistence::HistoryPersistence;
 use crate::error::HistoryError;
 
-use collab::core::collab::{DataSource, MutexCollab, TransactionMutExt, WeakMutexCollab};
+use collab::core::collab::{DataSource, MutexCollab, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
@@ -16,6 +16,7 @@ use tokio::time::interval;
 use tonic_proto::history::HistoryState;
 use tracing::error;
 
+const CONSUMER_NAME: &str = "open_collab_handle";
 pub struct OpenCollabHandle {
   pub object_id: String,
   pub mutex_collab: MutexCollab,
@@ -29,25 +30,26 @@ pub struct OpenCollabHandle {
 }
 
 impl OpenCollabHandle {
-  pub fn new(
+  pub async fn new(
     object_id: &str,
     doc_state: Vec<u8>,
     collab_type: CollabType,
     update_stream: Option<StreamGroup>,
     history_persistence: Option<Arc<HistoryPersistence>>,
   ) -> Result<Self, HistoryError> {
-    let mut collab = Collab::new_with_source(
-      CollabOrigin::Empty,
-      object_id,
-      DataSource::DocStateV1(doc_state),
-      vec![],
-      true,
-    )?;
-    collab.initialize();
+    let mutex_collab = {
+      let mut collab = Collab::new_with_source(
+        CollabOrigin::Empty,
+        object_id,
+        DataSource::DocStateV1(doc_state),
+        vec![],
+        true,
+      )?;
+      collab.initialize();
+      MutexCollab::new(collab)
+    };
 
-    let mutex_collab = MutexCollab::new(collab);
     let object_id = object_id.to_string();
-
     let history = Arc::new(CollabHistory::new(
       &object_id,
       mutex_collab.clone(),
@@ -58,9 +60,10 @@ impl OpenCollabHandle {
     spawn_recv_update(
       &object_id,
       &collab_type,
-      mutex_collab.downgrade(),
+      mutex_collab.clone(),
       update_stream,
-    );
+    )
+    .await?;
 
     // spawn a task periodically to save the history to the persistence.
     if let Some(persistence) = &history_persistence {
@@ -111,51 +114,92 @@ impl OpenCollabHandle {
 }
 
 /// Spawns an asynchronous task to continuously receive and process updates from a given update stream.
-fn spawn_recv_update(
+async fn spawn_recv_update(
   object_id: &str,
   collab_type: &CollabType,
-  mutex_collab: WeakMutexCollab,
+  mutex_collab: MutexCollab,
   update_stream: Option<StreamGroup>,
-) {
+) -> Result<(), HistoryError> {
   let mut update_stream = match update_stream {
     Some(stream) => stream,
-    None => return,
+    None => return Ok(()),
   };
 
   let interval_duration = Duration::from_secs(2);
   let object_id = object_id.to_string();
   let collab_type = collab_type.clone();
 
+  if let Ok(stale_messages) = update_stream.get_unacked_messages(CONSUMER_NAME).await {
+    let message_ids = stale_messages
+      .iter()
+      .map(|m| m.id.to_string())
+      .collect::<Vec<_>>();
+
+    // 1.Process the stale messages.
+    if let Err(err) = process_messages(
+      &mut update_stream,
+      stale_messages,
+      mutex_collab.clone(),
+      &object_id,
+      &collab_type,
+    )
+    .await
+    {
+      // 2.Clear the stale messages if failed to process them.
+      if let Err(err) = update_stream.clear().await {
+        error!("Failed to clear stale update messages: {:?}", err);
+      }
+      return Err(HistoryError::ApplyStaleMessage(err.to_string()));
+    }
+
+    // 3.Acknowledge the stale messages.
+    if let Err(err) = update_stream.ack_message_ids(message_ids).await {
+      error!("Failed to ack stale messages: {:?}", err);
+    }
+  }
+
+  // spawn a task to receive updates from the update stream.
+  let weak_mutex_collab = mutex_collab.downgrade();
   tokio::spawn(async move {
     let mut interval = interval(interval_duration);
     loop {
       interval.tick().await;
 
       // Check if the mutex_collab is still alive. If not, break the loop.
-      if let Some(mutex_collab) = mutex_collab.upgrade() {
-        if let Err(e) =
-          process_update(&mut update_stream, mutex_collab, &object_id, &collab_type).await
+      if let Some(mutex_collab) = weak_mutex_collab.upgrade() {
+        if let Ok(messages) = update_stream
+          .consumer_messages(CONSUMER_NAME, ReadOption::Undelivered)
+          .await
         {
-          error!("Error processing update: {:?}", e);
+          if let Err(e) = process_messages(
+            &mut update_stream,
+            messages,
+            mutex_collab,
+            &object_id,
+            &collab_type,
+          )
+          .await
+          {
+            error!("Error processing update: {:?}", e);
+          }
         }
       } else {
+        // break the loop if the mutex_collab is dropped.
         break;
       }
     }
   });
+  Ok(())
 }
 
 /// Processes messages from the update stream and applies them.
-async fn process_update(
+async fn process_messages(
   update_stream: &mut StreamGroup,
+  messages: Vec<StreamMessage>,
   mutex_collab: MutexCollab,
   _object_id: &str,
   _collab_type: &CollabType,
-) -> Result<(), Box<dyn std::error::Error>> {
-  let messages = update_stream
-    .consumer_messages("open_collab", ReadOption::Undelivered)
-    .await?;
-
+) -> Result<(), HistoryError> {
   let processing_task = tokio::task::spawn_blocking(move || {
     if let Some(lock_guard) = mutex_collab.try_lock() {
       apply_updates(&messages, &lock_guard)?;
@@ -163,7 +207,9 @@ async fn process_update(
     Ok::<_, HistoryError>(messages)
   });
 
-  let messages = processing_task.await??;
+  let messages = processing_task
+    .await
+    .map_err(|err| HistoryError::Internal(err.into()))??;
   update_stream.ack_messages(&messages).await?;
   Ok(())
 }

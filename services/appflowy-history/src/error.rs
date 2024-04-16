@@ -16,6 +16,12 @@ pub enum HistoryError {
   #[error("Record not found:{0}")]
   RecordNotFound(String),
 
+  #[error("Apply stale message:{0}")]
+  ApplyStaleMessage(String),
+
+  #[error(transparent)]
+  RedisStreamError(#[from] collab_stream::error::StreamError),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

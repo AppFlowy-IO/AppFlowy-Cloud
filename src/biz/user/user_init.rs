@@ -59,7 +59,7 @@ where
       .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
     collab_storage
-      .insert_or_update_collab_with_transaction(
+      .insert_new_collab_with_transaction(
         &workspace_id,
         &uid,
         CollabParams {
@@ -97,7 +97,7 @@ async fn create_workspace_database_collab(
     .map_err(|err| AppError::Internal(anyhow::Error::from(err)))?;
 
   storage
-    .insert_or_update_collab_with_transaction(
+    .insert_new_collab_with_transaction(
       workspace_id,
       uid,
       CollabParams {

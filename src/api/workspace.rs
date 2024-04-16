@@ -516,7 +516,7 @@ async fn batch_create_collab_handler(
     {
       state
         .collab_access_control_storage
-        .insert_or_update_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+        .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
         .await?;
 
       state
@@ -591,7 +591,7 @@ async fn create_collab_list_handler(
     let _object_id = params.object_id.clone();
     state
       .collab_access_control_storage
-      .insert_or_update_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
       .await?;
   }
 

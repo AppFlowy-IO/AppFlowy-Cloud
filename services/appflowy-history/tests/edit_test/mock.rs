@@ -5,6 +5,7 @@ use collab_stream::model::{CollabControlEvent, CollabUpdateEvent};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub struct StreamEventMock {
   pub open_event: CollabControlEvent,
   pub close_event: CollabControlEvent,
@@ -13,6 +14,7 @@ pub struct StreamEventMock {
   pub expected_json: serde_json::Value,
 }
 
+#[allow(dead_code)]
 pub async fn mock_test_data(
   workspace_id: &str,
   object_id: &str,

@@ -21,6 +21,18 @@ impl CollabMemCache {
     }
   }
 
+  /// Checks if an object with the given ID exists in the cache.
+  pub async fn is_exist(&self, object_id: &str) -> Result<bool, AppError> {
+    let exists: bool = self
+      .connection_manager
+      .lock()
+      .await
+      .exists(object_id)
+      .await
+      .map_err(|err| AppError::Internal(err.into()))?;
+    Ok(exists)
+  }
+
   pub async fn remove_encode_collab(&self, object_id: &str) -> Result<(), AppError> {
     self
       .connection_manager

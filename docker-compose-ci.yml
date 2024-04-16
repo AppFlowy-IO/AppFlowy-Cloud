@@ -17,6 +17,8 @@ services:
   minio:
     restart: on-failure
     image: minio/minio
+    ports:
+      - "9000:9000"
     environment:
       - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
       - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
@@ -28,6 +30,8 @@ services:
   postgres:
     restart: on-failure
     image: postgres
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
@@ -114,7 +118,6 @@ services:
       dockerfile: Dockerfile
       args:
         FEATURES: ""
-    image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
 
   admin_frontend:
     restart: on-failure
@@ -127,6 +130,17 @@ services:
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
+
+  appflowy_history:
+    restart: on-failure
+    build:
+      context: .
+      dockerfile: ./services/appflowy-history/Dockerfile
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_HISTORY_REDIS_URL=redis://redis:6379
+      - APPFLOWY_HISTORY_ENVIRONMENT=production
+      - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
 
 volumes:
   postgres_data:

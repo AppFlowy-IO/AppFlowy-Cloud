@@ -12,6 +12,9 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef as builder
 
+# Update package lists and install protobuf-compiler along with other build dependencies
+RUN apt update && apt install -y protobuf-compiler lld clang
+
 COPY --from=planner /app/recipe.json recipe.json
 # Build our project dependencies
 RUN cargo chef cook --release --recipe-path recipe.json
@@ -25,6 +28,7 @@ FROM debian:bookworm-slim AS runtime
 WORKDIR /app/services/appflowy-history
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl \
+    && apt-get install protobuf-compiler -y \
     # Clean up
     && apt-get autoremove -y \
     && apt-get clean -y \
@@ -33,5 +37,5 @@ RUN apt-get update -y \
 WORKDIR /app/
 COPY --from=builder /app/target/release/appflowy_history /usr/local/bin/appflowy_history
 ENV APP_ENVIRONMENT production
-ENV RUST_BACKTRACE 1
+ENV RUST_BACKTRACE  1
 CMD ["appflowy_history"]

@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+import "google/protobuf/wrappers.proto";
+
+// For optional string support
+package history;
+
+service History {
+    rpc GetSnapshots (SnapshotRequest) returns (RepeatedSnapshotMeta);
+    rpc GetInMemoryHistory (SnapshotRequest) returns (HistoryState);
+    rpc GetInDiskHistory (SnapshotMeta) returns (HistoryState);
+}
+
+message SnapshotRequest {
+    string workspace_id = 1;
+    string object_id = 2;
+    int32 collab_type = 3;
+}
+
+// SnapshotMeta represents metadata for a snapshot.
+message SnapshotMeta {
+    // The unique identifier for the snapshot.
+    string oid = 1;
+    // The raw binary snapshot data.
+    bytes snapshot = 2;
+    // The version of the snapshot format.
+    // If the version is 1, then use a specific method to decode the snapshot.
+    // If the version is 2, then use a different method to decode the snapshot.
+    int32 snapshot_version = 3;
+    // The creation timestamp of the snapshot.
+    int64 created_at = 4;
+}
+
+// A container for repeated instances of SnapshotMeta.
+message RepeatedSnapshotMeta {
+    repeated SnapshotMeta items = 1;  // List of SnapshotMeta items
+}
+
+
+// SnapshotState represents the state of a snapshot, including optional dependency IDs.
+message SnapshotState {
+    string oid = 1;                        // Unique identifier for the snapshot
+    bytes doc_state = 2;                   // The document state as raw binary data
+    int32 doc_state_version = 3;           // Version of the document state format
+    google.protobuf.StringValue deps_snapshot_id = 4; // Optional dependency snapshot ID
+}
+
+message SnapshotInfo {
+    HistoryState history_state = 1;
+    bytes snapshot = 2;  // Additional field specific to SnapshotInfo representing the snapshot data
+}
+
+message HistoryState {
+    string object_id = 1;                  // Unique identifier for the object
+    bytes doc_state = 2;                   // The document state as raw binary data
+    int32 doc_state_version = 3;           // Version of the document state format, with decoding instructions based on version
+}

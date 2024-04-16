@@ -18,7 +18,8 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net"] }
+tokio-stream = { version = "0.1", features = ["net"] }
 redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager"] }
 dotenvy = "0.15.0"
 axum = "0.7.4"
@@ -37,6 +38,11 @@ infra.workspace = true
 database.workspace = true
 parking_lot = "0.12.1"
 bincode.workspace = true
+tonic.workspace = true
+tonic-proto.workspace = true
+futures = "0.3.30"
+log = "0.4.20"
+prost = "0.12.3"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

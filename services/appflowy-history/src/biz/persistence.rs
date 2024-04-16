@@ -1,9 +1,9 @@
 use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState};
 use crate::error::HistoryError;
 use collab_entity::CollabType;
-use database::history::model::SnapshotMeta;
 use database::history::ops::insert_history;
 use sqlx::PgPool;
+use tonic_proto::history::SnapshotMeta;
 use uuid::Uuid;
 
 pub struct HistoryPersistence {

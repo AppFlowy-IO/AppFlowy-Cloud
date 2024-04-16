@@ -181,7 +181,7 @@ pub trait CollabSyncProtocol {
 }
 
 /// Handles incoming messages from the client/server
-pub fn handle_message<P: CollabSyncProtocol>(
+pub fn handle_message_follow_protocol<P: CollabSyncProtocol>(
   message_origin: &CollabOrigin,
   protocol: &P,
   collab: &mut Collab,

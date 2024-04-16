@@ -47,6 +47,9 @@ pub enum RealtimeError {
   #[error("{0} send too many messages")]
   TooManyMessage(String),
 
+  #[error("Acquire lock timeout")]
+  LockTimeout,
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }
@@ -54,5 +57,9 @@ pub enum RealtimeError {
 impl RealtimeError {
   pub fn is_too_many_message(&self) -> bool {
     matches!(self, RealtimeError::TooManyMessage(_))
+  }
+
+  pub fn is_lock_timeout(&self) -> bool {
+    matches!(self, RealtimeError::LockTimeout)
   }
 }

@@ -145,7 +145,7 @@ where
     // update
     if let ServerCollabMessage::ClientAck(ref ack) = msg {
       if ack.get_code() == AckCode::CannotApplyUpdate {
-        return Err(SyncError::YrsApplyUpdate(object.object_id.clone()));
+        return Err(SyncError::RequireInitSync);
       }
     }
 

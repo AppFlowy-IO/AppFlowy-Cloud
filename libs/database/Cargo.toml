@@ -17,6 +17,7 @@ async-trait = "0.1.77"
 anyhow = "1.0.79"
 serde.workspace = true
 serde_json.workspace = true
+tonic-proto.workspace = true
 
 sqlx = { version = "0.7", default-features = false, features = ["postgres", "chrono", "uuid", "macros", "runtime-tokio-rustls", "rust_decimal"] }
 tracing = { version = "0.1.40" }

@@ -1,4 +1,5 @@
 use anyhow::{Context, Error};
+use collab_stream::client::CONTROL_STREAM_KEY;
 use infra::env_util::get_env_var;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
@@ -9,6 +10,7 @@ pub struct Config {
   pub app_env: Environment,
   pub redis_url: String,
   pub db_settings: DatabaseSetting,
+  pub stream_settings: StreamSetting,
 }
 
 impl Config {
@@ -30,6 +32,9 @@ impl Config {
           .parse()
           .context("fail to get APPFLOWY_HISTORY_DATABASE_MAX_CONNECTIONS")?,
         database_name: get_env_var("APPFLOWY_HISTORY_DATABASE_NAME", "postgres"),
+      },
+      stream_settings: StreamSetting {
+        control_key: get_env_var("APPFLOWY_HISTORY_CONTROL_STREAM_KEY", CONTROL_STREAM_KEY),
       },
     })
   }
@@ -57,6 +62,11 @@ impl DatabaseSetting {
   pub fn with_db(&self) -> PgConnectOptions {
     self.without_db().database(&self.database_name)
   }
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamSetting {
+  pub control_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

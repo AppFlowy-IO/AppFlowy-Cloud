@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     .args([
       "run",
       "--manifest-path",
-      "./services/appflowy-history/history-server/Cargo.toml",
+      "./services/appflowy-history/Cargo.toml",
     ])
     .spawn()
     .context("Failed to start AppFlowy-History process")?;
@@ -50,7 +50,7 @@ async fn kill_existing_process(process_identifier: &str) -> Result<()> {
     .output()
     .await
     .context("Failed to kill existing processes")?;
-  println!("💀💀💀Killed existing instances of {}", process_identifier);
+  println!("Killed existing instances of {}", process_identifier);
   Ok(())
 }
 

@@ -51,3 +51,12 @@ pub enum Code {
   Ok = 0,
   Unhandled = -1,
 }
+
+impl From<Code> for tonic::Code {
+  fn from(code: Code) -> Self {
+    match code {
+      Code::Ok => tonic::Code::Ok,
+      Code::Unhandled => tonic::Code::Unknown,
+    }
+  }
+}

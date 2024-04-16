@@ -71,6 +71,7 @@ pub async fn setup_db(pool: &PgPool) -> anyhow::Result<()> {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct TestRpcClient {
   pub config: Config,
   history_rpc: HistoryClient<tonic::transport::Channel>,
@@ -104,6 +105,7 @@ impl TestRpcClient {
   }
 }
 
+#[allow(dead_code)]
 pub async fn run_test_server(control_stream_key: String) -> TestRpcClient {
   let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
   let addr = listener.local_addr().unwrap();

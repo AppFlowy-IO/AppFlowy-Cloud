@@ -52,4 +52,4 @@ jobs:
           cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features --tests -- -D warnings

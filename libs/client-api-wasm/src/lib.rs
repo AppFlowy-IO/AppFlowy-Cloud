@@ -1,11 +1,11 @@
 pub mod entities;
 
 use crate::entities::*;
-use client_api::entity::QueryCollabParams;
+
 use client_api::notify::TokenState;
 use client_api::{Client, ClientConfiguration};
 use std::sync::Arc;
-use tracing;
+
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "enable_wee_alloc")]

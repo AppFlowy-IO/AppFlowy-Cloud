@@ -93,13 +93,13 @@ pub struct ClientQueryCollabParams {
   pub collab_type: i32,
 }
 
-impl Into<QueryCollabParams> for ClientQueryCollabParams {
-  fn into(self) -> QueryCollabParams {
+impl From<ClientQueryCollabParams> for QueryCollabParams {
+  fn from(value: ClientQueryCollabParams) -> QueryCollabParams {
     QueryCollabParams {
-      workspace_id: self.workspace_id,
+      workspace_id: value.workspace_id,
       inner: QueryCollab {
-        collab_type: CollabType::from(self.collab_type),
-        object_id: self.object_id,
+        collab_type: CollabType::from(value.collab_type),
+        object_id: value.object_id,
       },
     }
   }

@@ -14,7 +14,7 @@ use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use collab_rt_protocol::{handle_message, RTProtocolError};
+use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::atomic::Ordering;
@@ -364,6 +364,8 @@ async fn handle_one_client_message(
   let mut attempt = 0;
   let max_attempts = 3;
 
+  // calling the handle_one_message_payload in a loop to handle the lock timeout error. It will retry
+  // 3 times before returning an error.
   loop {
     match handle_one_message_payload(
       object_id,
@@ -434,7 +436,12 @@ async fn handle_one_message_payload(
     for msg in reader {
       match msg {
         Ok(msg) => {
-          match handle_message(&message_origin, &ServerSyncProtocol, &mut collab_lock, msg) {
+          match handle_message_follow_protocol(
+            &message_origin,
+            &ServerSyncProtocol,
+            &mut collab_lock,
+            msg,
+          ) {
             Ok(payload) => {
               metrics_calculate
                 .apply_update_count
@@ -493,6 +500,7 @@ async fn handle_one_message_payload(
       None => Err(RealtimeError::UnexpectedData("No ack response")),
     },
     Err(err) => {
+      // Currently, panic only happens when calling handle_message_follow_protocol.
       if err.is_panic() {
         Ok(
           CollabAck::new(cloned_collab_origin, object_id.to_string(), msg_id, seq_num)

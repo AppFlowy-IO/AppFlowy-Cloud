@@ -20,6 +20,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror = "1.0.56"
 anyhow = "1"
+bytes.workspace = true
 
 collab = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }

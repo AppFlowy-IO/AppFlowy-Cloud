@@ -5,7 +5,9 @@ use bytes::Bytes;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
-use collab_rt_protocol::{handle_message, ClientSyncProtocol, Message, MessageReader, SyncMessage};
+use collab_rt_protocol::{
+  handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,
+};
 use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -145,7 +147,7 @@ where
     // update
     if let ServerCollabMessage::ClientAck(ref ack) = msg {
       if ack.get_code() == AckCode::CannotApplyUpdate {
-        return Err(SyncError::YrsApplyUpdate(object.object_id.clone()));
+        return Err(SyncError::RequireInitSync);
       }
     }
 
@@ -233,7 +235,8 @@ where
       for msg in reader {
         let msg = msg?;
         let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-        match handle_message(message_origin, &ClientSyncProtocol, &mut collab, msg)? {
+        match handle_message_follow_protocol(message_origin, &ClientSyncProtocol, &mut collab, msg)?
+        {
           Some(payload) => {
             let object_id = object_id.to_string();
             sink.queue_msg(|msg_id| {

@@ -1689,6 +1689,7 @@ dependencies = [
  "app-error",
  "async-stream",
  "async-trait",
+ "bytes",
  "chrono",
  "collab",
  "collab-document",

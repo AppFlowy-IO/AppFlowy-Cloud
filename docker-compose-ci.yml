@@ -17,6 +17,8 @@ services:
   minio:
     restart: on-failure
     image: minio/minio
+    ports:
+      - "9000:9000"
     environment:
       - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
       - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
@@ -28,6 +30,8 @@ services:
   postgres:
     restart: on-failure
     image: postgres
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}

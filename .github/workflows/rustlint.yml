@@ -27,6 +27,11 @@ jobs:
           components: rustfmt, clippy
           profile: minimal
 
+      - name: install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |

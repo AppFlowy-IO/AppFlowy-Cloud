@@ -5,8 +5,8 @@ use redis::streams::{
   StreamClaimOptions, StreamClaimReply, StreamMaxlen, StreamPendingData, StreamPendingReply,
   StreamReadOptions,
 };
-use redis::{pipe, AsyncCommands, RedisError, RedisResult};
-use tracing::error;
+use redis::{pipe, AsyncCommands, RedisResult};
+use tracing::{error, trace};
 
 #[derive(Clone)]
 pub struct StreamGroup {
@@ -43,10 +43,17 @@ impl StreamGroup {
   /// using XACK once they have been successfully processed. If you don't acknowledge a message,
   /// it remains in the pending state for that consumer. Redis keeps track of these messages so you
   /// can handle message failures or retries.
-  pub async fn ack_message_ids(&mut self, message_ids: &[String]) -> Result<(), StreamError> {
+  pub async fn ack_message_ids<T: ToString>(
+    &mut self,
+    message_ids: Vec<T>,
+  ) -> Result<(), StreamError> {
+    let message_ids = message_ids
+      .into_iter()
+      .map(|m| m.to_string())
+      .collect::<Vec<String>>();
     self
       .connection_manager
-      .xack(&self.stream_key, &self.group_name, message_ids)
+      .xack(&self.stream_key, &self.group_name, &message_ids)
       .await?;
     Ok(())
   }
@@ -67,7 +74,7 @@ impl StreamGroup {
       .iter()
       .map(|m| m.id.to_string())
       .collect::<Vec<String>>();
-    self.ack_message_ids(&message_ids).await
+    self.ack_message_ids(message_ids).await
   }
 
   /// Inserts multiple messages into the Redis stream
@@ -161,14 +168,37 @@ impl StreamGroup {
       Some((_, messages)) => Ok(messages),
     }
   }
-
   pub async fn get_unacked_messages(
     &mut self,
     consumer_name: &str,
+  ) -> Result<Vec<StreamMessage>, StreamError> {
+    let pending = self.get_pending().await?;
+
+    match pending {
+      None => Ok(vec![]),
+      Some(pending) => {
+        let messages = self
+          .get_unacked_messages_with_range(consumer_name, &pending.start_id, &pending.end_id)
+          .await?;
+        Ok(messages)
+      },
+    }
+  }
+
+  /// Get unacknowledged messages
+  ///
+  /// `min_idle_time` indicates the minimum amount of time a message should have been idle
+  /// (i.e., not acknowledged) before it can be claimed by another consumer. "Idle" time is
+  /// essentially how long the message has been unacknowledged since its last delivery to any consumer.
+  ///
+  pub async fn get_unacked_messages_with_range(
+    &mut self,
+    consumer_name: &str,
     start_id: &str,
+    end_id: &str,
   ) -> Result<Vec<StreamMessage>, StreamError> {
     let opts = StreamClaimOptions::default()
-      .idle(2000)
+      .idle(500)
       .with_force()
       .retry(2);
 
@@ -178,13 +208,14 @@ impl StreamGroup {
         &self.stream_key,
         &self.group_name,
         consumer_name,
-        10,
-        &[start_id],
+        500,
+        &[start_id, end_id],
         opts,
       )
       .await?;
 
     let mut messages = vec![];
+    trace!("Claimed messages: {}", result.ids.len());
     for id in result.ids {
       match StreamMessage::try_from(id) {
         Ok(message) => messages.push(message),
@@ -204,7 +235,7 @@ impl StreamGroup {
     Ok(read_messages.into_iter().collect())
   }
 
-  pub async fn pending_reply(&mut self) -> Result<Option<StreamPendingData>, StreamError> {
+  pub async fn get_pending(&mut self) -> Result<Option<StreamPendingData>, StreamError> {
     let reply: StreamPendingReply = self
       .connection_manager
       .xpending(&self.stream_key, &self.group_name)
@@ -220,7 +251,7 @@ impl StreamGroup {
   ///
   /// Use the `XTRIM` command to truncate the Redis stream to a maximum length of zero, effectively
   /// removing all entries from the stream.
-  pub async fn clear(&mut self) -> Result<(), RedisError> {
+  pub async fn clear(&mut self) -> Result<(), StreamError> {
     self
       .connection_manager
       .xtrim(&self.stream_key, StreamMaxlen::Equals(0))

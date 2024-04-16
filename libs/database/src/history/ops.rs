@@ -1,9 +1,9 @@
 use crate::collab::partition_key;
-use crate::history::model::{SnapshotInfo, SnapshotMeta};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, PgPool, Postgres};
 use std::ops::DerefMut;
+use tonic_proto::history::{HistoryState, SnapshotInfo, SnapshotMeta};
 use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]
@@ -12,7 +12,7 @@ pub async fn insert_history<'a>(
   oid: &str,
   doc_state: Vec<u8>,
   doc_state_version: i32,
-  deps_snapshot_id: Option<Uuid>,
+  deps_snapshot_id: Option<String>,
   collab_type: CollabType,
   created_at: i64,
   snapshots: Vec<SnapshotMeta>,
@@ -126,11 +126,15 @@ async fn insert_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
   oid: &str,
   doc_state: Vec<u8>,
   doc_state_version: i32,
-  deps_snapshot_id: Option<Uuid>,
+  deps_snapshot_id: Option<String>,
   partition_key: i32,
   created_at: i64,
   executor: E,
 ) -> Result<(), sqlx::Error> {
+  let deps_snapshot_id = match deps_snapshot_id {
+    Some(id) => Uuid::parse_str(&id).ok(),
+    None => None,
+  };
   sqlx::query!(
     r#"
     INSERT INTO af_snapshot_state (oid, workspace_id, doc_state, doc_state_version, deps_snapshot_id, partition_key, created_at)
@@ -222,11 +226,15 @@ pub async fn get_latest_snapshot(
     None => return Ok(None),
   };
 
-  let snapshot_info = SnapshotInfo {
+  let history_state = HistoryState {
     object_id: snapshot_state.oid,
-    snapshot: snapshot_meta.snapshot,
     doc_state: snapshot_state.doc_state,
     doc_state_version: snapshot_state.doc_state_version,
+  };
+
+  let snapshot_info = SnapshotInfo {
+    snapshot: snapshot_meta.snapshot,
+    history_state: Some(history_state),
   };
 
   Ok(Some(snapshot_info))

@@ -113,6 +113,10 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .lock()
     .insert("name", "workspace2");
   client_2.reconnect().await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   let expected_json = json!({
     "name": "workspace2"

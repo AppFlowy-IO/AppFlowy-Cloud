@@ -1,10 +1,10 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use collab_entity::CollabType;
-use database::history::model::{SnapshotMeta, SnapshotState};
 use database::history::ops::{
   get_latest_snapshot, get_latest_snapshot_state, get_snapshot_meta_list, insert_history,
 };
 use sqlx::PgPool;
+use tonic_proto::history::{SnapshotMeta, SnapshotState};
 use uuid::Uuid;
 
 #[sqlx::test(migrations = false)]
@@ -77,6 +77,6 @@ async fn insert_snapshot_test(pool: PgPool) {
     .await
     .unwrap()
     .unwrap();
-  assert_eq!(snapshot.doc_state, vec![10, 11, 12]);
+  assert_eq!(snapshot.history_state.unwrap().doc_state, vec![10, 11, 12]);
   assert_eq!(snapshot.snapshot, vec![3, 4, 5]);
 }

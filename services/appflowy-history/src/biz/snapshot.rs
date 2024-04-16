@@ -3,13 +3,13 @@ use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use collab::preclude::updates::encoder::Encode;
 use collab::preclude::{ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
-use database::history::model::SnapshotMeta;
 use parking_lot::RwLock;
 use std::ops::Deref;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
+use tonic_proto::history::SnapshotMeta;
 use tracing::{error, warn};
 
 #[derive(Clone)]

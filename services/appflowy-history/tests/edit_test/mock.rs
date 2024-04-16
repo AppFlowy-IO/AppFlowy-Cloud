@@ -10,9 +10,14 @@ pub struct StreamEventMock {
   pub close_event: CollabControlEvent,
   // each element can be decoded to a Update
   pub update_events: Vec<CollabUpdateEvent>,
+  pub expected_json: serde_json::Value,
 }
 
-pub async fn mock_event(workspace_id: &str, object_id: &str) -> StreamEventMock {
+pub async fn mock_test_data(
+  workspace_id: &str,
+  object_id: &str,
+  edit_count: usize,
+) -> StreamEventMock {
   let workspace_id = workspace_id.to_string();
   let object_id = object_id.to_string();
   let mut collab = Collab::new_with_origin(CollabOrigin::Empty, &object_id, vec![], true);
@@ -37,7 +42,7 @@ pub async fn mock_event(workspace_id: &str, object_id: &str) -> StreamEventMock 
     object_id: object_id.clone(),
   };
 
-  for i in 0..100 {
+  for i in 0..edit_count {
     collab.insert(&format!("key{}", i), vec![i as u8]);
   }
 
@@ -48,11 +53,13 @@ pub async fn mock_event(workspace_id: &str, object_id: &str) -> StreamEventMock 
       encode_update: update,
     })
     .collect::<Vec<_>>();
+  let expected_json = collab.to_json_value();
 
   StreamEventMock {
     open_event,
     close_event,
     update_events,
+    expected_json,
   }
 }
 

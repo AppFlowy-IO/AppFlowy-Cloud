@@ -1,15 +1,14 @@
 use crate::biz::snapshot::{gen_snapshot, CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
 
 use crate::error::HistoryError;
-
 use collab::core::collab::MutexCollab;
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
 use collab::preclude::{CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
-use database::history::model::{RepeatedSnapshotMeta, SnapshotMeta};
 use database::history::ops::get_snapshot_meta_list;
 use serde_json::Value;
 use sqlx::PgPool;
+use tonic_proto::history::{RepeatedSnapshotMeta, SnapshotMeta};
 
 pub struct CollabHistory {
   object_id: String,

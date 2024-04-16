@@ -47,7 +47,7 @@ use tracing::{info, warn};
 
 pub struct Application {
   port: u16,
-  server: Server,
+  actix_server: Server,
 }
 
 impl Application {
@@ -59,13 +59,13 @@ impl Application {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    let server = run(listener, state, config, rt_cmd_recv).await?;
+    let actix_server = run_actix_server(listener, state, config, rt_cmd_recv).await?;
 
-    Ok(Self { port, server })
+    Ok(Self { port, actix_server })
   }
 
   pub async fn run_until_stopped(self) -> Result<(), std::io::Error> {
-    self.server.await
+    self.actix_server.await
   }
 
   pub fn port(&self) -> u16 {
@@ -73,7 +73,7 @@ impl Application {
   }
 }
 
-pub async fn run(
+pub async fn run_actix_server(
   listener: TcpListener,
   state: AppState,
   config: Config,
@@ -232,6 +232,11 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     rt_cmd_tx,
   ));
 
+  #[cfg(feature = "history")]
+  let grpc_history_client =
+    tonic_proto::history::history_client::HistoryClient::connect(config.grpc_history.addrs.clone())
+      .await?;
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
@@ -251,6 +256,8 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     gotrue_admin,
     #[cfg(feature = "ai_enable")]
     appflowy_ai_client,
+    #[cfg(feature = "history")]
+    grpc_history_client,
   })
 }
 

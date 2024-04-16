@@ -133,33 +133,28 @@ where
   let final_json = Arc::new(Mutex::new(json!({})));
   let operation = async {
     loop {
-      match client_action().await {
-        Ok(result) => {
-          let collab = Collab::new_with_source(
-            CollabOrigin::Server,
-            object_id,
-            DataSource::DocStateV1(result.doc_state.clone()),
-            vec![],
-            true,
-          )?;
+      if let Ok(data) = client_action().await {
+        let collab = Collab::new_with_source(
+          CollabOrigin::Server,
+          object_id,
+          DataSource::DocStateV1(data.doc_state.clone()),
+          vec![],
+          true,
+        )
+        .unwrap();
 
-          let json = collab.to_json_value();
-          *final_json.lock().await = json.clone();
+        let json = collab.to_json_value();
+        *final_json.lock().await = json.clone();
 
-          if assert_json_matches_no_panic(
-            &json,
-            &expected_json,
-            assert_json_diff::Config::new(CompareMode::Inclusive),
-          )
-          .is_ok()
-          {
-            return Ok(());
-          }
-        },
-        Err(e) => {
-          eprintln!("Error during client action: {}", e);
-          return Err(anyhow!("Client action failed with error: {}", e));
-        },
+        if assert_json_matches_no_panic(
+          &json,
+          &expected_json,
+          assert_json_diff::Config::new(CompareMode::Inclusive),
+        )
+        .is_ok()
+        {
+          return Ok::<(), Status>(());
+        }
       }
       tokio::time::sleep(check_interval).await;
     }

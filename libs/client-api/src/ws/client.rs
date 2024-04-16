@@ -37,8 +37,8 @@ impl Default for WSClientConfig {
   fn default() -> Self {
     Self {
       buffer_capacity: 2000,
-      ping_per_secs: 6,
-      retry_connect_per_pings: 10,
+      ping_per_secs: 5,
+      retry_connect_per_pings: 6,
     }
   }
 }

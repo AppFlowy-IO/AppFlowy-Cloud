@@ -7,8 +7,9 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
-use collab_stream::model::CollabUpdateEvent;
+use collab_stream::model::{CollabUpdateEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
+use parking_lot::MutexGuard;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
@@ -109,70 +110,84 @@ impl OpenCollabHandle {
   }
 }
 
+/// Spawns an asynchronous task to continuously receive and process updates from a given update stream.
 fn spawn_recv_update(
   object_id: &str,
   collab_type: &CollabType,
   mutex_collab: WeakMutexCollab,
   update_stream: Option<StreamGroup>,
 ) {
-  if update_stream.is_none() {
-    return;
-  }
-  let mut update_stream = update_stream.unwrap();
-  let mut interval = interval(Duration::from_secs(2));
+  let mut update_stream = match update_stream {
+    Some(stream) => stream,
+    None => return,
+  };
+
+  let interval_duration = Duration::from_secs(2);
   let object_id = object_id.to_string();
   let collab_type = collab_type.clone();
+
   tokio::spawn(async move {
+    let mut interval = interval(interval_duration);
     loop {
       interval.tick().await;
-      if let Ok(messages) = update_stream
-        .consumer_messages("open_collab", ReadOption::Undelivered)
-        .await
-      {
-        let weak_mutex_collab = mutex_collab.clone();
-        match tokio::task::spawn_blocking(move || {
-          if let Some(mutex_collab) = weak_mutex_collab.upgrade() {
-            let lock_guard = mutex_collab.lock();
-            for message in &messages {
-              match CollabUpdateEvent::decode(&message.data) {
-                Ok(event) => match event {
-                  CollabUpdateEvent::UpdateV1 { encode_update } => {
-                    match Update::decode_v1(&encode_update) {
-                      Ok(update) => {
-                        let mut txn = lock_guard.try_transaction_mut()?;
-                        txn.try_apply_update(update)?;
-                      },
-                      Err(err) => error!("Failed to decode update: {:?}", err),
-                    }
-                  },
-                },
-                Err(err) => error!("Failed to decode update event: {:?}", err),
-              }
-            }
-          }
-          Ok::<_, HistoryError>(messages)
-        })
-        .await
+
+      // Check if the mutex_collab is still alive. If not, break the loop.
+      if let Some(mutex_collab) = mutex_collab.upgrade() {
+        if let Err(e) =
+          process_update(&mut update_stream, mutex_collab, &object_id, &collab_type).await
         {
-          Ok(Ok(messages)) => {
-            if let Err(err) = update_stream.ack_messages(&messages).await {
-              error!("Failed to ack update stream messages: {:?}", err);
-            }
-          },
-          Ok(Err(err)) => error!(
-            "{}:{} failed to apply update: {:?}",
-            object_id, collab_type, err
-          ),
-          Err(err) => {
-            error!(
-              "Failed to spawn_blocking when trying to apply udpate: {:?}",
-              err
-            );
-          },
+          error!("Error processing update: {:?}", e);
         }
+      } else {
+        break;
       }
     }
   });
+}
+
+/// Processes messages from the update stream and applies them.
+async fn process_update(
+  update_stream: &mut StreamGroup,
+  mutex_collab: MutexCollab,
+  _object_id: &str,
+  _collab_type: &CollabType,
+) -> Result<(), Box<dyn std::error::Error>> {
+  let messages = update_stream
+    .consumer_messages("open_collab", ReadOption::Undelivered)
+    .await?;
+
+  let processing_task = tokio::task::spawn_blocking(move || {
+    if let Some(lock_guard) = mutex_collab.try_lock() {
+      apply_updates(&messages, &lock_guard)?;
+    }
+    Ok::<_, HistoryError>(messages)
+  });
+
+  let messages = processing_task.await??;
+  update_stream.ack_messages(&messages).await?;
+  Ok(())
+}
+
+/// Applies decoded updates from messages to the given locked collaboration object.
+fn apply_updates(
+  messages: &[StreamMessage],
+  lock_guard: &MutexGuard<Collab>,
+) -> Result<(), HistoryError> {
+  for message in messages {
+    match CollabUpdateEvent::decode(&message.data) {
+      Ok(event) => match event {
+        CollabUpdateEvent::UpdateV1 { encode_update } => match Update::decode_v1(&encode_update) {
+          Ok(update) => {
+            let mut txn = lock_guard.try_transaction_mut()?;
+            txn.try_apply_update(update)?;
+          },
+          Err(err) => error!("Failed to decode update: {:?}", err),
+        },
+      },
+      Err(err) => error!("Failed to decode update event: {:?}", err),
+    }
+  }
+  Ok(())
 }
 
 fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<HistoryPersistence>) {

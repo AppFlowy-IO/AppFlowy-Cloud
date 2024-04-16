@@ -13,6 +13,18 @@ services:
       - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
       - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
 
+  # You do not need this if you have configured to use your own s3 file storage
+  minio:
+    restart: on-failure
+    image: minio/minio
+    environment:
+      - MINIO_BROWSER_REDIRECT_URL=http://localhost/minio
+      - MINIO_ROOT_USER=${APPFLOWY_S3_ACCESS_KEY:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${APPFLOWY_S3_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
   postgres:
     restart: on-failure
     image: postgres
@@ -108,12 +120,13 @@ services:
     build:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
+    image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
-        
+
   appflowy_history:
     restart: on-failure
     build:
@@ -122,6 +135,9 @@ services:
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - APPFLOWY_HISTORY_REDIS_URL=redis://redis:6379
+      - APPFLOWY_HISTORY_ENVIRONMENT=production
+      - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
+
 volumes:
   postgres_data:
   minio_data:

@@ -161,6 +161,22 @@ impl StreamGroup {
       Some((_, messages)) => Ok(messages),
     }
   }
+  pub async fn get_unacked_messages(
+    &mut self,
+    consumer_name: &str,
+  ) -> Result<Vec<StreamMessage>, StreamError> {
+    let pending = self.get_pending().await?;
+
+    match pending {
+      None => Ok(vec![]),
+      Some(pending) => {
+        let messages = self
+          .get_unacked_messages_with_range(consumer_name, &pending.start_id, &pending.end_id)
+          .await?;
+        Ok(messages)
+      },
+    }
+  }
 
   /// Get unacknowledged messages
   ///
@@ -168,10 +184,11 @@ impl StreamGroup {
   /// (i.e., not acknowledged) before it can be claimed by another consumer. "Idle" time is
   /// essentially how long the message has been unacknowledged since its last delivery to any consumer.
   ///
-  pub async fn get_unacked_messages(
+  pub async fn get_unacked_messages_with_range(
     &mut self,
     consumer_name: &str,
     start_id: &str,
+    end_id: &str,
   ) -> Result<Vec<StreamMessage>, StreamError> {
     let opts = StreamClaimOptions::default()
       .idle(500)
@@ -185,7 +202,7 @@ impl StreamGroup {
         &self.group_name,
         consumer_name,
         500,
-        &[start_id],
+        &[start_id, end_id],
         opts,
       )
       .await?;

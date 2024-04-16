@@ -24,25 +24,19 @@ async fn single_reader_single_sender_update_stream_test() {
 
   // the following messages are not acked so they should be pending
   // and should be returned by the next get_unacked_messages call
-  let messages = recv_group
+  let first_consume_messages = recv_group
     .consumer_messages("consumer1", ReadOption::Count(2))
     .await
     .unwrap();
-  assert_eq!(messages.len(), 2);
-  assert_eq!(messages[0].data, vec![0]);
-  assert_eq!(messages[1].data, vec![1]);
+  assert_eq!(first_consume_messages.len(), 2);
+  assert_eq!(first_consume_messages[0].data, vec![0]);
+  assert_eq!(first_consume_messages[1].data, vec![1]);
   sleep(Duration::from_secs(4)).await;
 
-  // let pending = recv_group.get_pending().await.unwrap().unwrap();
-  // assert_eq!(pending.consumers.len(), 1);
-  // assert_eq!(pending.consumers[0].pending, 2);
-  // let messages = recv_group
-  //   .get_unacked_messages(&pending.consumers[0].name, &pending.start_id)
-  //   .await
-  //   .unwrap();
-  // assert_eq!(messages.len(), 2);
-  // assert_eq!(messages[0].data, vec![0]);
-  // assert_eq!(messages[1].data, vec![1]);
+  let unacked_messages = recv_group.get_unacked_messages("consumer1").await.unwrap();
+  assert_eq!(unacked_messages.len(), first_consume_messages.len());
+  assert_eq!(unacked_messages[0].data, first_consume_messages[0].data);
+  assert_eq!(unacked_messages[1].data, first_consume_messages[1].data);
 
   let messages = recv_group
     .consumer_messages("consumer1", ReadOption::Count(5))

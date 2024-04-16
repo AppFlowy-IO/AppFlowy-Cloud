@@ -41,6 +41,8 @@ bincode.workspace = true
 tonic.workspace = true
 tonic-proto.workspace = true
 futures = "0.3.30"
+log = "0.4.20"
+prost = "0.12.3"
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"

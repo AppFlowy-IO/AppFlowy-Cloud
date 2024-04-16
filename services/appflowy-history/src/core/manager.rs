@@ -10,13 +10,14 @@ use dashmap::mapref::entry::Entry;
 use crate::config::StreamSetting;
 use dashmap::DashMap;
 use sqlx::PgPool;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
 use tonic_proto::history::{HistoryState, SnapshotRequest};
-use tracing::{error, trace};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
+const CONSUMER_NAME: &str = "open_collab";
 pub struct OpenCollabManager {
   #[allow(dead_code)]
   handles: Arc<DashMap<String, Arc<OpenCollabHandle>>>,
@@ -31,13 +32,7 @@ impl OpenCollabManager {
     setting: &StreamSetting,
   ) -> Self {
     let handles = Arc::new(DashMap::new());
-    spawn_control_group(
-      redis_stream.clone(),
-      Arc::downgrade(&handles),
-      pg_pool,
-      setting,
-    )
-    .await;
+    spawn_control_group(redis_stream.clone(), &handles, pg_pool, setting).await;
     Self {
       handles,
       redis_stream,
@@ -57,7 +52,7 @@ impl OpenCollabManager {
 
 async fn spawn_control_group(
   redis_stream: CollabRedisStream,
-  handles: Weak<DashMap<String, Arc<OpenCollabHandle>>>,
+  handles: &Arc<DashMap<String, Arc<OpenCollabHandle>>>,
   pg_pool: PgPool,
   setting: &StreamSetting,
 ) {
@@ -65,15 +60,31 @@ async fn spawn_control_group(
     .collab_control_stream(&setting.control_key, "history")
     .await
     .unwrap();
+
+  // Handle stale messages
+  if let Ok(stale_messages) = control_group.get_unacked_messages(CONSUMER_NAME).await {
+    info!("Handling stale messages: {:?}", stale_messages.len());
+    for message in &stale_messages {
+      if let Ok(event) = CollabControlEvent::decode(&message.data) {
+        handle_control_event(&redis_stream, event, handles, &pg_pool).await;
+      }
+    }
+
+    if let Err(err) = control_group.ack_messages(&stale_messages).await {
+      error!("Failed to ack stale messages: {:?}", err);
+    }
+  }
+
+  let weak_handles = Arc::downgrade(handles);
   let mut interval = interval(Duration::from_secs(1));
   tokio::spawn(async move {
     loop {
       interval.tick().await;
       if let Ok(messages) = control_group
-        .consumer_messages("open_collab", ReadOption::Count(10))
+        .consumer_messages(CONSUMER_NAME, ReadOption::Count(10))
         .await
       {
-        if let Some(handles) = handles.upgrade() {
+        if let Some(handles) = weak_handles.upgrade() {
           for message in &messages {
             if let Ok(event) = CollabControlEvent::decode(&message.data) {
               handle_control_event(&redis_stream, event, &handles, &pg_pool).await;

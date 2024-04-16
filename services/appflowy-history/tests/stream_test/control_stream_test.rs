@@ -174,7 +174,11 @@ async fn ack_partial_message_test() {
   assert_eq!(pending.consumers.len(), 1);
   assert_eq!(pending.consumers[0].pending, 1);
   let messages = recv_group
-    .get_unacked_messages(&pending.consumers[0].name, &pending.start_id)
+    .get_unacked_messages_with_range(
+      &pending.consumers[0].name,
+      &pending.start_id,
+      &pending.end_id,
+    )
     .await
     .unwrap();
   assert_eq!(messages.len(), 1);

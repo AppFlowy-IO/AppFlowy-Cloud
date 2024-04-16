@@ -194,7 +194,7 @@ jobs:
 
   admin_frontend_docker_manifest:
     runs-on: ubuntu-22.04
-    needs: [admin_frontend_image]
+    needs: [ admin_frontend_image ]
     strategy:
       fail-fast: false
       matrix:

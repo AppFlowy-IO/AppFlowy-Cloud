@@ -57,7 +57,7 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  fn encode_collab_mem_hit_rate(&self) -> f64;
+  fn encode_collab_redis_query_state(&self) -> (u64, u64);
 
   /// Insert/update the collaboration object in the storage.
   /// # Arguments
@@ -146,8 +146,8 @@ impl<T> CollabStorage for Arc<T>
 where
   T: CollabStorage,
 {
-  fn encode_collab_mem_hit_rate(&self) -> f64 {
-    self.as_ref().encode_collab_mem_hit_rate()
+  fn encode_collab_redis_query_state(&self) -> (u64, u64) {
+    self.as_ref().encode_collab_redis_query_state()
   }
 
   async fn insert_or_update_collab(

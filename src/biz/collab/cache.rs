@@ -18,7 +18,7 @@ use tracing::{error, event, Level};
 pub struct CollabCache {
   disk_cache: CollabDiskCache,
   mem_cache: CollabMemCache,
-  hits: Arc<AtomicU64>,
+  success_attempts: Arc<AtomicU64>,
   total_attempts: Arc<AtomicU64>,
 }
 
@@ -29,7 +29,7 @@ impl CollabCache {
     Self {
       disk_cache,
       mem_cache,
-      hits: Arc::new(AtomicU64::new(0)),
+      success_attempts: Arc::new(AtomicU64::new(0)),
       total_attempts: Arc::new(AtomicU64::new(0)),
     }
   }
@@ -47,7 +47,7 @@ impl CollabCache {
         "Get encode collab:{} from cache",
         params.object_id
       );
-      self.hits.fetch_add(1, Ordering::Relaxed);
+      self.success_attempts.fetch_add(1, Ordering::Relaxed);
       return Ok(encoded_collab);
     }
 
@@ -157,14 +157,12 @@ impl CollabCache {
     Ok(())
   }
 
-  pub fn get_hit_rate(&self) -> f64 {
-    let hits = self.hits.load(Ordering::Relaxed) as f64;
-    let total_attempts = self.total_attempts.load(Ordering::Relaxed) as f64;
-
-    if total_attempts == 0.0 {
-      0.0
-    } else {
-      hits / total_attempts
+  pub fn query_state(&self) -> QueryState {
+    let successful_attempts = self.success_attempts.load(Ordering::Relaxed);
+    let total_attempts = self.total_attempts.load(Ordering::Relaxed);
+    QueryState {
+      total_attempts,
+      success_attempts: successful_attempts,
     }
   }
 
@@ -188,4 +186,9 @@ impl CollabCache {
   pub fn pg_pool(&self) -> &sqlx::PgPool {
     &self.disk_cache.pg_pool
   }
+}
+
+pub struct QueryState {
+  pub total_attempts: u64,
+  pub success_attempts: u64,
 }

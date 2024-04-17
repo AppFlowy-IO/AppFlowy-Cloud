@@ -145,8 +145,9 @@ impl<AC> CollabStorage for CollabStorageImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  fn encode_collab_mem_hit_rate(&self) -> f64 {
-    self.cache.get_hit_rate()
+  fn encode_collab_redis_query_state(&self) -> (u64, u64) {
+    let state = self.cache.query_state();
+    (state.total_attempts, state.success_attempts)
   }
 
   async fn insert_or_update_collab(

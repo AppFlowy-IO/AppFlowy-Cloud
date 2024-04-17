@@ -59,6 +59,15 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 pub trait CollabStorage: Send + Sync + 'static {
   fn encode_collab_mem_hit_rate(&self) -> f64;
 
+  /// Insert/update the collaboration object in the storage.
+  /// # Arguments
+  /// * `workspace_id` - The ID of the workspace.
+  /// * `uid` - The ID of the user.
+  /// * `params` - The parameters containing the data of the collaboration.
+  /// * `write_immediately` - A boolean value that indicates whether the data should be written immediately.
+  /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
+  /// be scheduled to be written to disk later.
+  ///
   async fn insert_or_update_collab(
     &self,
     workspace_id: &str,
@@ -67,7 +76,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     write_immediately: bool,
   ) -> AppResult<()>;
 
-  /// Insert/update a new collaboration in the storage.
+  /// Insert a new collaboration in the storage.
   ///
   /// # Arguments
   ///

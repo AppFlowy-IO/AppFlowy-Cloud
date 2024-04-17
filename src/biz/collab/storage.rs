@@ -16,9 +16,11 @@ use database_entity::dto::{
 };
 use itertools::{Either, Itertools};
 
+use crate::state::RedisConnectionManager;
 use collab_rt::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
+
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -36,7 +38,7 @@ pub struct CollabStorageImpl<AC> {
   /// access control for collab object. Including read/write
   access_control: AC,
   snapshot_control: SnapshotControl,
-  rt_cmd: RTCommandSender,
+  rt_cmd_sender: RTCommandSender,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -48,12 +50,14 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: RTCommandSender,
+    _redis_conn_manager: RedisConnectionManager,
   ) -> Self {
+    // let queue = Arc::new(StorageQueue::new(cache.clone(), redis_conn_manager));
     Self {
       cache,
       access_control,
       snapshot_control,
-      rt_cmd: rt_cmd_sender,
+      rt_cmd_sender,
     }
   }
 
@@ -106,7 +110,7 @@ where
 
     // Attempt to send the command to the realtime server
     if let Err(err) = self
-      .rt_cmd
+      .rt_cmd_sender
       .send(RTCommand::GetEncodeCollab { object_id, ret })
       .await
     {
@@ -141,8 +145,9 @@ impl<AC> CollabStorage for CollabStorageImpl<AC>
 where
   AC: CollabStorageAccessControl,
 {
-  fn encode_collab_mem_hit_rate(&self) -> f64 {
-    self.cache.get_hit_rate()
+  fn encode_collab_redis_query_state(&self) -> (u64, u64) {
+    let state = self.cache.query_state();
+    (state.total_attempts, state.success_attempts)
   }
 
   async fn insert_or_update_collab(
@@ -150,6 +155,7 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    _write_immediately: bool,
   ) -> AppResult<()> {
     params.validate()?;
     if let Err(err) = params.check_encode_collab().await {
@@ -159,10 +165,9 @@ where
       )));
     }
     let is_exist = self.cache.is_exist(&params.object_id).await?;
+    // If the collab already exists, check if the user has enough permissions to update collab
+    // Otherwise, check if the user has enough permissions to create collab.
     if is_exist {
-      self
-        .check_write_workspace_permission(workspace_id, uid)
-        .await?;
       self
         .check_write_collab_permission(workspace_id, uid, &params.object_id)
         .await?;
@@ -181,22 +186,34 @@ where
         .await?;
     }
 
-    let mut transaction = self
-      .cache
-      .pg_pool()
-      .begin()
-      .await
-      .context("acquire transaction to upsert collab")
-      .map_err(AppError::from)?;
-    self
-      .cache
-      .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
-      .await?;
-    transaction
-      .commit()
-      .await
-      .context("fail to commit the transaction to upsert collab")
-      .map_err(AppError::from)?;
+    let write_to_disk = |data| async {
+      let mut transaction = self
+        .cache
+        .pg_pool()
+        .begin()
+        .await
+        .context("acquire transaction to upsert collab")
+        .map_err(AppError::from)?;
+      self
+        .cache
+        .insert_encode_collab_data(workspace_id, uid, data, &mut transaction)
+        .await?;
+      transaction
+        .commit()
+        .await
+        .context("fail to commit the transaction to upsert collab")
+        .map_err(AppError::from)?;
+      Ok::<(), AppError>(())
+    };
+
+    write_to_disk(params).await?;
+    // if write_immediately {
+    //   write_to_disk(params).await?;
+    // } else if let Err(err) = self.queue.queue_insert(params).await {
+    //   // If queue insert fails, write to disk immediately
+    //   write_to_disk(err.data).await?;
+    // }
+
     Ok(())
   }
 

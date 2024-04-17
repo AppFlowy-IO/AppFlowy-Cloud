@@ -120,6 +120,7 @@ pub async fn run_test_server(control_stream_key: String) -> TestRpcClient {
   TestRpcClient::new(addr, config).await
 }
 
+#[allow(dead_code)]
 pub async fn check_doc_state_json<'a, F>(
   object_id: &str,
   timeout_secs: u64,

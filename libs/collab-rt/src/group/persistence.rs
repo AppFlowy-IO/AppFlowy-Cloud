@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::{interval, sleep};
-use tracing::{trace, warn};
+use tracing::{error, trace, warn};
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -69,28 +69,38 @@ where
   }
 
   async fn force_save(&self) {
+    if self.edit_state.is_new() && self.save(true).await.is_ok() {
+      self.edit_state.set_is_new(false);
+      return;
+    }
+
     if !self.edit_state.is_edit() {
       trace!("skip force save collab to disk: {}", self.object_id);
       return;
     }
-    if let Err(err) = self.save().await {
+
+    if let Err(err) = self.save(false).await {
       warn!("fail to force save: {}:{:?}", self.object_id, err);
     }
   }
 
   /// return true if the collab has been dropped. Otherwise, return false
   async fn attempt_save(&self) -> Result<(), AppError> {
+    if self.edit_state.is_new() && self.save(true).await.is_ok() {
+      self.edit_state.set_is_new(false);
+      return Ok(());
+    }
+
     // Check if conditions for saving to disk are not met
     if !self.edit_state.should_save_to_disk() {
       trace!("skip save collab to disk: {}", self.object_id);
       return Ok(());
     }
-
-    self.save().await?;
+    self.save(false).await?;
     Ok(())
   }
 
-  async fn save(&self) -> Result<(), AppError> {
+  async fn save(&self, write_immediately: bool) -> Result<(), AppError> {
     let mutex_collab = self.collab.clone();
     let object_id = self.object_id.clone();
     let collab_type = self.collab_type.clone();
@@ -111,11 +121,11 @@ where
       Ok(Some(params)) => {
         match self
           .storage
-          .insert_or_update_collab(&self.workspace_id, &self.uid, params)
+          .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
           .await
         {
           Ok(_) => {
-            trace!("[realtime] save collab to disk: {}", self.object_id);
+            trace!("[realtime] did save collab to disk: {}", self.object_id);
             // Update the edit state on successful save
             self.edit_state.tick();
           },
@@ -125,7 +135,15 @@ where
       Ok(None) => {
         // required lock failed or get encode collab failed, skip saving
       },
-      Err(err) => warn!("attempt to encode collab {}=>{:?}", self.object_id, err),
+      Err(err) => {
+        if err.is_panic() {
+          // reason:
+          // 1. Couldn't get item's parent
+          warn!("encode collab panic:{}=>{:?}", self.object_id, err);
+        } else {
+          error!("fail to spawn a task to get encode collab: {:?}", err)
+        }
+      },
     }
     Ok(())
   }

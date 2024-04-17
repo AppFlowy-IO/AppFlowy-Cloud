@@ -232,11 +232,12 @@ async fn collab_mem_cache_read_write_test() {
   let timestamp = chrono::Utc::now().timestamp();
   mem_cache
     .insert_encode_collab_data(
-      object_id.clone(),
-      encode_collab.encode_to_bytes().unwrap(),
+      &object_id,
+      &encode_collab.encode_to_bytes().unwrap(),
       timestamp,
     )
-    .await;
+    .await
+    .unwrap();
 
   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
   assert_eq!(encode_collab_from_cache.state_vector, vec![1, 2, 3]);
@@ -253,24 +254,26 @@ async fn collab_mem_cache_insert_override_test() {
   let mut timestamp = chrono::Utc::now().timestamp();
   mem_cache
     .insert_encode_collab_data(
-      object_id.clone(),
-      encode_collab.encode_to_bytes().unwrap(),
+      &object_id,
+      &encode_collab.encode_to_bytes().unwrap(),
       timestamp,
     )
-    .await;
+    .await
+    .unwrap();
 
   // the following insert should not override the previous one because the timestamp is older
   // than the previous one
   timestamp -= 100;
   mem_cache
     .insert_encode_collab_data(
-      object_id.clone(),
-      EncodedCollab::new_v1(vec![6, 7, 8], vec![9, 10, 11])
+      &object_id,
+      &EncodedCollab::new_v1(vec![6, 7, 8], vec![9, 10, 11])
         .encode_to_bytes()
         .unwrap(),
       timestamp,
     )
-    .await;
+    .await
+    .unwrap();
 
   // check that the previous insert is still in the cache
   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();
@@ -282,13 +285,14 @@ async fn collab_mem_cache_insert_override_test() {
   timestamp += 500;
   mem_cache
     .insert_encode_collab_data(
-      object_id.clone(),
-      EncodedCollab::new_v1(vec![12, 13, 14], vec![15, 16, 17])
+      &object_id,
+      &EncodedCollab::new_v1(vec![12, 13, 14], vec![15, 16, 17])
         .encode_to_bytes()
         .unwrap(),
       timestamp,
     )
-    .await;
+    .await
+    .unwrap();
 
   // check that the previous insert is overridden
   let encode_collab_from_cache = mem_cache.get_encode_collab(&object_id).await.unwrap();

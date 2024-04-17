@@ -57,16 +57,26 @@ pub trait CollabStorageAccessControl: Send + Sync + 'static {
 /// Implementors of this trait should provide the actual storage logic, be it in-memory, file-based, database-backed, etc.
 #[async_trait]
 pub trait CollabStorage: Send + Sync + 'static {
-  fn encode_collab_mem_hit_rate(&self) -> f64;
+  fn encode_collab_redis_query_state(&self) -> (u64, u64);
 
+  /// Insert/update the collaboration object in the storage.
+  /// # Arguments
+  /// * `workspace_id` - The ID of the workspace.
+  /// * `uid` - The ID of the user.
+  /// * `params` - The parameters containing the data of the collaboration.
+  /// * `write_immediately` - A boolean value that indicates whether the data should be written immediately.
+  /// if write_immediately is true, the data will be written to disk immediately. Otherwise, the data will
+  /// be scheduled to be written to disk later.
+  ///
   async fn insert_or_update_collab(
     &self,
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    write_immediately: bool,
   ) -> AppResult<()>;
 
-  /// Insert/update a new collaboration in the storage.
+  /// Insert a new collaboration in the storage.
   ///
   /// # Arguments
   ///
@@ -136,8 +146,8 @@ impl<T> CollabStorage for Arc<T>
 where
   T: CollabStorage,
 {
-  fn encode_collab_mem_hit_rate(&self) -> f64 {
-    self.as_ref().encode_collab_mem_hit_rate()
+  fn encode_collab_redis_query_state(&self) -> (u64, u64) {
+    self.as_ref().encode_collab_redis_query_state()
   }
 
   async fn insert_or_update_collab(
@@ -145,10 +155,11 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    write_immediately: bool,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_or_update_collab(workspace_id, uid, params)
+      .insert_or_update_collab(workspace_id, uid, params, write_immediately)
       .await
   }
 

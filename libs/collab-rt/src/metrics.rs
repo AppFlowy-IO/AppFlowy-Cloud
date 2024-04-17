@@ -1,7 +1,7 @@
 use database::collab::CollabStorage;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::registry::Registry;
-use std::sync::atomic::{AtomicI64, AtomicU64};
+use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
@@ -9,14 +9,13 @@ use tokio::time::interval;
 #[derive(Clone)]
 pub struct CollabRealtimeMetrics {
   connected_users: Gauge,
-  encode_collab_mem_hit_rate: Gauge<f64, AtomicU64>,
+  total_success_get_encode_collab_from_redis: Gauge,
+  total_attempt_get_encode_collab_from_redis: Gauge,
   opening_collab_count: Gauge,
-
   /// The number of apply update
   apply_update_count: Gauge,
   /// The number of apply update failed
   apply_update_failed_count: Gauge,
-
   acquire_collab_lock_count: Gauge,
   acquire_collab_lock_fail_count: Gauge,
 }
@@ -25,7 +24,8 @@ impl CollabRealtimeMetrics {
   fn init() -> Self {
     Self {
       connected_users: Gauge::default(),
-      encode_collab_mem_hit_rate: Gauge::default(),
+      total_success_get_encode_collab_from_redis: Gauge::default(),
+      total_attempt_get_encode_collab_from_redis: Gauge::default(),
       opening_collab_count: Gauge::default(),
       apply_update_count: Default::default(),
       apply_update_failed_count: Default::default(),
@@ -43,9 +43,14 @@ impl CollabRealtimeMetrics {
       metrics.connected_users.clone(),
     );
     realtime_registry.register(
-      "mem_hit_rate",
-      "memory hit rate",
-      metrics.encode_collab_mem_hit_rate.clone(),
+      "total_success_get_encode_collab_from_redis",
+      "total success get encode collab from redis",
+      metrics.total_success_get_encode_collab_from_redis.clone(),
+    );
+    realtime_registry.register(
+      "total_attempt_get_encode_collab_from_redis",
+      "total attempt get encode collab from redis",
+      metrics.total_attempt_get_encode_collab_from_redis.clone(),
     );
     realtime_registry.register(
       "opening_collab_count",
@@ -75,10 +80,6 @@ impl CollabRealtimeMetrics {
     );
 
     metrics
-  }
-
-  pub fn record_encode_collab_mem_hit_rate(&self, rate: f64) {
-    self.encode_collab_mem_hit_rate.set(rate);
   }
 }
 
@@ -146,7 +147,13 @@ pub(crate) fn spawn_metrics<S>(
       );
 
       // cache hit rate
-      metrics.record_encode_collab_mem_hit_rate(storage.encode_collab_mem_hit_rate());
+      let (total, success) = storage.encode_collab_redis_query_state();
+      metrics
+        .total_attempt_get_encode_collab_from_redis
+        .set(total as i64);
+      metrics
+        .total_success_get_encode_collab_from_redis
+        .set(success as i64);
     }
   });
 }

@@ -183,7 +183,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
 
   // Redis
   info!("Connecting to Redis...");
-  let redis_client = get_redis_client(config.redis_uri.expose_secret()).await?;
+  let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
 
   #[cfg(feature = "ai_enable")]
   let appflowy_ai_client =
@@ -212,7 +212,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   let user_cache = UserCache::new(pg_pool.clone()).await;
   let collab_access_control = CollabAccessControlImpl::new(access_control.clone());
   let workspace_access_control = WorkspaceAccessControlImpl::new(access_control.clone());
-  let collab_cache = CollabCache::new(redis_client.clone(), pg_pool.clone());
+  let collab_cache = CollabCache::new(redis_conn_manager.clone(), pg_pool.clone());
 
   let collab_storage_access_control = CollabStorageAccessControlImpl {
     collab_access_control: collab_access_control.clone().into(),
@@ -220,7 +220,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     cache: collab_cache.clone(),
   };
   let snapshot_control = SnapshotControl::new(
-    redis_client.clone(),
+    redis_conn_manager.clone(),
     pg_pool.clone(),
     metrics.collab_metrics.clone(),
   )
@@ -230,6 +230,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     collab_storage_access_control,
     snapshot_control,
     rt_cmd_tx,
+    redis_conn_manager.clone(),
   ));
 
   #[cfg(feature = "history")]
@@ -244,7 +245,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),
     gotrue_client,
-    redis_connection_manager: redis_client,
+    redis_connection_manager: redis_conn_manager,
     collab_cache,
     collab_access_control_storage: collab_storage,
     collab_access_control,

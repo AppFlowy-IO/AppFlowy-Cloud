@@ -12,24 +12,24 @@ use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::{event, Level};
+use tracing::{error, event, Level};
 
 #[derive(Clone)]
 pub struct CollabCache {
   disk_cache: CollabDiskCache,
   mem_cache: CollabMemCache,
-  hits: Arc<AtomicU64>,
+  success_attempts: Arc<AtomicU64>,
   total_attempts: Arc<AtomicU64>,
 }
 
 impl CollabCache {
-  pub fn new(redis_client: RedisConnectionManager, pg_pool: PgPool) -> Self {
-    let mem_cache = CollabMemCache::new(redis_client.clone());
+  pub fn new(redis_conn_manager: RedisConnectionManager, pg_pool: PgPool) -> Self {
+    let mem_cache = CollabMemCache::new(redis_conn_manager.clone());
     let disk_cache = CollabDiskCache::new(pg_pool.clone());
     Self {
       disk_cache,
       mem_cache,
-      hits: Arc::new(AtomicU64::new(0)),
+      success_attempts: Arc::new(AtomicU64::new(0)),
       total_attempts: Arc::new(AtomicU64::new(0)),
     }
   }
@@ -44,10 +44,10 @@ impl CollabCache {
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&params.object_id).await {
       event!(
         Level::DEBUG,
-        "Get encoded collab:{} from cache",
+        "Get encode collab:{} from cache",
         params.object_id
       );
-      self.hits.fetch_add(1, Ordering::Relaxed);
+      self.success_attempts.fetch_add(1, Ordering::Relaxed);
       return Ok(encoded_collab);
     }
 
@@ -64,7 +64,7 @@ impl CollabCache {
     let timestamp = chrono::Utc::now().timestamp();
     tokio::spawn(async move {
       mem_cache
-        .insert_encode_collab(object_id, cloned_encode_collab, timestamp)
+        .insert_encode_collab(&object_id, cloned_encode_collab, timestamp)
         .await;
     });
     Ok(encode_collab)
@@ -107,6 +107,8 @@ impl CollabCache {
     results
   }
 
+  /// Insert the encoded collab data into the cache.
+  /// The data is inserted into both the memory and disk cache.
   pub async fn insert_encode_collab_data(
     &self,
     workspace_id: &str,
@@ -115,31 +117,52 @@ impl CollabCache {
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     let object_id = params.object_id.clone();
-    let encoded_collab = params.encoded_collab_v1.clone();
+    let encode_collab_data = params.encoded_collab_v1.clone();
     self
       .disk_cache
       .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
       .await?;
 
-    let timestamp = chrono::Utc::now().timestamp();
-    let mem_cache = self.mem_cache.clone();
-    tokio::spawn(async move {
-      mem_cache
-        .insert_encode_collab_data(object_id, encoded_collab, timestamp)
-        .await;
-    });
+    // when the data is written to the disk cache but fails to be written to the memory cache
+    // we log the error and continue.
+    if let Err(err) = self
+      .mem_cache
+      .insert_encode_collab_data(
+        &object_id,
+        &encode_collab_data,
+        chrono::Utc::now().timestamp(),
+      )
+      .await
+    {
+      error!(
+        "Failed to insert encode collab into memory cache: {:?}",
+        err
+      );
+    }
 
     Ok(())
   }
 
-  pub fn get_hit_rate(&self) -> f64 {
-    let hits = self.hits.load(Ordering::Relaxed) as f64;
-    let total_attempts = self.total_attempts.load(Ordering::Relaxed) as f64;
+  /// Insert the encoded collab data into the memory cache.
+  pub async fn insert_encode_collab_data_in_mem(
+    &self,
+    params: &CollabParams,
+  ) -> Result<(), AppError> {
+    let timestamp = chrono::Utc::now().timestamp();
+    self
+      .mem_cache
+      .insert_encode_collab_data(&params.object_id, &params.encoded_collab_v1, timestamp)
+      .await
+      .map_err(|err| AppError::Internal(err.into()))?;
+    Ok(())
+  }
 
-    if total_attempts == 0.0 {
-      0.0
-    } else {
-      hits / total_attempts
+  pub fn query_state(&self) -> QueryState {
+    let successful_attempts = self.success_attempts.load(Ordering::Relaxed);
+    let total_attempts = self.total_attempts.load(Ordering::Relaxed);
+    QueryState {
+      total_attempts,
+      success_attempts: successful_attempts,
     }
   }
 
@@ -163,4 +186,9 @@ impl CollabCache {
   pub fn pg_pool(&self) -> &sqlx::PgPool {
     &self.disk_cache.pg_pool
   }
+}
+
+pub struct QueryState {
+  pub total_attempts: u64,
+  pub success_attempts: u64,
 }

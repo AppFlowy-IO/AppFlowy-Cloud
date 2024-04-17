@@ -250,13 +250,20 @@ impl EditState {
     self.edit_counter.load(Ordering::SeqCst) != self.prev_edit_count.load(Ordering::SeqCst)
   }
 
+  pub(crate) fn is_new(&self) -> bool {
+    self.is_new.load(Ordering::SeqCst)
+  }
+
+  pub(crate) fn set_is_new(&self, is_new: bool) {
+    self.is_new.store(is_new, Ordering::SeqCst);
+  }
+
   pub(crate) fn should_save_to_disk(&self) -> bool {
     let current_edit_count = self.edit_counter.load(Ordering::SeqCst);
     let prev_edit_count = self.prev_edit_count.load(Ordering::SeqCst);
 
     // If the collab is new, save it to disk and reset the flag
     if self.is_new.load(Ordering::SeqCst) {
-      self.is_new.store(false, Ordering::SeqCst);
       return true;
     }
 

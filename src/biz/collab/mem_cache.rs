@@ -1,44 +1,40 @@
 use crate::state::RedisConnectionManager;
 use collab::core::collab_plugin::EncodedCollab;
 use redis::{pipe, AsyncCommands};
-use std::ops::DerefMut;
 
 use anyhow::anyhow;
 use app_error::AppError;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+
 use tracing::{error, instrument, trace};
 
 #[derive(Clone)]
 pub struct CollabMemCache {
-  connection_manager: Arc<Mutex<RedisConnectionManager>>,
+  connection_manager: RedisConnectionManager,
 }
 
 impl CollabMemCache {
-  pub fn new(redis_client: RedisConnectionManager) -> Self {
-    Self {
-      connection_manager: Arc::new(Mutex::new(redis_client)),
-    }
+  pub fn new(connection_manager: RedisConnectionManager) -> Self {
+    Self { connection_manager }
   }
 
   /// Checks if an object with the given ID exists in the cache.
   pub async fn is_exist(&self, object_id: &str) -> Result<bool, AppError> {
+    let cache_object_id = cache_object_id_from_key(object_id);
     let exists: bool = self
       .connection_manager
-      .lock()
-      .await
-      .exists(object_id)
+      .clone()
+      .exists(&cache_object_id)
       .await
       .map_err(|err| AppError::Internal(err.into()))?;
     Ok(exists)
   }
 
   pub async fn remove_encode_collab(&self, object_id: &str) -> Result<(), AppError> {
+    let cache_object_id = cache_object_id_from_key(object_id);
     self
       .connection_manager
-      .lock()
-      .await
-      .del::<&str, ()>(object_id)
+      .clone()
+      .del::<&str, ()>(&cache_object_id)
       .await
       .map_err(|err| {
         AppError::Internal(anyhow!(
@@ -81,7 +77,7 @@ impl CollabMemCache {
   #[instrument(level = "trace", skip_all, fields(object_id=%object_id))]
   pub async fn insert_encode_collab(
     &self,
-    object_id: String,
+    object_id: &str,
     encoded_collab: EncodedCollab,
     timestamp: i64,
   ) {
@@ -90,7 +86,7 @@ impl CollabMemCache {
     match result {
       Ok(Ok(bytes)) => {
         if let Err(err) = self
-          .insert_data_with_timestamp(object_id, bytes, timestamp)
+          .insert_data_with_timestamp(object_id, &bytes, timestamp)
           .await
         {
           error!("Failed to cache encoded collab: {:?}", err);
@@ -105,13 +101,15 @@ impl CollabMemCache {
     }
   }
 
-  pub async fn insert_encode_collab_data(&self, object_id: String, data: Vec<u8>, timestamp: i64) {
-    if let Err(err) = self
+  pub async fn insert_encode_collab_data(
+    &self,
+    object_id: &str,
+    data: &[u8],
+    timestamp: i64,
+  ) -> redis::RedisResult<()> {
+    self
       .insert_data_with_timestamp(object_id, data, timestamp)
       .await
-    {
-      error!("Failed to cache encoded collab bytes: {:?}", err);
-    }
   }
 
   /// Inserts data into Redis with a conditional timestamp.
@@ -129,12 +127,13 @@ impl CollabMemCache {
   /// A Redis result indicating the success or failure of the operation.
   async fn insert_data_with_timestamp(
     &self,
-    object_id: String,
-    data: Vec<u8>,
+    object_id: &str,
+    data: &[u8],
     timestamp: i64,
   ) -> redis::RedisResult<()> {
-    let mut conn = self.connection_manager.lock().await;
-    let key_exists: bool = conn.exists(&object_id).await?;
+    let cache_object_id = cache_object_id_from_key(object_id);
+    let mut conn = self.connection_manager.clone();
+    let key_exists: bool = conn.exists(&cache_object_id).await?;
     // Start a watch on the object_id to monitor for changes during this transaction
     if key_exists {
       // WATCH command is used to monitor one or more keys for modifications, establishing a condition
@@ -142,18 +141,27 @@ impl CollabMemCache {
       // altered by another client before the current client executes EXEC, the transaction will be
       // aborted by Redis (the EXEC will return nil indicating the transaction was not processed).
       redis::cmd("WATCH")
-        .arg(&object_id)
-        .query_async::<_, ()>(&mut *conn)
+        .arg(&cache_object_id)
+        .query_async::<_, ()>(&mut conn)
         .await?;
     }
 
     let result = async {
       // Retrieve the current data, if exists
       let current_value: Option<(i64, Vec<u8>)> = if key_exists {
-        let val: Option<Vec<u8>> = conn.get(&object_id).await?;
-        val.map(|data| {
-          let ts = i64::from_be_bytes(data[0..8].try_into().unwrap());
-          (ts, data[8..].to_vec())
+        let val: Option<Vec<u8>> = conn.get(&cache_object_id).await?;
+        val.and_then(|data| {
+          if data.len() < 8 {
+            None
+          } else {
+            match data[0..8].try_into() {
+              Ok(ts_bytes) => {
+                let ts = i64::from_be_bytes(ts_bytes);
+                Some((ts, data[8..].to_vec()))
+              },
+              Err(_) => None,
+            }
+          }
         })
       } else {
         None
@@ -165,14 +173,14 @@ impl CollabMemCache {
         .map_or(true, |(ts, _)| timestamp > *ts)
       {
         let mut pipeline = pipe();
-        let data = [timestamp.to_be_bytes().as_ref(), data.as_slice()].concat();
+        let data = [timestamp.to_be_bytes().as_ref(), data].concat();
         pipeline
             .atomic()
-            .set(&object_id, data)
+            .set(&cache_object_id, data)
             .ignore()
-            .expire(&object_id, 604800) // Setting the expiration to 7 days
+            .expire(&cache_object_id, 604800) // Setting the expiration to 7 days
             .ignore();
-        pipeline.query_async(conn.deref_mut()).await?;
+        pipeline.query_async(&mut conn).await?;
       }
       Ok::<(), redis::RedisError>(())
     }
@@ -180,7 +188,7 @@ impl CollabMemCache {
 
     // Always reset Watch State
     redis::cmd("UNWATCH")
-      .query_async::<_, ()>(&mut *conn)
+      .query_async::<_, ()>(&mut conn)
       .await?;
 
     result
@@ -200,9 +208,10 @@ impl CollabMemCache {
     &self,
     object_id: &str,
   ) -> redis::RedisResult<Option<(i64, Vec<u8>)>> {
-    let mut conn = self.connection_manager.lock().await;
+    let cache_object_id = cache_object_id_from_key(object_id);
+    let mut conn = self.connection_manager.clone();
     // Attempt to retrieve the data from Redis
-    if let Some(data) = conn.get::<_, Option<Vec<u8>>>(object_id).await? {
+    if let Some(data) = conn.get::<_, Option<Vec<u8>>>(&cache_object_id).await? {
       if data.len() < 8 {
         // Data is too short to contain a valid timestamp and payload
         Err(redis::RedisError::from((
@@ -211,14 +220,30 @@ impl CollabMemCache {
         )))
       } else {
         // Extract timestamp and payload from the retrieved data
-        let timestamp =
-          i64::from_be_bytes(data[0..8].try_into().expect("Failed to decode timestamp"));
-        let payload = data[8..].to_vec();
-        Ok(Some((timestamp, payload)))
+        match data[0..8].try_into() {
+          Ok(ts_bytes) => {
+            let timestamp = i64::from_be_bytes(ts_bytes);
+            let payload = data[8..].to_vec();
+            Ok(Some((timestamp, payload)))
+          },
+          Err(_) => Err(redis::RedisError::from((
+            redis::ErrorKind::TypeError,
+            "Failed to decode timestamp",
+          ))),
+        }
       }
     } else {
       // No data found for the provided object_id
       Ok(None)
     }
   }
+}
+
+/// Generates a cache-specific key for an object ID by prepending a fixed prefix.
+/// This method ensures that any updates to the object's data involve merely
+/// changing the prefix, allowing the old data to expire naturally.
+///
+#[inline]
+fn cache_object_id_from_key(object_id: &str) -> String {
+  format!("encode_collab_v0:{}", object_id)
 }

@@ -37,6 +37,26 @@ pub(crate) async fn insert_pending_meta(
   Ok(())
 }
 
+pub(crate) async fn remove_all_pending_meta(
+  mut connection_manager: RedisConnectionManager,
+) -> Result<(), AppError> {
+  let pattern = format!("{}*", QUEUE_COLLAB_PREFIX);
+  let iter: AsyncIter<String> = connection_manager
+    .scan_match(pattern)
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?;
+  let keys: Vec<_> = iter.collect().await;
+
+  if keys.is_empty() {
+    return Ok(());
+  }
+  connection_manager
+    .del(keys)
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?;
+  Ok(())
+}
+
 #[inline]
 pub(crate) async fn get_pending_meta(
   keys: &[String],

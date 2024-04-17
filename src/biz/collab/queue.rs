@@ -1,7 +1,7 @@
 use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::queue_redis_ops::{
-  get_pending_meta, get_remaining_pending_write, insert_pending_meta, remove_pending_meta,
-  storage_cache_key,
+  get_pending_meta, get_remaining_pending_write, insert_pending_meta, remove_all_pending_meta,
+  remove_pending_meta, storage_cache_key,
 };
 
 use crate::state::RedisConnectionManager;
@@ -31,7 +31,6 @@ pub struct StorageQueue {
   connection_manager: RedisConnectionManager,
   pending_write: PendingWriteHeap,
   pending_id_counter: Arc<AtomicI64>,
-  next_duration: Arc<Mutex<Duration>>,
 }
 
 impl StorageQueue {
@@ -56,14 +55,13 @@ impl StorageQueue {
       pending_write.clone(),
     );
 
-    spawn_period_check_pg_conn_count(collab_cache.pg_pool().clone(), next_duration.clone());
+    spawn_period_check_pg_conn_count(collab_cache.pg_pool().clone(), next_duration);
 
     Self {
       collab_cache,
       connection_manager,
       pending_write,
       pending_id_counter,
-      next_duration,
     }
   }
 
@@ -103,6 +101,13 @@ impl StorageQueue {
     )
     .await?;
 
+    Ok(())
+  }
+
+  #[cfg(debug_assertions)]
+  pub async fn clear(&self) -> Result<(), AppError> {
+    self.pending_write.lock().await.clear();
+    remove_all_pending_meta(self.connection_manager.clone()).await?;
     Ok(())
   }
 
@@ -183,7 +188,7 @@ fn spawn_period_write(
 ) {
   tokio::spawn(async move {
     loop {
-      let duration = next_duration.lock().await.clone();
+      let duration = *next_duration.lock().await;
       trace!("Next write attempt in {:?}", duration);
       let instant = Instant::now() + duration;
       sleep_until(instant).await;

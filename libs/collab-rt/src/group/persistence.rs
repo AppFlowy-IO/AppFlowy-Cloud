@@ -139,7 +139,10 @@ where
         if err.is_panic() {
           // reason:
           // 1. Couldn't get item's parent
-          warn!("encode collab panic:{}=>{:?}", self.object_id, err);
+          warn!(
+            "encode collab panic:{}:{}=>{:?}",
+            self.object_id, self.collab_type, err
+          );
         } else {
           error!("fail to spawn a task to get encode collab: {:?}", err)
         }

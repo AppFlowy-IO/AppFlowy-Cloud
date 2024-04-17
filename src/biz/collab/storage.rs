@@ -20,7 +20,9 @@ use crate::state::RedisConnectionManager;
 use collab_rt::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use crate::biz::collab::queue::StorageQueue;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -39,6 +41,7 @@ pub struct CollabStorageImpl<AC> {
   access_control: AC,
   snapshot_control: SnapshotControl,
   rt_cmd_sender: RTCommandSender,
+  queue: Arc<StorageQueue>,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -50,14 +53,15 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: RTCommandSender,
-    _redis_conn_manager: RedisConnectionManager,
+    redis_conn_manager: RedisConnectionManager,
   ) -> Self {
-    // let queue = Arc::new(StorageQueue::new(cache.clone(), redis_conn_manager));
+    let queue = Arc::new(StorageQueue::new(cache.clone(), redis_conn_manager));
     Self {
       cache,
       access_control,
       snapshot_control,
       rt_cmd_sender,
+      queue,
     }
   }
 
@@ -155,7 +159,7 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    _write_immediately: bool,
+    write_immediately: bool,
   ) -> AppResult<()> {
     params.validate()?;
     if let Err(err) = params.check_encode_collab().await {
@@ -206,13 +210,12 @@ where
       Ok::<(), AppError>(())
     };
 
-    write_to_disk(params).await?;
-    // if write_immediately {
-    //   write_to_disk(params).await?;
-    // } else if let Err(err) = self.queue.queue_insert(params).await {
-    //   // If queue insert fails, write to disk immediately
-    //   write_to_disk(err.data).await?;
-    // }
+    if write_immediately {
+      write_to_disk(params).await?;
+    } else if self.queue.push(workspace_id, uid, &params).await.is_err() {
+      // If queue insert fails, write to disk immediately
+      write_to_disk(params).await?;
+    }
 
     Ok(())
   }
@@ -271,13 +274,13 @@ where
       }
     }
 
-    let encode_collab = self.cache.get_collab_encode_data(uid, params).await?;
+    let encode_collab = self.cache.get_encode_collab(uid, params.inner).await?;
     Ok(encode_collab)
   }
 
   async fn batch_get_collab(
     &self,
-    uid: &i64,
+    _uid: &i64,
     queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     // Partition queries based on validation into valid queries and errors (with associated error messages).
@@ -294,7 +297,7 @@ where
           )),
         });
 
-    results.extend(self.cache.batch_get_encode_collab(uid, valid_queries).await);
+    results.extend(self.cache.batch_get_encode_collab(valid_queries).await);
     results
   }
 

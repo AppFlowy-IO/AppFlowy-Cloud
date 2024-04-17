@@ -4,4 +4,6 @@ pub mod disk_cache;
 pub mod mem_cache;
 pub mod metrics;
 pub mod ops;
+pub mod queue;
+mod queue_redis_ops;
 pub mod storage;

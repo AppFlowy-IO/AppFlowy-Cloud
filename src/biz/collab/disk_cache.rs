@@ -5,7 +5,7 @@ use database::collab::{
   batch_select_collab_blob, delete_collab, insert_into_af_collab, is_collab_exists,
   select_blob_from_af_collab, AppResult,
 };
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -42,13 +42,13 @@ impl CollabDiskCache {
   pub async fn get_collab_encoded_from_disk(
     &self,
     _uid: &i64,
-    params: QueryCollabParams,
+    query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
     event!(
       Level::INFO,
       "Get {}:{} from disk",
-      params.collab_type,
-      params.object_id
+      query.collab_type,
+      query.object_id
     );
 
     const MAX_ATTEMPTS: usize = 3;
@@ -56,7 +56,7 @@ impl CollabDiskCache {
 
     loop {
       let result =
-        select_blob_from_af_collab(&self.pg_pool, &params.collab_type, &params.object_id).await;
+        select_blob_from_af_collab(&self.pg_pool, &query.collab_type, &query.object_id).await;
 
       match result {
         Ok(data) => {
@@ -70,7 +70,7 @@ impl CollabDiskCache {
         Err(e) => {
           // Handle non-retryable errors immediately
           if matches!(e, sqlx::Error::RowNotFound) {
-            let msg = format!("Can't find the row for query: {:?}", params);
+            let msg = format!("Can't find the row for query: {:?}", query);
             return Err(AppError::RecordNotFound(msg));
           }
 
@@ -89,7 +89,6 @@ impl CollabDiskCache {
 
   pub async fn batch_get_collab(
     &self,
-    _uid: &i64,
     queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     batch_select_collab_blob(&self.pg_pool, queries).await

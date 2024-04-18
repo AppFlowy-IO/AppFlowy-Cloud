@@ -326,7 +326,7 @@ async fn pending_queue_write_test(pool: PgPool) {
   sleep(Duration::from_secs(3)).await;
 
   let mut queries = Vec::new();
-  for i in 0..20 {
+  for i in 0..30 {
     let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
     let params = CollabParams {
       object_id: uuid::Uuid::new_v4().to_string(),

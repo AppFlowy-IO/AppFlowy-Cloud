@@ -23,8 +23,6 @@ use tokio::sync::Mutex;
 use tokio::time::{interval, sleep, sleep_until, Instant};
 use tracing::{error, info, trace, warn};
 
-/// The maximum size of a batch payload in bytes.
-const MAXIMUM_BATCH_PAYLOAD_SIZE: usize = 2 * 1024 * 1024;
 type PendingWriteHeap = Arc<Mutex<BinaryHeap<PendingWrite>>>;
 #[derive(Clone)]
 pub struct StorageQueue {
@@ -167,14 +165,14 @@ fn spawn_period_check_pg_conn_count(pg_pool: PgPool, next_duration: Arc<Mutex<Du
       interval.tick().await;
       // these range values are arbitrary and can be adjusted as needed
       match pg_pool.size() {
-        0..=20 => {
+        0..=30 => {
+          *next_duration.lock().await = Duration::from_secs(1);
+        },
+        31..=50 => {
           *next_duration.lock().await = Duration::from_secs(2);
         },
-        21..=40 => {
-          *next_duration.lock().await = Duration::from_secs(3);
-        },
         _ => {
-          *next_duration.lock().await = Duration::from_secs(5);
+          *next_duration.lock().await = Duration::from_secs(4);
         },
       }
     }
@@ -193,34 +191,31 @@ fn spawn_period_write(
       // active connections is high, the interval will be longer.
       let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
+      let chunk_keys = consume_pending_write(&pending_heap, 30, 5).await;
+      if chunk_keys.is_empty() {
+        continue;
+      }
 
-      let mut cloned_connection_manager = connection_manager.clone();
-      let cloned_collab_cache = collab_cache.clone();
-      let keys = consume_pending_write_keys(&pending_heap, MAXIMUM_BATCH_PAYLOAD_SIZE).await;
-
-      // Spawns an internal task to handle the write operation. This isolation helps in preventing
-      // panics within the write operations from terminating the outer periodic task loop.
-      let handle = tokio::spawn(async move {
-        if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
-          match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
-            Ok(_) => {},
-            Err(err) => {
-              error!("Failed to write pending collaboration data: {:?}", err);
-            },
+      for keys in chunk_keys {
+        trace!(
+          "Writing chunk of {:?} pending collaboration data to disk",
+          keys
+        );
+        let cloned_collab_cache = collab_cache.clone();
+        let mut cloned_connection_manager = connection_manager.clone();
+        let _ = tokio::spawn(async move {
+          if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
+            match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
+              Ok(_) => {},
+              Err(err) => {
+                error!("Failed to write pending collaboration data: {:?}", err);
+              },
+            }
+            // Remove pending metadata from Redis even if some records fail to write to disk after retries.
+            // Records that fail repeatedly are considered potentially corrupt or invalid.
+            let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
           }
-          // Remove pending metadata from Redis even if some records fail to write to disk after retries.
-          // Records that fail repeatedly are considered potentially corrupt or invalid.
-          let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
-        }
-      })
-      .await;
-
-      if let Err(err) = handle {
-        if err.is_panic() {
-          error!("Panic in spawn_period_write: {:?}", err);
-        } else {
-          warn!("Error in spawn_period_write: {:?}", err);
-        }
+        });
       }
     }
   });
@@ -234,9 +229,9 @@ async fn retry_write_pending_to_disk(
     return Ok(());
   }
   const RETRY_DELAYS: [Duration; 3] = [
+    Duration::from_secs(1),
     Duration::from_secs(2),
-    Duration::from_secs(3),
-    Duration::from_secs(5),
+    Duration::from_secs(4),
   ];
 
   let expected_len = metas.len();
@@ -365,28 +360,49 @@ async fn write_pending_to_disk(
   Ok(success_write_objects)
 }
 
+const MAXIMUM_CHUNK_SIZE: usize = 2 * 1024 * 1024;
 #[inline]
-async fn consume_pending_write_keys(
+async fn consume_pending_write(
   pending_heap: &PendingWriteHeap,
-  maximum_payload_size: usize,
-) -> Vec<String> {
-  const NUM_ITEMS: usize = 5;
+  maximum_consume_item: usize,
+  num_of_item_each_chunk: usize,
+) -> Vec<Vec<String>> {
+  let mut chunks = Vec::new();
+  let mut current_chunk = Vec::with_capacity(maximum_consume_item);
+  let mut current_chunk_data_size = 0;
   let mut pending_lock = pending_heap.lock().await;
-  let mut write_items = Vec::with_capacity(NUM_ITEMS);
   while let Some(item) = pending_lock.pop() {
-    write_items.push(item);
-    if write_items.iter().map(|v| v.data_len).sum::<usize>() > maximum_payload_size {
-      break;
+    let item_size = item.data_len;
+
+    // Check if adding this item would exceed the maximum chunk size or item limit
+    if current_chunk_data_size + item_size > MAXIMUM_CHUNK_SIZE
+      || current_chunk.len() >= num_of_item_each_chunk
+    {
+      chunks.push(std::mem::replace(
+        &mut current_chunk,
+        Vec::with_capacity(maximum_consume_item),
+      ));
+      current_chunk_data_size = 0;
     }
-    if write_items.len() >= NUM_ITEMS {
-      break;
-    }
+
+    // Add the item to the current batch and update the batch size
+    current_chunk.push(item);
+    current_chunk_data_size += item_size;
+  }
+
+  if !current_chunk.is_empty() {
+    chunks.push(current_chunk);
   }
   drop(pending_lock);
-
-  write_items
-    .iter()
-    .map(|pending| storage_cache_key(&pending.object_id, pending.data_len))
+  // Convert each batch of items into a batch of keys
+  chunks
+    .into_iter()
+    .map(|batch| {
+      batch
+        .into_iter()
+        .map(|pending| storage_cache_key(&pending.object_id, pending.data_len))
+        .collect()
+    })
     .collect()
 }
 

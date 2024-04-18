@@ -419,10 +419,22 @@ async fn create_collab_handler(
   };
 
   let (params, workspace_id) = params.split();
+  let mut transaction = state
+    .pg_pool
+    .begin()
+    .await
+    .context("acquire transaction to upsert collab")
+    .map_err(AppError::from)?;
   state
     .collab_access_control_storage
-    .insert_or_update_collab(&workspace_id, &uid, params, true)
+    .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
     .await?;
+
+  transaction
+    .commit()
+    .await
+    .context("fail to commit the transaction to upsert collab")
+    .map_err(AppError::from)?;
 
   Ok(Json(AppResponse::Ok()))
 }
@@ -498,12 +510,6 @@ async fn batch_create_collab_handler(
   if collab_params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
-  let mut transaction = state
-    .pg_pool
-    .begin()
-    .await
-    .context("acquire transaction to upsert collab")
-    .map_err(AppError::from)?;
   for params in collab_params_list {
     let object_id = params.object_id.clone();
     if validate_encode_collab(
@@ -516,7 +522,7 @@ async fn batch_create_collab_handler(
     {
       state
         .collab_access_control_storage
-        .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+        .insert_new_collab(&workspace_id, &uid, params)
         .await?;
 
       state
@@ -525,12 +531,6 @@ async fn batch_create_collab_handler(
         .await?;
     }
   }
-
-  transaction
-    .commit()
-    .await
-    .context("fail to commit the transaction to upsert collab")
-    .map_err(AppError::from)?;
   Ok(Json(AppResponse::Ok()))
 }
 
@@ -580,26 +580,13 @@ async fn create_collab_list_handler(
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
 
-  let mut transaction = state
-    .pg_pool
-    .begin()
-    .await
-    .context("acquire transaction to upsert collab")
-    .map_err(AppError::from)?;
-
   for params in valid_items {
     let _object_id = params.object_id.clone();
     state
       .collab_access_control_storage
-      .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
+      .insert_new_collab(&workspace_id, &uid, params)
       .await?;
   }
-
-  transaction
-    .commit()
-    .await
-    .context("fail to commit the transaction to upsert collab")
-    .map_err(AppError::from)?;
 
   Ok(Json(AppResponse::Ok()))
 }

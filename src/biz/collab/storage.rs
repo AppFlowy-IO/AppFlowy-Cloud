@@ -142,6 +142,40 @@ where
       },
     }
   }
+
+  async fn queue_insert_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    priority: WritePriority,
+  ) -> Result<(), AppError> {
+    if self
+      .queue
+      .push(workspace_id, uid, &params, priority)
+      .await
+      .is_err()
+    {
+      let mut transaction = self
+        .cache
+        .pg_pool()
+        .begin()
+        .await
+        .context("acquire transaction to upsert collab")
+        .map_err(AppError::from)?;
+      self
+        .cache
+        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
+        .await?;
+      transaction
+        .commit()
+        .await
+        .context("fail to commit the transaction to upsert collab")
+        .map_err(AppError::from)?;
+    }
+
+    Ok(())
+  }
 }
 
 #[async_trait]
@@ -194,29 +228,29 @@ where
     } else {
       WritePriority::Low
     };
-    if self
-      .queue
-      .push(workspace_id, uid, &params, priority)
-      .await
-      .is_err()
-    {
-      let mut transaction = self
-        .cache
-        .pg_pool()
-        .begin()
-        .await
-        .context("acquire transaction to upsert collab")
-        .map_err(AppError::from)?;
-      self
-        .cache
-        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
-        .await?;
-      transaction
-        .commit()
-        .await
-        .context("fail to commit the transaction to upsert collab")
-        .map_err(AppError::from)?;
-    }
+    self
+      .queue_insert_collab(workspace_id, uid, params, priority)
+      .await?;
+    Ok(())
+  }
+
+  async fn insert_new_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+  ) -> AppResult<()> {
+    params.validate()?;
+    self
+      .check_write_workspace_permission(workspace_id, uid)
+      .await?;
+    self
+      .access_control
+      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+      .await?;
+    self
+      .queue_insert_collab(workspace_id, uid, params, WritePriority::High)
+      .await?;
     Ok(())
   }
 

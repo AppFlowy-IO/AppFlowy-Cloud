@@ -2,7 +2,7 @@ use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
 use crate::biz::collab::cache::CollabCache;
 use crate::biz::snapshot::SnapshotControl;
-use anyhow::Context;
+
 use app_error::AppError;
 use async_trait::async_trait;
 
@@ -151,31 +151,18 @@ where
     params: CollabParams,
     priority: WritePriority,
   ) -> Result<(), AppError> {
-    if self
+    if let Err(err) = params.check_encode_collab().await {
+      return Err(AppError::NoRequiredData(format!(
+        "collab doc state is not correct:{},{}",
+        params.object_id, err
+      )));
+    }
+
+    self
       .queue
       .push(workspace_id, uid, &params, priority)
       .await
-      .is_err()
-    {
-      let mut transaction = self
-        .cache
-        .pg_pool()
-        .begin()
-        .await
-        .context("acquire transaction to upsert collab")
-        .map_err(AppError::from)?;
-      self
-        .cache
-        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
-        .await?;
-      transaction
-        .commit()
-        .await
-        .context("fail to commit the transaction to upsert collab")
-        .map_err(AppError::from)?;
-    }
-
-    Ok(())
+      .map_err(AppError::from)
   }
 }
 
@@ -197,12 +184,6 @@ where
     write_immediately: bool,
   ) -> AppResult<()> {
     params.validate()?;
-    if let Err(err) = params.check_encode_collab().await {
-      return Err(AppError::NoRequiredData(format!(
-        "collab doc state is not correct:{},{}",
-        params.object_id, err
-      )));
-    }
     let is_exist = self.cache.is_exist(&params.object_id).await?;
     // If the collab already exists, check if the user has enough permissions to update collab
     // Otherwise, check if the user has enough permissions to create collab.
@@ -242,6 +223,7 @@ where
     params: CollabParams,
   ) -> AppResult<()> {
     params.validate()?;
+
     self
       .check_write_workspace_permission(workspace_id, uid)
       .await?;
@@ -273,7 +255,7 @@ where
       .await?;
     self
       .cache
-      .insert_encode_collab_data(workspace_id, uid, params, transaction)
+      .insert_encode_collab_data(workspace_id, uid, &params, transaction)
       .await?;
     Ok(())
   }

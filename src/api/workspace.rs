@@ -419,6 +419,16 @@ async fn create_collab_handler(
   };
 
   let (params, workspace_id) = params.split();
+  if let Err(err) = params.check_encode_collab().await {
+    return Err(
+      AppError::NoRequiredData(format!(
+        "collab doc state is not correct:{},{}",
+        params.object_id, err
+      ))
+      .into(),
+    );
+  }
+
   let mut transaction = state
     .pg_pool
     .begin()

@@ -115,7 +115,7 @@ impl CollabCache {
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: &CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     let object_id = params.object_id.clone();
@@ -166,7 +166,7 @@ impl CollabCache {
   ) -> Result<(), AppError> {
     self
       .disk_cache
-      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
+      .upsert_collab_with_transaction(workspace_id, uid, &params, transaction)
       .await?;
     Ok(())
   }

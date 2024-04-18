@@ -108,9 +108,9 @@ impl RedisSortedSet {
   /// Pop num of records from the queue
   /// The records are sorted by priority
 
-  pub async fn pop_with_len(&self, mut len: usize) -> Result<Vec<PendingWrite>, anyhow::Error> {
+  pub async fn pop(&self, len: usize) -> Result<Vec<PendingWrite>, anyhow::Error> {
     if len == 0 {
-      len = 1;
+      return Ok(vec![]);
     }
 
     let script = Script::new(
@@ -232,12 +232,12 @@ mod tests {
       sorted_set.push(item.clone()).await.unwrap();
     }
 
-    let pending_writes_from_sorted_set = sorted_set.pop_with_len(3).await.unwrap();
+    let pending_writes_from_sorted_set = sorted_set.pop(3).await.unwrap();
     assert_eq!(pending_writes_from_sorted_set[0].object_id, "o3");
     assert_eq!(pending_writes_from_sorted_set[1].object_id, "o1");
     assert_eq!(pending_writes_from_sorted_set[2].object_id, "o2");
 
-    let items = sorted_set.pop_with_len(2).await.unwrap();
+    let items = sorted_set.pop(2).await.unwrap();
     assert!(items.is_empty());
   }
 
@@ -249,6 +249,12 @@ mod tests {
     sleep(Duration::from_secs(3)).await;
 
     let pending_writes = vec![
+      PendingWrite {
+        object_id: "o1".to_string(),
+        seq: 1,
+        data_len: 0,
+        priority: WritePriority::Low,
+      },
       PendingWrite {
         object_id: "o1".to_string(),
         seq: 1,
@@ -273,16 +279,54 @@ mod tests {
       sorted_set_1.push(item.clone()).await.unwrap();
     }
 
-    let pending_writes_from_sorted_set = sorted_set_1.pop_with_len(1).await.unwrap();
+    let pending_writes_from_sorted_set = sorted_set_1.pop(1).await.unwrap();
     assert_eq!(pending_writes_from_sorted_set[0].object_id, "o3");
 
     let sorted_set_2 = RedisSortedSet::new(conn.clone(), "test_sorted_set2");
-    let pending_writes_from_sorted_set = sorted_set_2.pop_with_len(10).await.unwrap();
+    let pending_writes_from_sorted_set = sorted_set_2.pop(10).await.unwrap();
+    assert_eq!(pending_writes_from_sorted_set.len(), 2);
     assert_eq!(pending_writes_from_sorted_set[0].object_id, "o1");
     assert_eq!(pending_writes_from_sorted_set[1].object_id, "o2");
 
-    assert!(sorted_set_1.pop_with_len(10).await.unwrap().is_empty());
-    assert!(sorted_set_2.pop_with_len(10).await.unwrap().is_empty());
+    assert!(sorted_set_1.pop(10).await.unwrap().is_empty());
+    assert!(sorted_set_2.pop(10).await.unwrap().is_empty());
+  }
+
+  #[tokio::test]
+  async fn larget_num_set_test() {
+    let conn = redis_client().await.get_connection_manager().await.unwrap();
+    let sorted_set = RedisSortedSet::new(conn.clone(), "test_sorted_set3");
+    sorted_set.clear().await.unwrap();
+    sleep(Duration::from_secs(3)).await;
+    assert!(sorted_set.pop(10).await.unwrap().is_empty());
+
+    for i in 0..100 {
+      let pending_write = PendingWrite {
+        object_id: format!("o{}", i),
+        seq: i,
+        data_len: 0,
+        priority: WritePriority::Low,
+      };
+      sorted_set.push(pending_write).await.unwrap();
+
+      if i == 20 {
+        let set_1 = sorted_set.pop(20).await.unwrap();
+        assert_eq!(set_1.len(), 20);
+        assert_eq!(set_1[19].object_id, "o19");
+      }
+    }
+
+    let set_2 = sorted_set.pop(30).await.unwrap();
+    assert_eq!(set_2.len(), 30);
+    assert_eq!(set_2[0].object_id, "o20");
+    assert_eq!(set_2[29].object_id, "o49");
+
+    let set_3 = sorted_set.pop(1).await.unwrap();
+    assert_eq!(set_3.len(), 1);
+    assert_eq!(set_3[0].object_id, "o50");
+
+    let set_4 = sorted_set.pop(200).await.unwrap();
+    assert_eq!(set_4.len(), 49);
   }
 
   async fn redis_client() -> redis::Client {

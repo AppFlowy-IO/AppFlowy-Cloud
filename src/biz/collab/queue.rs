@@ -15,20 +15,21 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 
 use crate::biz::collab::RedisSortedSet;
+use redis::AsyncCommands;
 use sqlx::PgPool;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::{interval, sleep, sleep_until, Instant};
-use tracing::{error, info, trace, warn};
+use tracing::{error, instrument, trace, warn};
 
-type PendingWriteContainer = Arc<RedisSortedSet>;
+type PendingWriteSet = Arc<RedisSortedSet>;
 #[derive(Clone)]
 pub struct StorageQueue {
   collab_cache: CollabCache,
   connection_manager: RedisConnectionManager,
-  pending_write: PendingWriteContainer,
+  pub pending_write_set: PendingWriteSet,
   pending_id_counter: Arc<AtomicI64>,
 }
 
@@ -36,9 +37,9 @@ const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue";
 
 impl StorageQueue {
   pub fn new(collab_cache: CollabCache, connection_manager: RedisConnectionManager) -> Self {
-    let next_duration = Arc::new(Mutex::new(Duration::from_secs(2)));
+    let next_duration = Arc::new(Mutex::new(Duration::from_secs(1)));
     let pending_id_counter = Arc::new(AtomicI64::new(0));
-    let pending_write = Arc::new(RedisSortedSet::new(
+    let pending_write_set = Arc::new(RedisSortedSet::new(
       connection_manager.clone(),
       REDIS_PENDING_WRITE_QUEUE,
     ));
@@ -48,7 +49,7 @@ impl StorageQueue {
       next_duration.clone(),
       collab_cache.clone(),
       connection_manager.clone(),
-      pending_write.clone(),
+      pending_write_set.clone(),
     );
 
     spawn_period_check_pg_conn_count(collab_cache.pg_pool().clone(), next_duration);
@@ -56,7 +57,7 @@ impl StorageQueue {
     Self {
       collab_cache,
       connection_manager,
-      pending_write,
+      pending_write_set,
       pending_id_counter,
     }
   }
@@ -70,6 +71,7 @@ impl StorageQueue {
   /// in the database. It can also be retrieved during subsequent calls in the [CollabStorageImpl::get_encode_collab]
   /// to enhance performance and reduce database reads.
   ///
+  #[instrument(level = "trace", skip_all)]
   pub async fn push(
     &self,
     workspace_id: &str,
@@ -77,10 +79,6 @@ impl StorageQueue {
     params: &CollabParams,
     priority: WritePriority,
   ) -> Result<(), AppError> {
-    trace!(
-      "Queueing {} object for deferred writing to disk",
-      params.object_id
-    );
     self
       .collab_cache
       .insert_encode_collab_data_in_mem(params)
@@ -89,6 +87,7 @@ impl StorageQueue {
     let seq = self
       .pending_id_counter
       .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
     let pending_write = PendingWrite {
       object_id: params.object_id.clone(),
       seq,
@@ -103,51 +102,117 @@ impl StorageQueue {
       collab_type: params.collab_type.clone(),
     };
 
-    self
+    // If the queueing fails, write the data to the database immediately
+    if let Err(err) = self
       .queue_pending(params, pending_write, pending_meta)
-      .await?;
+      .await
+    {
+      error!(
+        "Failed to queue pending write for object {}: {:?}",
+        params.object_id, err
+      );
+
+      let mut transaction = self
+        .collab_cache
+        .pg_pool()
+        .begin()
+        .await
+        .context("acquire transaction to upsert collab")
+        .map_err(AppError::from)?;
+      self
+        .collab_cache
+        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
+        .await?;
+      transaction
+        .commit()
+        .await
+        .context("fail to commit the transaction to upsert collab")
+        .map_err(AppError::from)?;
+    } else {
+      trace!(
+        "Queueing {}:{} object for deferred writing to disk",
+        params.object_id,
+        seq
+      );
+    }
 
     Ok(())
   }
 
   #[cfg(debug_assertions)]
   pub async fn clear(&self) -> Result<(), AppError> {
-    self.pending_write.clear().await?;
+    self.pending_write_set.clear().await?;
     remove_all_pending_meta(self.connection_manager.clone()).await?;
     Ok(())
   }
+
   #[inline]
   async fn queue_pending(
     &self,
     params: &CollabParams,
     pending_write: PendingWrite,
-    pending_meta: PendingWriteMeta,
+    pending_write_meta: PendingWriteMeta,
   ) -> Result<(), anyhow::Error> {
+    const MAX_RETRIES: usize = 3;
+    const BASE_DELAY_MS: u64 = 200;
+    const BACKOFF_FACTOR: u64 = 2;
+
     let pending_write_data = serde_json::to_vec(&pending_write)?;
-    let pending_meta_data = serde_json::to_string(&pending_meta)?;
+    let pending_write_meta_data = serde_json::to_string(&pending_write_meta)?;
     let key = storage_cache_key(&params.object_id, params.encoded_collab_v1.len());
-
-    // Prepare the pipeline with both commands
-    let mut pipe = redis::pipe();
-    pipe
-      .atomic()
-      .cmd("ZADD")
-      .arg(self.pending_write.queue_name())
-      .arg(pending_write.score())
-      .arg(&pending_write_data)
-      .ignore()
-      .cmd("SETEX")
-      .arg(&key)
-      .arg(PENDING_WRITE_META_EXPIRE_SECS)
-      .arg(&pending_meta_data)
-      .ignore();
-
-    // Execute the pipeline
     let mut conn = self.connection_manager.clone();
-    pipe.query_async(&mut conn).await?;
 
-    Ok(())
+    for attempt in 0..MAX_RETRIES {
+      let mut pipe = redis::pipe();
+      // Prepare the pipeline with both commands
+      // 1. ZADD to add the pending write to the queue
+      // 2. SETEX to add the pending metadata to the cache
+      pipe
+        .atomic()
+        .cmd("ZADD")
+        .arg(REDIS_PENDING_WRITE_QUEUE)
+        .arg(pending_write.score())
+        .arg(&pending_write_data)
+        .ignore()
+        .cmd("SETEX")
+        .arg(&key)
+        .arg(PENDING_WRITE_META_EXPIRE_SECS)
+        .arg(&pending_write_meta_data)
+        .ignore();
+
+      match pipe.query_async::<_, ()>(&mut conn).await {
+        Ok(_) => return Ok(()),
+        Err(e) => {
+          if attempt == MAX_RETRIES - 1 {
+            return Err(e.into());
+          }
+
+          // 200ms, 400ms, 800ms
+          let delay = BASE_DELAY_MS * BACKOFF_FACTOR.pow(attempt as u32);
+          sleep(Duration::from_millis(delay)).await;
+        },
+      }
+    }
+    Err(anyhow!("Failed to execute redis pipeline after retries"))
   }
+}
+
+#[inline]
+pub(crate) async fn insert_pending_meta(
+  pending_write_meta: PendingWriteMeta,
+  data_len: usize,
+  mut connection_manager: RedisConnectionManager,
+) -> Result<(), AppError> {
+  let key = storage_cache_key(&pending_write_meta.object_id, data_len);
+  let value = serde_json::to_string(&pending_write_meta)?;
+
+  // set the key with a timeout of 7 days
+  connection_manager
+    .set_ex(&key, &value, PENDING_WRITE_META_EXPIRE_SECS)
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?;
+
+  Ok(())
 }
 
 /// Spawn a task that periodically checks the number of active connections in the PostgreSQL pool
@@ -159,14 +224,11 @@ fn spawn_period_check_pg_conn_count(pg_pool: PgPool, next_duration: Arc<Mutex<Du
       interval.tick().await;
       // these range values are arbitrary and can be adjusted as needed
       match pg_pool.size() {
-        0..=30 => {
+        0..=40 => {
           *next_duration.lock().await = Duration::from_secs(1);
         },
-        31..=50 => {
-          *next_duration.lock().await = Duration::from_secs(2);
-        },
         _ => {
-          *next_duration.lock().await = Duration::from_secs(4);
+          *next_duration.lock().await = Duration::from_secs(2);
         },
       }
     }
@@ -177,7 +239,7 @@ fn spawn_period_write(
   next_duration: Arc<Mutex<Duration>>,
   collab_cache: CollabCache,
   connection_manager: RedisConnectionManager,
-  pending_heap: PendingWriteContainer,
+  pending_write_set: PendingWriteSet,
 ) {
   tokio::spawn(async move {
     loop {
@@ -185,26 +247,18 @@ fn spawn_period_write(
       // active connections is high, the interval will be longer.
       let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
-      let chunk_keys = consume_pending_write(&pending_heap, 30, 5).await;
+      let chunk_keys = consume_pending_write(&pending_write_set, 30, 5).await;
       if chunk_keys.is_empty() {
         continue;
       }
 
       for keys in chunk_keys {
-        trace!(
-          "Writing chunk of {:?} pending collaboration data to disk",
-          keys
-        );
+        trace!("Writing {} pending collaboration data to disk", keys.len());
         let cloned_collab_cache = collab_cache.clone();
         let mut cloned_connection_manager = connection_manager.clone();
         tokio::spawn(async move {
           if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
-            match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
-              Ok(_) => {},
-              Err(err) => {
-                error!("Failed to write pending collaboration data: {:?}", err);
-              },
-            }
+            let _ = retry_write_pending_to_disk(&cloned_collab_cache, metas).await;
             // Remove pending metadata from Redis even if some records fail to write to disk after retries.
             // Records that fail repeatedly are considered potentially corrupt or invalid.
             let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
@@ -222,11 +276,7 @@ async fn retry_write_pending_to_disk(
   if metas.is_empty() {
     return Ok(());
   }
-  const RETRY_DELAYS: [Duration; 3] = [
-    Duration::from_secs(1),
-    Duration::from_secs(2),
-    Duration::from_secs(4),
-  ];
+  const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(2)];
 
   let expected_len = metas.len();
   let mut successes = Vec::with_capacity(metas.len());
@@ -234,11 +284,10 @@ async fn retry_write_pending_to_disk(
   for &delay in RETRY_DELAYS.iter() {
     match write_pending_to_disk(&metas, collab_cache).await {
       Ok(success_write_objects) => {
-        if cfg!(debug_assertions) {
-          info!("Success wrote {:?} objects to disk", success_write_objects);
+        if !success_write_objects.is_empty() {
+          successes.extend_from_slice(&success_write_objects);
+          metas.retain(|meta| !success_write_objects.contains(&meta.object_id));
         }
-        successes.extend_from_slice(&success_write_objects);
-        metas.retain(|meta| !success_write_objects.contains(&meta.object_id));
 
         // If there are no more metas to process, return the successes
         if metas.is_empty() {
@@ -328,15 +377,10 @@ async fn write_pending_to_disk(
     sqlx::query(&format!("SAVEPOINT {}", savepoint_name))
       .execute(transaction.deref_mut())
       .await?;
-    if let Err(err) = collab_cache
+    if let Err(_err) = collab_cache
       .insert_encode_collab_in_disk(&record.workspace_id, &record.uid, params, &mut transaction)
       .await
     {
-      trace!(
-        "Failed to write {} data to disk: {:?}, rollback to save point",
-        record.object_id,
-        err
-      );
       sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
         .execute(transaction.deref_mut())
         .await?;
@@ -356,8 +400,8 @@ async fn write_pending_to_disk(
 
 const MAXIMUM_CHUNK_SIZE: usize = 2 * 1024 * 1024;
 #[inline]
-async fn consume_pending_write(
-  pending_heap: &PendingWriteContainer,
+pub async fn consume_pending_write(
+  pending_write_set: &PendingWriteSet,
   maximum_consume_item: usize,
   num_of_item_each_chunk: usize,
 ) -> Vec<Vec<String>> {
@@ -365,17 +409,15 @@ async fn consume_pending_write(
   let mut current_chunk = Vec::with_capacity(maximum_consume_item);
   let mut current_chunk_data_size = 0;
 
-  if let Ok(items) = pending_heap.pop_with_len(maximum_consume_item).await {
+  if let Ok(items) = pending_write_set.pop(maximum_consume_item).await {
+    trace!("Consuming {} pending write items", items.len());
     for item in items {
       let item_size = item.data_len;
       // Check if adding this item would exceed the maximum chunk size or item limit
       if current_chunk_data_size + item_size > MAXIMUM_CHUNK_SIZE
         || current_chunk.len() >= num_of_item_each_chunk
       {
-        chunks.push(std::mem::replace(
-          &mut current_chunk,
-          Vec::with_capacity(maximum_consume_item),
-        ));
+        chunks.push(std::mem::take(&mut current_chunk));
         current_chunk_data_size = 0;
       }
 

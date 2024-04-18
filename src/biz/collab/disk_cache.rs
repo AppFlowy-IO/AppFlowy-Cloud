@@ -31,10 +31,10 @@ impl CollabDiskCache {
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: &CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> AppResult<()> {
-    insert_into_af_collab(transaction, uid, workspace_id, &params).await?;
+    insert_into_af_collab(transaction, uid, workspace_id, params).await?;
     Ok(())
   }
 
@@ -46,7 +46,7 @@ impl CollabDiskCache {
   ) -> Result<EncodedCollab, AppError> {
     event!(
       Level::INFO,
-      "Get {}:{} from disk",
+      "try get {}:{} from disk",
       query.collab_type,
       query.object_id
     );

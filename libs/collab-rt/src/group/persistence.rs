@@ -93,7 +93,6 @@ where
 
     // Check if conditions for saving to disk are not met
     if !self.edit_state.should_save_to_disk() {
-      trace!("skip save collab to disk: {}", self.object_id);
       return Ok(());
     }
     self.save(false).await?;

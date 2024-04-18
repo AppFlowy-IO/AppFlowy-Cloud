@@ -40,8 +40,10 @@ impl StorageQueue {
     let pending_id_counter = Arc::new(AtomicI64::new(0));
     let pending_write = Arc::new(Mutex::new(BinaryHeap::new()));
 
-    // spawn a task that fetches remaining pending writes from the Redis cache.
-    //
+    // Spawns a task to recover pending write operations from the Redis cache. This task is crucial
+    // for system resilience: if the server restarts unexpectedly, pending writes stored in the cache
+    // are at risk of being lost. By fetching and repopulating these writes into the pending write heap,
+    // we ensure that no data is lost and that write operations can resume seamlessly post-restart.
     spawn_fetch_remaining_pending_write(
       connection_manager.clone(),
       pending_write.clone(),
@@ -182,7 +184,7 @@ fn spawn_period_check_pg_conn_count(pg_pool: PgPool, next_duration: Arc<Mutex<Du
 fn spawn_period_write(
   next_duration: Arc<Mutex<Duration>>,
   collab_cache: CollabCache,
-  mut connection_manager: RedisConnectionManager,
+  connection_manager: RedisConnectionManager,
   pending_heap: PendingWriteHeap,
 ) {
   tokio::spawn(async move {
@@ -192,18 +194,33 @@ fn spawn_period_write(
       let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
 
+      let mut cloned_connection_manager = connection_manager.clone();
+      let cloned_collab_cache = collab_cache.clone();
       let keys = consume_pending_write_keys(&pending_heap, MAXIMUM_BATCH_PAYLOAD_SIZE).await;
-      if let Ok(metas) = get_pending_meta(&keys, &mut connection_manager).await {
-        match retry_write_pending_to_disk(&collab_cache, metas).await {
-          Ok(_) => {},
-          Err(err) => {
-            error!("Failed to write pending collaboration data: {:?}", err);
-          },
-        }
 
-        // Remove pending metadata from Redis even if some records fail to write to disk after retries.
-        // Records that fail repeatedly are considered potentially corrupt or invalid.
-        let _ = remove_pending_meta(&keys, &mut connection_manager).await;
+      // Spawns an internal task to handle the write operation. This isolation helps in preventing
+      // panics within the write operations from terminating the outer periodic task loop.
+      let handle = tokio::spawn(async move {
+        if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
+          match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
+            Ok(_) => {},
+            Err(err) => {
+              error!("Failed to write pending collaboration data: {:?}", err);
+            },
+          }
+          // Remove pending metadata from Redis even if some records fail to write to disk after retries.
+          // Records that fail repeatedly are considered potentially corrupt or invalid.
+          let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
+        }
+      })
+      .await;
+
+      if let Err(err) = handle {
+        if err.is_panic() {
+          error!("Panic in spawn_period_write: {:?}", err);
+        } else {
+          warn!("Error in spawn_period_write: {:?}", err);
+        }
       }
     }
   });

@@ -1,7 +1,7 @@
 use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::queue_redis_ops::{
-  get_pending_meta, get_remaining_pending_write, insert_pending_meta, remove_all_pending_meta,
-  remove_pending_meta, storage_cache_key,
+  get_pending_meta, remove_all_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite,
+  WritePriority, PENDING_WRITE_META_EXPIRE_SECS,
 };
 
 use crate::state::RedisConnectionManager;
@@ -11,10 +11,10 @@ use collab_entity::CollabType;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use serde::{Deserialize, Serialize};
 
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::HashMap;
 use std::ops::DerefMut;
 
+use crate::biz::collab::RedisSortedSet;
 use sqlx::PgPool;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
@@ -23,30 +23,25 @@ use tokio::sync::Mutex;
 use tokio::time::{interval, sleep, sleep_until, Instant};
 use tracing::{error, info, trace, warn};
 
-type PendingWriteHeap = Arc<Mutex<BinaryHeap<PendingWrite>>>;
+type PendingWriteContainer = Arc<RedisSortedSet>;
 #[derive(Clone)]
 pub struct StorageQueue {
   collab_cache: CollabCache,
   connection_manager: RedisConnectionManager,
-  pending_write: PendingWriteHeap,
+  pending_write: PendingWriteContainer,
   pending_id_counter: Arc<AtomicI64>,
 }
+
+const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue";
 
 impl StorageQueue {
   pub fn new(collab_cache: CollabCache, connection_manager: RedisConnectionManager) -> Self {
     let next_duration = Arc::new(Mutex::new(Duration::from_secs(2)));
     let pending_id_counter = Arc::new(AtomicI64::new(0));
-    let pending_write = Arc::new(Mutex::new(BinaryHeap::new()));
-
-    // Spawns a task to recover pending write operations from the Redis cache. This task is crucial
-    // for system resilience: if the server restarts unexpectedly, pending writes stored in the cache
-    // are at risk of being lost. By fetching and repopulating these writes into the pending write heap,
-    // we ensure that no data is lost and that write operations can resume seamlessly post-restart.
-    spawn_fetch_remaining_pending_write(
+    let pending_write = Arc::new(RedisSortedSet::new(
       connection_manager.clone(),
-      pending_write.clone(),
-      pending_id_counter.clone(),
-    );
+      REDIS_PENDING_WRITE_QUEUE,
+    ));
 
     // Spawns a task that periodically writes pending collaboration objects to the database.
     spawn_period_write(
@@ -91,69 +86,68 @@ impl StorageQueue {
       .insert_encode_collab_data_in_mem(params)
       .await?;
 
+    let seq = self
+      .pending_id_counter
+      .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let pending_write = PendingWrite {
+      object_id: params.object_id.clone(),
+      seq,
+      data_len: params.encoded_collab_v1.len(),
+      priority,
+    };
+
+    let pending_meta = PendingWriteMeta {
+      uid: *uid,
+      workspace_id: workspace_id.to_string(),
+      object_id: params.object_id.clone(),
+      collab_type: params.collab_type.clone(),
+    };
+
     self
-      .queue_pending(&params.object_id, params.encoded_collab_v1.len(), priority)
-      .await;
-    insert_pending_meta(
-      uid,
-      workspace_id,
-      &params.object_id,
-      params.encoded_collab_v1.len(),
-      &params.collab_type,
-      self.connection_manager.clone(),
-    )
-    .await?;
+      .queue_pending(params, pending_write, pending_meta)
+      .await?;
 
     Ok(())
   }
 
   #[cfg(debug_assertions)]
   pub async fn clear(&self) -> Result<(), AppError> {
-    self.pending_write.lock().await.clear();
+    self.pending_write.clear().await?;
     remove_all_pending_meta(self.connection_manager.clone()).await?;
     Ok(())
   }
-
   #[inline]
-  async fn queue_pending(&self, object_id: &str, size: usize, priority: WritePriority) {
-    let pending = PendingWrite {
-      object_id: object_id.to_string(),
-      seq: self
-        .pending_id_counter
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-      data_len: size,
-      priority,
-    };
-    self.pending_write.lock().await.push(pending);
-  }
-}
+  async fn queue_pending(
+    &self,
+    params: &CollabParams,
+    pending_write: PendingWrite,
+    pending_meta: PendingWriteMeta,
+  ) -> Result<(), anyhow::Error> {
+    let pending_write_data = serde_json::to_vec(&pending_write)?;
+    let pending_meta_data = serde_json::to_string(&pending_meta)?;
+    let key = storage_cache_key(&params.object_id, params.encoded_collab_v1.len());
 
-/// Initializes and fetches any pending writes from the Redis cache at server startup and populates
-/// them into the pending write heap.
-///
-/// This function assumes that the cache data in Redis is designed to be long-lived, with each cached
-/// item set to expire after [PENDING_WRITE_EXPIRE_IN_SECS]. Given this configuration, it is safe to attempt to fetch all
-/// extant pending writes from the cache upon initialization.
-///
-fn spawn_fetch_remaining_pending_write(
-  mut connection_manager: RedisConnectionManager,
-  pending_heap: PendingWriteHeap,
-  counter: Arc<AtomicI64>,
-) {
-  tokio::task::spawn(async move {
-    if let Ok(records) = get_remaining_pending_write(&counter, &mut connection_manager).await {
-      info!("Fetched {} remaining pending writes", records.len());
-      pending_heap
-        .lock()
-        .await
-        .extend(records.into_iter().map(|record| PendingWrite {
-          object_id: record.object_id,
-          seq: counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-          data_len: record.data_len,
-          priority: record.priority,
-        }));
-    }
-  });
+    // Prepare the pipeline with both commands
+    let mut pipe = redis::pipe();
+    pipe
+      .atomic()
+      .cmd("ZADD")
+      .arg(self.pending_write.queue_name())
+      .arg(pending_write.score())
+      .arg(&pending_write_data)
+      .ignore()
+      .cmd("SETEX")
+      .arg(&key)
+      .arg(PENDING_WRITE_META_EXPIRE_SECS)
+      .arg(&pending_meta_data)
+      .ignore();
+
+    // Execute the pipeline
+    let mut conn = self.connection_manager.clone();
+    pipe.query_async(&mut conn).await?;
+
+    Ok(())
+  }
 }
 
 /// Spawn a task that periodically checks the number of active connections in the PostgreSQL pool
@@ -183,7 +177,7 @@ fn spawn_period_write(
   next_duration: Arc<Mutex<Duration>>,
   collab_cache: CollabCache,
   connection_manager: RedisConnectionManager,
-  pending_heap: PendingWriteHeap,
+  pending_heap: PendingWriteContainer,
 ) {
   tokio::spawn(async move {
     loop {
@@ -203,7 +197,7 @@ fn spawn_period_write(
         );
         let cloned_collab_cache = collab_cache.clone();
         let mut cloned_connection_manager = connection_manager.clone();
-        let _ = tokio::spawn(async move {
+        tokio::spawn(async move {
           if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
             match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
               Ok(_) => {},
@@ -363,37 +357,37 @@ async fn write_pending_to_disk(
 const MAXIMUM_CHUNK_SIZE: usize = 2 * 1024 * 1024;
 #[inline]
 async fn consume_pending_write(
-  pending_heap: &PendingWriteHeap,
+  pending_heap: &PendingWriteContainer,
   maximum_consume_item: usize,
   num_of_item_each_chunk: usize,
 ) -> Vec<Vec<String>> {
   let mut chunks = Vec::new();
   let mut current_chunk = Vec::with_capacity(maximum_consume_item);
   let mut current_chunk_data_size = 0;
-  let mut pending_lock = pending_heap.lock().await;
-  while let Some(item) = pending_lock.pop() {
-    let item_size = item.data_len;
 
-    // Check if adding this item would exceed the maximum chunk size or item limit
-    if current_chunk_data_size + item_size > MAXIMUM_CHUNK_SIZE
-      || current_chunk.len() >= num_of_item_each_chunk
-    {
-      chunks.push(std::mem::replace(
-        &mut current_chunk,
-        Vec::with_capacity(maximum_consume_item),
-      ));
-      current_chunk_data_size = 0;
+  if let Ok(items) = pending_heap.pop_with_len(maximum_consume_item).await {
+    for item in items {
+      let item_size = item.data_len;
+      // Check if adding this item would exceed the maximum chunk size or item limit
+      if current_chunk_data_size + item_size > MAXIMUM_CHUNK_SIZE
+        || current_chunk.len() >= num_of_item_each_chunk
+      {
+        chunks.push(std::mem::replace(
+          &mut current_chunk,
+          Vec::with_capacity(maximum_consume_item),
+        ));
+        current_chunk_data_size = 0;
+      }
+
+      // Add the item to the current batch and update the batch size
+      current_chunk.push(item);
+      current_chunk_data_size += item_size;
     }
-
-    // Add the item to the current batch and update the batch size
-    current_chunk.push(item);
-    current_chunk_data_size += item_size;
   }
 
   if !current_chunk.is_empty() {
     chunks.push(current_chunk);
   }
-  drop(pending_lock);
   // Convert each batch of items into a batch of keys
   chunks
     .into_iter()
@@ -404,46 +398,6 @@ async fn consume_pending_write(
         .collect()
     })
     .collect()
-}
-
-#[derive(Clone)]
-pub(crate) struct PendingWrite {
-  pub object_id: String,
-  pub seq: i64,
-  pub data_len: usize,
-  pub priority: WritePriority,
-}
-
-#[derive(Clone)]
-pub enum WritePriority {
-  High,
-  Low,
-}
-
-impl Eq for PendingWrite {}
-impl PartialEq for PendingWrite {
-  fn eq(&self, other: &Self) -> bool {
-    self.object_id == other.object_id
-  }
-}
-
-impl Ord for PendingWrite {
-  fn cmp(&self, other: &Self) -> Ordering {
-    match (&self.priority, &other.priority) {
-      (WritePriority::High, WritePriority::Low) => Ordering::Greater,
-      (WritePriority::Low, WritePriority::High) => Ordering::Less,
-      _ => {
-        // Assuming lower seq is higher priority
-        other.seq.cmp(&self.seq)
-      },
-    }
-  }
-}
-
-impl PartialOrd for PendingWrite {
-  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    Some(self.cmp(other))
-  }
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]

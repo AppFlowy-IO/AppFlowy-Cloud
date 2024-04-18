@@ -1,41 +1,12 @@
-use crate::biz::collab::queue::{PendingWrite, PendingWriteMeta, WritePriority};
+use crate::biz::collab::queue::PendingWriteMeta;
 use crate::state::RedisConnectionManager;
 use app_error::AppError;
-use collab_entity::CollabType;
 use futures_util::StreamExt;
-use redis::{AsyncCommands, AsyncIter};
-use std::str::FromStr;
-use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::Arc;
+use redis::{AsyncCommands, AsyncIter, Script};
+use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
-pub(crate) const PENDING_WRITE_EXPIRE_IN_SECS: u64 = 604800; // 7 days in seconds
-#[inline]
-pub(crate) async fn insert_pending_meta(
-  uid: &i64,
-  workspace_id: &str,
-  object_id: &str,
-  data_len: usize,
-  collab_type: &CollabType,
-  mut connection_manager: RedisConnectionManager,
-) -> Result<(), AppError> {
-  let queue_item = PendingWriteMeta {
-    uid: *uid,
-    workspace_id: workspace_id.to_string(),
-    object_id: object_id.to_string(),
-    collab_type: collab_type.clone(),
-  };
-
-  let key = storage_cache_key(&queue_item.object_id, data_len);
-  let value = serde_json::to_string(&queue_item)?;
-
-  // set the key with a timeout of 7 days
-  connection_manager
-    .set_ex(&key, &value, PENDING_WRITE_EXPIRE_IN_SECS)
-    .await
-    .map_err(|err| AppError::Internal(err.into()))?;
-
-  Ok(())
-}
+pub(crate) const PENDING_WRITE_META_EXPIRE_SECS: u64 = 604800; // 7 days in seconds
 
 pub(crate) async fn remove_all_pending_meta(
   mut connection_manager: RedisConnectionManager,
@@ -75,31 +46,6 @@ pub(crate) async fn get_pending_meta(
   Ok(metas)
 }
 
-pub(crate) async fn get_remaining_pending_write(
-  counter: &Arc<AtomicI64>,
-  connection_manager: &mut RedisConnectionManager,
-) -> Result<Vec<PendingWrite>, AppError> {
-  let keys = scan_all_keys(connection_manager).await?;
-  Ok(
-    keys
-      .into_iter()
-      .flat_map(|cache_object_id| {
-        pending_write_from_cache_object_id(&cache_object_id, counter).ok()
-      })
-      .collect::<Vec<_>>(),
-  )
-}
-
-async fn scan_all_keys(conn_manager: &mut RedisConnectionManager) -> Result<Vec<String>, AppError> {
-  let pattern = format!("{}*", QUEUE_COLLAB_PREFIX);
-  let iter: AsyncIter<String> = conn_manager
-    .scan_match(pattern)
-    .await
-    .map_err(|err| AppError::Internal(err.into()))?;
-  let keys: Vec<_> = iter.collect().await;
-  Ok(keys)
-}
-
 #[inline]
 pub(crate) async fn remove_pending_meta(
   keys: &[String],
@@ -119,128 +65,224 @@ pub(crate) fn storage_cache_key(object_id: &str, data_len: usize) -> String {
   format!("{}{}:{}", QUEUE_COLLAB_PREFIX, object_id, data_len)
 }
 
-pub(crate) fn pending_write_from_cache_object_id(
-  key: &str,
-  counter: &Arc<AtomicI64>,
-) -> Result<PendingWrite, String> {
-  let trimmed_key = key.trim_start_matches(QUEUE_COLLAB_PREFIX);
-  let parts: Vec<&str> = trimmed_key.split(':').collect();
+pub struct RedisSortedSet {
+  conn: RedisConnectionManager,
+  name: &'static str,
+}
 
-  if parts.len() != 2 {
-    return Err(format!("Invalid key format: {}", key));
+impl RedisSortedSet {
+  pub fn new(conn: RedisConnectionManager, name: &'static str) -> Self {
+    Self { conn, name }
   }
 
-  let object_id = parts[0].to_owned();
-  let data_len = usize::from_str(parts[1]).map_err(|e| e.to_string())?;
+  pub async fn push(&self, item: PendingWrite) -> Result<(), anyhow::Error> {
+    let data = serde_json::to_vec(&item)?;
+    redis::cmd("ZADD")
+      .arg(self.name)
+      .arg(item.score())
+      .arg(data)
+      .query_async(&mut self.conn.clone())
+      .await?;
+    Ok(())
+  }
 
-  Ok(PendingWrite {
-    object_id,
-    seq: counter.fetch_add(1, Ordering::SeqCst),
-    data_len,
-    priority: WritePriority::Low,
-  })
+  pub fn queue_name(&self) -> &'static str {
+    self.name
+  }
+
+  pub async fn push_with_conn(
+    &self,
+    item: PendingWrite,
+    conn: &mut RedisConnectionManager,
+  ) -> Result<(), anyhow::Error> {
+    let data = serde_json::to_vec(&item)?;
+    redis::cmd("ZADD")
+      .arg(self.name)
+      .arg(item.score())
+      .arg(data)
+      .query_async(conn)
+      .await?;
+    Ok(())
+  }
+
+  /// Pop num of records from the queue
+  /// The records are sorted by priority
+
+  pub async fn pop_with_len(&self, mut len: usize) -> Result<Vec<PendingWrite>, anyhow::Error> {
+    if len == 0 {
+      len = 1;
+    }
+
+    let script = Script::new(
+      r#"
+            local items = redis.call('ZRANGE', KEYS[1], 0, ARGV[1], 'WITHSCORES')
+            if #items > 0 then
+                redis.call('ZREMRANGEBYRANK', KEYS[1], 0, ARGV[1])
+            end
+            return items
+            "#,
+    );
+    let mut conn = self.conn.clone();
+    let items: Vec<(String, f64)> = script
+      .key(self.name)
+      .arg(len - 1)
+      .invoke_async(&mut conn)
+      .await?;
+
+    let results = items
+      .iter()
+      .map(|(data, _score)| serde_json::from_str::<PendingWrite>(data).map_err(|e| e.into()))
+      .collect::<Result<Vec<PendingWrite>, anyhow::Error>>()?;
+
+    Ok(results)
+  }
+
+  pub async fn clear(&self) -> Result<(), anyhow::Error> {
+    let mut conn = self.conn.clone();
+    conn.del(self.name).await?;
+    Ok(())
+  }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PendingWrite {
+  pub object_id: String,
+  pub seq: i64,
+  pub data_len: usize,
+  pub priority: WritePriority,
+}
+
+impl PendingWrite {
+  pub fn score(&self) -> i64 {
+    match self.priority {
+      WritePriority::High => 0,
+      WritePriority::Low => self.seq + 1,
+    }
+  }
+}
+
+#[derive(Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum WritePriority {
+  High = 0,
+  Low = 1,
+}
+
+impl Eq for PendingWrite {}
+impl PartialEq for PendingWrite {
+  fn eq(&self, other: &Self) -> bool {
+    self.object_id == other.object_id
+  }
+}
+
+impl Ord for PendingWrite {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    match (&self.priority, &other.priority) {
+      (WritePriority::High, WritePriority::Low) => std::cmp::Ordering::Greater,
+      (WritePriority::Low, WritePriority::High) => std::cmp::Ordering::Less,
+      _ => {
+        // Assuming lower seq is higher priority
+        other.seq.cmp(&self.seq)
+      },
+    }
+  }
+}
+
+impl PartialOrd for PendingWrite {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
 }
 
 #[cfg(test)]
 mod tests {
-  use crate::biz::collab::queue::PendingWriteMeta;
-  use crate::biz::collab::queue_redis_ops::{
-    get_pending_meta, get_remaining_pending_write, insert_pending_meta, remove_pending_meta,
-    storage_cache_key,
-  };
+  use crate::biz::collab::{PendingWrite, RedisSortedSet, WritePriority};
   use anyhow::Context;
-  use collab_entity::CollabType;
-  use std::sync::atomic::AtomicI64;
-  use std::sync::Arc;
+  use std::time::Duration;
+  use tokio::time::sleep;
 
   #[tokio::test]
-  async fn pending_write_meta_insert_get_test() {
-    let data_len = 100;
-    let mut conn = redis_client().await.get_connection_manager().await.unwrap();
-    let metas = vec![
-      PendingWriteMeta {
-        uid: 1,
-        workspace_id: "w1".to_string(),
+  async fn pending_write_sorted_set_test() {
+    let conn = redis_client().await.get_connection_manager().await.unwrap();
+    let sorted_set = RedisSortedSet::new(conn.clone(), "test_sorted_set");
+    sorted_set.clear().await.unwrap();
+
+    let pending_writes = vec![
+      PendingWrite {
         object_id: "o1".to_string(),
-        collab_type: CollabType::Document,
+        seq: 1,
+        data_len: 0,
+        priority: WritePriority::Low,
       },
-      PendingWriteMeta {
-        uid: 2,
-        workspace_id: "w2".to_string(),
+      PendingWrite {
         object_id: "o2".to_string(),
-        collab_type: CollabType::Document,
+        seq: 2,
+        data_len: 0,
+        priority: WritePriority::Low,
+      },
+      PendingWrite {
+        object_id: "o3".to_string(),
+        seq: 0,
+        data_len: 0,
+        priority: WritePriority::High,
       },
     ];
 
-    for meta in metas.iter() {
-      insert_pending_meta(
-        &meta.uid,
-        &meta.workspace_id,
-        &meta.object_id,
-        data_len,
-        &meta.collab_type,
-        conn.clone(),
-      )
-      .await
-      .unwrap();
+    for item in &pending_writes {
+      sorted_set.push(item.clone()).await.unwrap();
     }
 
-    let keys = metas
-      .iter()
-      .map(|meta| storage_cache_key(&meta.object_id, data_len))
-      .collect::<Vec<String>>();
+    let pending_writes_from_sorted_set = sorted_set.pop_with_len(3).await.unwrap();
+    assert_eq!(pending_writes_from_sorted_set[0].object_id, "o3");
+    assert_eq!(pending_writes_from_sorted_set[1].object_id, "o1");
+    assert_eq!(pending_writes_from_sorted_set[2].object_id, "o2");
 
-    let metas_from_cache = get_pending_meta(&keys, &mut conn).await.unwrap();
-    assert_eq!(metas, metas_from_cache);
-
-    remove_pending_meta(&keys, &mut conn).await.unwrap();
-    let metas = get_pending_meta(&keys, &mut conn).await.unwrap();
-    assert!(metas.is_empty());
+    let items = sorted_set.pop_with_len(2).await.unwrap();
+    assert!(items.is_empty());
   }
 
   #[tokio::test]
-  async fn get_all_remaining_write_test() {
-    let mut conn = redis_client().await.get_connection_manager().await.unwrap();
-    let o1 = uuid::Uuid::new_v4().to_string();
-    let o2 = uuid::Uuid::new_v4().to_string();
-    insert_pending_meta(&1, "w1", &o1, 100, &CollabType::Document, conn.clone())
-      .await
-      .unwrap();
-    insert_pending_meta(&2, "w2", &o2, 101, &CollabType::Document, conn.clone())
-      .await
-      .unwrap();
+  async fn sorted_set_consume_partial_items_test() {
+    let conn = redis_client().await.get_connection_manager().await.unwrap();
+    let sorted_set_1 = RedisSortedSet::new(conn.clone(), "test_sorted_set2");
+    sorted_set_1.clear().await.unwrap();
+    sleep(Duration::from_secs(3)).await;
 
-    let counter = Arc::new(AtomicI64::new(0));
-    let pending_writes = get_remaining_pending_write(&counter, &mut conn)
-      .await
-      .unwrap()
-      .into_iter()
-      .filter(|item| item.object_id == o1 || item.object_id == o2)
-      .collect::<Vec<_>>();
+    let pending_writes = vec![
+      PendingWrite {
+        object_id: "o1".to_string(),
+        seq: 1,
+        data_len: 0,
+        priority: WritePriority::Low,
+      },
+      PendingWrite {
+        object_id: "o2".to_string(),
+        seq: 2,
+        data_len: 0,
+        priority: WritePriority::Low,
+      },
+      PendingWrite {
+        object_id: "o3".to_string(),
+        seq: 0,
+        data_len: 0,
+        priority: WritePriority::High,
+      },
+    ];
 
-    // the returns pending writes are not guaranteed to be in order
-    assert_eq!(pending_writes.len(), 2);
-    // assert the content of the pending writes
-    assert!(pending_writes.iter().any(|item| item.object_id == o1));
-    assert!(pending_writes.iter().any(|item| item.object_id == o2));
+    for item in &pending_writes {
+      sorted_set_1.push(item.clone()).await.unwrap();
+    }
 
-    let keys = pending_writes
-      .iter()
-      .map(|item| storage_cache_key(&item.object_id, item.data_len))
-      .collect::<Vec<String>>();
-    remove_pending_meta(&keys, &mut conn).await.unwrap();
+    let pending_writes_from_sorted_set = sorted_set_1.pop_with_len(1).await.unwrap();
+    assert_eq!(pending_writes_from_sorted_set[0].object_id, "o3");
 
-    let pending_writes = get_remaining_pending_write(&counter, &mut conn)
-      .await
-      .unwrap()
-      .into_iter()
-      .filter(|item| item.object_id == o1 || item.object_id == o2)
-      .collect::<Vec<_>>();
-    assert!(
-      pending_writes.is_empty(),
-      "expect no pending writes, but got {:?}",
-      pending_writes.len()
-    );
+    let sorted_set_2 = RedisSortedSet::new(conn.clone(), "test_sorted_set2");
+    let pending_writes_from_sorted_set = sorted_set_2.pop_with_len(10).await.unwrap();
+    assert_eq!(pending_writes_from_sorted_set[0].object_id, "o1");
+    assert_eq!(pending_writes_from_sorted_set[1].object_id, "o2");
+
+    assert!(sorted_set_1.pop_with_len(10).await.unwrap().is_empty());
+    assert!(sorted_set_2.pop_with_len(10).await.unwrap().is_empty());
   }
 
   async fn redis_client() -> redis::Client {

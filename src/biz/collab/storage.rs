@@ -22,7 +22,8 @@ use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::biz::collab::queue::{StorageQueue, WritePriority};
+use crate::biz::collab::queue::StorageQueue;
+use crate::biz::collab::queue_redis_ops::WritePriority;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;

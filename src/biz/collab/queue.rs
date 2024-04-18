@@ -5,7 +5,7 @@ use crate::biz::collab::queue_redis_ops::{
 };
 
 use crate::state::RedisConnectionManager;
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use app_error::AppError;
 use collab_entity::CollabType;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
+use std::ops::DerefMut;
 
 use sqlx::PgPool;
 use std::sync::atomic::AtomicI64;
@@ -65,7 +66,7 @@ impl StorageQueue {
     }
   }
 
-  /// Enqueues a object for deferred processing.
+  /// Enqueues a object for deferred processing. High priority writes are processed before low priority writes.
   ///
   /// adds a write task to a pending queue, which is periodically flushed by another task that batches
   /// and writes the queued collaboration objects to a PostgreSQL database.
@@ -73,11 +74,13 @@ impl StorageQueue {
   /// This data is stored temporarily in the `collab_cache` and is intended for later persistent storage
   /// in the database. It can also be retrieved during subsequent calls in the [CollabStorageImpl::get_encode_collab]
   /// to enhance performance and reduce database reads.
+  ///
   pub async fn push(
     &self,
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
+    priority: WritePriority,
   ) -> Result<(), AppError> {
     trace!(
       "Queueing {} object for deferred writing to disk",
@@ -89,7 +92,7 @@ impl StorageQueue {
       .await?;
 
     self
-      .queue_pending(&params.object_id, params.encoded_collab_v1.len())
+      .queue_pending(&params.object_id, params.encoded_collab_v1.len(), priority)
       .await;
     insert_pending_meta(
       uid,
@@ -112,13 +115,14 @@ impl StorageQueue {
   }
 
   #[inline]
-  async fn queue_pending(&self, object_id: &str, size: usize) {
+  async fn queue_pending(&self, object_id: &str, size: usize, priority: WritePriority) {
     let pending = PendingWrite {
       object_id: object_id.to_string(),
       seq: self
         .pending_id_counter
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
       data_len: size,
+      priority,
     };
     self.pending_write.lock().await.push(pending);
   }
@@ -146,6 +150,7 @@ fn spawn_fetch_remaining_pending_write(
           object_id: record.object_id,
           seq: counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
           data_len: record.data_len,
+          priority: record.priority,
         }));
     }
   });
@@ -158,27 +163,21 @@ fn spawn_period_check_pg_conn_count(pg_pool: PgPool, next_duration: Arc<Mutex<Du
   tokio::spawn(async move {
     loop {
       interval.tick().await;
-
       // these range values are arbitrary and can be adjusted as needed
       match pg_pool.size() {
         0..=20 => {
           *next_duration.lock().await = Duration::from_secs(2);
         },
         21..=40 => {
-          *next_duration.lock().await = Duration::from_secs(4);
+          *next_duration.lock().await = Duration::from_secs(3);
         },
         _ => {
-          *next_duration.lock().await = Duration::from_secs(6);
+          *next_duration.lock().await = Duration::from_secs(5);
         },
       }
     }
   });
 }
-
-/// Maximum number of retry attempts
-const MAX_RETRY_ATTEMPTS: usize = 3;
-/// Base duration to wait for between retries
-const RETRY_BASE_DURATION: u64 = 2; // seconds
 
 fn spawn_period_write(
   next_duration: Arc<Mutex<Duration>>,
@@ -188,62 +187,87 @@ fn spawn_period_write(
 ) {
   tokio::spawn(async move {
     loop {
-      let duration = *next_duration.lock().await;
-      trace!("Next write attempt in {:?}", duration);
-      let instant = Instant::now() + duration;
+      // The next_duration will be changed by spawn_period_check_pg_conn_count. When the number of
+      // active connections is high, the interval will be longer.
+      let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
 
       let keys = consume_pending_write_keys(&pending_heap, MAXIMUM_BATCH_PAYLOAD_SIZE).await;
       if let Ok(metas) = get_pending_meta(&keys, &mut connection_manager).await {
-        match invoke_write(&collab_cache, &metas).await {
-          Ok(_) => {
-            trace!(
-              "Successfully wrote pending {:?} to disk",
-              metas.iter().map(|m| &m.object_id).collect::<Vec<_>>()
-            );
-          },
+        match retry_write_pending_to_disk(&collab_cache, metas).await {
+          Ok(_) => {},
           Err(err) => {
             error!("Failed to write pending collaboration data: {:?}", err);
           },
         }
+
+        // Remove pending metadata from Redis even if some records fail to write to disk after retries.
+        // Records that fail repeatedly are considered potentially corrupt or invalid.
         let _ = remove_pending_meta(&keys, &mut connection_manager).await;
       }
     }
   });
 }
 
-async fn invoke_write(
+async fn retry_write_pending_to_disk(
   collab_cache: &CollabCache,
-  metas: &[PendingWriteMeta],
+  mut metas: Vec<PendingWriteMeta>,
 ) -> Result<(), AppError> {
-  let mut retry_count = 0;
-  loop {
-    match write_pending_to_disk(metas, collab_cache).await {
-      Ok(_) => return Ok(()),
-      Err(err) if retry_count < MAX_RETRY_ATTEMPTS => {
-        warn!(
-          "Attempt {} failed, retrying... Error: {:?}",
-          retry_count + 1,
-          err
-        );
-        sleep(Duration::from_secs(RETRY_BASE_DURATION)).await;
-        retry_count += 1;
+  if metas.is_empty() {
+    return Ok(());
+  }
+  const RETRY_DELAYS: [Duration; 3] = [
+    Duration::from_secs(2),
+    Duration::from_secs(3),
+    Duration::from_secs(5),
+  ];
+
+  let expected_len = metas.len();
+  let mut successes = Vec::with_capacity(metas.len());
+
+  for &delay in RETRY_DELAYS.iter() {
+    match write_pending_to_disk(&metas, collab_cache).await {
+      Ok(success_write_objects) => {
+        if cfg!(debug_assertions) {
+          info!("Success wrote {:?} objects to disk", success_write_objects);
+        }
+        successes.extend_from_slice(&success_write_objects);
+        metas.retain(|meta| !success_write_objects.contains(&meta.object_id));
+
+        // If there are no more metas to process, return the successes
+        if metas.is_empty() {
+          return Ok(());
+        }
       },
       Err(err) => {
         warn!(
-          "Failed to write pending collab to disk after {} attempts: {:?}",
-          MAX_RETRY_ATTEMPTS, err
+          "Error writing to disk: {:?}, retrying after {:?}",
+          err, delay
         );
-        return Err(err);
       },
     }
+
+    // Only sleep if there are more attempts left
+    if !metas.is_empty() {
+      sleep(delay).await;
+    }
   }
+
+  error!(
+    "expect {}, but success:{}, fail:{}",
+    expected_len,
+    successes.len(),
+    expected_len - successes.len()
+  );
+
+  Err(AppError::Internal(anyhow!("Failed after multiple retries")))
 }
 
 async fn write_pending_to_disk(
   pending_metas: &[PendingWriteMeta],
   collab_cache: &CollabCache,
-) -> Result<(), AppError> {
+) -> Result<Vec<String>, AppError> {
+  let mut success_write_objects = Vec::with_capacity(pending_metas.len());
   // Convert pending metadata into query parameters for batch fetching
   let queries = pending_metas
     .iter()
@@ -286,15 +310,33 @@ async fn write_pending_to_disk(
     .map_err(AppError::from)?;
 
   // Insert each record into the database within the transaction context
-  for record in records {
+  for (index, record) in records.into_iter().enumerate() {
     let params = CollabParams {
-      object_id: record.object_id,
+      object_id: record.object_id.clone(),
       collab_type: record.collab_type,
       encoded_collab_v1: record.encode_collab_v1,
     };
-    collab_cache
-      .insert_encode_collab_in_disk(&record.workspace_id, &record.uid, params, &mut transaction)
+    let savepoint_name = format!("sp_{}", index);
+
+    // using savepoint to rollback the transaction if the insert fails
+    sqlx::query(&format!("SAVEPOINT {}", savepoint_name))
+      .execute(transaction.deref_mut())
       .await?;
+    if let Err(err) = collab_cache
+      .insert_encode_collab_in_disk(&record.workspace_id, &record.uid, params, &mut transaction)
+      .await
+    {
+      trace!(
+        "Failed to write {} data to disk: {:?}, rollback to save point",
+        record.object_id,
+        err
+      );
+      sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
+        .execute(transaction.deref_mut())
+        .await?;
+    } else {
+      success_write_objects.push(record.object_id);
+    }
   }
 
   // Commit the transaction to finalize all writes
@@ -303,8 +345,7 @@ async fn write_pending_to_disk(
     .await
     .context("Failed to commit the transaction for pending collaboration data")
     .map_err(AppError::from)?;
-
-  Ok(())
+  Ok(success_write_objects)
 }
 
 #[inline]
@@ -337,6 +378,13 @@ pub(crate) struct PendingWrite {
   pub object_id: String,
   pub seq: i64,
   pub data_len: usize,
+  pub priority: WritePriority,
+}
+
+#[derive(Clone)]
+pub enum WritePriority {
+  High,
+  Low,
 }
 
 impl Eq for PendingWrite {}
@@ -348,8 +396,14 @@ impl PartialEq for PendingWrite {
 
 impl Ord for PendingWrite {
   fn cmp(&self, other: &Self) -> Ordering {
-    // smaller timestamp has higher priority
-    self.seq.cmp(&other.seq).reverse()
+    match (&self.priority, &other.priority) {
+      (WritePriority::High, WritePriority::Low) => Ordering::Greater,
+      (WritePriority::Low, WritePriority::High) => Ordering::Less,
+      _ => {
+        // Assuming lower seq is higher priority
+        other.seq.cmp(&self.seq)
+      },
+    }
   }
 }
 

@@ -125,7 +125,6 @@ where
           .await
         {
           Ok(_) => {
-            trace!("[realtime] did save collab to disk: {}", self.object_id);
             // Update the edit state on successful save
             self.edit_state.tick();
           },

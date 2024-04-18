@@ -791,6 +791,16 @@ async fn add_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
+  if !state.collab_cache.is_exist(&payload.object_id).await? {
+    return Err(
+      AppError::RecordNotFound(format!(
+        "Fail to insert collab member. The Collab with object_id {} does not exist",
+        payload.object_id
+      ))
+      .into(),
+    );
+  }
+
   biz::collab::ops::create_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
     .await?;
   Ok(Json(AppResponse::Ok()))
@@ -803,6 +813,16 @@ async fn update_collab_member_handler(
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let payload = payload.into_inner();
+
+  if !state.collab_cache.is_exist(&payload.object_id).await? {
+    return Err(
+      AppError::RecordNotFound(format!(
+        "Fail to update collab member. The Collab with object_id {} does not exist",
+        payload.object_id
+      ))
+      .into(),
+    );
+  }
   biz::collab::ops::upsert_collab_member(
     &state.pg_pool,
     &user_uuid,

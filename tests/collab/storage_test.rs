@@ -3,7 +3,7 @@ use crate::sql_test::util::{setup_db, test_create_user};
 use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::cache::CollabCache;
 use appflowy_cloud::biz::collab::mem_cache::CollabMemCache;
-use appflowy_cloud::biz::collab::queue::StorageQueue;
+use appflowy_cloud::biz::collab::queue::{StorageQueue, WritePriority};
 use client_api_test_util::*;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -307,7 +307,7 @@ async fn collab_mem_cache_insert_override_test() {
 }
 
 #[sqlx::test(migrations = false)]
-async fn pending_write_queue_test(pool: PgPool) {
+async fn pending_queue_write_test(pool: PgPool) {
   // prepare test prerequisites
   setup_db(&pool).await.unwrap();
   setup_log();
@@ -325,26 +325,34 @@ async fn pending_write_queue_test(pool: PgPool) {
   storage_queue.clear().await.unwrap();
   sleep(Duration::from_secs(3)).await;
 
-  // Push data 20 times into the queue
   let mut queries = Vec::new();
-  for _ in 0..10 {
+  for i in 0..20 {
     let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
     let params = CollabParams {
       object_id: uuid::Uuid::new_v4().to_string(),
       collab_type: CollabType::Unknown,
       encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
     };
-    storage_queue
-      .push(&user.workspace_id, &user.uid, &params)
-      .await
-      .unwrap();
 
-    // Save query for later validation
-    queries.push((params, encode_collab));
+    if i % 2 == 0 {
+      // Simulate a failure scenario by using a non-existent user ID. This is designed to test the
+      // robustness of the write operation. The objective is to ensure that valid records still get
+      // written to disk despite the presence of some invalid entries.
+      storage_queue
+        .push(&user.workspace_id, &1, &params, WritePriority::Low)
+        .await
+        .unwrap();
+    } else {
+      storage_queue
+        .push(&user.workspace_id, &user.uid, &params, WritePriority::Low)
+        .await
+        .unwrap();
+      queries.push((params, encode_collab));
+    }
   }
 
   // Allow some time for processing
-  sleep(Duration::from_secs(10)).await;
+  sleep(Duration::from_secs(20)).await;
 
   // Check that all items are processed correctly
   for (params, original_encode_collab) in queries {

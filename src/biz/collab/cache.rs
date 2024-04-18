@@ -194,7 +194,7 @@ impl CollabCache {
     }
   }
 
-  pub async fn remove_collab(&self, object_id: &str) -> Result<(), AppError> {
+  pub async fn delete_collab(&self, object_id: &str) -> Result<(), AppError> {
     self.mem_cache.remove_encode_collab(object_id).await?;
     self.disk_cache.delete_collab(object_id).await?;
     Ok(())

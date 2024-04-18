@@ -1,4 +1,4 @@
-use crate::biz::collab::queue::{PendingWrite, PendingWriteMeta};
+use crate::biz::collab::queue::{PendingWrite, PendingWriteMeta, WritePriority};
 use crate::state::RedisConnectionManager;
 use app_error::AppError;
 use collab_entity::CollabType;
@@ -137,6 +137,7 @@ pub(crate) fn pending_write_from_cache_object_id(
     object_id,
     seq: counter.fetch_add(1, Ordering::SeqCst),
     data_len,
+    priority: WritePriority::Low,
   })
 }
 

@@ -22,7 +22,7 @@ use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::biz::collab::queue::StorageQueue;
+use crate::biz::collab::queue::{StorageQueue, WritePriority};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -189,8 +189,17 @@ where
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
-
-    let write_to_disk = |data| async {
+    let priority = if write_immediately {
+      WritePriority::High
+    } else {
+      WritePriority::Low
+    };
+    if self
+      .queue
+      .push(workspace_id, uid, &params, priority)
+      .await
+      .is_err()
+    {
       let mut transaction = self
         .cache
         .pg_pool()
@@ -200,23 +209,14 @@ where
         .map_err(AppError::from)?;
       self
         .cache
-        .insert_encode_collab_data(workspace_id, uid, data, &mut transaction)
+        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
         .await?;
       transaction
         .commit()
         .await
         .context("fail to commit the transaction to upsert collab")
         .map_err(AppError::from)?;
-      Ok::<(), AppError>(())
-    };
-
-    if write_immediately {
-      write_to_disk(params).await?;
-    } else if self.queue.push(workspace_id, uid, &params).await.is_err() {
-      // If queue insert fails, write to disk immediately
-      write_to_disk(params).await?;
     }
-
     Ok(())
   }
 
@@ -312,7 +312,7 @@ where
         action: format!("delete collab:{}", object_id),
       });
     }
-    self.cache.remove_collab(object_id).await?;
+    self.cache.delete_collab(object_id).await?;
     Ok(())
   }
 

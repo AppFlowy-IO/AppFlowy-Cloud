@@ -2,8 +2,8 @@ use anyhow::anyhow;
 use app_error::AppError;
 use collab::core::collab_plugin::EncodedCollab;
 use database::collab::{
-  batch_select_collab_blob, delete_collab, insert_into_af_collab, is_collab_exists,
-  select_blob_from_af_collab, AppResult,
+  batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
+  AppResult,
 };
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use sqlx::{PgPool, Transaction};
@@ -95,7 +95,17 @@ impl CollabDiskCache {
   }
 
   pub async fn delete_collab(&self, object_id: &str) -> AppResult<()> {
-    delete_collab(&self.pg_pool, object_id).await?;
+    sqlx::query!(
+      r#"
+        UPDATE af_collab
+        SET deleted_at = $2
+        WHERE oid = $1;
+        "#,
+      object_id,
+      chrono::Utc::now()
+    )
+    .execute(&self.pg_pool)
+    .await?;
     Ok(())
   }
 }

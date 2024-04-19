@@ -76,6 +76,7 @@ services:
       # Prometheus Metrics
       - GOTRUE_METRICS_ENABLED=true
       - GOTRUE_METRICS_EXPORTER=prometheus
+      - GOTRUE_MAILER_TEMPLATES_CONFIRMATION=${GOTRUE_MAILER_TEMPLATES_CONFIRMATION}
     ports:
       - 9999:9999
 

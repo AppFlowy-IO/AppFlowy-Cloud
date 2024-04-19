@@ -4,19 +4,16 @@ use crate::biz::collab::queue_redis_ops::{
   WritePriority, PENDING_WRITE_META_EXPIRE_SECS,
 };
 
+use crate::biz::collab::RedisSortedSet;
 use crate::state::RedisConnectionManager;
 use anyhow::{anyhow, Context};
 use app_error::AppError;
 use collab_entity::CollabType;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use serde::{Deserialize, Serialize};
-
+use sqlx::PgPool;
 use std::collections::HashMap;
 use std::ops::DerefMut;
-
-use crate::biz::collab::RedisSortedSet;
-use redis::AsyncCommands;
-use sqlx::PgPool;
 use std::sync::atomic::AtomicI64;
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,16 +30,17 @@ pub struct StorageQueue {
   pending_id_counter: Arc<AtomicI64>,
 }
 
-const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue";
+pub const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue";
 
 impl StorageQueue {
-  pub fn new(collab_cache: CollabCache, connection_manager: RedisConnectionManager) -> Self {
+  pub fn new(
+    collab_cache: CollabCache,
+    connection_manager: RedisConnectionManager,
+    queue_name: &str,
+  ) -> Self {
     let next_duration = Arc::new(Mutex::new(Duration::from_secs(1)));
     let pending_id_counter = Arc::new(AtomicI64::new(0));
-    let pending_write_set = Arc::new(RedisSortedSet::new(
-      connection_manager.clone(),
-      REDIS_PENDING_WRITE_QUEUE,
-    ));
+    let pending_write_set = Arc::new(RedisSortedSet::new(connection_manager.clone(), queue_name));
 
     // Spawns a task that periodically writes pending collaboration objects to the database.
     spawn_period_write(
@@ -170,7 +168,7 @@ impl StorageQueue {
       pipe
         .atomic()
         .cmd("ZADD")
-        .arg(REDIS_PENDING_WRITE_QUEUE)
+        .arg(self.pending_write_set.queue_name())
         .arg(pending_write.score())
         .arg(&pending_write_data)
         .ignore()
@@ -195,24 +193,6 @@ impl StorageQueue {
     }
     Err(anyhow!("Failed to execute redis pipeline after retries"))
   }
-}
-
-#[inline]
-pub(crate) async fn insert_pending_meta(
-  pending_write_meta: PendingWriteMeta,
-  data_len: usize,
-  mut connection_manager: RedisConnectionManager,
-) -> Result<(), AppError> {
-  let key = storage_cache_key(&pending_write_meta.object_id, data_len);
-  let value = serde_json::to_string(&pending_write_meta)?;
-
-  // set the key with a timeout of 7 days
-  connection_manager
-    .set_ex(&key, &value, PENDING_WRITE_META_EXPIRE_SECS)
-    .await
-    .map_err(|err| AppError::Internal(err.into()))?;
-
-  Ok(())
 }
 
 /// Spawn a task that periodically checks the number of active connections in the PostgreSQL pool
@@ -410,7 +390,10 @@ pub async fn consume_pending_write(
   let mut current_chunk_data_size = 0;
 
   if let Ok(items) = pending_write_set.pop(maximum_consume_item).await {
-    trace!("Consuming {} pending write items", items.len());
+    trace!(
+      "Consuming {} pending write items",
+      items.len()
+    );
     for item in items {
       let item_size = item.data_len;
       // Check if adding this item would exceed the maximum chunk size or item limit

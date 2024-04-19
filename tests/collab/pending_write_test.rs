@@ -1,7 +1,7 @@
 use crate::collab::util::redis_connection_manager;
 use crate::sql_test::util::{setup_db, test_create_user};
 use appflowy_cloud::biz::collab::cache::CollabCache;
-use appflowy_cloud::biz::collab::queue::{consume_pending_write, StorageQueue};
+use appflowy_cloud::biz::collab::queue::StorageQueue;
 use appflowy_cloud::biz::collab::WritePriority;
 use client_api_test_util::setup_log;
 use collab::core::collab_plugin::EncodedCollab;
@@ -26,9 +26,8 @@ async fn pending_queue_write_test(pool: PgPool) {
     .unwrap();
 
   let collab_cache = CollabCache::new(conn.clone(), pool);
-  let storage_queue = StorageQueue::new(collab_cache.clone(), conn);
-  storage_queue.clear().await.unwrap();
-  sleep(Duration::from_secs(3)).await;
+  let queue_name = uuid::Uuid::new_v4().to_string();
+  let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
 
   let mut queries = Vec::new();
   for i in 0..50 {

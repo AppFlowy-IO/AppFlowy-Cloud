@@ -22,7 +22,7 @@ use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::biz::collab::queue::StorageQueue;
+use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
 use crate::biz::collab::queue_redis_ops::WritePriority;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -56,7 +56,11 @@ where
     rt_cmd_sender: RTCommandSender,
     redis_conn_manager: RedisConnectionManager,
   ) -> Self {
-    let queue = Arc::new(StorageQueue::new(cache.clone(), redis_conn_manager));
+    let queue = Arc::new(StorageQueue::new(
+      cache.clone(),
+      redis_conn_manager,
+      REDIS_PENDING_WRITE_QUEUE,
+    ));
     Self {
       cache,
       access_control,

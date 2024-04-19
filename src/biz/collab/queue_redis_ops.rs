@@ -67,27 +67,26 @@ pub(crate) fn storage_cache_key(object_id: &str, data_len: usize) -> String {
 
 pub struct RedisSortedSet {
   conn: RedisConnectionManager,
-  name: &'static str,
+  name: String,
 }
 
 impl RedisSortedSet {
-  pub fn new(conn: RedisConnectionManager, name: &'static str) -> Self {
-    Self { conn, name }
+  pub fn new(conn: RedisConnectionManager, name: &str) -> Self {
+    Self {
+      conn,
+      name: name.to_string(),
+    }
   }
 
   pub async fn push(&self, item: PendingWrite) -> Result<(), anyhow::Error> {
     let data = serde_json::to_vec(&item)?;
     redis::cmd("ZADD")
-      .arg(self.name)
+      .arg(&self.name)
       .arg(item.score())
       .arg(data)
       .query_async(&mut self.conn.clone())
       .await?;
     Ok(())
-  }
-
-  pub fn queue_name(&self) -> &'static str {
-    self.name
   }
 
   pub async fn push_with_conn(
@@ -97,7 +96,7 @@ impl RedisSortedSet {
   ) -> Result<(), anyhow::Error> {
     let data = serde_json::to_vec(&item)?;
     redis::cmd("ZADD")
-      .arg(self.name)
+      .arg(&self.name)
       .arg(item.score())
       .arg(data)
       .query_async(conn)
@@ -105,9 +104,12 @@ impl RedisSortedSet {
     Ok(())
   }
 
+  pub fn queue_name(&self) -> &str {
+    &self.name
+  }
+
   /// Pop num of records from the queue
   /// The records are sorted by priority
-
   pub async fn pop(&self, len: usize) -> Result<Vec<PendingWrite>, anyhow::Error> {
     if len == 0 {
       return Ok(vec![]);
@@ -115,16 +117,16 @@ impl RedisSortedSet {
 
     let script = Script::new(
       r#"
-            local items = redis.call('ZRANGE', KEYS[1], 0, ARGV[1], 'WITHSCORES')
-            if #items > 0 then
-                redis.call('ZREMRANGEBYRANK', KEYS[1], 0, ARGV[1])
-            end
-            return items
-            "#,
+         local items = redis.call('ZRANGE', KEYS[1], 0, ARGV[1], 'WITHSCORES')
+         if #items > 0 then
+           redis.call('ZREMRANGEBYRANK', KEYS[1], 0, #items / 2 - 1)
+         end
+         return items
+       "#,
     );
     let mut conn = self.conn.clone();
     let items: Vec<(String, f64)> = script
-      .key(self.name)
+      .key(&self.name)
       .arg(len - 1)
       .invoke_async(&mut conn)
       .await?;
@@ -137,9 +139,39 @@ impl RedisSortedSet {
     Ok(results)
   }
 
+  pub async fn peek(&self, n: usize) -> Result<Vec<PendingWrite>, anyhow::Error> {
+    let mut conn = self.conn.clone();
+    let items: Vec<(String, f64)> = redis::cmd("ZREVRANGE")
+      .arg(&self.name)
+      .arg(0)
+      .arg(n - 1)
+      .arg("WITHSCORES")
+      .query_async(&mut conn)
+      .await?;
+
+    let results = items
+      .iter()
+      .map(|(data, _score)| serde_json::from_str::<PendingWrite>(data).map_err(|e| e.into()))
+      .collect::<Result<Vec<PendingWrite>, anyhow::Error>>()?;
+
+    Ok(results)
+  }
+  pub async fn remove_items<T: AsRef<str>>(
+    &self,
+    items_to_remove: Vec<T>,
+  ) -> Result<(), anyhow::Error> {
+    let mut conn = self.conn.clone();
+    let mut pipe = redis::pipe();
+    for item in items_to_remove {
+      pipe.cmd("ZREM").arg(&self.name).arg(item.as_ref()).ignore();
+    }
+    pipe.query_async::<_, ()>(&mut conn).await?;
+    Ok(())
+  }
+
   pub async fn clear(&self) -> Result<(), anyhow::Error> {
     let mut conn = self.conn.clone();
-    conn.del(self.name).await?;
+    conn.del(&self.name).await?;
     Ok(())
   }
 }

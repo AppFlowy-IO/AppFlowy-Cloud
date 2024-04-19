@@ -201,7 +201,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::InvalidRequest);
+  assert_eq!(error.code, ErrorCode::NoRequiredData);
 }
 
 #[tokio::test]

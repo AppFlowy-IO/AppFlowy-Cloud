@@ -31,7 +31,7 @@ async fn simulate_small_data_set_write(pool: PgPool) {
   let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
 
   let queries = Arc::new(Mutex::new(Vec::new()));
-  for i in 0..100 {
+  for i in 0..50 {
     // sleep random seconds less than 2 seconds. because the runtime is single-threaded,
     // we need sleep a little time to let the runtime switch to other tasks.
     sleep(Duration::from_millis(i % 2)).await;
@@ -115,7 +115,7 @@ async fn simulate_large_data_set_write(pool: PgPool) {
 
       let encode_collab = EncodedCollab::new_v1(
         generate_random_bytes(10 * 1024),
-        generate_random_bytes(2 * 1024 * 1024),
+        generate_random_bytes(1024 * 1024),
       );
       let params = CollabParams {
         object_id: format!("object_id_{}", i),

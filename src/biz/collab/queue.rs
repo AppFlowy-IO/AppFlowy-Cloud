@@ -30,7 +30,7 @@ pub struct StorageQueue {
   pending_id_counter: Arc<AtomicI64>,
 }
 
-pub const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue";
+pub const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue_v0";
 
 impl StorageQueue {
   pub fn new(
@@ -230,7 +230,6 @@ fn spawn_period_write(
       // active connections is high, the interval will be longer.
       let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
-      trace!("tick");
       let chunk_keys = consume_pending_write(&pending_write_set, 30, 10).await;
       if chunk_keys.is_empty() {
         continue;
@@ -405,7 +404,11 @@ pub async fn consume_pending_write(
   let mut current_chunk_data_size = 0;
 
   if let Ok(items) = pending_write_set.pop(maximum_consume_item).await {
-    trace!("Consuming {} pending write items", items.len());
+    #[cfg(debug_assertions)]
+    if !items.is_empty() {
+      trace!("Consuming {} pending write items", items.len());
+    }
+
     for item in items {
       let item_size = item.data_len;
       // Check if adding this item would exceed the maximum chunk size or item limit

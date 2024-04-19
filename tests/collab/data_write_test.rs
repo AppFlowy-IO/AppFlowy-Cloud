@@ -34,7 +34,7 @@ async fn insert_empty_data_test() {
       .create_collab(params)
       .await
       .unwrap_err();
-    assert_eq!(error.code, ErrorCode::InvalidRequest);
+    assert_eq!(error.code, ErrorCode::NoRequiredData);
   }
 }
 

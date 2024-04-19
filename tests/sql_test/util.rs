@@ -65,6 +65,7 @@ pub async fn test_create_user(
   })
 }
 
+#[derive(Clone)]
 pub struct TestUser {
   pub uid: i64,
   pub workspace_id: String,

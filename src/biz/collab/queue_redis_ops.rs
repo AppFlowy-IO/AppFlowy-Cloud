@@ -33,14 +33,14 @@ pub(crate) async fn get_pending_meta(
   keys: &[String],
   connection_manager: &mut RedisConnectionManager,
 ) -> Result<Vec<PendingWriteMeta>, AppError> {
-  let results: Vec<Option<String>> = connection_manager
+  let results: Vec<Option<Vec<u8>>> = connection_manager
     .get(keys)
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
 
   let metas = results
     .into_iter()
-    .filter_map(|value| value.and_then(|data| serde_json::from_str(&data).ok()))
+    .filter_map(|value| value.and_then(|data| serde_json::from_slice(&data).ok()))
     .collect::<Vec<PendingWriteMeta>>();
 
   Ok(metas)
@@ -65,6 +65,7 @@ pub(crate) fn storage_cache_key(object_id: &str, data_len: usize) -> String {
   format!("{}{}:{}", QUEUE_COLLAB_PREFIX, object_id, data_len)
 }
 
+#[derive(Clone)]
 pub struct RedisSortedSet {
   conn: RedisConnectionManager,
   name: String,
@@ -108,8 +109,14 @@ impl RedisSortedSet {
     &self.name
   }
 
-  /// Pop num of records from the queue
-  /// The records are sorted by priority
+  /// Pops items from a Redis sorted set.
+  ///
+  /// This asynchronous function retrieves and removes the top `len` items from a Redis sorted set specified by `self.name`.
+  /// It uses a Lua script to atomically perform the operation to maintain data integrity during concurrent access.
+  ///
+  /// # Parameters
+  /// - `len`: The number of items to pop from the sorted set. If `len` is 0, the function returns an empty vector.
+  ///
   pub async fn pop(&self, len: usize) -> Result<Vec<PendingWrite>, anyhow::Error> {
     if len == 0 {
       return Ok(vec![]);
@@ -231,13 +238,12 @@ mod tests {
   use crate::biz::collab::{PendingWrite, RedisSortedSet, WritePriority};
   use anyhow::Context;
   use std::time::Duration;
-  use tokio::time::sleep;
 
   #[tokio::test]
   async fn pending_write_sorted_set_test() {
     let conn = redis_client().await.get_connection_manager().await.unwrap();
-    let sorted_set = RedisSortedSet::new(conn.clone(), "test_sorted_set");
-    sorted_set.clear().await.unwrap();
+    let set_name = uuid::Uuid::new_v4().to_string();
+    let sorted_set = RedisSortedSet::new(conn.clone(), &set_name);
 
     let pending_writes = vec![
       PendingWrite {
@@ -276,9 +282,8 @@ mod tests {
   #[tokio::test]
   async fn sorted_set_consume_partial_items_test() {
     let conn = redis_client().await.get_connection_manager().await.unwrap();
-    let sorted_set_1 = RedisSortedSet::new(conn.clone(), "test_sorted_set2");
-    sorted_set_1.clear().await.unwrap();
-    sleep(Duration::from_secs(3)).await;
+    let set_name = uuid::Uuid::new_v4().to_string();
+    let sorted_set_1 = RedisSortedSet::new(conn.clone(), &set_name);
 
     let pending_writes = vec![
       PendingWrite {
@@ -314,7 +319,7 @@ mod tests {
     let pending_writes_from_sorted_set = sorted_set_1.pop(1).await.unwrap();
     assert_eq!(pending_writes_from_sorted_set[0].object_id, "o3");
 
-    let sorted_set_2 = RedisSortedSet::new(conn.clone(), "test_sorted_set2");
+    let sorted_set_2 = RedisSortedSet::new(conn.clone(), &set_name);
     let pending_writes_from_sorted_set = sorted_set_2.pop(10).await.unwrap();
     assert_eq!(pending_writes_from_sorted_set.len(), 2);
     assert_eq!(pending_writes_from_sorted_set[0].object_id, "o1");
@@ -325,11 +330,10 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn larget_num_set_test() {
+  async fn large_num_set_test() {
     let conn = redis_client().await.get_connection_manager().await.unwrap();
-    let sorted_set = RedisSortedSet::new(conn.clone(), "test_sorted_set3");
-    sorted_set.clear().await.unwrap();
-    sleep(Duration::from_secs(3)).await;
+    let set_name = uuid::Uuid::new_v4().to_string();
+    let sorted_set = RedisSortedSet::new(conn.clone(), &set_name);
     assert!(sorted_set.pop(10).await.unwrap().is_empty());
 
     for i in 0..100 {
@@ -340,13 +344,11 @@ mod tests {
         priority: WritePriority::Low,
       };
       sorted_set.push(pending_write).await.unwrap();
-
-      if i == 20 {
-        let set_1 = sorted_set.pop(20).await.unwrap();
-        assert_eq!(set_1.len(), 20);
-        assert_eq!(set_1[19].object_id, "o19");
-      }
     }
+
+    let set_1 = sorted_set.pop(20).await.unwrap();
+    assert_eq!(set_1.len(), 20);
+    assert_eq!(set_1[19].object_id, "o19");
 
     let set_2 = sorted_set.pop(30).await.unwrap();
     assert_eq!(set_2.len(), 30);
@@ -359,6 +361,51 @@ mod tests {
 
     let set_4 = sorted_set.pop(200).await.unwrap();
     assert_eq!(set_4.len(), 49);
+  }
+
+  #[tokio::test]
+  async fn multi_threads_sorted_set_test() {
+    let conn = redis_client().await.get_connection_manager().await.unwrap();
+    let set_name = uuid::Uuid::new_v4().to_string();
+    let sorted_set = RedisSortedSet::new(conn.clone(), &set_name);
+
+    let mut handles = vec![];
+    for i in 0..100 {
+      let cloned_sorted_set = sorted_set.clone();
+      let handle = tokio::spawn(async move {
+        let pending_write = PendingWrite {
+          object_id: format!("o{}", i),
+          seq: i,
+          data_len: 0,
+          priority: WritePriority::Low,
+        };
+        tokio::time::sleep(Duration::from_millis(rand::random::<u64>() % 100)).await;
+        cloned_sorted_set
+          .push(pending_write)
+          .await
+          .expect("Failed to push data")
+      });
+      handles.push(handle);
+    }
+    futures::future::join_all(handles).await;
+
+    let mut handles = vec![];
+    for _ in 0..10 {
+      let cloned_sorted_set = sorted_set.clone();
+      let handle = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(rand::random::<u64>() % 100)).await;
+        let items = cloned_sorted_set
+          .pop(10)
+          .await
+          .expect("Failed to pop items");
+        assert_eq!(items.len(), 10, "Expected exactly 10 items to be popped");
+      });
+      handles.push(handle);
+    }
+    let results = futures::future::join_all(handles).await;
+    for result in results {
+      result.expect("A thread panicked or errored out");
+    }
   }
 
   async fn redis_client() -> redis::Client {

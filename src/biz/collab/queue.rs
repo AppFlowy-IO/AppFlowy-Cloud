@@ -26,7 +26,7 @@ type PendingWriteSet = Arc<RedisSortedSet>;
 pub struct StorageQueue {
   collab_cache: CollabCache,
   connection_manager: RedisConnectionManager,
-  pub pending_write_set: PendingWriteSet,
+  pending_write_set: PendingWriteSet,
   pending_id_counter: Arc<AtomicI64>,
 }
 
@@ -77,6 +77,7 @@ impl StorageQueue {
     params: &CollabParams,
     priority: WritePriority,
   ) -> Result<(), AppError> {
+    // TODO(nathan): compress the data before storing it in Redis
     self
       .collab_cache
       .insert_encode_collab_data_in_mem(params)
@@ -128,7 +129,7 @@ impl StorageQueue {
         .map_err(AppError::from)?;
     } else {
       trace!(
-        "Queueing {}:{} object for deferred writing to disk",
+        "did queue {}:{} object for deferred writing to disk",
         params.object_id,
         seq
       );
@@ -155,18 +156,20 @@ impl StorageQueue {
     const BASE_DELAY_MS: u64 = 200;
     const BACKOFF_FACTOR: u64 = 2;
 
+    // these serialization seems very fast, so we don't need to worry about the performance and no
+    // need to use spawn_blocking or block_in_place
     let pending_write_data = serde_json::to_vec(&pending_write)?;
-    let pending_write_meta_data = serde_json::to_string(&pending_write_meta)?;
+    let pending_write_meta_data = serde_json::to_vec(&pending_write_meta)?;
+
     let key = storage_cache_key(&params.object_id, params.encoded_collab_v1.len());
     let mut conn = self.connection_manager.clone();
-
     for attempt in 0..MAX_RETRIES {
       let mut pipe = redis::pipe();
       // Prepare the pipeline with both commands
       // 1. ZADD to add the pending write to the queue
       // 2. SETEX to add the pending metadata to the cache
       pipe
-        .atomic()
+        // .atomic()
         .cmd("ZADD")
         .arg(self.pending_write_set.queue_name())
         .arg(pending_write.score())
@@ -227,18 +230,30 @@ fn spawn_period_write(
       // active connections is high, the interval will be longer.
       let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
-      let chunk_keys = consume_pending_write(&pending_write_set, 30, 5).await;
+      trace!("tick");
+      let chunk_keys = consume_pending_write(&pending_write_set, 30, 10).await;
       if chunk_keys.is_empty() {
         continue;
       }
 
       for keys in chunk_keys {
-        trace!("Writing {} pending collaboration data to disk", keys.len());
+        trace!(
+          "start writing {} pending collaboration data to disk",
+          keys.len()
+        );
         let cloned_collab_cache = collab_cache.clone();
         let mut cloned_connection_manager = connection_manager.clone();
         tokio::spawn(async move {
           if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
-            let _ = retry_write_pending_to_disk(&cloned_collab_cache, metas).await;
+            if retry_write_pending_to_disk(&cloned_collab_cache, metas)
+              .await
+              .is_ok()
+            {
+              trace!(
+                "did write {} pending collaboration data to disk",
+                keys.len()
+              );
+            }
             // Remove pending metadata from Redis even if some records fail to write to disk after retries.
             // Records that fail repeatedly are considered potentially corrupt or invalid.
             let _ = remove_pending_meta(&keys, &mut cloned_connection_manager).await;
@@ -378,7 +393,7 @@ async fn write_pending_to_disk(
   Ok(success_write_objects)
 }
 
-const MAXIMUM_CHUNK_SIZE: usize = 2 * 1024 * 1024;
+const MAXIMUM_CHUNK_SIZE: usize = 5 * 1024 * 1024;
 #[inline]
 pub async fn consume_pending_write(
   pending_write_set: &PendingWriteSet,
@@ -390,17 +405,16 @@ pub async fn consume_pending_write(
   let mut current_chunk_data_size = 0;
 
   if let Ok(items) = pending_write_set.pop(maximum_consume_item).await {
-    trace!(
-      "Consuming {} pending write items",
-      items.len()
-    );
+    trace!("Consuming {} pending write items", items.len());
     for item in items {
       let item_size = item.data_len;
       // Check if adding this item would exceed the maximum chunk size or item limit
       if current_chunk_data_size + item_size > MAXIMUM_CHUNK_SIZE
         || current_chunk.len() >= num_of_item_each_chunk
       {
-        chunks.push(std::mem::take(&mut current_chunk));
+        if !current_chunk.is_empty() {
+          chunks.push(std::mem::take(&mut current_chunk));
+        }
         current_chunk_data_size = 0;
       }
 

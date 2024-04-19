@@ -4,6 +4,7 @@ use crate::biz::collab::queue_redis_ops::{
   WritePriority, PENDING_WRITE_META_EXPIRE_SECS,
 };
 
+use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::RedisSortedSet;
 use crate::state::RedisConnectionManager;
 use anyhow::{anyhow, Context};
@@ -38,6 +39,15 @@ impl StorageQueue {
     connection_manager: RedisConnectionManager,
     queue_name: &str,
   ) -> Self {
+    Self::new_with_metrics(collab_cache, connection_manager, queue_name, None)
+  }
+
+  pub fn new_with_metrics(
+    collab_cache: CollabCache,
+    connection_manager: RedisConnectionManager,
+    queue_name: &str,
+    metrics: Option<Arc<CollabMetrics>>,
+  ) -> Self {
     let next_duration = Arc::new(Mutex::new(Duration::from_secs(1)));
     let pending_id_counter = Arc::new(AtomicI64::new(0));
     let pending_write_set = Arc::new(RedisSortedSet::new(connection_manager.clone(), queue_name));
@@ -48,6 +58,7 @@ impl StorageQueue {
       collab_cache.clone(),
       connection_manager.clone(),
       pending_write_set.clone(),
+      metrics,
     );
 
     spawn_period_check_pg_conn_count(collab_cache.pg_pool().clone(), next_duration);
@@ -77,6 +88,7 @@ impl StorageQueue {
     params: &CollabParams,
     priority: WritePriority,
   ) -> Result<(), AppError> {
+    trace!("queuing {} object to pending write queue", params.object_id,);
     // TODO(nathan): compress the data before storing it in Redis
     self
       .collab_cache
@@ -223,13 +235,24 @@ fn spawn_period_write(
   collab_cache: CollabCache,
   connection_manager: RedisConnectionManager,
   pending_write_set: PendingWriteSet,
+  metrics: Option<Arc<CollabMetrics>>,
 ) {
+  let total_write_count = Arc::new(AtomicI64::new(0));
+  let total_success_write_count = Arc::new(AtomicI64::new(0));
   tokio::spawn(async move {
     loop {
       // The next_duration will be changed by spawn_period_check_pg_conn_count. When the number of
       // active connections is high, the interval will be longer.
       let instant = Instant::now() + *next_duration.lock().await;
       sleep_until(instant).await;
+
+      if let Some(metrics) = metrics.as_ref() {
+        metrics.record_write_collab(
+          total_write_count.load(std::sync::atomic::Ordering::Relaxed),
+          total_success_write_count.load(std::sync::atomic::Ordering::Relaxed),
+        );
+      }
+
       let chunk_keys = consume_pending_write(&pending_write_set, 30, 10).await;
       if chunk_keys.is_empty() {
         continue;
@@ -242,16 +265,32 @@ fn spawn_period_write(
         );
         let cloned_collab_cache = collab_cache.clone();
         let mut cloned_connection_manager = connection_manager.clone();
+        let cloned_total_write_count = total_write_count.clone();
+        let cloned_total_success_write_count = total_success_write_count.clone();
+
         tokio::spawn(async move {
           if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {
-            if retry_write_pending_to_disk(&cloned_collab_cache, metas)
-              .await
-              .is_ok()
-            {
-              trace!(
-                "did write {} pending collaboration data to disk",
-                keys.len()
-              );
+            if metas.is_empty() {
+              error!("the pending write keys is not empty, but metas is empty");
+              return;
+            }
+
+            match retry_write_pending_to_disk(&cloned_collab_cache, metas).await {
+              Ok(success_result) => {
+                #[cfg(debug_assertions)]
+                tracing::info!("success write pending: {:?}", keys,);
+
+                trace!("{:?}", success_result);
+                cloned_total_write_count.fetch_add(
+                  success_result.expected as i64,
+                  std::sync::atomic::Ordering::Relaxed,
+                );
+                cloned_total_success_write_count.fetch_add(
+                  success_result.success as i64,
+                  std::sync::atomic::Ordering::Relaxed,
+                );
+              },
+              Err(err) => error!("{:?}", err),
             }
             // Remove pending metadata from Redis even if some records fail to write to disk after retries.
             // Records that fail repeatedly are considered potentially corrupt or invalid.
@@ -266,13 +305,10 @@ fn spawn_period_write(
 async fn retry_write_pending_to_disk(
   collab_cache: &CollabCache,
   mut metas: Vec<PendingWriteMeta>,
-) -> Result<(), AppError> {
-  if metas.is_empty() {
-    return Ok(());
-  }
+) -> Result<WritePendingResult, AppError> {
   const RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(2)];
 
-  let expected_len = metas.len();
+  let expected = metas.len();
   let mut successes = Vec::with_capacity(metas.len());
 
   for &delay in RETRY_DELAYS.iter() {
@@ -285,7 +321,11 @@ async fn retry_write_pending_to_disk(
 
         // If there are no more metas to process, return the successes
         if metas.is_empty() {
-          return Ok(());
+          return Ok(WritePendingResult {
+            expected,
+            success: successes.len(),
+            fail: 0,
+          });
         }
       },
       Err(err) => {
@@ -302,14 +342,25 @@ async fn retry_write_pending_to_disk(
     }
   }
 
-  error!(
-    "expect {}, but success:{}, fail:{}",
-    expected_len,
-    successes.len(),
-    expected_len - successes.len()
-  );
+  if expected >= successes.len() {
+    Ok(WritePendingResult {
+      expected,
+      success: successes.len(),
+      fail: expected - successes.len(),
+    })
+  } else {
+    Err(AppError::Internal(anyhow!(
+      "the len of expected is less than success"
+    )))
+  }
+}
 
-  Err(AppError::Internal(anyhow!("Failed after multiple retries")))
+#[derive(Debug)]
+struct WritePendingResult {
+  expected: usize,
+  success: usize,
+  #[allow(dead_code)]
+  fail: usize,
 }
 
 async fn write_pending_to_disk(

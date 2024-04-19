@@ -5,6 +5,8 @@ use prometheus_client::registry::Registry;
 pub struct CollabMetrics {
   success_write_snapshot_count: Gauge,
   total_write_snapshot_count: Gauge,
+  success_write_collab_count: Gauge,
+  total_write_collab_count: Gauge,
 }
 
 impl CollabMetrics {
@@ -12,6 +14,8 @@ impl CollabMetrics {
     Self {
       success_write_snapshot_count: Gauge::default(),
       total_write_snapshot_count: Default::default(),
+      success_write_collab_count: Default::default(),
+      total_write_collab_count: Default::default(),
     }
   }
 
@@ -28,6 +32,16 @@ impl CollabMetrics {
       "total attempt write snapshot to db",
       metrics.total_write_snapshot_count.clone(),
     );
+    realtime_registry.register(
+      "success_write_collab_count",
+      "success write collab",
+      metrics.success_write_collab_count.clone(),
+    );
+    realtime_registry.register(
+      "total_write_collab_count",
+      "total write collab",
+      metrics.total_write_collab_count.clone(),
+    );
 
     metrics
   }
@@ -35,5 +49,10 @@ impl CollabMetrics {
   pub fn record_write_snapshot(&self, success_attempt: i64, total_attempt: i64) {
     self.success_write_snapshot_count.set(success_attempt);
     self.total_write_snapshot_count.set(total_attempt);
+  }
+
+  pub fn record_write_collab(&self, success_attempt: i64, total_attempt: i64) {
+    self.success_write_collab_count.set(success_attempt);
+    self.total_write_collab_count.set(total_attempt);
   }
 }

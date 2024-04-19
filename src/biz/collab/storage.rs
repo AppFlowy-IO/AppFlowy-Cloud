@@ -22,6 +22,7 @@ use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
 use crate::biz::collab::queue_redis_ops::WritePriority;
 use std::time::Duration;
@@ -55,11 +56,13 @@ where
     snapshot_control: SnapshotControl,
     rt_cmd_sender: RTCommandSender,
     redis_conn_manager: RedisConnectionManager,
+    metrics: Arc<CollabMetrics>,
   ) -> Self {
-    let queue = Arc::new(StorageQueue::new(
+    let queue = Arc::new(StorageQueue::new_with_metrics(
       cache.clone(),
       redis_conn_manager,
       REDIS_PENDING_WRITE_QUEUE,
+      Some(metrics),
     ));
     Self {
       cache,

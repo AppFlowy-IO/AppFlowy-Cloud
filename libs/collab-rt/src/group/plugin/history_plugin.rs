@@ -60,7 +60,6 @@ where
 
     let old = self.edit_count.fetch_add(1, Ordering::SeqCst);
     if old < 20 {
-      trace!("skip snapshot creation, edit_count: {}", old);
       return;
     }
 

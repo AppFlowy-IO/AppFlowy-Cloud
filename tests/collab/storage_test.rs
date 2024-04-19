@@ -1,6 +1,9 @@
 use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
+
 use app_error::ErrorCode;
+
 use appflowy_cloud::biz::collab::mem_cache::CollabMemCache;
+
 use client_api_test_util::*;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
@@ -8,6 +11,7 @@ use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
 use sqlx::types::Uuid;
+
 use std::collections::HashMap;
 
 #[tokio::test]
@@ -197,7 +201,7 @@ async fn fail_insert_collab_with_empty_payload_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::InvalidRequest);
+  assert_eq!(error.code, ErrorCode::NoRequiredData);
 }
 
 #[tokio::test]
@@ -224,7 +228,6 @@ async fn fail_insert_collab_with_invalid_workspace_id_test() {
 #[tokio::test]
 async fn collab_mem_cache_read_write_test() {
   let conn = redis_connection_manager().await;
-
   let mem_cache = CollabMemCache::new(conn);
   let encode_collab = EncodedCollab::new_v1(vec![1, 2, 3], vec![4, 5, 6]);
 

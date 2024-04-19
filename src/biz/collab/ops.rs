@@ -4,8 +4,8 @@ use std::ops::DerefMut;
 
 use app_error::AppError;
 use database_entity::dto::{
-  AFCollabMember, CollabMemberIdentify, DeleteCollabParams, InsertCollabMemberParams,
-  QueryCollabMembers, UpdateCollabMemberParams,
+  AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
+  UpdateCollabMemberParams,
 };
 
 use crate::biz::collab::access_control::CollabAccessControl;
@@ -13,16 +13,6 @@ use crate::biz::collab::access_control::CollabAccessControl;
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;
-
-pub async fn delete_collab(
-  pg_pool: &PgPool,
-  _user_uuid: &Uuid,
-  params: &DeleteCollabParams,
-) -> Result<(), AppError> {
-  params.validate()?;
-  database::collab::delete_collab(pg_pool, &params.object_id).await?;
-  Ok(())
-}
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -38,13 +28,6 @@ pub async fn create_collab_member(
     .begin()
     .await
     .context("acquire transaction to insert collab member")?;
-
-  if !database::collab::is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
-    return Err(AppError::RecordNotFound(format!(
-      "Fail to insert collab member. The Collab with object_id {} does not exist",
-      params.object_id
-    )));
-  }
 
   if database::collab::is_collab_member_exists(
     params.uid,
@@ -90,13 +73,6 @@ pub async fn upsert_collab_member(
     .begin()
     .await
     .context("acquire transaction to upsert collab member")?;
-
-  if !database::collab::is_collab_exists(&params.object_id, transaction.deref_mut()).await? {
-    return Err(AppError::RecordNotFound(format!(
-      "Fail to upsert collab member. The Collab with object_id {} does not exist",
-      params.object_id
-    )));
-  }
 
   collab_access_control
     .update_access_level_policy(&params.uid, &params.object_id, params.access_level)

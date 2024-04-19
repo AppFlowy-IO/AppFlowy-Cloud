@@ -239,22 +239,6 @@ struct QueryCollabData {
   blob: RawData,
 }
 
-#[inline]
-pub async fn delete_collab(pg_pool: &PgPool, object_id: &str) -> Result<(), sqlx::Error> {
-  sqlx::query!(
-    r#"
-        UPDATE af_collab
-        SET deleted_at = $2
-        WHERE oid = $1;
-        "#,
-    object_id,
-    chrono::Utc::now()
-  )
-  .execute(pg_pool)
-  .await?;
-  Ok(())
-}
-
 pub async fn create_snapshot(
   pg_pool: &PgPool,
   object_id: &str,
@@ -589,6 +573,9 @@ fn transform_record_not_found_error(
   }
 }
 
+/// Checks for the existence of a collaboration entry in the `af_collab` table using a specified `oid`.
+/// Use this method to verify if a specific collaboration object is already registered in the database.
+/// For a more efficient lookup, especially in frequent checks, consider using the cached method [CollabCache::is_exist].
 #[inline]
 pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
   oid: &str,

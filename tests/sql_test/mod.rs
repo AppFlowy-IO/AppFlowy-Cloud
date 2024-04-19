@@ -1,3 +1,3 @@
 mod history_test;
-mod util;
+pub(crate) mod util;
 mod workspace_test;

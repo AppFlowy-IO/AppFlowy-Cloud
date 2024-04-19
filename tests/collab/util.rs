@@ -47,7 +47,6 @@ pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> Encoded
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn redis_client() -> redis::Client {
   let redis_uri = "redis://localhost:6379";
   redis::Client::open(redis_uri)
@@ -55,7 +54,6 @@ pub async fn redis_client() -> redis::Client {
     .unwrap()
 }
 
-#[allow(dead_code)]
 pub async fn redis_connection_manager() -> ConnectionManager {
   let mut attempt = 0;
   let max_attempts = 5;

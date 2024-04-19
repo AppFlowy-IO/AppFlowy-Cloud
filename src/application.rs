@@ -231,6 +231,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     snapshot_control,
     rt_cmd_tx,
     redis_conn_manager.clone(),
+    metrics.collab_metrics.clone(),
   ));
 
   #[cfg(feature = "history")]

@@ -1,4 +1,3 @@
-use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -194,7 +193,7 @@ impl actix_web::error::ResponseError for AppResponseError {
 }
 
 #[cfg(feature = "axum")]
-impl IntoResponse for AppResponseError {
+impl axum::response::IntoResponse for AppResponseError {
   fn into_response(self) -> axum::response::Response {
     match serde_json::to_string(&self) {
       Ok(body) => match axum::http::Response::builder()

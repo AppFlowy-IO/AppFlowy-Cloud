@@ -29,6 +29,8 @@ pub struct StorageQueue {
   connection_manager: RedisConnectionManager,
   pending_write_set: PendingWriteSet,
   pending_id_counter: Arc<AtomicI64>,
+  total_queue_collab_count: Arc<AtomicI64>,
+  success_queue_collab_count: Arc<AtomicI64>,
 }
 
 pub const REDIS_PENDING_WRITE_QUEUE: &str = "collab_pending_write_queue_v0";
@@ -52,13 +54,18 @@ impl StorageQueue {
     let pending_id_counter = Arc::new(AtomicI64::new(0));
     let pending_write_set = Arc::new(RedisSortedSet::new(connection_manager.clone(), queue_name));
 
+    let total_queue_collab_count = Arc::new(AtomicI64::new(0));
+    let success_queue_collab_count = Arc::new(AtomicI64::new(0));
+
     // Spawns a task that periodically writes pending collaboration objects to the database.
     spawn_period_write(
       next_duration.clone(),
       collab_cache.clone(),
       connection_manager.clone(),
       pending_write_set.clone(),
-      metrics,
+      metrics.clone(),
+      total_queue_collab_count.clone(),
+      success_queue_collab_count.clone(),
     );
 
     spawn_period_check_pg_conn_count(collab_cache.pg_pool().clone(), next_duration);
@@ -68,6 +75,8 @@ impl StorageQueue {
       connection_manager,
       pending_write_set,
       pending_id_counter,
+      total_queue_collab_count,
+      success_queue_collab_count,
     }
   }
 
@@ -113,6 +122,9 @@ impl StorageQueue {
       collab_type: params.collab_type.clone(),
     };
 
+    self
+      .total_queue_collab_count
+      .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     // If the queueing fails, write the data to the database immediately
     if let Err(err) = self
       .queue_pending(params, pending_write, pending_meta)
@@ -140,6 +152,9 @@ impl StorageQueue {
         .context("fail to commit the transaction to upsert collab")
         .map_err(AppError::from)?;
     } else {
+      self
+        .success_queue_collab_count
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
       trace!(
         "did queue {}:{} object for deferred writing to disk",
         params.object_id,
@@ -236,9 +251,11 @@ fn spawn_period_write(
   connection_manager: RedisConnectionManager,
   pending_write_set: PendingWriteSet,
   metrics: Option<Arc<CollabMetrics>>,
+  total_queue_collab_count: Arc<AtomicI64>,
+  success_queue_collab_count: Arc<AtomicI64>,
 ) {
   let total_write_count = Arc::new(AtomicI64::new(0));
-  let total_success_write_count = Arc::new(AtomicI64::new(0));
+  let success_write_count = Arc::new(AtomicI64::new(0));
   tokio::spawn(async move {
     loop {
       // The next_duration will be changed by spawn_period_check_pg_conn_count. When the number of
@@ -248,8 +265,13 @@ fn spawn_period_write(
 
       if let Some(metrics) = metrics.as_ref() {
         metrics.record_write_collab(
+          success_write_count.load(std::sync::atomic::Ordering::Relaxed),
           total_write_count.load(std::sync::atomic::Ordering::Relaxed),
-          total_success_write_count.load(std::sync::atomic::Ordering::Relaxed),
+        );
+
+        metrics.record_queue_collab(
+          success_queue_collab_count.load(std::sync::atomic::Ordering::Relaxed),
+          total_queue_collab_count.load(std::sync::atomic::Ordering::Relaxed),
         );
       }
 
@@ -266,7 +288,7 @@ fn spawn_period_write(
         let cloned_collab_cache = collab_cache.clone();
         let mut cloned_connection_manager = connection_manager.clone();
         let cloned_total_write_count = total_write_count.clone();
-        let cloned_total_success_write_count = total_success_write_count.clone();
+        let cloned_total_success_write_count = success_write_count.clone();
 
         tokio::spawn(async move {
           if let Ok(metas) = get_pending_meta(&keys, &mut cloned_connection_manager).await {

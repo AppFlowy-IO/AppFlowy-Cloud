@@ -27,7 +27,7 @@ async fn batch_insert_collab_with_empty_payload_test() {
     .await
     .unwrap_err();
 
-  assert_eq!(error.code, ErrorCode::NoRequiredData);
+  assert_eq!(error.code, ErrorCode::InvalidRequest);
 }
 
 #[tokio::test]

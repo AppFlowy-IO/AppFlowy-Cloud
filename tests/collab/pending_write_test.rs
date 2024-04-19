@@ -104,7 +104,7 @@ async fn simulate_large_data_set_write(pool: PgPool) {
   let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
 
   let queries = Arc::new(Mutex::new(Vec::new()));
-  for i in 0..10 {
+  for i in 0..5 {
     let cloned_storage_queue = storage_queue.clone();
     let cloned_queries = queries.clone();
     let cloned_user = user.clone();

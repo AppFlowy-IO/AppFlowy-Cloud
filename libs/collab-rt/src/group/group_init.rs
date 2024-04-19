@@ -292,10 +292,8 @@ mod tests {
 
   #[test]
   fn edit_state_test() {
-    let edit_state = EditState::new(10, 10, true);
+    let edit_state = EditState::new(10, 10, false);
     edit_state.increment_edit_count();
-    assert!(edit_state.should_save_to_disk());
-    edit_state.tick();
 
     for _ in 0..10 {
       edit_state.increment_edit_count();

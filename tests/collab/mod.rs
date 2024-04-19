@@ -5,6 +5,7 @@ mod edit_permission;
 mod member_crud;
 mod missing_update_test;
 mod multi_devices_edit;
+mod pending_write_test;
 mod single_device_edit;
 mod storage_test;
 mod util;

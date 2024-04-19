@@ -1,3 +1,4 @@
+use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
@@ -142,6 +143,7 @@ where
     Ok(resp)
   }
 }
+
 #[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
 pub struct AppResponseError {
   pub code: ErrorCode,
@@ -188,5 +190,22 @@ impl actix_web::error::ResponseError for AppResponseError {
 
   fn error_response(&self) -> actix_web::HttpResponse {
     actix_web::HttpResponse::Ok().json(self)
+  }
+}
+
+#[cfg(feature = "axum")]
+impl IntoResponse for AppResponseError {
+  fn into_response(self) -> axum::response::Response {
+    match serde_json::to_string(&self) {
+      Ok(body) => match axum::http::Response::builder()
+        .header("Content-Type", "application/json")
+        .status(axum::http::StatusCode::OK)
+        .body(axum::body::Body::from(body))
+      {
+        Ok(x) => x,
+        Err(x) => format!("failed to create response: {}", x).into_response(),
+      },
+      Err(e) => format!("failed to serialize response: {}", e).into_response(),
+    }
   }
 }

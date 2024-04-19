@@ -5315,6 +5315,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "app-error",
+ "axum 0.7.4",
  "chrono",
  "collab-entity",
  "database-entity",

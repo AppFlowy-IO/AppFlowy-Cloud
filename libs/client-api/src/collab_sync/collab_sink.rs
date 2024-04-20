@@ -1,18 +1,17 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::SeqNumCounter;
-
-use crate::collab_sync::sink_queue::{QueueItem, SinkQueue};
+use crate::collab_sync::ping::PingSyncRunner;
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
-
+use anyhow::Error;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab_rt_entity::{ClientCollabMessage, MsgId, ServerCollabMessage, SinkMessage};
 use futures_util::SinkExt;
+use std::collections::BinaryHeap;
 use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
-
-use crate::collab_sync::ping::PingSyncRunner;
 use tokio::sync::{broadcast, watch, Mutex};
 use tokio::time::{interval, sleep};
 use tracing::{error, trace, warn};
@@ -31,7 +30,7 @@ pub struct CollabSink<Sink> {
   /// The [SinkQueue] is used to queue the messages that are waiting to be sent to the
   /// remote. It will merge the messages if possible.
   message_queue: Arc<parking_lot::Mutex<SinkQueue<ClientCollabMessage>>>,
-  flying_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
+  sending_messages: Arc<parking_lot::Mutex<HashSet<MsgId>>>,
   /// The [watch::Sender] is used to notify the [CollabSinkRunner] to process the pending messages.
   /// Sending `false` will stop the [CollabSinkRunner].
   notifier: Arc<watch::Sender<SinkSignal>>,
@@ -64,10 +63,10 @@ where
     let notifier = Arc::new(notifier);
     let sender = Arc::new(Mutex::new(sink));
     let message_queue = Arc::new(parking_lot::Mutex::new(SinkQueue::new()));
-    let flying_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
+    let sending_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
     let state = Arc::new(CollabSinkState::new(pause));
     let mut interval = interval(SEND_INTERVAL);
-    let weak_flying_messages = Arc::downgrade(&flying_messages);
+    let weak_sending_messages = Arc::downgrade(&sending_messages);
 
     let weak_notifier = Arc::downgrade(&notifier);
     let origin = CollabOrigin::Client(CollabClient {
@@ -92,14 +91,14 @@ where
         match weak_notifier.upgrade() {
           Some(notifier) => {
             // Removing the flying messages allows for the re-sending of the top k messages in the message queue.
-            if let Some(flying_messages) = weak_flying_messages.upgrade() {
+            if let Some(sending_messages) = weak_sending_messages.upgrade() {
               // remove all the flying messages if the last sync is expired within the SEND_INTERVAL.
               if cloned_state
                 .latest_sync
                 .is_time_for_next_sync(SEND_INTERVAL)
                 .await
               {
-                flying_messages.lock().clear();
+                sending_messages.lock().clear();
               }
             }
 
@@ -120,7 +119,7 @@ where
       notifier,
       sync_state_tx,
       config,
-      flying_messages,
+      sending_messages,
       state,
     }
   }
@@ -149,8 +148,6 @@ where
   /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
     let _ = self.sync_state_tx.send(CollabSyncState::Syncing);
-    // Clear all the pending messages and send the init message immediately.
-    self.clear();
 
     // When the client is connected, remove all pending messages and send the init message.
     let mut msg_queue = self.message_queue.lock();
@@ -185,10 +182,10 @@ where
         msg_queue.clear();
       },
     }
-    match self.flying_messages.try_lock() {
+    match self.sending_messages.try_lock() {
       None => error!("failed to acquire the lock of the flying message"),
-      Some(mut flying_messages) => {
-        flying_messages.clear();
+      Some(mut sending_messages) => {
+        sending_messages.clear();
       },
     }
   }
@@ -220,16 +217,16 @@ where
   ) -> Result<bool, SyncError> {
     // safety: msg_id is not None
     let income_message_id = msg_id;
-    let mut flying_messages = self.flying_messages.lock();
+    let mut sending_messages = self.sending_messages.lock();
 
     // if the message id is not in the flying messages, it means the message is invalid.
-    if !flying_messages.contains(&income_message_id) {
+    if !sending_messages.contains(&income_message_id) {
       return Ok(false);
     }
 
     let mut message_queue = self.message_queue.lock();
     let mut is_valid = false;
-    // if flying_messages.contains(&income_message_id) {
+    // if sending_messages.contains(&income_message_id) {
     if let Some(current_item) = message_queue.pop() {
       if current_item.msg_id() != income_message_id {
         error!(
@@ -241,7 +238,7 @@ where
         message_queue.push(current_item);
       } else {
         is_valid = true;
-        flying_messages.remove(&income_message_id);
+        sending_messages.remove(&income_message_id);
       }
     }
 
@@ -292,18 +289,18 @@ where
     }
 
     let items = {
-      let (mut msg_queue, mut flying_messages) = match (
+      let (mut msg_queue, mut sending_messages) = match (
         self.message_queue.try_lock(),
-        self.flying_messages.try_lock(),
+        self.sending_messages.try_lock(),
       ) {
-        (Some(msg_queue), Some(flying_messages)) => (msg_queue, flying_messages),
+        (Some(msg_queue), Some(sending_messages)) => (msg_queue, sending_messages),
         _ => {
           // If acquire the lock failed, try later
           retry_later(Arc::downgrade(&self.notifier));
           return;
         },
       };
-      get_next_batch_item(&self.state, &mut flying_messages, &mut msg_queue)
+      get_next_batch_item(&self.state, &mut sending_messages, &mut msg_queue)
     };
     self.send_immediately(items).await;
   }
@@ -333,7 +330,7 @@ where
           Err(err) => {
             error!("Failed to send error: {:?}", err.into());
             self
-              .flying_messages
+              .sending_messages
               .lock()
               .retain(|id| !message_ids.contains(id));
           },
@@ -342,7 +339,7 @@ where
       Err(_) => {
         warn!("failed to acquire the lock of the sink, retry later");
         self
-          .flying_messages
+          .sending_messages
           .lock()
           .retain(|id| !message_ids.contains(id));
         retry_later(Arc::downgrade(&self.notifier));
@@ -351,8 +348,8 @@ where
   }
 
   fn merge(&self) {
-    if let (Some(flying_messages), Some(mut msg_queue)) = (
-      self.flying_messages.try_lock(),
+    if let (Some(sending_messages), Some(mut msg_queue)) = (
+      self.sending_messages.try_lock(),
       self.message_queue.try_lock(),
     ) {
       let mut items: Vec<QueueItem<ClientCollabMessage>> = Vec::with_capacity(msg_queue.len());
@@ -360,7 +357,7 @@ where
       while let Some(next) = msg_queue.pop() {
         // If the message is in the flying messages, it means the message is sending to the remote.
         // So don't merge the message.
-        if flying_messages.contains(&next.msg_id()) {
+        if sending_messages.contains(&next.msg_id()) {
           items.push(next);
           continue;
         }
@@ -370,7 +367,7 @@ where
         // 2. The last message can be merged.
         // 3. The last message's payload size is less than the maximum payload size.
         if let Some(last) = items.last_mut() {
-          if !flying_messages.contains(&last.msg_id())
+          if !sending_messages.contains(&last.msg_id())
             && last.message().payload_size() < self.config.maximum_payload_size
             && last.mergeable()
             && last.merge(&next, &self.config.maximum_payload_size).is_ok()
@@ -403,14 +400,14 @@ where
   }
 
   /// Notify the sink to process the next message.
-  pub(crate) fn notify(&self) {
+  pub(crate) fn notify_next(&self) {
     let _ = self.notifier.send(SinkSignal::Proceed);
   }
 }
 
 fn get_next_batch_item(
   state: &Arc<CollabSinkState>,
-  flying_messages: &mut HashSet<MsgId>,
+  sending_messages: &mut HashSet<MsgId>,
   msg_queue: &mut SinkQueue<ClientCollabMessage>,
 ) -> Vec<QueueItem<ClientCollabMessage>> {
   let mut next_sending_items = vec![];
@@ -418,10 +415,10 @@ fn get_next_batch_item(
 
   while let Some(item) = msg_queue.pop() {
     // If we've already selected 20 items for sending, or if the current message
-    // is already being sent (exists in flying_messages), we requeue the current item
+    // is already being sent (exists in sending_messages), we requeue the current item
     // and break out of the loop to prevent sending too many messages at once or
     // sending the same message twice.
-    if next_sending_items.len() >= 20 || flying_messages.contains(&item.msg_id()) {
+    if next_sending_items.len() >= 20 || sending_messages.contains(&item.msg_id()) {
       requeue_items.push(item);
       break;
     }
@@ -454,7 +451,7 @@ fn get_next_batch_item(
     .iter()
     .map(|item| item.msg_id())
     .collect::<Vec<_>>();
-  flying_messages.extend(message_ids);
+  sending_messages.extend(message_ids);
   next_sending_items
 }
 
@@ -581,4 +578,114 @@ pub enum SinkSignal {
   Stop,
   Proceed,
   ProcessAfterMillis(u64),
+}
+
+pub(crate) struct SinkQueue<Msg> {
+  queue: BinaryHeap<QueueItem<Msg>>,
+}
+
+impl<Msg> SinkQueue<Msg>
+where
+  Msg: SinkMessage,
+{
+  pub(crate) fn new() -> Self {
+    Self {
+      queue: Default::default(),
+    }
+  }
+
+  pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
+    #[cfg(feature = "sync_verbose_log")]
+    trace!("📩 queue: {}", msg);
+    self.queue.push(QueueItem::new(msg, msg_id));
+  }
+}
+
+impl<Msg> Deref for SinkQueue<Msg>
+where
+  Msg: SinkMessage,
+{
+  type Target = BinaryHeap<QueueItem<Msg>>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.queue
+  }
+}
+
+impl<Msg> DerefMut for SinkQueue<Msg>
+where
+  Msg: SinkMessage,
+{
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.queue
+  }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct QueueItem<Msg> {
+  inner: Msg,
+  msg_id: MsgId,
+}
+
+impl<Msg> QueueItem<Msg>
+where
+  Msg: SinkMessage,
+{
+  pub fn new(msg: Msg, msg_id: MsgId) -> Self {
+    Self { inner: msg, msg_id }
+  }
+
+  pub fn message(&self) -> &Msg {
+    &self.inner
+  }
+
+  pub fn into_message(self) -> Msg {
+    self.inner
+  }
+
+  pub fn msg_id(&self) -> MsgId {
+    self.msg_id
+  }
+}
+
+impl<Msg> QueueItem<Msg>
+where
+  Msg: SinkMessage,
+{
+  pub fn mergeable(&self) -> bool {
+    self.inner.mergeable()
+  }
+
+  pub fn merge(&mut self, other: &Self, max_size: &usize) -> Result<bool, Error> {
+    self.inner.merge(other.message(), max_size)
+  }
+}
+
+impl<Msg> Eq for QueueItem<Msg> where Msg: Eq {}
+
+impl<Msg> PartialEq for QueueItem<Msg>
+where
+  Msg: PartialEq,
+{
+  fn eq(&self, other: &Self) -> bool {
+    self.inner == other.inner
+  }
+}
+
+impl<Msg> PartialOrd for QueueItem<Msg>
+where
+  Msg: PartialOrd + Ord,
+{
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl<Msg> Ord for QueueItem<Msg>
+where
+  Msg: Ord,
+{
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self.inner.cmp(&other.inner)
+  }
 }

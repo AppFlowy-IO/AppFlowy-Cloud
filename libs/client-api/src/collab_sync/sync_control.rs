@@ -121,11 +121,6 @@ where
       reason,
     )
   }
-
-  /// Remove all the messages in the sink queue
-  pub fn clear(&self) {
-    self.sink.clear();
-  }
 }
 
 pub enum InitSyncReason {

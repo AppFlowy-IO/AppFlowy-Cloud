@@ -1,5 +1,5 @@
 use crate::af_spawn;
-use crate::collab_sync::{start_sync, CollabSink, InitSyncReason, SyncError, SyncObject};
+use crate::collab_sync::{start_sync, CollabSink, SyncError, SyncObject, SyncReason};
 
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
@@ -107,18 +107,21 @@ where
       .await
       {
         match error {
-          SyncError::MissUpdates(reason) => {
-            Self::pull_missing_updates(&origin, &object, &collab, &sink, &seq_num_counter, reason)
+          SyncError::MissUpdates {
+            state_vector_v1,
+            reason,
+          } => {
+            Self::pull_missing_updates(&origin, &object, &collab, &sink, state_vector_v1, reason)
               .await;
           },
-          SyncError::RequireInitSync => {
+          SyncError::CannotApplyUpdate => {
             if let Some(lock_guard) = collab.try_lock() {
               if let Err(err) = start_sync(
                 origin.clone(),
                 &object,
                 &lock_guard,
                 &sink,
-                InitSyncReason::RequireInitSync,
+                SyncReason::ServerCannotApplyUpdate,
               ) {
                 error!("Error while start sync: {}", err);
               }
@@ -140,11 +143,18 @@ where
     msg: ServerCollabMessage,
     seq_num_counter: &Arc<SeqNumCounter>,
   ) -> Result<(), SyncError> {
-    // If server return the AckCode::ApplyInternalError, which means the server can not apply the
-    // update
-    if let ServerCollabMessage::ClientAck(ref ack) = msg {
-      if ack.get_code() == AckCode::CannotApplyUpdate {
-        return Err(SyncError::RequireInitSync);
+    if let ServerCollabMessage::ClientAck(ack) = &msg {
+      let ack_code = ack.get_code();
+      // if the server can not apply the update, we start the init sync.
+      if ack_code == AckCode::CannotApplyUpdate {
+        return Err(SyncError::CannotApplyUpdate);
+      }
+
+      if ack_code == AckCode::MissUpdate {
+        return Err(SyncError::MissUpdates {
+          state_vector_v1: Some(ack.payload.to_vec()),
+          reason: "Remote miss updates".to_string(),
+        });
       }
     }
 
@@ -163,11 +173,6 @@ where
           .validate_response(msg_id, &msg, seq_num_counter)
           .await?;
 
-        if let ServerCollabMessage::ClientAck(ack) = &msg {
-          if matches!(ack.get_code(), AckCode::RequireInitSync) {
-            return Err(SyncError::RequireInitSync);
-          }
-        }
         if is_valid {
           Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
         }
@@ -183,17 +188,15 @@ where
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
-    _seq_num_counter: &Arc<SeqNumCounter>,
+    state_vector_v1: Option<Vec<u8>>,
     reason: String,
   ) {
     if let Some(lock_guard) = collab.try_lock() {
-      if let Err(err) = start_sync(
-        origin.clone(),
-        object,
-        &lock_guard,
-        sink,
-        InitSyncReason::MissUpdates(reason),
-      ) {
+      let reason = SyncReason::MissUpdates {
+        state_vector_v1,
+        reason,
+      };
+      if let Err(err) = start_sync(origin.clone(), object, &lock_guard, sink, reason) {
         error!("Error while start sync: {}", err);
       }
     }
@@ -263,7 +266,13 @@ where
 
 #[derive(Default)]
 pub struct SeqNumCounter {
+  /// The sequence number of the last update broadcast by the server.
+  /// This counter is incremented by 1 each time the server applies an update.
   pub broadcast_seq_counter: AtomicU32,
+  /// The sequence number of the last update acknowledged by a client.
+  /// This is set to the sequence number contained in the `CollabMessage::ClientAck` received from a client.
+  /// If this number is greater than `broadcast_seq_counter`, it indicates that some updates are missing on the client side,
+  /// prompting an initialization sync to rectify missing updates.
   pub ack_seq_counter: AtomicU32,
   pub equal_counter: AtomicU32,
 }
@@ -324,19 +333,23 @@ impl SeqNumCounter {
       broadcast_seq_num,
     );
 
-    if ack_seq_num > broadcast_seq_num + 3 {
+    if ack_seq_num > broadcast_seq_num + 1 {
       self.store_broadcast_seq_num(ack_seq_num);
-      return Err(SyncError::MissUpdates(format!(
-        "missing {} updates, start init sync",
-        ack_seq_num - broadcast_seq_num,
-      )));
+      return Err(SyncError::MissUpdates {
+        state_vector_v1: None,
+        reason: format!(
+          "missing {} updates, start init sync",
+          ack_seq_num - broadcast_seq_num,
+        ),
+      });
     }
 
     if self.equal_counter.load(Ordering::SeqCst) >= 5 {
       self.equal_counter.store(0, Ordering::SeqCst);
-      return Err(SyncError::MissUpdates(
-        "ping exceeds, start init sync".to_string(),
-      ));
+      return Err(SyncError::MissUpdates {
+        state_vector_v1: None,
+        reason: "ping exceeds, start init sync".to_string(),
+      });
     }
     Ok(())
   }

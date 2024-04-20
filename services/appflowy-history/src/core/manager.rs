@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
 use tonic_proto::history::{HistoryState, SnapshotRequest};
-use tracing::{error, info, trace};
+use tracing::{error, trace};
 use uuid::Uuid;
 
 const CONSUMER_NAME: &str = "open_collab";
@@ -63,7 +63,6 @@ async fn spawn_control_group(
 
   // Handle stale messages
   if let Ok(stale_messages) = control_group.get_unacked_messages(CONSUMER_NAME).await {
-    info!("Handling stale messages: {:?}", stale_messages.len());
     for message in &stale_messages {
       if let Ok(event) = CollabControlEvent::decode(&message.data) {
         handle_control_event(&redis_stream, event, handles, &pg_pool).await;

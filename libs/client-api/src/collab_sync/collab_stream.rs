@@ -153,7 +153,7 @@ where
       if ack_code == AckCode::MissUpdate {
         return Err(SyncError::MissUpdates {
           state_vector_v1: Some(ack.payload.to_vec()),
-          reason: "Remote miss updates".to_string(),
+          reason: "server miss updates".to_string(),
         });
       }
     }
@@ -338,8 +338,8 @@ impl SeqNumCounter {
       return Err(SyncError::MissUpdates {
         state_vector_v1: None,
         reason: format!(
-          "missing {} updates, start init sync",
-          ack_seq_num - broadcast_seq_num,
+          "ack is not equal to broadcast, ack:{}, broadcast:{}",
+          ack_seq_num, broadcast_seq_num,
         ),
       });
     }

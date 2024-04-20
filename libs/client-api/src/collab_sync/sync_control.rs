@@ -8,8 +8,8 @@ use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage};
-use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol};
+use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
+use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
 use futures_util::{SinkExt, StreamExt};
 use std::fmt::Display;
 use std::ops::Deref;
@@ -19,7 +19,7 @@ use tokio::sync::{broadcast, watch};
 
 use tracing::{instrument, trace};
 use yrs::updates::decoder::Decode;
-use yrs::updates::encoder::{Encoder, EncoderV1};
+use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::{ReadTxn, StateVector};
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
@@ -157,6 +157,17 @@ fn gen_sync_state<P: CollabSyncProtocol>(
   Ok(encoder.to_vec())
 }
 
+fn gen_missing_updates(collab: &Collab, sv: StateVector) -> Result<Vec<u8>, SyncError> {
+  let update = {
+    let txn = collab.transact();
+    txn.encode_state_as_update_v1(&sv)
+  };
+
+  let mut encoder = EncoderV1::new();
+  Message::Sync(SyncMessage::Update(update)).encode(&mut encoder);
+  Ok(encoder.to_vec())
+}
+
 #[instrument(level = "trace", skip_all)]
 pub fn start_sync<E, Sink>(
   origin: CollabOrigin,
@@ -180,49 +191,66 @@ where
   }
 
   let sync_before = collab.get_last_sync_at() > 0;
-  let payload = match reason {
+  match reason {
     SyncReason::MissUpdates {
       state_vector_v1,
-      reason: _,
-    } => {
-      #[cfg(feature = "sync_verbose_log")]
-      trace!("🔥🔥🔥{} send missing updates", &sync_object.object_id,);
-      match state_vector_v1.and_then(|sv| StateVector::decode_v1(&sv).ok()) {
-        None => {
-          let awareness = collab.get_awareness();
-          gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?
-        },
-        Some(sv) => {
-          let txn = collab.transact();
-          txn.encode_state_as_update_v1(&sv)
-        },
-      }
+      reason,
+    } => match state_vector_v1.and_then(|sv| StateVector::decode_v1(&sv).ok()) {
+      None => {
+        trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
+        let awareness = collab.get_awareness();
+        let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
+        sink.queue_init_sync(|msg_id| {
+          let init_sync = InitSync::new(
+            origin,
+            sync_object.object_id.clone(),
+            sync_object.collab_type.clone(),
+            sync_object.workspace_id.clone(),
+            msg_id,
+            payload,
+          );
+          ClientCollabMessage::new_init_sync(init_sync)
+        });
+      },
+      Some(sv) => {
+        trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
+        let update = gen_missing_updates(collab, sv)?;
+        sink.queue_msg(|msg_id| {
+          let update_sync = UpdateSync::new(
+            origin.clone(),
+            sync_object.object_id.clone(),
+            update,
+            msg_id,
+          );
+          ClientCollabMessage::new_update_sync(update_sync)
+        });
+      },
     },
     SyncReason::CollabInitialize
     | SyncReason::ServerCannotApplyUpdate
     | SyncReason::NetworkResume => {
-      #[cfg(feature = "sync_verbose_log")]
       trace!(
-        "🔥🔥🔥{} start init sync, reason: {}",
+        "🔥{} start sync, reason: {}",
         &sync_object.object_id,
         reason
       );
       let awareness = collab.get_awareness();
-      gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?
+      let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
+
+      sink.queue_init_sync(|msg_id| {
+        let init_sync = InitSync::new(
+          origin,
+          sync_object.object_id.clone(),
+          sync_object.collab_type.clone(),
+          sync_object.workspace_id.clone(),
+          msg_id,
+          payload,
+        );
+        ClientCollabMessage::new_init_sync(init_sync)
+      });
     },
   };
 
-  sink.queue_init_sync(|msg_id| {
-    let init_sync = InitSync::new(
-      origin,
-      sync_object.object_id.clone(),
-      sync_object.collab_type.clone(),
-      sync_object.workspace_id.clone(),
-      msg_id,
-      payload,
-    );
-    ClientCollabMessage::new_init_sync(init_sync)
-  });
   Ok(true)
 }
 
@@ -259,4 +287,9 @@ impl Default for SinkConfig {
       maximum_payload_size: 1024 * 10,
     }
   }
+}
+
+fn trace_verbose_log(msg: &str) {
+  #[cfg(feature = "sync_verbose_log")]
+  trace!("{}", msg);
 }

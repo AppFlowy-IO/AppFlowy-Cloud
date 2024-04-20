@@ -466,7 +466,10 @@ async fn handle_one_message_payload(
                 .fetch_add(1, Ordering::Relaxed);
               let code = ack_code_from_error(&err);
               let payload = match err {
-                RTProtocolError::MissUpdates { state_vector_v1 } => state_vector_v1,
+                RTProtocolError::MissUpdates {
+                  state_vector_v1,
+                  reason: _,
+                } => state_vector_v1,
                 _ => vec![],
               };
 

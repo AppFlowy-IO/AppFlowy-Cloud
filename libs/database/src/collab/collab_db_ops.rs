@@ -92,7 +92,9 @@ pub async fn insert_into_af_collab(
         ))?;
       } else {
         return Err(AppError::Internal(anyhow!(
-          "Inserting a row with an existing object_id but different workspace_id"
+          "workspace_id is not match. expect workspace_id:{}, but receive:{}",
+          existing_workspace_id,
+          workspace_id
         )));
       }
     },
@@ -124,10 +126,15 @@ pub async fn insert_into_af_collab(
       )
       .execute(tx.deref_mut())
       .await
-      .context(format!(
-        "Insert af_collab_member failed: {}:{}:{}",
-        uid, params.object_id, permission_id
-      ))?;
+      .map_err(|err| {
+        AppError::Internal(anyhow!(
+          "Insert af_collab_member failed: {}:{}:{}. error details:{:?}",
+          uid,
+          params.object_id,
+          permission_id,
+          err
+        ))
+      })?;
 
       sqlx::query!(
         "INSERT INTO af_collab (oid, blob, len, partition_key, encrypt, owner_uid, workspace_id)\
@@ -143,8 +150,8 @@ pub async fn insert_into_af_collab(
       .execute(tx.deref_mut())
       .await
       .context(format!(
-        "Insert new af_collab failed: {}:{}:{}, workspace_id:{}",
-        uid, params.object_id, params.collab_type, workspace_id
+        "Insert new af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}",
+        workspace_id, uid, params.object_id, params.collab_type
       ))?;
     },
   }

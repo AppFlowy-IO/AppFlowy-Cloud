@@ -45,7 +45,7 @@ impl CollabSyncProtocol for ClientSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+  ) -> Result<(), RTProtocolError> {
     let mut retry_txn = TransactionRetry::new(awareness.doc());
     let mut txn = retry_txn
       .try_get_write_txn_with(origin.clone())
@@ -58,12 +58,12 @@ impl CollabSyncProtocol for ClientSyncProtocol {
 
     // If the client can't apply broadcast from server, which means the client is missing some
     // updates.
-    if txn.store().pending_update().is_none() {
-      Ok(None)
-    } else {
-      Err(RTProtocolError::MissUpdates(
-        "missing updates when applying update".to_string(),
-      ))
+    match txn.store().pending_update() {
+      Some(update) => {
+        let state_vector_v1 = update.missing.encode_v1();
+        Err(RTProtocolError::MissUpdates { state_vector_v1 })
+      },
+      None => Ok(()),
     }
   }
 }
@@ -135,7 +135,7 @@ pub trait CollabSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<Option<Vec<u8>>, RTProtocolError>;
+  ) -> Result<(), RTProtocolError>;
 
   /// Handle continuous update send from the client. By default just apply an update to a current
   /// `awareness` document instance.
@@ -144,7 +144,7 @@ pub trait CollabSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+  ) -> Result<(), RTProtocolError> {
     self.handle_sync_step2(origin, awareness, update)
   }
 
@@ -189,17 +189,27 @@ pub fn handle_message_follow_protocol<P: CollabSyncProtocol>(
 ) -> Result<Option<Vec<u8>>, RTProtocolError> {
   match msg {
     Message::Sync(msg) => match msg {
-      SyncMessage::SyncStep1(sv) => protocol.handle_sync_step1(collab.get_awareness(), sv),
-      SyncMessage::SyncStep2(update) => protocol.handle_sync_step2(
-        message_origin,
-        collab.get_mut_awareness(),
-        Update::decode_v1(&update)?,
-      ),
-      SyncMessage::Update(update) => protocol.handle_update(
-        message_origin,
-        collab.get_mut_awareness(),
-        Update::decode_v1(&update)?,
-      ),
+      SyncMessage::SyncStep1(sv) => {
+        // calculate missing updates base on the input state vector
+        let update = protocol.handle_sync_step1(collab.get_awareness(), sv)?;
+        Ok(update)
+      },
+      SyncMessage::SyncStep2(update) => {
+        protocol.handle_sync_step2(
+          message_origin,
+          collab.get_mut_awareness(),
+          Update::decode_v1(&update)?,
+        )?;
+        Ok(None)
+      },
+      SyncMessage::Update(update) => {
+        protocol.handle_update(
+          message_origin,
+          collab.get_mut_awareness(),
+          Update::decode_v1(&update)?,
+        )?;
+        Ok(None)
+      },
     },
     Message::Auth(reason) => protocol.handle_auth(collab.get_awareness(), reason),
     Message::Awareness(update) => {

@@ -1,7 +1,6 @@
 use crate::af_spawn;
 use crate::collab_sync::{start_sync, CollabSink, InitSyncReason, SyncError, SyncObject};
 
-use bytes::Bytes;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
@@ -99,7 +98,6 @@ where
       };
 
       if let Err(error) = ObserveCollab::<Sink, Stream>::process_message(
-        &origin,
         &object,
         &collab,
         &sink,
@@ -136,7 +134,6 @@ where
 
   /// Continuously handle messages from the remote doc
   async fn process_message(
-    _origin: &CollabOrigin,
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
@@ -157,8 +154,8 @@ where
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
           seq_num_counter.store_broadcast_seq_num(data.seq_num);
         }
-        Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
-        sink.notify();
+        Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
+        sink.notify_next();
         Ok(())
       },
       Some(msg_id) => {
@@ -171,33 +168,13 @@ where
             return Err(SyncError::RequireInitSync);
           }
         }
-
         if is_valid {
-          Self::process_message_payload(&object.object_id, msg, collab, sink).await?;
+          Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
         }
-        sink.notify();
+        sink.notify_next();
         Ok(())
       },
     }
-  }
-
-  async fn process_message_payload(
-    object_id: &str,
-    msg: ServerCollabMessage,
-    collab: &Arc<MutexCollab>,
-    sink: &Arc<CollabSink<Sink>>,
-  ) -> Result<(), SyncError> {
-    if msg.payload().is_empty() {
-      return Ok(());
-    }
-    ObserveCollab::<Sink, Stream>::process_payload(
-      msg.origin(),
-      msg.payload(),
-      object_id,
-      collab,
-      sink,
-    )
-    .await
   }
 
   #[instrument(level = "trace", skip_all)]
@@ -222,48 +199,65 @@ where
     }
   }
 
-  async fn process_payload(
-    message_origin: &CollabOrigin,
-    payload: &Bytes,
+  async fn process_message_follow_protocol(
     object_id: &str,
+    msg: &ServerCollabMessage,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
-    if let Some(mut collab) = collab.try_lock() {
-      let mut decoder = DecoderV1::new(Cursor::new(payload));
-      let reader = MessageReader::new(&mut decoder);
-      for msg in reader {
-        let msg = msg?;
-        let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-        match handle_message_follow_protocol(message_origin, &ClientSyncProtocol, &mut collab, msg)?
-        {
-          Some(payload) => {
+    if msg.payload().is_empty() {
+      return Ok(());
+    }
+
+    let payload = msg.payload().clone();
+    let message_origin = msg.origin().clone();
+    let sink = sink.clone();
+    let object_id = object_id.to_string();
+    let collab = collab.clone();
+
+    // workaround for panic when applying updates. It can be removed in the future
+    let result = tokio::spawn(async move {
+      if let Some(mut collab) = collab.try_lock() {
+        let mut decoder = DecoderV1::new(Cursor::new(&payload));
+        let reader = MessageReader::new(&mut decoder);
+        for yrs_message in reader {
+          let msg = yrs_message?;
+          let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+
+          if let Some(return_payload) =
+            handle_message_follow_protocol(&message_origin, &ClientSyncProtocol, &mut collab, msg)?
+          {
             let object_id = object_id.to_string();
             sink.queue_msg(|msg_id| {
               if is_server_sync_step_1 {
                 ClientCollabMessage::new_server_init_sync(ServerInit::new(
                   message_origin.clone(),
                   object_id,
-                  payload,
+                  return_payload,
                   msg_id,
                 ))
               } else {
                 ClientCollabMessage::new_update_sync(UpdateSync::new(
                   message_origin.clone(),
                   object_id,
-                  payload,
+                  return_payload,
                   msg_id,
                 ))
               }
             });
-          },
-          None => {
-            // do nothing
-          },
+          }
         }
       }
-    }
-    Ok(())
+      Ok::<_, SyncError>(())
+    })
+    .await;
+
+    result.unwrap_or_else(|err| {
+      error!("Panic while processing message: {:?}", err);
+      Err(SyncError::Internal(anyhow::anyhow!(
+        "Panic while processing message"
+      )))
+    })
   }
 }
 

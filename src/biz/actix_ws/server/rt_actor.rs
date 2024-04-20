@@ -6,7 +6,7 @@ use collab_rt::{CollaborationServer, RealtimeAccessControl};
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 use std::ops::Deref;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 
 #[derive(Clone)]
 pub struct RealtimeServerActor<S, AC>(pub CollaborationServer<S, AC>);
@@ -34,7 +34,6 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    info!("realtime server started");
     ctx.set_mailbox_capacity(3000);
   }
 }

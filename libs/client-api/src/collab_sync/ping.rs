@@ -1,5 +1,4 @@
-use crate::collab_sync::sink_queue::SinkQueue;
-use crate::collab_sync::{CollabSinkState, SinkSignal};
+use crate::collab_sync::{CollabSinkState, SinkQueue, SinkSignal};
 use collab::core::origin::CollabOrigin;
 use collab_rt_entity::{ClientCollabMessage, PingSync, SinkMessage};
 use std::sync::atomic::Ordering;

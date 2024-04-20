@@ -464,22 +464,23 @@ async fn handle_one_message_payload(
               metrics_calculate
                 .apply_update_failed_count
                 .fetch_add(1, Ordering::Relaxed);
+              let code = ack_code_from_error(&err);
+              let payload = match err {
+                RTProtocolError::MissUpdates { state_vector_v1 } => state_vector_v1,
+                _ => vec![],
+              };
 
-              if !matches!(err, RTProtocolError::MissUpdates(_)) {
-                error!("{} => apply update failed: {:?}", cloned_object_id, err);
-              }
+              ack_response = Some(
+                CollabAck::new(
+                  message_origin.clone(),
+                  cloned_object_id.to_string(),
+                  msg_id,
+                  seq_num,
+                )
+                .with_code(code)
+                .with_payload(payload),
+              );
 
-              if ack_response.is_none() {
-                ack_response = Some(
-                  CollabAck::new(
-                    message_origin.clone(),
-                    cloned_object_id.to_string(),
-                    msg_id,
-                    seq_num,
-                  )
-                  .with_code(ack_code_from_error(&err)),
-                );
-              }
               break;
             },
           }
@@ -521,8 +522,8 @@ fn ack_code_from_error(error: &RTProtocolError) -> AckCode {
   match error {
     RTProtocolError::YrsTransaction(_) => AckCode::Retry,
     RTProtocolError::YrsApplyUpdate(_) => AckCode::CannotApplyUpdate,
-    RTProtocolError::YrsEncodeState(_) => AckCode::EncodeState,
-    RTProtocolError::MissUpdates(_) => AckCode::RequireInitSync,
+    RTProtocolError::YrsEncodeState(_) => AckCode::EncodeStateAsUpdateFail,
+    RTProtocolError::MissUpdates { .. } => AckCode::MissUpdate,
     _ => AckCode::Internal,
   }
 }

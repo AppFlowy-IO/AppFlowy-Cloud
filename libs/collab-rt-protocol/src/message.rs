@@ -257,8 +257,8 @@ pub enum RTProtocolError {
   #[error(transparent)]
   BinCodeSerde(#[from] bincode::Error),
 
-  #[error("{0}")]
-  MissUpdates(String),
+  #[error("Missing Updates")]
+  MissUpdates { state_vector_v1: Vec<u8> },
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),

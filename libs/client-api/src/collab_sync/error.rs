@@ -26,11 +26,14 @@ pub enum SyncError {
   #[error("Workspace id is not found")]
   NoWorkspaceId,
 
-  #[error("{0}")]
-  MissUpdates(String),
+  #[error("Missing updates")]
+  MissUpdates {
+    state_vector_v1: Option<Vec<u8>>,
+    reason: String,
+  },
 
-  #[error("Require init sync")]
-  RequireInitSync,
+  #[error("Can not apply update")]
+  CannotApplyUpdate,
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
@@ -39,7 +42,10 @@ pub enum SyncError {
 impl From<RTProtocolError> for SyncError {
   fn from(value: RTProtocolError) -> Self {
     match value {
-      RTProtocolError::MissUpdates(e) => Self::MissUpdates(e),
+      RTProtocolError::MissUpdates { state_vector_v1 } => Self::MissUpdates {
+        state_vector_v1: Some(state_vector_v1),
+        reason: "".to_string(),
+      },
       RTProtocolError::DecodingError(e) => Self::DecodingError(e),
       RTProtocolError::YAwareness(e) => Self::YAwareness(e),
       RTProtocolError::YrsApplyUpdate(e) => Self::YrsApplyUpdate(e),

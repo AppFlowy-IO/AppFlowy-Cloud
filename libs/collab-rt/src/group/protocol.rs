@@ -38,7 +38,7 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+  ) -> Result<(), RTProtocolError> {
     let mut retry_txn = TransactionRetry::new(awareness.doc());
     let mut txn = retry_txn
       .try_get_write_txn_with(origin.clone())
@@ -53,12 +53,12 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     // from the client or the client is missing some updates from the server.
     // If the client can't apply broadcast from server, which means the client is missing some
     // updates.
-    if txn.store().pending_update().is_none() {
-      Ok(None)
-    } else {
-      Err(RTProtocolError::MissUpdates(
-        "missing updates when applying update".to_string(),
-      ))
+    match txn.store().pending_update() {
+      Some(update) => {
+        let state_vector_v1 = update.missing.encode_v1();
+        Err(RTProtocolError::MissUpdates { state_vector_v1 })
+      },
+      None => Ok(()),
     }
   }
 

@@ -93,7 +93,6 @@ where
 
     // Check if conditions for saving to disk are not met
     if !self.edit_state.should_save_to_disk() {
-      trace!("skip save collab to disk: {}", self.object_id);
       return Ok(());
     }
     self.save(false).await?;
@@ -125,7 +124,6 @@ where
           .await
         {
           Ok(_) => {
-            trace!("[realtime] did save collab to disk: {}", self.object_id);
             // Update the edit state on successful save
             self.edit_state.tick();
           },
@@ -139,7 +137,10 @@ where
         if err.is_panic() {
           // reason:
           // 1. Couldn't get item's parent
-          warn!("encode collab panic:{}=>{:?}", self.object_id, err);
+          warn!(
+            "encode collab panic:{}:{}=>{:?}",
+            self.object_id, self.collab_type, err
+          );
         } else {
           error!("fail to spawn a task to get encode collab: {:?}", err)
         }

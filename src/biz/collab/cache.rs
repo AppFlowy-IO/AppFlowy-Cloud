@@ -5,7 +5,7 @@ use collab::core::collab_plugin::EncodedCollab;
 
 use crate::state::RedisConnectionManager;
 
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabParams, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
 use sqlx::{PgPool, Transaction};
@@ -34,28 +34,28 @@ impl CollabCache {
     }
   }
 
-  pub async fn get_collab_encode_data(
+  pub async fn get_encode_collab(
     &self,
     uid: &i64,
-    params: QueryCollabParams,
+    query: QueryCollab,
   ) -> Result<EncodedCollab, AppError> {
     self.total_attempts.fetch_add(1, Ordering::Relaxed);
     // Attempt to retrieve encoded collab from memory cache, falling back to disk cache if necessary.
-    if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&params.object_id).await {
+    if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
       event!(
         Level::DEBUG,
         "Get encode collab:{} from cache",
-        params.object_id
+        query.object_id
       );
       self.success_attempts.fetch_add(1, Ordering::Relaxed);
       return Ok(encoded_collab);
     }
 
     // Retrieve from disk cache as fallback. After retrieval, the value is inserted into the memory cache.
-    let object_id = params.object_id.clone();
+    let object_id = query.object_id.clone();
     let encode_collab = self
       .disk_cache
-      .get_collab_encoded_from_disk(uid, params)
+      .get_collab_encoded_from_disk(uid, query)
       .await?;
 
     // spawn a task to insert the encoded collab into the memory cache
@@ -70,11 +70,13 @@ impl CollabCache {
     Ok(encode_collab)
   }
 
-  pub async fn batch_get_encode_collab(
+  /// Batch get the encoded collab data from the cache.
+  /// returns a hashmap of the object_id to the encoded collab data.
+  pub async fn batch_get_encode_collab<T: Into<QueryCollab>>(
     &self,
-    uid: &i64,
-    queries: Vec<QueryCollab>,
+    queries: Vec<T>,
   ) -> HashMap<String, QueryCollabResult> {
+    let queries = queries.into_iter().map(Into::into).collect::<Vec<_>>();
     let mut results = HashMap::new();
     // 1. Processes valid queries against the in-memory cache to retrieve cached values.
     //    - Queries not found in the cache are earmarked for disk retrieval.
@@ -102,7 +104,7 @@ impl CollabCache {
 
     // 2. Retrieves remaining values from the disk cache for queries not satisfied by the memory cache.
     //    - These values are then merged into the final result set.
-    let values_from_disk_cache = self.disk_cache.batch_get_collab(uid, disk_queries).await;
+    let values_from_disk_cache = self.disk_cache.batch_get_collab(disk_queries).await;
     results.extend(values_from_disk_cache);
     results
   }
@@ -113,7 +115,7 @@ impl CollabCache {
     &self,
     workspace_id: &str,
     uid: &i64,
-    params: CollabParams,
+    params: &CollabParams,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     let object_id = params.object_id.clone();
@@ -143,6 +145,32 @@ impl CollabCache {
     Ok(())
   }
 
+  pub async fn get_encode_collab_from_disk(
+    &self,
+    uid: &i64,
+    query: QueryCollab,
+  ) -> Result<EncodedCollab, AppError> {
+    let encode_collab = self
+      .disk_cache
+      .get_collab_encoded_from_disk(uid, query)
+      .await?;
+    Ok(encode_collab)
+  }
+
+  pub async fn insert_encode_collab_in_disk(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    transaction: &mut Transaction<'_, sqlx::Postgres>,
+  ) -> Result<(), AppError> {
+    self
+      .disk_cache
+      .upsert_collab_with_transaction(workspace_id, uid, &params, transaction)
+      .await?;
+    Ok(())
+  }
+
   /// Insert the encoded collab data into the memory cache.
   pub async fn insert_encode_collab_data_in_mem(
     &self,
@@ -166,7 +194,7 @@ impl CollabCache {
     }
   }
 
-  pub async fn remove_collab(&self, object_id: &str) -> Result<(), AppError> {
+  pub async fn delete_collab(&self, object_id: &str) -> Result<(), AppError> {
     self.mem_cache.remove_encode_collab(object_id).await?;
     self.disk_cache.delete_collab(object_id).await?;
     Ok(())

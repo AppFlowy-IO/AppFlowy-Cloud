@@ -3,6 +3,9 @@ use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 use serde_json::json;
 use sqlx::types::uuid;
+use std::time::Duration;
+use tokio::time::sleep;
+use tracing::trace;
 
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
@@ -66,64 +69,77 @@ async fn sync_collab_content_after_reconnect_test() {
   .unwrap();
 }
 
-// #[tokio::test]
-// async fn same_client_with_diff_devices_edit_same_collab_test() {
-//   let collab_type = CollabType::Unknown;
-//   let registered_user = generate_unique_registered_user().await;
-//   let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
-//   let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
-//
-//   let workspace_id = client_1.workspace_id().await;
-//   let object_id = client_1
-//     .create_and_edit_collab(&workspace_id, collab_type.clone())
-//     .await;
-//
-//   // client 1 edit the collab
-//   client_1
-//     .collabs
-//     .get_mut(&object_id)
-//     .unwrap()
-//     .mutex_collab
-//     .lock()
-//     .insert("name", "workspace1");
-//   client_1
-//     .wait_object_sync_complete(&object_id)
-//     .await
-//     .unwrap();
-//
-//   client_2
-//     .open_collab(&workspace_id, &object_id, collab_type.clone())
-//     .await;
-//   client_2
-//     .wait_object_sync_complete(&object_id)
-//     .await
-//     .unwrap();
-//   trace!("client 2 disconnect: {:?}", client_2.device_id);
-//   client_2.disconnect().await;
-//   sleep(Duration::from_millis(2000)).await;
-//
-//   client_2
-//     .collabs
-//     .get_mut(&object_id)
-//     .unwrap()
-//     .mutex_collab
-//     .lock()
-//     .insert("name", "workspace2");
-//   client_2.reconnect().await;
-//   client_2
-//     .wait_object_sync_complete(&object_id)
-//     .await
-//     .unwrap();
-//
-//   let expected_json = json!({
-//     "name": "workspace2"
-//   });
-//
-//   assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
-//     .await;
-//   assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
-//     .await;
-// }
+#[tokio::test]
+async fn same_client_with_diff_devices_edit_same_collab_test() {
+  let collab_type = CollabType::Unknown;
+  let registered_user = generate_unique_registered_user().await;
+  let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
+  let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
+
+  let workspace_id = client_1.workspace_id().await;
+  let object_id = client_1
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .await;
+
+  // client 1 edit the collab
+  client_1
+    .collabs
+    .get_mut(&object_id)
+    .unwrap()
+    .mutex_collab
+    .lock()
+    .insert("name", "workspace1");
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+
+  assert_server_collab(
+    &workspace_id,
+    &mut client_1.api_client,
+    &object_id,
+    &collab_type,
+    30,
+    json!({
+      "name": "workspace1"
+    }),
+  )
+  .await
+  .unwrap();
+
+  client_2
+    .open_collab(&workspace_id, &object_id, collab_type.clone())
+    .await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+  trace!("client 2 disconnect: {:?}", client_2.device_id);
+  client_2.disconnect().await;
+  sleep(Duration::from_millis(2000)).await;
+
+  client_2
+    .collabs
+    .get_mut(&object_id)
+    .unwrap()
+    .mutex_collab
+    .lock()
+    .insert("name", "workspace2");
+  client_2.reconnect().await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+
+  let expected_json = json!({
+    "name": "workspace2"
+  });
+
+  assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
+    .await;
+  assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
+    .await;
+}
 
 #[tokio::test]
 async fn same_client_with_diff_devices_edit_diff_collab_test() {

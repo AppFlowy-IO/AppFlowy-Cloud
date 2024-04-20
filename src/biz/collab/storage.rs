@@ -2,7 +2,7 @@ use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
 use crate::biz::collab::cache::CollabCache;
 use crate::biz::snapshot::SnapshotControl;
-use anyhow::Context;
+
 use app_error::AppError;
 use async_trait::async_trait;
 
@@ -20,7 +20,11 @@ use crate::state::RedisConnectionManager;
 use collab_rt::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use crate::biz::collab::metrics::CollabMetrics;
+use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
+use crate::biz::collab::queue_redis_ops::WritePriority;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -39,6 +43,7 @@ pub struct CollabStorageImpl<AC> {
   access_control: AC,
   snapshot_control: SnapshotControl,
   rt_cmd_sender: RTCommandSender,
+  queue: Arc<StorageQueue>,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -50,14 +55,21 @@ where
     access_control: AC,
     snapshot_control: SnapshotControl,
     rt_cmd_sender: RTCommandSender,
-    _redis_conn_manager: RedisConnectionManager,
+    redis_conn_manager: RedisConnectionManager,
+    metrics: Arc<CollabMetrics>,
   ) -> Self {
-    // let queue = Arc::new(StorageQueue::new(cache.clone(), redis_conn_manager));
+    let queue = Arc::new(StorageQueue::new_with_metrics(
+      cache.clone(),
+      redis_conn_manager,
+      REDIS_PENDING_WRITE_QUEUE,
+      Some(metrics),
+    ));
     Self {
       cache,
       access_control,
       snapshot_control,
       rt_cmd_sender,
+      queue,
     }
   }
 
@@ -138,6 +150,27 @@ where
       },
     }
   }
+
+  async fn queue_insert_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+    priority: WritePriority,
+  ) -> Result<(), AppError> {
+    if let Err(err) = params.check_encode_collab().await {
+      return Err(AppError::NoRequiredData(format!(
+        "collab doc state is not correct:{},{}",
+        params.object_id, err
+      )));
+    }
+
+    self
+      .queue
+      .push(workspace_id, uid, &params, priority)
+      .await
+      .map_err(AppError::from)
+  }
 }
 
 #[async_trait]
@@ -155,15 +188,9 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    _write_immediately: bool,
+    write_immediately: bool,
   ) -> AppResult<()> {
     params.validate()?;
-    if let Err(err) = params.check_encode_collab().await {
-      return Err(AppError::NoRequiredData(format!(
-        "collab doc state is not correct:{},{}",
-        params.object_id, err
-      )));
-    }
     let is_exist = self.cache.is_exist(&params.object_id).await?;
     // If the collab already exists, check if the user has enough permissions to update collab
     // Otherwise, check if the user has enough permissions to create collab.
@@ -185,35 +212,35 @@ where
         .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
         .await?;
     }
-
-    let write_to_disk = |data| async {
-      let mut transaction = self
-        .cache
-        .pg_pool()
-        .begin()
-        .await
-        .context("acquire transaction to upsert collab")
-        .map_err(AppError::from)?;
-      self
-        .cache
-        .insert_encode_collab_data(workspace_id, uid, data, &mut transaction)
-        .await?;
-      transaction
-        .commit()
-        .await
-        .context("fail to commit the transaction to upsert collab")
-        .map_err(AppError::from)?;
-      Ok::<(), AppError>(())
+    let priority = if write_immediately {
+      WritePriority::High
+    } else {
+      WritePriority::Low
     };
+    self
+      .queue_insert_collab(workspace_id, uid, params, priority)
+      .await?;
+    Ok(())
+  }
 
-    write_to_disk(params).await?;
-    // if write_immediately {
-    //   write_to_disk(params).await?;
-    // } else if let Err(err) = self.queue.queue_insert(params).await {
-    //   // If queue insert fails, write to disk immediately
-    //   write_to_disk(err.data).await?;
-    // }
+  async fn insert_new_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+  ) -> AppResult<()> {
+    params.validate()?;
 
+    self
+      .check_write_workspace_permission(workspace_id, uid)
+      .await?;
+    self
+      .access_control
+      .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
+      .await?;
+    self
+      .queue_insert_collab(workspace_id, uid, params, WritePriority::High)
+      .await?;
     Ok(())
   }
 
@@ -235,7 +262,7 @@ where
       .await?;
     self
       .cache
-      .insert_encode_collab_data(workspace_id, uid, params, transaction)
+      .insert_encode_collab_data(workspace_id, uid, &params, transaction)
       .await?;
     Ok(())
   }
@@ -271,13 +298,13 @@ where
       }
     }
 
-    let encode_collab = self.cache.get_collab_encode_data(uid, params).await?;
+    let encode_collab = self.cache.get_encode_collab(uid, params.inner).await?;
     Ok(encode_collab)
   }
 
   async fn batch_get_collab(
     &self,
-    uid: &i64,
+    _uid: &i64,
     queries: Vec<QueryCollab>,
   ) -> HashMap<String, QueryCollabResult> {
     // Partition queries based on validation into valid queries and errors (with associated error messages).
@@ -294,7 +321,7 @@ where
           )),
         });
 
-    results.extend(self.cache.batch_get_encode_collab(uid, valid_queries).await);
+    results.extend(self.cache.batch_get_encode_collab(valid_queries).await);
     results
   }
 
@@ -309,7 +336,7 @@ where
         action: format!("delete collab:{}", object_id),
       });
     }
-    self.cache.remove_collab(object_id).await?;
+    self.cache.delete_collab(object_id).await?;
     Ok(())
   }
 

@@ -14,7 +14,7 @@ tracing = "0.1.40"
 futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
-tokio = { workspace = true, features = ["net", "sync", "macros"] }
+tokio = { workspace = true, features = ["net", "sync", "macros", "rt-multi-thread"] }
 async-trait = "0.1.77"
 serde.workspace = true
 serde_json.workspace = true
@@ -45,4 +45,4 @@ lazy_static = "1.4.0"
 rand = "0.8.5"
 
 [features]
-multi-thread = ["tokio/rt-multi-thread"]
+multi-thread = []

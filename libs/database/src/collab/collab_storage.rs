@@ -76,6 +76,13 @@ pub trait CollabStorage: Send + Sync + 'static {
     write_immediately: bool,
   ) -> AppResult<()>;
 
+  async fn insert_new_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+  ) -> AppResult<()>;
+
   /// Insert a new collaboration in the storage.
   ///
   /// # Arguments
@@ -160,6 +167,18 @@ where
     self
       .as_ref()
       .insert_or_update_collab(workspace_id, uid, params, write_immediately)
+      .await
+  }
+
+  async fn insert_new_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    params: CollabParams,
+  ) -> AppResult<()> {
+    self
+      .as_ref()
+      .insert_new_collab(workspace_id, uid, params)
       .await
   }
 

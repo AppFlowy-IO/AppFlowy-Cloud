@@ -160,8 +160,8 @@ where
   ) -> Result<(), AppError> {
     if let Err(err) = params.check_encode_collab().await {
       return Err(AppError::NoRequiredData(format!(
-        "collab doc state is not correct:{},{}",
-        params.object_id, err
+        "Invalid collab doc state detected for workspace_id: {}, uid: {}, object_id: {} collab_type:{}. Error details: {}",
+        workspace_id, uid, params.object_id, params.collab_type, err
       )));
     }
 

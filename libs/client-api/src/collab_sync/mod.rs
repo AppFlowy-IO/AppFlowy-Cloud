@@ -4,7 +4,6 @@ mod collab_stream;
 mod error;
 mod ping;
 mod plugin;
-mod sink_queue;
 mod sync_control;
 
 pub use channel::*;

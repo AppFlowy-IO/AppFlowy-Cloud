@@ -1,4 +1,4 @@
-use crate::collab_sync::{CollabSyncState, InitSyncReason, SinkConfig, SyncControl};
+use crate::collab_sync::{CollabSyncState, SinkConfig, SyncControl, SyncReason};
 
 use crate::af_spawn;
 use crate::ws::{ConnectState, WSConnectStateReceiver};
@@ -101,7 +101,7 @@ where
             {
               if let Some(local_collab) = local_collab.try_lock() {
                 sync_queue.resume();
-                let _ = sync_queue.init_sync(&local_collab, InitSyncReason::NetworkResume);
+                let _ = sync_queue.init_sync(&local_collab, SyncReason::NetworkResume);
               }
             } else {
               break;
@@ -189,7 +189,7 @@ where
         }
         if let Err(err) = self
           .sync_queue
-          .init_sync(&collab, InitSyncReason::CollabDidInit)
+          .init_sync(&collab, SyncReason::CollabInitialize)
         {
           error!("Failed to start init sync: {}", err);
         }
@@ -257,7 +257,7 @@ where
           if queue.did_queue_init_sync() {
             return Ok(());
           }
-          let is_queue = queue.init_sync(&collab, InitSyncReason::CollabDidInit)?;
+          let is_queue = queue.init_sync(&collab, SyncReason::CollabInitialize)?;
           if is_queue {
             #[cfg(feature = "sync_verbose_log")]
             trace!("finish init sync: {}", queue.origin);

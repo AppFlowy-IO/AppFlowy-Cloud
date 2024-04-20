@@ -209,8 +209,8 @@ pub enum AckCode {
   CannotApplyUpdate = 1,
   Retry = 2,
   Internal = 3,
-  EncodeState = 4,
-  RequireInitSync = 5,
+  EncodeStateAsUpdateFail = 4,
+  MissUpdate = 5,
 }
 
 impl From<u8> for AckCode {
@@ -220,8 +220,8 @@ impl From<u8> for AckCode {
       1 => AckCode::CannotApplyUpdate,
       2 => AckCode::Retry,
       3 => AckCode::Internal,
-      4 => AckCode::EncodeState,
-      5 => AckCode::RequireInitSync,
+      4 => AckCode::EncodeStateAsUpdateFail,
+      5 => AckCode::MissUpdate,
       _ => AckCode::Internal,
     }
   }

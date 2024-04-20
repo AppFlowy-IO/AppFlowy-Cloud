@@ -3,7 +3,7 @@ use crate::collab_sync::collab_stream::ObserveCollab;
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, CollabSyncState, SinkSignal, SyncError, SyncObject,
 };
-use anyhow::anyhow;
+
 use collab::core::awareness::Awareness;
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
@@ -11,13 +11,16 @@ use collab::preclude::Collab;
 use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage};
 use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol};
 use futures_util::{SinkExt, StreamExt};
+use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, watch};
 
-use tracing::trace;
+use tracing::{instrument, trace};
+use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encoder, EncoderV1};
+use yrs::{ReadTxn, StateVector};
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 
@@ -112,7 +115,7 @@ where
   }
 
   /// Returns bool indicating whether the init sync is queued.
-  pub fn init_sync(&self, collab: &Collab, reason: InitSyncReason) -> Result<bool, SyncError> {
+  pub fn init_sync(&self, collab: &Collab, reason: SyncReason) -> Result<bool, SyncError> {
     start_sync(
       self.origin.clone(),
       &self.object,
@@ -123,11 +126,25 @@ where
   }
 }
 
-pub enum InitSyncReason {
-  CollabDidInit,
-  MissUpdates(String),
-  RequireInitSync,
+pub enum SyncReason {
+  CollabInitialize,
+  MissUpdates {
+    state_vector_v1: Option<Vec<u8>>,
+    reason: String,
+  },
+  ServerCannotApplyUpdate,
   NetworkResume,
+}
+
+impl Display for SyncReason {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      SyncReason::CollabInitialize => write!(f, "CollabInitialize"),
+      SyncReason::MissUpdates { reason, .. } => write!(f, "MissUpdates: {}", reason),
+      SyncReason::ServerCannotApplyUpdate => write!(f, "ServerCannotApplyUpdate"),
+      SyncReason::NetworkResume => write!(f, "NetworkResume"),
+    }
+  }
 }
 
 fn gen_sync_state<P: CollabSyncProtocol>(
@@ -140,12 +157,13 @@ fn gen_sync_state<P: CollabSyncProtocol>(
   Ok(encoder.to_vec())
 }
 
+#[instrument(level = "trace", skip_all)]
 pub fn start_sync<E, Sink>(
   origin: CollabOrigin,
   sync_object: &SyncObject,
   collab: &Collab,
   sink: &Arc<CollabSink<Sink>>,
-  reason: InitSyncReason,
+  reason: SyncReason,
 ) -> Result<bool, SyncError>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
@@ -157,40 +175,42 @@ where
 
   if let Err(err) = sync_object.collab_type.validate(collab) {
     #[cfg(feature = "sync_verbose_log")]
-    trace!(
-      "{}: skip queue init sync. error: {}",
-      sync_object.object_id,
-      err
-    );
-    return Err(SyncError::Internal(anyhow!("Lack of required data")));
+    trace!("{} error: {}", sync_object.object_id, err);
+    return Err(SyncError::Internal(err));
   }
 
   let sync_before = collab.get_last_sync_at() > 0;
-  let awareness = collab.get_awareness();
-  let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
-
-  #[cfg(feature = "sync_verbose_log")]
-  match reason {
-    InitSyncReason::CollabDidInit => {
-      trace!(
-        "{} collab did init and then try init sync",
-        &sync_object.object_id,
-      );
+  let payload = match reason {
+    SyncReason::MissUpdates {
+      state_vector_v1,
+      reason: _,
+    } => {
+      #[cfg(feature = "sync_verbose_log")]
+      trace!("🔥🔥🔥{} send missing updates", &sync_object.object_id,);
+      match state_vector_v1.and_then(|sv| StateVector::decode_v1(&sv).ok()) {
+        None => {
+          let awareness = collab.get_awareness();
+          gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?
+        },
+        Some(sv) => {
+          let txn = collab.transact();
+          txn.encode_state_as_update_v1(&sv)
+        },
+      }
     },
-    InitSyncReason::MissUpdates(reason) => {
+    SyncReason::CollabInitialize
+    | SyncReason::ServerCannotApplyUpdate
+    | SyncReason::NetworkResume => {
+      #[cfg(feature = "sync_verbose_log")]
       trace!(
-        "🔥🔥🔥{} start pull missing updates, reason:{}",
+        "🔥🔥🔥{} start init sync, reason: {}",
         &sync_object.object_id,
         reason
       );
+      let awareness = collab.get_awareness();
+      gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?
     },
-    InitSyncReason::RequireInitSync => {
-      trace!("{} retry init sync", &sync_object.object_id,);
-    },
-    InitSyncReason::NetworkResume => {
-      trace!("{} network resume, retry init sync", &sync_object.object_id,);
-    },
-  }
+  };
 
   sink.queue_init_sync(|msg_id| {
     let init_sync = InitSync::new(

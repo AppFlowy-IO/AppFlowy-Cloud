@@ -6,3 +6,27 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+app-error = { workspace = true, features = ["actix_web_error", "tokio_error"] }
+actix.workspace = true
+actix-web = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip", "macros"] }
+actix-http = { workspace = true, default-features = false, features = ["openssl","compress-brotli", "compress-gzip"] }
+actix-rt.workspace = true
+actix-web-actors = { workspace = true }
+anyhow.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+client-websocket.workspace = true
+dotenvy.workspace = true
+futures-util.workspace = true
+thiserror = "1.0.58"
+tokio = { workspace = true, features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "fs",
+    "time",
+] }
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]

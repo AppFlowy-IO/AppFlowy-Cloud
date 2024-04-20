@@ -4545,6 +4545,24 @@ dependencies = [
 [[package]]
 name = "realtime"
 version = "0.1.0"
+dependencies = [
+ "actix",
+ "actix-http",
+ "actix-rt",
+ "actix-web",
+ "actix-web-actors",
+ "anyhow",
+ "app-error",
+ "async-trait",
+ "bytes",
+ "client-websocket",
+ "dotenvy",
+ "futures-util",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+]
 
 [[package]]
 name = "redis"

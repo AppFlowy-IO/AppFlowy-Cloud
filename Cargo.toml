@@ -6,11 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix = "0.13.3"
-actix-web = { version = "4.5.1", default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
+actix.workspace = true
+actix-web = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-http = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
-actix-rt = "2.9.0"
-actix-web-actors = { version = "4.3" }
+actix-rt.workspace = true
+actix-web-actors.workspace = true
 actix-service = "2.0.2"
 actix-identity = "0.6.0"
 actix-router = "0.5.2"
@@ -58,8 +58,8 @@ async-trait.workspace = true
 prometheus-client.workspace = true
 itertools = "0.11"
 uuid = "1.6.1"
-tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
-dotenvy = "0.15.7"
+tokio-tungstenite = { workspace = true, features = ["native-tls"] }
+dotenvy.workspace = true
 url = "2.5.0"
 brotli = "3.4.0"
 dashmap.workspace = true
@@ -155,11 +155,17 @@ members = [
 ]
 
 [workspace.dependencies]
+actix = "0.13.3"
+actix-web-actors = { version = "4.3" }
+actix-rt = "2.9.0"
+actix-web = { version = "4.5.1", default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 collab-rt-entity = { path = "libs/collab-rt-entity" }
 collab-rt-protocol = { path = "libs/collab-rt-protocol" }
 database = { path = "libs/database" }
 database-entity = { path = "libs/database-entity" }
+dotenvy = "0.15.7"
 shared-entity = { path = "libs/shared-entity" }
+tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 access-control = { path = "libs/access-control" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"

@@ -162,10 +162,6 @@ where
     match msg.msg_id() {
       None => {
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
-          if cfg!(feature = "sync_verbose_log") {
-            trace!("receive origin: {}", msg.origin());
-          }
-
           seq_num_counter.check_broadcast_contiguous(&object.object_id, data.seq_num)?;
           seq_num_counter.store_broadcast_seq_num(data.seq_num);
         }

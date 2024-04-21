@@ -60,8 +60,17 @@ impl CollabSyncProtocol for ClientSyncProtocol {
     // updates.
     match txn.store().pending_update() {
       Some(update) => {
-        let state_vector_v1 = update.missing.encode_v1();
-        Err(RTProtocolError::MissUpdates { state_vector_v1 })
+        if cfg!(feature = "verbose_log") {
+          tracing::trace!(
+            "Did find pending update, missing: {}",
+            update.missing.is_empty()
+          );
+        }
+        // let state_vector_v1 = update.missing.encode_v1();
+        Err(RTProtocolError::MissUpdates {
+          state_vector_v1: None,
+          reason: "client miss updates".to_string(),
+        })
       },
       None => Ok(()),
     }

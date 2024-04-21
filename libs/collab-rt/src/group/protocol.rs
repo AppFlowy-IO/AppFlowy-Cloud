@@ -54,9 +54,14 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     // If the client can't apply broadcast from server, which means the client is missing some
     // updates.
     match txn.store().pending_update() {
-      Some(update) => {
-        let state_vector_v1 = update.missing.encode_v1();
-        Err(RTProtocolError::MissUpdates { state_vector_v1 })
+      Some(_update) => {
+        // let state_vector_v1 = update.missing.encode_v1();
+        // for the moment, we don't need to send missing updates to the client. passing None
+        // instead, which will trigger a sync step 0 on client
+        Err(RTProtocolError::MissUpdates {
+          state_vector_v1: None,
+          reason: "server miss updates".to_string(),
+        })
       },
       None => Ok(()),
     }

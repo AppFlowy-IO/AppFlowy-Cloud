@@ -100,7 +100,7 @@ impl CollabBroadcast {
         .lock()
         .get_doc()
         .observe_update_v1(move |txn, event| {
-          let seq_num = edit_state.increment_edit_count();
+          let seq_num = edit_state.increment_edit_count() + 1;
           let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
 
@@ -343,7 +343,7 @@ async fn handle_one_client_message(
   // If the payload is empty, we don't need to apply any updates .
   // Currently, only the ping message should has an empty payload.
   if collab_msg.payload().is_empty() {
-    if !matches!(collab_msg, ClientCollabMessage::ClientPingSync(_)) {
+    if !matches!(collab_msg, ClientCollabMessage::ClientCollabStateCheck(_)) {
       error!("receive unexpected empty payload message:{}", collab_msg);
     }
     return Ok(CollabAck::new(
@@ -466,7 +466,10 @@ async fn handle_one_message_payload(
                 .fetch_add(1, Ordering::Relaxed);
               let code = ack_code_from_error(&err);
               let payload = match err {
-                RTProtocolError::MissUpdates { state_vector_v1 } => state_vector_v1,
+                RTProtocolError::MissUpdates {
+                  state_vector_v1,
+                  reason: _,
+                } => state_vector_v1.unwrap_or_default(),
                 _ => vec![],
               };
 

@@ -1,6 +1,7 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::SeqNumCounter;
-use crate::collab_sync::ping::PingSyncRunner;
+
+use crate::collab_sync::period_state_check::CollabStateCheckRunner;
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
 use anyhow::Error;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -40,8 +41,11 @@ pub struct CollabSink<Sink> {
 
 impl<Sink> Drop for CollabSink<Sink> {
   fn drop(&mut self) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("Drop CollabSink {}", self.object.object_id);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("Drop CollabSink {}", self.object.object_id);
+    }
+
+    //
     let _ = self.notifier.send(SinkSignal::Stop);
   }
 }
@@ -73,7 +77,7 @@ where
       uid,
       device_id: object.device_id.clone(),
     });
-    PingSyncRunner::run(
+    CollabStateCheckRunner::run(
       origin,
       object.object_id.clone(),
       Arc::downgrade(&message_queue),
@@ -191,8 +195,9 @@ where
   }
 
   pub fn pause(&self) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("{}:{} pause", self.uid, self.object.object_id);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("{}:{} pause", self.uid, self.object.object_id);
+    }
 
     self.state.pause_ping.store(true, Ordering::SeqCst);
     self.state.pause.store(true, Ordering::SeqCst);
@@ -200,8 +205,9 @@ where
   }
 
   pub fn resume(&self) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("{}:{} resume", self.uid, self.object.object_id);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("{}:{} resume", self.uid, self.object.object_id);
+    }
 
     self.state.pause_ping.store(false, Ordering::SeqCst);
     self.state.pause.store(false, Ordering::SeqCst);
@@ -264,8 +270,7 @@ where
           self.object.object_id, err
         );
       }
-    } else {
-      #[cfg(feature = "sync_verbose_log")]
+    } else if cfg!(feature = "sync_verbose_log") {
       trace!(
         "{}: pending count:{} ids:{}",
         self.object.object_id,
@@ -320,12 +325,13 @@ where
         self.state.latest_sync.update_timestamp().await;
         match sender.send(messages).await {
           Ok(_) => {
-            #[cfg(feature = "sync_verbose_log")]
-            trace!(
-              "🔥client sending {} messages {:?}",
-              self.object.object_id,
-              message_ids
-            );
+            if cfg!(feature = "sync_verbose_log") {
+              trace!(
+                "🔥client sending {} messages {:?}",
+                self.object.object_id,
+                message_ids
+              );
+            }
           },
           Err(err) => {
             error!("Failed to send error: {:?}", err.into());
@@ -384,9 +390,8 @@ where
         items.push(next);
       }
 
-      if cfg!(debug_assertions) {
+      if cfg!(feature = "sync_verbose_log") {
         for (msg_id, merged_ids) in merged_ids {
-          #[cfg(feature = "sync_verbose_log")]
           trace!(
             "{}: merged {:?} messages into: {:?}",
             self.object.object_id,
@@ -595,8 +600,10 @@ where
   }
 
   pub(crate) fn push_msg(&mut self, msg_id: MsgId, msg: Msg) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("📩 queue: {}", msg);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("📩 queue: {}", msg);
+    }
+
     self.queue.push(QueueItem::new(msg, msg_id));
   }
 }

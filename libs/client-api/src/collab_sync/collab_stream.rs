@@ -226,7 +226,6 @@ where
         for yrs_message in reader {
           let msg = yrs_message?;
           let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
-
           if let Some(return_payload) =
             handle_message_follow_protocol(&message_origin, &ClientSyncProtocol, &mut collab, msg)?
           {

@@ -99,14 +99,16 @@ where
   }
 
   pub fn pause(&self) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("pause {} sync", self.object.object_id);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("pause {} sync", self.object.object_id);
+    }
     self.sink.pause();
   }
 
   pub fn resume(&self) {
-    #[cfg(feature = "sync_verbose_log")]
-    trace!("resume {} sync", self.object.object_id);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("resume {} sync", self.object.object_id);
+    }
     self.sink.resume();
   }
 
@@ -197,7 +199,11 @@ where
       reason,
     } => match state_vector_v1.and_then(|sv| StateVector::decode_v1(&sv).ok()) {
       None => {
-        trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
+        trace!(
+          "🔥{} start init sync, reason:{}",
+          &sync_object.object_id,
+          reason
+        );
         let awareness = collab.get_awareness();
         let payload = gen_sync_state(awareness, &ClientSyncProtocol, sync_before)?;
         sink.queue_init_sync(|msg_id| {
@@ -213,7 +219,11 @@ where
         });
       },
       Some(sv) => {
-        trace!("🔥{} start sync, reason:{}", &sync_object.object_id, reason);
+        trace!(
+          "🔥{} start init sync, reason:{}",
+          &sync_object.object_id,
+          reason
+        );
         let update = gen_missing_updates(collab, sv)?;
         sink.queue_msg(|msg_id| {
           let update_sync = UpdateSync::new(
@@ -230,7 +240,7 @@ where
     | SyncReason::ServerCannotApplyUpdate
     | SyncReason::NetworkResume => {
       trace!(
-        "🔥{} start sync, reason: {}",
+        "🔥{} start init sync, reason: {}",
         &sync_object.object_id,
         reason
       );
@@ -287,9 +297,4 @@ impl Default for SinkConfig {
       maximum_payload_size: 1024 * 10,
     }
   }
-}
-
-fn trace_verbose_log(msg: &str) {
-  #[cfg(feature = "sync_verbose_log")]
-  trace!("{}", msg);
 }

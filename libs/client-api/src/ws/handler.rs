@@ -50,14 +50,12 @@ where
   pub fn sink(&self) -> BroadcastSink<Vec<ClientCollabMessage>> {
     let (tx, mut rx) = unbounded_channel::<Vec<ClientCollabMessage>>();
     let cloned_sender = self.rt_msg_sender.clone();
-    #[cfg(feature = "sync_verbose_log")]
     let object_id = self.object_id.clone();
     af_spawn(async move {
       while let Some(msg) = rx.recv().await {
         let _ = cloned_sender.send(msg);
       }
 
-      #[cfg(feature = "sync_verbose_log")]
       trace!("WebSocketChannel {} sink closed", object_id);
     });
     BroadcastSink::new(tx)
@@ -67,7 +65,6 @@ where
   pub fn stream(&self) -> UnboundedReceiverStream<Result<T, anyhow::Error>> {
     let (tx, rx) = unbounded_channel::<Result<T, anyhow::Error>>();
     let mut recv = self.receiver.subscribe();
-    #[cfg(feature = "sync_verbose_log")]
     let object_id = self.object_id.clone();
     af_spawn(async move {
       while let Ok(msg) = recv.recv().await {
@@ -76,8 +73,9 @@ where
           break;
         }
       }
-      #[cfg(feature = "sync_verbose_log")]
-      trace!("WebSocketChannel {} stream closed", object_id);
+      if cfg!(feature = "sync_verbose_log") {
+        trace!("WebSocketChannel {} stream closed", object_id);
+      }
     });
     UnboundedReceiverStream::new(rx)
   }

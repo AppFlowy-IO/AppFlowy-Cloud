@@ -46,7 +46,7 @@ impl From<RTProtocolError> for SyncError {
         state_vector_v1,
         reason,
       } => Self::MissUpdates {
-        state_vector_v1: Some(state_vector_v1),
+        state_vector_v1,
         reason,
       },
       RTProtocolError::DecodingError(e) => Self::DecodingError(e),

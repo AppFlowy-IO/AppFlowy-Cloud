@@ -1,6 +1,6 @@
 use crate::collab_sync::{CollabSinkState, SinkQueue, SinkSignal};
 use collab::core::origin::CollabOrigin;
-use collab_rt_entity::{ClientCollabMessage, PingSync, SinkMessage};
+use collab_rt_entity::{ClientCollabMessage, CollabStateCheck, SinkMessage};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -9,9 +9,9 @@ use tokio::time::{sleep_until, Instant};
 use tracing::warn;
 
 #[allow(dead_code)]
-pub struct PingSyncRunner;
+pub struct CollabStateCheckRunner;
 
-impl PingSyncRunner {
+impl CollabStateCheckRunner {
   #[allow(dead_code)]
   pub(crate) fn run(
     origin: CollabOrigin,
@@ -37,8 +37,9 @@ impl PingSyncRunner {
 
         match message_queue.upgrade() {
           None => {
-            #[cfg(feature = "sync_verbose_log")]
-            tracing::warn!("{} message queue dropped", object_id);
+            if cfg!(feature = "sync_verbose_log") {
+              tracing::warn!("{} message queue dropped", object_id);
+            }
             break;
           },
           Some(message_queue) => {
@@ -53,19 +54,20 @@ impl PingSyncRunner {
               if let Some(mut queue) = message_queue.try_lock() {
                 let is_not_empty = queue.iter().any(|item| !item.message().is_ping_sync());
                 if is_not_empty {
-                  #[cfg(feature = "sync_verbose_log")]
-                  tracing::trace!("{} slow down ping", object_id);
+                  if cfg!(feature = "sync_verbose_log") {
+                    tracing::trace!("{} slow down check", object_id);
+                  }
+
                   next_tick = Instant::now() + Duration::from_secs(30);
                 }
 
                 let msg_id = state.id_counter.next();
-                let ping = PingSync {
+                let check = CollabStateCheck {
                   origin: origin.clone(),
                   object_id: object_id.clone(),
                   msg_id,
                 };
-                let ping = ClientCollabMessage::ClientPingSync(ping);
-                queue.push_msg(msg_id, ping);
+                queue.push_msg(msg_id, ClientCollabMessage::ClientCollabStateCheck(check));
 
                 // notify the sink to proceed next message
                 if let Some(notify) = weak_notify.upgrade() {

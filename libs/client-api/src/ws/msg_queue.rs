@@ -88,10 +88,7 @@ async fn handle_tick(
     return (0, 0);
   }
 
-  if cfg!(debug_assertions) {
-    #[cfg(feature = "sync_verbose_log")]
-    log_message_map(&messages_map);
-  }
+  log_message_map(&messages_map);
 
   // Send messages to server
   send_batch_message(sender, messages_map).await;
@@ -192,6 +189,9 @@ fn log_message_map(messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {
   let log_msg = format!("{}\n{}\n{}", start_sign, log_msg, end_sign);
   tracing::debug!("Aggregate message list:\n{}", log_msg);
 }
+
+#[cfg(not(feature = "sync_verbose_log"))]
+fn log_message_map(_messages_map: &HashMap<String, Vec<ClientCollabMessage>>) {}
 
 #[derive(Eq, PartialEq, Hash)]
 struct SeenId {

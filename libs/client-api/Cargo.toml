@@ -8,7 +8,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-reqwest = { version = "0.11.27", features = ["stream","json"] }
+reqwest = { version = "0.11.27", features = ["stream", "json"] }
 anyhow = "1.0.79"
 serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
@@ -57,14 +57,14 @@ features = ["tungstenite"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.40"
-getrandom = { version = "0.2", features = ["js"]}
-tokio = { workspace = true, features = ["sync"]}
+getrandom = { version = "0.2", features = ["js"] }
+tokio = { workspace = true, features = ["sync"] }
 again = { version = "0.1.2" }
 
 [features]
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
-sync_verbose_log = []
+sync_verbose_log = ["collab-rt-protocol/verbose_log"]
 test_fast_sync = []
 enable_brotli = ["brotli"]

@@ -309,9 +309,6 @@ where
 
   async fn send_immediately(&self, items: Vec<QueueItem<ClientCollabMessage>>) {
     if items.is_empty() {
-      if cfg!(feature = "sync_verbose_log") {
-        trace!("{}: no message to send", self.object.object_id);
-      }
       return;
     }
 

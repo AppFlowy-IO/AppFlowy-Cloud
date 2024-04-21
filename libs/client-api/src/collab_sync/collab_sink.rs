@@ -62,13 +62,12 @@ where
     notifier: watch::Sender<SinkSignal>,
     sync_state_tx: broadcast::Sender<CollabSyncState>,
     config: SinkConfig,
-    pause: bool,
   ) -> Self {
     let notifier = Arc::new(notifier);
     let sender = Arc::new(Mutex::new(sink));
     let message_queue = Arc::new(parking_lot::Mutex::new(SinkQueue::new()));
     let sending_messages = Arc::new(parking_lot::Mutex::new(HashSet::new()));
-    let state = Arc::new(CollabSinkState::new(pause));
+    let state = Arc::new(CollabSinkState::new());
     let mut interval = interval(SEND_INTERVAL);
     let weak_sending_messages = Arc::downgrade(&sending_messages);
 
@@ -152,6 +151,7 @@ where
   /// message immediately.
   pub fn queue_init_sync(&self, f: impl FnOnce(MsgId) -> ClientCollabMessage) {
     let _ = self.sync_state_tx.send(CollabSyncState::Syncing);
+    self.clear();
 
     // When the client is connected, remove all pending messages and send the init message.
     let mut msg_queue = self.message_queue.lock();
@@ -200,8 +200,6 @@ where
     }
 
     self.state.pause_ping.store(true, Ordering::SeqCst);
-    self.state.pause.store(true, Ordering::SeqCst);
-    let _ = self.sync_state_tx.send(CollabSyncState::Pause);
   }
 
   pub fn resume(&self) {
@@ -210,7 +208,6 @@ where
     }
 
     self.state.pause_ping.store(false, Ordering::SeqCst);
-    self.state.pause.store(false, Ordering::SeqCst);
   }
 
   /// Notify the sink to process the next message and mark the current message as done.
@@ -225,7 +222,7 @@ where
     let income_message_id = msg_id;
     let mut sending_messages = self.sending_messages.lock();
 
-    // if the message id is not in the flying messages, it means the message is invalid.
+    // if the message id is not in the sending messages, it means the message is invalid.
     if !sending_messages.contains(&income_message_id) {
       return Ok(false);
     }
@@ -287,12 +284,6 @@ where
   }
 
   async fn process_next_msg(&self) {
-    if self.state.pause.load(Ordering::SeqCst) {
-      // If the sink is paused, sleep for a while and try later.
-      sleep(Duration::from_secs(2)).await;
-      return;
-    }
-
     let items = {
       let (mut msg_queue, mut sending_messages) = match (
         self.message_queue.try_lock(),
@@ -301,6 +292,12 @@ where
         (Some(msg_queue), Some(sending_messages)) => (msg_queue, sending_messages),
         _ => {
           // If acquire the lock failed, try later
+          if cfg!(feature = "sync_verbose_log") {
+            trace!(
+              "{}: failed to acquire the lock of the sink, retry later",
+              self.object.object_id
+            );
+          }
           retry_later(Arc::downgrade(&self.notifier));
           return;
         },
@@ -543,7 +540,6 @@ impl SyncTimestamp {
 }
 
 pub(crate) struct CollabSinkState {
-  pub(crate) pause: AtomicBool,
   pub(crate) latest_sync: SyncTimestamp,
   pub(crate) pause_ping: AtomicBool,
   pub(crate) id_counter: DefaultMsgIdCounter,
@@ -551,10 +547,9 @@ pub(crate) struct CollabSinkState {
 }
 
 impl CollabSinkState {
-  fn new(pause: bool) -> Self {
+  fn new() -> Self {
     let msg_id_counter = DefaultMsgIdCounter::new();
     CollabSinkState {
-      pause: AtomicBool::new(pause),
       latest_sync: SyncTimestamp::new(),
       pause_ping: AtomicBool::new(false),
       id_counter: msg_id_counter,
@@ -569,7 +564,6 @@ pub enum CollabSyncState {
   Syncing,
   /// All the messages are synced to the remote.
   Finished,
-  Pause,
 }
 
 impl CollabSyncState {

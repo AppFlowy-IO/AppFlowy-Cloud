@@ -542,7 +542,6 @@ impl TestClient {
         SinkConfig::default(),
         stream,
         Some(handler),
-        !self.ws_client.is_connected(),
         ws_connect_state,
       );
       collab.lock().add_plugin(Box::new(sync_plugin));
@@ -613,7 +612,6 @@ impl TestClient {
         SinkConfig::default(),
         stream,
         Some(handler),
-        !self.ws_client.is_connected(),
         ws_connect_state,
       );
 

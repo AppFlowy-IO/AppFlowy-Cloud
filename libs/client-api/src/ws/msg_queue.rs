@@ -119,7 +119,7 @@ async fn send_batch_message(
       }
     },
     Err(err) => {
-      error!("Failed to RealtimeMessage: {}", err);
+      error!("Failed to encode realtime message: {}", err);
     },
   }
 }

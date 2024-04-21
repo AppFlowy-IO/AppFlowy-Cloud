@@ -51,7 +51,7 @@ where
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: RTCommandReceiver,
   ) -> Result<Self, RealtimeError> {
-    if cfg!(feature = "multi-thread") {
+    if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
     }
 
@@ -249,7 +249,7 @@ pub fn default_tokio_runtime() -> io::Result<Runtime> {
 /// task execution confines all tasks to the same thread, attributable to the actor's reliance on a
 /// single-threaded Tokio runtime. To circumvent this limitation and enable task execution across
 /// multiple threads, we've incorporated a multi-thread feature.
-#[cfg(feature = "multi-thread")]
+#[cfg(feature = "collab-rt-multi-thread")]
 pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + Send + 'static,
@@ -258,7 +258,7 @@ where
   COLLAB_RUNTIME.spawn(future)
 }
 
-#[cfg(not(feature = "multi-thread"))]
+#[cfg(not(feature = "collab-rt-multi-thread"))]
 pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + 'static,

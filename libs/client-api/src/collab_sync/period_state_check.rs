@@ -43,7 +43,7 @@ impl CollabStateCheckRunner {
             break;
           },
           Some(message_queue) => {
-            if state.pause.load(Ordering::SeqCst) {
+            if state.pause_ping.load(Ordering::SeqCst) {
               continue;
             } else {
               // Skip this iteration if a message was sent recently, within the specified duration.

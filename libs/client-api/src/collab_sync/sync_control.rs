@@ -59,7 +59,6 @@ where
     sink_config: SinkConfig,
     stream: Stream,
     collab: Weak<MutexCollab>,
-    pause: bool,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);
@@ -74,7 +73,6 @@ where
       notifier,
       sync_state_tx.clone(),
       sink_config,
-      pause,
     ));
     af_spawn(CollabSinkRunner::run(Arc::downgrade(&sink), notifier_rx));
 

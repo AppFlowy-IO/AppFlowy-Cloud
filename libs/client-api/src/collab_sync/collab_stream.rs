@@ -162,6 +162,7 @@ where
     match msg.msg_id() {
       None => {
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
+          seq_num_counter.check_broadcast_contiguous(&object.object_id, data.seq_num)?;
           seq_num_counter.store_broadcast_seq_num(data.seq_num);
         }
         Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
@@ -278,9 +279,16 @@ pub struct SeqNumCounter {
 
 impl SeqNumCounter {
   pub fn store_ack_seq_num(&self, seq_num: u32) -> u32 {
+    // If the broadcast sequence counter is 0, set it to the current sequence number.
+    if self.broadcast_seq_counter.load(Ordering::SeqCst) == 0 {
+      self.broadcast_seq_counter.store(seq_num, Ordering::SeqCst);
+    }
+
     match self
       .ack_seq_counter
       .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+        // Check if the sequence number is less than the current one. A lower sequence number can indicate
+        // that the server has been restarted, or the collaboration group has been reinitialized.
         if seq_num >= current {
           Some(seq_num)
         } else {
@@ -295,19 +303,52 @@ impl SeqNumCounter {
     }
   }
 
-  pub fn store_broadcast_seq_num(&self, seq_num: u32) -> u32 {
-    self
+  pub fn store_broadcast_seq_num(&self, broadcast_seq_num: u32) -> u32 {
+    match self
       .broadcast_seq_counter
-      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |_current| Some(seq_num))
-      .unwrap()
+      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
+        // Check if the sequence number is less than the current one. A lower sequence number can indicate
+        // that the server has been restarted, or the collaboration group has been reinitialized.
+        if broadcast_seq_num >= current {
+          Some(broadcast_seq_num)
+        } else {
+          None
+        }
+      }) {
+      Ok(prev) => prev,
+      Err(prev) => {
+        self
+          .broadcast_seq_counter
+          .store(broadcast_seq_num, Ordering::SeqCst);
+        prev
+      },
+    }
   }
 
-  pub fn get_ack_seq_num(&self) -> u32 {
-    self.ack_seq_counter.load(Ordering::SeqCst)
-  }
+  /// Checks if the given broadcast sequence number is contiguous with the current sequence.
+  ///
+  /// Verifies that the broadcast sequence number provided (`broadcast_seq_num`) follows directly after
+  /// the last known sequence number stored in the system (`current`).
+  ///
+  /// If there is a gap between the `broadcast_seq_num` and `current`, it indicates that some
+  /// messages may have been missed, and an error is returned.
+  pub fn check_broadcast_contiguous(
+    &self,
+    object_id: &str,
+    broadcast_seq_num: u32,
+  ) -> Result<(), SyncError> {
+    let current = self.broadcast_seq_counter.load(Ordering::SeqCst);
+    if current > 0 && broadcast_seq_num > current + 1 {
+      return Err(SyncError::MissUpdates {
+        state_vector_v1: None,
+        reason: format!(
+          "{} broadcast is not contiguous, current:{}, broadcast:{}",
+          object_id, current, broadcast_seq_num,
+        ),
+      });
+    }
 
-  pub fn get_broadcast_seq_num(&self) -> u32 {
-    self.broadcast_seq_counter.load(Ordering::SeqCst)
+    Ok(())
   }
 
   pub fn check_ack_broadcast_contiguous(&self, object_id: &str) -> Result<(), SyncError> {
@@ -322,6 +363,13 @@ impl SeqNumCounter {
 
       if old + 1 >= 2 {
         self.miss_update_counter.store(0, Ordering::SeqCst);
+        // Mark the broadcast sequence number as ack seq_num because a MissUpdates error triggers
+        // an initialization synchronization. After this initial sync, the ack and broadcast sequence
+        // numbers are expected to align, ensuring that all updates are synchronized.
+        self
+          .broadcast_seq_counter
+          .store(ack_seq_num, Ordering::SeqCst);
+
         return Err(SyncError::MissUpdates {
           state_vector_v1: None,
           reason: format!(

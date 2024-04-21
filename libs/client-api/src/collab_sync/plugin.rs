@@ -58,7 +58,6 @@ where
     sink_config: SinkConfig,
     stream: Stream,
     channel: Option<Arc<C>>,
-    pause: bool,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
     let sync_queue = SyncControl::new(
@@ -68,7 +67,6 @@ where
       sink_config,
       stream,
       collab.clone(),
-      pause,
     );
 
     if let Some(local_collab) = collab.upgrade() {
@@ -100,8 +98,8 @@ where
             if let (Some(local_collab), Some(sync_queue)) =
               (weak_local_collab.upgrade(), weak_sync_queue.upgrade())
             {
+              sync_queue.resume();
               if let Some(local_collab) = local_collab.try_lock() {
-                sync_queue.resume();
                 let _ = sync_queue.init_sync(&local_collab, SyncReason::NetworkResume);
               }
             } else {

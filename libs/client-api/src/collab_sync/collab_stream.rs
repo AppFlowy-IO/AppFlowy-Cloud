@@ -153,7 +153,7 @@ where
       if ack_code == AckCode::MissUpdate {
         return Err(SyncError::MissUpdates {
           state_vector_v1: Some(ack.payload.to_vec()),
-          reason: "Remote miss updates".to_string(),
+          reason: "server miss updates".to_string(),
         });
       }
     }
@@ -274,7 +274,7 @@ pub struct SeqNumCounter {
   /// If this number is greater than `broadcast_seq_counter`, it indicates that some updates are missing on the client side,
   /// prompting an initialization sync to rectify missing updates.
   pub ack_seq_counter: AtomicU32,
-  pub equal_counter: AtomicU32,
+  pub miss_update_counter: AtomicU32,
 }
 
 impl SeqNumCounter {
@@ -288,18 +288,8 @@ impl SeqNumCounter {
           None
         }
       }) {
-      Ok(prev) => {
-        if prev == seq_num {
-          self.equal_counter.fetch_add(1, Ordering::SeqCst);
-        } else {
-          self.equal_counter.store(0, Ordering::SeqCst);
-        }
-        prev
-      },
+      Ok(prev) => prev,
       Err(prev) => {
-        // If the seq_num is less than the current seq_num, we should reset the equal_counter.
-        // Because the server might be restarted and the seq_num is reset to 0.
-        self.equal_counter.store(0, Ordering::SeqCst);
         self.ack_seq_counter.store(seq_num, Ordering::SeqCst);
         prev
       },
@@ -324,33 +314,35 @@ impl SeqNumCounter {
   pub fn check_ack_broadcast_contiguous(&self, object_id: &str) -> Result<(), SyncError> {
     let ack_seq_num = self.ack_seq_counter.load(Ordering::SeqCst);
     let broadcast_seq_num = self.broadcast_seq_counter.load(Ordering::SeqCst);
+    log_ack_and_broadcast(object_id, ack_seq_num, broadcast_seq_num);
 
-    #[cfg(feature = "sync_verbose_log")]
-    trace!(
-      "receive {} seq_num, ack:{}, broadcast:{}",
-      object_id,
-      ack_seq_num,
-      broadcast_seq_num,
-    );
+    if ack_seq_num > broadcast_seq_num {
+      // calculate the number of times the ack is greater than the broadcast. We don't do return MissingUpdates
+      // immediately, because the ack may be greater than the broadcast for a short time.
+      let old = self.miss_update_counter.fetch_add(1, Ordering::SeqCst);
 
-    if ack_seq_num > broadcast_seq_num + 1 {
-      self.store_broadcast_seq_num(ack_seq_num);
-      return Err(SyncError::MissUpdates {
-        state_vector_v1: None,
-        reason: format!(
-          "missing {} updates, start init sync",
-          ack_seq_num - broadcast_seq_num,
-        ),
-      });
+      if old + 1 >= 2 {
+        self.miss_update_counter.store(0, Ordering::SeqCst);
+        return Err(SyncError::MissUpdates {
+          state_vector_v1: None,
+          reason: format!(
+            "ack is not equal to broadcast, ack:{}, broadcast:{}",
+            ack_seq_num, broadcast_seq_num,
+          ),
+        });
+      }
     }
 
-    if self.equal_counter.load(Ordering::SeqCst) >= 5 {
-      self.equal_counter.store(0, Ordering::SeqCst);
-      return Err(SyncError::MissUpdates {
-        state_vector_v1: None,
-        reason: "ping exceeds, start init sync".to_string(),
-      });
-    }
     Ok(())
   }
+}
+
+#[cfg(feature = "sync_verbose_log")]
+fn log_ack_and_broadcast(object_id: &str, ack_seq_num: u32, broadcast_seq_num: u32) {
+  trace!(
+    "receive {} seq_num, ack:{}, broadcast:{}",
+    object_id,
+    ack_seq_num,
+    broadcast_seq_num,
+  );
 }

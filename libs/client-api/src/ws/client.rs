@@ -419,8 +419,9 @@ fn handle_collab_message(
       if let Some(channels) = collab_channels.read().get(&object_id) {
         for channel in channels.iter() {
           if let Some(channel) = channel.upgrade() {
-            #[cfg(feature = "sync_verbose_log")]
-            trace!("receive server: {}", collab_msg);
+            if cfg!(feature = "sync_verbose_log") {
+              trace!("receive server: {}", collab_msg);
+            }
             channel.forward_to_stream(collab_msg.clone());
           }
         }

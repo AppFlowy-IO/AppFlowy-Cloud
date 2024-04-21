@@ -42,9 +42,12 @@ pub enum SyncError {
 impl From<RTProtocolError> for SyncError {
   fn from(value: RTProtocolError) -> Self {
     match value {
-      RTProtocolError::MissUpdates { state_vector_v1 } => Self::MissUpdates {
-        state_vector_v1: Some(state_vector_v1),
-        reason: "".to_string(),
+      RTProtocolError::MissUpdates {
+        state_vector_v1,
+        reason,
+      } => Self::MissUpdates {
+        state_vector_v1,
+        reason,
       },
       RTProtocolError::DecodingError(e) => Self::DecodingError(e),
       RTProtocolError::YAwareness(e) => Self::YAwareness(e),

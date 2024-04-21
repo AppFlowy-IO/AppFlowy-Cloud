@@ -258,7 +258,17 @@ pub enum RTProtocolError {
   BinCodeSerde(#[from] bincode::Error),
 
   #[error("Missing Updates")]
-  MissUpdates { state_vector_v1: Vec<u8> },
+  MissUpdates {
+    /// - `state_vector_v1`: Contains the last known state vector from the client. If `None`,
+    ///   this indicates that the receiver needs to perform a full initialization synchronization starting from sync step 0.
+    ///
+    /// The receiver uses this information to determine how to recover from the error,
+    /// either by recalculating the missing updates based on the `state_vector_v1` if it's available,
+    /// or by starting a full initialization sync if it's not.
+    state_vector_v1: Option<Vec<u8>>,
+    /// - `reason`: A human-readable explanation of why the error was raised, providing context for the missing updates.
+    reason: String,
+  },
 
   #[error(transparent)]
   Internal(#[from] anyhow::Error),

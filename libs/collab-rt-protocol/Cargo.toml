@@ -15,3 +15,6 @@ collab = { version = "0.1.0" }
 bincode.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+
+[features]
+verbose_log = []

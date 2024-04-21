@@ -19,6 +19,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use tokio::time::sleep;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Retry};
 use tokio_stream::StreamExt;
@@ -175,26 +176,49 @@ where
     let payload = Message::Awareness(update.clone()).encode_v1();
     self.sync_queue.queue_msg(|msg_id| {
       let update_sync = UpdateSync::new(origin.clone(), object_id.to_string(), payload, msg_id);
-      #[cfg(feature = "sync_verbose_log")]
-      trace!("queue awareness: {:?}", update);
+      if cfg!(feature = "sync_verbose_log") {
+        trace!("queue awareness: {:?}", update);
+      }
+
       ClientCollabMessage::new_update_sync(update_sync)
     });
   }
 
   fn start_init_sync(&self) {
-    if let Some(collab) = self.collab.upgrade() {
-      if let Some(collab) = collab.try_lock() {
-        if !self.sync_queue.should_queue_init_sync() {
-          return;
+    let object_id = self.object.object_id.clone();
+    let collab = self.collab.clone();
+    let sync_queue = self.sync_queue.clone();
+
+    tokio::spawn(async move {
+      if let Some(collab) = collab.upgrade() {
+        const MAX_RETRY: usize = 3;
+        const RETRY_INTERVAL: Duration = Duration::from_millis(300);
+
+        for attempt in 0..MAX_RETRY {
+          if let Some(collab) = collab.clone().try_lock() {
+            if let Err(err) = sync_queue.init_sync(&collab, SyncReason::CollabInitialize) {
+              error!("Failed to start init sync: {}", err);
+            }
+            return;
+          }
+
+          trace!(
+            "Attempt {} failed to lock collab for init sync: {}",
+            attempt + 1,
+            object_id
+          );
+          if attempt < MAX_RETRY - 1 {
+            sleep(RETRY_INTERVAL).await;
+          }
         }
-        if let Err(err) = self
-          .sync_queue
-          .init_sync(&collab, SyncReason::CollabInitialize)
-        {
-          error!("Failed to start init sync: {}", err);
-        }
+
+        trace!(
+          "Failed to start init sync after {} attempts, object_id: {}",
+          MAX_RETRY,
+          object_id
+        );
       }
-    }
+    });
   }
 }
 
@@ -259,8 +283,6 @@ where
           }
           let is_queue = queue.init_sync(&collab, SyncReason::CollabInitialize)?;
           if is_queue {
-            #[cfg(feature = "sync_verbose_log")]
-            trace!("finish init sync: {}", queue.origin);
             return Ok(());
           } else {
             return Err(anyhow!("Failed to queue init sync"));

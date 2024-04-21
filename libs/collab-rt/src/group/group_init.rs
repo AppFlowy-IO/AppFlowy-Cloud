@@ -226,7 +226,7 @@ impl EditState {
     self.edit_counter.load(Ordering::SeqCst)
   }
 
-  /// Increments the edit count and returns the new value.
+  /// Increments the edit count and returns the old value
   pub(crate) fn increment_edit_count(&self) -> u32 {
     self
       .edit_counter

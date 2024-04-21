@@ -354,7 +354,14 @@ impl SeqNumCounter {
   pub fn check_ack_broadcast_contiguous(&self, object_id: &str) -> Result<(), SyncError> {
     let ack_seq_num = self.ack_seq_counter.load(Ordering::SeqCst);
     let broadcast_seq_num = self.broadcast_seq_counter.load(Ordering::SeqCst);
-    log_ack_and_broadcast(object_id, ack_seq_num, broadcast_seq_num);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!(
+        "receive {} seq_num, ack:{}, broadcast:{}",
+        object_id,
+        ack_seq_num,
+        broadcast_seq_num,
+      );
+    }
 
     if ack_seq_num > broadcast_seq_num {
       // calculate the number of times the ack is greater than the broadcast. We don't do return MissingUpdates
@@ -382,14 +389,4 @@ impl SeqNumCounter {
 
     Ok(())
   }
-}
-
-#[cfg(feature = "sync_verbose_log")]
-fn log_ack_and_broadcast(object_id: &str, ack_seq_num: u32, broadcast_seq_num: u32) {
-  trace!(
-    "receive {} seq_num, ack:{}, broadcast:{}",
-    object_id,
-    ack_seq_num,
-    broadcast_seq_num,
-  );
 }

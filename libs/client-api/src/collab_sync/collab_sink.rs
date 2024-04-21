@@ -1,7 +1,6 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::SeqNumCounter;
 
-use crate::collab_sync::period_state_check::CollabStateCheckRunner;
 use crate::collab_sync::{SinkConfig, SyncError, SyncObject};
 use anyhow::Error;
 use collab::core::origin::{CollabClient, CollabOrigin};
@@ -71,18 +70,11 @@ where
     let mut interval = interval(SEND_INTERVAL);
     let weak_sending_messages = Arc::downgrade(&sending_messages);
 
-    let weak_notifier = Arc::downgrade(&notifier);
-    let origin = CollabOrigin::Client(CollabClient {
+    let _weak_notifier = Arc::downgrade(&notifier);
+    let _origin = CollabOrigin::Client(CollabClient {
       uid,
       device_id: object.device_id.clone(),
     });
-    CollabStateCheckRunner::run(
-      origin,
-      object.object_id.clone(),
-      Arc::downgrade(&message_queue),
-      weak_notifier,
-      state.clone(),
-    );
 
     let cloned_state = state.clone();
     let weak_notifier = Arc::downgrade(&notifier);

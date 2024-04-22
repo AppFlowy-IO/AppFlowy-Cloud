@@ -8,7 +8,7 @@ use async_trait::async_trait;
 
 use collab::core::collab_plugin::EncodedCollab;
 
-use collab_rt::command::{RTCommand, RTCommandSender};
+use appflowy_collaborate::command::{RTCommand, RTCommandSender};
 use database::collab::{AppResult, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
@@ -17,7 +17,7 @@ use database_entity::dto::{
 use itertools::{Either, Itertools};
 
 use crate::state::RedisConnectionManager;
-use collab_rt::data_validation::CollabValidator;
+use appflowy_collaborate::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;

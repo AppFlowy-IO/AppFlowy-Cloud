@@ -599,6 +599,7 @@ dependencies = [
  "anyhow",
  "app-error",
  "appflowy-ai",
+ "appflowy-collaborate",
  "argon2",
  "assert-json-diff",
  "async-stream",
@@ -613,7 +614,6 @@ dependencies = [
  "collab-document",
  "collab-entity",
  "collab-folder",
- "collab-rt",
  "collab-rt-entity",
  "collab-stream",
  "dashmap",
@@ -670,6 +670,46 @@ dependencies = [
  "uuid",
  "validator",
  "workspace-template",
+]
+
+[[package]]
+name = "appflowy-collaborate"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "app-error",
+ "async-stream",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "collab",
+ "collab-document",
+ "collab-entity",
+ "collab-folder",
+ "collab-rt-entity",
+ "collab-rt-protocol",
+ "dashmap",
+ "database",
+ "database-entity",
+ "futures",
+ "futures-util",
+ "indexmap 2.2.5",
+ "lazy_static",
+ "md5",
+ "parking_lot 0.12.1",
+ "prometheus-client",
+ "rand 0.8.5",
+ "redis 0.25.2",
+ "semver",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "yrs",
 ]
 
 [[package]]
@@ -1681,46 +1721,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "collab-rt"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "app-error",
- "async-stream",
- "async-trait",
- "bytes",
- "chrono",
- "collab",
- "collab-document",
- "collab-entity",
- "collab-folder",
- "collab-rt-entity",
- "collab-rt-protocol",
- "dashmap",
- "database",
- "database-entity",
- "futures",
- "futures-util",
- "indexmap 2.2.5",
- "lazy_static",
- "md5",
- "parking_lot 0.12.1",
- "prometheus-client",
- "rand 0.8.5",
- "redis 0.25.2",
- "semver",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
- "uuid",
- "yrs",
 ]
 
 [[package]]

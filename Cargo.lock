@@ -1518,6 +1518,7 @@ dependencies = [
  "tokio",
  "tokio-retry",
  "tokio-stream",
+ "tokio-util",
  "tracing",
  "url",
  "uuid",

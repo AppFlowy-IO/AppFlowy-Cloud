@@ -24,7 +24,7 @@ uuid = { version = "1.6", features = ["v4"] }
 dotenvy = "0.15"
 reqwest = "0.11.27"
 tower-service = "0.3"
-tower-http = { version = "0.5", features = ["cors", "fs"] }
+tower-http = { version = "0.5", features = ["fs"] }
 tower = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

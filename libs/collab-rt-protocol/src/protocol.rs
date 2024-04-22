@@ -1,7 +1,6 @@
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
-use collab::core::transaction::TransactionRetry;
 use collab::preclude::Collab;
 
 use yrs::updates::decoder::Decode;
@@ -46,9 +45,9 @@ impl CollabSyncProtocol for ClientSyncProtocol {
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<(), RTProtocolError> {
-    let mut retry_txn = TransactionRetry::new(awareness.doc());
-    let mut txn = retry_txn
-      .try_get_write_txn_with(origin.clone())
+    let mut txn = awareness
+      .doc()
+      .try_transact_mut_with(origin.clone())
       .map_err(|err| {
         RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
       })?;

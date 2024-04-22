@@ -151,7 +151,7 @@ members = [
     "services/appflowy-history",
     "services/realtime",
     # xtask
-    "xtask", "libs/tonic-proto",
+    "xtask", "libs/tonic-proto", "services/appflowy-collaborate",
 ]
 
 [workspace.dependencies]

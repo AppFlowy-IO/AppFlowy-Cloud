@@ -1,7 +1,8 @@
 use crate::af_spawn;
 use crate::collab_sync::collab_stream::ObserveCollab;
 use crate::collab_sync::{
-  CollabSink, CollabSinkRunner, CollabSyncState, SinkSignal, SyncError, SyncObject,
+  CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
+  SyncObject,
 };
 
 use collab::core::awareness::Awareness;
@@ -130,7 +131,7 @@ pub enum SyncReason {
   CollabInitialize,
   MissUpdates {
     state_vector_v1: Option<Vec<u8>>,
-    reason: String,
+    reason: MissUpdateReason,
   },
   ServerCannotApplyUpdate,
   NetworkResume,

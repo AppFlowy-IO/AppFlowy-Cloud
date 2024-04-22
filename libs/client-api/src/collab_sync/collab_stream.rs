@@ -1,5 +1,7 @@
 use crate::af_spawn;
-use crate::collab_sync::{start_sync, CollabSink, SyncError, SyncObject, SyncReason};
+use crate::collab_sync::{
+  start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
+};
 
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
@@ -11,6 +13,9 @@ use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
+use tokio::select;
+use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
@@ -52,13 +57,16 @@ where
     let cloned_weak_collab = weak_collab.clone();
     let seq_num_counter = Arc::new(SeqNumCounter::default());
     let cloned_seq_num_counter = seq_num_counter.clone();
+    let init_sync_cancel_token = Arc::new(Mutex::new(CancellationToken::new()));
+    let arc_object = Arc::new(object);
     af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
       origin,
-      object,
+      arc_object,
       stream,
       cloned_weak_collab,
       sink,
       cloned_seq_num_counter,
+      init_sync_cancel_token,
     ));
     Self {
       object_id,
@@ -72,11 +80,12 @@ where
   // Spawn the stream that continuously reads the doc's updates from remote.
   async fn observer_collab_message(
     origin: CollabOrigin,
-    object: SyncObject,
+    object: Arc<SyncObject>,
     mut stream: Stream,
     weak_collab: Weak<MutexCollab>,
     weak_sink: Weak<CollabSink<Sink>>,
     seq_num_counter: Arc<SeqNumCounter>,
+    cancel_token: Arc<Mutex<CancellationToken>>,
   ) {
     while let Some(collab_message_result) = stream.next().await {
       let collab = match weak_collab.upgrade() {
@@ -92,12 +101,16 @@ where
       let msg = match collab_message_result {
         Ok(msg) => msg,
         Err(err) => {
-          warn!("Stream error:{}, stop receive incoming changes", err.into());
+          warn!(
+            "{} stream error:{}, stop receive incoming changes",
+            object.object_id,
+            err.into()
+          );
           break;
         },
       };
 
-      if let Err(error) = ObserveCollab::<Sink, Stream>::process_message(
+      if let Err(error) = ObserveCollab::<Sink, Stream>::process_remote_message(
         &object,
         &collab,
         &sink,
@@ -111,8 +124,29 @@ where
             state_vector_v1,
             reason,
           } => {
-            Self::pull_missing_updates(&origin, &object, &collab, &sink, state_vector_v1, reason)
-              .await;
+            let mut cancel_token_lock = cancel_token.lock().await;
+            cancel_token_lock.cancel();
+            let new_cancel_token = CancellationToken::new();
+            *cancel_token_lock = new_cancel_token.clone();
+            drop(cancel_token_lock);
+
+            let cloned_origin = origin.clone();
+            let cloned_object = object.clone();
+            let collab = collab.clone();
+            let sink = sink.clone();
+            tokio::spawn(async move {
+              select! {
+                _ = new_cancel_token.cancelled() => {
+                    if cfg!(feature = "sync_verbose_log") {
+                      trace!("{} receive cancel signal, cancel pull missing updates", cloned_object.object_id);
+                    }
+                },
+                _ = tokio::time::sleep(tokio::time::Duration::from_secs(3)) => {
+                   Self::pull_missing_updates(&cloned_origin, &cloned_object, &collab, &sink, state_vector_v1, reason)
+                   .await;
+                }
+              }
+            });
           },
           SyncError::CannotApplyUpdate => {
             if let Some(lock_guard) = collab.try_lock() {
@@ -136,13 +170,17 @@ where
   }
 
   /// Continuously handle messages from the remote doc
-  async fn process_message(
+  async fn process_remote_message(
     object: &SyncObject,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
     msg: ServerCollabMessage,
     seq_num_counter: &Arc<SeqNumCounter>,
   ) -> Result<(), SyncError> {
+    if cfg!(feature = "sync_verbose_log") {
+      trace!("handle server: {}", msg);
+    }
+
     if let ServerCollabMessage::ClientAck(ack) = &msg {
       let ack_code = ack.get_code();
       // if the server can not apply the update, we start the init sync.
@@ -153,7 +191,7 @@ where
       if ack_code == AckCode::MissUpdate {
         return Err(SyncError::MissUpdates {
           state_vector_v1: Some(ack.payload.to_vec()),
-          reason: "server miss updates".to_string(),
+          reason: MissUpdateReason::ServerMissUpdates,
         });
       }
     }
@@ -161,12 +199,14 @@ where
     // msg_id will be None for [ServerBroadcast] or [ServerAwareness].
     match msg.msg_id() {
       None => {
+        // apply the broadcast data and then check the continuity of the broadcast sequence number.
+        Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
+        sink.notify_next();
+
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
           seq_num_counter.check_broadcast_contiguous(&object.object_id, data.seq_num)?;
           seq_num_counter.store_broadcast_seq_num(data.seq_num);
         }
-        Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
-        sink.notify_next();
         Ok(())
       },
       Some(msg_id) => {
@@ -190,7 +230,7 @@ where
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
     state_vector_v1: Option<Vec<u8>>,
-    reason: String,
+    reason: MissUpdateReason,
   ) {
     if let Some(lock_guard) = collab.try_lock() {
       let reason = SyncReason::MissUpdates {
@@ -334,17 +374,17 @@ impl SeqNumCounter {
   /// messages may have been missed, and an error is returned.
   pub fn check_broadcast_contiguous(
     &self,
-    object_id: &str,
+    _object_id: &str,
     broadcast_seq_num: u32,
   ) -> Result<(), SyncError> {
     let current = self.broadcast_seq_counter.load(Ordering::SeqCst);
     if current > 0 && broadcast_seq_num > current + 1 {
       return Err(SyncError::MissUpdates {
         state_vector_v1: None,
-        reason: format!(
-          "{} broadcast is not contiguous, current:{}, broadcast:{}",
-          object_id, current, broadcast_seq_num,
-        ),
+        reason: MissUpdateReason::BroadcastSeqNotContinuous {
+          current,
+          expected: broadcast_seq_num,
+        },
       });
     }
 
@@ -354,7 +394,14 @@ impl SeqNumCounter {
   pub fn check_ack_broadcast_contiguous(&self, object_id: &str) -> Result<(), SyncError> {
     let ack_seq_num = self.ack_seq_counter.load(Ordering::SeqCst);
     let broadcast_seq_num = self.broadcast_seq_counter.load(Ordering::SeqCst);
-    log_ack_and_broadcast(object_id, ack_seq_num, broadcast_seq_num);
+    if cfg!(feature = "sync_verbose_log") {
+      trace!(
+        "receive {} seq_num, ack:{}, broadcast:{}",
+        object_id,
+        ack_seq_num,
+        broadcast_seq_num,
+      );
+    }
 
     if ack_seq_num > broadcast_seq_num {
       // calculate the number of times the ack is greater than the broadcast. We don't do return MissingUpdates
@@ -372,24 +419,14 @@ impl SeqNumCounter {
 
         return Err(SyncError::MissUpdates {
           state_vector_v1: None,
-          reason: format!(
-            "ack is not equal to broadcast, ack:{}, broadcast:{}",
-            ack_seq_num, broadcast_seq_num,
-          ),
+          reason: MissUpdateReason::AckSeqAdvanceBroadcastSeq {
+            ack_seq: ack_seq_num,
+            broadcast_seq: broadcast_seq_num,
+          },
         });
       }
     }
 
     Ok(())
   }
-}
-
-#[cfg(feature = "sync_verbose_log")]
-fn log_ack_and_broadcast(object_id: &str, ack_seq_num: u32, broadcast_seq_num: u32) {
-  trace!(
-    "receive {} seq_num, ack:{}, broadcast:{}",
-    object_id,
-    ack_seq_num,
-    broadcast_seq_num,
-  );
 }

@@ -9,7 +9,7 @@ use crate::config::config::Config;
 use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
-use collab_rt::CollabRealtimeMetrics;
+use appflowy_collaborate::CollabRealtimeMetrics;
 use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};

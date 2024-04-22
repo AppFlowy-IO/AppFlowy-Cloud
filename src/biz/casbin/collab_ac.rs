@@ -4,7 +4,7 @@ use access_control::access::{enable_access_control, AccessControl};
 use access_control::act::{Action, ActionVariant};
 use app_error::AppError;
 use async_trait::async_trait;
-use collab_rt::RealtimeAccessControl;
+use appflowy_collaborate::RealtimeAccessControl;
 use database_entity::dto::AFAccessLevel;
 use tracing::instrument;
 

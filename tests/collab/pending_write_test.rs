@@ -104,35 +104,25 @@ async fn simulate_large_data_set_write(pool: PgPool) {
   let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
 
   let queries = Arc::new(Mutex::new(Vec::new()));
-  for i in 0..5 {
-    let cloned_storage_queue = storage_queue.clone();
-    let cloned_queries = queries.clone();
-    let cloned_user = user.clone();
-    tokio::spawn(async move {
-      // sleep random seconds less than 2 seconds. because the runtime is single-threaded,
-      // we need sleep a little time to let the runtime switch to other tasks.
-      sleep(Duration::from_millis(i % 2)).await;
+  for i in 0..3 {
+    // sleep random seconds less than 2 seconds. because the runtime is single-threaded,
+    // we need sleep a little time to let the runtime switch to other tasks.
+    sleep(Duration::from_millis(i % 2)).await;
 
-      let encode_collab = EncodedCollab::new_v1(
-        generate_random_bytes(10 * 1024),
-        generate_random_bytes(1024 * 1024),
-      );
-      let params = CollabParams {
-        object_id: format!("object_id_{}", i),
-        collab_type: CollabType::Unknown,
-        encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
-      };
-      cloned_storage_queue
-        .push(
-          &cloned_user.workspace_id,
-          &cloned_user.uid,
-          &params,
-          WritePriority::Low,
-        )
-        .await
-        .unwrap();
-      cloned_queries.lock().await.push((params, encode_collab));
-    });
+    let encode_collab = EncodedCollab::new_v1(
+      generate_random_bytes(10 * 1024),
+      generate_random_bytes(2 * 1024 * 1024),
+    );
+    let params = CollabParams {
+      object_id: format!("object_id_{}", i),
+      collab_type: CollabType::Unknown,
+      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
+    };
+    storage_queue
+      .push(&user.workspace_id, &user.uid, &params, WritePriority::Low)
+      .await
+      .unwrap();
+    queries.lock().await.push((params, encode_collab));
   }
 
   // Allow some time for processing

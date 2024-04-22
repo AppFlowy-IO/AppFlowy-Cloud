@@ -13,10 +13,10 @@ use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
+use appflowy_collaborate::data_validation::{validate_encode_collab, CollabValidator};
 use bytes::BytesMut;
 use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
-use collab_rt::data_validation::{validate_encode_collab, CollabValidator};
 
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;

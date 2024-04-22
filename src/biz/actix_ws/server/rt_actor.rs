@@ -1,8 +1,8 @@
 use crate::biz::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
 use crate::biz::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
 use actix::{Actor, Context, Handler, ResponseFuture};
-use collab_rt::error::RealtimeError;
-use collab_rt::{CollaborationServer, RealtimeAccessControl};
+use appflowy_collaborate::error::RealtimeError;
+use appflowy_collaborate::{CollaborationServer, RealtimeAccessControl};
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 use std::ops::Deref;

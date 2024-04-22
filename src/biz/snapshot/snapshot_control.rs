@@ -4,8 +4,8 @@ use crate::biz::snapshot::queue::PendingQueue;
 use crate::state::RedisConnectionManager;
 use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_collaborate::data_validation::validate_encode_collab;
 use async_stream::stream;
-use collab_rt::data_validation::validate_encode_collab;
 use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
   select_snapshot, AppResult, COLLAB_SNAPSHOT_LIMIT, SNAPSHOT_PER_HOUR,

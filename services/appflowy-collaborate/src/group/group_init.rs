@@ -1,4 +1,3 @@
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use dashmap::DashMap;
@@ -18,6 +17,7 @@ use crate::rt_server::rt_spawn;
 use collab::core::collab::MutexCollab;
 use futures_util::{SinkExt, StreamExt};
 
+use collab::entity::EncodedCollab;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use tokio::sync::mpsc;
 use tracing::{event, trace};

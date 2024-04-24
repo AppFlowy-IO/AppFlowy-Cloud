@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
 use assert_json_diff::assert_json_include;
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 use collab_document::document_data::default_document_collab_data;
 use collab_entity::CollabType;
 use database_entity::dto::{
@@ -16,6 +16,27 @@ use crate::collab::util::{generate_random_string, test_encode_collab_v1};
 use client_api_test_util::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
+
+#[tokio::test]
+async fn get_collab_response_compatible_test() {
+  let mut test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+
+  let params = QueryCollabParams {
+    workspace_id: workspace_id.clone(),
+    inner: QueryCollab {
+      object_id: workspace_id.clone(),
+      collab_type: CollabType::Folder,
+    },
+  };
+  // after 0.3.22, we use [CollabResponse] instead of EncodedCollab as the response
+  let data = test_client.get_collab(params).await.unwrap();
+  assert_eq!(data.object_id, workspace_id);
+
+  let json = serde_json::to_value(data.clone()).unwrap();
+  let encode_collab: EncodedCollab = serde_json::from_value(json).unwrap();
+  assert_eq!(data.encode_collab, encode_collab);
+}
 
 #[tokio::test]
 async fn batch_insert_collab_with_empty_payload_test() {

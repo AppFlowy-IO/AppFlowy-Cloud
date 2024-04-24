@@ -1,6 +1,6 @@
 use crate::group::cmd::{GroupCommand, GroupCommandSender};
 use crate::rt_server::rt_spawn;
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tracing::error;

@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use app_error::AppError;
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
   AppResult,

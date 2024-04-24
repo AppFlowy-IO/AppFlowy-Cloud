@@ -7,10 +7,10 @@ use crate::metrics::CollabMetricsCalculate;
 use crate::RealtimeAccessControl;
 use app_error::AppError;
 use collab::core::collab::{DataSource, MutexCollab};
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
 
 use crate::group::plugin::HistoryPlugin;
+use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
 use collab_rt_entity::user::RealtimeUser;

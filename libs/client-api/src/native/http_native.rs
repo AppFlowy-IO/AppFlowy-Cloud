@@ -6,12 +6,12 @@ use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
-use collab_rt_entity::EncodedCollab;
 use collab_rt_entity::HttpRealtimeMessage;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures_util::stream;
 use prost::Message;
 use reqwest::{Body, Method};
+use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
@@ -25,7 +25,7 @@ impl Client {
   pub async fn get_collab(
     &self,
     params: QueryCollabParams,
-  ) -> Result<EncodedCollab, AppResponseError> {
+  ) -> Result<CollabResponse, AppResponseError> {
     info!("get collab:{}", params);
     // 2 seconds, 4 seconds, 8 seconds
     let retry_strategy = ExponentialBackoff::from_millis(2).factor(1000).take(3);

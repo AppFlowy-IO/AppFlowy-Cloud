@@ -18,7 +18,7 @@ env:
   LATEST_TAG: latest
 
 jobs:
-  appflowy_cloud_history:
+  appflowy_history:
     runs-on: ubuntu-22.04
     steps:
       - name: Check out the repository
@@ -39,7 +39,7 @@ jobs:
       - name: Build and Push AppFlowy History
         run: |
           export TAG=${GITHUB_REF#refs/*/}
-          docker buildx build --platform linux/amd64,linux/arm64 -t appflowyinc/appflowy_cloud_history:${TAG} -t appflowyinc/appflowy_cloud_history:latest -f services/appflowy-history/Dockerfile --push .
+          docker buildx build --platform linux/amd64,linux/arm64 -t appflowyinc/appflowy_history:${TAG} -t appflowyinc/appflowy_history:latest -f services/appflowy-history/Dockerfile --push .
 
   gotrue_image:
     runs-on: ubuntu-22.04

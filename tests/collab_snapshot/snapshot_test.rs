@@ -1,8 +1,8 @@
 use anyhow::Error;
 use assert_json_diff::assert_json_eq;
 use collab::core::collab::{DataSource, MutexCollab};
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use serde_json::{json, Value};

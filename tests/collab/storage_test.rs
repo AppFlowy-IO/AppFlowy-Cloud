@@ -5,7 +5,7 @@ use app_error::ErrorCode;
 use appflowy_cloud::biz::collab::mem_cache::CollabMemCache;
 
 use client_api_test_util::*;
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
@@ -37,6 +37,7 @@ async fn success_insert_collab_test() {
     ))
     .await
     .unwrap()
+    .encode_collab
     .doc_state;
 
   assert_eq!(doc_state, encode_collab.doc_state);

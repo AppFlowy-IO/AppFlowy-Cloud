@@ -15,7 +15,6 @@ use anyhow::{anyhow, Context};
 use app_error::AppError;
 use appflowy_collaborate::data_validation::{validate_encode_collab, CollabValidator};
 use bytes::BytesMut;
-use collab::core::collab_plugin::EncodedCollab;
 use collab_entity::CollabType;
 
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
@@ -606,19 +605,26 @@ async fn get_collab_handler(
   user_uuid: UserUuid,
   payload: Json<QueryCollabParams>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<EncodedCollab>>> {
+) -> Result<Json<AppResponse<CollabResponse>>> {
   let uid = state
     .user_cache
     .get_user_uid(&user_uuid)
     .await
     .map_err(AppResponseError::from)?;
-  let data = state
+  let params = payload.into_inner();
+  let object_id = params.object_id.clone();
+  let encode_collab = state
     .collab_access_control_storage
-    .get_encode_collab(&uid, payload.into_inner(), false)
+    .get_encode_collab(&uid, params, false)
     .await
     .map_err(AppResponseError::from)?;
 
-  Ok(Json(AppResponse::Ok().with_data(data)))
+  let resp = CollabResponse {
+    encode_collab,
+    object_id,
+  };
+
+  Ok(Json(AppResponse::Ok().with_data(resp)))
 }
 
 async fn v1_get_collab_handler(
@@ -626,7 +632,7 @@ async fn v1_get_collab_handler(
   path: web::Path<(String, String)>,
   query: web::Query<CollabTypeParam>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<EncodedCollab>>> {
+) -> Result<Json<AppResponse<CollabResponse>>> {
   let (workspace_id, object_id) = path.into_inner();
   let collab_type = query.into_inner().collab_type;
   let uid = state
@@ -638,18 +644,23 @@ async fn v1_get_collab_handler(
   let param = QueryCollabParams {
     workspace_id,
     inner: QueryCollab {
-      object_id,
+      object_id: object_id.clone(),
       collab_type,
     },
   };
 
-  let data = state
+  let encode_collab = state
     .collab_access_control_storage
     .get_encode_collab(&uid, param, false)
     .await
     .map_err(AppResponseError::from)?;
 
-  Ok(Json(AppResponse::Ok().with_data(data)))
+  let resp = CollabResponse {
+    encode_collab,
+    object_id,
+  };
+
+  Ok(Json(AppResponse::Ok().with_data(resp)))
 }
 
 #[instrument(level = "trace", skip_all, err)]

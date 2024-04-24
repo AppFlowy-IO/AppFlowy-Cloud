@@ -4,7 +4,7 @@ use appflowy_cloud::biz::collab::cache::CollabCache;
 use appflowy_cloud::biz::collab::queue::StorageQueue;
 use appflowy_cloud::biz::collab::WritePriority;
 use client_api_test_util::setup_log;
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use database_entity::dto::{CollabParams, QueryCollab};
 use sqlx::PgPool;

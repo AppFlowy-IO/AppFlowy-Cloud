@@ -6,13 +6,12 @@ use crate::ws::{
 use crate::Client;
 use app_error::gotrue::GoTrueError;
 use client_websocket::{connect_async, WebSocketStream};
-use collab_rt_entity::EncodedCollab;
 use database_entity::dto::QueryCollabParams;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
 use reqwest::header::HeaderMap;
 use reqwest::Method;
-use shared_entity::dto::workspace_dto::CollabTypeParam;
+use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::pin::Pin;
@@ -171,7 +170,7 @@ impl GetCollabAction {
 
 impl Action for GetCollabAction {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync>>;
-  type Item = EncodedCollab;
+  type Item = CollabResponse;
   type Error = AppResponseError;
 
   fn run(&mut self) -> Self::Future {
@@ -191,7 +190,7 @@ impl Action for GetCollabAction {
         .send()
         .await?;
       log_request_id(&resp);
-      let resp = AppResponse::<EncodedCollab>::from_response(resp).await?;
+      let resp = AppResponse::<CollabResponse>::from_response(resp).await?;
       resp.into_data()
     })
   }

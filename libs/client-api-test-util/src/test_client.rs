@@ -8,9 +8,9 @@ use bytes::Bytes;
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
 use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::{DataSource, MutexCollab};
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
+use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 
 use collab_entity::CollabType;
@@ -24,7 +24,8 @@ use database_entity::dto::{
 use mime::Mime;
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
-  BlobMetadata, WorkspaceMemberChangeset, WorkspaceMemberInvitation, WorkspaceSpaceUsage,
+  BlobMetadata, CollabResponse, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
+  WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
@@ -174,7 +175,7 @@ impl TestClient {
     Folder::from_collab_doc_state(
       uid,
       CollabOrigin::Empty,
-      DataSource::DocStateV1(data.doc_state.to_vec()),
+      DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
       &workspace_id,
       vec![],
     )
@@ -454,6 +455,13 @@ impl TestClient {
       .api_client
       .create_collab_list(workspace_id, params)
       .await
+  }
+
+  pub async fn get_collab(
+    &mut self,
+    query: QueryCollabParams,
+  ) -> Result<CollabResponse, AppResponseError> {
+    self.api_client.get_collab(query).await
   }
 
   pub async fn batch_get_collab(
@@ -746,7 +754,7 @@ pub async fn assert_server_collab(
           let json = Collab::new_with_source(
             CollabOrigin::Empty,
             &object_id,
-            DataSource::DocStateV1(data.doc_state.to_vec()),
+            DataSource::DocStateV1(data.encode_collab.doc_state.to_vec()),
             vec![],
             false,
           )
@@ -867,7 +875,7 @@ pub async fn get_collab_json_from_server(
   Collab::new_with_source(
     CollabOrigin::Empty,
     object_id,
-    DataSource::DocStateV1(bytes.doc_state.to_vec()),
+    DataSource::DocStateV1(bytes.encode_collab.doc_state.to_vec()),
     vec![],
     false,
   )

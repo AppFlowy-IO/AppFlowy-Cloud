@@ -1,7 +1,6 @@
 use client_api::entity::AFUserProfile;
 use client_api::error::{AppResponseError, ErrorCode};
-use collab_entity::CollabType;
-use collab_rt_entity::EncodedCollab;
+use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{QueryCollab, QueryCollabParams};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};

@@ -1,10 +1,8 @@
 use crate::biz::collab::disk_cache::CollabDiskCache;
 use crate::biz::collab::mem_cache::CollabMemCache;
-use app_error::AppError;
-use collab::core::collab_plugin::EncodedCollab;
-
 use crate::state::RedisConnectionManager;
-
+use app_error::AppError;
+use collab::entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};

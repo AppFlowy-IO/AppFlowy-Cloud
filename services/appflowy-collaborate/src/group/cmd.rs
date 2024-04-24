@@ -3,13 +3,13 @@ use crate::error::RealtimeError;
 use crate::group::manager::GroupManager;
 use crate::RealtimeAccessControl;
 use async_stream::stream;
-use collab::core::collab_plugin::EncodedCollab;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, SinkMessage};
 use collab_rt_entity::{CollabAck, RealtimeMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 
+use collab::entity::EncodedCollab;
 use futures_util::StreamExt;
 use std::sync::Arc;
 use tracing::{error, instrument, trace, warn};

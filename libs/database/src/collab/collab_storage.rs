@@ -1,12 +1,12 @@
 use app_error::AppError;
 use async_trait::async_trait;
 
-use collab::core::collab_plugin::EncodedCollab;
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
+use collab::entity::EncodedCollab;
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;

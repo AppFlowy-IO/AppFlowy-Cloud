@@ -2,8 +2,8 @@ use crate::error::RealtimeError;
 use async_trait::async_trait;
 
 use collab::core::collab::DataSource;
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use database_entity::dto::CollabParams;

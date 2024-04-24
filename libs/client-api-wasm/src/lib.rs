@@ -134,7 +134,7 @@ impl ClientAPI {
   ) -> Result<ClientEncodeCollab, ClientResponse> {
     tracing::debug!("get_collab: {:?}", params);
     match self.client.get_collab(params.into()).await {
-      Ok(data) => Ok(ClientEncodeCollab::from(data)),
+      Ok(data) => Ok(ClientEncodeCollab::from(data.encode_collab)),
       Err(err) => Err(ClientResponse::from(err)),
     }
   }

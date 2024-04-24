@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use tracing::error;
@@ -157,6 +158,16 @@ pub struct QueryCollabParams {
   #[serde(flatten)]
   #[validate]
   pub inner: QueryCollab,
+}
+
+impl Display for QueryCollabParams {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "workspace_id: {}, object_id: {}, collab_type: {:?}",
+      self.workspace_id, self.object_id, self.collab_type
+    )
+  }
 }
 
 impl QueryCollabParams {

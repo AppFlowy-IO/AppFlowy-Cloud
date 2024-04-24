@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Retry, RetryIf};
-use tracing::{event, instrument};
+use tracing::{event, info, instrument};
 
 impl Client {
   #[instrument(level = "debug", skip_all)]
@@ -26,6 +26,7 @@ impl Client {
     &self,
     params: QueryCollabParams,
   ) -> Result<EncodedCollab, AppResponseError> {
+    info!("get collab:{}", params);
     // 2 seconds, 4 seconds, 8 seconds
     let retry_strategy = ExponentialBackoff::from_millis(2).factor(1000).take(3);
     let action = GetCollabAction::new(self.clone(), params);

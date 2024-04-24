@@ -246,33 +246,6 @@ fn bulk_from_redis_value(v: &Value) -> Result<&Vec<Value>, RedisError> {
   }
 }
 
-struct UserId(i64);
-
-impl FromRedisValue for UserId {
-  fn from_redis_value(v: &Value) -> RedisResult<Self> {
-    match v {
-      Value::Data(uid_bytes) => {
-        if uid_bytes.len() == std::mem::size_of::<i64>() {
-          let mut buf = [0u8; 8];
-          buf.copy_from_slice(uid_bytes);
-          let value = i64::from_be_bytes(buf);
-          Ok(Self(value))
-        } else {
-          Err(RedisError::from((
-            redis::ErrorKind::TypeError,
-            "Invalid UID length",
-            format!("Expected 8 bytes, got {}", uid_bytes.len()),
-          )))
-        }
-      },
-      _ => Err(RedisError::from((
-        redis::ErrorKind::TypeError,
-        "Expected Value::Data for UID",
-      ))),
-    }
-  }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum CollabControlEvent {
   Open {

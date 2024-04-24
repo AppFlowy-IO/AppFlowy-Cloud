@@ -428,6 +428,7 @@ impl TestClient {
     timeout_secs: u64,
   ) -> Result<AFSnapshotMetas, AppResponseError> {
     let duration = Duration::from_secs(timeout_secs);
+    #[allow(clippy::blocks_in_conditions)]
     match timeout(duration, async {
       let mut snapshot_metas = self.get_snapshot_list(workspace_id, object_id).await?;
       // Loop until the condition `f` returns true or the timeout is reached

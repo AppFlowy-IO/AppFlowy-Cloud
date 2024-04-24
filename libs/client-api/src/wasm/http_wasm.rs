@@ -6,7 +6,7 @@ use again::RetryPolicy;
 use app_error::gotrue::GoTrueError;
 use app_error::{AppError, ErrorCode};
 use async_trait::async_trait;
-use collab_rt_entity::EncodedCollab;
+use collab_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use reqwest::Method;

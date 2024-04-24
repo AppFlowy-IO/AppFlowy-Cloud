@@ -70,7 +70,7 @@ governor = { version = "0.6.3" }
 tonic.workspace = true
 prost.workspace = true
 tonic-proto.workspace = true
-appflowy-collaborate = { path = "services/appflowy-collaborate", features = ["collab-rt-multi-thread"] }
+appflowy-collaborate = { path = "services/appflowy-collaborate" }
 
 # collab
 collab = { version = "0.1.0" }

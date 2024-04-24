@@ -1,6 +1,6 @@
 use anyhow::Context;
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 
 use rand::distributions::Alphanumeric;

@@ -6,7 +6,7 @@ use crate::biz::snapshot::SnapshotControl;
 use app_error::AppError;
 use async_trait::async_trait;
 
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 
 use appflowy_collaborate::command::{RTCommand, RTCommandSender};
 use database::collab::{AppResult, CollabStorage, CollabStorageAccessControl};

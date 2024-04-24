@@ -1,5 +1,5 @@
 use crate::state::RedisConnectionManager;
-use collab::core::collab_plugin::EncodedCollab;
+use collab::entity::EncodedCollab;
 use redis::{pipe, AsyncCommands};
 
 use anyhow::anyhow;

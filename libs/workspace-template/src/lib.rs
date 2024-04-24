@@ -5,8 +5,8 @@ use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 pub use anyhow::Result;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{

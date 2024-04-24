@@ -6,11 +6,11 @@ use again::RetryPolicy;
 use app_error::gotrue::GoTrueError;
 use app_error::{AppError, ErrorCode};
 use async_trait::async_trait;
-use collab_rt_entity::EncodedCollab;
+use collab_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use reqwest::Method;
-use shared_entity::dto::workspace_dto::CollabTypeParam;
+use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
@@ -34,7 +34,7 @@ impl Client {
   pub async fn get_collab(
     &self,
     params: QueryCollabParams,
-  ) -> Result<EncodedCollab, AppResponseError> {
+  ) -> Result<CollabResponse, AppResponseError> {
     let url = format!(
       "{}/api/workspace/v1/{}/collab/{}",
       self.base_url, &params.workspace_id, &params.object_id
@@ -47,7 +47,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    let resp = AppResponse::<EncodedCollab>::from_response(resp).await?;
+    let resp = AppResponse::<CollabResponse>::from_response(resp).await?;
     resp.into_data()
   }
 

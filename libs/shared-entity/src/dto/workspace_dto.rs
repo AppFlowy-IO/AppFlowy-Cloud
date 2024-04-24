@@ -111,5 +111,12 @@ pub struct CollabTypeParam {
 pub struct CollabResponse {
   #[serde(flatten)]
   pub encode_collab: EncodedCollab,
+  /// Object ID is marked with `serde(default)` to handle cases where `object_id` is missing in the data.
+  /// This scenario can occur if the server data does not include `object_id` due to version downgrades (pre-0325 versions).
+  /// The default ensures graceful handling of missing `object_id` during deserialization, preventing errors in client applications
+  /// that expect this field to exist.
+  ///
+  /// We can remove this 'serde(default)' after the 0325 version is stable.
+  #[serde(default)]
   pub object_id: String,
 }

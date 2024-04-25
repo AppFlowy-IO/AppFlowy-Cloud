@@ -9,7 +9,7 @@ async fn get_user_default_workspace_test() {
   let test_client = TestClient::new_user().await;
   let folder = test_client.get_user_folder().await;
 
-  let views = folder.get_workspace_views();
+  let views = folder.get_views_belong_to(&test_client.workspace_id().await);
   assert_eq!(views.len(), 1);
   assert_eq!(views[0].name, "Getting started");
 }

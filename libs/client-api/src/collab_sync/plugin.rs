@@ -17,11 +17,12 @@ use futures_util::SinkExt;
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio_retry::strategy::FixedInterval;
-use tokio_retry::{Action, Retry};
+use tokio_retry::{Action, Condition, RetryIf};
 use tokio_stream::StreamExt;
 use tracing::{error, trace};
 use yrs::updates::encoder::Encode;
@@ -33,12 +34,18 @@ pub struct SyncPlugin<Sink, Stream, C> {
   #[allow(dead_code)]
   channel: Option<Arc<C>>,
   collab: Weak<MutexCollab>,
+  is_destroyed: Arc<AtomicBool>,
 }
 
 impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
   fn drop(&mut self) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("Drop sync plugin: {}", self.object.object_id);
+
+    // when the plugin is dropped, set the is_destroyed flag to true
+    self
+      .is_destroyed
+      .store(true, std::sync::atomic::Ordering::SeqCst);
   }
 }
 
@@ -124,6 +131,7 @@ where
       object,
       channel,
       collab,
+      is_destroyed: Arc::new(Default::default()),
     }
   }
 }
@@ -143,8 +151,12 @@ where
       collab: self.collab.clone(),
     };
 
+    let condition = InitSyncRetryCondition {
+      is_plugin_destroyed: self.is_destroyed.clone(),
+    };
+
     tokio::spawn(async move {
-      if let Err(err) = Retry::spawn(retry_strategy, action).await {
+      if let Err(err) = RetryIf::spawn(retry_strategy, action, condition).await {
         error!("Failed to start init sync: {}", err);
       }
     });
@@ -217,6 +229,12 @@ where
         );
       }
     });
+  }
+
+  fn destroy(&self) {
+    self
+      .is_destroyed
+      .store(true, std::sync::atomic::Ordering::SeqCst);
   }
 }
 
@@ -295,5 +313,17 @@ where
       // If the queue or collab is dropped, return Ok to stop retrying.
       Ok(())
     })
+  }
+}
+
+pub(crate) struct InitSyncRetryCondition {
+  is_plugin_destroyed: Arc<AtomicBool>,
+}
+impl Condition<anyhow::Error> for InitSyncRetryCondition {
+  fn should_retry(&mut self, _error: &anyhow::Error) -> bool {
+    // Only retry if the plugin is not destroyed
+    !self
+      .is_plugin_destroyed
+      .load(std::sync::atomic::Ordering::SeqCst)
   }
 }

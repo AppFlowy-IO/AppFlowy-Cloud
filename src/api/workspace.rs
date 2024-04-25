@@ -418,6 +418,15 @@ async fn create_collab_handler(
   };
 
   let (params, workspace_id) = params.split();
+
+  if params.object_id == workspace_id {
+    // Only the object with [CollabType::Folder] can have the same object_id as workspace_id. But
+    // it should use create workspace API
+    return Err(
+      AppError::InvalidRequest("object_id cannot be the same as workspace_id".to_string()).into(),
+    );
+  }
+
   if let Err(err) = params.check_encode_collab().await {
     return Err(
       AppError::NoRequiredData(format!(

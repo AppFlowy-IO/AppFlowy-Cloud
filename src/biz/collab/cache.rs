@@ -42,7 +42,7 @@ impl CollabCache {
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
       event!(
         Level::DEBUG,
-        "Get encode collab:{} from cache",
+        "Did get encode collab:{} from cache",
         query.object_id
       );
       self.success_attempts.fetch_add(1, Ordering::Relaxed);

@@ -292,9 +292,12 @@ where
 
     // Early return if editing collab is initialized, as it indicates no need to query further.
     if !is_collab_init {
-      trace!("Get encode collab {} from editing collab", params.object_id);
       // Attempt to retrieve encoded collab from the editing collab
       if let Some(value) = self.get_encode_collab_from_editing(&params.object_id).await {
+        trace!(
+          "Did get encode collab {} from editing collab",
+          params.object_id
+        );
         return Ok(value);
       }
     }

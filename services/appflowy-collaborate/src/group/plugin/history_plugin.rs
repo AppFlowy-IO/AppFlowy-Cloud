@@ -92,7 +92,7 @@ where
       let encode_collab = weak_collab.upgrade().and_then(|collab| {
         collab.try_lock().and_then(|lock| {
           lock
-            .encode_collab_v1(|collab| collab_type.validate(collab))
+            .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
             .ok()
         })
       });

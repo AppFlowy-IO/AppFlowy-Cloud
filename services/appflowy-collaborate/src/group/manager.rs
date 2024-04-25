@@ -247,7 +247,7 @@ where
         false,
       ) {
         // TODO(nathan): this check is not necessary, can be removed in the future.
-        collab_type.validate(&collab).ok()?;
+        collab_type.validate_require_data(&collab).ok()?;
         return Some(encoded_collab);
       }
     }

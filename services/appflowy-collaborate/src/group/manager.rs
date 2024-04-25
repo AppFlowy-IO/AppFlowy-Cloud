@@ -144,8 +144,9 @@ where
     };
 
     trace!(
-      "[realtime]: {} create group:{}:{}",
+      "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
       uid,
+      workspace_id,
       object_id,
       collab_type
     );

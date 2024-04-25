@@ -179,7 +179,13 @@ fn get_encode_collab(
         err
       ))
     })?
-    .encode_to_bytes()?;
+    .encode_to_bytes()
+    .map_err(|err| {
+      AppError::Internal(anyhow!(
+        "Failed to serialize encoded collaboration to bytes: {:?}",
+        err
+      ))
+    })?;
 
   // Specific check for collaboration type 'Folder' to ensure workspace ID consistency.
   if let CollabType::Folder = collab_type {

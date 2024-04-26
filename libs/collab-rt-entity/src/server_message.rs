@@ -308,11 +308,11 @@ pub struct AwarenessSync {
 }
 
 impl AwarenessSync {
-  pub fn new(object_id: String, payload: Vec<u8>) -> Self {
+  pub fn new(object_id: String, payload: Vec<u8>, origin: CollabOrigin) -> Self {
     Self {
       object_id,
       payload: Bytes::from(payload),
-      origin: CollabOrigin::Server,
+      origin,
     }
   }
 }

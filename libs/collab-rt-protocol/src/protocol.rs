@@ -172,10 +172,11 @@ pub trait CollabSyncProtocol {
   /// instance is being updated with incoming data.
   fn handle_awareness_update(
     &self,
+    message_origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: AwarenessUpdate,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
-    awareness.apply_update(update)?;
+    awareness.apply_update(update, message_origin)?;
     Ok(None)
   }
 
@@ -221,7 +222,7 @@ pub fn handle_message_follow_protocol<P: CollabSyncProtocol>(
     },
     Message::Auth(reason) => protocol.handle_auth(collab.get_awareness(), reason),
     Message::Awareness(update) => {
-      protocol.handle_awareness_update(collab.get_mut_awareness(), update)
+      protocol.handle_awareness_update(message_origin, collab.get_mut_awareness(), update)
     },
     Message::Custom(msg) => protocol.handle_custom_message(collab.get_mut_awareness(), msg),
   }

@@ -24,4 +24,13 @@ module.exports = {
       },
     },
   },
+  locals: {
+    cdnBaseUrl: '',
+    userIconUrl: "https://cdn-icons-png.flaticon.com/512/1077/1077012.png",
+    userName: "John Doe",
+    acceptUrl: "https://appflowy.io",
+    workspaceName: "AppFlowy",
+    workspaceMembersCount: "100",
+    workspaceIconURL: "https://cdn-icons-png.flaticon.com/512/1078/1078013.png",
+  },
 }

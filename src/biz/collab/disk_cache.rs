@@ -1,10 +1,12 @@
 use anyhow::anyhow;
 use app_error::AppError;
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
 use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
-  AppResult,
+  select_collab_meta_from_af_collab, AppResult,
 };
+use database::pg_row::AFCollabRowMeta;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use sqlx::{PgPool, Transaction};
 use std::collections::HashMap;
@@ -25,6 +27,21 @@ impl CollabDiskCache {
   pub async fn is_exist(&self, object_id: &str) -> AppResult<bool> {
     let is_exist = is_collab_exists(object_id, &self.pg_pool).await?;
     Ok(is_exist)
+  }
+
+  pub async fn get_collab_meta(
+    &self,
+    object_id: &str,
+    collab_type: &CollabType,
+  ) -> AppResult<AFCollabRowMeta> {
+    let result = select_collab_meta_from_af_collab(&self.pg_pool, object_id, collab_type).await?;
+    match result {
+      None => {
+        let msg = format!("Can't find the row for object_id: {}", object_id);
+        Err(AppError::RecordNotFound(msg))
+      },
+      Some(meta) => Ok(meta),
+    }
   }
 
   pub async fn upsert_collab_with_transaction(

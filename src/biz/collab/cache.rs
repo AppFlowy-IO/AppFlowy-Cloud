@@ -3,6 +3,8 @@ use crate::biz::collab::mem_cache::CollabMemCache;
 use crate::state::RedisConnectionManager;
 use app_error::AppError;
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
+use database::collab::CollabMetadata;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 use futures_util::{stream, StreamExt};
 use itertools::{Either, Itertools};
@@ -32,6 +34,36 @@ impl CollabCache {
     }
   }
 
+  pub async fn get_collab_meta(
+    &self,
+    object_id: &str,
+    collab_type: &CollabType,
+  ) -> Result<CollabMetadata, AppError> {
+    match self.mem_cache.get_collab_meta(object_id).await {
+      Ok(meta) => Ok(meta),
+      Err(_) => {
+        let row = self
+          .disk_cache
+          .get_collab_meta(object_id, collab_type)
+          .await?;
+        let meta = CollabMetadata {
+          object_id: row.oid,
+          workspace_id: row.workspace_id.to_string(),
+        };
+
+        // Spawn a background task to insert the collaboration metadata into the memory cache.
+        let cloned_meta = meta.clone();
+        let mem_cache = self.mem_cache.clone();
+        tokio::spawn(async move {
+          if let Err(err) = mem_cache.insert_collab_meta(cloned_meta).await {
+            error!("{:?}", err);
+          }
+        });
+        Ok(meta)
+      },
+    }
+  }
+
   pub async fn get_encode_collab(
     &self,
     uid: &i64,
@@ -42,7 +74,7 @@ impl CollabCache {
     if let Some(encoded_collab) = self.mem_cache.get_encode_collab(&query.object_id).await {
       event!(
         Level::DEBUG,
-        "Get encode collab:{} from cache",
+        "Did get encode collab:{} from cache",
         query.object_id
       );
       self.success_attempts.fetch_add(1, Ordering::Relaxed);

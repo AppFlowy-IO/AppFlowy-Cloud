@@ -89,7 +89,7 @@ async fn create_workspace_database_collab(
   });
 
   let encode_collab = collab
-    .encode_collab_v1(|collab| collab_type.validate(collab))
+    .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
     .map_err(AppError::Internal)?;
 
   let encoded_collab_v1 = encode_collab

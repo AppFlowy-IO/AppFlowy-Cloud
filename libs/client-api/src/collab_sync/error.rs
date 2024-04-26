@@ -36,6 +36,9 @@ pub enum SyncError {
   #[error("Can not apply update")]
   CannotApplyUpdate,
 
+  #[error("{0}")]
+  OverrideWithIncorrectData(String),
+
   #[error(transparent)]
   Internal(#[from] anyhow::Error),
 }

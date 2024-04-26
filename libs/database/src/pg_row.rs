@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
+
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFUserProfile, AFWorkspace, AFWorkspaceInvitationStatus,
 };
@@ -184,4 +185,13 @@ pub struct AFWorkspaceInvitationMinimal {
   pub invitee_uid: Option<i64>,
   pub status: AFWorkspaceInvitationStatus,
   pub role: AFRole,
+}
+
+#[derive(FromRow, Clone, Debug)]
+pub struct AFCollabRowMeta {
+  pub oid: String,
+  pub workspace_id: Uuid,
+
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub created_at: Option<DateTime<Utc>>,
 }

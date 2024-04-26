@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 
 use appflowy_collaborate::command::{RTCommand, RTCommandSender};
-use database::collab::{AppResult, CollabStorage, CollabStorageAccessControl};
+use database::collab::{AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
@@ -25,6 +25,7 @@ use std::sync::Arc;
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
 use crate::biz::collab::queue_redis_ops::WritePriority;
+use collab_entity::CollabType;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -342,6 +343,14 @@ where
     }
     self.cache.delete_collab(object_id).await?;
     Ok(())
+  }
+
+  async fn query_collab_meta(
+    &self,
+    object_id: &str,
+    collab_type: &CollabType,
+  ) -> AppResult<CollabMetadata> {
+    self.cache.get_collab_meta(object_id, collab_type).await
   }
 
   async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {

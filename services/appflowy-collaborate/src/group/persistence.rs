@@ -2,13 +2,13 @@ use crate::group::group_init::EditState;
 
 use anyhow::anyhow;
 use app_error::AppError;
-use collab::preclude::{Collab, MapRefExtension};
-use collab_entity::CollabType;
+use collab::preclude::Collab;
+use collab_entity::{validate_data_for_folder, CollabType};
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
-use collab_entity::define::{FOLDER, FOLDER_META, FOLDER_WORKSPACE_ID};
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -189,7 +189,8 @@ fn get_encode_collab(
 
   // Specific check for collaboration type 'Folder' to ensure workspace ID consistency.
   if let CollabType::Folder = collab_type {
-    validate_workspace_id(collab, workspace_id)?;
+    validate_data_for_folder(collab, workspace_id)
+      .map_err(|err| AppError::OverrideWithIncorrectData(err.to_string()))?;
   }
 
   // Construct and return collaboration parameters.
@@ -199,27 +200,4 @@ fn get_encode_collab(
     collab_type: collab_type.clone(),
   };
   Ok(params)
-}
-
-/// Validates the workspace ID for 'Folder' type collaborations.
-/// Ensures that the workspace ID contained in each Folder matches the expected workspace ID.
-/// A mismatch indicates that the Folder data may be incorrect, potentially due to it being
-/// overridden with data from another Folder.
-fn validate_workspace_id(collab: &Collab, workspace_id: &str) -> Result<(), AppError> {
-  let txn = collab
-    .try_transaction()
-    .map_err(|_| AppError::Internal(anyhow!("Failed to initiate transaction")))?;
-
-  let workspace_id_in_collab = collab
-    .get_map_with_txn(&txn, vec![FOLDER, FOLDER_META])
-    .and_then(|map| map.get_str_with_txn(&txn, FOLDER_WORKSPACE_ID))
-    .ok_or_else(|| AppError::Internal(anyhow!("No required data: FOLDER_WORKSPACE_ID")))?;
-
-  if workspace_id != workspace_id_in_collab {
-    return Err(AppError::OverrideWithIncorrectData(format!(
-      "Workspace ID mismatch: expected {}, but received {}",
-      workspace_id, workspace_id_in_collab
-    )));
-  }
-  Ok(())
 }

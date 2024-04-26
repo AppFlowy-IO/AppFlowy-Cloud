@@ -110,6 +110,24 @@ where
   ) -> Result<(), RealtimeError> {
     let mut is_new_collab = false;
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
+    // Ensure the workspace_id matches the metadata's workspace_id when creating a collaboration object
+    // of type [CollabType::Folder]. In this case, both the object id and the workspace id should be
+    // identical. Currently, this workspace_id validation is only performed for [CollabType::Folder] types.
+    if matches!(collab_type, CollabType::Folder) {
+      if let Ok(metadata) = self
+        .storage
+        .query_collab_meta(object_id, &collab_type)
+        .await
+      {
+        if metadata.workspace_id != workspace_id {
+          return Err(RealtimeError::CollabWorkspaceIdNotMatch {
+            expect: metadata.workspace_id,
+            actual: workspace_id.to_string(),
+          });
+        }
+      }
+    }
+
     let result = load_collab(uid, object_id, params, self.storage.clone()).await;
     let mutex_collab = {
       let collab = match result {

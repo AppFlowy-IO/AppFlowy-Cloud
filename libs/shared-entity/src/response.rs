@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::borrow::Cow;
 
 use app_error::AppError;
@@ -32,7 +32,7 @@ pub struct AppResponse<T> {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub data: Option<T>,
 
-  #[serde(default)]
+  #[serde(deserialize_with = "default_error_code")]
   pub code: ErrorCode,
 
   #[serde(default)]
@@ -144,6 +144,7 @@ where
 }
 #[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
 pub struct AppResponseError {
+  #[serde(deserialize_with = "default_error_code")]
   pub code: ErrorCode,
   pub message: Cow<'static, str>,
 }
@@ -188,5 +189,15 @@ impl actix_web::error::ResponseError for AppResponseError {
 
   fn error_response(&self) -> actix_web::HttpResponse {
     actix_web::HttpResponse::Ok().json(self)
+  }
+}
+
+/// Uses a custom deserializer for error codes.
+/// This ensures that when a client receives an unrecognized error code, due to version mismatches,
+/// it defaults to the `Internal` error code.
+fn default_error_code<'a, D: Deserializer<'a>>(deserializer: D) -> Result<ErrorCode, D::Error> {
+  match ErrorCode::deserialize(deserializer) {
+    Ok(code) => Ok(code),
+    Err(_) => Ok(ErrorCode::Internal),
   }
 }

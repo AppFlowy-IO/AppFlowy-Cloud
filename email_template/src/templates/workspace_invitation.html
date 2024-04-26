@@ -5,18 +5,18 @@ bodyClass: bg-purple-50
 ---
 
 <x-main>
-  <div class="bg-purple-50 sm:px-4 px-12 sm:py-12 py-24">
+  <div class="bg-purple-50 sm:px-4 px-12 sm:py-12 py-24 text-black">
     <table align="center">
       <tr>
         <td class="w-[552px] max-w-full">
-          <div class="w-full text-center w-12 h-12">
-            <img src="{{ .UserIconURL }}" class="rounded-full overflow-hidden" width="48px" height="48px"
-                 alt="{{ .UserName }}">
+          <div class="w-full text-center">
+            <img src="{{ userIconUrl }}" class="rounded-full overflow-hidden object-cover" width="48px" height="48px"
+                 alt="{{ userName }}">
           </div>
           <p class="w-full text-center break-words whitespace-normal text-2xl">
-            <span class="text-3xl font-bold">{{ .UserName }}</span>
+            <span class="text-3xl font-bold">{{ userName }}</span>
             <span class="mx-2=1">invited to Join</span>
-            <span class="text-3xl font-bold">{{ .WorkspaceName }}</span>
+            <span class="text-3xl font-bold">{{ workspaceName }}</span>
             <span class="mx-2=1">on AppFlowy</span>
           </p>
           <x-divider space-x="20%"/>
@@ -28,10 +28,13 @@ bodyClass: bg-purple-50
                     <td class="w-9/12">
                     </td>
                     <td class="w-3/12">
-                      <div class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white border-2 border-black overflow-hidden">
-                        <img src="{{ .UserIconURL }}"
+                      <div
+                        style="border: 2px solid black;"
+                        class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white overflow-hidden">
+                        <img src="{{ workspaceIconURL }}"
+                             class="overflow-hidden object-cover"
                              width="100%" height="100%"
-                             alt="{{ .UserName }}">
+                             alt="{{ workspaceName }}">
                       </div>
                     </td>
                   </tr>
@@ -40,15 +43,15 @@ bodyClass: bg-purple-50
               </td>
               <td class="w-7/12">
                 <div class="font-bold mb-2">
-                  {{ .WorkspaceName }}
+                  {{ workspaceName }}
                 </div>
-                <div class="text-sm text-slate-500"> {{ .WorkspaceMembersCount }} members</div>
+                <div class="text-sm text-slate-500"> {{ workspaceMembersCount }} members</div>
               </td>
             </tr>
           </table>
           <x-button align="center"
                     class="hover:opacity-90 cursor-pointer h-[34px] !text-xl !leading-[34px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
-                    href="{{ .AcceptUrl }}">
+                    href="{{ acceptUrl }}">
             Join workspace
           </x-button>
           <p class="m-0 leading-4.5 text-sm text-slate-500 text-center">
@@ -71,7 +74,7 @@ bodyClass: bg-purple-50
         <td class="text-center text-slate-600 text-xs px-6">
           <p class="m-0 mb-4 uppercase cursor-pointer">
             <a href="https://appflowy.io">
-              <img src="images/appflowy-logo.svg" width="150px">
+              <img src="{{ cdnBaseUrl }}images/appflowy-logo.svg" width="150px">
             </a>
           </p>
           <p class="m-0 text-sm">
@@ -86,7 +89,7 @@ bodyClass: bg-purple-50
                           class="hover:opacity-90 mr-2 relative !bg-[#9327ff] !font-normal rounded-2xl"
                           href="https://testflight.apple.com/join/6CexvkDz">
 
-                  <img class="absolute top-3" src="images/appstore-badge.svg" width="16px"
+                  <img class="absolute top-3" src="{{ cdnBaseUrl }}images/appstore-badge.svg" width="16px"
                        alt="Download on the App Store">
                   <span class="text-sm ml-6">Test Flight</span>
                 </x-button>
@@ -95,7 +98,7 @@ bodyClass: bg-purple-50
                 <x-button align="left" class="hover:opacity-90 ml-2 relative !bg-[#9327ff] !font-normal rounded-2xl"
                           href="https://play.google.com/store/apps/details?id=io.appflowy.appflowy">
 
-                  <img class="absolute top-4" src="images/google-play-badge.svg" width="16px"
+                  <img class="absolute top-4" src="{{ cdnBaseUrl }}images/google-play-badge.svg" width="16px"
                        alt="Get it on Google Play">
                   <span class="text-sm ml-6">Google Play</span>
                 </x-button>
@@ -107,23 +110,23 @@ bodyClass: bg-purple-50
           <p class="cursor-default">
             <a href="https://twitter.com/appflowy"
                class="text-indigo-700 [text-decoration:none] mr-4">
-              <img src="images/twitter.svg" width="20" alt="Maizzle">
+              <img src="{{ cdnBaseUrl }}images/twitter.svg" width="20" alt="Maizzle">
             </a>
             <a href="https://www.reddit.com/r/AppFlowy"
                class="text-indigo-700 [text-decoration:none] mr-4">
-              <img src="images/reddit.svg" width="20" alt="Maizzle">
+              <img src="{{ cdnBaseUrl }}images/reddit.svg" width="20" alt="Maizzle">
             </a>
             <a href="https://github.com/AppFlowy-IO/AppFlowy"
                class="text-indigo-700 [text-decoration:none] mr-4">
-              <img src="images/github.svg" width="20" alt="Maizzle">
+              <img src="{{ cdnBaseUrl }}images/github.svg" width="20" alt="Maizzle">
             </a>
             <a href="https://discord.gg/9Q2xaN37tV"
                class="text-indigo-700 [text-decoration:none] mr-4">
-              <img src="images/discord.svg" width="20" alt="Maizzle">
+              <img src="{{ cdnBaseUrl }}images/discord.svg" width="20" alt="Maizzle">
             </a>
             <a href="https://forum.appflowy.io/"
                class="text-indigo-700 [text-decoration:none]">
-              <img src="images/forum.svg" width="20" alt="Maizzle">
+              <img src="{{ cdnBaseUrl }}images/forum.svg" width="20" alt="Maizzle">
             </a>
           </p>
           <p class="text-xs leading-4.5">

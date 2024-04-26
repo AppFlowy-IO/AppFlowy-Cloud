@@ -50,6 +50,9 @@ pub enum RealtimeError {
   #[error("Acquire lock timeout")]
   LockTimeout,
 
+  #[error("Collab workspace id not match: expect {expect}, actual {actual}")]
+  CollabWorkspaceIdNotMatch { expect: String, actual: String },
+
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
 }

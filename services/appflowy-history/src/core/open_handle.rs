@@ -84,7 +84,8 @@ impl OpenCollabHandle {
       .mutex_collab
       .try_lock()
       .ok_or(HistoryError::TryLockFail)?;
-    let encode_collab = lock_guard.encode_collab_v1(|collab| self.collab_type.validate(collab))?;
+    let encode_collab =
+      lock_guard.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
     Ok(HistoryState {
       object_id: self.object_id.clone(),
       doc_state: encode_collab.doc_state.to_vec(),

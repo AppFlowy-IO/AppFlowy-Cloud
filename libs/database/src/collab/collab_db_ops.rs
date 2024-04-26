@@ -5,9 +5,9 @@ use database_entity::dto::{
   QueryCollab, QueryCollabResult, RawData,
 };
 
-use crate::collab::{partition_key, SNAPSHOT_PER_HOUR};
-use crate::pg_row::AFCollabMemberAccessLevelRow;
+use crate::collab::{partition_key_from_collab_type, SNAPSHOT_PER_HOUR};
 use crate::pg_row::AFSnapshotRow;
+use crate::pg_row::{AFCollabMemberAccessLevelRow, AFCollabRowMeta};
 use app_error::AppError;
 use chrono::{Duration, Utc};
 use futures_util::stream::BoxStream;
@@ -52,7 +52,7 @@ pub async fn insert_into_af_collab(
   params: &CollabParams,
 ) -> Result<(), AppError> {
   let encrypt = 0;
-  let partition_key = crate::collab::partition_key(&params.collab_type);
+  let partition_key = crate::collab::partition_key_from_collab_type(&params.collab_type);
   let workspace_id = Uuid::from_str(workspace_id)?;
   let existing_workspace_id: Option<Uuid> = sqlx::query_scalar!(
     "SELECT workspace_id FROM af_collab WHERE oid = $1",
@@ -168,7 +168,7 @@ pub async fn select_blob_from_af_collab<'a, E>(
 where
   E: Executor<'a, Database = Postgres>,
 {
-  let partition_key = partition_key(collab_type);
+  let partition_key = partition_key_from_collab_type(collab_type);
   sqlx::query_scalar!(
     r#"
         SELECT blob
@@ -179,6 +179,30 @@ where
     partition_key,
   )
   .fetch_one(conn)
+  .await
+}
+
+#[inline]
+pub async fn select_collab_meta_from_af_collab<'a, E>(
+  conn: E,
+  object_id: &str,
+  collab_type: &CollabType,
+) -> Result<Option<AFCollabRowMeta>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
+  let partition_key = partition_key_from_collab_type(collab_type);
+  sqlx::query_as!(
+    AFCollabRowMeta,
+    r#"
+        SELECT oid,workspace_id,deleted_at,created_at
+        FROM af_collab
+        WHERE oid = $1 AND partition_key = $2 AND deleted_at IS NULL;
+        "#,
+    object_id,
+    partition_key,
+  )
+  .fetch_optional(conn)
   .await
 }
 
@@ -197,7 +221,7 @@ pub async fn batch_select_collab_blob(
   }
 
   for (collab_type, mut object_ids) in object_ids_by_collab_type.into_iter() {
-    let partition_key = partition_key(&collab_type);
+    let partition_key = partition_key_from_collab_type(&collab_type);
     let par_results: Result<Vec<QueryCollabData>, sqlx::Error> = sqlx::query_as!(
       QueryCollabData,
       r#"

@@ -18,7 +18,7 @@ use collab_rt_entity::CollabMessage;
 use database::collab::CollabStorage;
 use database_entity::dto::QueryCollabParams;
 use std::sync::Arc;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 pub struct GroupManager<S, AC> {
   state: GroupManagementState,
@@ -112,19 +112,19 @@ where
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
     // Ensure the workspace_id matches the metadata's workspace_id when creating a collaboration object
     // of type [CollabType::Folder]. In this case, both the object id and the workspace id should be
-    // identical. Currently, this workspace_id validation is only performed for [CollabType::Folder] types.
-    if matches!(collab_type, CollabType::Folder) {
-      if let Ok(metadata) = self
-        .storage
-        .query_collab_meta(object_id, &collab_type)
-        .await
-      {
-        if metadata.workspace_id != workspace_id {
-          return Err(RealtimeError::CollabWorkspaceIdNotMatch {
-            expect: metadata.workspace_id,
-            actual: workspace_id.to_string(),
-          });
-        }
+    // identical.
+    if let Ok(metadata) = self
+      .storage
+      .query_collab_meta(object_id, &collab_type)
+      .await
+    {
+      if metadata.workspace_id != workspace_id {
+        let err = RealtimeError::CollabWorkspaceIdNotMatch {
+          expect: metadata.workspace_id,
+          actual: workspace_id.to_string(),
+        };
+        warn!("[Realtime]:{}", err);
+        return Err(err);
       }
     }
 

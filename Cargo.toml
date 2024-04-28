@@ -81,7 +81,6 @@ collab-entity = { version = "0.1.0" }
 #Local crate
 snowflake = { path = "libs/snowflake" }
 database.workspace = true
-appflowy-ai = { path = "libs/appflowy-ai" }
 database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }

@@ -598,7 +598,6 @@ dependencies = [
  "actix-web-actors",
  "anyhow",
  "app-error",
- "appflowy-ai",
  "appflowy-collaborate",
  "argon2",
  "assert-json-diff",

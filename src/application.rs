@@ -4,6 +4,7 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
+use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
 use crate::biz::actix_ws::server::RealtimeServerActor;
@@ -239,6 +240,14 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     tonic_proto::history::history_client::HistoryClient::connect(config.grpc_history.addrs.clone())
       .await?;
 
+  let mailer = Mailer::new(
+    config.mailer.smtp_username.clone(),
+    config.mailer.smtp_password.expose_secret().clone(),
+    &config.mailer.smtp_host,
+    &config.mailer.workspace_invite_template_url,
+  )
+  .await?;
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
@@ -256,6 +265,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     access_control,
     metrics,
     gotrue_admin,
+    mailer,
     #[cfg(feature = "ai_enable")]
     appflowy_ai_client,
     #[cfg(feature = "history")]

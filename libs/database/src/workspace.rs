@@ -665,3 +665,39 @@ pub async fn select_workspace_total_collab_bytes(
     ))),
   }
 }
+
+#[inline]
+pub async fn select_workspace_name_from_workspace_id(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<String>, AppError> {
+  let workspace_name = sqlx::query_scalar!(
+    r#"
+      SELECT workspace_name
+      FROM public.af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(workspace_name)
+}
+
+#[inline]
+pub async fn select_workspace_member_count_from_workspace_id(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<i64>, AppError> {
+  let workspace_count = sqlx::query_scalar!(
+    r#"
+      SELECT COUNT(*)
+      FROM public.af_workspace_member
+      WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(workspace_count)
+}

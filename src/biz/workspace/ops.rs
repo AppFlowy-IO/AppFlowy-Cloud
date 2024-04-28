@@ -1,4 +1,6 @@
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
+use crate::mailer::Mailer;
+use crate::state::GoTrueAdmin;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -20,7 +22,7 @@ use database_entity::dto::{
   WorkspaceUsage,
 };
 
-use gotrue::params::MagicLinkParams;
+use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
@@ -162,6 +164,8 @@ pub async fn accept_workspace_invite(
 
 #[instrument(level = "debug", skip_all, err)]
 pub async fn invite_workspace_members(
+  mailer: &Mailer,
+  gotrue_admin: &GoTrueAdmin,
   pg_pool: &PgPool,
   gotrue_client: &gotrue::api::Client,
   inviter: &Uuid,
@@ -172,17 +176,18 @@ pub async fn invite_workspace_members(
     .begin()
     .await
     .context("Begin transaction to invite workspace members")?;
+  let admin_token = gotrue_admin.token(gotrue_client).await?;
 
   for invitation in invitations {
-    gotrue_client
-      .magic_link(
-        &MagicLinkParams {
-          email: invitation.email.clone(),
-          ..Default::default()
-        },
-        Some("/web/login#redirect_to=invite".to_owned()),
-      )
-      .await?;
+    let name = database::user::select_name_from_email(pg_pool, &invitation.email).await?;
+    let workspace_name =
+      database::workspace::select_workspace_name_from_workspace_id(pg_pool, workspace_id)
+        .await?
+        .unwrap_or_default();
+    let workspace_member_count =
+      database::workspace::select_workspace_member_count_from_workspace_id(pg_pool, workspace_id)
+        .await?
+        .unwrap_or_default();
 
     // Generate a link such that when clicked, the user is added to the workspace.
     insert_workspace_invitation(
@@ -193,6 +198,29 @@ pub async fn invite_workspace_members(
       invitation.role,
     )
     .await?;
+
+    let accept_url = gotrue_client
+      .admin_generate_link(
+        &admin_token,
+        &GenerateLinkParams {
+          type_: GenerateLinkType::Invite,
+          email: invitation.email.clone(),
+          redirect_to: "/web/accept-workspace".to_string(),
+          ..Default::default()
+        },
+      )
+      .await?
+      .action_link;
+
+    mailer
+      .send_workspace_invite(
+        invitation.email,
+        name,
+        workspace_name,
+        workspace_member_count.to_string(),
+        accept_url,
+      )
+      .await?;
   }
 
   txn

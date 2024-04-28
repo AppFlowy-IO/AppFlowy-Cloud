@@ -17,6 +17,15 @@ pub struct Config {
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
   pub grpc_history: GrpcHistorySetting,
+  pub mailer: MailerSetting,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct MailerSetting {
+  pub smtp_host: String,
+  pub smtp_username: String,
+  pub smtp_password: Secret<String>,
+  pub workspace_invite_template_url: String,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -161,6 +170,12 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     grpc_history: GrpcHistorySetting {
       addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),
+    },
+    mailer: MailerSetting {
+      smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
+      smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
+      smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
+      workspace_invite_template_url: get_env_var("APPFLOWY_MAILER_WORKSPACE_INVITE_TEMPLATE_URL", "https://raw.githubusercontent.com/AppFlowy-IO/AppFlowy-Cloud/main/assets/mailer_templates/build_production/workspace_invitation.html"),
     },
   };
   Ok(config)

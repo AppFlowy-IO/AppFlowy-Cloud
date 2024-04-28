@@ -47,7 +47,7 @@ validator = "0.16.1"
 bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
-rust-s3 = { version = "0.33.0", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
+rust-s3 = { version = "0.34.0-rc4", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
 redis = { workspace = true, features = ["json", "tokio-comp", "connection-manager"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }

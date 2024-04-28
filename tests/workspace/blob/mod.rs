@@ -43,7 +43,7 @@ impl TestBucket {
     {
       Ok(_) => {},
       Err(e) => match e {
-        s3::error::S3Error::Http(409, _) => {},
+        s3::error::S3Error::HttpFailWithBody(409, _) => {},
         _ => panic!("could not create bucket: {}", e),
       },
     }
@@ -63,7 +63,7 @@ impl TestBucket {
         Some(resp.bytes().to_owned())
       },
       Err(err) => match err {
-        s3::error::S3Error::Http(404, _) => None,
+        s3::error::S3Error::HttpFailWithBody(404, _) => None,
         _ => panic!("could not get object: {}", err),
       },
     }

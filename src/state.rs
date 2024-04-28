@@ -18,6 +18,7 @@ use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::sync::Arc;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -41,8 +42,7 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
-  #[cfg(feature = "ai_enable")]
-  pub appflowy_ai_client: appflowy_ai::client::AppFlowyAIClient,
+  pub appflowy_ai_client: AppFlowyAIClient,
   #[cfg(feature = "history")]
   pub grpc_history_client:
     tonic_proto::history::history_client::HistoryClient<tonic::transport::Channel>,

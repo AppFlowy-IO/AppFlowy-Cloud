@@ -49,6 +49,11 @@ pub struct WebAppOAuthLoginRequest {
   pub user_name: Option<String>,
   pub user_icon: Option<String>,
   pub workspace_member_count: Option<String>,
+
+  // Errors
+  pub error: Option<String>,
+  pub error_code: Option<i64>,
+  pub error_description: Option<String>,
 }
 
 #[derive(Deserialize)]

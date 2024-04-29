@@ -61,36 +61,32 @@ async fn login_callback_query_handler(
   State(state): State<AppState>,
   Query(query): Query<WebAppOAuthLoginRequest>,
 ) -> Result<Html<String>, WebAppError> {
-  let token = match state
+  if let Some(err) = query.error {
+    tracing::error!(
+      "OAuth login error: {:?}, code: {:?}, description: {:?}",
+      err,
+      query.error_code,
+      query.error_description
+    );
+    return render_template(templates::Redirect {
+      redirect_url: format!(
+        "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+        query.workspace_name.unwrap_or_default(),
+        query.workspace_icon.unwrap_or_default(),
+        query.user_name.unwrap_or_default(),
+        query.user_icon.unwrap_or_default(),
+        query.workspace_member_count.unwrap_or_default()),
+    });
+  };
+
+  let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
       gotrue::grant::RefreshTokenGrant {
         refresh_token: query.refresh_token,
       },
     ))
-    .await
-  {
-    Ok(token) => token,
-    Err(err) => {
-      tracing::error!("refreshing token: {:?}", err);
-      if let Some(action) = &query.action {
-        match action {
-          OAuthLoginAction::AcceptWorkspaceInvite => {
-            return render_template(templates::Redirect {
-              redirect_url: format!(
-                "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
-                query.workspace_name.unwrap_or_default(),
-                query.workspace_icon.unwrap_or_default(),
-                query.user_name.unwrap_or_default(),
-                query.user_icon.unwrap_or_default(),
-                query.workspace_member_count.unwrap_or_default()),
-            });
-          },
-        }
-      }
-      return Err(WebAppError::GoTrue(err));
-    },
-  };
+    .await?;
 
   // Do another round of refresh_token to consume and invalidate the old one
   let token = state

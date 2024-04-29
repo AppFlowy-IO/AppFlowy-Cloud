@@ -197,16 +197,6 @@ pub async fn invite_workspace_members(
       "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
         .to_string();
 
-    // Generate a link such that when clicked, the user is added to the workspace.
-    let invite_id = insert_workspace_invitation(
-      &mut txn,
-      workspace_id,
-      inviter,
-      invitation.email.as_str(),
-      invitation.role,
-    )
-    .await?;
-
     let accept_url = gotrue_client
       .admin_generate_link(
         &admin_token,
@@ -226,6 +216,16 @@ pub async fn invite_workspace_members(
       )
       .await?
       .action_link;
+
+    // Generate a link such that when clicked, the user is added to the workspace.
+    let invite_id = insert_workspace_invitation(
+      &mut txn,
+      workspace_id,
+      inviter,
+      invitation.email.as_str(),
+      invitation.role,
+    )
+    .await?;
 
     mailer
       .send_workspace_invite(

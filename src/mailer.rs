@@ -21,26 +21,19 @@ impl Mailer {
     smtp_username: String,
     smtp_password: String,
     smtp_host: &str,
-    workspace_invite_template_url: &str,
   ) -> Result<Self, anyhow::Error> {
     let creds = Credentials::new(smtp_username, smtp_password);
     let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(smtp_host)?
       .credentials(creds)
       .build();
 
-    let http_client = reqwest::Client::new();
-    let workspace_invite_template = http_client
-      .get(workspace_invite_template_url)
-      .send()
-      .await?
-      .error_for_status()?
-      .text()
-      .await?;
+    let workspace_invite_template =
+      include_str!("../assets/mailer_templates/build_production/workspace_invitation.html");
 
     HANDLEBARS
       .write()
       .unwrap()
-      .register_template_string("workspace_invite", &workspace_invite_template)
+      .register_template_string("workspace_invite", workspace_invite_template)
       .unwrap();
 
     Ok(Self { smtp_transport })

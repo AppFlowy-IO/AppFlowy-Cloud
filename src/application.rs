@@ -244,7 +244,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_password.expose_secret().clone(),
     &config.mailer.smtp_host,
-    &config.mailer.workspace_invite_template_url,
   )
   .await?;
 

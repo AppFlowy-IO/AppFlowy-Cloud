@@ -62,21 +62,19 @@ jobs:
       - name: Run Docker-Compose
         run: |
           docker compose -f docker-compose-ci.yml up -d
-          sleep 5
-          docker ps -a
-          docker compose logs appflowy_cloud
+          docker compose logs appflowy_cloud -f &
 
-#     - name: Run tests
-#       run: |
-#         RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test --workspace
+      - name: Run tests
+        run: |
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test --workspace
 
-#     - name: Install Node.js
-#       uses: actions/setup-node@v2
-#       with:
-#         node-version: '14'
+      - name: Install Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'
 
-#     - name: Run WASM tests
-#       working-directory: ./libs/wasm-test
-#       run: |
-#         cargo install wasm-pack
-#         wasm-pack test --headless --firefox
+      - name: Run WASM tests
+        working-directory: ./libs/wasm-test
+        run: |
+          cargo install wasm-pack
+          wasm-pack test --headless --firefox

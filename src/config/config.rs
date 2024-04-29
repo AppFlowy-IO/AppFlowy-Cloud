@@ -25,7 +25,6 @@ pub struct MailerSetting {
   pub smtp_host: String,
   pub smtp_username: String,
   pub smtp_password: Secret<String>,
-  pub workspace_invite_template_url: String,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -175,7 +174,6 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
       smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
       smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
-      workspace_invite_template_url: get_env_var("APPFLOWY_MAILER_WORKSPACE_INVITE_TEMPLATE_URL", "https://raw.githubusercontent.com/AppFlowy-IO/Appflowy-Cloud/main/assets/mailer_templates/build_production/workspace_invitation.html"),
     },
   };
   Ok(config)

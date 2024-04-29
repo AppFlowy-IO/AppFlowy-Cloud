@@ -47,7 +47,7 @@ validator = "0.16.1"
 bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
-rust-s3 = { version = "0.33.0", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
+rust-s3 = { version = "0.34.0-rc4", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
 redis = { workspace = true, features = ["json", "tokio-comp", "connection-manager"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }
@@ -209,10 +209,10 @@ debug = true
 # will be removed when using yrs 0.18.2 that expose pendings
 yrs = { git = "https://github.com/appflowy/y-crdt", rev = "3f25bb510ca5274e7657d3713fbed41fb46b4487" }
 
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "851239880d8aca9e07abb47d96a4f8ff532dd930" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "851239880d8aca9e07abb47d96a4f8ff532dd930" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "851239880d8aca9e07abb47d96a4f8ff532dd930" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "851239880d8aca9e07abb47d96a4f8ff532dd930" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
 
 [features]
 ai_enable = []

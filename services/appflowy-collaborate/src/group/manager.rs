@@ -18,7 +18,7 @@ use collab_rt_entity::CollabMessage;
 use database::collab::CollabStorage;
 use database_entity::dto::QueryCollabParams;
 use std::sync::Arc;
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, warn};
 
 pub struct GroupManager<S, AC> {
   state: GroupManagementState,
@@ -110,6 +110,24 @@ where
   ) -> Result<(), RealtimeError> {
     let mut is_new_collab = false;
     let params = QueryCollabParams::new(object_id, collab_type.clone(), workspace_id);
+    // Ensure the workspace_id matches the metadata's workspace_id when creating a collaboration object
+    // of type [CollabType::Folder]. In this case, both the object id and the workspace id should be
+    // identical.
+    if let Ok(metadata) = self
+      .storage
+      .query_collab_meta(object_id, &collab_type)
+      .await
+    {
+      if metadata.workspace_id != workspace_id {
+        let err = RealtimeError::CollabWorkspaceIdNotMatch {
+          expect: metadata.workspace_id,
+          actual: workspace_id.to_string(),
+        };
+        warn!("[Realtime]:{}:{}, {}", object_id, collab_type, err);
+        return Err(err);
+      }
+    }
+
     let result = load_collab(uid, object_id, params, self.storage.clone()).await;
     let mutex_collab = {
       let collab = match result {
@@ -247,7 +265,7 @@ where
         false,
       ) {
         // TODO(nathan): this check is not necessary, can be removed in the future.
-        collab_type.validate(&collab).ok()?;
+        collab_type.validate_require_data(&collab).ok()?;
         return Some(encoded_collab);
       }
     }

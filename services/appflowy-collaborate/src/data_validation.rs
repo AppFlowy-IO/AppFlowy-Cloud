@@ -44,7 +44,7 @@ pub async fn validate_encode_collab(
     .map_err(|err| RealtimeError::Internal(err.into()))?;
 
     collab_type
-      .validate(&collab)
+      .validate_require_data(&collab)
       .map_err(|err| RealtimeError::NoRequiredCollabData(err.to_string()))?;
     Ok::<(), RealtimeError>(())
   })

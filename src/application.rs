@@ -369,7 +369,7 @@ async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> 
   {
     Ok(_) => Ok(()),
     Err(e) => match e {
-      s3::error::S3Error::Http(409, _) => Ok(()), // Bucket already exists
+      s3::error::S3Error::HttpFailWithBody(409, _) => Ok(()), // Bucket already exists
       _ => Err(e),
     },
   }?;

@@ -3,11 +3,12 @@ use crate::group::group_init::EditState;
 use anyhow::anyhow;
 use app_error::AppError;
 use collab::preclude::Collab;
-use collab_entity::CollabType;
+use collab_entity::{validate_data_for_folder, CollabType};
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -20,7 +21,7 @@ pub(crate) struct GroupPersistence<S> {
   storage: Arc<S>,
   uid: i64,
   edit_state: Arc<EditState>,
-  collab: WeakMutexCollab,
+  mutex_collab: WeakMutexCollab,
   collab_type: CollabType,
 }
 
@@ -34,7 +35,7 @@ where
     uid: i64,
     storage: Arc<S>,
     edit_state: Arc<EditState>,
-    collab: WeakMutexCollab,
+    mutex_collab: WeakMutexCollab,
     collab_type: CollabType,
   ) -> Self {
     Self {
@@ -43,7 +44,7 @@ where
       uid,
       storage,
       edit_state,
-      collab,
+      mutex_collab,
       collab_type,
     }
   }
@@ -100,8 +101,9 @@ where
   }
 
   async fn save(&self, write_immediately: bool) -> Result<(), AppError> {
-    let mutex_collab = self.collab.clone();
+    let mutex_collab = self.mutex_collab.clone();
     let object_id = self.object_id.clone();
+    let workspace_id = self.workspace_id.clone();
     let collab_type = self.collab_type.clone();
     let collab = match mutex_collab.upgrade() {
       Some(collab) => collab,
@@ -110,14 +112,16 @@ where
 
     let result = tokio::task::spawn_blocking(move || {
       // Attempt to lock the collab; skip saving if unable
-      let lock_guard = collab.try_lock()?;
-      let params = get_encode_collab(&object_id, &lock_guard, &collab_type).ok()?;
-      Some(params)
+      let lock_guard = collab
+        .try_lock()
+        .ok_or_else(|| AppError::Internal(anyhow!("required lock failed")))?;
+      let params = get_encode_collab(&workspace_id, &object_id, &lock_guard, &collab_type)?;
+      Ok::<_, AppError>(params)
     })
     .await;
 
     match result {
-      Ok(Some(params)) => {
+      Ok(Ok(params)) => {
         match self
           .storage
           .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
@@ -130,8 +134,11 @@ where
           Err(err) => warn!("fail to save collab to disk: {:?}", err),
         }
       },
-      Ok(None) => {
-        // required lock failed or get encode collab failed, skip saving
+      Ok(Err(err)) => {
+        if matches!(err, AppError::OverrideWithIncorrectData(_)) {
+          return Err(err);
+        }
+        // omits the other errors
       },
       Err(err) => {
         if err.is_panic() {
@@ -150,30 +157,47 @@ where
   }
 }
 
+/// Encodes collaboration parameters for a given workspace and object.
+///
+/// This function attempts to encode collaboration details into a byte format based on the collaboration type.
+/// It validates required data for the collaboration type before encoding.
+/// If the collaboration type is `Folder`, it additionally checks for a workspace ID match.
+///
 #[inline]
 fn get_encode_collab(
+  workspace_id: &str,
   object_id: &str,
   collab: &Collab,
   collab_type: &CollabType,
 ) -> Result<CollabParams, AppError> {
-  let result = collab
-    .try_encode_collab_v1(|collab| collab_type.validate(collab))
-    .map_err(|err| AppError::Internal(anyhow!("fail to encode collab to bytes: {:?}", err)))?
-    .encode_to_bytes();
+  // Attempt to encode collaboration data to version 1 bytes and validate required data.
+  let encoded_collab = collab
+    .try_encode_collab_v1(|c| collab_type.validate_require_data(c))
+    .map_err(|err| {
+      AppError::Internal(anyhow!(
+        "Failed to encode collaboration to bytes: {:?}",
+        err
+      ))
+    })?
+    .encode_to_bytes()
+    .map_err(|err| {
+      AppError::Internal(anyhow!(
+        "Failed to serialize encoded collaboration to bytes: {:?}",
+        err
+      ))
+    })?;
 
-  match result {
-    Ok(encoded_collab_v1) => {
-      let params = CollabParams {
-        object_id: object_id.to_string(),
-        encoded_collab_v1,
-        collab_type: collab_type.clone(),
-      };
-
-      Ok(params)
-    },
-    Err(err) => Err(AppError::Internal(anyhow!(
-      "fail to encode doc to bytes: {:?}",
-      err
-    ))),
+  // Specific check for collaboration type 'Folder' to ensure workspace ID consistency.
+  if let CollabType::Folder = collab_type {
+    validate_data_for_folder(collab, workspace_id)
+      .map_err(|err| AppError::OverrideWithIncorrectData(err.to_string()))?;
   }
+
+  // Construct and return collaboration parameters.
+  let params = CollabParams {
+    object_id: object_id.to_string(),
+    encoded_collab_v1: encoded_collab,
+    collab_type: collab_type.clone(),
+  };
+  Ok(params)
 }

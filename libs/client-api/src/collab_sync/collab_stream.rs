@@ -5,6 +5,7 @@ use crate::collab_sync::{
 
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
+use collab_entity::{validate_data_for_folder, CollabType};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{
   handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,
@@ -161,6 +162,10 @@ where
               }
             }
           },
+          SyncError::OverrideWithIncorrectData(_) => {
+            error!("Error while processing message: {}", error);
+            break;
+          },
           _ => {
             error!("Error while processing message: {}", error);
           },
@@ -200,7 +205,7 @@ where
     match msg.msg_id() {
       None => {
         // apply the broadcast data and then check the continuity of the broadcast sequence number.
-        Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
+        Self::process_message_follow_protocol(object, &msg, collab, sink).await?;
         sink.notify_next();
 
         if let ServerCollabMessage::ServerBroadcast(ref data) = msg {
@@ -215,7 +220,7 @@ where
           .await?;
 
         if is_valid {
-          Self::process_message_follow_protocol(&object.object_id, &msg, collab, sink).await?;
+          Self::process_message_follow_protocol(object, &msg, collab, sink).await?;
         }
         sink.notify_next();
         Ok(())
@@ -244,7 +249,7 @@ where
   }
 
   async fn process_message_follow_protocol(
-    object_id: &str,
+    sync_object: &SyncObject,
     msg: &ServerCollabMessage,
     collab: &Arc<MutexCollab>,
     sink: &Arc<CollabSink<Sink>>,
@@ -256,7 +261,7 @@ where
     let payload = msg.payload().clone();
     let message_origin = msg.origin().clone();
     let sink = sink.clone();
-    let object_id = object_id.to_string();
+    let sync_object = sync_object.clone();
     let collab = collab.clone();
 
     // workaround for panic when applying updates. It can be removed in the future
@@ -266,11 +271,24 @@ where
         let reader = MessageReader::new(&mut decoder);
         for yrs_message in reader {
           let msg = yrs_message?;
+
+          // When the client receives a SyncStep1 message, it indicates that the server is requesting
+          // the client to send updates that the server is missing. This typically occurs when the client
+          // has been editing offline, resulting in the client's version of the collaboration object
+          // being ahead of the server's version. In response, the client prepares to send the missing updates.
           let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+
+          // If the collaboration object is of type [CollabType::Folder], data validation is required
+          // before sending the SyncStep1 to the server.
+          if is_server_sync_step_1 && sync_object.collab_type == CollabType::Folder {
+            validate_data_for_folder(&collab, &sync_object.workspace_id)
+              .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
+          }
+
           if let Some(return_payload) =
             handle_message_follow_protocol(&message_origin, &ClientSyncProtocol, &mut collab, msg)?
           {
-            let object_id = object_id.to_string();
+            let object_id = sync_object.object_id.clone();
             sink.queue_msg(|msg_id| {
               if is_server_sync_step_1 {
                 ClientCollabMessage::new_server_init_sync(ServerInit::new(

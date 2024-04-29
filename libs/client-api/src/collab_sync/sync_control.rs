@@ -185,7 +185,7 @@ where
     return Ok(false);
   }
 
-  if let Err(err) = sync_object.collab_type.validate(collab) {
+  if let Err(err) = sync_object.collab_type.validate_require_data(collab) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("{} error: {}", sync_object.object_id, err);
     return Err(SyncError::Internal(err));

@@ -110,6 +110,9 @@ pub enum AppError {
 
   #[error("{0}")]
   NoRequiredData(String),
+
+  #[error("{0}")]
+  OverrideWithIncorrectData(String),
 }
 
 impl AppError {
@@ -168,6 +171,7 @@ impl AppError {
       #[cfg(feature = "bincode_error")]
       AppError::BincodeError(_) => ErrorCode::Internal,
       AppError::NoRequiredData(_) => ErrorCode::NoRequiredData,
+      AppError::OverrideWithIncorrectData(_) => ErrorCode::OverrideWithIncorrectData,
     }
   }
 }
@@ -277,6 +281,7 @@ pub enum ErrorCode {
   WorkspaceLimitExceeded = 1026,
   WorkspaceMemberLimitExceeded = 1027,
   FileStorageLimitExceeded = 1028,
+  OverrideWithIncorrectData = 1029,
 }
 
 impl ErrorCode {

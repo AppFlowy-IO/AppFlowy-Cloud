@@ -92,7 +92,7 @@ impl CollabGroup {
     let encode_collab = self
       .collab
       .lock()
-      .try_encode_collab_v1(|collab| self.collab_type.validate(collab))?;
+      .try_encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
     Ok(encode_collab)
   }
 

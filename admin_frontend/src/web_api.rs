@@ -7,7 +7,7 @@ use crate::models::{
   WebApiInviteUserRequest, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
-use crate::session::{self, UserSession};
+use crate::session::{self, new_session_cookie, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap};
@@ -403,12 +403,6 @@ fn htmx_trigger(trigger: &str) -> HeaderMap {
   let mut h = HeaderMap::new();
   h.insert("HX-Trigger", trigger.parse().unwrap());
   h
-}
-
-fn new_session_cookie(id: uuid::Uuid) -> Cookie<'static> {
-  let mut cookie = Cookie::new("session_id", id.to_string());
-  cookie.set_path("/");
-  cookie
 }
 
 async fn session_login(

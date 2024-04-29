@@ -6,11 +6,12 @@ use crate::ext::api::{
   get_workspace_members, verify_token_cloud,
 };
 use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
-use crate::session::{self, UserSession};
+use crate::session::{self, new_session_cookie, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
+use axum_extra::extract::CookieJar;
 use gotrue_entity::dto::User;
 
 use crate::{templates, AppState};
@@ -60,7 +61,8 @@ async fn login_callback_handler() -> Result<Html<String>, WebAppError> {
 async fn login_callback_query_handler(
   State(state): State<AppState>,
   Query(query): Query<WebAppOAuthLoginRequest>,
-) -> Result<Html<String>, WebAppError> {
+  mut jar: CookieJar,
+) -> Result<(CookieJar, Html<String>), WebAppError> {
   if let Some(err) = query.error {
     tracing::error!(
       "OAuth login error: {:?}, code: {:?}, description: {:?}",
@@ -68,7 +70,7 @@ async fn login_callback_query_handler(
       query.error_code,
       query.error_description
     );
-    return render_template(templates::Redirect {
+    return Ok((jar, render_template(templates::Redirect {
       redirect_url: format!(
         "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
         query.workspace_name.unwrap_or_default(),
@@ -76,7 +78,7 @@ async fn login_callback_query_handler(
         query.user_name.unwrap_or_default(),
         query.user_icon.unwrap_or_default(),
         query.workspace_member_count.unwrap_or_default()),
-    });
+    })?));
   };
 
   let token = state
@@ -107,6 +109,7 @@ async fn login_callback_query_handler(
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
+  jar = jar.add(new_session_cookie(new_session_id));
 
   match query.action {
     Some(action) => match action {
@@ -124,14 +127,17 @@ async fn login_callback_query_handler(
         .await
         {
           tracing::error!("accepting workspace invitation: {:?}", err);
-          return render_template(templates::Redirect {
-            redirect_url: "https://test.appflowy.io/invitation/expired".to_string(),
-          });
+          return Ok((
+            jar,
+            render_template(templates::Redirect {
+              redirect_url: "https://test.appflowy.io/invitation/expired".to_string(),
+            })?,
+          ));
         };
-        render_template(templates::OpenAppFlowyOrDownload {})
+        Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?))
       },
     },
-    None => home_handler(State(state), new_session).await,
+    None => Ok((jar, home_handler(State(state), new_session).await?)),
   }
 }
 

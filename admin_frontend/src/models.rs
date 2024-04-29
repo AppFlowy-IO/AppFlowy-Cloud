@@ -39,7 +39,7 @@ pub struct WebApiCreateSSOProviderRequest {
 #[derive(Deserialize)]
 pub struct WebAppOAuthLoginRequest {
   // Use for Login
-  pub refresh_token: String,
+  pub refresh_token: Option<String>,
 
   // Use actions (with params) after login
   pub action: Option<OAuthLoginAction>,

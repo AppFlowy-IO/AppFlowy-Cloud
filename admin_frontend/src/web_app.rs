@@ -85,7 +85,9 @@ async fn login_callback_query_handler(
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
       gotrue::grant::RefreshTokenGrant {
-        refresh_token: query.refresh_token,
+        refresh_token: query.refresh_token.ok_or(WebAppError::BadRequest(
+          "refresh_token not found".to_string(),
+        ))?,
       },
     ))
     .await?;

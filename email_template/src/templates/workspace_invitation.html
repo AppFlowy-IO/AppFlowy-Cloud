@@ -1,0 +1,141 @@
+---
+title: "Confirm to join the workspace"
+preheader: "Please confirm your email address to join the workspace."
+bodyClass: bg-purple-50
+---
+
+<x-main>
+  <div class="bg-purple-50 sm:px-4 px-12 sm:py-12 py-24 text-black">
+    <table align="center">
+      <tr>
+        <td class="w-[552px] max-w-full">
+          <div class="w-full text-center">
+            <img src="{{ userIconUrl }}" class="rounded-full overflow-hidden object-cover" width="48px" height="48px"
+                 alt="{{ userName }}">
+          </div>
+          <p class="w-full text-center break-words whitespace-normal text-2xl">
+            <span class="text-3xl font-bold">{{ userName }}</span>
+            <span class="mx-2=1">invited to Join</span>
+            <span class="text-3xl font-bold">{{ workspaceName }}</span>
+            <span class="mx-2=1">on AppFlowy</span>
+          </p>
+          <x-divider space-x="20%"/>
+          <table align="center" class="w-full">
+            <tr>
+              <td class="w-5/12">
+                <table align="center" class="w-full">
+                  <tr>
+                    <td class="w-9/12">
+                    </td>
+                    <td class="w-3/12">
+                      <div
+                        style="border: 2px solid black;"
+                        class="rounded-2xl mr-2 w-[60px] h-[60px] bg-white overflow-hidden">
+                        <img src="{{ workspaceIconURL }}"
+                             class="overflow-hidden object-cover"
+                             width="100%" height="100%"
+                             alt="{{ workspaceName }}">
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+
+              </td>
+              <td class="w-7/12">
+                <div class="font-bold mb-2">
+                  {{ workspaceName }}
+                </div>
+                <div class="text-sm text-slate-500"> {{ workspaceMembersCount }} members</div>
+              </td>
+            </tr>
+          </table>
+          <x-button align="center"
+                    class="hover:opacity-90 cursor-pointer h-[34px] !text-xl !leading-[34px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
+                    href="{{ acceptUrl }}">
+            Join workspace
+          </x-button>
+          <p class="m-0 leading-4.5 text-sm text-slate-500 text-center">
+            By clicking "Join workspace"
+            <br/>
+            you acknowledge that you have read and understood,
+            <br/>
+            and agree to AppFlowy's <a
+            href="https://appflowy.io/terms" class="text-slate-500">Terms & Conditions</a> and <a class="text-slate-500"
+                                                                                                  href="https://appflowy.io/privacy">Privacy
+            Policy</a>.
+          </p>
+          <x-divider space-x="20%"/>
+        </td>
+      </tr>
+      <tr role="separator">
+        <td class="leading-24">&zwj;</td>
+      </tr>
+      <tr>
+        <td class="text-center text-slate-600 text-xs px-6">
+          <p class="m-0 mb-4 uppercase cursor-pointer">
+            <a href="https://appflowy.io">
+              <img src="{{ cdnBaseUrl }}images/appflowy-logo.svg" width="150px">
+            </a>
+          </p>
+          <p class="m-0 text-sm">
+            Try the AppFlowy mobile app to stay on top of activity like comments, replies, and @mentions when you're on
+            the go.
+          </p>
+
+          <table class="w-full my-4">
+            <tr>
+              <td>
+                <x-button align="right"
+                          class="hover:opacity-90 mr-2 relative !bg-[#9327ff] !font-normal rounded-2xl"
+                          href="https://testflight.apple.com/join/6CexvkDz">
+
+                  <img class="absolute top-3" src="{{ cdnBaseUrl }}images/appstore-badge.svg" width="16px"
+                       alt="Download on the App Store">
+                  <span class="text-sm ml-6">Test Flight</span>
+                </x-button>
+              </td>
+              <td>
+                <x-button align="left" class="hover:opacity-90 ml-2 relative !bg-[#9327ff] !font-normal rounded-2xl"
+                          href="https://play.google.com/store/apps/details?id=io.appflowy.appflowy">
+
+                  <img class="absolute top-4" src="{{ cdnBaseUrl }}images/google-play-badge.svg" width="16px"
+                       alt="Get it on Google Play">
+                  <span class="text-sm ml-6">Google Play</span>
+                </x-button>
+
+              </td>
+            </tr>
+          </table>
+
+          <p class="cursor-default">
+            <a href="https://twitter.com/appflowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/twitter.svg" width="20" alt="Maizzle">
+            </a>
+            <a href="https://www.reddit.com/r/AppFlowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/reddit.svg" width="20" alt="Maizzle">
+            </a>
+            <a href="https://github.com/AppFlowy-IO/AppFlowy"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/github.svg" width="20" alt="Maizzle">
+            </a>
+            <a href="https://discord.gg/9Q2xaN37tV"
+               class="text-indigo-700 [text-decoration:none] mr-4">
+              <img src="{{ cdnBaseUrl }}images/discord.svg" width="20" alt="Maizzle">
+            </a>
+            <a href="https://forum.appflowy.io/"
+               class="text-indigo-700 [text-decoration:none]">
+              <img src="{{ cdnBaseUrl }}images/forum.svg" width="20" alt="Maizzle">
+            </a>
+          </p>
+          <p class="text-xs leading-4.5">
+            <span>Cupyright © 2024, AppFlowy Inc.</span>
+            <br>
+            <span>Need Help? support@appflowy.io</span>
+          </p>
+        </td>
+      </tr>
+    </table>
+  </div>
+</x-main>

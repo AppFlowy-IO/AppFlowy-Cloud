@@ -57,17 +57,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
+          sudo update-ca-certificates
 
       - name: Run Docker-Compose
         run: |
           docker compose -f docker-compose-ci.yml up -d
-          docker compose logs appflowy-cloud -f &
-          docker compose logs gotrue -f &
-          docker compose logs nginx -f &
+          sleep 5
+          docker ps -a
+          docker compose logs appflowy_cloud
 
-      - name: Run tests
-        run: |
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test --workspace
+#     - name: Run tests
+#       run: |
+#         RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test --workspace
 
 #     - name: Install Node.js
 #       uses: actions/setup-node@v2

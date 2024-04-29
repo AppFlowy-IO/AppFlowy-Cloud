@@ -20,7 +20,7 @@ env:
 
 jobs:
   test:
-    name: Docker
+    name: Integration Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -47,6 +47,7 @@ jobs:
           sed -i 's/GOTRUE_RATE_LIMIT_EMAIL_SENT=100/GOTRUE_RATE_LIMIT_EMAIL_SENT=1000/' .env
           sed -i 's/APPFLOWY_MAILER_SMTP_USERNAME=.*/APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
           sed -i 's/APPFLOWY_MAILER_SMTP_PASSWORD=.*/APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
+          sed -i 's/OPENAI_API_KEY=.*/OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
 
       - name: Update Nginx Configuration
         run: |
@@ -62,7 +63,7 @@ jobs:
       - name: Run Docker-Compose
         run: |
           docker compose -f docker-compose-ci.yml up -d
-          docker compose logs appflowy_cloud -f &
+          docker ps -a
 
       - name: Run tests
         run: |

@@ -32,6 +32,7 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
+use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::command::{RTCommandReceiver, RTCommandSender};
 use appflowy_collaborate::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -186,9 +187,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
 
-  #[cfg(feature = "ai_enable")]
-  let appflowy_ai_client =
-    appflowy_ai::client::AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
+  let ai_client = AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -265,8 +264,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     metrics,
     gotrue_admin,
     mailer,
-    #[cfg(feature = "ai_enable")]
-    appflowy_ai_client,
+    ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
   })

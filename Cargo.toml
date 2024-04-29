@@ -72,6 +72,9 @@ prost.workspace = true
 tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
 
+# ai
+appflowy-ai-client = { version = "0.1.0" }
+
 # collab
 collab = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
@@ -81,7 +84,6 @@ collab-entity = { version = "0.1.0" }
 #Local crate
 snowflake = { path = "libs/snowflake" }
 database.workspace = true
-appflowy-ai = { path = "libs/appflowy-ai" }
 database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
@@ -146,7 +148,6 @@ members = [
     "libs/client-websocket",
     "libs/client-api-test-util",
     "libs/wasm-test",
-    "libs/appflowy-ai",
     "libs/client-api-wasm",
     # services
     "services/appflowy-history",
@@ -216,6 +217,7 @@ collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = 
 collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
 collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
 
+appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", rev = "6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9" }
+
 [features]
-ai_enable = []
 history = []

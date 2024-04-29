@@ -4,9 +4,10 @@ use crate::ext::api::{
   get_pending_workspace_invitations, get_user_owned_workspaces, get_user_profile,
   get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
 };
+use crate::models::WebAppOAuthLoginRequest;
 use crate::session::UserSession;
 use askama::Template;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::Result;
 use axum::{response::Html, routing::get, Router};
 use gotrue_entity::dto::User;
@@ -23,6 +24,8 @@ pub fn page_router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
     .route("/login", get(login_handler))
+    .route("/login-callback", get(login_callback_handler))
+    .route("/login-callback-query", get(login_callback_query_handler))
     .route("/home", get(home_handler))
     .route("/admin/home", get(admin_home_handler))
 }
@@ -47,6 +50,38 @@ pub fn component_router() -> Router<AppState> {
     .route("/admin/sso", get(admin_sso_handler))
     .route("/admin/sso/create", get(admin_sso_create_handler))
     .route("/admin/sso/:sso_provider_id", get(admin_sso_detail_handler))
+}
+
+pub async fn login_callback_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::LoginCallback {})
+}
+
+pub async fn login_callback_query_handler(
+  State(state): State<AppState>,
+  Query(query): Query<WebAppOAuthLoginRequest>,
+) -> Result<Html<String>, WebAppError> {
+  println!("{:?}", query);
+
+  // let token = state
+  //   .gotrue_client
+  //   .token(&gotrue::grant::Grant::RefreshToken(
+  //     gotrue::grant::RefreshTokenGrant {
+  //       refresh_token: query.refresh_token,
+  //     },
+  //   ))
+  //   .await?;
+
+  // // Do another round of refresh_token to consume and invalidate the old one
+  // let token = state
+  //   .gotrue_client
+  //   .token(&gotrue::grant::Grant::RefreshToken(
+  //     gotrue::grant::RefreshTokenGrant {
+  //       refresh_token: token.refresh_token,
+  //     },
+  //   ))
+  //   .await?;
+
+  todo!()
 }
 
 pub async fn admin_sso_detail_handler(

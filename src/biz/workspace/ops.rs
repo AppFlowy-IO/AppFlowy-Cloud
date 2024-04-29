@@ -203,7 +203,7 @@ pub async fn invite_workspace_members(
       .admin_generate_link(
         &admin_token,
         &GenerateLinkParams {
-          type_: GenerateLinkType::Invite,
+          type_: GenerateLinkType::MagicLink,
           email: invitation.email.clone(),
           redirect_to: "/web/accept-workspace".to_string(),
           ..Default::default()

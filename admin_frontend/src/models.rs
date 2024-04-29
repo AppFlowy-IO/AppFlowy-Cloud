@@ -35,3 +35,13 @@ pub struct WebApiCreateSSOProviderRequest {
   pub type_: String,
   pub metadata_url: String,
 }
+
+#[derive(Deserialize, Debug)]
+pub struct WebAppOAuthLoginRequest {
+  // Use for Login
+  pub refresh_token: String,
+
+  // Use actions (with params) after login
+  pub action: Option<String>,
+  pub workspace_id: Option<String>,
+}

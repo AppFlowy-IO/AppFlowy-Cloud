@@ -23,6 +23,7 @@ use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::*;
 use prost::Message as ProstMessage;
+use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams, SummarizeRowResponse};
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -127,6 +128,9 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/summarize_row").route(web::post().to(summary_row_handler)),
     )
 }
 
@@ -1001,5 +1005,29 @@ async fn parser_realtime_msg(
       "Unsupported message type: {:?}",
       message
     ))),
+  }
+}
+
+#[instrument(level = "debug", skip(state, payload), err)]
+async fn summary_row_handler(
+  state: Data<AppState>,
+  payload: Json<SummarizeRowParams>,
+) -> Result<Json<AppResponse<SummarizeRowResponse>>> {
+  let params = payload.into_inner();
+  match params.data {
+    SummarizeRowData::Identity { .. } => {
+      return Err(AppError::InvalidRequest("Identity data is not supported".to_string()).into());
+    },
+    SummarizeRowData::Content(content) => {
+      let text = state
+        .ai_client
+        .summarize_row(&content)
+        .await
+        .map_err(|err| AppError::InvalidRequest(err.to_string()))?
+        .text;
+
+      let resp = SummarizeRowResponse { text };
+      Ok(AppResponse::Ok().with_data(resp).into())
+    },
   }
 }

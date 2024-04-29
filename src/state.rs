@@ -10,6 +10,7 @@ use crate::mailer::Mailer;
 use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -43,8 +44,7 @@ pub struct AppState {
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: Mailer,
-  #[cfg(feature = "ai_enable")]
-  pub appflowy_ai_client: appflowy_ai::client::AppFlowyAIClient,
+  pub ai_client: AppFlowyAIClient,
   #[cfg(feature = "history")]
   pub grpc_history_client:
     tonic_proto::history::history_client::HistoryClient<tonic::transport::Channel>,

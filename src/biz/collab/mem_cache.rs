@@ -5,8 +5,11 @@ use redis::{pipe, AsyncCommands};
 use anyhow::anyhow;
 use app_error::AppError;
 
+use database::collab::CollabMetadata;
 use tracing::{error, instrument, trace};
 
+const SEVEN_DAYS: i64 = 604800;
+const ONE_MONTH: u64 = 2592000;
 #[derive(Clone)]
 pub struct CollabMemCache {
   connection_manager: RedisConnectionManager,
@@ -17,9 +20,45 @@ impl CollabMemCache {
     Self { connection_manager }
   }
 
+  pub async fn insert_collab_meta(&self, meta: CollabMetadata) -> Result<(), AppError> {
+    let key = collab_meta_key(&meta.object_id);
+    let value = serde_json::to_string(&meta)?;
+    self
+      .connection_manager
+      .clone()
+      .set_ex(key, value, ONE_MONTH)
+      .await
+      .map_err(|err| {
+        AppError::Internal(anyhow!("Failed to save collab meta to redis: {:?}", err))
+      })?;
+    Ok(())
+  }
+
+  pub async fn get_collab_meta(&self, object_id: &str) -> Result<CollabMetadata, AppError> {
+    let key = collab_meta_key(object_id);
+    let value: Option<String> = self
+      .connection_manager
+      .clone()
+      .get(key)
+      .await
+      .map_err(|err| {
+        AppError::Internal(anyhow!("Failed to get collab meta from redis: {:?}", err))
+      })?;
+    match value {
+      Some(value) => {
+        let meta: CollabMetadata = serde_json::from_str(&value)?;
+        Ok(meta)
+      },
+      None => Err(AppError::RecordNotFound(format!(
+        "Collab meta not found for object_id: {}",
+        object_id
+      ))),
+    }
+  }
+
   /// Checks if an object with the given ID exists in the cache.
   pub async fn is_exist(&self, object_id: &str) -> Result<bool, AppError> {
-    let cache_object_id = cache_object_id_from_key(object_id);
+    let cache_object_id = encode_collab_key(object_id);
     let exists: bool = self
       .connection_manager
       .clone()
@@ -30,7 +69,7 @@ impl CollabMemCache {
   }
 
   pub async fn remove_encode_collab(&self, object_id: &str) -> Result<(), AppError> {
-    let cache_object_id = cache_object_id_from_key(object_id);
+    let cache_object_id = encode_collab_key(object_id);
     self
       .connection_manager
       .clone()
@@ -131,7 +170,7 @@ impl CollabMemCache {
     data: &[u8],
     timestamp: i64,
   ) -> redis::RedisResult<()> {
-    let cache_object_id = cache_object_id_from_key(object_id);
+    let cache_object_id = encode_collab_key(object_id);
     let mut conn = self.connection_manager.clone();
     let key_exists: bool = conn.exists(&cache_object_id).await?;
     // Start a watch on the object_id to monitor for changes during this transaction
@@ -178,7 +217,7 @@ impl CollabMemCache {
             .atomic()
             .set(&cache_object_id, data)
             .ignore()
-            .expire(&cache_object_id, 604800) // Setting the expiration to 7 days
+            .expire(&cache_object_id, SEVEN_DAYS) // Setting the expiration to 7 days
             .ignore();
         pipeline.query_async(&mut conn).await?;
       }
@@ -208,7 +247,7 @@ impl CollabMemCache {
     &self,
     object_id: &str,
   ) -> redis::RedisResult<Option<(i64, Vec<u8>)>> {
-    let cache_object_id = cache_object_id_from_key(object_id);
+    let cache_object_id = encode_collab_key(object_id);
     let mut conn = self.connection_manager.clone();
     // Attempt to retrieve the data from Redis
     if let Some(data) = conn.get::<_, Option<Vec<u8>>>(&cache_object_id).await? {
@@ -244,6 +283,11 @@ impl CollabMemCache {
 /// changing the prefix, allowing the old data to expire naturally.
 ///
 #[inline]
-fn cache_object_id_from_key(object_id: &str) -> String {
+fn encode_collab_key(object_id: &str) -> String {
   format!("encode_collab_v0:{}", object_id)
+}
+
+#[inline]
+fn collab_meta_key(object_id: &str) -> String {
+  format!("collab_meta_v0:{}", object_id)
 }

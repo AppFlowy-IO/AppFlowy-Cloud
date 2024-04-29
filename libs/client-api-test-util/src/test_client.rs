@@ -518,7 +518,7 @@ impl TestClient {
       let mut lock_guard = collab.lock();
       lock_guard.emit_awareness_state();
       let data = lock_guard
-        .encode_collab_v1(|collab| collab_type.validate(collab))
+        .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
         .unwrap()
         .encode_to_bytes()
         .unwrap();
@@ -632,6 +632,57 @@ impl TestClient {
       mutex_collab: collab,
     };
     self.collabs.insert(object_id.to_string(), test_collab);
+  }
+
+  #[allow(unused_variables)]
+  pub async fn create_collab_with_data(
+    &mut self,
+    object_id: String,
+    workspace_id: &str,
+    collab_type: CollabType,
+    encoded_collab_v1: Option<EncodedCollab>,
+  ) -> Result<(), AppResponseError> {
+    // Subscribe to object
+    let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
+    let collab = match encoded_collab_v1 {
+      None => Arc::new(MutexCollab::new(Collab::new_with_origin(
+        origin.clone(),
+        &object_id,
+        vec![],
+        false,
+      ))),
+      Some(data) => Arc::new(MutexCollab::new(
+        Collab::new_with_source(
+          origin.clone(),
+          &object_id,
+          DataSource::DocStateV1(data.doc_state.to_vec()),
+          vec![],
+          false,
+        )
+        .unwrap(),
+      )),
+    };
+
+    let encoded_collab_v1 = {
+      let lock_guard = collab.lock();
+      let data = lock_guard
+        .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+        .unwrap()
+        .encode_to_bytes()
+        .unwrap();
+      drop(lock_guard);
+      data
+    };
+
+    self
+      .api_client
+      .create_collab(CreateCollabParams {
+        object_id: object_id.clone(),
+        encoded_collab_v1,
+        collab_type: collab_type.clone(),
+        workspace_id: workspace_id.to_string(),
+      })
+      .await
   }
 
   #[cfg(not(target_arch = "wasm32"))]

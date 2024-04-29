@@ -6,7 +6,7 @@ pub use collab_db_ops::*;
 use collab_entity::CollabType;
 pub use collab_storage::*;
 
-pub(crate) fn partition_key(collab_type: &CollabType) -> i32 {
+pub(crate) fn partition_key_from_collab_type(collab_type: &CollabType) -> i32 {
   match collab_type {
     CollabType::Document => 0,
     CollabType::Database => 1,

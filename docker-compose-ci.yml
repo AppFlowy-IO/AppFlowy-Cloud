@@ -39,7 +39,7 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
-      - postgres_data:/var/lib/postgresql/data
+  #      - postgres_data:/var/lib/postgresql/data
 
   redis:
     restart: on-failure
@@ -111,8 +111,8 @@ services:
       - APPFLOWY_S3_SECRET_KEY=${APPFLOWY_S3_SECRET_KEY}
       - APPFLOWY_S3_BUCKET=${APPFLOWY_S3_BUCKET}
       - APPFLOWY_S3_REGION=${APPFLOWY_S3_REGION}
-      - APPFLOWY_AI_URL=${APPFLOWY_AI_URL}
       - APPFLOWY_ACCESS_CONTROL=${APPFLOWY_ACCESS_CONTROL}
+      - APPFLOWY_AI_URL=${APPFLOWY_AI_URL}
     build:
       context: .
       dockerfile: Dockerfile
@@ -130,6 +130,17 @@ services:
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
       - ADMIN_FRONTEND_GOTRUE_URL=${ADMIN_FRONTEND_GOTRUE_URL:-http://gotrue:9999}
       - ADMIN_FRONTEND_APPFLOWY_CLOUD_URL=${ADMIN_FRONTEND_APPFLOWY_CLOUD_URL:-http://appflowy_cloud:8000}
+
+  appflowy_ai:
+    restart: on-failure
+    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_DEBUG=false
+      - FLASK_SKIP_DOTENV=true
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERVER_NAME=${APPFLOWY_AI_SERVER_NAME}
 
   appflowy_history:
     restart: on-failure

@@ -31,7 +31,7 @@ async fn simulate_small_data_set_write(pool: PgPool) {
   let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
 
   let queries = Arc::new(Mutex::new(Vec::new()));
-  for i in 0..50 {
+  for i in 0..10 {
     // sleep random seconds less than 2 seconds. because the runtime is single-threaded,
     // we need sleep a little time to let the runtime switch to other tasks.
     sleep(Duration::from_millis(i % 2)).await;

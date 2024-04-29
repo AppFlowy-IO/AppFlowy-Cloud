@@ -179,9 +179,7 @@ pub async fn invite_workspace_members(
   let admin_token = gotrue_admin.token(gotrue_client).await?;
 
   for invitation in invitations {
-    let username = database::user::select_name_from_email(pg_pool, &invitation.email)
-      .await
-      .unwrap_or(invitation.email.clone());
+    let inviter_name = database::user::select_name_from_uuid(pg_pool, inviter).await?;
     let workspace_name =
       database::workspace::select_workspace_name_from_workspace_id(pg_pool, workspace_id)
         .await?
@@ -209,7 +207,7 @@ pub async fn invite_workspace_members(
             "/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
             invite_id, workspace_name,
             workspace_icon_url,
-            username,
+            inviter_name,
             user_icon_url,
             workspace_member_count,
           ),
@@ -235,7 +233,7 @@ pub async fn invite_workspace_members(
         invitation.email,
         WorkspaceInviteMailerParam {
           user_icon_url,
-          username,
+          username: inviter_name,
           workspace_name,
           workspace_icon_url,
           workspace_member_count,

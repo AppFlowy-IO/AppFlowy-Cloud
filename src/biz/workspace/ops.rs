@@ -228,19 +228,26 @@ pub async fn invite_workspace_members(
     )
     .await?;
 
-    mailer
-      .send_workspace_invite(
-        invitation.email,
-        WorkspaceInviteMailerParam {
-          user_icon_url,
-          username: inviter_name,
-          workspace_name,
-          workspace_icon_url,
-          workspace_member_count,
-          accept_url,
-        },
-      )
-      .await?;
+    // send email can be slow, so send email in background
+    let cloned_mailer = mailer.clone();
+    tokio::spawn(async move {
+      if let Err(err) = cloned_mailer
+        .send_workspace_invite(
+          invitation.email,
+          WorkspaceInviteMailerParam {
+            user_icon_url,
+            username: inviter_name,
+            workspace_name,
+            workspace_icon_url,
+            workspace_member_count,
+            accept_url,
+          },
+        )
+        .await
+      {
+        tracing::error!("Failed to send workspace invite email: {:?}", err);
+      };
+    });
   }
 
   txn

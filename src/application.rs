@@ -254,7 +254,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     access_control,
     metrics,
     gotrue_admin,
-    appflowy_ai_client,
+    ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
   })

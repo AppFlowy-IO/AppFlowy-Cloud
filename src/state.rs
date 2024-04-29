@@ -9,6 +9,7 @@ use crate::config::config::Config;
 use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -18,7 +19,6 @@ use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::PgPool;
 use std::sync::Arc;
-use appflowy_ai_client::client::AppFlowyAIClient;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -42,7 +42,7 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
-  pub appflowy_ai_client: AppFlowyAIClient,
+  pub ai_client: AppFlowyAIClient,
   #[cfg(feature = "history")]
   pub grpc_history_client:
     tonic_proto::history::history_client::HistoryClient<tonic::transport::Channel>,

@@ -1018,7 +1018,7 @@ async fn summary_row_handler(
     },
     SummarizeRowData::Content(content) => {
       let text = state
-        .appflowy_ai_client
+        .ai_client
         .summarize_row(&content)
         .await
         .map_err(|err| AppError::InvalidRequest(err.to_string()))?

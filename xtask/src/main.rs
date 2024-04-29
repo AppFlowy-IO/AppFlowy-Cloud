@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
   kill_existing_process(appflowy_history_bin_name).await?;
 
   let mut appflowy_cloud_cmd = Command::new("cargo")
-    .args(["run", "--features", "ai_enable"])
+    .args(["run", "--features", ""])
     .spawn()
     .context("Failed to start AppFlowy-Cloud process")?;
 

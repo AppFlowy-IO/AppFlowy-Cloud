@@ -110,14 +110,7 @@ services:
       - FLASK_DEBUG=false
       - FLASK_SKIP_DOTENV=true
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERVER_NAME=${APPFLOWY_AI_SERVER_NAME}
 
-#  collab_history:
-#    restart: on-failure
-#    build:
-#      context: .
-#      dockerfile: ./libs/appflowy-history/Dockerfile
-#    environment:
-#      - RUST_LOG=${RUST_LOG:-info}
-#      - APPFLOWY_HISTORY_REDIS_URL=${APPFLOWY_HISTORY_REDIS_URL:-redis://redis:6379}
 volumes:
   postgres_data:

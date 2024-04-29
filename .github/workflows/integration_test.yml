@@ -20,7 +20,7 @@ env:
 
 jobs:
   test:
-    name: Docker
+    name: Integration Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -45,6 +45,7 @@ jobs:
           sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
           sed -i 's/API_EXTERNAL_URL=http:\/\/your-host/API_EXTERNAL_URL=http:\/\/localhost/' .env
           sed -i 's/GOTRUE_RATE_LIMIT_EMAIL_SENT=100/GOTRUE_RATE_LIMIT_EMAIL_SENT=1000/' .env
+          sed -i 's/OPENAI_API_KEY=.*/OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
 
       - name: Update Nginx Configuration
         run: |
@@ -59,6 +60,7 @@ jobs:
       - name: Run Docker-Compose
         run: |
           docker compose -f docker-compose-ci.yml up -d
+          docker ps -a
 
       - name: Run tests
         run: |

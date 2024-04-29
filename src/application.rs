@@ -4,8 +4,6 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
-use access_control::access::{enable_access_control, AccessControl};
-
 use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::{
   CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
@@ -24,6 +22,7 @@ use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
+use access_control::access::{enable_access_control, AccessControl};
 use actix::Supervisor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
@@ -31,6 +30,7 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
+use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::command::{RTCommandReceiver, RTCommandSender};
 use appflowy_collaborate::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -185,9 +185,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
 
-  #[cfg(feature = "ai_enable")]
-  let appflowy_ai_client =
-    appflowy_ai::client::AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
+  let appflowy_ai_client = AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -256,8 +254,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     access_control,
     metrics,
     gotrue_admin,
-    #[cfg(feature = "ai_enable")]
-    appflowy_ai_client,
+    ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
   })

@@ -179,7 +179,9 @@ pub async fn invite_workspace_members(
   let admin_token = gotrue_admin.token(gotrue_client).await?;
 
   for invitation in invitations {
-    let username = database::user::select_name_from_email(pg_pool, &invitation.email).await?;
+    let username = database::user::select_name_from_email(pg_pool, &invitation.email)
+      .await
+      .unwrap_or(invitation.email.clone());
     let workspace_name =
       database::workspace::select_workspace_name_from_workspace_id(pg_pool, workspace_id)
         .await?

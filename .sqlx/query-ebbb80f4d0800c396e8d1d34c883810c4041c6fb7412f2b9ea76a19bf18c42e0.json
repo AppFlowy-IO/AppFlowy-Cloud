@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO public.af_workspace_invitation (\n          workspace_id,\n          inviter,\n          invitee_email,\n          role_id\n      )\n      VALUES (\n        $1,\n        (SELECT uid FROM public.af_user WHERE uuid = $2),\n        $3,\n        $4\n      )\n      RETURNING id;\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ebbb80f4d0800c396e8d1d34c883810c4041c6fb7412f2b9ea76a19bf18c42e0"
+}

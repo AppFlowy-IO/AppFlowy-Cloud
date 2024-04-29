@@ -36,12 +36,23 @@ pub struct WebApiCreateSSOProviderRequest {
   pub metadata_url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct WebAppOAuthLoginRequest {
   // Use for Login
   pub refresh_token: String,
 
   // Use actions (with params) after login
-  pub action: Option<String>,
-  pub workspace_id: Option<String>,
+  pub action: Option<OAuthLoginAction>,
+  pub workspace_invitation_id: Option<String>,
+  pub workspace_name: Option<String>,
+  pub workspace_icon: Option<String>,
+  pub user_name: Option<String>,
+  pub user_icon: Option<String>,
+  pub workspace_member_count: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OAuthLoginAction {
+  AcceptWorkspaceInvite,
 }

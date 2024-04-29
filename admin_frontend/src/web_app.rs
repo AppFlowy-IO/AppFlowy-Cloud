@@ -1,11 +1,12 @@
 use crate::askama_entities::WorkspaceWithMembers;
 use crate::error::WebAppError;
 use crate::ext::api::{
-  get_pending_workspace_invitations, get_user_owned_workspaces, get_user_profile,
-  get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
+  accept_workspace_invitation, get_pending_workspace_invitations, get_user_owned_workspaces,
+  get_user_profile, get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces,
+  get_workspace_members, verify_token_cloud,
 };
-use crate::models::WebAppOAuthLoginRequest;
-use crate::session::UserSession;
+use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
+use crate::session::{self, UserSession};
 use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::Result;
@@ -20,7 +21,7 @@ pub fn router(state: AppState) -> Router<AppState> {
     .nest_service("/components", component_router().with_state(state))
 }
 
-pub fn page_router() -> Router<AppState> {
+fn page_router() -> Router<AppState> {
   Router::new()
     .route("/", get(home_handler))
     .route("/login", get(login_handler))
@@ -30,7 +31,7 @@ pub fn page_router() -> Router<AppState> {
     .route("/admin/home", get(admin_home_handler))
 }
 
-pub fn component_router() -> Router<AppState> {
+fn component_router() -> Router<AppState> {
   Router::new()
     // User actions
     .route("/user/navigate", get(user_navigate_handler))
@@ -52,39 +53,93 @@ pub fn component_router() -> Router<AppState> {
     .route("/admin/sso/:sso_provider_id", get(admin_sso_detail_handler))
 }
 
-pub async fn login_callback_handler() -> Result<Html<String>, WebAppError> {
+async fn login_callback_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::LoginCallback {})
 }
 
-pub async fn login_callback_query_handler(
+async fn login_callback_query_handler(
   State(state): State<AppState>,
   Query(query): Query<WebAppOAuthLoginRequest>,
 ) -> Result<Html<String>, WebAppError> {
-  println!("{:?}", query);
+  let token = match state
+    .gotrue_client
+    .token(&gotrue::grant::Grant::RefreshToken(
+      gotrue::grant::RefreshTokenGrant {
+        refresh_token: query.refresh_token,
+      },
+    ))
+    .await
+  {
+    Ok(token) => token,
+    Err(err) => {
+      tracing::error!("refreshing token: {:?}", err);
+      if let Some(action) = &query.action {
+        match action {
+          OAuthLoginAction::AcceptWorkspaceInvite => {
+            return render_template(templates::Redirect {
+              redirect_url: format!(
+                "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+                query.workspace_name.unwrap_or_default(),
+                query.workspace_icon.unwrap_or_default(),
+                query.user_name.unwrap_or_default(),
+                query.user_icon.unwrap_or_default(),
+                query.workspace_member_count.unwrap_or_default()),
+            });
+          },
+        }
+      }
+      return Err(WebAppError::GoTrue(err));
+    },
+  };
 
-  // let token = state
-  //   .gotrue_client
-  //   .token(&gotrue::grant::Grant::RefreshToken(
-  //     gotrue::grant::RefreshTokenGrant {
-  //       refresh_token: query.refresh_token,
-  //     },
-  //   ))
-  //   .await?;
+  // Do another round of refresh_token to consume and invalidate the old one
+  let token = state
+    .gotrue_client
+    .token(&gotrue::grant::Grant::RefreshToken(
+      gotrue::grant::RefreshTokenGrant {
+        refresh_token: token.refresh_token,
+      },
+    ))
+    .await?;
 
-  // // Do another round of refresh_token to consume and invalidate the old one
-  // let token = state
-  //   .gotrue_client
-  //   .token(&gotrue::grant::Grant::RefreshToken(
-  //     gotrue::grant::RefreshTokenGrant {
-  //       refresh_token: token.refresh_token,
-  //     },
-  //   ))
-  //   .await?;
+  verify_token_cloud(
+    token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
 
-  todo!()
+  let new_session_id = uuid::Uuid::new_v4();
+  let new_session = session::UserSession::new(new_session_id.to_string(), token);
+  state.session_store.put_user_session(&new_session).await?;
+
+  match query.action {
+    Some(action) => match action {
+      OAuthLoginAction::AcceptWorkspaceInvite => {
+        let invite_id = query
+          .workspace_invitation_id
+          .ok_or(WebAppError::BadRequest(
+            "workspace_invitation_id not found".to_string(),
+          ))?;
+        if let Err(err) = accept_workspace_invitation(
+          &new_session.token.access_token,
+          &invite_id,
+          &state.appflowy_cloud_url,
+        )
+        .await
+        {
+          tracing::error!("accepting workspace invitation: {:?}", err);
+          return render_template(templates::Redirect {
+            redirect_url: "https://test.appflowy.io/invitation/expired".to_string(),
+          });
+        };
+        render_template(templates::OpenAppFlowyOrDownload {})
+      },
+    },
+    None => home_handler(State(state), new_session).await,
+  }
 }
 
-pub async fn admin_sso_detail_handler(
+async fn admin_sso_detail_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(sso_provider_id): Path<String>,
@@ -103,11 +158,11 @@ pub async fn admin_sso_detail_handler(
   })
 }
 
-pub async fn admin_sso_create_handler() -> Result<Html<String>, WebAppError> {
+async fn admin_sso_create_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::SsoCreate)
 }
 
-pub async fn admin_sso_handler(
+async fn admin_sso_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -121,15 +176,15 @@ pub async fn admin_sso_handler(
   render_template(templates::SsoList { sso_providers })
 }
 
-pub async fn user_navigate_handler() -> Result<Html<String>, WebAppError> {
+async fn user_navigate_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::Navigate)
 }
 
-pub async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
+async fn admin_navigate_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::AdminNavigate)
 }
 
-pub async fn shared_workspaces_handler(
+async fn shared_workspaces_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -150,7 +205,7 @@ pub async fn shared_workspaces_handler(
   render_template(templates::SharedWorkspaces { shared_workspaces })
 }
 
-pub async fn user_invite_handler(
+async fn user_invite_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -193,7 +248,7 @@ pub async fn user_invite_handler(
   })
 }
 
-pub async fn user_usage_handler(
+async fn user_usage_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -223,7 +278,7 @@ pub async fn user_usage_handler(
   })
 }
 
-pub async fn workspace_usage_handler(
+async fn workspace_usage_handler(
   State(app_state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -236,11 +291,11 @@ pub async fn workspace_usage_handler(
   render_template(templates::WorkspaceUsageList { workspace_usages })
 }
 
-pub async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {
+async fn admin_users_create_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::CreateUser)
 }
 
-pub async fn user_user_handler(
+async fn user_user_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -251,17 +306,17 @@ pub async fn user_user_handler(
   render_template(templates::UserDetails { user: &user })
 }
 
-pub async fn login_handler(State(state): State<AppState>) -> Result<Html<String>, WebAppError> {
+async fn login_handler(State(state): State<AppState>) -> Result<Html<String>, WebAppError> {
   let external = state.gotrue_client.settings().await?.external;
   let oauth_providers = external.oauth_providers();
   render_template(templates::Login { oauth_providers })
 }
 
-pub async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
+async fn user_change_password_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::ChangePassword)
 }
 
-pub async fn home_handler(
+async fn home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -275,7 +330,7 @@ pub async fn home_handler(
   })
 }
 
-pub async fn admin_home_handler(
+async fn admin_home_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -286,7 +341,7 @@ pub async fn admin_home_handler(
   render_template(templates::AdminHome { user: &user })
 }
 
-pub async fn admin_users_handler(
+async fn admin_users_handler(
   State(state): State<AppState>,
   session: UserSession,
 ) -> Result<Html<String>, WebAppError> {
@@ -308,7 +363,7 @@ pub async fn admin_users_handler(
   render_template(templates::AdminUsers { users: &users })
 }
 
-pub async fn admin_user_details_handler(
+async fn admin_user_details_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_id): Path<String>,
@@ -316,8 +371,7 @@ pub async fn admin_user_details_handler(
   let user = state
     .gotrue_client
     .admin_user_details(&session.token.access_token, &user_id)
-    .await
-    .unwrap(); // TODO: handle error
+    .await?;
 
   render_template(templates::AdminUserDetails { user: &user })
 }

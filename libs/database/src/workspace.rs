@@ -251,9 +251,9 @@ pub async fn insert_workspace_invitation(
   inviter_uuid: &Uuid,
   invitee_email: &str,
   invitee_role: AFRole,
-) -> Result<(), AppError> {
+) -> Result<Uuid, AppError> {
   let role_id: i32 = invitee_role.into();
-  sqlx::query!(
+  let id = sqlx::query!(
     r#"
       INSERT INTO public.af_workspace_invitation (
           workspace_id,
@@ -267,16 +267,17 @@ pub async fn insert_workspace_invitation(
         $3,
         $4
       )
+      RETURNING id;
     "#,
     workspace_id,
     inviter_uuid,
     invitee_email,
     role_id
   )
-  .execute(txn.deref_mut())
+  .fetch_one(txn.deref_mut())
   .await?;
 
-  Ok(())
+  Ok(id.id)
 }
 
 pub async fn update_workspace_invitation_set_status_accepted(

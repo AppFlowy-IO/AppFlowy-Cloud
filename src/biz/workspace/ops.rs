@@ -1,5 +1,5 @@
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
-use crate::mailer::Mailer;
+use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
 use crate::state::GoTrueAdmin;
 use anyhow::Context;
 use app_error::AppError;
@@ -179,7 +179,7 @@ pub async fn invite_workspace_members(
   let admin_token = gotrue_admin.token(gotrue_client).await?;
 
   for invitation in invitations {
-    let name = database::user::select_name_from_email(pg_pool, &invitation.email).await?;
+    let username = database::user::select_name_from_email(pg_pool, &invitation.email).await?;
     let workspace_name =
       database::workspace::select_workspace_name_from_workspace_id(pg_pool, workspace_id)
         .await?
@@ -187,10 +187,18 @@ pub async fn invite_workspace_members(
     let workspace_member_count =
       database::workspace::select_workspace_member_count_from_workspace_id(pg_pool, workspace_id)
         .await?
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .to_string();
+
+    // default icon until we have workspace icon
+    let workspace_icon_url =
+      "https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png".to_string();
+    let user_icon_url =
+      "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
+        .to_string();
 
     // Generate a link such that when clicked, the user is added to the workspace.
-    insert_workspace_invitation(
+    let invite_id = insert_workspace_invitation(
       &mut txn,
       workspace_id,
       inviter,
@@ -205,7 +213,14 @@ pub async fn invite_workspace_members(
         &GenerateLinkParams {
           type_: GenerateLinkType::MagicLink,
           email: invitation.email.clone(),
-          redirect_to: "/web/accept-workspace".to_string(),
+          redirect_to: format!(
+            "/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+            invite_id, workspace_name,
+            workspace_icon_url,
+            username,
+            user_icon_url,
+            workspace_member_count,
+          ),
           ..Default::default()
         },
       )
@@ -215,10 +230,14 @@ pub async fn invite_workspace_members(
     mailer
       .send_workspace_invite(
         invitation.email,
-        name,
-        workspace_name,
-        workspace_member_count.to_string(),
-        accept_url,
+        WorkspaceInviteMailerParam {
+          user_icon_url,
+          username,
+          workspace_name,
+          workspace_icon_url,
+          workspace_member_count,
+          accept_url,
+        },
       )
       .await?;
   }

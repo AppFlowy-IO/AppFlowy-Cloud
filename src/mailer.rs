@@ -49,22 +49,8 @@ impl Mailer {
   pub async fn send_workspace_invite(
     &self,
     email: String,
-    username: String,
-    workspace_name: String,
-    workspace_member_count: String,
-    accept_url: String,
+    param: WorkspaceInviteMailerParam,
   ) -> Result<(), anyhow::Error> {
-    let param = WorkspaceInviteMailerParam {
-      user_icon_url:
-        "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
-          .to_string(), // until we have user icon
-      username: username.clone(),
-      workspace_name,
-      workspace_icon_url: "https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png" // (AppFlowy Logo)
-        .to_string(), // until we have workspace icon
-      workspace_member_count,
-      accept_url,
-    };
     let rendered = HANDLEBARS
       .read()
       .unwrap()
@@ -76,7 +62,7 @@ impl Mailer {
         lettre::Address::new("notify", "appflowy.io")?,
       ))
       .to(lettre::message::Mailbox::new(
-        Some(username),
+        Some(param.username),
         email.parse().unwrap(),
       ))
       .subject("AppFlowy Workpace Invitation")

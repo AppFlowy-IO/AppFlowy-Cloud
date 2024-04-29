@@ -187,7 +187,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
 
-  let ai_client = AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
+  let appflowy_ai_client = AppFlowyAIClient::new(config.appflowy_ai.url.expose_secret());
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -264,7 +264,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     metrics,
     gotrue_admin,
     mailer,
-    ai_client,
+    ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
   })

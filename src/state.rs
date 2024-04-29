@@ -6,6 +6,7 @@ use crate::biz::collab::storage::CollabAccessControlStorage;
 
 use crate::biz::pg_listener::PgListeners;
 use crate::config::config::Config;
+use crate::mailer::Mailer;
 use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
@@ -41,6 +42,7 @@ pub struct AppState {
   pub access_control: AccessControl,
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
+  pub mailer: Mailer,
   #[cfg(feature = "ai_enable")]
   pub appflowy_ai_client: appflowy_ai::client::AppFlowyAIClient,
   #[cfg(feature = "history")]

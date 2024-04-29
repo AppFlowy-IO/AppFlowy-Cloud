@@ -1,0 +1,15 @@
+<script>
+  window.onload = function() {
+    const current_url = window.location.href;
+    if (current_url.includes('/login-callback')) {
+      var redirect_url = current_url.replace('/login-callback', '/login-callback-query');
+      if (redirect_url.includes('?')) { // If '?' exists, replace '#' with '&'
+        redirect_url = redirect_url.replace('#', '&');
+      } else { // If '?' does not exist, replace '#' with '?'
+        redirect_url = redirect_url.replace('#', '?');
+      }
+      // alert(redirect_url);
+      window.location.href = redirect_url;
+    }
+  };
+</script>

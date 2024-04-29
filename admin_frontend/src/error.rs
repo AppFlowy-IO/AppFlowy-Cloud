@@ -48,6 +48,8 @@ pub enum WebAppError {
   Askama(askama::Error),
   GoTrue(gotrue_entity::error::GoTrueError),
   ExtApi(ext::error::Error),
+  Redis(redis::RedisError),
+  BadRequest(String),
 }
 
 impl IntoResponse for WebAppError {
@@ -62,7 +64,21 @@ impl IntoResponse for WebAppError {
         Redirect::to("/login").into_response()
       },
       WebAppError::ExtApi(e) => e.into_response(),
+      WebAppError::Redis(e) => {
+        tracing::error!("redis error: {:?}", e);
+        status::StatusCode::INTERNAL_SERVER_ERROR.into_response()
+      },
+      WebAppError::BadRequest(e) => {
+        tracing::error!("bad request: {:?}", e);
+        status::StatusCode::BAD_REQUEST.into_response()
+      },
     }
+  }
+}
+
+impl From<redis::RedisError> for WebAppError {
+  fn from(v: redis::RedisError) -> Self {
+    WebAppError::Redis(v)
   }
 }
 

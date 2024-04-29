@@ -21,7 +21,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::select;
-use tokio::sync::broadcast::error::SendError;
+
 use tokio::sync::broadcast::{channel, Sender};
 
 use tokio::time::{sleep, Instant};
@@ -37,7 +37,7 @@ use yrs::UpdateSubscription;
 ///
 pub struct CollabBroadcast {
   object_id: String,
-  sender: Sender<CollabMessage>,
+  broadcast_sender: Sender<CollabMessage>,
   awareness_sub: Option<AwarenessUpdateSubscription>,
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
@@ -74,7 +74,7 @@ impl CollabBroadcast {
     let (sender, _) = channel(buffer_capacity);
     let mut this = CollabBroadcast {
       object_id,
-      sender,
+      broadcast_sender: sender,
       awareness_sub: Default::default(),
       doc_subscription: Default::default(),
       edit_state,
@@ -88,7 +88,7 @@ impl CollabBroadcast {
     let (doc_sub, awareness_sub) = {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
-      let broadcast_sink = self.sender.clone();
+      let broadcast_sink = self.broadcast_sender.clone();
       let modified_at = self.modified_at.clone();
       let edit_state = self.edit_state.clone();
 
@@ -101,13 +101,14 @@ impl CollabBroadcast {
         .get_doc()
         .observe_update_v1(move |txn, event| {
           let seq_num = edit_state.increment_edit_count() + 1;
-          let update_len = event.update.len();
           let origin = CollabOrigin::from(txn);
-
+          trace!(
+            "observe update with len:{}, origin: {}",
+            event.update.len(),
+            origin
+          );
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
-
-          trace!("collab update with len:{}", update_len);
           if let Err(err) = broadcast_sink.send(msg.into()) {
             trace!("fail to broadcast updates:{}", err);
           }
@@ -115,21 +116,22 @@ impl CollabBroadcast {
         })
         .unwrap();
 
-      let broadcast_sink = self.sender.clone();
+      let broadcast_sink = self.broadcast_sender.clone();
       let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
-      let awareness_sub = collab.lock().observe_awareness(move |awareness, event| {
-        if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
-          trace!("awareness update:{}", awareness_update);
-          let payload = Message::Awareness(awareness_update).encode_v1();
-          // TODO(nathan): replace the origin from awareness transaction
-          let msg = AwarenessSync::new(cloned_oid.clone(), payload);
-          if let Err(err) = broadcast_sink.send(msg.into()) {
-            trace!("fail to broadcast awareness:{}", err);
+      let awareness_sub = collab
+        .lock()
+        .observe_awareness(move |awareness, event, origin| {
+          if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
+            trace!("awareness update:{}", origin);
+            let payload = Message::Awareness(awareness_update).encode_v1();
+            let msg = AwarenessSync::new(cloned_oid.clone(), payload, origin.clone());
+            if let Err(err) = broadcast_sink.send(msg.into()) {
+              trace!("fail to broadcast awareness:{}", err);
+            }
           }
-        }
-      });
+        });
       (doc_sub, awareness_sub)
     };
 
@@ -137,16 +139,7 @@ impl CollabBroadcast {
     self.awareness_sub = Some(awareness_sub);
   }
 
-  /// Broadcasts user message to all active subscribers. Returns error if message could not have
-  /// been broadcast.
-  #[allow(clippy::result_large_err)]
-  #[allow(dead_code)]
-  pub fn broadcast_awareness(&self, msg: AwarenessSync) -> Result<(), SendError<CollabMessage>> {
-    self.sender.send(msg.into())?;
-    Ok(())
-  }
-
-  /// Subscribes a new connection to a broadcast group, enabling real-time collaboration.
+  /// Subscribes a new connection to a broadcast group
   ///
   /// This function takes a `sink`/`stream` pair representing the connection to a subscriber. The `sink`
   /// is used to send messages to the subscriber, while the `stream` receives messages from the subscriber.
@@ -195,7 +188,7 @@ impl CollabBroadcast {
 
       // the receiver will continue to receive updates from the document observer and forward the update to
       // connected subscriber using its Sink. The loop will break if the stop_rx receives a message.
-      let mut receiver = self.sender.subscribe();
+      let mut receiver = self.broadcast_sender.subscribe();
       let cloned_user = user.clone();
       rt_spawn(async move {
         loop {
@@ -204,6 +197,8 @@ impl CollabBroadcast {
             result = receiver.recv() => {
               match result {
                 Ok(message) => {
+
+                  // No need to broadcast the message back to the originator
                   if message.origin() == &subscriber_origin {
                     continue;
                   }

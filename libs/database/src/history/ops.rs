@@ -1,4 +1,4 @@
-use crate::collab::partition_key;
+use crate::collab::partition_key_from_collab_type;
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, PgPool, Postgres};
@@ -19,7 +19,7 @@ pub async fn insert_history<'a>(
   pool: PgPool,
 ) -> Result<(), sqlx::Error> {
   let mut transaction = pool.begin().await?;
-  let partition_key = partition_key(&collab_type);
+  let partition_key = partition_key_from_collab_type(&collab_type);
   let to_insert: Vec<SnapshotMeta> = snapshots
     .into_iter()
     .filter(|s| s.created_at <= created_at)
@@ -92,7 +92,7 @@ pub async fn get_snapshot_meta_list<'a>(
   collab_type: &CollabType,
   pool: &PgPool,
 ) -> Result<Vec<AFSnapshotMetaRow>, sqlx::Error> {
-  let partition_key = partition_key(collab_type);
+  let partition_key = partition_key_from_collab_type(collab_type);
   let order_clause = "DESC";
   let query = format!(
         "SELECT oid, snapshot, snapshot_version, created_at FROM af_snapshot_meta WHERE oid = $1 AND partition_key = $2 ORDER BY created_at {}",
@@ -162,7 +162,7 @@ pub async fn get_latest_snapshot_state<'a, E: Executor<'a, Database = Postgres>>
   collab_type: &CollabType,
   executor: E,
 ) -> Result<Option<AFSnapshotStateRow>, sqlx::Error> {
-  let partition_key = partition_key(collab_type);
+  let partition_key = partition_key_from_collab_type(collab_type);
   let rec = sqlx::query_as!(
     AFSnapshotStateRow,
     r#"
@@ -188,7 +188,7 @@ pub async fn get_latest_snapshot(
   pool: &PgPool,
 ) -> Result<Option<SnapshotInfo>, sqlx::Error> {
   let mut transaction = pool.begin().await?;
-  let partition_key = partition_key(collab_type);
+  let partition_key = partition_key_from_collab_type(collab_type);
   // Attempt to fetch the latest snapshot metadata
   let snapshot_meta = sqlx::query_as!(
     AFSnapshotMetaRow,

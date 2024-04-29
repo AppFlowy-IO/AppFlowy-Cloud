@@ -7,6 +7,8 @@ use database_entity::dto::{
 };
 
 use collab::entity::EncodedCollab;
+use collab_entity::CollabType;
+use serde::{Deserialize, Serialize};
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -132,6 +134,12 @@ pub trait CollabStorage: Send + Sync + 'static {
   ///
   /// * `Result<()>` - Returns `Ok(())` if the collaboration was deleted successfully, `Err` otherwise.
   async fn delete_collab(&self, workspace_id: &str, uid: &i64, object_id: &str) -> AppResult<()>;
+
+  async fn query_collab_meta(
+    &self,
+    object_id: &str,
+    collab_type: &CollabType,
+  ) -> AppResult<CollabMetadata>;
   async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError>;
 
   async fn create_snapshot(&self, params: InsertSnapshotParams) -> AppResult<AFSnapshotMeta>;
@@ -222,6 +230,17 @@ where
       .await
   }
 
+  async fn query_collab_meta(
+    &self,
+    object_id: &str,
+    collab_type: &CollabType,
+  ) -> AppResult<CollabMetadata> {
+    self
+      .as_ref()
+      .query_collab_meta(object_id, collab_type)
+      .await
+  }
+
   async fn should_create_snapshot(&self, oid: &str) -> Result<bool, AppError> {
     self.as_ref().should_create_snapshot(oid).await
   }
@@ -249,4 +268,10 @@ where
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.as_ref().get_collab_snapshot_list(oid).await
   }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CollabMetadata {
+  pub object_id: String,
+  pub workspace_id: String,
 }

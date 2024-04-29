@@ -196,7 +196,7 @@ pub async fn invite_workspace_members(
     let user_icon_url =
       "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
         .to_string();
-
+    let invite_id = uuid::Uuid::new_v4();
     let accept_url = gotrue_client
       .admin_generate_link(
         &admin_token,
@@ -218,8 +218,9 @@ pub async fn invite_workspace_members(
       .action_link;
 
     // Generate a link such that when clicked, the user is added to the workspace.
-    let invite_id = insert_workspace_invitation(
+    insert_workspace_invitation(
       &mut txn,
+      &invite_id,
       workspace_id,
       inviter,
       invitation.email.as_str(),

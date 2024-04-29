@@ -247,15 +247,17 @@ pub async fn upsert_workspace_member_with_txn(
 #[inline]
 pub async fn insert_workspace_invitation(
   txn: &mut Transaction<'_, sqlx::Postgres>,
+  invite_id: &uuid::Uuid,
   workspace_id: &uuid::Uuid,
   inviter_uuid: &Uuid,
   invitee_email: &str,
   invitee_role: AFRole,
-) -> Result<Uuid, AppError> {
+) -> Result<(), AppError> {
   let role_id: i32 = invitee_role.into();
-  let id = sqlx::query!(
+  sqlx::query!(
     r#"
       INSERT INTO public.af_workspace_invitation (
+          id,
           workspace_id,
           inviter,
           invitee_email,
@@ -263,21 +265,22 @@ pub async fn insert_workspace_invitation(
       )
       VALUES (
         $1,
-        (SELECT uid FROM public.af_user WHERE uuid = $2),
-        $3,
-        $4
+        $2,
+        (SELECT uid FROM public.af_user WHERE uuid = $3),
+        $4,
+        $5
       )
-      RETURNING id;
     "#,
+    invite_id,
     workspace_id,
     inviter_uuid,
     invitee_email,
     role_id
   )
-  .fetch_one(txn.deref_mut())
+  .execute(txn.deref_mut())
   .await?;
 
-  Ok(id.id)
+  Ok(())
 }
 
 pub async fn update_workspace_invitation_set_status_accepted(

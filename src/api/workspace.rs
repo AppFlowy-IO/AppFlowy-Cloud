@@ -249,6 +249,8 @@ async fn post_workspace_invite_handler(
 ) -> Result<JsonAppResponse<()>> {
   let invited_members = payload.into_inner();
   workspace::ops::invite_workspace_members(
+    &state.mailer,
+    &state.gotrue_admin,
     &state.pg_pool,
     &state.gotrue_client,
     &user_uuid,

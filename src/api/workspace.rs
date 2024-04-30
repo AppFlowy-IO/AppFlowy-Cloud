@@ -297,11 +297,11 @@ async fn post_accept_workspace_invite_handler(
 
 #[instrument(skip_all, err)]
 async fn get_workspace_members_handler(
-  user_uuid: UserUuid,
+  _user_uuid: UserUuid,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
 ) -> Result<JsonAppResponse<Vec<AFWorkspaceMember>>> {
-  let members = workspace::ops::get_workspace_members(&state.pg_pool, &user_uuid, &workspace_id)
+  let members = workspace::ops::get_workspace_members(&state.pg_pool, &workspace_id)
     .await?
     .into_iter()
     .map(|member| AFWorkspaceMember {

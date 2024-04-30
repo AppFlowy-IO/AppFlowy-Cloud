@@ -1,5 +1,6 @@
 use anyhow::{Context, Error};
 use collab_stream::client::CONTROL_STREAM_KEY;
+use collab_stream::model::CollabControlEvent;
 use infra::env_util::get_env_var;
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
@@ -66,6 +67,7 @@ impl DatabaseSetting {
 
 #[derive(Debug, Clone)]
 pub struct StreamSetting {
+  /// The key of the stream that contains control event, [CollabControlEvent].
   pub control_key: String,
 }
 

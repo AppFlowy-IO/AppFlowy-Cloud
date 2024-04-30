@@ -22,39 +22,27 @@ jobs:
   test:
     name: Integration Tests
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        include:
+          - test_service: "appflowy_cloud"
+            test_cmd: "--workspace --exclude appflowy-history"
+          - test_service: "appflowy_history"
+            test_cmd: "-p appflowy-history"
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            AppFlowy-Cloud
+          workspaces: "AppFlowy-Cloud"
 
       - name: Copy and rename deploy.env to .env
         run: cp deploy.env .env
 
-      - name: Replace values in .env
-        run: |
-          # log level
-          sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
-          sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
-          sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
-          sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.CI_GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
-          sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
-          sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
-          sed -i 's/API_EXTERNAL_URL=http:\/\/your-host/API_EXTERNAL_URL=http:\/\/localhost/' .env
-          sed -i 's/GOTRUE_RATE_LIMIT_EMAIL_SENT=100/GOTRUE_RATE_LIMIT_EMAIL_SENT=1000/' .env
-          sed -i 's/APPFLOWY_MAILER_SMTP_USERNAME=.*/APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
-          sed -i 's/APPFLOWY_MAILER_SMTP_PASSWORD=.*/APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
-          sed -i 's/APPFLOWY_AI_OPENAI_API_KEY=.*/APPFLOWY_AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
-
       - name: Update Nginx Configuration
-        run: |
-          # the wasm-pack headless tests will run on random ports, so we need to allow all origins
-          sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
+        run: sed -i 's/http:\/\/127\.0\.0\.1:8000/http:\/\/127.0.0.1/g' nginx/nginx.conf
 
-      - name: install prerequisites
+      - name: Install prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
@@ -65,9 +53,10 @@ jobs:
           docker compose -f docker-compose-ci.yml up -d
           docker ps -a
 
-      - name: Run tests
+      - name: Run Tests
         run: |
-          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test --workspace
+          echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
+          RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
       - name: Install Node.js
         uses: actions/setup-node@v2

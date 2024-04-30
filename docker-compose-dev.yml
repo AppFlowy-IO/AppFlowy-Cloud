@@ -107,8 +107,6 @@ services:
     ports:
       - 5001:5001
     environment:
-      - FLASK_DEBUG=false
-      - FLASK_SKIP_DOTENV=true
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}

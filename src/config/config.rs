@@ -60,7 +60,7 @@ pub struct AppFlowyAISetting {
 impl AppFlowyAISetting {
   pub fn url(&self) -> String {
     format!(
-      "{}:{}",
+      "http://{}:{}",
       self.host.expose_secret(),
       self.port.expose_secret()
     )
@@ -177,7 +177,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     appflowy_ai: AppFlowyAISetting {
       port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").into(),
-      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "http://localhost").into(),
+      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost").into(),
     },
     grpc_history: GrpcHistorySetting {
       addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),

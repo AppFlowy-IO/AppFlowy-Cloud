@@ -16,9 +16,10 @@ else
   exit 1  # Exit with an error code to indicate failure
 fi
 
-export LOCALHOST_URL="http://localhost"
-export LOCALHOST_WS_URL="ws://localhost/ws"
-export LOCALHOST_GOTRUE_URL="http://localhost:gotrue"
+# Make sure to update the test client configuration in libs/client-api-test-util/src/client.rs
+# export LOCALHOST_URL="http://localhost"
+# export LOCALHOST_WS_URL="ws://localhost/ws"
+# export LOCALHOST_GOTRUE_URL="http://localhost:gotrue"
 
 docker compose down
 docker compose -f docker-compose-ci.yml pull

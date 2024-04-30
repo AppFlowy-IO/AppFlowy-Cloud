@@ -212,3 +212,16 @@ pub async fn select_email_from_user_uuid(
   .await?;
   Ok(email)
 }
+
+#[inline]
+pub async fn select_name_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<String, AppError> {
+  let email = sqlx::query_scalar!(
+    r#"
+      SELECT name FROM af_user WHERE uuid = $1
+    "#,
+    user_uuid
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(email)
+}

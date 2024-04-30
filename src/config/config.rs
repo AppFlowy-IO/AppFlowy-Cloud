@@ -1,6 +1,6 @@
 use anyhow::Context;
 use infra::env_util::get_env_var;
-use secrecy::Secret;
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use std::fmt::Display;
@@ -53,7 +53,18 @@ pub struct GoTrueSetting {
 
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct AppFlowyAISetting {
-  pub url: Secret<String>,
+  pub port: Secret<String>,
+  pub host: Secret<String>,
+}
+
+impl AppFlowyAISetting {
+  pub fn url(&self) -> String {
+    format!(
+      "http://{}:{}",
+      self.host.expose_secret(),
+      self.port.expose_secret()
+    )
+  }
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our
@@ -165,7 +176,8 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       region: get_env_var("APPFLOWY_S3_REGION", ""),
     },
     appflowy_ai: AppFlowyAISetting {
-      url: get_env_var("APPFLOWY_AI_URL", "http://localhost:5001").into(),
+      port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").into(),
+      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost").into(),
     },
     grpc_history: GrpcHistorySetting {
       addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),

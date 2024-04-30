@@ -1,4 +1,6 @@
 use crate::biz::workspace::access_control::WorkspaceAccessControl;
+use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
+use crate::state::GoTrueAdmin;
 use anyhow::Context;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
@@ -20,7 +22,7 @@ use database_entity::dto::{
   WorkspaceUsage,
 };
 
-use gotrue::params::MagicLinkParams;
+use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
@@ -162,6 +164,8 @@ pub async fn accept_workspace_invite(
 
 #[instrument(level = "debug", skip_all, err)]
 pub async fn invite_workspace_members(
+  mailer: &Mailer,
+  gotrue_admin: &GoTrueAdmin,
   pg_pool: &PgPool,
   gotrue_client: &gotrue::api::Client,
   inviter: &Uuid,
@@ -172,27 +176,98 @@ pub async fn invite_workspace_members(
     .begin()
     .await
     .context("Begin transaction to invite workspace members")?;
+  let admin_token = gotrue_admin.token(gotrue_client).await?;
+
+  let inviter_name = database::user::select_name_from_uuid(pg_pool, inviter).await?;
+  let workspace_name =
+    database::workspace::select_workspace_name_from_workspace_id(pg_pool, workspace_id)
+      .await?
+      .unwrap_or_default();
+  let workspace_member_count =
+    database::workspace::select_workspace_member_count_from_workspace_id(pg_pool, workspace_id)
+      .await?
+      .unwrap_or_default();
+  let workspace_members_by_email: HashMap<_, _> =
+    database::workspace::select_workspace_member_list(pg_pool, workspace_id)
+      .await?
+      .into_iter()
+      .map(|row| (row.email, row.role))
+      .collect();
+  let pending_invitations =
+    database::workspace::select_workspace_pending_invitations(pg_pool, workspace_id).await?;
 
   for invitation in invitations {
-    gotrue_client
-      .magic_link(
-        &MagicLinkParams {
+    if workspace_members_by_email.contains_key(&invitation.email) {
+      tracing::warn!("User already in workspace: {}", invitation.email);
+      continue;
+    }
+    if pending_invitations.contains(&invitation.email) {
+      tracing::warn!("User already invited: {}", invitation.email);
+      continue;
+    }
+
+    let inviter_name = inviter_name.clone();
+    let workspace_name = workspace_name.clone();
+    let workspace_member_count = workspace_member_count.to_string();
+
+    // use default icon until we have workspace icon
+    let workspace_icon_url =
+      "https://miro.medium.com/v2/resize:fit:2400/1*mTPfm7CwU31-tLhtLNkyJw.png".to_string();
+    let user_icon_url =
+      "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
+        .to_string();
+    let invite_id = uuid::Uuid::new_v4();
+    let accept_url = gotrue_client
+      .admin_generate_link(
+        &admin_token,
+        &GenerateLinkParams {
+          type_: GenerateLinkType::MagicLink,
           email: invitation.email.clone(),
+          redirect_to: format!(
+            "/web/login-callback?action=accept_workspace_invite&workspace_invitation_id={}&workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+            invite_id, workspace_name,
+            workspace_icon_url,
+            inviter_name,
+            user_icon_url,
+            workspace_member_count,
+          ),
           ..Default::default()
         },
-        Some("/web/login#redirect_to=invite".to_owned()),
       )
-      .await?;
+      .await?
+      .action_link;
 
     // Generate a link such that when clicked, the user is added to the workspace.
     insert_workspace_invitation(
       &mut txn,
+      &invite_id,
       workspace_id,
       inviter,
       invitation.email.as_str(),
       invitation.role,
     )
     .await?;
+
+    // send email can be slow, so send email in background
+    let cloned_mailer = mailer.clone();
+    tokio::spawn(async move {
+      if let Err(err) = cloned_mailer
+        .send_workspace_invite(
+          invitation.email,
+          WorkspaceInviteMailerParam {
+            user_icon_url,
+            username: inviter_name,
+            workspace_name,
+            workspace_icon_url,
+            workspace_member_count,
+            accept_url,
+          },
+        )
+        .await
+      {
+        tracing::error!("Failed to send workspace invite email: {:?}", err);
+      };
+    });
   }
 
   txn
@@ -335,7 +410,6 @@ pub async fn remove_workspace_members(
 
 pub async fn get_workspace_members(
   pg_pool: &PgPool,
-  _user_uuid: &Uuid,
   workspace_id: &Uuid,
 ) -> Result<Vec<AFWorkspaceMemberRow>, AppResponseError> {
   Ok(select_workspace_member_list(pg_pool, workspace_id).await?)

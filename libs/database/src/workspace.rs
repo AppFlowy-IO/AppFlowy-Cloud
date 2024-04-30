@@ -4,7 +4,7 @@ use sqlx::{
   types::{uuid, Uuid},
   Executor, PgPool, Postgres, Transaction,
 };
-use std::ops::DerefMut;
+use std::{collections::HashSet, ops::DerefMut};
 use tracing::{event, instrument};
 
 use crate::pg_row::AFWorkspaceMemberPermRow;
@@ -247,6 +247,7 @@ pub async fn upsert_workspace_member_with_txn(
 #[inline]
 pub async fn insert_workspace_invitation(
   txn: &mut Transaction<'_, sqlx::Postgres>,
+  invite_id: &uuid::Uuid,
   workspace_id: &uuid::Uuid,
   inviter_uuid: &Uuid,
   invitee_email: &str,
@@ -256,6 +257,7 @@ pub async fn insert_workspace_invitation(
   sqlx::query!(
     r#"
       INSERT INTO public.af_workspace_invitation (
+          id,
           workspace_id,
           inviter,
           invitee_email,
@@ -263,11 +265,13 @@ pub async fn insert_workspace_invitation(
       )
       VALUES (
         $1,
-        (SELECT uid FROM public.af_user WHERE uuid = $2),
-        $3,
-        $4
+        $2,
+        (SELECT uid FROM public.af_user WHERE uuid = $3),
+        $4,
+        $5
       )
     "#,
+    invite_id,
     workspace_id,
     inviter_uuid,
     invitee_email,
@@ -664,4 +668,59 @@ pub async fn select_workspace_total_collab_bytes(
       workspace_id
     ))),
   }
+}
+
+#[inline]
+pub async fn select_workspace_name_from_workspace_id(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<String>, AppError> {
+  let workspace_name = sqlx::query_scalar!(
+    r#"
+      SELECT workspace_name
+      FROM public.af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(workspace_name)
+}
+
+#[inline]
+pub async fn select_workspace_member_count_from_workspace_id(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<Option<i64>, AppError> {
+  let workspace_count = sqlx::query_scalar!(
+    r#"
+      SELECT COUNT(*)
+      FROM public.af_workspace_member
+      WHERE workspace_id = $1
+    "#,
+    workspace_id
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(workspace_count)
+}
+
+#[inline]
+pub async fn select_workspace_pending_invitations(
+  pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<HashSet<String>, AppError> {
+  let invitee_emails = sqlx::query_scalar!(
+    r#"
+      SELECT invitee_email
+      FROM public.af_workspace_invitation
+      WHERE workspace_id = $1
+      AND status = 0
+    "#,
+    workspace_id
+  )
+  .fetch_all(pool)
+  .await?;
+  Ok(invitee_emails.into_iter().collect())
 }

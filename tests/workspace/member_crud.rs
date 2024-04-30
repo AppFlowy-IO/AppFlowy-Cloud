@@ -111,10 +111,10 @@ async fn add_duplicate_workspace_members() {
     .list_workspace_invitations(Some(AFWorkspaceInvitationStatus::Pending))
     .await
     .unwrap();
-  let is_none = invitations
+
+  let is_none = !invitations
     .iter()
-    .find(|inv| inv.workspace_id.to_string().as_str() == workspace_id)
-    .is_none();
+    .any(|inv| inv.workspace_id.to_string().as_str() == workspace_id);
   assert!(is_none);
 }
 

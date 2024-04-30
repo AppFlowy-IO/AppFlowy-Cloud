@@ -30,7 +30,8 @@ RUN cargo build --profile=release --features "${FEATURES}" --bin appflowy_cloud
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN apt-get update -y \
-    && apt-get install -y --no-install-recommends openssl \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && update-ca-certificates \
     # Clean up
     && apt-get autoremove -y \
     && apt-get clean -y \

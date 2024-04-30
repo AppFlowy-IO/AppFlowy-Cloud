@@ -1,4 +1,5 @@
 use app_error::ErrorCode;
+use client_api::entity::AFWorkspaceInvitationStatus;
 use client_api_test_util::{api_client_with_email, TestClient};
 use database_entity::dto::{AFAccessLevel, AFRole, QueryCollabMembers};
 use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
@@ -91,9 +92,30 @@ async fn add_duplicate_workspace_members() {
   c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Member)
     .await
     .unwrap();
-  c1.invite_and_accepted_workspace_member(&workspace_id, &c2, AFRole::Member)
+
+  // next invite should do nothing since c2 is already a workspace member
+  c1.api_client
+    .invite_workspace_members(
+      &workspace_id,
+      vec![WorkspaceMemberInvitation {
+        email: c2.email().await,
+        role: AFRole::Member,
+      }],
+    )
     .await
     .unwrap();
+
+  // should not find any invitation
+  let invitations = c2
+    .api_client
+    .list_workspace_invitations(Some(AFWorkspaceInvitationStatus::Pending))
+    .await
+    .unwrap();
+
+  let is_none = !invitations
+    .iter()
+    .any(|inv| inv.workspace_id.to_string().as_str() == workspace_id);
+  assert!(is_none);
 }
 
 #[tokio::test]

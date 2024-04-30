@@ -138,4 +138,11 @@ impl ClientAPI {
       Err(err) => Err(ClientResponse::from(err)),
     }
   }
+
+  pub async fn get_user_workspace(&self) -> Result<UserWorkspace, ClientResponse> {
+    match self.client.get_user_workspace_info().await {
+      Ok(workspace_info) => Ok(UserWorkspace::from(workspace_info)),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
 }

@@ -1,10 +1,11 @@
 use client_api::entity::AFUserProfile;
 use client_api::error::{AppResponseError, ErrorCode};
 use collab_entity::{CollabType, EncodedCollab};
-use database_entity::dto::{QueryCollab, QueryCollabParams};
+use database_entity::dto::{AFUserWorkspaceInfo, AFWorkspace, QueryCollab, QueryCollabParams};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use tsify::Tsify;
+use uuid::Uuid;
 use wasm_bindgen::JsValue;
 
 macro_rules! from_struct_for_jsvalue {
@@ -79,6 +80,60 @@ impl From<AFUserProfile> for User {
       name: profile.name,
       latest_workspace_id: profile.latest_workspace_id.to_string(),
       icon_url: None,
+    }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct UserWorkspace {
+  pub user: User,
+  pub visiting_workspace_id: String,
+  pub workspaces: Vec<Workspace>,
+}
+
+from_struct_for_jsvalue!(UserWorkspace);
+
+impl From<AFUserWorkspaceInfo> for UserWorkspace {
+  fn from(info: AFUserWorkspaceInfo) -> Self {
+    UserWorkspace {
+      user: User::from(info.user_profile),
+      visiting_workspace_id: info.visiting_workspace.workspace_id.to_string(),
+      workspaces: info
+        .workspaces
+        .into_iter()
+        .map(|workspace| Workspace::from(workspace))
+        .collect(),
+    }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct Workspace {
+  pub workspace_id: String,
+  pub database_storage_id: String,
+  pub owner_uid: String,
+  pub owner_name: String,
+  pub workspace_type: i32,
+  pub workspace_name: String,
+  pub created_at: String,
+  pub icon: String,
+}
+
+from_struct_for_jsvalue!(Workspace);
+
+impl From<AFWorkspace> for Workspace {
+  fn from(workspace: AFWorkspace) -> Self {
+    Workspace {
+      workspace_id: workspace.workspace_id.to_string(),
+      database_storage_id: workspace.database_storage_id.to_string(),
+      owner_uid: workspace.owner_uid.to_string(),
+      owner_name: workspace.owner_name,
+      workspace_type: workspace.workspace_type as i32,
+      workspace_name: workspace.workspace_name,
+      created_at: workspace.created_at.timestamp().to_string(),
+      icon: workspace.icon,
     }
   }
 }

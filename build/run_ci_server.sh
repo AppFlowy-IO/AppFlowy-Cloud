@@ -4,11 +4,11 @@ set -eo pipefail
 
 cd "$(dirname "$0")/.."
 
-# This script is used to simulate the CI environment locally. It requires the local .env file
-# to be present in the root directory of the project. And the values in the .env file should be
-# updated to match the CI environment.
-
+# This script simulates the continuous integration (CI) environment on a local machine. It
+# requires a `.env` file to be located in the project's root directory. The values in the `.env`
+# file must be updated to reflect the specifications of the CI environment.
 # Check if .env file exists in the current directory
+
 if [ -f ".env" ]; then
   echo ".env file exists"
 else

@@ -5,6 +5,20 @@ use gotrue_entity::{dto::User, sso::SSOProvider};
 use crate::{askama_entities::WorkspaceWithMembers, ext::entities::WorkspaceUsageLimits};
 
 #[derive(Template)]
+#[template(path = "pages/redirect.html")]
+pub struct Redirect {
+  pub redirect_url: String,
+}
+
+#[derive(Template)]
+#[template(path = "pages/open_appflowy_or_download.html")]
+pub struct OpenAppFlowyOrDownload {}
+
+#[derive(Template)]
+#[template(path = "pages/login_callback.html")]
+pub struct LoginCallback {}
+
+#[derive(Template)]
 #[template(path = "components/user_usage.html")]
 pub struct UserUsage {
   pub workspace_count: usize,

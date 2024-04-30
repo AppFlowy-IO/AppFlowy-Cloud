@@ -6,7 +6,7 @@ use axum::{
   http::request::Parts,
   response::{IntoResponse, Redirect},
 };
-use axum_extra::extract::CookieJar;
+use axum_extra::extract::{cookie::Cookie, CookieJar};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue_entity::dto::GotrueTokenResponse;
 use jwt::{Claims, Header};
@@ -217,4 +217,10 @@ fn expect_redis_value_data(v: &redis::Value) -> redis::RedisResult<&[u8]> {
       format!("redis value is not data: {:?}", x),
     ))),
   }
+}
+
+pub fn new_session_cookie(id: uuid::Uuid) -> Cookie<'static> {
+  let mut cookie = Cookie::new("session_id", id.to_string());
+  cookie.set_path("/");
+  cookie
 }

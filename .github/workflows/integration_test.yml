@@ -45,6 +45,8 @@ jobs:
           sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
           sed -i 's/API_EXTERNAL_URL=http:\/\/your-host/API_EXTERNAL_URL=http:\/\/localhost/' .env
           sed -i 's/GOTRUE_RATE_LIMIT_EMAIL_SENT=100/GOTRUE_RATE_LIMIT_EMAIL_SENT=1000/' .env
+          sed -i 's/APPFLOWY_MAILER_SMTP_USERNAME=.*/APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
+          sed -i 's/APPFLOWY_MAILER_SMTP_PASSWORD=.*/APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
           sed -i 's/OPENAI_API_KEY=.*/OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
 
       - name: Update Nginx Configuration
@@ -56,6 +58,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install protobuf-compiler
+          sudo update-ca-certificates
 
       - name: Run Docker-Compose
         run: |

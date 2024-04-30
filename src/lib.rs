@@ -3,6 +3,7 @@ pub mod application;
 pub mod biz;
 pub mod config;
 pub mod domain;
+pub mod mailer;
 pub mod middleware;
 mod self_signed;
 pub mod state;

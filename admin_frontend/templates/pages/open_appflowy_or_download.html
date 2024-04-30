@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Open App or Redirect</title>
+    <script>
+      function openApp() {
+        var appUrl = 'appflowy-flutter://';
+        var fallbackUrl = 'https://appflowy.io/download'; // URL to download page
+        var timeout = 2000; // 2 seconds
+
+        var timer = setTimeout(function () {
+          window.location = fallbackUrl;
+        }, timeout);
+
+        window.addEventListener('blur', function onWindowBlur() {
+          clearTimeout(timer); // Clear the timer if user focuses on the new tab/window (app opened)
+          window.removeEventListener('blur', onWindowBlur);
+        });
+
+        window.location = appUrl; // Try opening the app
+      }
+
+      window.onload = openApp; // Try to open the app right when the page loads
+    </script>
+  </head>
+  <body>
+    <h1>Opening AppFlowy</h1>
+    <p>If the app does not open, you will be redirected to the download page.</p>
+  </body>
+</html>

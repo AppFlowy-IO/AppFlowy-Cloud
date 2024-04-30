@@ -4,6 +4,9 @@ use crate::api::file_storage::file_storage_scope;
 use crate::api::user::user_scope;
 use crate::api::workspace::{collab_scope, workspace_scope};
 use crate::api::ws::ws_scope;
+use crate::mailer::Mailer;
+use access_control::access::{enable_access_control, AccessControl};
+
 use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::casbin::{
   CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
@@ -22,7 +25,6 @@ use crate::middleware::metrics_mw::MetricsMiddleware;
 use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
-use access_control::access::{enable_access_control, AccessControl};
 use actix::Supervisor;
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
@@ -237,6 +239,13 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     tonic_proto::history::history_client::HistoryClient::connect(config.grpc_history.addrs.clone())
       .await?;
 
+  let mailer = Mailer::new(
+    config.mailer.smtp_username.clone(),
+    config.mailer.smtp_password.expose_secret().clone(),
+    &config.mailer.smtp_host,
+  )
+  .await?;
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
@@ -254,6 +263,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<A
     access_control,
     metrics,
     gotrue_admin,
+    mailer,
     ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,

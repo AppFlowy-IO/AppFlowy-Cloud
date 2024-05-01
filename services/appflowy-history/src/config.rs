@@ -66,6 +66,7 @@ impl DatabaseSetting {
 
 #[derive(Debug, Clone)]
 pub struct StreamSetting {
+  /// The key of the stream that contains control event, [CollabControlEvent].
   pub control_key: String,
 }
 

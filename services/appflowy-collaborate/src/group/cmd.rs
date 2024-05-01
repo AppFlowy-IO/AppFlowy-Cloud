@@ -1,4 +1,3 @@
-use crate::client_msg_router::ClientMessageRouter;
 use crate::error::RealtimeError;
 use crate::group::manager::GroupManager;
 use crate::RealtimeAccessControl;
@@ -9,6 +8,7 @@ use collab_rt_entity::{CollabAck, RealtimeMessage};
 use dashmap::DashMap;
 use database::collab::CollabStorage;
 
+use crate::client::client_msg_router::ClientMessageRouter;
 use collab::entity::EncodedCollab;
 use futures_util::StreamExt;
 use std::sync::Arc;

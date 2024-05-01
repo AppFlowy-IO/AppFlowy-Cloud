@@ -1,7 +1,6 @@
-mod client_msg_router;
+mod client;
 pub mod command;
 pub mod connect_state;
-pub mod data_validation;
 pub mod error;
 mod group;
 mod metrics;
@@ -13,4 +12,4 @@ pub use metrics::*;
 pub use permission::*;
 pub use rt_server::*;
 
-pub use client_msg_router::RealtimeClientWebsocketSink;
+pub use client::client_msg_router::RealtimeClientWebsocketSink;

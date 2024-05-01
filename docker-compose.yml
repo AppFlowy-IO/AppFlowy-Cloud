@@ -115,14 +115,14 @@ services:
       dockerfile: Dockerfile
       args:
         FEATURES: ""
-    image: appflowyinc/appflowy_cloud:${BACKEND_VERSION:-latest}
+    image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
 
   admin_frontend:
     restart: on-failure
     build:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
-    image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
+    image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
@@ -138,6 +138,20 @@ services:
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
+
+  appflowy_history:
+    restart: on-failure
+    image: appflowyinc/appflowy_history:${APPFLOWY_HISTORY_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: ./services/appflowy-history/Dockerfile
+    ports:
+      - "50051:50051"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_HISTORY_REDIS_URL=redis://redis:6379
+      - APPFLOWY_HISTORY_ENVIRONMENT=production
+      - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
 
 volumes:
   postgres_data:

@@ -13,7 +13,6 @@ use collab_rt_entity::CollabMessage;
 use collab_rt_entity::MessageByObjectId;
 use database::collab::CollabStorage;
 
-use crate::rt_server::rt_spawn;
 use collab::core::collab::MutexCollab;
 use futures_util::{SinkExt, StreamExt};
 
@@ -63,7 +62,7 @@ impl CollabGroup {
     let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone(), &collab).await;
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
-    rt_spawn(
+    tokio::spawn(
       GroupPersistence::new(
         workspace_id.clone(),
         object_id.clone(),

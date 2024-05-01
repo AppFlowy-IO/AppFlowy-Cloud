@@ -2,7 +2,6 @@ use crate::error::RealtimeError;
 use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
-use crate::rt_server::rt_spawn;
 use anyhow::anyhow;
 use bytes::Bytes;
 use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
@@ -190,7 +189,7 @@ impl CollabBroadcast {
       // connected subscriber using its Sink. The loop will break if the stop_rx receives a message.
       let mut receiver = self.broadcast_sender.subscribe();
       let cloned_user = user.clone();
-      rt_spawn(async move {
+      tokio::spawn(async move {
         loop {
           select! {
             _ = stop_rx.recv() => break,
@@ -226,7 +225,7 @@ impl CollabBroadcast {
       // the stream will continue to receive messages from the client and it will stop if the stop_rx
       // receives a message. If the client's message alter the document state, it will trigger the
       // document observer and broadcast the update to all connected subscribers. Check out the [observe_update_v1] and [sink_task] above.
-      rt_spawn(async move {
+      tokio::spawn(async move {
         loop {
           select! {
             _ = stop_rx.recv() => {

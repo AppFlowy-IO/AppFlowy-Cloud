@@ -204,7 +204,7 @@ where
     object_id,
     DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     vec![],
-    true,
+    false,
   )
   .map(MutexCollab::new);
   match result {

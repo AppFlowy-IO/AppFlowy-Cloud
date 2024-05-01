@@ -1,5 +1,4 @@
 use crate::group::cmd::{GroupCommand, GroupCommandSender};
-use crate::rt_server::rt_spawn;
 use collab::entity::EncodedCollab;
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -21,7 +20,7 @@ pub(crate) fn spawn_collaboration_command(
   group_sender_by_object_id: &Arc<DashMap<String, GroupCommandSender>>,
 ) {
   let group_sender_by_object_id = group_sender_by_object_id.clone();
-  rt_spawn(async move {
+  tokio::spawn(async move {
     while let Some(cmd) = command_recv.recv().await {
       match cmd {
         CollaborationCommand::GetEncodeCollab { object_id, ret } => {

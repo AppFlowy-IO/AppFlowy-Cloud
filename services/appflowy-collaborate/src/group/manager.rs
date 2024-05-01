@@ -1,4 +1,3 @@
-use crate::client_msg_router::ClientMessageRouter;
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
 
@@ -9,6 +8,7 @@ use app_error::AppError;
 use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::origin::CollabOrigin;
 
+use crate::client::client_msg_router::ClientMessageRouter;
 use crate::group::plugin::HistoryPlugin;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, CollabPlugin};

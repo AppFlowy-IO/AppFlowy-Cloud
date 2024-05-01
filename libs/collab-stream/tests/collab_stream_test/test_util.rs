@@ -21,7 +21,7 @@ pub async fn pubsub_client() -> PubSubClient {
   let redis_client = redis_client().await;
   PubSubClient::new(redis_client)
     .await
-    .context("failed to create stream client")
+    .context("failed to create pubsub client")
     .unwrap()
 }
 

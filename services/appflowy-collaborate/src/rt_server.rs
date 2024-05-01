@@ -1,11 +1,13 @@
-use crate::client_msg_router::{ClientMessageRouter, RealtimeClientWebsocketSink};
-use crate::command::{spawn_rt_command, RTCommandReceiver};
+use crate::client::client_msg_router::ClientMessageRouter;
+use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::connect_state::ConnectState;
 use crate::error::RealtimeError;
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::metrics::CollabMetricsCalculate;
-use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeAccessControl};
+use crate::{
+  spawn_metrics, CollabRealtimeMetrics, RealtimeAccessControl, RealtimeClientWebsocketSink,
+};
 use anyhow::Result;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
@@ -49,7 +51,7 @@ where
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<CollabRealtimeMetrics>,
-    command_recv: RTCommandReceiver,
+    command_recv: CLCommandReceiver,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -68,7 +70,7 @@ where
 
     spawn_period_check_inactive_group(Arc::downgrade(&group_manager), &group_sender_by_object_id);
 
-    spawn_rt_command(command_recv, &group_sender_by_object_id);
+    spawn_collaboration_command(command_recv, &group_sender_by_object_id);
 
     spawn_metrics(&metrics, &metrics_calculate, &storage);
     Ok(Self {

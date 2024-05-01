@@ -80,6 +80,7 @@ collab = { version = "0.1.0" }
 collab-document = { version = "0.1.0" }
 collab-folder = { version = "0.1.0" }
 collab-entity = { version = "0.1.0" }
+collab-rt-protocol.workspace = true
 
 #Local crate
 snowflake = { path = "libs/snowflake" }

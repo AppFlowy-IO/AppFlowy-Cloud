@@ -119,13 +119,14 @@ services:
       dockerfile: Dockerfile
       args:
         FEATURES: ""
+    image: appflowyinc/appflowy_cloud:${APPFLOWY_CLOUD_VERSION:-latest}
 
   admin_frontend:
     restart: on-failure
     build:
       context: .
       dockerfile: ./admin_frontend/Dockerfile
-    image: appflowyinc/admin_frontend:${BACKEND_VERSION:-latest}
+    image: appflowyinc/admin_frontend:${APPFLOWY_ADMIN_FRONTEND_VERSION:-latest}
     environment:
       - RUST_LOG=${RUST_LOG:-info}
       - ADMIN_FRONTEND_REDIS_URL=${ADMIN_FRONTEND_REDIS_URL:-redis://redis:6379}
@@ -147,6 +148,7 @@ services:
     build:
       context: .
       dockerfile: ./services/appflowy-history/Dockerfile
+    image: appflowyinc/appflowy_history:${APPFLOWY_HISTORY_VERSION:-latest}
     ports:
       - "50051:50051"
     environment:

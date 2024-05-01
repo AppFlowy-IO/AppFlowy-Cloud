@@ -33,7 +33,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
-use appflowy_collaborate::command::{RTCommandReceiver, RTCommandSender};
+use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
@@ -56,7 +56,7 @@ impl Application {
   pub async fn build(
     config: Config,
     state: AppState,
-    rt_cmd_recv: RTCommandReceiver,
+    rt_cmd_recv: CLCommandReceiver,
   ) -> Result<Self, Error> {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
@@ -79,7 +79,7 @@ pub async fn run_actix_server(
   listener: TcpListener,
   state: AppState,
   config: Config,
-  rt_cmd_recv: RTCommandReceiver,
+  rt_cmd_recv: CLCommandReceiver,
 ) -> Result<Server, anyhow::Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
@@ -163,7 +163,7 @@ fn get_certificate_and_server_key(config: &Config) -> Option<(Secret<String>, Se
   }
 }
 
-pub async fn init_state(config: &Config, rt_cmd_tx: RTCommandSender) -> Result<AppState, Error> {
+pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<AppState, Error> {
   // Print the feature flags
 
   let metrics = AppMetrics::new();

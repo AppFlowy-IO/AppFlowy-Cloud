@@ -616,6 +616,7 @@ dependencies = [
  "collab-entity",
  "collab-folder",
  "collab-rt-entity",
+ "collab-rt-protocol",
  "collab-stream",
  "dashmap",
  "database",
@@ -691,6 +692,7 @@ dependencies = [
  "collab-folder",
  "collab-rt-entity",
  "collab-rt-protocol",
+ "collab-stream",
  "dashmap",
  "database",
  "database-entity",
@@ -1772,10 +1774,13 @@ name = "collab-rt-protocol"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "bincode",
  "collab",
+ "collab-entity",
  "serde",
  "thiserror",
+ "tokio",
  "tracing",
  "yrs",
 ]

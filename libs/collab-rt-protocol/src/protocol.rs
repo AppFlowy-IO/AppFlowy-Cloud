@@ -52,7 +52,7 @@ impl CollabSyncProtocol for ClientSyncProtocol {
         RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
       })?;
     txn.try_apply_update(update).map_err(|err| {
-      RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {}", err))
+      RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {} ", err))
     })?;
 
     // If the client can't apply broadcast from server, which means the client is missing some
@@ -121,16 +121,17 @@ pub trait CollabSyncProtocol {
     awareness: &Awareness,
     sv: StateVector,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
-    let update = awareness
-      .doc()
-      .try_transact()
-      .map_err(|err| {
-        RTProtocolError::YrsTransaction(format!("fail to handle sync step1. error: {}", err))
-      })?
-      .try_encode_state_as_update_v1(&sv)
-      .map_err(|err| {
-        RTProtocolError::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
-      })?;
+    let txn = awareness.doc().try_transact().map_err(|err| {
+      RTProtocolError::YrsTransaction(format!("fail to handle sync step1. error: {}", err))
+    })?;
+    let update = txn.try_encode_state_as_update_v1(&sv).map_err(|err| {
+      RTProtocolError::YrsEncodeState(format!(
+        "fail to encode state as update. error: {}\ninit state vector: {:?}\ndocument state: {:#?}",
+        err,
+        sv,
+        txn.store()
+      ))
+    })?;
     Ok(Some(
       Message::Sync(SyncMessage::SyncStep2(update)).encode_v1(),
     ))

@@ -21,7 +21,12 @@ impl CollabSyncProtocol for ServerSyncProtocol {
     })?;
 
     let client_step2_update = txn.try_encode_state_as_update_v1(&sv).map_err(|err| {
-      RTProtocolError::YrsEncodeState(format!("fail to encode state as update. error: {}", err))
+      RTProtocolError::YrsEncodeState(format!(
+        "fail to encode state as update. error: {}\ninit state vector: {:?}\ndocument state: {:#?}",
+        err,
+        sv,
+        txn.store()
+      ))
     })?;
 
     // Retrieve the latest document state from the client after they return online from offline editing.

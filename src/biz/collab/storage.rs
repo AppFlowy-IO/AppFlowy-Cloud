@@ -3,29 +3,25 @@ use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
 use crate::biz::collab::cache::CollabCache;
 use crate::biz::snapshot::SnapshotControl;
 
+use crate::api::util::CollabValidator;
+use crate::biz::collab::metrics::CollabMetrics;
+use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
+use crate::biz::collab::queue_redis_ops::WritePriority;
+use crate::state::RedisConnectionManager;
 use app_error::AppError;
+use appflowy_collaborate::command::{CLCommandSender, CollaborationCommand};
 use async_trait::async_trait;
-
 use collab::entity::EncodedCollab;
-
-use appflowy_collaborate::command::{RTCommand, RTCommandSender};
+use collab_entity::CollabType;
 use database::collab::{AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use itertools::{Either, Itertools};
-
-use crate::state::RedisConnectionManager;
-use appflowy_collaborate::data_validation::CollabValidator;
 use sqlx::Transaction;
 use std::collections::HashMap;
 use std::sync::Arc;
-
-use crate::biz::collab::metrics::CollabMetrics;
-use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
-use crate::biz::collab::queue_redis_ops::WritePriority;
-use collab_entity::CollabType;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -43,7 +39,7 @@ pub struct CollabStorageImpl<AC> {
   /// access control for collab object. Including read/write
   access_control: AC,
   snapshot_control: SnapshotControl,
-  rt_cmd_sender: RTCommandSender,
+  rt_cmd_sender: CLCommandSender,
   queue: Arc<StorageQueue>,
 }
 
@@ -55,7 +51,7 @@ where
     cache: CollabCache,
     access_control: AC,
     snapshot_control: SnapshotControl,
-    rt_cmd_sender: RTCommandSender,
+    rt_cmd_sender: CLCommandSender,
     redis_conn_manager: RedisConnectionManager,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
@@ -124,7 +120,7 @@ where
     // Attempt to send the command to the realtime server
     if let Err(err) = self
       .rt_cmd_sender
-      .send(RTCommand::GetEncodeCollab { object_id, ret })
+      .send(CollaborationCommand::GetEncodeCollab { object_id, ret })
       .await
     {
       error!(

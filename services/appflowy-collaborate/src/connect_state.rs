@@ -2,7 +2,7 @@ use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::{RealtimeMessage, SystemMessage};
 use dashmap::DashMap;
 
-use crate::client_msg_router::ClientMessageRouter;
+use crate::client::client_msg_router::ClientMessageRouter;
 use dashmap::mapref::entry::Entry;
 use std::sync::Arc;
 use tracing::{info, trace};
@@ -111,8 +111,9 @@ impl ConnectState {
 
 #[cfg(test)]
 mod tests {
-  use crate::client_msg_router::{ClientMessageRouter, RealtimeClientWebsocketSink};
+  use crate::client::client_msg_router::ClientMessageRouter;
   use crate::connect_state::ConnectState;
+  use crate::RealtimeClientWebsocketSink;
   use collab_rt_entity::user::{RealtimeUser, UserDevice};
   use collab_rt_entity::RealtimeMessage;
   use std::time::Duration;

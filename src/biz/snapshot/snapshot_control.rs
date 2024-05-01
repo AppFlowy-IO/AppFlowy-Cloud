@@ -4,7 +4,6 @@ use crate::biz::snapshot::queue::PendingQueue;
 use crate::state::RedisConnectionManager;
 use anyhow::anyhow;
 use app_error::AppError;
-use appflowy_collaborate::data_validation::validate_encode_collab;
 use async_stream::stream;
 use database::collab::{
   create_snapshot_and_maintain_limit, get_all_collab_snapshot_meta, latest_snapshot_time,
@@ -15,6 +14,7 @@ use futures_util::StreamExt;
 
 use chrono::{DateTime, Utc};
 
+use collab_rt_protocol::validate_encode_collab;
 use sqlx::{Acquire, PgPool};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

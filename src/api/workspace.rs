@@ -1,4 +1,4 @@
-use crate::api::util::{compress_type_from_header_value, device_id_from_headers};
+use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
 use crate::biz::actix_ws::entities::ClientStreamMessage;
@@ -13,12 +13,12 @@ use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use app_error::AppError;
-use appflowy_collaborate::data_validation::{validate_encode_collab, CollabValidator};
 use bytes::BytesMut;
 use collab_entity::CollabType;
 
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
+use collab_rt_protocol::validate_encode_collab;
 use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::*;

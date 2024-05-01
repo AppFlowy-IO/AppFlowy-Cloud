@@ -1,6 +1,10 @@
 use crate::domain::compression::{CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE};
 use actix_http::header::HeaderMap;
 use app_error::AppError;
+
+use async_trait::async_trait;
+use collab_rt_protocol::validate_encode_collab;
+use database_entity::dto::CollabParams;
 use std::str::FromStr;
 
 #[inline]
@@ -55,4 +59,18 @@ pub fn device_id_from_headers(headers: &HeaderMap) -> Result<String, AppError> {
         .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
     })
     .map(|s| s.to_string())
+}
+
+#[async_trait]
+pub trait CollabValidator {
+  async fn check_encode_collab(&self) -> Result<(), AppError>;
+}
+
+#[async_trait]
+impl CollabValidator for CollabParams {
+  async fn check_encode_collab(&self) -> Result<(), AppError> {
+    validate_encode_collab(&self.object_id, &self.encoded_collab_v1, &self.collab_type)
+      .await
+      .map_err(|err| AppError::NoRequiredData(err.to_string()))
+  }
 }

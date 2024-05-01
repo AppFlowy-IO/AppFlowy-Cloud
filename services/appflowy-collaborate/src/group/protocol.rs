@@ -51,7 +51,11 @@ impl CollabSyncProtocol for ServerSyncProtocol {
         RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
       })?;
     txn.try_apply_update(update).map_err(|err| {
-      RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {}", err))
+      RTProtocolError::YrsApplyUpdate(format!(
+        "sync step2 apply update: {}\ndocument state: {:#?}",
+        err,
+        txn.store()
+      ))
     })?;
 
     // If server can't apply updates sent by client, which means the server is missing some updates

@@ -1,5 +1,3 @@
-use crate::rt_server::rt_spawn;
-
 use collab::core::collab::WeakMutexCollab;
 use collab::preclude::CollabPlugin;
 use collab_entity::CollabType;
@@ -73,7 +71,7 @@ where
     let object_id = self.object_id.clone();
     let workspace_id = self.workspace_id.clone();
 
-    rt_spawn(async move {
+    tokio::spawn(async move {
       sleep(std::time::Duration::from_secs(2)).await;
       match storage.should_create_snapshot(&object_id).await {
         Ok(should_do) => {

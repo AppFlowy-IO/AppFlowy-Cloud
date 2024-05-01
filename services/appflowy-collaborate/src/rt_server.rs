@@ -14,21 +14,16 @@ use collab_rt_entity::MessageByObjectId;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use database::collab::CollabStorage;
-use lazy_static::lazy_static;
+
 use std::future::Future;
-use std::io;
+
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::runtime;
-use tokio::runtime::Runtime;
+
 use tokio::sync::Notify;
 use tokio::time::interval;
 use tracing::{error, info, trace};
-
-lazy_static! {
-  pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
-}
 
 #[derive(Clone)]
 pub struct CollaborationServer<S, AC> {
@@ -178,7 +173,7 @@ where
 
               let object_id = entry.key().clone();
               let clone_notify = notify.clone();
-              rt_spawn(runner.run(object_id, clone_notify));
+              tokio::spawn(runner.run(object_id, clone_notify));
               entry.insert(new_sender.clone());
 
               // wait for the runner to be ready to handle the message.
@@ -239,32 +234,36 @@ fn spawn_period_check_inactive_group<S, AC>(
   });
 }
 
-pub fn default_tokio_runtime() -> io::Result<Runtime> {
-  runtime::Builder::new_multi_thread()
-    .thread_name("collab-rt")
-    .enable_io()
-    .enable_time()
-    .build()
-}
-
 /// When the CollaborationServer operates within an actix-web actor, utilizing tokio::spawn for
 /// task execution confines all tasks to the same thread, attributable to the actor's reliance on a
 /// single-threaded Tokio runtime. To circumvent this limitation and enable task execution across
 /// multiple threads, we've incorporated a multi-thread feature.
+///
+/// When appflowy-collaborate is deployed as a standalone service, we can use tokio multi-thread.
 #[cfg(feature = "collab-rt-multi-thread")]
-pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
-where
-  T: Future + Send + 'static,
-  T::Output: Send + 'static,
-{
-  COLLAB_RUNTIME.spawn(future)
-}
+mod collaboration_runtime {
+  use lazy_static::lazy_static;
+  use std::future::Future;
+  use std::io;
+  use tokio::runtime;
+  use tokio::runtime::Runtime;
+  lazy_static! {
+    pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
+  }
 
-#[cfg(not(feature = "collab-rt-multi-thread"))]
-pub(crate) fn rt_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
-where
-  T: Future + 'static,
-  T::Output: Send + 'static,
-{
-  tokio::task::spawn_local(future)
+  pub fn default_tokio_runtime() -> io::Result<Runtime> {
+    runtime::Builder::new_multi_thread()
+      .thread_name("collab-rt")
+      .enable_io()
+      .enable_time()
+      .build()
+  }
+
+  pub(crate) fn spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+  where
+    T: Future + Send + 'static,
+    T::Output: Send + 'static,
+  {
+    COLLAB_RUNTIME.spawn(future)
+  }
 }

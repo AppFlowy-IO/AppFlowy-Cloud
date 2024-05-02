@@ -123,7 +123,10 @@ where
           expect: metadata.workspace_id,
           actual: workspace_id.to_string(),
         };
-        warn!("[Realtime]:{}:{}, {}", object_id, collab_type, err);
+        warn!(
+          "[Realtime]:user_id:{},object_id:{}:{},error:{}",
+          uid, object_id, collab_type, err
+        );
         return Err(err);
       }
     }

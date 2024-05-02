@@ -25,8 +25,7 @@ impl WorkspaceTemplate for GetStartedDocumentTemplate {
 
   async fn create(&self, object_id: String) -> anyhow::Result<TemplateData> {
     let data = tokio::task::spawn_blocking(|| {
-      let json_str = include_str!("../../assets/read_me.json");
-      let document_data = JsonToDocumentParser::json_str_to_document(json_str).unwrap();
+      let document_data = get_started_document_data().unwrap();
       let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
         CollabOrigin::Empty,
         &object_id,
@@ -123,4 +122,9 @@ impl WorkspaceTemplate for DocumentTemplate {
       .await;
     self.create(view_id).await
   }
+}
+
+pub fn get_started_document_data() -> Result<DocumentData, Error> {
+  let json_str = include_str!("../../assets/read_me.json");
+  JsonToDocumentParser::json_str_to_document(json_str)
 }

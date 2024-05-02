@@ -7,3 +7,4 @@ mod websocket;
 mod workspace;
 
 mod ai_test;
+mod yrs_version;

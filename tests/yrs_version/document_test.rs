@@ -26,4 +26,16 @@ fn load_yrs_0172_version_get_started_document_using_current_yrs_version() {
   let icon_block = document_data.blocks.get("a9SSKQKF4-").unwrap();
   let icon_data = icon_block.data.get("icon").unwrap().as_str().unwrap();
   assert_eq!(icon_data, "🥰");
+
+  let welcome_to_appflowy = document_data
+    .meta
+    .text_map
+    .as_ref()
+    .unwrap()
+    .get("OETXfTYZEw")
+    .unwrap();
+  assert_eq!(
+    welcome_to_appflowy,
+    r#"[{"insert":"Welcome to AppFlowy!"}]"#
+  );
 }

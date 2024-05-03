@@ -76,10 +76,10 @@ appflowy-collaborate = { path = "services/appflowy-collaborate" }
 appflowy-ai-client = { version = "0.1.0" }
 
 # collab
-collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
-collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
-collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
-collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
+collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -181,10 +181,10 @@ futures-util = "0.3.30"
 yrs = "0.18.7"
 bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
-collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
-collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
-collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
-collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", branch = "bart/yrs-update-v0.18" }
+collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
 infra = { path = "libs/infra" }
 tracing = { version = "0.1.40" }
 gotrue = { path = "libs/gotrue" }
@@ -209,7 +209,6 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-yrs = { version = "0.18.6", path = "/Users/bartoszsypytkowski/dev/y-crdt/yrs" }
 appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", rev = "6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9" }
 
 [features]

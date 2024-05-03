@@ -29,10 +29,10 @@ anyhow = "1"
 bytes.workspace = true
 collab-stream.workspace = true
 
-collab = { version = "0.1.0" }
-collab-entity = { version = "0.1.0" }
-collab-folder = { version = "0.1.0" }
-collab-document = { version = "0.1.0" }
+collab = { workspace = true }
+collab-entity = { workspace = true }
+collab-folder = { workspace = true }
+collab-document = { workspace = true }
 database.workspace = true
 database-entity.workspace = true
 yrs.workspace = true

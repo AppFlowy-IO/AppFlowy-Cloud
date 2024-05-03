@@ -7356,6 +7356,8 @@ dependencies = [
 [[package]]
 name = "yrs"
 version = "0.18.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d58fbc807677598fedfab76f99f6e1aa5c644411255002b5438ea0ab14672398"
 dependencies = [
  "arc-swap",
  "atomic_refcell",

@@ -127,7 +127,7 @@ impl TestClient {
       .clients()
       .iter()
       .map(|(_a, json)| {
-        let user: UserId = serde_json::from_str(&*json).unwrap();
+        let user: UserId = serde_json::from_str(json).unwrap();
         user.uid
       })
       .collect()

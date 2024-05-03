@@ -28,6 +28,10 @@ fn page_router() -> Router<AppState> {
     .route("/login", get(login_handler))
     .route("/login-callback", get(login_callback_handler))
     .route("/login-callback-query", get(login_callback_query_handler))
+    .route(
+      "/open-appflowy-or-download",
+      get(open_appflowy_or_download_handler),
+    )
     .route("/home", get(home_handler))
     .route("/admin/home", get(admin_home_handler))
 }
@@ -52,6 +56,10 @@ fn component_router() -> Router<AppState> {
     .route("/admin/sso", get(admin_sso_handler))
     .route("/admin/sso/create", get(admin_sso_create_handler))
     .route("/admin/sso/:sso_provider_id", get(admin_sso_detail_handler))
+}
+
+async fn open_appflowy_or_download_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::OpenAppFlowyOrDownload {})
 }
 
 async fn login_callback_handler() -> Result<Html<String>, WebAppError> {

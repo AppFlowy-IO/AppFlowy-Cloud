@@ -55,10 +55,13 @@ impl Mailer {
         lettre::Address::new("notify", "appflowy.io")?,
       ))
       .to(lettre::message::Mailbox::new(
-        Some(param.username),
+        Some(param.username.clone()),
         email.parse().unwrap(),
       ))
-      .subject("AppFlowy Workpace Invitation")
+      .subject(format!(
+        "Action required: {} invited you to {} in AppFlowy",
+        param.username, param.workspace_name
+      ))
       .header(ContentType::TEXT_HTML)
       .body(rendered)?;
 
@@ -70,7 +73,7 @@ impl Mailer {
 #[derive(serde::Serialize)]
 pub struct WorkspaceInviteMailerParam {
   pub user_icon_url: String,
-  pub username: String,
+  pub username: String, // Inviter
   pub workspace_name: String,
   pub workspace_icon_url: String,
   pub workspace_member_count: String,

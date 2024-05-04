@@ -1,15 +1,46 @@
-<!DOCTYPE html>
-<html lang="en">
+<!-- Derive from https://gist.github.com/mcxiaoke/c2dd7d24c31c5bd2d724/ -->
+
+<!doctype html>
+<html>
   <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <title>AppFlowy</title>
-    <script>
-      window.onload = function () {
-        window.location = 'appflowy-flutter://';
-      };
-    </script>
   </head>
   <body>
+
+    <!-- iframe used for attempting to load a custom protocol -->
+    <iframe style="display:none" height="0" width="0" id="loader"></iframe>
+
+    <script>(function(){
+
+      // For desktop browser, remember to pass though any metadata on the link for deep linking
+      var fallbackLink = 'https://appflowy.io/download/'+window.location.search+window.location.hash;
+
+      // Simple device detection
+      var isiOS = navigator.userAgent.match('iPad') || navigator.userAgent.match('iPhone') || navigator.userAgent.match('iPod'),
+        isAndroid = navigator.userAgent.match('Android');
+
+      // Mobile
+      if (isiOS || isAndroid) {
+        // Load our custom protocol in the iframe, for Chrome and Opera this burys the error dialog (which is actually HTML)
+        // for iOS we will get a popup error if this protocol is not supported, but it won't block javascript
+        document.getElementById('loader').src = 'appflowy-flutter://'+window.location.search+window.location.hash;
+
+        // The fallback link for Android needs to be https:// rather than market:// or the device will try to
+        // load both URLs and only the last one will win. (Especially FireFox, where an "Are You Sure" dialog will appear)
+        // on iOS we can link directly to the App Store as our app switch will fire prior to the switch
+        // If you have a mobile web app, your fallback could be that instead.
+          fallbackLink = isAndroid ? 'https://play.google.com/store/apps/details?id=io.appflowy.appflowy' :
+          'https://testflight.apple.com/join/6CexvkDz' ;
+      }
+
+      // Now we just wait for everything to execute, if the user is redirected to your custom app
+      // the timeout below will never fire, if a custom app is not present (or the user is on the Desktop)
+      // we will replace the current URL with the fallbackLink (store URL or desktop URL as appropriate)
+      window.setTimeout(function (){ window.location.replace(fallbackLink); }, 1);
+
+    })();</script>
+
     <h1>Opening AppFlowy</h1>
     <p>If AppFlowy does not open, you can click <a href="appflowy-flutter://">here</a> to launch the app.</p>
     <p>If AppFlowy is not installed, you can <a href="https://appflowy.io/download">download AppFlowy manually</a>.</p>

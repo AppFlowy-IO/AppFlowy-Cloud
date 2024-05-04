@@ -6,28 +6,29 @@
   </head>
   <body>
     <script>
-      var fallbackLink = 'https://appflowy.io/download/'+window.location.search+window.location.hash;
+      document.addEventListener("DOMContentLoaded", function() {
+        var fallbackLink = 'https://appflowy.io/download/'+window.location.search+window.location.hash;
 
-      // Mobile
-      const isiOS = navigator.userAgent.match('iPad') || navigator.userAgent.match('iPhone') || navigator.userAgent.match('iPod');
-      const isAndroid = navigator.userAgent.match('Android');
-      if (isiOS) {
+        // Mobile
+        const isiOS = navigator.userAgent.match(/iPad|iPhone|iPod/);
+        const isAndroid = navigator.userAgent.match(/Android/);
+
+        if (isiOS) {
           fallbackLink = 'https://testflight.apple.com/join/6CexvkDz';
-      } else if (isAndroid) {
+        } else if (isAndroid) {
           fallbackLink = 'https://play.google.com/store/apps/details?id=io.appflowy.appflowy';
-      }
-
-      window.location = 'appflowy-flutter://'+window.location.search+window.location.hash;
-
-      function checkFocus() {
-        if (document.hasFocus()) {
-          window.location = fallbackLink;
-          return;
         }
-        setTimeout(checkFocus, 1000);
-      }
-      setTimeout(checkFocus, 500); // initial delay to wait for the app to open(or not)
 
+        // Attempt to redirect
+        window.location = 'appflowy-flutter://'+window.location.search+window.location.hash;
+
+        // Update the fallback download link
+        document.getElementById('download-link').href = fallbackLink;
+      });
     </script>
+
+    <h1>Opening AppFlowy</h1>
+    <p>If AppFlowy does not open, you can click <a href="appflowy-flutter://">here</a> to launch the app.</p>
+    <p>If AppFlowy is not installed, you can <a id="download-link" href="#">download AppFlowy manually</a>.</p>
   </body>
 </html>

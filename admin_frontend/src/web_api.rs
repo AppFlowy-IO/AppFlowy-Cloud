@@ -389,7 +389,7 @@ async fn logout_handler(
   state.session_store.del_user_session(session_id).await?;
   Ok((
     jar.remove(Cookie::from("session_id")),
-    htmx_redirect("/web/login"),
+    htmx_redirect("/web"),
   ))
 }
 

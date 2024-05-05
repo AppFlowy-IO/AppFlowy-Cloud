@@ -4,8 +4,6 @@ use collab::core::origin::CollabOrigin;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use database_entity::dto::{QueryCollab, QueryCollabParams};
-use std::fs::File;
-use std::io::Write;
 
 #[tokio::test]
 async fn get_user_default_workspace_test() {
@@ -41,12 +39,6 @@ async fn get_document_collab_from_remote(
     },
   };
   let resp = test_client.get_collab(params).await.unwrap();
-  let mut file = File::create("./get_started_encode_collab").unwrap();
-
-  // Step 3: Write the Vec<u8> data to the file.
-  file
-    .write_all(&resp.encode_collab.encode_to_bytes().unwrap())
-    .unwrap();
   Document::from_doc_state(
     CollabOrigin::Empty,
     DataSource::DocStateV1(resp.encode_collab.doc_state.to_vec()),

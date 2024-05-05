@@ -111,10 +111,6 @@ client-api-test-util = { path = "libs/client-api-test-util", features = ["collab
 client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "sync_verbose_log", "test_fast_sync", "enable_brotli"] }
 opener = "0.6.1"
 image = "0.23.14"
-collab-folder = { version = "0.1.0" }
-client-websocket.workspace = true
-actix-test = "0.1"
-semver = "1.0.22"
 
 [[bin]]
 name = "appflowy_cloud"
@@ -155,7 +151,8 @@ members = [
     "services/realtime",
     "services/appflowy-collaborate",
     # xtask
-    "xtask", "libs/tonic-proto",
+    "xtask",
+    "libs/tonic-proto",
 ]
 
 [workspace.dependencies]

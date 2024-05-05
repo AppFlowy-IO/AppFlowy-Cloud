@@ -1,31 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
   <head>
-    <meta charset="UTF-8">
-    <title>Open App or Redirect</title>
-    <script>
-      function openApp() {
-        var appUrl = 'appflowy-flutter://';
-        var fallbackUrl = 'https://appflowy.io/download'; // URL to download page
-        var timeout = 2000; // 2 seconds
-
-        var timer = setTimeout(function () {
-          window.location = fallbackUrl;
-        }, timeout);
-
-        window.addEventListener('blur', function onWindowBlur() {
-          clearTimeout(timer); // Clear the timer if user focuses on the new tab/window (app opened)
-          window.removeEventListener('blur', onWindowBlur);
-        });
-
-        window.location = appUrl; // Try opening the app
-      }
-
-      window.onload = openApp; // Try to open the app right when the page loads
-    </script>
+    <meta charset="utf-8">
+    <title>AppFlowy</title>
   </head>
   <body>
+    <script>
+      document.addEventListener("DOMContentLoaded", function() {
+        var fallbackLink = 'https://appflowy.io/download/'+window.location.search+window.location.hash;
+
+        // Mobile
+        const isiOS = navigator.userAgent.match(/iPad|iPhone|iPod/);
+        const isAndroid = navigator.userAgent.match(/Android/);
+
+        if (isiOS) {
+          fallbackLink = 'https://testflight.apple.com/join/6CexvkDz';
+        } else if (isAndroid) {
+          fallbackLink = 'https://play.google.com/store/apps/details?id=io.appflowy.appflowy';
+        }
+
+        // Attempt to redirect
+        window.location = 'appflowy-flutter://'+window.location.search+window.location.hash;
+
+        // Update the fallback download link
+        document.getElementById('download-link').href = fallbackLink;
+      });
+    </script>
+
     <h1>Opening AppFlowy</h1>
-    <p>If the app does not open, you will be redirected to the <a href="https://appflowy.io/download">download page</a>.</p>
+    <p>If AppFlowy does not open, you can click <a href="appflowy-flutter://">here</a> to launch the app.</p>
+    <p>If AppFlowy is not installed, you can <a id="download-link" href="#">download AppFlowy manually</a>.</p>
   </body>
 </html>

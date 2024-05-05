@@ -39,7 +39,6 @@ async fn main() -> Result<()> {
       },
   }
 
-  println!("One of the services has completed successfully.");
   Ok(())
 }
 

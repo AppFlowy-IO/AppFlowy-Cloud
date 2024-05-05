@@ -636,7 +636,7 @@ dependencies = [
  "chrono",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-document 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-folder 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-rt-entity",
  "collab-rt-protocol",
@@ -675,7 +675,7 @@ dependencies = [
  "bincode",
  "chrono",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-stream",
  "dashmap",
  "database",
@@ -1470,7 +1470,7 @@ dependencies = [
  "chrono",
  "client-websocket",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-rt-entity",
  "collab-rt-protocol",
  "database-entity",
@@ -1513,7 +1513,7 @@ dependencies = [
  "client-websocket",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-document 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-folder 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "database-entity",
  "dotenvy",
@@ -1544,7 +1544,7 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "client-api",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-rt-entity",
  "console_error_panic_hook",
  "database-entity",
@@ -1585,30 +1585,6 @@ dependencies = [
 name = "collab"
 version = "0.2.0"
 source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=22edc56#22edc5679eae866183f390b4894d42beee0222f7"
-dependencies = [
- "anyhow",
- "async-trait",
- "bincode",
- "bytes",
- "chrono",
- "js-sys",
- "parking_lot 0.12.1",
- "serde",
- "serde_json",
- "serde_repr",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tracing",
- "unicode-segmentation",
- "web-sys",
- "yrs",
-]
-
-[[package]]
-name = "collab"
-version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6#69130e61cbb7d83c69676a298f2d87c6b4fe67f4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1699,21 +1675,6 @@ dependencies = [
  "anyhow",
  "bytes",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=22edc56)",
- "getrandom 0.2.12",
- "serde",
- "serde_json",
- "serde_repr",
- "uuid",
-]
-
-[[package]]
-name = "collab-entity"
-version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6#69130e61cbb7d83c69676a298f2d87c6b4fe67f4"
-dependencies = [
- "anyhow",
- "bytes",
- "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
  "getrandom 0.2.12",
  "serde",
  "serde_json",
@@ -1788,7 +1749,7 @@ dependencies = [
  "chrono",
  "client-websocket",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-rt-protocol",
  "database-entity",
  "prost",
@@ -1810,7 +1771,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "serde",
  "thiserror",
  "tokio",
@@ -1824,7 +1785,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "futures",
  "rand 0.8.5",
  "redis 0.25.2",
@@ -2190,7 +2151,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "database-entity",
  "futures-util",
  "redis 0.25.2",
@@ -2215,7 +2176,7 @@ dependencies = [
  "app-error",
  "bincode",
  "chrono",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "serde",
  "serde_json",
  "serde_repr",
@@ -5591,7 +5552,7 @@ dependencies = [
  "anyhow",
  "app-error",
  "chrono",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "database-entity",
  "gotrue-entity",
  "reqwest 0.11.27",
@@ -7317,7 +7278,7 @@ dependencies = [
  "bytes",
  "collab 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-document 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
- "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=69130e6)",
+ "collab-entity 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "collab-folder 0.2.0 (git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=b32271b0)",
  "getrandom 0.2.12",
  "indexmap 2.2.5",

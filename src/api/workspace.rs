@@ -1019,14 +1019,27 @@ async fn summary_row_handler(
       return Err(AppError::InvalidRequest("Identity data is not supported".to_string()).into());
     },
     SummarizeRowData::Content(content) => {
-      let text = state
-        .ai_client
-        .summarize_row(&content)
-        .await
-        .map_err(|err| AppError::InvalidRequest(err.to_string()))?
-        .text;
+      if content.is_empty() {
+        return Ok(
+          AppResponse::Ok()
+            .with_data(SummarizeRowResponse {
+              text: "No content".to_string(),
+            })
+            .into(),
+        );
+      }
 
-      let resp = SummarizeRowResponse { text };
+      let result = state.ai_client.summarize_row(&content).await;
+      let resp = match result {
+        Ok(resp) => SummarizeRowResponse { text: resp.text },
+        Err(err) => {
+          error!("Failed to summarize row: {:?}", err);
+          SummarizeRowResponse {
+            text: "No content".to_string(),
+          }
+        },
+      };
+
       Ok(AppResponse::Ok().with_data(resp).into())
     },
   }

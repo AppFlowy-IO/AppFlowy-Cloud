@@ -5,7 +5,7 @@ bodyClass: bg-purple-50
 ---
 
 <x-main>
-    <div class="bg-purple-50 sm:px-4 px-12 sm:py-12 py-24 text-black">
+    <div class="bg-purple-50 font-helvetica sm:px-4 px-12 sm:py-12 py-24 text-black">
         <table align="center">
             <tr>
                 <td class="w-[552px] max-w-full">
@@ -42,15 +42,19 @@ bodyClass: bg-purple-50
                         </tr>
                     </table>
                     <x-button align="center"
-                              class="hover:opacity-90 cursor-pointer h-[34px] !text-xl !leading-[34px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
+                              class="hover:opacity-90 cursor-pointer !text-xl !leading-[20px] !bg-[#9327ff] !font-normal w-[60%] my-8 rounded-2xl"
                               href="{{ acceptUrl }}">
-                        Join workspace
+
+                        <div class="font-medium text-[24px]">
+                            Join workspace
+                            <div class="text-xs">require v0.5.6+ to continue</div>
+                        </div>
                     </x-button>
                     <div class="mx-auto  leading-4.5 text-sm text-slate-500 text-center w-[70%]">
-                        By clicking "Join workspace" above, you confirm that you have read, understood, and agree to
-                        AppFlowy's <a href="https://appflowy.io/terms" class="no-underline text-slate-500">Terms &
+                        By clicking "Join workspace" above, you confirm that you have read, understood, and agreed to
+                        AppFlowy's <a href="https://appflowy.io/terms/app" class="text-slate-500">Terms &
                         Conditions</a>
-                        and <a class="text-slate-500 no-underline" href="https://appflowy.io/privacy">Privacy
+                        and <a class="text-slate-500" href="https://appflowy.io/privacy/app">Privacy
                         Policy.</a>
                     </div>
                     <x-divider space-x="20%"/>

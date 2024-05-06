@@ -18,7 +18,6 @@ bodyClass: bg-purple-50
                         <span class="text-3xl font-bold">{{ userName }}</span>
                         <span class="mx-2=1">invited you to Join</span>
                         <span class="text-3xl font-bold">{{ workspaceName }}</span>
-                        <span class="mx-2=1">on AppFlowy</span>
                     </p>
                     <x-divider space-x="20%"/>
                     <table align="center">
@@ -47,22 +46,13 @@ bodyClass: bg-purple-50
                               href="{{ acceptUrl }}">
                         Join workspace
                     </x-button>
-                    <p class="m-0 leading-4.5 text-sm text-slate-500 text-center">
-                        By clicking "Join workspace"
-                        <br/>
-                        you acknowledge that you have read and understood,
-                        <br/>
-                        and agree to AppFlowy's <a
-                            href="https://appflowy.io/terms" class="text-slate-500">Terms & Conditions</a> and <a
-                            class="text-slate-500"
-                            href="https://appflowy.io/privacy">Privacy
-                        Policy</a>.
-                    </p>
+                    <div class="m-0 leading-4.5 text-sm text-slate-500 text-center w-[100%]">
+                        <div class="w-[60%]">
+                            By clicking "Join workspace" above, you confirm that you have read, understood, and agree to AppFlowy's <a href="https://appflowy.io/terms" class="text-slate-500">Terms & Conditions</a> and <a class="text-slate-500" href="https://appflowy.io/privacy">Privacy Policy.</a>.
+                        </div>
+                    </div>
                     <x-divider space-x="20%"/>
                 </td>
-            </tr>
-            <tr role="separator">
-                <td class="leading-24">&zwj;</td>
             </tr>
             <tr>
                 <td class="text-center text-slate-600 text-xs px-6">
@@ -71,39 +61,9 @@ bodyClass: bg-purple-50
                             <img src="{{ cdnBaseUrl }}images/appflowy-logo.png" width="150px">
                         </a>
                     </p>
-                    <p class="m-0 text-sm">
-                        Try the AppFlowy mobile app to stay on top of activity like comments, replies, and @mentions
-                        when you're on
-                        the go.
+                    <p class="m-0 text-sm font-medium">
+                        Bring projects, knowledge, and teams together with the power of AI.
                     </p>
-
-                    <table class="w-full my-4">
-                        <tr>
-                            <td>
-                                <x-button align="right"
-                                          class="hover:opacity-90 mr-2 relative !bg-[#9327ff] !font-normal rounded-2xl"
-                                          href="https://testflight.apple.com/join/6CexvkDz">
-
-                                    <img class="absolute top-4" src="{{ cdnBaseUrl }}images/appstore-badge.png"
-                                         width="16px"
-                                         alt="Download on the App Store">
-                                    <span class="text-sm ml-6">Test Flight</span>
-                                </x-button>
-                            </td>
-                            <td>
-                                <x-button align="left"
-                                          class="hover:opacity-90 ml-2 relative !bg-[#9327ff] !font-normal rounded-2xl"
-                                          href="https://play.google.com/store/apps/details?id=io.appflowy.appflowy">
-
-                                    <img class="absolute top-4" src="{{ cdnBaseUrl }}images/google-play-badge.png"
-                                         width="16px"
-                                         alt="Get it on Google Play">
-                                    <span class="text-sm ml-6">Google Play</span>
-                                </x-button>
-
-                            </td>
-                        </tr>
-                    </table>
 
                     <p class="cursor-default">
                         <a href="https://twitter.com/appflowy"
@@ -122,15 +82,6 @@ bodyClass: bg-purple-50
                            class="text-indigo-700 [text-decoration:none] mr-4">
                             <img src="{{ cdnBaseUrl }}images/discord.png" width="20" alt="Maizzle">
                         </a>
-                        <a href="https://forum.appflowy.io/"
-                           class="text-indigo-700 [text-decoration:none]">
-                            <img src="{{ cdnBaseUrl }}images/forum.png" width="20" alt="Maizzle">
-                        </a>
-                    </p>
-                    <p class="text-xs leading-4.5">
-                        <span>Cupyright © 2024, AppFlowy Inc.</span>
-                        <br>
-                        <span>Need Help? support@appflowy.io</span>
                     </p>
                 </td>
             </tr>

@@ -6,29 +6,89 @@
   </head>
   <body>
     <script>
-      document.addEventListener("DOMContentLoaded", function() {
-        var fallbackLink = 'https://appflowy.io/download/'+window.location.search+window.location.hash;
+      const getDeviceType = () => {
+        const ua = navigator.userAgent;
 
-        // Mobile
-        const isiOS = navigator.userAgent.match(/iPad|iPhone|iPod/);
-        const isAndroid = navigator.userAgent.match(/Android/);
-
-        if (isiOS) {
-          fallbackLink = 'https://testflight.apple.com/join/6CexvkDz';
-        } else if (isAndroid) {
-          fallbackLink = 'https://play.google.com/store/apps/details?id=io.appflowy.appflowy';
+        if (/(iPad|iPhone|iPod)/g.test(ua)) {
+          return 'iOS';
+        } else if (/Android/g.test(ua)) {
+          return 'Android';
+        } else {
+          return 'Desktop';
         }
+      };
 
-        // Attempt to redirect
-        window.location = 'appflowy-flutter://'+window.location.search+window.location.hash;
+      const getFallbackLink = () => {
+        const deviceType = getDeviceType();
+        if (deviceType === 'iOS') {
+          return 'https://testflight.apple.com/join/6CexvkDz';
+        } else if (deviceType === 'Android') {
+          return 'https://play.google.com/store/apps/details?id=io.appflowy.appflowy';
+        } else {
+          return 'https://appflowy.io/download/#pop';
+        }
+      };
 
-        // Update the fallback download link
-        document.getElementById('download-link').href = fallbackLink;
+      const APPFLOWY_SCHEME = 'appflowy-flutter://';
+
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none'
+      iframe.src = APPFLOWY_SCHEME;
+
+      const openAppFlowyIframe = () => {
+        document.body.appendChild(iframe);
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      };
+
+      const openAppFlowy = () => {
+        openAppFlowyIframe();
+        const initialTime = new Date();
+        let interactTime = initialTime;
+        let waitTime = 0;
+        const duration = 1500;
+        const checkOpen = setInterval(() => {
+          waitTime = new Date() - initialTime;
+          if (waitTime > duration) {
+            clearInterval(checkOpen);
+            // If the interaction time is over 1.5 seconds, it means the app is installed but hasn't opened(stayed in the confirmation dialog)
+            if (new Date() - interactTime < duration) {
+              window.location.href = getFallbackLink();
+            }
+          }
+
+        }, 20);
+
+        document.addEventListener('mousemove', () => {
+          interactTime = new Date();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+          const isHidden = document.hidden;
+          if (isHidden) {
+            clearInterval(checkOpen);
+          }
+        });
+
+      };
+      document.addEventListener("DOMContentLoaded", function() {
+        openAppFlowy();
+
+        document.getElementById('open-appflowy').addEventListener('click', (e) => {
+          e.preventDefault();
+          openAppFlowy();
+        });
+
+        document.getElementById('download-link').addEventListener('click', (e) => {
+          e.preventDefault();
+          window.open(getFallbackLink(), '_current');
+        });
       });
     </script>
 
     <h1>Opening AppFlowy</h1>
-    <p>If AppFlowy does not open, you can click <a href="appflowy-flutter://">here</a> to launch the app.</p>
+    <p>If AppFlowy does not open, you can click <a id="open-appflowy" href="#">here</a> to launch the app.</p>
     <p>If AppFlowy is not installed, you can <a id="download-link" href="#">download AppFlowy manually</a>.</p>
   </body>
 </html>

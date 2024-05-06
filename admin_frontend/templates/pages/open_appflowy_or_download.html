@@ -74,7 +74,7 @@
           }
           if (waitTime > downloadDuration) {
             clearInterval(checkOpen);
-            if (isMobile || new Date() - interactTime < duration) {
+            if (isMobile || new Date() - interactTime < downloadDuration) {
               document.getElementById('download-link').click();
             }
           }

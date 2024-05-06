@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 yrs.workspace = true
 thiserror = "1.0.56"
 serde.workspace = true
-collab = { version = "0.1.0" }
+collab = { workspace = true }
 bincode.workspace = true
 anyhow.workspace = true
 tracing.workspace = true

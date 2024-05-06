@@ -22,6 +22,7 @@ use database_entity::dto::{
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use mime::Mime;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
@@ -111,6 +112,11 @@ impl TestClient {
   }
 
   pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
+    #[derive(Deserialize)]
+    struct UserId {
+      pub uid: i64,
+    }
+
     self
       .collabs
       .get(object_id)
@@ -118,11 +124,11 @@ impl TestClient {
       .mutex_collab
       .lock()
       .get_awareness()
-      .get_states()
+      .clients()
       .iter()
       .map(|(_a, json)| {
-        let uid = json.get("uid").unwrap().as_i64();
-        uid.unwrap()
+        let user: UserId = serde_json::from_str(json).unwrap();
+        user.uid
       })
       .collect()
   }

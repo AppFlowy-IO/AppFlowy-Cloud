@@ -83,8 +83,6 @@
 
       };
       document.addEventListener("DOMContentLoaded", function() {
-        openAppFlowy();
-
         document.getElementById('open-appflowy').addEventListener('click', (e) => {
           e.preventDefault();
           openAppFlowy(true);
@@ -94,6 +92,9 @@
           e.preventDefault();
           window.open(getFallbackLink(), '_current');
         });
+
+        openAppFlowy();
+
       });
     </script>
 

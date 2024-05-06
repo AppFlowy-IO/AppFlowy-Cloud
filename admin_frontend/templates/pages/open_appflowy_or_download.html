@@ -36,6 +36,10 @@
       iframe.style.display = 'none'
       iframe.src = APPFLOWY_SCHEME;
 
+      const openAppFlowyLink = () => {
+        window.location.href = APPFLOWY_SCHEME;
+      };
+
       const openAppFlowyIframe = () => {
         document.body.appendChild(iframe);
         setTimeout(() => {
@@ -43,23 +47,17 @@
         }, 1000);
       };
 
-      const openAppFlowyLink = () => {
-        window.location.href = APPFLOWY_SCHEME;
-      };
-
       const openAppFlowy = (force) => {
-        if (isMobile) {
-          openAppFlowyLink();
-        } else {
-          openAppFlowyIframe();
-        }
+        openAppFlowyIframe();
 
         if (force) return;
 
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
-        const duration = 3500;
+        const downloadDuration = isMobile ? 1050 : 3500;
+        const openIframeDuration = 1000;
+        let openFinished = false;
 
         const updateInteractTime = () => {
           interactTime = new Date();
@@ -70,7 +68,11 @@
 
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
-          if (waitTime > duration) {
+          if (waitTime > openIframeDuration && !openFinished) {
+            openAppFlowyLink();
+            openFinished = true;
+          }
+          if (waitTime > downloadDuration) {
             clearInterval(checkOpen);
             if (isMobile || new Date() - interactTime < duration) {
               document.getElementById('download-link').click();
@@ -83,12 +85,16 @@
           document.addEventListener('mousemove', updateInteractTime);
         }
 
-        document.addEventListener('visibilitychange', () => {
+        document.addEventListener('visibilitychange webkitvisibilitychange', () => {
           const isHidden = document.hidden;
           if (isHidden) {
             clearInterval(checkOpen);
           }
         });
+
+        window.onpagehide = () => {
+          clearInterval(checkOpen);
+        };
 
       };
       document.addEventListener("DOMContentLoaded", function() {

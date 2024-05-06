@@ -17,9 +17,9 @@
           return 'Desktop';
         }
       };
-
+      const deviceType = getDeviceType();
       const getFallbackLink = () => {
-        const deviceType = getDeviceType();
+
         if (deviceType === 'iOS') {
           return 'https://testflight.apple.com/join/6CexvkDz';
         } else if (deviceType === 'Android') {
@@ -53,22 +53,20 @@
         const updateInteractTime = () => {
           interactTime = new Date();
         };
+
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
           if (waitTime > duration) {
             clearInterval(checkOpen);
-            // If the interaction time is over 1.5 seconds, it means the app is installed but hasn't opened(stayed in the confirmation dialog)
-            if (new Date() - interactTime < duration) {
+            if (deviceType !== 'Desktop' || new Date() - interactTime < duration) {
               window.location.href = getFallbackLink();
             }
 
-            document.removeEventListener('touchstart', updateInteractTime);
             document.removeEventListener('mousemove', updateInteractTime);
           }
 
         }, 20);
 
-        document.addEventListener('touchstart', updateInteractTime);
         document.addEventListener('mousemove', updateInteractTime);
 
         document.addEventListener('visibilitychange', () => {

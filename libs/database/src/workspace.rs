@@ -294,6 +294,7 @@ pub async fn update_workspace_invitation_set_status_accepted(
     SET status = 1
     WHERE invitee_email = (SELECT email FROM public.af_user WHERE uuid = $1)
       AND id = $2
+      AND status = 0
     "#,
     invitee_uuid,
     invite_id,

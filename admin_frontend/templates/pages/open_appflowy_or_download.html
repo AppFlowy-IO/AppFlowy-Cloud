@@ -62,11 +62,13 @@
               window.location.href = getFallbackLink();
             }
 
+            document.removeEventListener('touchstart', updateInteractTime);
             document.removeEventListener('mousemove', updateInteractTime);
           }
 
         }, 20);
 
+        document.addEventListener('touchstart', updateInteractTime);
         document.addEventListener('mousemove', updateInteractTime);
 
         document.addEventListener('visibilitychange', () => {

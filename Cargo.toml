@@ -75,11 +75,8 @@ appflowy-collaborate = { path = "services/appflowy-collaborate" }
 # ai
 appflowy-ai-client = { version = "0.1.0" }
 
-# collab
-collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
-collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
-collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
-collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "22edc56" }
+collab = { workspace = true }
+collab-entity = { workspace = true }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -176,13 +173,8 @@ actix-http = { version = "3.6.0", default-features = false }
 tokio = { version = "1.36.0", features = ["sync"] }
 tokio-stream = "0.1.14"
 futures-util = "0.3.30"
-yrs = "0.18.7"
 bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
-collab = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
-collab-entity = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
-collab-folder = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
-collab-document = { version = "0.2", git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
 infra = { path = "libs/infra" }
 tracing = { version = "0.1.40" }
 gotrue = { path = "libs/gotrue" }
@@ -196,6 +188,13 @@ lazy_static = "1.4.0"
 tonic = "0.11"
 prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
+
+# collaboration
+yrs = "0.18.7"
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
 
 [profile.release]
 lto = true

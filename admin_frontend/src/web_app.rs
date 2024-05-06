@@ -1,9 +1,10 @@
 use crate::askama_entities::WorkspaceWithMembers;
 use crate::error::WebAppError;
 use crate::ext::api::{
-  accept_workspace_invitation, get_pending_workspace_invitations, get_user_owned_workspaces,
-  get_user_profile, get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces,
-  get_workspace_members, verify_token_cloud,
+  accept_workspace_invitation, get_accepted_workspace_invitations,
+  get_pending_workspace_invitations, get_user_owned_workspaces, get_user_profile,
+  get_user_workspace_limit, get_user_workspace_usages, get_user_workspaces, get_workspace_members,
+  verify_token_cloud,
 };
 use crate::models::{OAuthLoginAction, WebAppOAuthLoginRequest};
 use crate::session::{self, new_session_cookie, UserSession};
@@ -68,35 +69,51 @@ async fn login_callback_handler() -> Result<Html<String>, WebAppError> {
 
 async fn login_callback_query_handler(
   State(state): State<AppState>,
+  session: Option<UserSession>,
   Query(query): Query<WebAppOAuthLoginRequest>,
   mut jar: CookieJar,
 ) -> Result<(CookieJar, Html<String>), WebAppError> {
-  if let Some(err) = query.error {
-    tracing::error!(
-      "OAuth login error: {:?}, code: {:?}, description: {:?}",
-      err,
-      query.error_code,
-      query.error_description
-    );
-    return Ok((jar, render_template(templates::Redirect {
-      redirect_url: format!(
-        "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
-        query.workspace_name.unwrap_or_default(),
-        query.workspace_icon.unwrap_or_default(),
-        query.user_name.unwrap_or_default(),
-        query.user_icon.unwrap_or_default(),
-        query.workspace_member_count.unwrap_or_default()),
-    })?));
+  let refresh_token = {
+    match query.refresh_token {
+      Some(refresh_token) => refresh_token,
+      None => match session {
+        Some(session) => session.token.refresh_token,
+        None => match query.error {
+          Some(err) => {
+            tracing::error!(
+              "OAuth login error: {:?}, code: {:?}, description: {:?}",
+              err,
+              query.error_code,
+              query.error_description
+            );
+            let expired_url = format!(
+                "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+                query.workspace_name.unwrap_or_default(),
+                query.workspace_icon.unwrap_or_default(),
+                query.user_name.unwrap_or_default(),
+                query.user_icon.unwrap_or_default(),
+                query.workspace_member_count.unwrap_or_default());
+            return Ok((
+              jar,
+              render_template(templates::Redirect {
+                redirect_url: expired_url,
+              })?,
+            ));
+          },
+          None => {
+            return Err(WebAppError::BadRequest(
+              "refresh_token not found".to_string(),
+            ));
+          },
+        },
+      },
+    }
   };
 
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
-      gotrue::grant::RefreshTokenGrant {
-        refresh_token: query.refresh_token.ok_or(WebAppError::BadRequest(
-          "refresh_token not found".to_string(),
-        ))?,
-      },
+      gotrue::grant::RefreshTokenGrant { refresh_token },
     ))
     .await?;
 
@@ -129,6 +146,22 @@ async fn login_callback_query_handler(
           .ok_or(WebAppError::BadRequest(
             "workspace_invitation_id not found".to_string(),
           ))?;
+
+        {
+          // If user has already accepted the invitation, redirect to open or download AppFlowy
+          let accepted_invitations = get_accepted_workspace_invitations(
+            &new_session.token.access_token,
+            &state.appflowy_cloud_url,
+          )
+          .await?;
+          let found = accepted_invitations
+            .iter()
+            .find(|w| w.invite_id.to_string() == invite_id);
+          if let Some(_) = found {
+            return Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?));
+          }
+        }
+
         if let Err(err) = accept_workspace_invitation(
           &new_session.token.access_token,
           &invite_id,
@@ -137,10 +170,17 @@ async fn login_callback_query_handler(
         .await
         {
           tracing::error!("accepting workspace invitation: {:?}", err);
+          let expired_url = format!(
+            "https://appflowy.io/invitation/expired?workspace_name={}&workspace_icon={}&user_name={}&user_icon={}&workspace_member_count={}",
+            query.workspace_name.unwrap_or_default(),
+            query.workspace_icon.unwrap_or_default(),
+            query.user_name.unwrap_or_default(),
+            query.user_icon.unwrap_or_default(),
+            query.workspace_member_count.unwrap_or_default());
           return Ok((
             jar,
             render_template(templates::Redirect {
-              redirect_url: "https://test.appflowy.io/invitation/expired".to_string(),
+              redirect_url: expired_url,
             })?,
           ));
         };

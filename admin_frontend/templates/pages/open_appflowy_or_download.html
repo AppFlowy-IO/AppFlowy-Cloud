@@ -55,7 +55,7 @@
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
-        const downloadDuration = 250;
+        const downloadDuration = deviceType === 'Android' ? 1500 : 250;
         const openIframeDuration = 200;
         let openFinished = false;
 

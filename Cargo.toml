@@ -75,11 +75,10 @@ appflowy-collaborate = { path = "services/appflowy-collaborate" }
 # ai
 appflowy-ai-client = { version = "0.1.0" }
 
-# collab
-collab = { version = "0.1.0" }
-collab-document = { version = "0.1.0" }
-collab-folder = { version = "0.1.0" }
-collab-entity = { version = "0.1.0" }
+collab = { workspace = true }
+collab-document = { workspace = true }
+collab-entity = { workspace = true }
+collab-folder = { workspace = true }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -176,13 +175,8 @@ actix-http = { version = "3.6.0", default-features = false }
 tokio = { version = "1.36.0", features = ["sync"] }
 tokio-stream = "0.1.14"
 futures-util = "0.3.30"
-yrs = "0.17.2"
 bincode = "1.3.3"
 client-websocket = { path = "libs/client-websocket" }
-collab = { version = "0.1.0" }
-collab-folder = { version = "0.1.0" }
-collab-document = { version = "0.1.0" }
-collab-entity = { version = "0.1.0" }
 infra = { path = "libs/infra" }
 tracing = { version = "0.1.40" }
 gotrue = { path = "libs/gotrue" }
@@ -197,6 +191,13 @@ tonic = "0.11"
 prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
 
+# collaboration
+yrs = "0.18.7"
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+
 [profile.release]
 lto = true
 opt-level = 3
@@ -207,14 +208,6 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-# will be removed when using yrs 0.18.2 that expose pendings
-yrs = { git = "https://github.com/appflowy/y-crdt", rev = "3f25bb510ca5274e7657d3713fbed41fb46b4487" }
-
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "85580a5c0e95b5dae4787336faa751da44365760" }
-
 appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", rev = "6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9" }
 
 [features]

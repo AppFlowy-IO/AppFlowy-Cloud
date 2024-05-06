@@ -18,6 +18,7 @@
         }
       };
       const deviceType = getDeviceType();
+      const isMobile = deviceType !== 'Desktop';
       const getFallbackLink = () => {
 
         if (deviceType === 'iOS') {
@@ -49,27 +50,29 @@
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
-        const duration = 1500;
+        const duration = isMobile ? 1500 : 3500;
 
         const updateInteractTime = () => {
           interactTime = new Date();
         };
 
         document.removeEventListener('mousemove', updateInteractTime);
+        document.removeEventListener('mouseenter', updateInteractTime);
 
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
           if (waitTime > duration) {
             clearInterval(checkOpen);
-            if (deviceType !== 'Desktop' || new Date() - interactTime < duration) {
-              window.location.href = getFallbackLink();
+            if (isMobile || new Date() - interactTime < duration) {
+              document.getElementById('download-link').click();
             }
-
           }
-
         }, 20);
 
-        document.addEventListener('mousemove', updateInteractTime);
+        if (!isMobile) {
+          document.addEventListener('mouseenter', updateInteractTime);
+          document.addEventListener('mousemove', updateInteractTime);
+        }
 
         document.addEventListener('visibilitychange', () => {
           const isHidden = document.hidden;

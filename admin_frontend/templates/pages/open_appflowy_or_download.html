@@ -42,12 +42,17 @@
         }, 1000);
       };
 
-      const openAppFlowy = () => {
+      const openAppFlowy = (force) => {
         openAppFlowyIframe();
+        if (force) return;
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
         const duration = 1500;
+
+        const updateInteractTime = () => {
+          interactTime = new Date();
+        };
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
           if (waitTime > duration) {
@@ -56,13 +61,13 @@
             if (new Date() - interactTime < duration) {
               window.location.href = getFallbackLink();
             }
+
+            document.removeEventListener('mousemove', updateInteractTime);
           }
 
         }, 20);
 
-        document.addEventListener('mousemove', () => {
-          interactTime = new Date();
-        });
+        document.addEventListener('mousemove', updateInteractTime);
 
         document.addEventListener('visibilitychange', () => {
           const isHidden = document.hidden;
@@ -77,7 +82,7 @@
 
         document.getElementById('open-appflowy').addEventListener('click', (e) => {
           e.preventDefault();
-          openAppFlowy();
+          openAppFlowy(true);
         });
 
         document.getElementById('download-link').addEventListener('click', (e) => {

@@ -76,7 +76,9 @@ appflowy-collaborate = { path = "services/appflowy-collaborate" }
 appflowy-ai-client = { version = "0.1.0" }
 
 collab = { workspace = true }
+collab-document = { workspace = true }
 collab-entity = { workspace = true }
+collab-folder = { workspace = true }
 collab-rt-protocol.workspace = true
 
 #Local crate
@@ -191,10 +193,10 @@ tonic-proto = { path = "libs/tonic-proto" }
 
 # collaboration
 yrs = "0.18.7"
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "b32271b0" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
 
 [profile.release]
 lto = true

@@ -4,7 +4,6 @@ use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
 use anyhow::anyhow;
 use bytes::Bytes;
-use collab::core::awareness::{gen_awareness_update_message, AwarenessUpdateSubscription};
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use collab::core::origin::CollabOrigin;
 use collab_rt_entity::user::RealtimeUser;
@@ -28,7 +27,7 @@ use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::UpdateSubscription;
+use yrs::Subscription as YrsSubscription;
 
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
@@ -37,10 +36,10 @@ use yrs::UpdateSubscription;
 pub struct CollabBroadcast {
   object_id: String,
   broadcast_sender: Sender<CollabMessage>,
-  awareness_sub: Option<AwarenessUpdateSubscription>,
+  awareness_sub: Option<YrsSubscription>,
   /// Keep the lifetime of the document observer subscription. The subscription will be stopped
   /// when the broadcast is dropped.
-  doc_subscription: Option<UpdateSubscription>,
+  doc_subscription: Option<YrsSubscription>,
   edit_state: Arc<EditState>,
   /// The last modified time of the document.
   pub modified_at: Arc<parking_lot::Mutex<Instant>>,
@@ -119,18 +118,15 @@ impl CollabBroadcast {
       let cloned_oid = self.object_id.clone();
 
       // Observer the awareness's update and broadcast it to all subscribers.
-      let awareness_sub = collab
-        .lock()
-        .observe_awareness(move |awareness, event, origin| {
-          if let Ok(awareness_update) = gen_awareness_update_message(awareness, event) {
-            trace!("awareness update:{}", origin);
-            let payload = Message::Awareness(awareness_update).encode_v1();
-            let msg = AwarenessSync::new(cloned_oid.clone(), payload, origin.clone());
-            if let Err(err) = broadcast_sink.send(msg.into()) {
-              trace!("fail to broadcast awareness:{}", err);
-            }
+      let awareness_sub = collab.lock().observe_awareness(move |event| {
+        if let Some(awareness_update) = event.awareness_update() {
+          let payload = Message::Awareness(awareness_update.clone()).encode_v1();
+          let msg = AwarenessSync::new(cloned_oid.clone(), payload, CollabOrigin::Empty);
+          if let Err(err) = broadcast_sink.send(msg.into()) {
+            trace!("fail to broadcast awareness:{}", err);
           }
-        });
+        }
+      });
       (doc_sub, awareness_sub)
     };
 

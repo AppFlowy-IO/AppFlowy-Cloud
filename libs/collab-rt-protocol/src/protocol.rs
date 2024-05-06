@@ -173,11 +173,11 @@ pub trait CollabSyncProtocol {
   /// instance is being updated with incoming data.
   fn handle_awareness_update(
     &self,
-    message_origin: &CollabOrigin,
+    _message_origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: AwarenessUpdate,
   ) -> Result<Option<Vec<u8>>, RTProtocolError> {
-    awareness.apply_update(update, message_origin)?;
+    awareness.apply_update(update)?;
     Ok(None)
   }
 

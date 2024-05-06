@@ -68,7 +68,7 @@
 
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
-          if (waitTime > openIframeDuration && !openFinished) {
+          if (isMobile && waitTime > openIframeDuration && !openFinished) {
             openAppFlowyLink();
             openFinished = true;
           }

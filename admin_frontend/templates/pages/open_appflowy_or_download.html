@@ -45,6 +45,7 @@
       const openAppFlowy = (force) => {
         openAppFlowyIframe();
         if (force) return;
+
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
@@ -54,6 +55,8 @@
           interactTime = new Date();
         };
 
+        document.removeEventListener('mousemove', updateInteractTime);
+
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
           if (waitTime > duration) {
@@ -62,7 +65,6 @@
               window.location.href = getFallbackLink();
             }
 
-            document.removeEventListener('mousemove', updateInteractTime);
           }
 
         }, 20);

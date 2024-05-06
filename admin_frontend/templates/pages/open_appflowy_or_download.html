@@ -43,14 +43,23 @@
         }, 1000);
       };
 
+      const openAppFlowyLink = () => {
+        window.location.href = APPFLOWY_SCHEME;
+      };
+
       const openAppFlowy = (force) => {
-        openAppFlowyIframe();
+        if (isMobile) {
+          openAppFlowyLink();
+        } else {
+          openAppFlowyIframe();
+        }
+
         if (force) return;
 
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
-        const duration = isMobile ? 1500 : 3500;
+        const duration = 3500;
 
         const updateInteractTime = () => {
           interactTime = new Date();

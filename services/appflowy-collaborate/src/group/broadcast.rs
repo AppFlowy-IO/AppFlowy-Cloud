@@ -536,18 +536,12 @@ impl Subscription {
   pub async fn stop(&mut self) {
     if let Some(sink_stop_tx) = self.sink_stop_tx.take() {
       if let Err(err) = sink_stop_tx.send(()).await {
-        warn!(
-          "fail to stop sink:{}, the stream might be already stop",
-          err
-        );
+        warn!("the sink might be already stop, error: {}", err);
       }
     }
     if let Some(stream_stop_tx) = self.stream_stop_tx.take() {
       if let Err(err) = stream_stop_tx.send(()).await {
-        warn!(
-          "fail to stop stream:{}, the stream might be already stop",
-          err
-        );
+        warn!("the stream might be already stop, error: {}", err);
       }
     }
   }

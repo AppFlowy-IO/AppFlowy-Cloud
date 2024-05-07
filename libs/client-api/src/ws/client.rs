@@ -48,19 +48,24 @@ pub trait WSClientHttpSender: Send + Sync {
   async fn send_ws_msg(&self, device_id: &str, message: Message) -> Result<(), WSError>;
 }
 
+#[async_trait::async_trait]
+pub trait WSClientConnectURLProvider: Send + Sync {
+  fn connect_ws_url(&self) -> String;
+  async fn connect_info(&self) -> Result<ConnectInfo, WSError>;
+}
+
 type WeakChannel = Weak<WebSocketChannel<ServerCollabMessage>>;
 type ChannelByObjectId = HashMap<String, Vec<WeakChannel>>;
 pub type WSConnectStateReceiver = Receiver<ConnectState>;
 
 pub(crate) type StateNotify = parking_lot::Mutex<ConnectStateNotify>;
-pub(crate) type CurrentConnInfo = parking_lot::Mutex<Option<ConnectInfo>>;
 
 /// The maximum size allowed for a WebSocket message is 65,536 bytes. If the message exceeds
 /// 50960 bytes (to avoid occupying the entire space), it should be sent over HTTP instead.
 const MAXIMUM_MESSAGE_SIZE: usize = 40960;
 const MAXIMUM_BATCH_MESSAGE_SIZE: usize = 20480;
+
 pub struct WSClient {
-  current_conn_info: Arc<CurrentConnInfo>,
   config: WSClientConfig,
   state_notify: Arc<StateNotify>,
   /// Sender used to send messages to the websocket.
@@ -75,11 +80,13 @@ pub struct WSClient {
 
   #[cfg(debug_assertions)]
   skip_realtime_message: Arc<std::sync::atomic::AtomicBool>,
+  connect_provider: Arc<dyn WSClientConnectURLProvider>,
 }
 impl WSClient {
-  pub fn new<H>(config: WSClientConfig, http_sender: H) -> Self
+  pub fn new<H, C>(config: WSClientConfig, http_sender: H, connect_provider: C) -> Self
   where
     H: WSClientHttpSender + 'static,
+    C: WSClientConnectURLProvider + 'static,
   {
     let (ws_msg_sender, _) = channel(config.buffer_capacity);
     let state_notify = Arc::new(parking_lot::Mutex::new(ConnectStateNotify::new()));
@@ -88,9 +95,9 @@ impl WSClient {
     let http_sender = Arc::new(http_sender);
     let (user_channel, _) = channel(1);
     let (rt_msg_sender, _) = channel(config.buffer_capacity);
+    let connect_provider = Arc::new(connect_provider);
     let aggregate_queue = Arc::new(AggregateMessageQueue::new(MAXIMUM_BATCH_MESSAGE_SIZE));
     WSClient {
-      current_conn_info: Arc::new(parking_lot::Mutex::new(None)),
       config,
       state_notify,
       ws_msg_sender,
@@ -104,11 +111,14 @@ impl WSClient {
 
       #[cfg(debug_assertions)]
       skip_realtime_message: Default::default(),
+      connect_provider,
     }
   }
 
-  pub async fn connect(&self, url: &str, connect_info: ConnectInfo) -> Result<(), WSError> {
+  pub async fn connect(&self) -> Result<(), WSError> {
+    let connect_info = self.connect_provider.connect_info().await?;
     let device_id = connect_info.device_id.clone();
+
     if self.get_state().is_connecting() {
       info!("websocket is connecting, skip connect request");
       return Ok(());
@@ -119,15 +129,11 @@ impl WSClient {
     self.set_state(ConnectState::Connecting).await;
     let (stop_ws_msg_loop_tx, stop_ws_msg_loop_rx) = oneshot::channel();
     *self.stop_ws_msg_loop_tx.lock().await = Some(stop_ws_msg_loop_tx);
-    *self.current_conn_info.lock() = Some(connect_info.clone());
 
     // 2. start connecting
-    trace!("start connecting to {}, {}", url, connect_info);
     let conn_result = retry_connect(
-      url.to_string(),
-      connect_info,
+      self.connect_provider.clone(),
       Arc::downgrade(&self.state_notify),
-      Arc::downgrade(&self.current_conn_info),
     )
     .await;
 
@@ -377,7 +383,6 @@ impl WSClient {
       reason: Cow::from("client disconnect"),
     })));
 
-    *self.current_conn_info.lock() = None;
     self.set_state(ConnectState::Lost).await;
   }
 

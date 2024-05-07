@@ -30,17 +30,23 @@
         }
       };
 
+      const getDuration = () => {
+        switch (deviceType) {
+          case 'iOS':
+            return 250;
+          default:
+            return 1500;
+        }
+      }
+
       const APPFLOWY_SCHEME = 'appflowy-flutter://';
 
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none'
       iframe.src = APPFLOWY_SCHEME;
 
-      const openAppFlowyLink = () => {
-        window.location.href = APPFLOWY_SCHEME;
-      };
-
-      const openAppFlowyIframe = () => {
+      const openSchema = () => {
+        if (isMobile) return window.location.href = APPFLOWY_SCHEME;
         document.body.appendChild(iframe);
         setTimeout(() => {
           document.body.removeChild(iframe);
@@ -48,16 +54,14 @@
       };
 
       const openAppFlowy = (force) => {
-        openAppFlowyIframe();
+        openSchema();
 
         if (force) return;
 
         const initialTime = new Date();
         let interactTime = initialTime;
         let waitTime = 0;
-        const downloadDuration = deviceType === 'Android' ? 1500 : 250;
-        const openIframeDuration = 200;
-        let openFinished = false;
+        const duration = getDuration();
 
         const updateInteractTime = () => {
           interactTime = new Date();
@@ -68,13 +72,10 @@
 
         const checkOpen = setInterval(() => {
           waitTime = new Date() - initialTime;
-          if (isMobile && waitTime > openIframeDuration && !openFinished) {
-            openAppFlowyLink();
-            openFinished = true;
-          }
-          if (waitTime > downloadDuration) {
+
+          if (waitTime > duration) {
             clearInterval(checkOpen);
-            if (isMobile || new Date() - interactTime < downloadDuration) {
+            if (isMobile || new Date() - interactTime < duration) {
               document.getElementById('download-link').click();
             }
           }
@@ -85,7 +86,7 @@
           document.addEventListener('mousemove', updateInteractTime);
         }
 
-        document.addEventListener('visibilitychange webkitvisibilitychange', () => {
+        document.addEventListener('visibilitychange', () => {
           const isHidden = document.hidden;
           if (isHidden) {
             clearInterval(checkOpen);
@@ -93,6 +94,10 @@
         });
 
         window.onpagehide = () => {
+          clearInterval(checkOpen);
+        };
+
+        window.onbeforeunload = () => {
           clearInterval(checkOpen);
         };
 

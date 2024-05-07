@@ -19,7 +19,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, RetryIf};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 pub(crate) struct RefreshTokenAction {
   token: Arc<RwLock<ClientToken>>,
@@ -107,6 +107,7 @@ impl Action for ConnectAction {
       info!("🔵websocket start connecting");
       let url = connect_provider.connect_ws_url();
       let headers: HeaderMap = connect_provider.connect_info().await?.into();
+      trace!("websocket url:{}, headers: {:?}", url, headers);
       match connect_async(&url, headers).await {
         Ok(stream) => {
           info!("🟢websocket connect success");

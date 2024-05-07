@@ -120,12 +120,14 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
+  pub async fn refresh_token(&self, reason: &str) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
     if !self.is_refreshing_token.load(Ordering::SeqCst) {
       self.is_refreshing_token.store(true, Ordering::SeqCst);
+
+      info!("refresh token reason:{}", reason);
       let result = self.inner_refresh_token().await;
       let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
       for tx in txs {
@@ -181,12 +183,12 @@ impl WSClientHttpSender for Client {
 #[async_trait]
 impl WSClientConnectURLProvider for Client {
   fn connect_ws_url(&self) -> String {
-    self.ws_url()
+    self.ws_addr.clone()
   }
 
   async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
     let conn_info = self
-      .ws_connect_info()
+      .ws_connect_info(false)
       .await
       .map_err(|err| WSError::Http(err.to_string()))?;
     Ok(conn_info)

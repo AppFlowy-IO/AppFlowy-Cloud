@@ -1,9 +1,9 @@
-use crate::ws::{ConnectInfo, CurrentConnInfo, StateNotify, WSError};
+use crate::ws::{StateNotify, WSClientConnectURLProvider, WSError};
 use again::Condition;
 use app_error::gotrue::GoTrueError;
 use client_websocket::{connect_async, WebSocketStream};
 use reqwest::header::HeaderMap;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 pub(crate) struct RefreshTokenRetryCondition;
 
@@ -13,12 +13,12 @@ impl Condition<GoTrueError> for RefreshTokenRetryCondition {
   }
 }
 pub async fn retry_connect(
-  url: String,
-  info: ConnectInfo,
+  connect_provider: Arc<dyn WSClientConnectURLProvider>,
   _state_notify: Weak<StateNotify>,
-  _current_addr: Weak<CurrentConnInfo>,
 ) -> Result<WebSocketStream, WSError> {
-  let headers: HeaderMap = info.into();
+  let url = connect_provider.connect_ws_url();
+  let connect_info = connect_provider.connect_info().await?;
+  let headers: HeaderMap = connect_info.into();
   let stream = connect_async(url, headers).await?;
   Ok(stream)
 }

@@ -22,7 +22,7 @@ concurrency:
 
 env:
   LOCALHOST_URL: http://localhost
-  LOCALHOST_WS: ws://localhost/ws
+  LOCALHOST_WS: ws://localhost/ws/v1
   APPFLOWY_REDIS_URI: redis://redis:6379
   LOCALHOST_GOTRUE: http://localhost/gotrue
   DATABASE_URL: postgres://postgres:password@localhost:5432/postgres

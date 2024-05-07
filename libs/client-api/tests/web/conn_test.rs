@@ -5,7 +5,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 #[wasm_bindgen_test]
 async fn realtime_connect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
   let device_id = "fake_device_id";
   loop {

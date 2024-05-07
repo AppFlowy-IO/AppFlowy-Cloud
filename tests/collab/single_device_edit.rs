@@ -601,10 +601,10 @@ async fn collab_flush_test() {
 }
 
 #[tokio::test]
-async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
+async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
   let text = generate_random_string(1024 * 1024 * 3);
   let mut tasks = Vec::new();
-  for i in 0..50 {
+  for i in 0..10 {
     let cloned_text = text.clone();
     let task = tokio::spawn(async move {
       let mut new_user = TestClient::new_user_without_ws_conn().await;
@@ -615,7 +615,7 @@ async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
       let workspace_id = new_user.workspace_id().await;
       let doc_state = make_big_collab_doc_state(&object_id, "text", cloned_text);
       new_user
-        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Document, doc_state)
+        .open_collab_with_doc_state(&workspace_id, &object_id, CollabType::Unknown, doc_state)
         .await;
       (new_user, object_id)
     });

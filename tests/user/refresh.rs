@@ -8,7 +8,7 @@ async fn refresh_success() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let old_token = c.access_token().unwrap();
   tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-  c.refresh_token().await.unwrap();
+  c.refresh_token("").await.unwrap();
   let new_token = c.access_token().unwrap();
   assert_ne!(old_token, new_token);
 }
@@ -23,7 +23,7 @@ async fn concurrent_refresh() {
   for _ in 0..20 {
     let cloned_client = c.clone();
     let handle = tokio::spawn(async move {
-      cloned_client.refresh_token().await.unwrap();
+      cloned_client.refresh_token("").await.unwrap();
       Ok::<(), AppError>(())
     });
     join_handles.push(handle);

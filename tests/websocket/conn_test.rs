@@ -7,10 +7,9 @@ use client_api_test_util::generate_unique_registered_user_client;
 #[tokio::test]
 async fn realtime_connect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
-  let connect_info = c.ws_connect_info().await.unwrap();
-  tokio::spawn(async move { ws_client.connect(&c.ws_url(), connect_info).await });
+  tokio::spawn(async move { ws_client.connect().await });
   let connect_future = async {
     loop {
       match state.recv().await {
@@ -40,11 +39,9 @@ async fn realtime_connect_after_token_exp_test() {
     .unwrap()
     .as_secs() as i64;
 
-  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone(), c.clone());
   let mut state = ws_client.subscribe_connect_state();
-  let connect_info = c.ws_connect_info().await.unwrap();
-  tokio::spawn(async move { ws_client.connect(&c.ws_url(), connect_info).await });
-
+  tokio::spawn(async move { ws_client.connect().await });
   let connect_future = async {
     loop {
       match state.recv().await {
@@ -67,9 +64,8 @@ async fn realtime_connect_after_token_exp_test() {
 #[tokio::test]
 async fn realtime_disconnect_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
-  let connect_info = c.ws_connect_info().await.unwrap();
-  ws_client.connect(&c.ws_url(), connect_info).await.unwrap();
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone(), c.clone());
+  ws_client.connect().await.unwrap();
 
   let mut state = ws_client.subscribe_connect_state();
   loop {

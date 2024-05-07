@@ -1,7 +1,7 @@
 use crate::http::log_request_id;
 use crate::notify::ClientToken;
 use crate::ws::{
-  ConnectInfo, ConnectState, ConnectStateNotify, CurrentConnInfo, StateNotify, WSError,
+  ConnectState, ConnectStateNotify, StateNotify, WSClientConnectURLProvider, WSError,
 };
 use crate::Client;
 use app_error::gotrue::GoTrueError;
@@ -19,7 +19,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio_retry::strategy::FixedInterval;
 use tokio_retry::{Action, Condition, RetryIf};
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 pub(crate) struct RefreshTokenAction {
   token: Arc<RwLock<ClientToken>>,
@@ -74,45 +74,40 @@ impl Condition<GoTrueError> for RefreshTokenRetryCondition {
 }
 
 pub async fn retry_connect(
-  url: String,
-  info: ConnectInfo,
+  connect_provider: Arc<dyn WSClientConnectURLProvider>,
   state_notify: Weak<StateNotify>,
-  current_addr: Weak<CurrentConnInfo>,
 ) -> Result<WebSocketStream, WSError> {
   let stream = RetryIf::spawn(
-    FixedInterval::new(Duration::from_secs(10)),
-    ConnectAction::new(url, info.clone()),
-    RetryCondition {
-      connect_info: info,
-      current_connect_info: current_addr,
-      state_notify,
-    },
+    FixedInterval::new(Duration::from_secs(15)),
+    ConnectAction::new(connect_provider),
+    RetryCondition { state_notify },
   )
   .await?;
   Ok(stream)
 }
 
 struct ConnectAction {
-  url: String,
-  connect_info: ConnectInfo,
+  connect_provider: Arc<dyn WSClientConnectURLProvider>,
 }
 
 impl ConnectAction {
-  fn new(url: String, connect_info: ConnectInfo) -> Self {
-    Self { url, connect_info }
+  fn new(connect_provider: Arc<dyn WSClientConnectURLProvider>) -> Self {
+    Self { connect_provider }
   }
 }
 
 impl Action for ConnectAction {
-  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync>>;
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send>>;
   type Item = WebSocketStream;
   type Error = WSError;
 
   fn run(&mut self) -> Self::Future {
-    let url = self.url.clone();
-    let headers: HeaderMap = self.connect_info.clone().into();
+    let connect_provider = self.connect_provider.clone();
     Box::pin(async move {
       info!("🔵websocket start connecting");
+      let url = connect_provider.connect_ws_url();
+      let headers: HeaderMap = connect_provider.connect_info().await?.into();
+      trace!("websocket url:{}, headers: {:?}", url, headers);
       match connect_async(&url, headers).await {
         Ok(stream) => {
           info!("🟢websocket connect success");
@@ -125,8 +120,6 @@ impl Action for ConnectAction {
 }
 
 struct RetryCondition {
-  connect_info: ConnectInfo,
-  current_connect_info: Weak<parking_lot::Mutex<Option<ConnectInfo>>>,
   state_notify: Weak<parking_lot::Mutex<ConnectStateNotify>>,
 }
 impl Condition<WSError> for RetryCondition {
@@ -136,24 +129,10 @@ impl Condition<WSError> for RetryCondition {
       if let Some(state_notify) = self.state_notify.upgrade() {
         state_notify.lock().set_state(ConnectState::Unauthorized);
       }
-
       return false;
     }
 
-    let should_retry = self
-      .current_connect_info
-      .upgrade()
-      .map(|addr| match addr.try_lock() {
-        None => false,
-        Some(addr) => match &*addr {
-          None => false,
-          Some(addr) => addr == &self.connect_info,
-        },
-      })
-      .unwrap_or(false);
-
-    debug!("WSClient should_retry: {}", should_retry);
-    should_retry
+    true
   }
 }
 

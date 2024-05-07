@@ -643,7 +643,10 @@ async fn simulate_50_offline_user_connect_and_then_sync_document_test() {
     });
     tasks.push(task);
   }
-  let _results = futures::future::join_all(tasks).await;
+  let results = futures::future::join_all(tasks).await;
+  for result in results {
+    result.unwrap()
+  }
 }
 
 // #[tokio::test]

@@ -10,7 +10,7 @@ lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> =
     get_env_var("LOCALHOST_URL", "http://localhost:8000");
   pub static ref LOCALHOST_WS: Cow<'static, str> =
-    get_env_var("LOCALHOST_WS", "ws://localhost:8000/ws");
+    get_env_var("LOCALHOST_WS", "ws://localhost:8000/ws/v1");
   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
     get_env_var("LOCALHOST_GOTRUE", "http://localhost:9999");
 }
@@ -19,7 +19,7 @@ lazy_static! {
 #[cfg(target_arch = "wasm32")]
 lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> = Cow::Owned("http://localhost".to_string());
-  pub static ref LOCALHOST_WS: Cow<'static, str> = Cow::Owned("ws://localhost/ws".to_string());
+  pub static ref LOCALHOST_WS: Cow<'static, str> = Cow::Owned("ws://localhost/ws/v1".to_string());
   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
     Cow::Owned("http://localhost/gotrue".to_string());
 }

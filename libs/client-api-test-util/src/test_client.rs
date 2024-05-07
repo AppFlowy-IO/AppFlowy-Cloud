@@ -81,13 +81,10 @@ impl TestClient {
         retry_connect_per_pings: 5,
       },
       api_client.clone(),
+      api_client.clone(),
     );
-    let connect_info = api_client.ws_connect_info().await.unwrap();
     if start_ws_conn {
-      ws_client
-        .connect(&api_client.ws_url(), connect_info)
-        .await
-        .unwrap();
+      ws_client.connect().await.unwrap();
     }
     Self {
       user: registered_user,
@@ -707,14 +704,7 @@ impl TestClient {
   }
 
   pub async fn reconnect(&self) {
-    self
-      .ws_client
-      .connect(
-        &self.api_client.ws_url(),
-        self.api_client.ws_connect_info().await.unwrap(),
-      )
-      .await
-      .unwrap();
+    self.ws_client.connect().await.unwrap();
   }
 
   pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {

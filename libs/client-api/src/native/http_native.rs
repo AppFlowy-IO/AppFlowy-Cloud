@@ -188,7 +188,7 @@ impl WSClientConnectURLProvider for Client {
 
   async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
     let conn_info = self
-      .ws_connect_info(false)
+      .ws_connect_info(true)
       .await
       .map_err(|err| WSError::Http(err.to_string()))?;
     Ok(conn_info)

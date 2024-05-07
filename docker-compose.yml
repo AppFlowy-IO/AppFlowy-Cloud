@@ -27,7 +27,9 @@ services:
 
   postgres:
     restart: on-failure
-    image: postgres
+    build:
+      context: ./postgres
+      dockerfile: postgres.Dockerfile
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}

@@ -1,6 +1,6 @@
 use crate::http::log_request_id;
 use crate::native::GetCollabAction;
-use crate::ws::{WSClientHttpSender, WSError};
+use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
@@ -175,6 +175,21 @@ impl WSClientHttpSender for Client {
       .post_realtime_msg(device_id, message)
       .await
       .map_err(|err| WSError::Http(err.to_string()))
+  }
+}
+
+#[async_trait]
+impl WSClientConnectURLProvider for Client {
+  fn connect_ws_url(&self) -> String {
+    self.ws_url()
+  }
+
+  async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
+    let conn_info = self
+      .ws_connect_info()
+      .await
+      .map_err(|err| WSError::Http(err.to_string()))?;
+    Ok(conn_info)
   }
 }
 

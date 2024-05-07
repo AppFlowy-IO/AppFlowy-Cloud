@@ -1,5 +1,5 @@
 use crate::http::log_request_id;
-use crate::ws::{WSClientHttpSender, WSError};
+use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
 use crate::Client;
 use crate::RefreshTokenRetryCondition;
 use again::RetryPolicy;
@@ -143,5 +143,20 @@ impl WSClientHttpSender for Client {
     _message: client_websocket::Message,
   ) -> Result<(), WSError> {
     Err(WSError::Internal(anyhow::Error::msg("not supported")))
+  }
+}
+
+#[async_trait]
+impl WSClientConnectURLProvider for Client {
+  fn connect_ws_url(&self) -> String {
+    self.ws_url()
+  }
+
+  async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
+    let conn_info = self
+      .ws_connect_info()
+      .await
+      .map_err(|err| WSError::Http(err.to_string()))?;
+    Ok(conn_info)
   }
 }

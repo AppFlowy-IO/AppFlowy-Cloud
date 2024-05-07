@@ -143,6 +143,23 @@ pub async fn get_pending_workspace_invitations(
   from_json_response(resp).await
 }
 
+pub async fn get_accepted_workspace_invitations(
+  access_token: &str,
+  appflowy_cloud_base_url: &str,
+) -> Result<Vec<AFWorkspaceInvitation>, Error> {
+  let http_client = reqwest::Client::new();
+  let resp = http_client
+    .get(format!(
+      "{}/api/workspace/invite?status=Accepted",
+      appflowy_cloud_base_url
+    ))
+    .header("Authorization", format!("Bearer {}", access_token))
+    .send()
+    .await?;
+
+  from_json_response(resp).await
+}
+
 async fn get_user_workspace_limits(
   workspace_id: &str,
   access_token: &str,

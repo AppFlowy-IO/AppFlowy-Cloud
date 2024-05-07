@@ -2,8 +2,8 @@
 module.exports = {
   theme: {
     screens: {
-      sm: {max: '600px'},
-      xs: {max: '425px'},
+      sm: { max: '600px' },
+      xs: { max: '425px' },
     },
     extend: {
       spacing: {
@@ -73,6 +73,7 @@ module.exports = {
         sans: ['ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
         serif: ['ui-serif', 'Georgia', 'Cambria', '"Times New Roman"', 'Times', 'serif'],
         mono: ['ui-monospace', 'Menlo', 'Consolas', 'monospace'],
+        helvetica: ['Helvetica', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
       },
       fontSize: {
         0: '0',
@@ -134,4 +135,4 @@ module.exports = {
     require('tailwindcss-box-shadow'),
     require('tailwindcss-email-variants'),
   ],
-}
+};

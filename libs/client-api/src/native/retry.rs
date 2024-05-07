@@ -78,7 +78,7 @@ pub async fn retry_connect(
   state_notify: Weak<StateNotify>,
 ) -> Result<WebSocketStream, WSError> {
   let stream = RetryIf::spawn(
-    FixedInterval::new(Duration::from_secs(10)),
+    FixedInterval::new(Duration::from_secs(15)),
     ConnectAction::new(connect_provider),
     RetryCondition { state_notify },
   )

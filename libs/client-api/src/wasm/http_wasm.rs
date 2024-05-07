@@ -1,12 +1,9 @@
 use crate::http::log_request_id;
 use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
 use crate::Client;
-use crate::RefreshTokenRetryCondition;
-use again::RetryPolicy;
 use app_error::gotrue::GoTrueError;
-use app_error::{AppError, ErrorCode};
+use app_error::ErrorCode;
 use async_trait::async_trait;
-use collab_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use reqwest::Method;
@@ -14,8 +11,7 @@ use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tracing::{event, instrument};
+use tracing::instrument;
 
 impl Client {
   pub async fn create_collab_list(
@@ -153,10 +149,6 @@ impl WSClientConnectURLProvider for Client {
   }
 
   async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
-    let conn_info = self
-      .ws_connect_info()
-      .await
-      .map_err(|err| WSError::Http(err.to_string()))?;
-    Ok(conn_info)
+    Err(WSError::Internal(anyhow::Error::msg("not supported")))
   }
 }

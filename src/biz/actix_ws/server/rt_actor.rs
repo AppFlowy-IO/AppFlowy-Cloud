@@ -6,7 +6,7 @@ use appflowy_collaborate::{CollaborationServer, RealtimeAccessControl};
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
 use std::ops::Deref;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[derive(Clone)]
 pub struct RealtimeServerActor<S, AC>(pub CollaborationServer<S, AC>);
@@ -34,7 +34,12 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    ctx.set_mailbox_capacity(6000);
+    let mail_box_size = mail_box_size();
+    info!(
+      "realtime server started with mailbox size: {}",
+      mail_box_size
+    );
+    ctx.set_mailbox_capacity(mail_box_size);
   }
 }
 impl<S, AC> actix::Supervised for RealtimeServerActor<S, AC>
@@ -44,7 +49,17 @@ where
 {
   fn restarting(&mut self, ctx: &mut Context<RealtimeServerActor<S, AC>>) {
     error!("realtime server is restarting");
-    ctx.set_mailbox_capacity(6000);
+    ctx.set_mailbox_capacity(mail_box_size());
+  }
+}
+
+fn mail_box_size() -> usize {
+  match std::env::var("APPFLOWY_WEBSOCKET_MAILBOX_SIZE") {
+    Ok(value) => value.parse::<usize>().unwrap_or_else(|_| {
+      error!("Error: Invalid mailbox size format, defaulting to 6000");
+      6000
+    }),
+    Err(_) => 6000,
   }
 }
 

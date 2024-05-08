@@ -688,6 +688,7 @@ impl TestClient {
       .await
   }
 
+  #[cfg(not(target_arch = "wasm32"))]
   pub async fn post_realtime_binary(&self, message: Vec<u8>) -> Result<(), AppResponseError> {
     let message = client_websocket::Message::binary(message);
     self

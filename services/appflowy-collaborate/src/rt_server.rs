@@ -183,18 +183,34 @@ where
           },
         };
 
-        if let Err(err) = sender
-          .send(GroupCommand::HandleClientCollabMessage {
-            user: user.clone(),
-            object_id,
-            collab_messages,
-          })
-          .await
-        {
-          // it should not happen. Because the receiver is always running before acquiring the sender.
-          // Otherwise, the GroupCommandRunner might not be ready to handle the message.
-          error!("Send message to group fail: {}", err);
-        }
+        let cloned_user = user.clone();
+        // Create a new task to send a message to the group command runner without waiting for the
+        // result. This approach is used to prevent potential issues with the actor's mailbox in
+        // single-threaded runtimes (like actix-web actors). By spawning a task, the actor can
+        // immediately proceed to process the next message.
+        tokio::spawn(async move {
+          let (tx, rx) = tokio::sync::oneshot::channel();
+          match sender
+            .send(GroupCommand::HandleClientCollabMessage {
+              user: cloned_user,
+              object_id,
+              collab_messages,
+              ret: tx,
+            })
+            .await
+          {
+            Ok(_) => {
+              if let Ok(Err(err)) = rx.await {
+                error!("Handle client collab message fail: {}", err);
+              }
+            },
+            Err(err) => {
+              // it should not happen. Because the receiver is always running before acquiring the sender.
+              // Otherwise, the GroupCommandRunner might not be ready to handle the message.
+              error!("Send message to group fail: {}", err);
+            },
+          }
+        });
       }
 
       Ok(())

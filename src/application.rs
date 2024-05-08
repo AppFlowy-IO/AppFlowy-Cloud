@@ -226,7 +226,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   )
   .await;
-  let collab_storage = Arc::new(CollabStorageImpl::new(
+  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
     collab_storage_access_control,
     snapshot_control,
@@ -256,7 +256,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     gotrue_client,
     redis_connection_manager: redis_conn_manager,
     collab_cache,
-    collab_access_control_storage: collab_storage,
+    collab_access_control_storage,
     collab_access_control,
     workspace_access_control,
     bucket_storage,

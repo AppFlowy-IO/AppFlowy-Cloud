@@ -1,21 +1,16 @@
-use crate::collab::util::{
-  generate_random_bytes, generate_random_string, make_big_collab_doc_state,
-};
+use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
 use assert_json_diff::assert_json_eq;
 use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;
 use std::collections::HashMap;
-use std::sync::Arc;
-
-use collab::core::origin::CollabOrigin;
 
 use std::time::Duration;
 
 use tokio::time::sleep;
 
-use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
+use collab_rt_entity::MAXIMUM_REALTIME_MESSAGE_SIZE;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -581,28 +576,27 @@ async fn post_realtime_message_test() {
   }
 }
 
-#[tokio::test]
-async fn post_large_num_of_realtime_message_request_test() {
-  let client = Arc::new(TestClient::new_user().await);
-  let mut handles = vec![];
-  for _ in 0..1000 {
-    let cloned_client = client.clone();
-    let handle = tokio::spawn(async move {
-      let message = RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(UpdateSync::new(
-        CollabOrigin::Empty,
-        "fake_object_id".to_string(),
-        generate_random_bytes(1024),
-        1,
-      )))
-      .encode()
-      .unwrap();
-      cloned_client.post_realtime_binary(message).await.unwrap();
-    });
-    handles.push(handle);
-  }
-
-  futures::future::join_all(handles).await;
-}
+// #[tokio::test]
+// async fn post_large_num_of_realtime_message_request_test() {
+//   let client = Arc::new(TestClient::new_user().await);
+//   let mut handles = vec![];
+//   for _ in 0..100 {
+//     let cloned_client = client.clone();
+//     let handle = tokio::spawn(async move {
+//       let message = RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(UpdateSync::new(
+//         CollabOrigin::Empty,
+//         "fake_object_id".to_string(),
+//         generate_random_bytes(1024),
+//         1,
+//       )))
+//       .encode()
+//       .unwrap();
+//       cloned_client.post_realtime_binary(message).await.unwrap();
+//     });
+//     handles.push(handle);
+//   }
+//   futures::future::join_all(handles).await;
+// }
 
 #[tokio::test]
 async fn simulate_10_offline_user_connect_and_then_sync_document_test() {

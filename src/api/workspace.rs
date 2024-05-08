@@ -28,8 +28,8 @@ use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-use std::time::Duration;
-use tokio::time::{sleep, Instant};
+
+use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, event, instrument};
@@ -911,44 +911,24 @@ async fn post_realtime_message_stream_handler(
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let mut stream_message = Some(ClientStreamMessage {
+  let stream_message = ClientStreamMessage {
     uid,
     device_id,
     message,
-  });
-  const MAX_RETRIES: usize = 3;
-  const RETRY_DELAY: Duration = Duration::from_secs(2);
+  };
 
-  let mut attempts = 0;
-  while attempts < MAX_RETRIES {
-    match stream_message.take() {
-      None => {
-        return Err(AppError::Internal(anyhow!("Unexpected empty stream message")).into());
-      },
-      Some(message_to_send) => {
-        match server.try_send(message_to_send) {
-          Ok(_) => return Ok(Json(AppResponse::Ok())),
-          Err(err) if attempts < MAX_RETRIES - 1 => {
-            attempts += 1;
-            stream_message = Some(err.into_inner());
-            sleep(RETRY_DELAY).await;
-          },
-          Err(err) => {
-            return Err(
-              AppError::Internal(anyhow!(
-                "Failed to send client stream message to websocket server after {} attempts: {}",
-                // attempts starts from 0, so add 1 for accurate count
-                attempts + 1,
-                err
-              ))
-              .into(),
-            );
-          },
-        }
-      },
-    }
+  // When the server is under heavy load, try_send may fail. In client side, it will retry to send
+  // the message later.
+  match server.try_send(stream_message) {
+    Ok(_) => return Ok(Json(AppResponse::Ok())),
+    Err(err) => Err(
+      AppError::Internal(anyhow!(
+        "Failed to send message to websocket server, error:{}",
+        err
+      ))
+      .into(),
+    ),
   }
-  Err(AppError::Internal(anyhow!("Failed to send message to websocket server")).into())
 }
 
 async fn get_workspace_usage_handler(

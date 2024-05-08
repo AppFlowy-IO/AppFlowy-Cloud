@@ -34,7 +34,7 @@ pub async fn is_blob_metadata_exists(
 
 #[instrument(level = "trace", skip_all, err)]
 pub async fn insert_blob_metadata(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
+  pg_pool: &PgPool,
   file_id: &str,
   workspace_id: &Uuid,
   file_type: &str,
@@ -54,10 +54,12 @@ pub async fn insert_blob_metadata(
     file_type,
     file_size as i64,
   )
-  .execute(tx.deref_mut())
+  .execute(pg_pool)
   .await?;
   let n = res.rows_affected();
-  assert_eq!(n, 1);
+  if n != 1 {
+    tracing::error!("insert_blob_metadata: rows_affected: {}", n);
+  }
   Ok(())
 }
 

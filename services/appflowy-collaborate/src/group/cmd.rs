@@ -12,7 +12,7 @@ use crate::client::client_msg_router::ClientMessageRouter;
 use collab::entity::EncodedCollab;
 use futures_util::StreamExt;
 use std::sync::Arc;
-use tracing::{error, instrument, trace, warn};
+use tracing::{instrument, trace, warn};
 
 /// Using [GroupCommand] to interact with the group
 /// - HandleClientCollabMessage: Handle the client message
@@ -22,6 +22,7 @@ pub enum GroupCommand {
     user: RealtimeUser,
     object_id: String,
     collab_messages: Vec<ClientCollabMessage>,
+    ret: tokio::sync::oneshot::Sender<Result<(), RealtimeError>>,
   },
   EncodeCollab {
     object_id: String,
@@ -68,12 +69,13 @@ where
             user,
             object_id,
             collab_messages,
+            ret,
           } => {
-            if let Err(err) = self
+            let result = self
               .handle_client_collab_message(&user, object_id, collab_messages)
-              .await
-            {
-              error!("handle client message error: {}", err);
+              .await;
+            if let Err(err) = ret.send(result) {
+              warn!("Send handle client collab message result fail: {:?}", err);
             }
           },
           GroupCommand::EncodeCollab { object_id, ret } => {

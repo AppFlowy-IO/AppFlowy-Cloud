@@ -11,6 +11,7 @@ use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use dashmap::DashMap;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -45,6 +46,7 @@ pub struct AppState {
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: Mailer,
   pub ai_client: AppFlowyAIClient,
+  pub realtime_shared_state: RealtimeSharedState,
   #[cfg(feature = "history")]
   pub grpc_history_client:
     tonic_proto::history::history_client::HistoryClient<tonic::transport::Channel>,

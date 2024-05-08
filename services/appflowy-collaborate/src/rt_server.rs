@@ -32,6 +32,7 @@ pub struct CollaborationServer<S, AC> {
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
   access_control: Arc<AC>,
+  storage: Arc<S>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
   metrics_calculate: CollabMetricsCalculate,
@@ -68,7 +69,9 @@ where
     spawn_collaboration_command(command_recv, &group_sender_by_object_id);
 
     spawn_metrics(&metrics, &metrics_calculate, &storage);
+
     Ok(Self {
+      storage,
       group_manager,
       connect_state,
       group_sender_by_object_id,
@@ -94,13 +97,17 @@ where
     let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
     let metrics_calculate = self.metrics_calculate.clone();
+    let storage = self.storage.clone();
 
     Box::pin(async move {
+      storage
+        .add_connected_user(connected_user.uid, &connected_user.device_id)
+        .await;
+
       if let Some(old_user) = connect_state.handle_user_connect(connected_user, new_client_router) {
         // Remove the old user from all collaboration groups.
         group_manager.remove_user(&old_user).await;
       }
-
       metrics_calculate.connected_users.store(
         connect_state.number_of_connected_users() as i64,
         std::sync::atomic::Ordering::Relaxed,
@@ -123,11 +130,16 @@ where
     let group_manager = self.group_manager.clone();
     let connect_state = self.connect_state.clone();
     let metrics_calculate = self.metrics_calculate.clone();
+    let storage = self.storage.clone();
 
     Box::pin(async move {
       trace!("[realtime]: disconnect => {}", disconnect_user);
       let was_removed = connect_state.handle_user_disconnect(&disconnect_user);
       if was_removed.is_some() {
+        storage
+          .remove_connected_user(disconnect_user.uid, &disconnect_user.device_id)
+          .await;
+
         metrics_calculate.connected_users.store(
           connect_state.number_of_connected_users() as i64,
           std::sync::atomic::Ordering::Relaxed,

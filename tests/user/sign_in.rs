@@ -88,12 +88,7 @@ async fn sign_in_with_invalid_url() {
   let c = localhost_client();
   match c.sign_in_with_url(url_str).await {
     Ok(_) => panic!("should not be ok"),
-    Err(e) => {
-      assert_eq!(e.code, ErrorCode::UserUnAuthorized);
-      assert!(e
-        .message
-        .contains("invalid JWT: unable to parse or verify signature, token is expired by"));
-    },
+    Err(e) => assert_eq!(e.code, ErrorCode::OAuthError),
   }
 }
 
@@ -105,4 +100,12 @@ async fn sign_in_with_url() {
   let sign_in_url = c.extract_sign_in_url(action_link.as_str()).await.unwrap();
   let is_new = c.sign_in_with_url(&sign_in_url).await.unwrap();
   assert!(is_new);
+}
+
+#[tokio::test]
+async fn sign_in_with_magic_link() {
+  let c = localhost_client();
+  let email = generate_unique_email();
+  let resp = c.sign_in_with_magic_link(&email, None).await;
+  assert!(resp.is_ok());
 }

@@ -1,6 +1,7 @@
-use crate::platform_spawn;
+use crate::af_spawn;
+use collab_rt_entity::ClientCollabMessage;
+use collab_rt_entity::RealtimeMessage;
 use futures_util::Sink;
-use realtime_entity::message::RealtimeMessage;
 use std::fmt::Debug;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -8,16 +9,17 @@ use tokio::sync::broadcast::{channel, Sender};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{trace, warn};
-use websocket::Message;
 
 pub struct WebSocketChannel<T> {
+  #[allow(dead_code)]
   object_id: String,
-  sender: Sender<Message>,
+  rt_msg_sender: Sender<Vec<ClientCollabMessage>>,
   receiver: Sender<T>,
 }
 
 impl<T> Drop for WebSocketChannel<T> {
   fn drop(&mut self) {
+    #[cfg(feature = "sync_verbose_log")]
     trace!("Drop WebSocketChannel {}", self.object_id);
   }
 }
@@ -26,12 +28,12 @@ impl<T> WebSocketChannel<T>
 where
   T: Into<RealtimeMessage> + Clone + Send + Sync + 'static,
 {
-  pub fn new(object_id: &str, sender: Sender<Message>) -> Self {
+  pub fn new(object_id: &str, rt_msg_sender: Sender<Vec<ClientCollabMessage>>) -> Self {
     let object_id = object_id.to_string();
     let (receiver, _) = channel(1000);
     Self {
       object_id,
-      sender,
+      rt_msg_sender,
       receiver,
     }
   }
@@ -44,32 +46,36 @@ where
     }
   }
 
-  pub fn sink(&self) -> BroadcastSink<T> {
-    let (tx, mut rx) = unbounded_channel::<T>();
-    let cloned_sender = self.sender.clone();
+  /// Use to send message to server via WebSocket.
+  pub fn sink(&self) -> BroadcastSink<Vec<ClientCollabMessage>> {
+    let (tx, mut rx) = unbounded_channel::<Vec<ClientCollabMessage>>();
+    let cloned_sender = self.rt_msg_sender.clone();
     let object_id = self.object_id.clone();
-    platform_spawn(async move {
+    af_spawn(async move {
       while let Some(msg) = rx.recv().await {
-        let realtime_msg: RealtimeMessage = msg.into();
-        let _ = cloned_sender.send(realtime_msg.into());
+        let _ = cloned_sender.send(msg);
       }
+
       trace!("WebSocketChannel {} sink closed", object_id);
     });
     BroadcastSink::new(tx)
   }
 
+  /// Use to receive message from server via WebSocket.
   pub fn stream(&self) -> UnboundedReceiverStream<Result<T, anyhow::Error>> {
     let (tx, rx) = unbounded_channel::<Result<T, anyhow::Error>>();
     let mut recv = self.receiver.subscribe();
     let object_id = self.object_id.clone();
-    platform_spawn(async move {
+    af_spawn(async move {
       while let Ok(msg) = recv.recv().await {
         if let Err(err) = tx.send(Ok(msg)) {
           trace!("Failed to send message to channel stream: {}", err);
           break;
         }
       }
-      trace!("WebSocketChannel {} stream closed", object_id);
+      if cfg!(feature = "sync_verbose_log") {
+        trace!("WebSocketChannel {} stream closed", object_id);
+      }
     });
     UnboundedReceiverStream::new(rx)
   }

@@ -1,14 +1,14 @@
 mod channel;
+mod collab_sink;
+mod collab_stream;
 mod error;
-mod pending_msg;
+mod period_state_check;
 mod plugin;
-mod sink;
-mod sync;
+mod sync_control;
 
 pub use channel::*;
+pub use collab_rt_entity::{MsgId, ServerCollabMessage};
+pub use collab_sink::*;
 pub use error::*;
 pub use plugin::*;
-pub use sink::*;
-pub use sync::*;
-
-pub use realtime_entity::collab_msg;
+pub use sync_control::*;

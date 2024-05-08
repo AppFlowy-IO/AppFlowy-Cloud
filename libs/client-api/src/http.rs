@@ -1,35 +1,33 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
-use anyhow::Context;
-use brotli::CompressorReader;
 use gotrue_entity::dto::AuthProvider;
-use shared_entity::dto::workspace_dto::CreateWorkspaceParam;
+use shared_entity::dto::workspace_dto::{
+  CreateWorkspaceParam, PatchWorkspaceParam, WorkspaceMemberInvitation,
+};
 use std::fmt::{Display, Formatter};
+#[cfg(feature = "enable_brotli")]
 use std::io::Read;
 
 use app_error::AppError;
 use bytes::Bytes;
+use collab_entity::CollabType;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFSnapshotMeta, AFSnapshotMetas, AFUserProfile,
-  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams,
-  BatchQueryCollabResult, CollabMemberIdentify, CreateCollabParams, DeleteCollabParams,
-  InsertCollabMemberParams, QueryCollab, QueryCollabMembers, QueryCollabParams,
-  QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
+  AFUserWorkspaceInfo, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
+  AFWorkspaceMember, AFWorkspaces, BatchQueryCollabParams, BatchQueryCollabResult,
+  CollabMemberIdentify, CreateCollabParams, DeleteCollabParams, InsertCollabMemberParams,
+  QueryCollab, QueryCollabMembers, QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use futures_util::StreamExt;
-use gotrue::grant::Grant;
 use gotrue::grant::PasswordGrant;
-
+use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
 use mime::Mime;
 use parking_lot::RwLock;
-use realtime_entity::EncodedCollab;
-use reqwest::{header, StatusCode};
-
-use collab_entity::CollabType;
-use reqwest::header::HeaderValue;
 use reqwest::Method;
 use reqwest::RequestBuilder;
+use reqwest::{header, StatusCode};
+use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
 use shared_entity::dto::workspace_dto::{
@@ -43,8 +41,10 @@ use std::time::Duration;
 use tracing::{error, event, info, instrument, trace, warn};
 use url::Url;
 
+use crate::ws::ConnectInfo;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
+use shared_entity::dto::ai_dto::{SummarizeRowParams, SummarizeRowResponse};
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -104,9 +104,9 @@ pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
-  ws_addr: String,
+  pub ws_addr: String,
   pub device_id: String,
-  pub client_id: String,
+  pub client_version: Version,
   pub(crate) token: Arc<RwLock<ClientToken>>,
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
@@ -134,6 +134,28 @@ impl Client {
     client_id: &str,
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
+    let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 5, 0));
+
+    #[cfg(debug_assertions)]
+    {
+      let feature_flags = [
+        ("sync_verbose_log", cfg!(feature = "sync_verbose_log")),
+        ("enable_brotli", cfg!(feature = "enable_brotli")),
+        // Add more features here as needed.
+      ];
+
+      let enabled_features: Vec<&str> = feature_flags
+        .iter()
+        .filter_map(|&(name, enabled)| if enabled { Some(name) } else { None })
+        .collect();
+
+      trace!(
+        "Client version: {}, features: {:?}",
+        client_version,
+        enabled_features
+      );
+    }
+
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
@@ -144,7 +166,7 @@ impl Client {
       refresh_ret_txs: Default::default(),
       config,
       device_id: device_id.to_string(),
-      client_id: client_id.to_string(),
+      client_version,
     }
   }
 
@@ -194,56 +216,68 @@ impl Client {
     self.token.read().subscribe()
   }
 
-  /// Attempts to sign in using a URL, extracting and validating the token parameters from the URL fragment.
+  /// Sign in with magic link
+  ///
+  /// User will receive an email with a magic link to sign in.
+  /// The redirect_to parameter is optional. If provided, the user will be redirected to the specified URL after signing in.
+  /// If not, the user will be redirected to the appflowy-flutter:// by default
+  ///
+  /// The redirect_to should be the scheme of the app, e.g., appflowy-flutter://
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn sign_in_with_magic_link(
+    &self,
+    email: &str,
+    redirect_to: Option<String>,
+  ) -> Result<(), AppResponseError> {
+    self
+      .gotrue_client
+      .magic_link(
+        &MagicLinkParams {
+          email: email.to_owned(),
+          ..Default::default()
+        },
+        redirect_to,
+      )
+      .await?;
+    Ok(())
+  }
+
+  /// Attempts to sign in using a URL, extracting refresh_token from the URL.
   /// It looks like, e.g., `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
   /// return a bool indicating if the user is new
   #[instrument(level = "debug", skip_all, err)]
   pub async fn sign_in_with_url(&self, url: &str) -> Result<bool, AppResponseError> {
-    let mut access_token: Option<String> = None;
-    let mut token_type: Option<String> = None;
-    let mut expires_in: Option<i64> = None;
-    let mut expires_at: Option<i64> = None;
-    let mut refresh_token: Option<String> = None;
-    let mut provider_access_token: Option<String> = None;
-    let mut provider_refresh_token: Option<String> = None;
-
-    Url::parse(url)?
+    let parsed = Url::parse(url)?;
+    let key_value_pairs = parsed
       .fragment()
       .ok_or(url_missing_param("fragment"))?
-      .split('&')
-      .try_for_each(|f| -> Result<(), AppResponseError> {
-        let (k, v) = f.split_once('=').ok_or(url_missing_param("key=value"))?;
-        match k {
-          "access_token" => access_token = Some(v.to_string()),
-          "token_type" => token_type = Some(v.to_string()),
-          "expires_in" => expires_in = Some(v.parse::<i64>().context("parser expires_in failed")?),
-          "expires_at" => expires_at = Some(v.parse::<i64>().context("parser expires_at failed")?),
-          "refresh_token" => refresh_token = Some(v.to_string()),
-          "provider_access_token" => provider_access_token = Some(v.to_string()),
-          "provider_refresh_token" => provider_refresh_token = Some(v.to_string()),
-          x => tracing::warn!("unhandled param in url: {}", x),
-        };
-        Ok(())
-      })?;
+      .split('&');
 
-    let access_token = access_token.ok_or(url_missing_param("access_token"))?;
-    if access_token.is_empty() {
-      return Err(AppError::OAuthError("Empty access token".to_string()).into());
+    let mut refresh_token: Option<&str> = None;
+    for param in key_value_pairs {
+      match param.split_once('=') {
+        Some(pair) => {
+          let (k, v) = pair;
+          if k == "refresh_token" {
+            refresh_token = Some(v);
+            break;
+          }
+        },
+        None => warn!("param is not in key=value format: {}", param),
+      }
     }
+    let refresh_token = refresh_token.ok_or(url_missing_param("refresh_token"))?;
 
-    let (user, new) = self.verify_token(&access_token).await?;
-    self.token.write().set(GotrueTokenResponse {
-      access_token,
-      token_type: token_type.ok_or(url_missing_param("token_type"))?,
-      expires_in: expires_in.ok_or(url_missing_param("expires_in"))?,
-      expires_at: expires_at.ok_or(url_missing_param("expires_at"))?,
-      refresh_token: refresh_token.ok_or(url_missing_param("refresh_token"))?,
-      user,
-      provider_access_token,
-      provider_refresh_token,
-    });
+    let new_token = self
+      .gotrue_client
+      .token(&Grant::RefreshToken(RefreshTokenGrant {
+        refresh_token: refresh_token.to_owned(),
+      }))
+      .await?;
 
+    let (_user, new) = self.verify_token(&new_token.access_token).await?;
+    self.token.write().set(new_token);
     Ok(new)
   }
 
@@ -352,14 +386,14 @@ impl Client {
   }
 
   #[inline]
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   async fn verify_token(&self, access_token: &str) -> Result<(User, bool), AppResponseError> {
     let user = self.gotrue_client.user_info(access_token).await?;
     let is_new = self.verify_token_cloud(access_token).await?;
     Ok((user, is_new))
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   #[inline]
   async fn verify_token_cloud(&self, access_token: &str) -> Result<bool, AppResponseError> {
     let url = format!("{}/api/user/verify/{}", self.base_url, access_token);
@@ -369,7 +403,7 @@ impl Client {
   }
 
   // Invites another user by sending a magic link to the user's email address.
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn invite(&self, email: &str) -> Result<(), AppResponseError> {
     self
       .gotrue_client
@@ -384,7 +418,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_user(&self, email: &str, password: &str) -> Result<User, AppResponseError> {
     Ok(
       self
@@ -402,7 +436,7 @@ impl Client {
     )
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_email_verified_user(
     &self,
     email: &str,
@@ -422,6 +456,19 @@ impl Client {
         )
         .await?,
     )
+  }
+
+  // filter is postgre sql like filter
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn admin_list_users(
+    &self,
+    filter: Option<&str>,
+  ) -> Result<Vec<User>, AppResponseError> {
+    let user = self
+      .gotrue_client
+      .admin_list_user(&self.access_token()?, filter)
+      .await?;
+    Ok(user.users)
   }
 
   /// Only expose this method for testing
@@ -481,7 +528,7 @@ impl Client {
     }
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_profile(&self) -> Result<AFUserProfile, AppResponseError> {
     let url = format!("{}/api/user/profile", self.base_url);
     let resp = self
@@ -495,7 +542,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_user_workspace_info(&self) -> Result<AFUserWorkspaceInfo, AppResponseError> {
     let url = format!("{}/api/user/workspace", self.base_url);
     let resp = self
@@ -509,7 +556,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn delete_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
     let url = format!("{}/api/workspace/{}", self.base_url, workspace_id);
     let resp = self
@@ -522,7 +569,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_workspace(
     &self,
     params: CreateWorkspaceParam,
@@ -540,7 +587,20 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn patch_workspace(&self, params: PatchWorkspaceParam) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::PATCH, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
@@ -554,7 +614,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn open_workspace(&self, workspace_id: &str) -> Result<AFWorkspace, AppResponseError> {
     let url = format!("{}/api/workspace/{}/open", self.base_url, workspace_id);
     let resp = self
@@ -568,7 +628,20 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn leave_workspace(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/leave", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&())
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_workspace_members<W: AsRef<str>>(
     &self,
     workspace_id: W,
@@ -589,7 +662,61 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn invite_workspace_members(
+    &self,
+    workspace_id: &str,
+    invitations: Vec<WorkspaceMemberInvitation>,
+  ) -> Result<(), AppResponseError> {
+    let url = format!("{}/api/workspace/{}/invite", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&invitations)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn list_workspace_invitations(
+    &self,
+    status: Option<AFWorkspaceInvitationStatus>,
+  ) -> Result<Vec<AFWorkspaceInvitation>, AppResponseError> {
+    let url = format!("{}/api/workspace/invite", self.base_url);
+    let mut builder = self.http_client_with_auth(Method::GET, &url).await?;
+    if let Some(status) = status {
+      builder = builder.query(&[("status", status)])
+    }
+    let resp = builder.send().await?;
+    log_request_id(&resp);
+    let res = AppResponse::<Vec<AFWorkspaceInvitation>>::from_response(resp).await?;
+    res.into_data()
+  }
+
+  pub async fn accept_workspace_invitation(
+    &self,
+    invitation_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/accept-invite/{}",
+      self.base_url, invitation_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&())
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()?;
+    Ok(())
+  }
+
+  #[deprecated(note = "use invite_workspace_members instead")]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn add_workspace_members<T: Into<CreateWorkspaceMembers>, W: AsRef<str>>(
     &self,
     workspace_id: W,
@@ -612,7 +739,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_workspace_member<T: AsRef<str>>(
     &self,
     workspace_id: T,
@@ -634,7 +761,7 @@ impl Client {
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn remove_workspace_members<T: AsRef<str>>(
     &self,
     workspace_id: T,
@@ -677,7 +804,7 @@ impl Client {
     Ok(is_new)
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn sign_up(&self, email: &str, password: &str) -> Result<(), AppResponseError> {
     match self.gotrue_client.sign_up(email, password, None).await? {
       Authenticated(access_token_resp) => {
@@ -691,14 +818,14 @@ impl Client {
     }
   }
 
-  #[instrument(level = "debug", skip_all)]
+  #[instrument(level = "info", skip_all)]
   pub async fn sign_out(&self) -> Result<(), AppResponseError> {
     self.gotrue_client.logout(&self.access_token()?).await?;
     self.token.write().unset();
     Ok(())
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_user(&self, params: UpdateUserParams) -> Result<(), AppResponseError> {
     let gotrue_params = UpdateGotrueUserParams::new()
       .with_opt_email(params.email.clone())
@@ -724,7 +851,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn create_collab(&self, params: CreateCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
@@ -820,7 +947,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_collab(&self, params: CreateCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
@@ -836,28 +963,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all)]
-  pub async fn get_collab(
-    &self,
-    params: QueryCollabParams,
-  ) -> Result<EncodedCollab, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab/{}",
-      self.base_url, &params.workspace_id, &params.object_id
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<EncodedCollab>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn batch_get_collab(
     &self,
     workspace_id: &str,
@@ -880,7 +986,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/collab/{}",
@@ -896,7 +1002,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn add_collab_member(
     &self,
     params: InsertCollabMemberParams,
@@ -915,7 +1021,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_collab_member(
     &self,
     params: CollabMemberIdentify,
@@ -936,7 +1042,7 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn update_collab_member(
     &self,
     params: UpdateCollabMemberParams,
@@ -955,7 +1061,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn remove_collab_member(
     &self,
     params: CollabMemberIdentify,
@@ -974,7 +1080,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  #[instrument(level = "debug", skip_all, err)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_collab_members(
     &self,
     params: QueryCollabMembers,
@@ -995,13 +1101,21 @@ impl Client {
       .into_data()
   }
 
-  pub async fn ws_url(&self, device_id: &str) -> Result<String, AppResponseError> {
-    self
-      .refresh_if_expired(chrono::Local::now().timestamp())
-      .await?;
+  pub async fn ws_connect_info(&self, auto_refresh: bool) -> Result<ConnectInfo, AppResponseError> {
+    if auto_refresh {
+      self
+        .refresh_if_expired(
+          chrono::Local::now().timestamp(),
+          "get websocket connect info",
+        )
+        .await?;
+    }
 
-    let access_token = self.access_token()?;
-    Ok(format!("{}/{}/{}", self.ws_addr, access_token, device_id))
+    Ok(ConnectInfo {
+      access_token: self.access_token()?,
+      client_version: self.client_version.clone(),
+      device_id: self.device_id.clone(),
+    })
   }
 
   pub fn get_blob_url(&self, workspace_id: &str, file_id: &str) -> String {
@@ -1011,6 +1125,7 @@ impl Client {
     )
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn put_blob<T: Into<Bytes>>(
     &self,
     url: &str,
@@ -1035,6 +1150,7 @@ impl Client {
   }
 
   /// Only expose this method for testing
+  #[instrument(level = "info", skip_all)]
   #[cfg(debug_assertions)]
   pub async fn put_blob_with_content_length<T: Into<Bytes>>(
     &self,
@@ -1059,6 +1175,7 @@ impl Client {
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
+  #[instrument(level = "info", skip_all)]
   pub async fn get_blob(&self, url: &str) -> Result<(Mime, Vec<u8>), AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::GET, url)
@@ -1107,6 +1224,7 @@ impl Client {
     }
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn get_blob_metadata(&self, url: &str) -> Result<BlobMetadata, AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::GET, url)
@@ -1120,6 +1238,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn delete_blob(&self, url: &str) -> Result<(), AppResponseError> {
     let resp = self
       .http_client_with_auth(Method::DELETE, url)
@@ -1130,6 +1249,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  #[instrument(level = "info", skip_all)]
   pub async fn get_workspace_usage(
     &self,
     workspace_id: &str,
@@ -1163,15 +1283,38 @@ impl Client {
   }
 
   // Refresh token if given timestamp is close to the token expiration time
-  pub async fn refresh_if_expired(&self, ts: i64) -> Result<(), AppResponseError> {
+  pub async fn refresh_if_expired(&self, ts: i64, reason: &str) -> Result<(), AppResponseError> {
     let expires_at = self.token_expires_at()?;
 
     if ts + 30 > expires_at {
       info!("token is about to expire, refreshing token");
       // Add 30 seconds buffer
-      self.refresh_token().await?;
+      self.refresh_token(reason).await?;
     }
     Ok(())
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn summarize_row(
+    &self,
+    params: SummarizeRowParams,
+  ) -> Result<SummarizeRowResponse, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/summarize_row",
+      self.base_url, params.workspace_id
+    );
+
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    AppResponse::<SummarizeRowResponse>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -1181,14 +1324,16 @@ impl Client {
     url: &str,
   ) -> Result<RequestBuilder, AppResponseError> {
     let ts_now = chrono::Local::now().timestamp();
-    self.refresh_if_expired(ts_now).await?;
+    self
+      .refresh_if_expired(ts_now, "make http client request")
+      .await?;
 
     let access_token = self.access_token()?;
     trace!("start request: {}, method: {}", url, method);
     let request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", self.client_id.clone())
+      .header("client-version", self.client_version.to_string())
       .header("client-timestamp", ts_now.to_string())
       .header("device_id", self.device_id.clone())
       .bearer_auth(access_token);
@@ -1201,22 +1346,29 @@ impl Client {
     method: Method,
     url: &str,
   ) -> Result<RequestBuilder, AppResponseError> {
-    self
-      .http_client_with_auth(method, url)
-      .await
-      .map(|builder| {
-        builder
-          .header(
-            X_COMPRESSION_TYPE,
-            HeaderValue::from_static(X_COMPRESSION_TYPE_BROTLI),
-          )
-          .header(
-            X_COMPRESSION_BUFFER_SIZE,
-            HeaderValue::from(self.config.compression_buffer_size),
-          )
-      })
+    #[cfg(feature = "enable_brotli")]
+    {
+      self
+        .http_client_with_auth(method, url)
+        .await
+        .map(|builder| {
+          builder
+            .header(
+              crate::http::X_COMPRESSION_TYPE,
+              reqwest::header::HeaderValue::from_static(crate::http::X_COMPRESSION_TYPE_BROTLI),
+            )
+            .header(
+              crate::http::X_COMPRESSION_BUFFER_SIZE,
+              reqwest::header::HeaderValue::from(self.config.compression_buffer_size),
+            )
+        })
+    }
+
+    #[cfg(not(feature = "enable_brotli"))]
+    self.http_client_with_auth(method, url).await
   }
 
+  #[instrument(level = "info", skip_all)]
   pub(crate) fn batch_create_collab_url(&self, workspace_id: &str) -> String {
     format!(
       "{}/api/workspace/{}/batch/collab",
@@ -1246,31 +1398,29 @@ pub(crate) fn log_request_id(resp: &reqwest::Response) {
   }
 }
 
+#[cfg(feature = "enable_brotli")]
 pub async fn spawn_blocking_brotli_compress(
   data: Vec<u8>,
   quality: u32,
   buffer_size: usize,
 ) -> Result<Vec<u8>, AppError> {
   tokio::task::spawn_blocking(move || {
-    event!(
-      tracing::Level::DEBUG,
-      "start compressing collab with len:{}",
-      data.len(),
-    );
-    let mut compressor = CompressorReader::new(&*data, buffer_size, quality, 22);
+    let mut compressor = brotli::CompressorReader::new(&*data, buffer_size, quality, 22);
     let mut compressed_data = Vec::new();
     compressor
       .read_to_end(&mut compressed_data)
       .map_err(|err| AppError::InvalidRequest(format!("Failed to compress data: {}", err)))?;
-
-    event!(
-      tracing::Level::DEBUG,
-      "compress collab success: before:{}, after:{}",
-      data.len(),
-      compressed_data.len()
-    );
     Ok(compressed_data)
   })
   .await
   .map_err(AppError::from)?
+}
+
+#[cfg(not(feature = "enable_brotli"))]
+pub async fn spawn_blocking_brotli_compress(
+  data: Vec<u8>,
+  _quality: u32,
+  _buffer_size: usize,
+) -> Result<Vec<u8>, AppError> {
+  Ok(data)
 }

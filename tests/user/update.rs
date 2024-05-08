@@ -160,14 +160,9 @@ async fn user_empty_metadata_override() {
 #[tokio::test]
 async fn user_change_notify_test() {
   let (c, _user) = generate_unique_registered_user_client().await;
-  let ws_client = WSClient::new(WSClientConfig::default(), c.clone());
+  let ws_client = WSClient::new(WSClientConfig::default(), c.clone(), c.clone());
   let mut user_change_recv = ws_client.subscribe_user_changed();
-
-  let device_id = "fake_device_id";
-  ws_client
-    .connect(c.ws_url(device_id).await.unwrap(), device_id)
-    .await
-    .unwrap();
+  ws_client.connect().await.unwrap();
 
   // After update user, the user_change_recv should receive a user change message via the websocket
   let fut = Box::pin(async move {

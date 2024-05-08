@@ -1,9 +1,11 @@
+mod awareness_test;
 mod collab_curd_test;
+mod data_write_test;
 mod edit_permission;
-mod edit_workspace;
 mod member_crud;
+mod missing_update_test;
 mod multi_devices_edit;
+mod pending_write_test;
 mod single_device_edit;
-mod snapshot_test;
 mod storage_test;
-mod util;
+pub mod util;

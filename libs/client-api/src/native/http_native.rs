@@ -1,29 +1,43 @@
 use crate::http::log_request_id;
-use crate::ws::{WSClientHttpSender, WSError};
+use crate::native::GetCollabAction;
+use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
-use database_entity::dto::CollabParams;
+use collab_rt_entity::HttpRealtimeMessage;
+use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures_util::stream;
 use prost::Message;
-use realtime_entity::realtime_proto::HttpRealtimeMessage;
 use reqwest::{Body, Method};
+use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tokio_retry::strategy::FixedInterval;
-use tokio_retry::RetryIf;
-use tracing::{event, instrument};
+use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
+use tokio_retry::{Retry, RetryIf};
+use tracing::{event, info, instrument};
 
 impl Client {
+  #[instrument(level = "debug", skip_all)]
+  pub async fn get_collab(
+    &self,
+    params: QueryCollabParams,
+  ) -> Result<CollabResponse, AppResponseError> {
+    info!("get collab:{}", params);
+    // 2 seconds, 4 seconds, 8 seconds
+    let retry_strategy = ExponentialBackoff::from_millis(2).factor(1000).take(3);
+    let action = GetCollabAction::new(self.clone(), params);
+    Retry::spawn(retry_strategy, action).await
+  }
+
   #[instrument(level = "debug", skip_all, err)]
   pub async fn post_realtime_msg(
     &self,
     device_id: &str,
-    msg: websocket::Message,
+    msg: client_websocket::Message,
   ) -> Result<(), AppResponseError> {
     let device_id = device_id.to_string();
     let payload =
@@ -56,7 +70,7 @@ impl Client {
       .into_iter()
       .map(|params| {
         let config = self.config.clone();
-        platform_spawn(async move {
+        af_spawn(async move {
           let data = params.to_bytes().map_err(AppError::from)?;
           spawn_blocking_brotli_compress(
             data,
@@ -106,12 +120,14 @@ impl Client {
   /// using the stored refresh token. If successful, it updates the stored access token with the new one
   /// received from the server.
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
+  pub async fn refresh_token(&self, reason: &str) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
     if !self.is_refreshing_token.load(Ordering::SeqCst) {
       self.is_refreshing_token.store(true, Ordering::SeqCst);
+
+      info!("refresh token reason:{}", reason);
       let result = self.inner_refresh_token().await;
       let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
       for tx in txs {
@@ -129,7 +145,7 @@ impl Client {
   }
 
   async fn inner_refresh_token(&self) -> Result<(), AppResponseError> {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(10)).take(4);
+    let retry_strategy = FixedInterval::new(Duration::from_secs(2)).take(4);
     let action = RefreshTokenAction::new(self.token.clone(), self.gotrue_client.clone());
     match RetryIf::spawn(retry_strategy, action, RefreshTokenRetryCondition).await {
       Ok(_) => {
@@ -152,16 +168,35 @@ impl Client {
 
 #[async_trait]
 impl WSClientHttpSender for Client {
-  async fn send_ws_msg(&self, device_id: &str, message: websocket::Message) -> Result<(), WSError> {
+  async fn send_ws_msg(
+    &self,
+    device_id: &str,
+    message: client_websocket::Message,
+  ) -> Result<(), WSError> {
     self
       .post_realtime_msg(device_id, message)
       .await
-      .map_err(|err| WSError::Internal(anyhow::Error::from(err)))
+      .map_err(|err| WSError::Http(err.to_string()))
+  }
+}
+
+#[async_trait]
+impl WSClientConnectURLProvider for Client {
+  fn connect_ws_url(&self) -> String {
+    self.ws_addr.clone()
+  }
+
+  async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
+    let conn_info = self
+      .ws_connect_info(true)
+      .await
+      .map_err(|err| WSError::Http(err.to_string()))?;
+    Ok(conn_info)
   }
 }
 
 // TODO(nathan): spawn for wasm
-pub fn platform_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
+pub fn af_spawn<T>(future: T) -> tokio::task::JoinHandle<T::Output>
 where
   T: Future + Send + 'static,
   T::Output: Send + 'static,

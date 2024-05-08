@@ -1,8 +1,8 @@
-use crate::biz::collab::member_listener::{CollabMemberListener, CollabMemberNotification};
-use crate::biz::user::UserListener;
-use crate::biz::workspace::member_listener::{
-  WorkspaceMemberListener, WorkspaceMemberNotification,
+use crate::biz::casbin::pg_listen::{
+  CollabMemberListener, CollabMemberNotification, WorkspaceMemberListener,
+  WorkspaceMemberNotification,
 };
+use crate::biz::user::user_verify::UserListener;
 use anyhow::Error;
 use database::pg_row::AFUserNotification;
 use serde::de::DeserializeOwned;
@@ -45,7 +45,7 @@ impl PgListeners {
   }
 
   pub fn subscribe_user_change(&self, uid: i64) -> tokio::sync::mpsc::Receiver<AFUserNotification> {
-    let (tx, rx) = tokio::sync::mpsc::channel(1);
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
     let mut user_notify = self.user_listener.notify.subscribe();
     tokio::spawn(async move {
       while let Ok(notification) = user_notify.recv().await {

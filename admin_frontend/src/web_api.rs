@@ -1,10 +1,13 @@
 use crate::error::WebApiError;
+use crate::ext::api::{
+  accept_workspace_invitation, invite_user_to_workspace, leave_workspace, verify_token_cloud,
+};
 use crate::models::{
   WebApiAdminCreateUserRequest, WebApiChangePasswordRequest, WebApiCreateSSOProviderRequest,
   WebApiInviteUserRequest, WebApiPutUserRequest,
 };
 use crate::response::WebApiResponse;
-use crate::session::{self, UserSession};
+use crate::session::{self, new_session_cookie, UserSession};
 use crate::{models::WebApiLoginRequest, AppState};
 use axum::extract::Path;
 use axum::http::{status, HeaderMap};
@@ -25,13 +28,16 @@ pub fn router() -> Router<AppState> {
   Router::new()
     .route("/signin", post(sign_in_handler))
     .route("/signup", post(sign_up_handler))
-    .route("/login_refresh/:refresh_token", post(login_refresh_handler))
+    .route("/login-refresh/:refresh_token", post(login_refresh_handler))
     .route("/logout", post(logout_handler))
 
     // user
-    .route("/change_password", post(change_password_handler))
+    .route("/change-password", post(change_password_handler))
     .route("/oauth_login/:provider", post(post_oauth_login_handler))
     .route("/invite", post(invite_handler))
+    .route("/workspace/:workspace_id/invite", post(workspace_invite_handler))
+    .route("/workspace/:workspace_id/leave", post(leave_workspace_handler))
+    .route("/invite/:invite_id/accept", post(invite_accept_handler))
     .route("/open_app", post(open_app_handler))
 
     // admin
@@ -48,7 +54,7 @@ pub fn router() -> Router<AppState> {
     .route("/admin/sso/:provider_id", delete(admin_delete_sso_handler))
 }
 
-pub async fn admin_delete_sso_handler(
+async fn admin_delete_sso_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(provider_id): Path<String>,
@@ -61,7 +67,7 @@ pub async fn admin_delete_sso_handler(
   Ok(WebApiResponse::<()>::from_str("SSO Deleted".into()))
 }
 
-pub async fn admin_create_sso_handler(
+async fn admin_create_sso_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiCreateSSOProviderRequest>,
@@ -97,7 +103,7 @@ pub async fn admin_create_sso_handler(
 /// The client application should implement handling for this URL format, typically through the
 /// `sign_in_with_url` method in the `client-api` crate. See [client_api::Client::sign_in_with_url] for more details.
 ///
-pub async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
+async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiError<'static>> {
   let app_sign_in_url = format!(
       "appflowy-flutter://login-callback#access_token={}&expires_at={}&expires_in={}&refresh_token={}&token_type={}",
         session.token.access_token,
@@ -111,7 +117,7 @@ pub async fn open_app_handler(session: UserSession) -> Result<HeaderMap, WebApiE
 
 // Invite another user, this will trigger email sending
 // to the target user
-pub async fn invite_handler(
+async fn invite_handler(
   State(state): State<AppState>,
   Form(param): Form<WebApiInviteUserRequest>,
 ) -> Result<WebApiResponse<()>, WebApiError<'static>> {
@@ -128,7 +134,54 @@ pub async fn invite_handler(
   Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
 }
 
-pub async fn change_password_handler(
+async fn workspace_invite_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(workspace_id): Path<String>,
+  Form(param): Form<WebApiInviteUserRequest>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  invite_user_to_workspace(
+    &session.token.access_token,
+    &workspace_id,
+    &param.email,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
+  Ok(WebApiResponse::<()>::from_str("Invitation sent".into()))
+}
+
+async fn leave_workspace_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(workspace_id): Path<String>,
+) -> Result<WebApiResponse<()>, WebApiError<'static>> {
+  leave_workspace(
+    &session.token.access_token,
+    &workspace_id,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
+  Ok(WebApiResponse::<()>::from_str("Left workspace".into()))
+}
+
+async fn invite_accept_handler(
+  State(state): State<AppState>,
+  session: UserSession,
+  Path(invite_id): Path<String>,
+) -> Result<HeaderMap, WebApiError<'static>> {
+  accept_workspace_invitation(
+    &session.token.access_token,
+    &invite_id,
+    &state.appflowy_cloud_url,
+  )
+  .await?;
+
+  Ok(htmx_trigger("workspaceInvitationAccepted"))
+}
+
+async fn change_password_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiChangePasswordRequest>,
@@ -152,7 +205,7 @@ pub async fn change_password_handler(
   Ok(WebApiResponse::<()>::from_str("Password changed".into()))
 }
 
-pub async fn post_oauth_login_handler(
+async fn post_oauth_login_handler(
   header_map: HeaderMap,
   Path(provider): Path<String>,
 ) -> Result<WebApiResponse<String>, WebApiError<'static>> {
@@ -166,7 +219,7 @@ pub async fn post_oauth_login_handler(
   Ok(oauth_url.into())
 }
 
-pub async fn admin_update_user_handler(
+async fn admin_update_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_uuid): Path<String>,
@@ -187,7 +240,7 @@ pub async fn admin_update_user_handler(
   Ok(res.into())
 }
 
-pub async fn post_user_generate_link_handler(
+async fn post_user_generate_link_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(email): Path<String>,
@@ -205,7 +258,7 @@ pub async fn post_user_generate_link_handler(
   Ok(res.action_link)
 }
 
-pub async fn admin_delete_user_handler(
+async fn admin_delete_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Path(user_uuid): Path<String>,
@@ -223,7 +276,7 @@ pub async fn admin_delete_user_handler(
   Ok(().into())
 }
 
-pub async fn admin_add_user_handler(
+async fn admin_add_user_handler(
   State(state): State<AppState>,
   session: UserSession,
   Form(param): Form<WebApiAdminCreateUserRequest>,
@@ -241,11 +294,11 @@ pub async fn admin_add_user_handler(
   Ok(WebApiResponse::<()>::from_str("User created".into()))
 }
 
-pub async fn login_refresh_handler(
+async fn login_refresh_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Path(refresh_token): Path<String>,
-) -> Result<CookieJar, WebApiError<'static>> {
+) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
   let token = state
     .gotrue_client
     .token(&gotrue::grant::Grant::RefreshToken(
@@ -263,19 +316,12 @@ pub async fn login_refresh_handler(
     ))
     .await?;
 
-  let new_session_id = uuid::Uuid::new_v4();
-  let new_session = session::UserSession::new(new_session_id.to_string(), token);
-  state.session_store.put_user_session(&new_session).await?;
-
-  let mut cookie = Cookie::new("session_id", new_session_id.to_string());
-  cookie.set_path("/");
-
-  Ok(jar.add(cookie))
+  session_login(State(state), token, jar).await
 }
 
 // login and set the cookie
 // sign up if not exist
-pub async fn sign_in_handler(
+async fn sign_in_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
@@ -299,7 +345,7 @@ pub async fn sign_in_handler(
   session_login(State(state), token, jar).await
 }
 
-pub async fn sign_up_handler(
+async fn sign_up_handler(
   State(state): State<AppState>,
   jar: CookieJar,
   Form(param): Form<WebApiLoginRequest>,
@@ -328,7 +374,7 @@ pub async fn sign_up_handler(
   }
 }
 
-pub async fn logout_handler(
+async fn logout_handler(
   State(state): State<AppState>,
   jar: CookieJar,
 ) -> Result<(CookieJar, HeaderMap), WebApiError<'static>> {
@@ -343,7 +389,7 @@ pub async fn logout_handler(
   state.session_store.del_user_session(session_id).await?;
   Ok((
     jar.remove(Cookie::from("session_id")),
-    htmx_redirect("/web/login"),
+    htmx_redirect("/web"),
   ))
 }
 
@@ -353,10 +399,10 @@ fn htmx_redirect(url: &str) -> HeaderMap {
   h
 }
 
-fn new_session_cookie(id: uuid::Uuid) -> Cookie<'static> {
-  let mut cookie = Cookie::new("session_id", id.to_string());
-  cookie.set_path("/");
-  cookie
+fn htmx_trigger(trigger: &str) -> HeaderMap {
+  let mut h = HeaderMap::new();
+  h.insert("HX-Trigger", trigger.parse().unwrap());
+  h
 }
 
 async fn session_login(
@@ -364,6 +410,12 @@ async fn session_login(
   token: GotrueTokenResponse,
   jar: CookieJar,
 ) -> Result<(CookieJar, HeaderMap, WebApiResponse<()>), WebApiError<'static>> {
+  verify_token_cloud(
+    token.access_token.as_str(),
+    state.appflowy_cloud_url.as_str(),
+  )
+  .await?;
+
   let new_session_id = uuid::Uuid::new_v4();
   let new_session = session::UserSession::new(new_session_id.to_string(), token);
   state.session_store.put_user_session(&new_session).await?;
@@ -386,7 +438,7 @@ async fn send_magic_link(
         email: email.to_owned(),
         ..Default::default()
       },
-      Some("/".to_owned()),
+      Some("/web/login".to_owned()),
     )
     .await?;
   Ok(WebApiResponse::<()>::from_str("Magic Link Sent".into()))

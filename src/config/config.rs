@@ -1,7 +1,9 @@
 use anyhow::Context;
-use secrecy::Secret;
+use infra::env_util::get_env_var;
+use secrecy::{ExposeSecret, Secret};
 use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
+use std::fmt::Display;
 use std::str::FromStr;
 
 #[derive(Clone, Debug)]
@@ -13,7 +15,16 @@ pub struct Config {
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
   pub s3: S3Setting,
-  pub casbin: CasbinSetting,
+  pub appflowy_ai: AppFlowyAISetting,
+  pub grpc_history: GrpcHistorySetting,
+  pub mailer: MailerSetting,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct MailerSetting {
+  pub smtp_host: String,
+  pub smtp_username: String,
+  pub smtp_password: Secret<String>,
 }
 
 #[derive(serde::Deserialize, Clone, Debug)]
@@ -37,7 +48,23 @@ pub struct GoTrueSetting {
   pub ext_url: String, // public url
   pub jwt_secret: Secret<String>,
   pub admin_email: String,
-  pub admin_password: String,
+  pub admin_password: Secret<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct AppFlowyAISetting {
+  pub port: Secret<String>,
+  pub host: Secret<String>,
+}
+
+impl AppFlowyAISetting {
+  pub fn url(&self) -> String {
+    format!(
+      "http://{}:{}",
+      self.host.expose_secret(),
+      self.port.expose_secret()
+    )
+  }
 }
 
 // We are using 127.0.0.1 as our host in address, we are instructing our
@@ -60,8 +87,22 @@ pub struct ApplicationSetting {
 pub struct DatabaseSetting {
   pub pg_conn_opts: PgConnectOptions,
   pub require_ssl: bool,
+  /// PostgreSQL has a maximum of 115 connections to the database, 15 connections are reserved to
+  /// the super user to maintain the integrity of the PostgreSQL database, and 100 PostgreSQL
+  /// connections are reserved for system applications.
+  /// When we exceed the limit of the database connection, then it shows an error message.
   pub max_connections: u32,
   pub database_name: String,
+}
+
+impl Display for DatabaseSetting {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+        f,
+        "DatabaseSetting {{ pg_conn_opts: {:?}, require_ssl: {}, max_connections: {}, database_name: {} }}",
+        self.pg_conn_opts, self.require_ssl, self.max_connections, self.database_name
+        )
+  }
 }
 
 impl DatabaseSetting {
@@ -80,6 +121,11 @@ impl DatabaseSetting {
   }
 }
 
+#[derive(Clone, Debug)]
+pub struct GrpcHistorySetting {
+  pub addrs: String,
+}
+
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let config = Config {
@@ -94,7 +140,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       require_ssl: get_env_var("APPFLOWY_DATABASE_REQUIRE_SSL", "false")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_REQUIRE_SSL")?,
-      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "20")
+      max_connections: get_env_var("APPFLOWY_DATABASE_MAX_CONNECTIONS", "40")
         .parse()
         .context("fail to get APPFLOWY_DATABASE_MAX_CONNECTIONS")?,
       database_name: get_env_var("APPFLOWY_DATABASE_NAME", "postgres"),
@@ -104,7 +150,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       ext_url: get_env_var("APPFLOWY_GOTRUE_EXT_URL", "http://localhost:9999"),
       jwt_secret: get_env_var("APPFLOWY_GOTRUE_JWT_SECRET", "hello456").into(),
       admin_email: get_env_var("APPFLOWY_GOTRUE_ADMIN_EMAIL", "admin@example.com"),
-      admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password"),
+      admin_password: get_env_var("APPFLOWY_GOTRUE_ADMIN_PASSWORD", "password").into(),
     },
     application: ApplicationSetting {
       port: get_env_var("APPFLOWY_APPLICATION_PORT", "8000").parse()?,
@@ -129,22 +175,20 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       bucket: get_env_var("APPFLOWY_S3_BUCKET", "appflowy"),
       region: get_env_var("APPFLOWY_S3_REGION", ""),
     },
-    casbin: CasbinSetting {
-      pool_size: get_env_var("APPFLOWY_CASBIN_POOL_SIZE", "8").parse()?,
+    appflowy_ai: AppFlowyAISetting {
+      port: get_env_var("APPFLOWY_AI_SERVER_PORT", "5001").into(),
+      host: get_env_var("APPFLOWY_AI_SERVER_HOST", "localhost").into(),
+    },
+    grpc_history: GrpcHistorySetting {
+      addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),
+    },
+    mailer: MailerSetting {
+      smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
+      smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
+      smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
     },
   };
   Ok(config)
-}
-
-fn get_env_var(key: &str, default: &str) -> String {
-  std::env::var(key).unwrap_or_else(|e| {
-    tracing::warn!(
-      "failed to read environment variable: {}, using default value: {}",
-      e,
-      default
-    );
-    default.to_owned()
-  })
 }
 
 /// The possible runtime environment for our application.

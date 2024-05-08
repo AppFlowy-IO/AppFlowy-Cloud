@@ -26,7 +26,7 @@ DB_NAME="${POSTGRES_DB:=appflowy}"
 
 if [[ -z "${SKIP_DOCKER}" ]]
 then
-  RUNNING_POSTGRES_CONTAINER=$(docker ps --filter 'name=appflowy_postgres' --format '{{.ID}}')
+  RUNNING_POSTGRES_CONTAINER=$(docker ps --filter 'name=postgres' --format '{{.ID}}')
   if [[ -n $RUNNING_POSTGRES_CONTAINER ]]; then
     echo >&2 "there is a postgres container already running, kill it with"
     echo >&2 "    docker kill ${RUNNING_POSTGRES_CONTAINER}"
@@ -41,7 +41,7 @@ then
       -e POSTGRES_DB="${DB_NAME}" \
       -p "${DB_PORT}":5432 \
       -d \
-      --name "appflowy_postgres_$(date '+%s')" \
+      --name "postgres_$(date '+%s')" \
       postgres:14 -N 1000
 fi
 

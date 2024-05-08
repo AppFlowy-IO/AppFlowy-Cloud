@@ -1,18 +1,16 @@
-use std::time::Duration;
-
 use client_api_test_util::*;
 use collab_entity::CollabType;
+use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 use serde_json::json;
 use sqlx::types::uuid;
+use std::time::Duration;
 use tokio::time::sleep;
 use tracing::trace;
 
-use database_entity::dto::{AFAccessLevel, QueryCollabParams};
-
 #[tokio::test]
-async fn edit_collab_with_ws_reconnect_sync_test() {
+async fn sync_collab_content_after_reconnect_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Unknown;
 
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
@@ -24,10 +22,10 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
   test_client.disconnect().await;
   for i in 0..=5 {
     test_client
-      .collab_by_object_id
+      .collabs
       .get_mut(&object_id)
       .unwrap()
-      .collab
+      .mutex_collab
       .lock()
       .insert(&i.to_string(), i.to_string());
   }
@@ -47,7 +45,10 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
   // After reconnect the collab should be synced to the server.
   test_client.reconnect().await;
   // Wait for the messages to be sent
-  test_client.wait_object_sync_complete(&object_id).await;
+  test_client
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   assert_server_collab(
     &workspace_id,
@@ -64,12 +65,13 @@ async fn edit_collab_with_ws_reconnect_sync_test() {
       "5": "5",
     }),
   )
-  .await;
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
-async fn edit_collab_with_different_devices_test() {
-  let collab_type = CollabType::Document;
+async fn same_client_with_diff_devices_edit_same_collab_test() {
+  let collab_type = CollabType::Unknown;
   let registered_user = generate_unique_registered_user().await;
   let mut client_1 = TestClient::user_with_new_device(registered_user.clone()).await;
   let mut client_2 = TestClient::user_with_new_device(registered_user.clone()).await;
@@ -81,45 +83,141 @@ async fn edit_collab_with_different_devices_test() {
 
   // client 1 edit the collab
   client_1
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
-    .insert("name", "work");
-  client_1.wait_object_sync_complete(&object_id).await;
+    .insert("name", "workspace1");
+  client_1
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
+
+  assert_server_collab(
+    &workspace_id,
+    &mut client_1.api_client,
+    &object_id,
+    &collab_type,
+    30,
+    json!({
+      "name": "workspace1"
+    }),
+  )
+  .await
+  .unwrap();
 
   client_2
     .open_collab(&workspace_id, &object_id, collab_type.clone())
     .await;
-  sleep(Duration::from_millis(1000)).await;
-
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
   trace!("client 2 disconnect: {:?}", client_2.device_id);
   client_2.disconnect().await;
-  sleep(Duration::from_millis(1000)).await;
+  sleep(Duration::from_millis(2000)).await;
 
   client_2
-    .collab_by_object_id
+    .collabs
     .get_mut(&object_id)
     .unwrap()
-    .collab
+    .mutex_collab
     .lock()
-    .insert("name", "workspace");
-
+    .insert("name", "workspace2");
   client_2.reconnect().await;
-  client_2.wait_object_sync_complete(&object_id).await;
+  client_2
+    .wait_object_sync_complete(&object_id)
+    .await
+    .unwrap();
 
   let expected_json = json!({
-    "name": "workspace"
+    "name": "workspace2"
   });
-  assert_client_collab(&mut client_1, &object_id, "name", expected_json.clone(), 10).await;
-  assert_client_collab(&mut client_2, &object_id, "name", expected_json.clone(), 10).await;
+
+  assert_client_collab_within_secs(&mut client_2, &object_id, "name", expected_json.clone(), 60)
+    .await;
+  assert_client_collab_within_secs(&mut client_1, &object_id, "name", expected_json.clone(), 60)
+    .await;
+}
+
+#[tokio::test]
+async fn same_client_with_diff_devices_edit_diff_collab_test() {
+  let registered_user = generate_unique_registered_user().await;
+  let collab_type = CollabType::Unknown;
+  let mut device_1 = TestClient::user_with_new_device(registered_user.clone()).await;
+  let mut device_2 = TestClient::user_with_new_device(registered_user.clone()).await;
+
+  let workspace_id = device_1.workspace_id().await;
+
+  // different devices create different collabs. the collab will be synced between devices
+  let object_id_1 = device_1
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .await;
+  let object_id_2 = device_2
+    .create_and_edit_collab(&workspace_id, collab_type.clone())
+    .await;
+
+  // client 1 edit the collab with object_id_1
+  device_1
+    .collabs
+    .get_mut(&object_id_1)
+    .unwrap()
+    .mutex_collab
+    .lock()
+    .insert("name", "object 1");
+  device_1
+    .wait_object_sync_complete(&object_id_1)
+    .await
+    .unwrap();
+
+  // client 2 edit the collab with object_id_2
+  device_2
+    .collabs
+    .get_mut(&object_id_2)
+    .unwrap()
+    .mutex_collab
+    .lock()
+    .insert("name", "object 2");
+  device_2
+    .wait_object_sync_complete(&object_id_2)
+    .await
+    .unwrap();
+
+  // client1 open the collab with object_id_2
+  device_1
+    .open_collab(&workspace_id, &object_id_2, collab_type.clone())
+    .await;
+  assert_client_collab_within_secs(
+    &mut device_1,
+    &object_id_2,
+    "name",
+    json!({
+      "name": "object 2"
+    }),
+    60,
+  )
+  .await;
+
+  // client2 open the collab with object_id_1
+  device_2
+    .open_collab(&workspace_id, &object_id_1, collab_type.clone())
+    .await;
+  assert_client_collab_within_secs(
+    &mut device_2,
+    &object_id_1,
+    "name",
+    json!({
+      "name": "object 1"
+    }),
+    60,
+  )
+  .await;
 }
 
 #[tokio::test]
 async fn edit_document_with_both_clients_offline_then_online_sync_test() {
-  let _object_id = uuid::Uuid::new_v4().to_string();
-  let collab_type = CollabType::Document;
+  let collab_type = CollabType::Unknown;
   let mut client_1 = TestClient::new_user().await;
   let mut client_2 = TestClient::new_user().await;
 
@@ -130,7 +228,7 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
 
   // add client 2 as a member of the collab
   client_1
-    .add_client_as_collab_member(
+    .add_collab_member(
       &workspace_id,
       &object_id,
       &client_2,
@@ -147,28 +245,30 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
   for i in 0..10 {
     if i % 2 == 0 {
       client_1
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), format!("Task {}", i));
     } else {
       client_2
-        .collab_by_object_id
+        .collabs
         .get_mut(&object_id)
         .unwrap()
-        .collab
+        .mutex_collab
         .lock()
         .insert(&i.to_string(), format!("Task {}", i));
     }
   }
 
   tokio::join!(client_1.reconnect(), client_2.reconnect());
-  tokio::join!(
+  let (left, right) = tokio::join!(
     client_1.wait_object_sync_complete(&object_id),
     client_2.wait_object_sync_complete(&object_id)
   );
+  assert!(left.is_ok());
+  assert!(right.is_ok());
 
   let expected_json = json!({
     "0": "Task 0",
@@ -182,6 +282,10 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
     "8": "Task 8",
     "9": "Task 9"
   });
-  assert_client_collab_include_value(&mut client_1, &object_id, expected_json.clone()).await;
-  assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone()).await;
+  assert_client_collab_include_value(&mut client_1, &object_id, expected_json.clone())
+    .await
+    .unwrap();
+  assert_client_collab_include_value(&mut client_2, &object_id, expected_json.clone())
+    .await
+    .unwrap();
 }

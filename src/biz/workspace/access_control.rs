@@ -1,7 +1,5 @@
 #![allow(unused)]
-use crate::biz::workspace::member_listener::{WorkspaceMemberAction, WorkspaceMemberNotification};
-use crate::component::auth::jwt::UserUuid;
-use crate::middleware::access_control_mw::{AccessResource, HttpAccessControlService};
+use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use actix_http::Method;
 use async_trait::async_trait;
 use database::user::select_uid_from_uuid;
@@ -10,7 +8,12 @@ use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use actix_router::{Path, Url};
+use crate::api::workspace::{
+  WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
+};
+use crate::state::UserCache;
+use access_control::act::Action;
+use actix_router::{Path, ResourceDef, Url};
 use anyhow::anyhow;
 use app_error::AppError;
 use database_entity::dto::AFRole;
@@ -21,178 +24,95 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn get_role_from_uid<'a, E>(
+  async fn enforce_role(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+    role: AFRole,
+  ) -> Result<bool, AppError>;
+
+  async fn enforce_action(
+    &self,
+    uid: &i64,
+    workspace_id: &str,
+    action: Action,
+  ) -> Result<bool, AppError>;
+
+  async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
+    -> Result<(), AppError>;
+
+  async fn remove_user_from_workspace(
     &self,
     uid: &i64,
     workspace_id: &Uuid,
-    executor: E,
-  ) -> Result<AFRole, AppError>
-  where
-    E: Executor<'a, Database = Postgres>;
-
-  async fn cache_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) -> Result<(), AppError>;
-
-  async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) -> Result<(), AppError>;
-}
-
-/// Represents the role of the user in the workspace by the workspace id.
-/// - Key: workspace id of
-/// - Value: the member status of the user in the workspace
-type MemberStatusByWorkspaceId = HashMap<Uuid, MemberStatus>;
-
-/// Represents the role of the various workspaces for a user
-/// - Key: User's UID
-/// - Value: A mapping between the workspace id and the member status of the user in the workspace
-type MemberStatusByUid = HashMap<i64, MemberStatusByWorkspaceId>;
-
-#[derive(Clone, Debug)]
-enum MemberStatus {
-  /// Mark the user is not the member of the workspace.
-  /// it don't need to query the database to get the role of the user in the workspace
-  /// when the user is not the member of the workspace.
-  Deleted,
-  /// The user is the member of the workspace
-  Valid(AFRole),
-}
-
-pub struct WorkspaceAccessControlImpl {
-  pg_pool: PgPool,
-  member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
-}
-
-impl WorkspaceAccessControlImpl {
-  pub fn new(pg_pool: PgPool, listener: broadcast::Receiver<WorkspaceMemberNotification>) -> Self {
-    let member_status_by_uid = Arc::new(RwLock::new(HashMap::new()));
-    spawn_listen_on_workspace_member_change(
-      listener,
-      pg_pool.clone(),
-      member_status_by_uid.clone(),
-    );
-
-    WorkspaceAccessControlImpl {
-      pg_pool,
-      member_status_by_uid,
-    }
-  }
-
-  pub async fn update_member(&self, uid: &i64, workspace_id: &Uuid, role: AFRole) {
-    update_workspace_member_status(uid, workspace_id, role, &self.member_status_by_uid).await;
-  }
-
-  pub async fn remove_member(&self, uid: &i64, workspace_id: &Uuid) {
-    if let Some(inner_map) = self.member_status_by_uid.write().await.get_mut(uid) {
-      if let Entry::Occupied(mut entry) = inner_map.entry(*workspace_id) {
-        entry.insert(MemberStatus::Deleted);
-      }
-    }
-  }
-
-  #[inline]
-  async fn get_user_workspace_role(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-  ) -> Result<AFRole, AppError> {
-    let member_status = self
-      .member_status_by_uid
-      .read()
-      .await
-      .get(uid)
-      .and_then(|map| map.get(workspace_id).cloned());
-
-    let member_status = match member_status {
-      None => {
-        reload_workspace_member_status_from_db(
-          uid,
-          workspace_id,
-          &self.pg_pool,
-          &self.member_status_by_uid,
-        )
-        .await?
-      },
-      Some(status) => status,
-    };
-
-    match member_status {
-      MemberStatus::Deleted => Err(AppError::NotEnoughPermissions(format!(
-        "user:{} is not a member of workspace:{}",
-        uid, workspace_id
-      ))),
-      MemberStatus::Valid(access_level) => Ok(access_level),
-    }
-  }
-}
-
-#[inline]
-async fn update_workspace_member_status(
-  uid: &i64,
-  workspace_id: &Uuid,
-  role: AFRole,
-  member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
-) {
-  let mut outer_map = member_status_by_uid.write().await;
-  let inner_map = outer_map.entry(*uid).or_insert_with(HashMap::new);
-  inner_map.insert(*workspace_id, MemberStatus::Valid(role));
-}
-
-#[inline]
-async fn reload_workspace_member_status_from_db(
-  uid: &i64,
-  workspace_id: &Uuid,
-  pg_pool: &PgPool,
-  member_status_by_uid: &Arc<RwLock<MemberStatusByUid>>,
-) -> Result<MemberStatus, AppError> {
-  let member = database::workspace::select_workspace_member(pg_pool, uid, workspace_id).await?;
-  let status = MemberStatus::Valid(member.role.clone());
-  update_workspace_member_status(uid, workspace_id, member.role, member_status_by_uid).await;
-  Ok(status)
-}
-
-fn spawn_listen_on_workspace_member_change(
-  mut listener: broadcast::Receiver<WorkspaceMemberNotification>,
-  pg_pool: PgPool,
-  member_status_by_uid: Arc<RwLock<MemberStatusByUid>>,
-) {
-  tokio::spawn(async move {
-    while let Ok(change) = listener.recv().await {
-      match change.action_type {
-        WorkspaceMemberAction::INSERT | WorkspaceMemberAction::UPDATE => match change.new {
-          None => {
-            warn!("The workspace member change can't be None when the action is INSERT or UPDATE")
-          },
-          Some(change) => {
-            if let Err(err) = reload_workspace_member_status_from_db(
-              &change.uid,
-              &change.workspace_id,
-              &pg_pool,
-              &member_status_by_uid,
-            )
-            .await
-            {
-              warn!("Failed to reload workspace member status from db: {}", err);
-            }
-          },
-        },
-        WorkspaceMemberAction::DELETE => match change.old {
-          None => warn!("The workspace member change can't be None when the action is DELETE"),
-          Some(change) => {
-            if let Some(inner_map) = member_status_by_uid.write().await.get_mut(&change.uid) {
-              inner_map.insert(change.workspace_id, MemberStatus::Deleted);
-            }
-          },
-        },
-      }
-    }
-  });
+  ) -> Result<(), AppError>;
 }
 
 #[derive(Clone)]
-pub struct WorkspaceHttpAccessControl<AC: WorkspaceAccessControl> {
+pub struct WorkspaceMiddlewareAccessControl<AC: WorkspaceAccessControl> {
   pub pg_pool: PgPool,
   pub access_control: Arc<AC>,
+  skip_resources: Vec<(Method, ResourceDef)>,
+  require_role_rules: Vec<(ResourceDef, HashMap<Method, AFRole>)>,
 }
+
+impl<AC> WorkspaceMiddlewareAccessControl<AC>
+where
+  AC: WorkspaceAccessControl,
+{
+  pub fn new(pg_pool: PgPool, access_control: Arc<AC>) -> Self {
+    Self {
+      pg_pool,
+      // Skip access control when the request matches the following resources
+      skip_resources: vec![
+        // Skip access control when the request is a POST request and the path is matched with the WORKSPACE_PATTERN,
+        (Method::POST, ResourceDef::new(WORKSPACE_PATTERN)),
+      ],
+      // Require role for given resources
+      require_role_rules: vec![
+        // Only the Owner can manager the workspace members
+        (
+          ResourceDef::new(WORKSPACE_MEMBER_PATTERN),
+          [
+            (Method::POST, AFRole::Owner),
+            (Method::DELETE, AFRole::Owner),
+            (Method::PUT, AFRole::Owner),
+            (Method::GET, AFRole::Member),
+          ]
+          .into(),
+        ),
+        (
+          // Only the Owner can invite a user to the workspace
+          ResourceDef::new(WORKSPACE_INVITE_PATTERN),
+          [(Method::POST, AFRole::Owner)].into(),
+        ),
+      ],
+      access_control,
+    }
+  }
+
+  fn should_skip(&self, method: &Method, path: &Path<Url>) -> bool {
+    self.skip_resources.iter().any(|(m, r)| {
+      if m != method {
+        return false;
+      }
+      r.is_match(path.as_str())
+    })
+  }
+
+  fn require_role(&self, method: &Method, path: &Path<Url>) -> Option<AFRole> {
+    self.require_role_rules.iter().find_map(|(r, roles)| {
+      if r.is_match(path.as_str()) {
+        roles.get(method).cloned()
+      } else {
+        None
+      }
+    })
+  }
+}
+
 #[async_trait]
-impl<AC> HttpAccessControlService for WorkspaceHttpAccessControl<AC>
+impl<AC> MiddlewareAccessControl for WorkspaceMiddlewareAccessControl<AC>
 where
   AC: WorkspaceAccessControl,
 {
@@ -200,48 +120,53 @@ where
     AccessResource::Workspace
   }
 
-  #[instrument(level = "trace", skip_all, err)]
-  #[allow(clippy::blocks_in_conditions)]
-  async fn check_workspace_permission(
+  #[instrument(name = "check_workspace_permission", level = "trace", skip_all)]
+  async fn check_resource_permission(
     &self,
-    workspace_id: &Uuid,
+    workspace_id: &str,
     uid: &i64,
-    method: Method,
-  ) -> Result<(), AppError> {
-    trace!("workspace_id: {:?}, uid: {:?}", workspace_id, uid);
-    let role = self
-      .access_control
-      .get_role_from_uid(uid, workspace_id, &self.pg_pool)
-      .await
-      .map_err(|err| {
-        AppError::NotEnoughPermissions(format!(
-          "Can't find the role of the user:{:?} in the workspace:{:?}. error: {}",
-          uid, workspace_id, err
-        ))
-      })?;
-
-    match method {
-      Method::DELETE | Method::POST | Method::PUT => match role {
-        AFRole::Owner => return Ok(()),
-        _ => {
-          return Err(AppError::NotEnoughPermissions(format!(
-            "User:{:?} doesn't have the enough permission to access workspace:{}",
-            uid, workspace_id
-          )))
-        },
-      },
-      _ => Ok(()),
-    }
-  }
-
-  async fn check_collab_permission(
-    &self,
-    oid: &str,
-    uid: &i64,
+    resource_id: &str,
     method: Method,
     path: &Path<Url>,
   ) -> Result<(), AppError> {
-    error!("The check_collab_permission is not implemented");
-    Ok(())
+    if self.should_skip(&method, path) {
+      trace!("Skip access control for the request");
+      return Ok(());
+    }
+
+    // For some specific resources, we require a specific role to access them instead of the action.
+    // For example, Both AFRole::Owner and AFRole::Member have the write permission to the workspace,
+    // but only the Owner can manage the workspace members.
+    let require_role = self.require_role(&method, path);
+    let result = match require_role {
+      Some(role) => {
+        self
+          .access_control
+          .enforce_role(uid, resource_id, role)
+          .await
+      },
+      None => {
+        // If the request doesn't match any specific resources, we enforce the action.
+        let action = Action::from(&method);
+        self
+          .access_control
+          .enforce_action(uid, resource_id, action)
+          .await
+      },
+    }?;
+
+    if result {
+      Ok(())
+    } else {
+      Err(AppError::NotEnoughPermissions {
+        user: uid.to_string(),
+        action: format!(
+          "access workspace:{} with given url:{}, method: {}",
+          resource_id,
+          path.as_str(),
+          method,
+        ),
+      })
+    }
   }
 }

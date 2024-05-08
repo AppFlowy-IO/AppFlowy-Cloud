@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT oid, snapshot, snapshot_version, created_at\n        FROM af_snapshot_meta\n        WHERE oid = $1 AND partition_key = $2\n        ORDER BY created_at DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "oid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "snapshot",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "snapshot_version",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "229a99b7a3a2f136babd5499c2a1047fe840903acf0d06e57fb78ca9b03e7008"
+}

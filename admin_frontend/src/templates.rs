@@ -1,5 +1,36 @@
 use askama::Template;
+use database_entity::dto::{AFWorkspace, AFWorkspaceInvitation};
 use gotrue_entity::{dto::User, sso::SSOProvider};
+
+use crate::{askama_entities::WorkspaceWithMembers, ext::entities::WorkspaceUsageLimits};
+
+#[derive(Template)]
+#[template(path = "pages/redirect.html")]
+pub struct Redirect {
+  pub redirect_url: String,
+}
+
+#[derive(Template)]
+#[template(path = "pages/open_appflowy_or_download.html")]
+pub struct OpenAppFlowyOrDownload {}
+
+#[derive(Template)]
+#[template(path = "pages/login_callback.html")]
+pub struct LoginCallback {}
+
+#[derive(Template)]
+#[template(path = "components/user_usage.html")]
+pub struct UserUsage {
+  pub workspace_count: usize,
+  pub workspace_limit: String,
+}
+
+// ./../templates/components/workspace_usage.html
+#[derive(Template)]
+#[template(path = "components/workspace_usage.html")]
+pub struct WorkspaceUsageList {
+  pub workspace_usages: Vec<WorkspaceUsageLimits>,
+}
 
 #[derive(Template)]
 #[template(path = "components/admin_sso_detail.html")]
@@ -28,10 +59,6 @@ pub struct Login<'a> {
   pub oauth_providers: Vec<&'a str>,
 }
 
-// #[derive(Template)]
-// #[template(path = "login.html")]
-// pub struct Login;
-
 #[derive(Template)]
 #[template(path = "pages/home.html")]
 pub struct Home<'a> {
@@ -45,7 +72,17 @@ pub struct CreateUser;
 
 #[derive(Template)]
 #[template(path = "components/invite.html")]
-pub struct Invite;
+pub struct Invite {
+  pub shared_workspaces: Vec<AFWorkspace>,
+  pub owned_workspaces: Vec<WorkspaceWithMembers>,
+  pub pending_workspace_invitations: Vec<AFWorkspaceInvitation>,
+}
+
+#[derive(Template)]
+#[template(path = "components/shared_workspaces.html")]
+pub struct SharedWorkspaces {
+  pub shared_workspaces: Vec<AFWorkspace>,
+}
 
 #[derive(Template)]
 #[template(path = "components/admin_navigate.html")]

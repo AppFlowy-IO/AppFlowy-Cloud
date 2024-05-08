@@ -42,7 +42,7 @@ pub struct ResultLabel {
 // Metric types: https://prometheus.io/docs/concepts/metric_types
 // Application handlers should call the corresponding methods to update the metrics.
 #[derive(Clone)]
-pub struct AppFlowyCloudMetrics {
+pub struct RequestMetrics {
   requests_count: Family<PathLabel, Counter>,
   requests_latency: Family<PathLabel, CounterWithExemplar<TraceLabel>>,
   requests_result: Family<ResultLabel, CounterWithExemplar<TraceLabel>>,
@@ -53,7 +53,7 @@ pub struct TraceLabel {
   pub trace_id: String,
 }
 
-impl AppFlowyCloudMetrics {
+impl RequestMetrics {
   fn init() -> Self {
     Self {
       requests_count: Family::default(),

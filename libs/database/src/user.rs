@@ -1,4 +1,6 @@
+use crate::pg_row::AFUserIdRow;
 use app_error::AppError;
+use futures_util::stream::BoxStream;
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres};
@@ -88,7 +90,15 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   user_uuid: &Uuid,
   email: &str,
   name: &str,
-) -> Result<String, AppError> {
+) -> Result<Uuid, AppError> {
+  let name = {
+    if name.is_empty() {
+      email
+    } else {
+      name
+    }
+  };
+
   let row = sqlx::query!(
     r#"
     WITH ins_user AS (
@@ -122,7 +132,7 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
   .fetch_one(executor)
   .await?;
 
-  Ok(row.workspace_id.to_string())
+  Ok(row.workspace_id)
 }
 
 #[inline]
@@ -141,6 +151,12 @@ pub async fn select_uid_from_uuid<'a, E: Executor<'a, Database = Postgres>>(
   .await?
   .uid;
   Ok(uid)
+}
+
+pub fn select_all_uid_uuid<'a, E: Executor<'a, Database = Postgres> + 'a>(
+  executor: E,
+) -> BoxStream<'a, sqlx::Result<AFUserIdRow>> {
+  sqlx::query_as!(AFUserIdRow, r#" SELECT uid, uuid FROM af_user"#,).fetch(executor)
 }
 
 #[inline]
@@ -179,4 +195,33 @@ pub async fn is_user_exist<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
 
   Ok(exists.unwrap_or(false))
+}
+
+#[inline]
+pub async fn select_email_from_user_uuid(
+  pool: &PgPool,
+  user_uuid: &Uuid,
+) -> Result<String, AppError> {
+  let email = sqlx::query_scalar!(
+    r#"
+      SELECT email FROM af_user WHERE uuid = $1
+    "#,
+    user_uuid
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(email)
+}
+
+#[inline]
+pub async fn select_name_from_uuid(pool: &PgPool, user_uuid: &Uuid) -> Result<String, AppError> {
+  let email = sqlx::query_scalar!(
+    r#"
+      SELECT name FROM af_user WHERE uuid = $1
+    "#,
+    user_uuid
+  )
+  .fetch_one(pool)
+  .await?;
+  Ok(email)
 }

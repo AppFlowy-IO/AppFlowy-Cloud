@@ -1,11 +1,10 @@
-use actix_http::header::HeaderName;
+use actix_http::header::{HeaderName, HeaderValue};
 use std::future::{ready, Ready};
 use tracing::{span, Instrument, Level};
 
 use actix_service::{forward_ready, Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use futures_util::future::LocalBoxFuture;
-use reqwest::header::HeaderValue;
 
 const X_REQUEST_ID: &str = "x-request-id";
 pub struct RequestIdMiddleware;
@@ -62,9 +61,10 @@ where
       let client_info = get_client_info(&req);
       let span = span!(Level::INFO, "request",
         request_id = %request_id,
-        path = %req.path(),
+        path = %req.match_pattern().unwrap_or_default(),
         method = %req.method(),
         client_version = client_info.client_version,
+        device_id = client_info.device_id,
         payload_size = client_info.payload_size
       );
 
@@ -111,15 +111,22 @@ fn get_client_info(req: &ServiceRequest) -> ClientInfo {
     .get("client-version")
     .and_then(|val| val.to_str().ok());
 
+  let device_id = req
+    .headers()
+    .get("device_id")
+    .and_then(|val| val.to_str().ok());
+
   ClientInfo {
     payload_size,
     client_version,
+    device_id,
   }
 }
 
 struct ClientInfo<'a> {
   payload_size: usize,
   client_version: Option<&'a str>,
+  device_id: Option<&'a str>,
 }
 
 #[inline]

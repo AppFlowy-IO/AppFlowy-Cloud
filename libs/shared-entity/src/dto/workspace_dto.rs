@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
-use database_entity::dto::AFRole;
+use collab_entity::{CollabType, EncodedCollab};
+use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use uuid::Uuid;
@@ -29,10 +30,22 @@ impl From<Vec<CreateWorkspaceMember>> for CreateWorkspaceMembers {
   }
 }
 
+// Deprecated
 #[derive(Deserialize, Serialize)]
 pub struct CreateWorkspaceMember {
   pub email: String,
   pub role: AFRole,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct WorkspaceMemberInvitation {
+  pub email: String,
+  pub role: AFRole,
+}
+
+#[derive(Deserialize)]
+pub struct WorkspaceInviteQuery {
+  pub status: Option<AFWorkspaceInvitationStatus>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -62,7 +75,6 @@ impl WorkspaceMemberChangeset {
 
 #[derive(Deserialize, Serialize)]
 pub struct WorkspaceSpaceUsage {
-  pub total_capacity: u64,
   pub consumed_capacity: u64,
 }
 
@@ -81,4 +93,30 @@ pub struct BlobMetadata {
 #[derive(Serialize, Deserialize)]
 pub struct CreateWorkspaceParam {
   pub workspace_name: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct PatchWorkspaceParam {
+  pub workspace_id: Uuid,
+  pub workspace_name: Option<String>,
+  pub workspace_icon: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CollabTypeParam {
+  pub collab_type: CollabType,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollabResponse {
+  #[serde(flatten)]
+  pub encode_collab: EncodedCollab,
+  /// Object ID is marked with `serde(default)` to handle cases where `object_id` is missing in the data.
+  /// This scenario can occur if the server data does not include `object_id` due to version downgrades (pre-0325 versions).
+  /// The default ensures graceful handling of missing `object_id` during deserialization, preventing errors in client applications
+  /// that expect this field to exist.
+  ///
+  /// We can remove this 'serde(default)' after the 0325 version is stable.
+  #[serde(default)]
+  pub object_id: String,
 }

@@ -1,7 +1,10 @@
 use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
-use database_entity::dto::{AFAccessLevel, AFRole, AFUserProfile, AFWorkspace};
+
+use database_entity::dto::{
+  AFAccessLevel, AFRole, AFUserProfile, AFWorkspace, AFWorkspaceInvitationStatus,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
@@ -12,10 +15,12 @@ pub struct AFWorkspaceRow {
   pub workspace_id: Uuid,
   pub database_storage_id: Option<Uuid>,
   pub owner_uid: Option<i64>,
+  pub owner_name: Option<String>,
   pub created_at: Option<DateTime<Utc>>,
   pub workspace_type: i32,
   pub deleted_at: Option<DateTime<Utc>>,
   pub workspace_name: Option<String>,
+  pub icon: Option<String>,
 }
 
 impl TryFrom<AFWorkspaceRow> for AFWorkspace {
@@ -24,21 +29,24 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
   fn try_from(value: AFWorkspaceRow) -> Result<Self, Self::Error> {
     let owner_uid = value
       .owner_uid
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty owner_uid")))?;
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty owner_uid")))?;
     let database_storage_id = value
       .database_storage_id
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty workspace_id")))?;
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty workspace_id")))?;
 
     let workspace_name = value.workspace_name.unwrap_or_default();
     let created_at = value.created_at.unwrap_or_else(Utc::now);
+    let icon = value.icon.unwrap_or_default();
 
     Ok(Self {
       workspace_id: value.workspace_id,
       database_storage_id,
       owner_uid,
+      owner_name: value.owner_name.unwrap_or_default(),
       workspace_type: value.workspace_type,
       workspace_name,
       created_at,
+      icon,
     })
   }
 }
@@ -56,6 +64,12 @@ pub struct AFUserRow {
   pub deleted_at: Option<DateTime<Utc>>,
   pub updated_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct AFUserIdRow {
+  pub uid: i64,
+  pub uuid: Uuid,
 }
 
 /// Represent the row of the af_user_profile_view
@@ -80,12 +94,12 @@ impl TryFrom<AFUserProfileRow> for AFUserProfile {
   fn try_from(value: AFUserProfileRow) -> Result<Self, Self::Error> {
     let uid = value
       .uid
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty uid")))?;
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty uid")))?;
     let uuid = value
       .uuid
-      .ok_or(AppError::Internal(anyhow!("Unexpect empty uuid")))?;
+      .ok_or(AppError::Internal(anyhow!("Unexpected empty uuid")))?;
     let latest_workspace_id = value.latest_workspace_id.ok_or(AppError::Internal(anyhow!(
-      "Unexpect empty latest_workspace_id"
+      "Unexpected empty latest_workspace_id"
     )))?;
     Ok(Self {
       uid,
@@ -117,7 +131,7 @@ pub struct AFWorkspaceMemberRow {
 }
 
 #[derive(FromRow)]
-pub struct AFCollabMemerAccessLevelRow {
+pub struct AFCollabMemberAccessLevelRow {
   pub uid: i64,
   pub oid: String,
   pub access_level: AFAccessLevel,
@@ -162,4 +176,22 @@ pub struct AFSnapshotRow {
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: DateTime<Utc>,
   pub workspace_id: Uuid,
+}
+
+#[derive(Debug, FromRow, Deserialize, Serialize)]
+pub struct AFWorkspaceInvitationMinimal {
+  pub workspace_id: Uuid,
+  pub inviter_uid: i64,
+  pub invitee_uid: Option<i64>,
+  pub status: AFWorkspaceInvitationStatus,
+  pub role: AFRole,
+}
+
+#[derive(FromRow, Clone, Debug)]
+pub struct AFCollabRowMeta {
+  pub oid: String,
+  pub workspace_id: Uuid,
+
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub created_at: Option<DateTime<Utc>>,
 }

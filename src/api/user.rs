@@ -1,36 +1,21 @@
-use crate::biz;
-use crate::component::auth::jwt::{Authorization, UserUuid};
-use crate::component::auth::{
-  change_password, logged_user_from_request, login, register, ChangePasswordRequest,
-  RegisterRequest,
-};
-use crate::component::auth::{InputParamsError, LoginRequest};
-use crate::component::token_state::SessionToken;
-use crate::domain::{UserEmail, UserName, UserPassword};
+use crate::biz::user::auth::jwt::{Authorization, UserUuid};
+use crate::biz::user::user_info::{get_profile, get_user_workspace_info, update_user};
+use crate::biz::user::user_verify::verify_token;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
-use actix_web::HttpRequest;
 use actix_web::Result;
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{web, Scope};
 use database_entity::dto::{AFUserProfile, AFUserWorkspaceInfo};
 use shared_entity::dto::auth_dto::{SignInTokenResponse, UpdateUserParams};
-use shared_entity::response::{AppResponse, JsonAppResponse};
-
 use shared_entity::response::AppResponseError;
+use shared_entity::response::{AppResponse, JsonAppResponse};
 
 pub fn user_scope() -> Scope {
   web::scope("/api/user")
-    // auth server integration
     .service(web::resource("/verify/{access_token}").route(web::get().to(verify_user_handler)))
     .service(web::resource("/update").route(web::post().to(update_user_handler)))
     .service(web::resource("/profile").route(web::get().to(get_user_profile_handler)))
     .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
-    .service(web::resource("/test").route(web::get().to(mem_pprof_handler)))
-
-    // deprecated
-    .service(web::resource("/login").route(web::post().to(login_handler)))
-    .service(web::resource("/register").route(web::post().to(register_handler)))
-    .service(web::resource("/password").route(web::post().to(change_password_handler)))
 }
 
 async fn mem_pprof_handler() -> Vec<u8> {
@@ -47,7 +32,7 @@ async fn verify_user_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<SignInTokenResponse>> {
   let access_token = path.into_inner();
-  let is_new = biz::user::verify_token(&access_token, state.as_ref())
+  let is_new = verify_token(&access_token, state.as_ref())
     .await
     .map_err(AppResponseError::from)?;
   let resp = SignInTokenResponse { is_new };
@@ -59,7 +44,7 @@ async fn get_user_profile_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserProfile>> {
-  let profile = biz::user::get_profile(&state.pg_pool, &uuid)
+  let profile = get_profile(&state.pg_pool, &uuid)
     .await
     .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().with_data(profile).into())
@@ -70,7 +55,7 @@ async fn get_user_workspace_info_handler(
   uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<AFUserWorkspaceInfo>> {
-  let info = biz::user::get_user_workspace_info(&state.pg_pool, &uuid).await?;
+  let info = get_user_workspace_info(&state.pg_pool, &uuid).await?;
   Ok(AppResponse::Ok().with_data(info).into())
 }
 
@@ -81,79 +66,6 @@ async fn update_user_handler(
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
-  biz::user::update_user(&state.pg_pool, auth.uuid()?, params).await?;
+  update_user(&state.pg_pool, auth.uuid()?, params).await?;
   Ok(AppResponse::Ok().into())
-}
-
-#[tracing::instrument(skip_all)]
-async fn login_handler(
-  req: Json<LoginRequest>,
-  state: Data<AppState>,
-  session: SessionToken,
-) -> Result<HttpResponse> {
-  let req = req.into_inner();
-  let email = UserEmail::parse(req.email)
-    .map_err(InputParamsError::InvalidEmail)?
-    .0;
-  let password = UserPassword::parse(req.password)
-    .map_err(InputParamsError::InvalidPassword)?
-    .0;
-  let (resp, token) = login(email, password, &state).await?;
-
-  // Renews the session key, assigning existing session state to new key.
-  session.renew();
-  if let Err(err) = session.insert_token(token) {
-    // It needs to navigate to login page in web application
-    tracing::error!("Insert session failed: {:?}", err);
-  }
-
-  Ok(HttpResponse::Ok().json(resp))
-}
-
-#[tracing::instrument(level = "debug", skip(state))]
-async fn register_handler(
-  req: Json<RegisterRequest>,
-  state: Data<AppState>,
-) -> Result<HttpResponse> {
-  let req = req.into_inner();
-  let name = UserName::parse(req.name)
-    .map_err(InputParamsError::InvalidName)?
-    .0;
-  let email = UserEmail::parse(req.email)
-    .map_err(InputParamsError::InvalidEmail)?
-    .0;
-  let password = UserPassword::parse(req.password)
-    .map_err(InputParamsError::InvalidPassword)?
-    .0;
-
-  let resp = register(name, email, password, &state).await?;
-  Ok(HttpResponse::Ok().json(resp))
-}
-
-#[tracing::instrument(level = "debug", skip_all)]
-async fn change_password_handler(
-  req: HttpRequest,
-  payload: Json<ChangePasswordRequest>,
-  // session: SessionToken,
-  state: Data<AppState>,
-) -> Result<HttpResponse> {
-  let logged_user = logged_user_from_request(&req, &state.config.application.server_key)?;
-  let payload = payload.into_inner();
-  if payload.new_password != payload.new_password_confirm {
-    return Err(InputParamsError::PasswordNotMatch.into());
-  }
-
-  let new_password = UserPassword::parse(payload.new_password)
-    .map_err(InputParamsError::InvalidPassword)?
-    .0;
-
-  change_password(
-    state.pg_pool.clone(),
-    logged_user.clone(),
-    payload.current_password,
-    new_password,
-  )
-  .await?;
-
-  Ok(HttpResponse::Ok().finish())
 }

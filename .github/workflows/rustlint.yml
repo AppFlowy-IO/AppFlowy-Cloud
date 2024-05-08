@@ -11,7 +11,7 @@ env:
   SQLX_VERSION: 0.7.1
   SQLX_FEATURES: "rustls,postgres"
   SQLX_OFFLINE: true
-  RUST_TOOLCHAIN: "1.75"
+  RUST_TOOLCHAIN: "1.77"
 
 jobs:
   test:
@@ -27,10 +27,18 @@ jobs:
           components: rustfmt, clippy
           profile: minimal
 
+      - name: install prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install protobuf-compiler
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             AppFlowy-Cloud
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-clippy-
 
       - name: Copy and rename dev.env to .env
         run: cp dev.env .env
@@ -44,4 +52,4 @@ jobs:
           cargo fmt --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --all-targets --all-features --tests -- -D warnings

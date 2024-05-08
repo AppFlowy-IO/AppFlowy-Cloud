@@ -5,8 +5,9 @@ use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 pub use anyhow::Result;
 use async_trait::async_trait;
 use collab::core::collab::MutexCollab;
-use collab::core::collab_plugin::EncodedCollab;
 use collab::core::origin::CollabOrigin;
+use collab::entity::EncodedCollab;
+use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
   timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
@@ -18,6 +19,8 @@ use tokio::sync::RwLock;
 #[async_trait]
 pub trait WorkspaceTemplate {
   fn layout(&self) -> ViewLayout;
+
+  async fn create(&self, object_id: String) -> Result<TemplateData>;
 
   async fn create_workspace_view(
     &self,
@@ -115,11 +118,17 @@ impl WorkspaceTemplateBuilder {
         favorites: Default::default(),
         recent: Default::default(),
         trash: Default::default(),
+        private: Default::default(),
       };
 
-      let collab = Arc::new(MutexCollab::new(CollabOrigin::Empty, &workspace_id, vec![]));
+      let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
+        CollabOrigin::Empty,
+        &workspace_id,
+        vec![],
+        false,
+      )));
       let folder = Folder::create(uid, collab, None, folder_data);
-      let data = folder.encode_collab_v1();
+      let data = folder.encode_collab_v1()?;
       Ok::<_, anyhow::Error>(TemplateData {
         object_id: workspace_id,
         object_type: CollabType::Folder,

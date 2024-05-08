@@ -1,5 +1,4 @@
 use client_api::{Client, ClientConfiguration};
-use dotenv::dotenv;
 use lazy_static::lazy_static;
 use std::borrow::Cow;
 use std::env;
@@ -11,7 +10,7 @@ lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> =
     get_env_var("LOCALHOST_URL", "http://localhost:8000");
   pub static ref LOCALHOST_WS: Cow<'static, str> =
-    get_env_var("LOCALHOST_WS", "ws://localhost:8000/ws");
+    get_env_var("LOCALHOST_WS", "ws://localhost:8000/ws/v1");
   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
     get_env_var("LOCALHOST_GOTRUE", "http://localhost:9999");
 }
@@ -20,14 +19,14 @@ lazy_static! {
 #[cfg(target_arch = "wasm32")]
 lazy_static! {
   pub static ref LOCALHOST_URL: Cow<'static, str> = Cow::Owned("http://localhost".to_string());
-  pub static ref LOCALHOST_WS: Cow<'static, str> = Cow::Owned("ws://localhost/ws".to_string());
+  pub static ref LOCALHOST_WS: Cow<'static, str> = Cow::Owned("ws://localhost/ws/v1".to_string());
   pub static ref LOCALHOST_GOTRUE: Cow<'static, str> =
     Cow::Owned("http://localhost/gotrue".to_string());
 }
 
 #[allow(dead_code)]
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {
-  dotenv().ok();
+  dotenvy::dotenv().ok();
   match env::var(key) {
     Ok(value) => Cow::Owned(value),
     Err(_) => {
@@ -53,7 +52,7 @@ pub fn localhost_client_with_device_id(device_id: &str) -> Client {
     &LOCALHOST_GOTRUE,
     device_id,
     ClientConfiguration::default(),
-    "test",
+    "0.5.0",
   )
 }
 

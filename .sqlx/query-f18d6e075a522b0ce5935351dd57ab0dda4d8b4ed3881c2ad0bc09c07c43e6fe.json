@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_collab_snapshot (oid, blob, len, encrypt, workspace_id)\n      VALUES ($1, $2, $3, $4, $5)\n      RETURNING sid AS snapshot_id, oid AS object_id, created_at\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "snapshot_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "object_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Int4",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f18d6e075a522b0ce5935351dd57ab0dda4d8b4ed3881c2ad0bc09c07c43e6fe"
+}

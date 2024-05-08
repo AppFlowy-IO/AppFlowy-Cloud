@@ -1,3 +1,4 @@
+use super::TestBucket;
 use app_error::ErrorCode;
 use client_api_test_util::{generate_unique_registered_user_client, workspace_id_from_client};
 
@@ -95,4 +96,70 @@ async fn put_delete_get() {
   let url = c1.get_blob_url(&workspace_id, &file_id);
   let err = c1.get_blob(&url).await.unwrap_err();
   assert_eq!(err.code, ErrorCode::RecordNotFound);
+}
+
+#[tokio::test]
+async fn put_and_delete_workspace() {
+  let test_bucket = TestBucket::new().await;
+
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let file_id = uuid::Uuid::new_v4().to_string();
+  let blob_to_put = "some contents 1";
+  {
+    // put blob
+    let mime = mime::TEXT_PLAIN_UTF_8;
+    let url = c1.get_blob_url(&workspace_id, &file_id);
+    c1.put_blob(&url, blob_to_put, &mime).await.unwrap();
+  }
+
+  {
+    // blob exists in the bucket
+    let raw_data = test_bucket
+      .get_object(&workspace_id, &file_id)
+      .await
+      .unwrap();
+    assert_eq!(blob_to_put, String::from_utf8_lossy(&raw_data));
+  }
+
+  // delete workspace
+  c1.delete_workspace(&workspace_id).await.unwrap();
+
+  {
+    // blob does not exist in the bucket
+    let is_none = test_bucket
+      .get_object(&workspace_id, &file_id)
+      .await
+      .is_none();
+    assert!(is_none);
+  }
+}
+
+#[tokio::test]
+async fn simulate_30_put_blob_request_test() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+
+  let mut handles = vec![];
+  for _ in 0..30 {
+    let cloned_client = c1.clone();
+    let cloned_workspace_id = workspace_id.clone();
+    let handle = tokio::spawn(async move {
+      let mime = mime::TEXT_PLAIN_UTF_8;
+      let file_id = uuid::Uuid::new_v4().to_string();
+      let url = cloned_client.get_blob_url(&cloned_workspace_id, &file_id);
+      let data = vec![0; 3 * 1024 * 1024];
+      cloned_client.put_blob(&url, data, &mime).await.unwrap();
+      url
+    });
+    handles.push(handle);
+  }
+
+  let results = futures::future::join_all(handles).await;
+  for result in results {
+    let url = result.unwrap();
+    let (_, got_data) = c1.get_blob(&url).await.unwrap();
+    assert_eq!(got_data, vec![0; 3 * 1024 * 1024]);
+    c1.delete_blob(&url).await.unwrap();
+  }
 }

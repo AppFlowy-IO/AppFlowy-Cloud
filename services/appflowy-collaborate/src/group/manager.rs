@@ -1,7 +1,7 @@
 use crate::group::group_init::CollabGroup;
 use crate::group::state::GroupManagementState;
 
-use crate::error::RealtimeError;
+use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::metrics::CollabMetricsCalculate;
 use crate::RealtimeAccessControl;
 use app_error::AppError;
@@ -119,10 +119,11 @@ where
       .await
     {
       if metadata.workspace_id != workspace_id {
-        let err = RealtimeError::CollabWorkspaceIdNotMatch {
-          expect: metadata.workspace_id,
-          actual: workspace_id.to_string(),
-        };
+        let err =
+          RealtimeError::CreateGroupFailed(CreateGroupFailedReason::CollabWorkspaceIdNotMatch {
+            expect: metadata.workspace_id,
+            actual: workspace_id.to_string(),
+          });
         warn!(
           "[Realtime]:user_id:{},object_id:{}:{},error:{}",
           uid, object_id, collab_type, err
@@ -145,7 +146,9 @@ where
               false,
             ))
           } else {
-            return Err(RealtimeError::Internal(err.into()));
+            return Err(RealtimeError::CreateGroupFailed(
+              CreateGroupFailedReason::CannotGetCollabData,
+            ));
           }
         },
       };

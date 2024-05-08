@@ -122,12 +122,13 @@ where
       message,
     } = client_msg;
 
+    // Get the real-time user by the device ID and user ID. If the user is not found, which means
+    // the user is not connected to the real-time server via websocket.
     let user = self.get_user_by_device(&UserDevice::new(&device_id, uid));
-
     match (user, message.transform()) {
       (Some(user), Ok(messages)) => self.handle_client_message(user, messages),
       (None, _) => {
-        warn!("user:{}|device:{} not found", uid, device_id);
+        warn!("Can't find the realtime user uid:{}, device:{}. User should connect via websocket before", uid,device_id);
         Box::pin(async { Ok(()) })
       },
       (Some(_), Err(err)) => {

@@ -5,6 +5,8 @@ use crate::resource_usage::{
 use app_error::AppError;
 use async_trait::async_trait;
 use sqlx::PgPool;
+use std::time::Duration;
+use tokio::time::sleep;
 use tracing::{instrument, warn};
 use uuid::Uuid;
 
@@ -60,6 +62,9 @@ where
     }
 
     let obj_key = format!("{}/{}", workspace_id, file_id);
+    self.client.pub_blob(obj_key, &file_data).await?;
+
+    // Begin a transaction to insert blob metadata after the blob is successfully uploaded.
     let mut tx = self.pg_pool.begin().await?;
     insert_blob_metadata(
       &mut tx,
@@ -69,8 +74,6 @@ where
       file_data.len(),
     )
     .await?;
-
-    self.client.pub_blob(obj_key, &file_data).await?;
     tx.commit().await?;
     Ok(())
   }

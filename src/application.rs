@@ -34,6 +34,7 @@ use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
+use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
@@ -246,6 +247,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     &config.mailer.smtp_host,
   )
   .await?;
+  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
+  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
+    warn!("Failed to remove all connected users: {:?}", err);
+  }
 
   info!("Application state initialized");
   Ok(AppState {
@@ -268,6 +273,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
+    realtime_shared_state,
   })
 }
 

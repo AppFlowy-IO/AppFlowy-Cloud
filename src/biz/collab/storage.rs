@@ -377,3 +377,35 @@ where
     self.snapshot_control.get_collab_snapshot_list(oid).await
   }
 }
+
+#[allow(dead_code)]
+#[derive(Clone)]
+pub struct CollabUserState {
+  redis_conn_manager: RedisConnectionManager,
+}
+
+#[allow(dead_code)]
+impl CollabUserState {
+  async fn add_connected_user(&self, uid: i64, device_id: &str) -> AppResult<()> {
+    let mut conn = self.redis_conn_manager.clone();
+    redis::cmd("HSET")
+      .arg(uid)
+      .arg(device_id)
+      .arg("true")
+      .query_async(&mut conn)
+      .await
+      .map_err(|err| AppError::Internal(err.into()))?;
+    Ok(())
+  }
+
+  async fn remove_connected_user(&self, uid: i64, device_id: &str) -> AppResult<()> {
+    let mut conn = self.redis_conn_manager.clone();
+    redis::cmd("HDEL")
+      .arg(uid)
+      .arg(device_id)
+      .query_async(&mut conn)
+      .await
+      .map_err(|err| AppError::Internal(err.into()))?;
+    Ok(())
+  }
+}

@@ -1,16 +1,21 @@
-use crate::collab::util::{generate_random_string, make_big_collab_doc_state};
+use crate::collab::util::{
+  generate_random_bytes, generate_random_string, make_big_collab_doc_state,
+};
 use assert_json_diff::assert_json_eq;
 use client_api_test_util::*;
 use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
+
+use collab::core::origin::CollabOrigin;
 
 use std::time::Duration;
 
 use tokio::time::sleep;
 
-use collab_rt_entity::MAXIMUM_REALTIME_MESSAGE_SIZE;
+use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -577,27 +582,26 @@ async fn post_realtime_message_test() {
 }
 
 #[tokio::test]
-async fn collab_flush_test() {
-  let mut new_user = TestClient::new_user().await;
-  let object_id = Uuid::new_v4().to_string();
-  let workspace_id = new_user.workspace_id().await;
-  new_user
-    .open_collab(&workspace_id, &object_id, CollabType::Document)
-    .await;
-
-  // the default flush_per_update is 100 that defined in [WriteConfig]
-  // so we need to write 200 times to trigger the flush
-  for i in 0..200 {
-    new_user
-      .collabs
-      .get_mut(&object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
-      .insert(&i.to_string(), i.to_string());
-    sleep(Duration::from_millis(300)).await;
+async fn post_large_num_of_realtime_message_request_test() {
+  let client = Arc::new(TestClient::new_user().await);
+  let mut handles = vec![];
+  for _ in 0..1000 {
+    let cloned_client = client.clone();
+    let handle = tokio::spawn(async move {
+      let message = RealtimeMessage::Collab(CollabMessage::ClientUpdateSync(UpdateSync::new(
+        CollabOrigin::Empty,
+        "fake_object_id".to_string(),
+        generate_random_bytes(1024),
+        1,
+      )))
+      .encode()
+      .unwrap();
+      cloned_client.post_realtime_binary(message).await.unwrap();
+    });
+    handles.push(handle);
   }
-  // TODO(nathan): assert the collab content in disk
+
+  futures::future::join_all(handles).await;
 }
 
 #[tokio::test]
@@ -638,8 +642,9 @@ async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
           .mutex_collab
           .lock()
           .insert(&i.to_string(), i.to_string());
-        sleep(Duration::from_millis(30)).await;
+        sleep(Duration::from_millis(60)).await;
       }
+      client.wait_object_sync_complete(&object_id).await.unwrap();
     });
     tasks.push(task);
   }

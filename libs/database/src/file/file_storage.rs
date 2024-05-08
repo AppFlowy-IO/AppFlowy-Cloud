@@ -63,17 +63,14 @@ where
     let obj_key = format!("{}/{}", workspace_id, file_id);
     self.client.pub_blob(obj_key, &file_data).await?;
 
-    // Begin a transaction to insert blob metadata after the blob is successfully uploaded.
-    let mut tx = self.pg_pool.begin().await?;
     insert_blob_metadata(
-      &mut tx,
+      &self.pg_pool,
       &file_id,
       &workspace_id,
       &file_type,
       file_data.len(),
     )
     .await?;
-    tx.commit().await?;
     Ok(())
   }
 

@@ -1,9 +1,13 @@
 use client_api::entity::AFUserProfile;
 use client_api::error::{AppResponseError, ErrorCode};
 use collab_entity::{CollabType, EncodedCollab};
-use database_entity::dto::{AFUserWorkspaceInfo, AFWorkspace, QueryCollab, QueryCollabParams};
+use database_entity::dto::{
+  AFUserWorkspaceInfo, AFWorkspace, BatchQueryCollabResult, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
+};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::collections::HashMap;
 use tsify::Tsify;
 use uuid::Uuid;
 use wasm_bindgen::JsValue;
@@ -185,5 +189,50 @@ impl From<EncodedCollab> for ClientEncodeCollab {
       doc_state: collab.doc_state.to_vec(),
       version: ClientEncoderVersion::V1,
     }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct BatchClientQueryCollab(pub Vec<ClientQueryCollab>);
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct ClientQueryCollab {
+  pub object_id: String,
+  #[tsify(type = "0 | 1 | 2 | 3 | 4 | 5")]
+  pub collab_type: i32,
+}
+
+from_struct_for_jsvalue!(ClientQueryCollab);
+
+impl From<ClientQueryCollab> for QueryCollab {
+  fn from(value: ClientQueryCollab) -> QueryCollab {
+    QueryCollab {
+      collab_type: CollabType::from(value.collab_type),
+      object_id: value.object_id,
+    }
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct BatchClientEncodeCollab(pub HashMap<String, Vec<u8>>);
+
+from_struct_for_jsvalue!(BatchClientEncodeCollab);
+
+impl From<BatchQueryCollabResult> for BatchClientEncodeCollab {
+  fn from(result: BatchQueryCollabResult) -> Self {
+    let mut hash_map = HashMap::new();
+
+    result.0.into_iter().for_each(|(k, v)| match v {
+      QueryCollabResult::Success { encode_collab_v1 } => {
+        hash_map.insert(k, encode_collab_v1);
+      },
+      QueryCollabResult::Failed { .. } => {
+        tracing::error!("Failed to get collab: {:?}", k);
+      },
+    });
+
+    BatchClientEncodeCollab(hash_map)
   }
 }

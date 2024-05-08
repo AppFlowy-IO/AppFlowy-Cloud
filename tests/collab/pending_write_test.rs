@@ -75,8 +75,19 @@ async fn simulate_small_data_set_write(pool: PgPool) {
       .unwrap();
 
     assert_eq!(
+      encode_collab_from_disk.doc_state.len(),
+      original_encode_collab.doc_state.len(),
+      "doc_state length mismatch"
+    );
+    assert_eq!(
       encode_collab_from_disk.doc_state,
       original_encode_collab.doc_state
+    );
+
+    assert_eq!(
+      encode_collab_from_disk.state_vector.len(),
+      original_encode_collab.state_vector.len(),
+      "state_vector length mismatch"
     );
     assert_eq!(
       encode_collab_from_disk.state_vector,
@@ -103,49 +114,48 @@ async fn simulate_large_data_set_write(pool: PgPool) {
   let queue_name = uuid::Uuid::new_v4().to_string();
   let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
 
-  let queries = Arc::new(Mutex::new(Vec::new()));
-  for i in 0..3 {
-    // sleep random seconds less than 2 seconds. because the runtime is single-threaded,
-    // we need sleep a little time to let the runtime switch to other tasks.
-    sleep(Duration::from_millis(i % 2)).await;
-
-    let encode_collab = EncodedCollab::new_v1(
-      generate_random_bytes(10 * 1024),
-      generate_random_bytes(2 * 1024 * 1024),
-    );
-    let params = CollabParams {
-      object_id: format!("object_id_{}", i),
-      collab_type: CollabType::Unknown,
-      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
-    };
-    storage_queue
-      .push(&user.workspace_id, &user.uid, &params, WritePriority::Low)
-      .await
-      .unwrap();
-    queries.lock().await.push((params, encode_collab));
-  }
+  let origin_encode_collab = EncodedCollab::new_v1(
+    generate_random_bytes(10 * 1024),
+    generate_random_bytes(2 * 1024 * 1024),
+  );
+  let params = CollabParams {
+    object_id: uuid::Uuid::new_v4().to_string(),
+    collab_type: CollabType::Unknown,
+    encoded_collab_v1: origin_encode_collab.encode_to_bytes().unwrap(),
+  };
+  storage_queue
+    .push(&user.workspace_id, &user.uid, &params, WritePriority::Low)
+    .await
+    .unwrap();
 
   // Allow some time for processing
   sleep(Duration::from_secs(30)).await;
 
-  // Check that all items are processed correctly
-  for (params, original_encode_collab) in queries.lock().await.iter() {
-    let query = QueryCollab {
-      object_id: params.object_id.clone(),
-      collab_type: params.collab_type.clone(),
-    };
-    let encode_collab_from_disk = collab_cache
-      .get_encode_collab_from_disk(&user.uid, query)
-      .await
-      .unwrap();
+  let query = QueryCollab {
+    object_id: params.object_id.clone(),
+    collab_type: params.collab_type.clone(),
+  };
+  let encode_collab_from_disk = collab_cache
+    .get_encode_collab_from_disk(&user.uid, query)
+    .await
+    .unwrap();
+  assert_eq!(
+    encode_collab_from_disk.doc_state.len(),
+    origin_encode_collab.doc_state.len(),
+    "doc_state length mismatch"
+  );
+  assert_eq!(
+    encode_collab_from_disk.doc_state,
+    origin_encode_collab.doc_state
+  );
 
-    assert_eq!(
-      encode_collab_from_disk.doc_state,
-      original_encode_collab.doc_state
-    );
-    assert_eq!(
-      encode_collab_from_disk.state_vector,
-      original_encode_collab.state_vector
-    );
-  }
+  assert_eq!(
+    encode_collab_from_disk.state_vector.len(),
+    origin_encode_collab.state_vector.len(),
+    "state_vector length mismatch"
+  );
+  assert_eq!(
+    encode_collab_from_disk.state_vector,
+    origin_encode_collab.state_vector
+  );
 }

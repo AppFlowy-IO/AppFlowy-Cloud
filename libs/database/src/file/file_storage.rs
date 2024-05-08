@@ -5,8 +5,7 @@ use crate::resource_usage::{
 use app_error::AppError;
 use async_trait::async_trait;
 use sqlx::PgPool;
-use std::time::Duration;
-use tokio::time::sleep;
+
 use tracing::{instrument, warn};
 use uuid::Uuid;
 

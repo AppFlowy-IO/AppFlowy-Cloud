@@ -37,7 +37,7 @@ impl RealtimeSharedState {
 
   pub async fn is_user_connected(&self, uid: &i64, device_id: &str) -> Result<bool, RealtimeError> {
     let mut conn = self.redis_conn_manager.clone();
-    let key = realtime_shared_state_cache_key(&uid, device_id);
+    let key = realtime_shared_state_cache_key(uid, device_id);
     let result: Option<String> = conn
       .get(key)
       .await

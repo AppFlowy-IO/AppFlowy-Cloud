@@ -18,14 +18,6 @@ pub fn user_scope() -> Scope {
     .service(web::resource("/workspace").route(web::get().to(get_user_workspace_info_handler)))
 }
 
-async fn mem_pprof_handler() -> Vec<u8> {
-  let mut prof_ctl = jemalloc_pprof::PROF_CTL.as_ref().unwrap().lock().await;
-  if !prof_ctl.activated() {
-    panic!("heap profiling not activated");
-  }
-  prof_ctl.dump_pprof().unwrap()
-}
-
 #[tracing::instrument(skip(state, path), err)]
 async fn verify_user_handler(
   path: web::Path<String>,

@@ -1,6 +1,5 @@
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
-use crate::biz::collab::cache::CollabCache;
 use crate::biz::snapshot::SnapshotControl;
 
 use crate::api::util::CollabValidator;
@@ -9,6 +8,7 @@ use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
 use crate::biz::collab::queue_redis_ops::WritePriority;
 use crate::state::RedisConnectionManager;
 use app_error::AppError;
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::command::{CLCommandSender, CollaborationCommand};
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use async_trait::async_trait;

@@ -12,7 +12,7 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
-app-error = { workspace = true }
+app-error = { workspace = true, features = ["sqlx_error", "tokio_error"] }
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
@@ -24,6 +24,7 @@ tokio = { workspace = true, features = ["net", "sync", "macros", "rt-multi-threa
 async-trait = "0.1.77"
 serde.workspace = true
 serde_json.workspace = true
+sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono"] }
 thiserror = "1.0.56"
 anyhow = "1"
 bytes.workspace = true
@@ -47,6 +48,7 @@ semver = "1.0.22"
 redis = "0.25.2"
 parking_lot = "0.12.1"
 lazy_static = "1.4.0"
+itertools = "0.12.0"
 
 [dev-dependencies]
 rand = "0.8.5"

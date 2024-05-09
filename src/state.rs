@@ -1,6 +1,5 @@
 use crate::api::metrics::RequestMetrics;
 use crate::biz::casbin::{CollabAccessControlImpl, WorkspaceAccessControlImpl};
-use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::storage::CollabAccessControlStorage;
 
@@ -11,6 +10,7 @@ use access_control::access::AccessControl;
 use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use dashmap::DashMap;

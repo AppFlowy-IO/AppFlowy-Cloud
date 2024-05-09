@@ -970,14 +970,14 @@ impl Client {
     params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/v1/{}/collab_list",
+      "{}/api/workspace/{}/collab_list",
       self.base_url, workspace_id
     );
     let params = BatchQueryCollabParams(params);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .query(&params)
+      .json(&params)
       .send()
       .await?;
     log_request_id(&resp);

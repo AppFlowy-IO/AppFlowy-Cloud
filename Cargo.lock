@@ -522,7 +522,7 @@ dependencies = [
 [[package]]
 name = "appflowy-ai-client"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI?rev=6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9#6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI?tag=0.0.7#115f185e15f895abf750415584248689b9ff8ea2"
 dependencies = [
  "anyhow",
  "reqwest 0.12.4",

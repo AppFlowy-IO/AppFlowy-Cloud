@@ -213,10 +213,10 @@ appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", tag =
 
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "108a7978" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "108a7978" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "108a7978" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "108a7978" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
 
 [features]
 history = []

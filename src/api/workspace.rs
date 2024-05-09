@@ -127,7 +127,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_member_list_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
+      web::resource("/{workspace_id}/collab_list")
+      .route(web::get().to(batch_get_collab_handler)) // deprecated: browser cannot use json param
+                                                      // for GET request
+      .route(web::post().to(batch_get_collab_handler)),
     )
     .service(
       web::resource("/{workspace_id}/summarize_row").route(web::post().to(summary_row_handler)),

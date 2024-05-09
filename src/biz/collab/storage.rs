@@ -10,6 +10,7 @@ use crate::biz::collab::queue_redis_ops::WritePriority;
 use crate::state::RedisConnectionManager;
 use app_error::AppError;
 use appflowy_collaborate::command::{CLCommandSender, CollaborationCommand};
+use appflowy_collaborate::shared_state::RealtimeSharedState;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
@@ -41,6 +42,7 @@ pub struct CollabStorageImpl<AC> {
   snapshot_control: SnapshotControl,
   rt_cmd_sender: CLCommandSender,
   queue: Arc<StorageQueue>,
+  shared_state: RealtimeSharedState,
 }
 
 impl<AC> CollabStorageImpl<AC>
@@ -55,6 +57,7 @@ where
     redis_conn_manager: RedisConnectionManager,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
+    let shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
     let queue = Arc::new(StorageQueue::new_with_metrics(
       cache.clone(),
       redis_conn_manager,
@@ -67,6 +70,7 @@ where
       snapshot_control,
       rt_cmd_sender,
       queue,
+      shared_state,
     }
   }
 
@@ -376,36 +380,20 @@ where
   async fn get_collab_snapshot_list(&self, oid: &str) -> AppResult<AFSnapshotMetas> {
     self.snapshot_control.get_collab_snapshot_list(oid).await
   }
-}
 
-#[allow(dead_code)]
-#[derive(Clone)]
-pub struct CollabUserState {
-  redis_conn_manager: RedisConnectionManager,
-}
-
-#[allow(dead_code)]
-impl CollabUserState {
-  async fn add_connected_user(&self, uid: i64, device_id: &str) -> AppResult<()> {
-    let mut conn = self.redis_conn_manager.clone();
-    redis::cmd("HSET")
-      .arg(uid)
-      .arg(device_id)
-      .arg("true")
-      .query_async(&mut conn)
-      .await
-      .map_err(|err| AppError::Internal(err.into()))?;
-    Ok(())
+  async fn add_connected_user(&self, uid: i64, device_id: &str) {
+    if let Err(err) = self.shared_state.add_connected_user(uid, device_id).await {
+      error!("Failed to add connected user: {}", err);
+    }
   }
 
-  async fn remove_connected_user(&self, uid: i64, device_id: &str) -> AppResult<()> {
-    let mut conn = self.redis_conn_manager.clone();
-    redis::cmd("HDEL")
-      .arg(uid)
-      .arg(device_id)
-      .query_async(&mut conn)
+  async fn remove_connected_user(&self, uid: i64, device_id: &str) {
+    if let Err(err) = self
+      .shared_state
+      .remove_connected_user(uid, device_id)
       .await
-      .map_err(|err| AppError::Internal(err.into()))?;
-    Ok(())
+    {
+      error!("Failed to remove connected user: {}", err);
+    }
   }
 }

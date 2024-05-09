@@ -9,7 +9,7 @@ use database::workspace::select_workspace;
 use database_entity::dto::AFRole;
 use sqlx::types::uuid;
 use std::ops::DerefMut;
-use tracing::{event, instrument, trace};
+use tracing::{event, instrument};
 
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
@@ -21,6 +21,13 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
   let user = state.gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
+
+  // Check if the user already exists in the database
+  let user_exists = is_user_exist(&state.pg_pool, &user_uuid).await?;
+  if user_exists {
+    tracing::info!("user already exists:{},{}", user_uuid, user.email);
+    return Ok(false);
+  }
 
   let mut txn = state
     .pg_pool
@@ -39,37 +46,32 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
     .execute(txn.deref_mut())
     .await?;
 
-  let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
-  if is_new {
-    let new_uid = state.id_gen.write().await.next_id();
-    event!(tracing::Level::INFO, "create new user:{}", new_uid);
-    let workspace_id =
-      create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
-    let workspace_row = select_workspace(txn.deref_mut(), &workspace_id).await?;
+  let new_uid = state.id_gen.write().await.next_id();
+  event!(tracing::Level::INFO, "create new user:{}", new_uid);
+  let workspace_id = create_user(txn.deref_mut(), new_uid, &user_uuid, &user.email, &name).await?;
+  let workspace_row = select_workspace(txn.deref_mut(), &workspace_id).await?;
 
-    // It's essential to cache the user's role because subsequent actions will rely on this cached information.
-    state
-      .workspace_access_control
-      .insert_role(&new_uid, &workspace_id, AFRole::Owner)
-      .await?;
-
-    // Create a workspace with the GetStarted template
-    initialize_workspace_for_user(
-      new_uid,
-      &workspace_row,
-      &mut txn,
-      vec![GetStartedDocumentTemplate],
-      &state.collab_access_control_storage,
-    )
+  // It's essential to cache the user's role because subsequent actions will rely on this cached information.
+  state
+    .workspace_access_control
+    .insert_role(&new_uid, &workspace_id, AFRole::Owner)
     .await?;
-  } else {
-    trace!("user already exists:{},{}", user.id, user.email);
-  }
+
+  // Create a workspace with the GetStarted template
+  initialize_workspace_for_user(
+    new_uid,
+    &workspace_row,
+    &mut txn,
+    vec![GetStartedDocumentTemplate],
+    &state.collab_access_control_storage,
+  )
+  .await?;
+
   txn
     .commit()
     .await
     .context("fail to commit transaction to verify token")?;
-  Ok(is_new)
+  Ok(true)
 }
 
 pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotification>;

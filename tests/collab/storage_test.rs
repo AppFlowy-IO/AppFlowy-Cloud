@@ -1,20 +1,18 @@
-use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
+use std::collections::HashMap;
 
-use app_error::ErrorCode;
-
-use appflowy_cloud::biz::collab::mem_cache::CollabMemCache;
-
-use client_api_test_util::*;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use sqlx::types::Uuid;
+
+use app_error::ErrorCode;
+use appflowy_collaborate::collab::mem_cache::CollabMemCache;
+use client_api_test_util::*;
+use database::collab::CollabMetadata;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
 };
-use sqlx::types::Uuid;
 
-use database::collab::CollabMetadata;
-
-use std::collections::HashMap;
+use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
 
 #[tokio::test]
 async fn success_insert_collab_test() {

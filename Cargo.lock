@@ -522,7 +522,7 @@ dependencies = [
 [[package]]
 name = "appflowy-ai-client"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI?rev=6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9#6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI?tag=0.0.7#115f185e15f895abf750415584248689b9ff8ea2"
 dependencies = [
  "anyhow",
  "reqwest 0.12.4",
@@ -1584,7 +1584,7 @@ dependencies = [
 [[package]]
 name = "collab"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=316500d8e8f#316500d8e8f8a84ca79a38319a37458109b25cf0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=108a7978#108a79782f47d7636313979f99bc7a964498d878"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1608,7 +1608,7 @@ dependencies = [
 [[package]]
 name = "collab-document"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=316500d8e8f#316500d8e8f8a84ca79a38319a37458109b25cf0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=108a7978#108a79782f47d7636313979f99bc7a964498d878"
 dependencies = [
  "anyhow",
  "collab",
@@ -1627,7 +1627,7 @@ dependencies = [
 [[package]]
 name = "collab-entity"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=316500d8e8f#316500d8e8f8a84ca79a38319a37458109b25cf0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=108a7978#108a79782f47d7636313979f99bc7a964498d878"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1642,7 +1642,7 @@ dependencies = [
 [[package]]
 name = "collab-folder"
 version = "0.2.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=316500d8e8f#316500d8e8f8a84ca79a38319a37458109b25cf0"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-Collab?rev=108a7978#108a79782f47d7636313979f99bc7a964498d878"
 dependencies = [
  "anyhow",
  "chrono",

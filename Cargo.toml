@@ -194,10 +194,10 @@ tonic-proto = { path = "libs/tonic-proto" }
 
 # collaboration
 yrs = "0.18.7"
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab = { version = "0.2.0" }
+collab-entity = { version = "0.2.0" }
+collab-folder = { version = "0.2.0" }
+collab-document = { version = "0.2.0" }
 
 [profile.release]
 lto = true
@@ -209,7 +209,14 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", rev = "6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9" }
+appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", tag = "0.0.7" }
+
+# It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
+# So using patch to workaround this issue.
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
 
 [features]
 history = []

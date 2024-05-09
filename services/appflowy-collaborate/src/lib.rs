@@ -6,6 +6,7 @@ mod group;
 mod metrics;
 mod permission;
 mod rt_server;
+pub mod shared_state;
 mod util;
 
 pub use metrics::*;

@@ -34,6 +34,7 @@ use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
+use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
@@ -226,7 +227,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   )
   .await;
-  let collab_storage = Arc::new(CollabStorageImpl::new(
+  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
     collab_storage_access_control,
     snapshot_control,
@@ -246,6 +247,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     &config.mailer.smtp_host,
   )
   .await?;
+  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
+  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
+    warn!("Failed to remove all connected users: {:?}", err);
+  }
 
   info!("Application state initialized");
   Ok(AppState {
@@ -256,7 +261,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     gotrue_client,
     redis_connection_manager: redis_conn_manager,
     collab_cache,
-    collab_access_control_storage: collab_storage,
+    collab_access_control_storage,
     collab_access_control,
     workspace_access_control,
     bucket_storage,
@@ -268,6 +273,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
+    realtime_shared_state,
   })
 }
 

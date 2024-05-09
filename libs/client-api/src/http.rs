@@ -104,7 +104,7 @@ pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
-  ws_addr: String,
+  pub ws_addr: String,
   pub device_id: String,
   pub client_version: Version,
   pub(crate) token: Arc<RwLock<ClientToken>>,
@@ -1101,15 +1101,15 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "info", skip_all)]
-  pub fn ws_url(&self) -> String {
-    format!("{}/v1", self.ws_addr)
-  }
-
-  pub async fn ws_connect_info(&self) -> Result<ConnectInfo, AppResponseError> {
-    self
-      .refresh_if_expired(chrono::Local::now().timestamp())
-      .await?;
+  pub async fn ws_connect_info(&self, auto_refresh: bool) -> Result<ConnectInfo, AppResponseError> {
+    if auto_refresh {
+      self
+        .refresh_if_expired(
+          chrono::Local::now().timestamp(),
+          "get websocket connect info",
+        )
+        .await?;
+    }
 
     Ok(ConnectInfo {
       access_token: self.access_token()?,
@@ -1283,13 +1283,13 @@ impl Client {
   }
 
   // Refresh token if given timestamp is close to the token expiration time
-  pub async fn refresh_if_expired(&self, ts: i64) -> Result<(), AppResponseError> {
+  pub async fn refresh_if_expired(&self, ts: i64, reason: &str) -> Result<(), AppResponseError> {
     let expires_at = self.token_expires_at()?;
 
     if ts + 30 > expires_at {
       info!("token is about to expire, refreshing token");
       // Add 30 seconds buffer
-      self.refresh_token().await?;
+      self.refresh_token(reason).await?;
     }
     Ok(())
   }
@@ -1324,7 +1324,9 @@ impl Client {
     url: &str,
   ) -> Result<RequestBuilder, AppResponseError> {
     let ts_now = chrono::Local::now().timestamp();
-    self.refresh_if_expired(ts_now).await?;
+    self
+      .refresh_if_expired(ts_now, "make http client request")
+      .await?;
 
     let access_token = self.access_token()?;
     trace!("start request: {}, method: {}", url, method);

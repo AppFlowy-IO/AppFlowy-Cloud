@@ -1,12 +1,9 @@
 use crate::http::log_request_id;
-use crate::ws::{WSClientHttpSender, WSError};
+use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSError};
 use crate::Client;
-use crate::RefreshTokenRetryCondition;
-use again::RetryPolicy;
 use app_error::gotrue::GoTrueError;
-use app_error::{AppError, ErrorCode};
+use app_error::ErrorCode;
 use async_trait::async_trait;
-use collab_entity::EncodedCollab;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use reqwest::Method;
@@ -14,8 +11,7 @@ use shared_entity::dto::workspace_dto::{CollabResponse, CollabTypeParam};
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tracing::{event, instrument};
+use tracing::{info, instrument};
 
 impl Client {
   pub async fn create_collab_list(
@@ -52,12 +48,14 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
-  pub async fn refresh_token(&self) -> Result<(), AppResponseError> {
+  pub async fn refresh_token(&self, reason: &str) -> Result<(), AppResponseError> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.refresh_ret_txs.write().push(tx);
 
     if !self.is_refreshing_token.load(Ordering::SeqCst) {
       self.is_refreshing_token.store(true, Ordering::SeqCst);
+
+      info!("refresh token reason:{}", reason);
       let txs = std::mem::take(&mut *self.refresh_ret_txs.write());
       let result = self.inner_refresh_token().await;
       for tx in txs {
@@ -142,6 +140,17 @@ impl WSClientHttpSender for Client {
     _device_id: &str,
     _message: client_websocket::Message,
   ) -> Result<(), WSError> {
+    Err(WSError::Internal(anyhow::Error::msg("not supported")))
+  }
+}
+
+#[async_trait]
+impl WSClientConnectURLProvider for Client {
+  fn connect_ws_url(&self) -> String {
+    self.ws_addr.clone()
+  }
+
+  async fn connect_info(&self) -> Result<ConnectInfo, WSError> {
     Err(WSError::Internal(anyhow::Error::msg("not supported")))
   }
 }

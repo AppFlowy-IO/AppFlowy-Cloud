@@ -17,7 +17,7 @@ reqwest.workspace = true
 uuid = { version = "1.6.1", features = ["v4"] }
 gotrue-entity = { path = "../gotrue-entity" }
 database-entity.workspace = true
-collab-entity = { version = "0.1.0" }
+collab-entity = { workspace = true }
 app-error = { workspace = true }
 chrono = "0.4.31"
 

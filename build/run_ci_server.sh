@@ -18,7 +18,7 @@ fi
 
 # Make sure to update the test client configuration in libs/client-api-test-util/src/client.rs
 # export LOCALHOST_URL="http://localhost"
-# export LOCALHOST_WS_URL="ws://localhost/ws"
+# export LOCALHOST_WS_URL="ws://localhost/ws/v1"
 # export LOCALHOST_GOTRUE_URL="http://localhost:gotrue"
 
 docker compose down

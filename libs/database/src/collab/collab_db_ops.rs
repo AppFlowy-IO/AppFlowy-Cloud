@@ -85,11 +85,12 @@ pub async fn insert_into_af_collab(
           uid,
         )
         .execute(tx.deref_mut())
-        .await
-        .context(format!(
-          "user:{} update af_collab:{} failed",
-          uid, params.object_id
-        ))?;
+        .await.map_err(|err| {
+          AppError::Internal(anyhow!(
+            "Update af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. error: {:?}",
+            workspace_id, uid, params.object_id, params.collab_type, err,
+          ))
+        })?;
       } else {
         return Err(AppError::Internal(anyhow!(
           "workspace_id is not match. expect workspace_id:{}, but receive:{}",
@@ -148,11 +149,12 @@ pub async fn insert_into_af_collab(
         workspace_id,
       )
       .execute(tx.deref_mut())
-      .await
-      .context(format!(
-        "Insert new af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}",
-        workspace_id, uid, params.object_id, params.collab_type
-      ))?;
+      .await.map_err(|err| {
+        AppError::Internal(anyhow!(
+          "Insert new af_collab failed: workspace_id:{}, uid:{}, object_id:{}, collab_type:{}. payload len:{} error: {:?}",
+         workspace_id, uid, params.object_id, params.collab_type, params.encoded_collab_v1.len(), err,
+        ))
+      })?;
     },
   }
 

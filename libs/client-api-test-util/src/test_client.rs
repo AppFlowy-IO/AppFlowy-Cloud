@@ -22,6 +22,7 @@ use database_entity::dto::{
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
 use mime::Mime;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
@@ -80,13 +81,10 @@ impl TestClient {
         retry_connect_per_pings: 5,
       },
       api_client.clone(),
+      api_client.clone(),
     );
-    let connect_info = api_client.ws_connect_info().await.unwrap();
     if start_ws_conn {
-      ws_client
-        .connect(&api_client.ws_url(), connect_info)
-        .await
-        .unwrap();
+      ws_client.connect().await.unwrap();
     }
     Self {
       user: registered_user,
@@ -111,6 +109,11 @@ impl TestClient {
   }
 
   pub async fn get_connect_users(&self, object_id: &str) -> Vec<i64> {
+    #[derive(Deserialize)]
+    struct UserId {
+      pub uid: i64,
+    }
+
     self
       .collabs
       .get(object_id)
@@ -118,11 +121,11 @@ impl TestClient {
       .mutex_collab
       .lock()
       .get_awareness()
-      .get_states()
+      .clients()
       .iter()
       .map(|(_a, json)| {
-        let uid = json.get("uid").unwrap().as_i64();
-        uid.unwrap()
+        let user: UserId = serde_json::from_str(json).unwrap();
+        user.uid
       })
       .collect()
   }
@@ -686,10 +689,8 @@ impl TestClient {
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  pub async fn post_realtime_message(
-    &self,
-    message: client_websocket::Message,
-  ) -> Result<(), AppResponseError> {
+  pub async fn post_realtime_binary(&self, message: Vec<u8>) -> Result<(), AppResponseError> {
+    let message = client_websocket::Message::binary(message);
     self
       .api_client
       .post_realtime_msg(&self.device_id, message)
@@ -701,14 +702,7 @@ impl TestClient {
   }
 
   pub async fn reconnect(&self) {
-    self
-      .ws_client
-      .connect(
-        &self.api_client.ws_url(),
-        self.api_client.ws_connect_info().await.unwrap(),
-      )
-      .await
-      .unwrap();
+    self.ws_client.connect().await.unwrap();
   }
 
   pub async fn get_edit_collab_json(&self, object_id: &str) -> Value {

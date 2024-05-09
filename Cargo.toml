@@ -194,10 +194,10 @@ tonic-proto = { path = "libs/tonic-proto" }
 
 # collaboration
 yrs = "0.18.7"
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "316500d8e8f" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "316500d8e8f" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "316500d8e8f" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "316500d8e8f" }
 
 [profile.release]
 lto = true

@@ -7,7 +7,7 @@ use crate::biz::user::auth::jwt::UserUuid;
 use crate::biz::workspace;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
 use crate::state::AppState;
-use actix_web::web::{Bytes, Payload, Query};
+use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
@@ -126,11 +126,11 @@ pub fn workspace_scope() -> Scope {
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
         .route(web::get().to(get_collab_member_list_handler)),
     )
-    .service( // Deprecated
-      web::resource("/{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
-    )
     .service(
-      web::resource("/v1/{workspace_id}/collab_list").route(web::get().to(v1_batch_get_collab_handler)),
+      web::resource("/{workspace_id}/collab_list")
+      .route(web::get().to(batch_get_collab_handler)) // deprecated: browser cannot use json param
+                                                      // for GET request
+      .route(web::post().to(batch_get_collab_handler)),
     )
     .service(
       web::resource("/{workspace_id}/summarize_row").route(web::post().to(summary_row_handler)),
@@ -749,32 +749,11 @@ async fn get_all_collab_snapshot_list_handler(
   Ok(Json(AppResponse::Ok().with_data(data)))
 }
 
-// Deprecated
 #[instrument(level = "debug", skip(payload, state), err)]
 async fn batch_get_collab_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   payload: Json<BatchQueryCollabParams>,
-) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
-  let uid = state
-    .user_cache
-    .get_user_uid(&user_uuid)
-    .await
-    .map_err(AppResponseError::from)?;
-  let result = BatchQueryCollabResult(
-    state
-      .collab_access_control_storage
-      .batch_get_collab(&uid, payload.into_inner().0)
-      .await,
-  );
-  Ok(Json(AppResponse::Ok().with_data(result)))
-}
-
-#[instrument(level = "debug", skip(payload, state), err)]
-async fn v1_batch_get_collab_handler(
-  user_uuid: UserUuid,
-  state: Data<AppState>,
-  payload: Query<BatchQueryCollabParams>,
 ) -> Result<Json<AppResponse<BatchQueryCollabResult>>> {
   let uid = state
     .user_cache

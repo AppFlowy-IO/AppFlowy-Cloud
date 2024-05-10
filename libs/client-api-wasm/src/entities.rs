@@ -214,9 +214,9 @@ impl From<ClientQueryCollab> for QueryCollab {
   }
 }
 
-#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[derive(Tsify, Serialize, Deserialize, Default)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
-pub struct BatchClientEncodeCollab(pub HashMap<String, Vec<u8>>);
+pub struct BatchClientEncodeCollab(pub HashMap<String, ClientEncodeCollab>);
 
 from_struct_for_jsvalue!(BatchClientEncodeCollab);
 
@@ -226,7 +226,13 @@ impl From<BatchQueryCollabResult> for BatchClientEncodeCollab {
 
     result.0.into_iter().for_each(|(k, v)| match v {
       QueryCollabResult::Success { encode_collab_v1 } => {
-        hash_map.insert(k, encode_collab_v1);
+        EncodedCollab::decode_from_bytes(&encode_collab_v1)
+          .map(|collab| {
+            hash_map.insert(k, ClientEncodeCollab::from(collab));
+          })
+          .unwrap_or_else(|err| {
+            tracing::error!("Failed to decode collab: {:?}", err);
+          });
       },
       QueryCollabResult::Failed { .. } => {
         tracing::error!("Failed to get collab: {:?}", k);

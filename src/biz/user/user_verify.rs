@@ -35,6 +35,13 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
     .await
     .context("acquire transaction to verify token")?;
 
+  // Check if the user already exists in the database
+  let user_exists = is_user_exist(&state.pg_pool, &user_uuid).await?;
+  if user_exists {
+    tracing::info!("user already exists:{},{}", user_uuid, user.email);
+    return Ok(false);
+  }
+
   // To prevent concurrent creation of the same user with the same workspace resources, we lock
   // the user row when `verify_token` is called. This means that if multiple requests try to
   // create the same user simultaneously, the first request will acquire the lock, create the user,

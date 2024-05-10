@@ -191,8 +191,9 @@ pub async fn is_user_exist<'a, E: Executor<'a, Database = Postgres>>(
   "#,
     user_uuid
   )
-  .fetch_one(executor)
-  .await?;
+  .fetch_optional(executor)
+  .await?
+  .unwrap_or(None);
 
   Ok(exists.unwrap_or(false))
 }

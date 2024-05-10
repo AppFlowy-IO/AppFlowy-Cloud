@@ -14,7 +14,6 @@ use crate::biz::casbin::{
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
-use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
@@ -33,6 +32,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollaborationServer;

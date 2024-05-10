@@ -19,7 +19,7 @@ use workspace_template::document::get_started::GetStartedDocumentTemplate;
 #[instrument(skip_all, err)]
 pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, AppError> {
   if true {
-    panic("test");
+    panic!("test");
   }
   let user = state.gotrue_client.user_info(access_token).await?;
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;

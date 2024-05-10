@@ -1,3 +1,4 @@
+mod chat;
 pub mod file_storage;
 pub mod metrics;
 pub mod user;

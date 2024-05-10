@@ -22,6 +22,11 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
 
+  let is_new = !is_user_exist(&state.pg_pool, &user_uuid).await?;
+  if !is_new {
+    return Ok(false);
+  }
+
   let mut txn = state
     .pg_pool
     .begin()

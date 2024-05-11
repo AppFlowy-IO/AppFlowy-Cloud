@@ -2,8 +2,9 @@ use crate::pg_row::AFChatRow;
 use crate::workspace::is_workspace_exist;
 use anyhow::anyhow;
 use app_error::AppError;
+use chrono::{DateTime, Utc};
 use database_entity::chat::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageOffset,
   RepeatedChatMessage, UpdateChatParams,
 };
 use serde_json::json;
@@ -46,6 +47,12 @@ pub async fn insert_chat(
   Ok(())
 }
 
+/// Updates specific fields of a chat record in the database using transactional queries.
+///
+/// This function dynamically builds an SQL `UPDATE` query based on the provided parameters to
+/// update fields of a specific chat record identified by `chat_id`. It uses a transaction to ensure
+/// that the update operation is atomic.
+///
 pub async fn update_chat(
   txn: &mut Transaction<'_, Postgres>,
   chat_id: &Uuid,
@@ -122,16 +129,18 @@ pub async fn get_chat<'a, E: Executor<'a, Database = Postgres>>(
 
 pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
+  uid: i64,
   chat_id: &str,
   params: CreateChatMessageParams,
 ) -> Result<(), AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
   sqlx::query!(
     r#"
-       INSERT INTO af_chat_messages (chat_id, content)
-       VALUES ($1, $2)
+       INSERT INTO af_chat_messages (chat_id, uid, content)
+       VALUES ($1, $2, $3)
     "#,
     chat_id,
+    uid,
     params.content,
   )
   .execute(executor)
@@ -146,37 +155,98 @@ pub async fn select_chat_messages(
   params: GetChatMessageParams,
 ) -> Result<RepeatedChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
-  // Get the messages in descending order of created_at timestamp and message_id. This
-  // ensures that even if two messages have the same timestamp, they will still be sorted
-  // consistently based on their ID.
-  let messages: Vec<ChatMessage> = sqlx::query_as!(
-    ChatMessage,
-    r#"
-     SELECT message_id, content, created_at
-          FROM af_chat_messages
-          WHERE chat_id = $1
-          ORDER BY created_at DESC, message_id DESC
-          LIMIT $2 OFFSET $3
-   "#,
-    &chat_id,
-    params.limit as i64,
-    params.offset as i64,
-  )
-  .fetch_all(txn.deref_mut())
-  .await?;
+  let mut query = r#"
+        SELECT message_id, content, created_at
+        FROM af_chat_messages
+        WHERE chat_id = $1
+    "#
+  .to_string();
+
+  let mut args = PgArguments::default();
+  args.add(&chat_id);
+
+  // Message IDs:   1    2    3    4    5
+  // AfterMessageId(3, 5):   [4]  [5]  has_more = false
+  // BeforeMessageId(3, 5):  [1]  [2]  has_more = false
+  // Offset(3, 5):           [4]  [5]  has_more = true
+  match params.offset {
+    MessageOffset::AfterMessageId(after_message_id) => {
+      query += " AND message_id > $2";
+      args.add(after_message_id);
+      query += " ORDER BY message_id ASC LIMIT $3";
+      args.add(params.limit as i64);
+    },
+    MessageOffset::Offset(offset) => {
+      query += " ORDER BY message_id ASC LIMIT $2 OFFSET $3";
+      args.add(params.limit as i64);
+      args.add(offset as i64);
+    },
+    MessageOffset::BeforeMessageId(before_message_id) => {
+      query += " AND message_id < $2";
+      args.add(before_message_id);
+      query += " ORDER BY message_id ASC LIMIT $3";
+      args.add(params.limit as i64);
+    },
+  }
+
+  let rows: Vec<(i64, String, DateTime<Utc>)> = sqlx::query_as_with(&query, args)
+    .fetch_all(txn.deref_mut())
+    .await?;
+
+  let messages = rows
+    .into_iter()
+    .map(|(message_id, content, created_at)| ChatMessage {
+      message_id,
+      content,
+      created_at,
+    })
+    .collect::<Vec<ChatMessage>>();
 
   let total = sqlx::query_scalar!(
     r#"
-      SELECT COUNT(*)
-      FROM public.af_chat_messages
-      WHERE chat_id = $1
-    "#,
+        SELECT COUNT(*)
+        FROM public.af_chat_messages
+        WHERE chat_id = $1
+        "#,
     &chat_id
   )
   .fetch_one(txn.deref_mut())
   .await?
   .unwrap_or(0);
-  let has_more = (params.offset + params.limit) < total as u64;
+
+  let has_more = match params.offset {
+    MessageOffset::AfterMessageId(_) => {
+      if messages.is_empty() {
+        false
+      } else {
+        sqlx::query!(
+          "SELECT EXISTS(SELECT 1 FROM af_chat_messages WHERE chat_id = $1 AND message_id > $2)",
+          &chat_id,
+          messages.last().as_ref().unwrap().message_id
+        )
+        .fetch_one(txn.deref_mut())
+        .await?
+        .exists
+        .unwrap_or(false)
+      }
+    },
+    MessageOffset::Offset(offset) => (offset + params.limit) < total as u64,
+    MessageOffset::BeforeMessageId(_) => {
+      if messages.is_empty() {
+        false
+      } else {
+        sqlx::query!(
+          "SELECT EXISTS(SELECT 1 FROM af_chat_messages WHERE chat_id = $1 AND message_id < $2)",
+          &chat_id,
+          messages[0].message_id
+        )
+        .fetch_one(txn.deref_mut())
+        .await?
+        .exists
+        .unwrap_or(false)
+      }
+    },
+  };
 
   Ok(RepeatedChatMessage {
     messages,
@@ -196,7 +266,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
      SELECT message_id, content, created_at
           FROM af_chat_messages
           WHERE chat_id = $1
-          ORDER BY created_at DESC
+          ORDER BY created_at ASC
    "#,
     chat_id,
   )

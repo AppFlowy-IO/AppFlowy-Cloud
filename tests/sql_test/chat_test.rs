@@ -94,47 +94,72 @@ async fn chat_message_crud_test(pool: PgPool) {
     let params = CreateChatMessageParams {
       content: format!("message {}", i),
     };
-    insert_chat_message(&pool, &chat_id, params).await.unwrap();
+    insert_chat_message(&pool, user.uid, &chat_id, params)
+      .await
+      .unwrap();
   }
 
-  // get 3 messages
+  // get 3 messages: 1,2,3
   {
+    // option 1:use offset to get 3 messages => 1,2,3
     let mut txn = pool.begin().await.unwrap();
-    let params = GetChatMessageParams {
-      chat_id: chat_id.clone(),
-      limit: 3,
-      offset: 0,
-      after_message_id: None,
-    };
-    let result = select_chat_messages(&mut txn, &chat_id, params)
+    let params = GetChatMessageParams::offset(chat_id.clone(), 0, 3);
+    let result_1 = select_chat_messages(&mut txn, &chat_id, params)
       .await
       .unwrap();
     txn.commit().await.unwrap();
-    assert_eq!(result.messages.len(), 3);
-    assert_eq!(result.total, 5);
-    assert!(result.has_more);
-  }
+    assert_eq!(result_1.messages.len(), 3);
+    assert_eq!(result_1.messages[0].message_id, 1);
+    assert_eq!(result_1.messages[1].message_id, 2);
+    assert_eq!(result_1.messages[2].message_id, 3);
+    assert_eq!(result_1.total, 5);
+    assert!(result_1.has_more);
 
-  // get remaining 2 messages
-  {
-    let params = GetChatMessageParams {
-      chat_id: chat_id.clone(),
-      limit: 3,
-      offset: 3,
-      after_message_id: None,
-    };
-
+    // option 2:use before_message_id to get 3 messages => 1,2,3
+    let params = GetChatMessageParams::before_message_id(chat_id.clone(), 4, 3);
     let mut txn = pool.begin().await.unwrap();
-    let result = select_chat_messages(&mut txn, &chat_id, params)
+    let result_2 = select_chat_messages(&mut txn, &chat_id, params)
       .await
       .unwrap();
     txn.commit().await.unwrap();
-    assert_eq!(result.messages.len(), 2);
-    assert_eq!(result.total, 5);
-    assert!(!result.has_more);
+    assert_eq!(result_2.messages.len(), 3);
+    assert_eq!(result_2.messages[0].message_id, 1);
+    assert_eq!(result_2.messages[1].message_id, 2);
+    assert_eq!(result_2.messages[2].message_id, 3);
+    assert_eq!(result_2.total, 5);
+    assert!(!result_2.has_more);
   }
 
-  // get all messages at once
+  // get two messages: 4,5
+  {
+    // option 1:use offset to get 2 messages => 4,5
+    let params = GetChatMessageParams::offset(chat_id.clone(), 3, 3);
+    let mut txn = pool.begin().await.unwrap();
+    let result_1 = select_chat_messages(&mut txn, &chat_id, params)
+      .await
+      .unwrap();
+    txn.commit().await.unwrap();
+    assert_eq!(result_1.messages.len(), 2);
+    assert_eq!(result_1.messages[0].message_id, 4);
+    assert_eq!(result_1.messages[1].message_id, 5);
+    assert_eq!(result_1.total, 5);
+    assert!(!result_1.has_more);
+
+    // option 2:use after_message_id to get remaining 2 messages => 4,5
+    let params = GetChatMessageParams::after_message_id(chat_id.clone(), 3, 3);
+    let mut txn = pool.begin().await.unwrap();
+    let result_2 = select_chat_messages(&mut txn, &chat_id, params)
+      .await
+      .unwrap();
+    txn.commit().await.unwrap();
+    assert_eq!(result_2.messages.len(), 2);
+    assert_eq!(result_2.messages[0].message_id, 4);
+    assert_eq!(result_2.messages[1].message_id, 5);
+    assert_eq!(result_2.total, 5);
+    assert!(!result_2.has_more);
+  }
+
+  // get all messages
   {
     let messages = get_all_chat_messages(&pool, &chat_id).await.unwrap();
     assert_eq!(messages.len(), 5);

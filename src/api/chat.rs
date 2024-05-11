@@ -1,4 +1,5 @@
 use crate::biz::chat::ops::{create_chat, create_chat_message, delete_chat, get_chat_messages};
+use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
@@ -54,9 +55,11 @@ async fn post_chat_message_handler(
   state: Data<AppState>,
   chat_id: web::Path<String>,
   payload: Json<CreateChatMessageParams>,
+  uuid: UserUuid,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let chat_id = chat_id.into_inner();
-  create_chat_message(&state.pg_pool, payload.into_inner(), &chat_id).await?;
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
+  create_chat_message(&state.pg_pool, uid, payload.into_inner(), &chat_id).await?;
   Ok(AppResponse::Ok().into())
 }
 

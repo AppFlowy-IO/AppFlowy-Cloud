@@ -10,7 +10,7 @@ use validator::Validate;
 pub(crate) async fn create_chat(
   pg_pool: &PgPool,
   params: CreateChatParams,
-  workspace_id: &String,
+  workspace_id: &str,
 ) -> Result<(), AppError> {
   params.validate()?;
 
@@ -29,19 +29,20 @@ pub(crate) async fn delete_chat(pg_pool: &PgPool, chat_id: &str) -> Result<(), A
 
 pub async fn create_chat_message(
   pg_pool: &PgPool,
+  uid: i64,
   params: CreateChatMessageParams,
-  chat_id: &String,
+  chat_id: &str,
 ) -> Result<(), AppError> {
   params.validate()?;
 
-  insert_chat_message(pg_pool, chat_id, params).await?;
+  insert_chat_message(pg_pool, uid, chat_id, params).await?;
   Ok(())
 }
 
 pub async fn get_chat_messages(
   pg_pool: &PgPool,
   params: GetChatMessageParams,
-  chat_id: &String,
+  chat_id: &str,
 ) -> Result<RepeatedChatMessage, AppError> {
   params.validate()?;
 

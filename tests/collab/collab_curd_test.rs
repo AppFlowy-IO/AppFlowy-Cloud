@@ -13,7 +13,7 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::collab::util::{generate_random_string, test_encode_collab_v1};
-use client_api_test_util::TestClient;
+use client_api_test::TestClient;
 use shared_entity::response::AppResponse;
 use uuid::Uuid;
 

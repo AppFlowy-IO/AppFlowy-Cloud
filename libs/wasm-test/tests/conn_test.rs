@@ -1,5 +1,5 @@
 use client_api::ws::{ConnectState, WSClient, WSClientConfig};
-use client_api_test_util::generate_unique_registered_user_client;
+use client_api_test::generate_unique_registered_user_client;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]

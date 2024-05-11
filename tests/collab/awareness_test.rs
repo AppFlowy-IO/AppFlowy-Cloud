@@ -1,4 +1,4 @@
-use client_api_test_util::TestClient;
+use client_api_test::TestClient;
 use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, AFRole};
 use std::time::Duration;

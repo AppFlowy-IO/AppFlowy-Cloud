@@ -1,9 +1,11 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use database::chat::chat_ops::{
-  delete_chat, get_all_chat_messages, get_chat, insert_chat, insert_chat_message,
+  delete_chat, get_all_chat_messages, insert_chat, insert_chat_message, select_chat,
   select_chat_messages,
 };
-use database_entity::chat::{CreateChatMessageParams, CreateChatParams, GetChatMessageParams};
+use database_entity::chat::{
+  ChatAuthor, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -38,7 +40,7 @@ async fn chat_crud_test(pool: PgPool) {
 
   // get chat
   {
-    let chat = get_chat(&pool, &chat_id).await.unwrap();
+    let chat = select_chat(&pool, &chat_id).await.unwrap();
     assert_eq!(chat.name, "my first chat");
     assert_eq!(
       chat.rag_ids,
@@ -55,7 +57,7 @@ async fn chat_crud_test(pool: PgPool) {
 
   // get chat
   {
-    let result = get_chat(&pool, &chat_id).await.unwrap_err();
+    let result = select_chat(&pool, &chat_id).await.unwrap_err();
     assert!(result.is_record_not_found());
   }
 }
@@ -94,7 +96,7 @@ async fn chat_message_crud_test(pool: PgPool) {
     let params = CreateChatMessageParams {
       content: format!("message {}", i),
     };
-    insert_chat_message(&pool, user.uid, &chat_id, params)
+    insert_chat_message(&pool, ChatAuthor::Human { uid: user.uid }, &chat_id, params)
       .await
       .unwrap();
   }

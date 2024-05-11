@@ -15,7 +15,7 @@ CREATE TABLE af_chat
 CREATE TABLE af_chat_messages
 (
     message_id BIGSERIAL PRIMARY KEY,
-    uid        BIGINT                   NOT NULL,
+    author     JSONB                    NOT NULL,
     chat_id    UUID                     NOT NULL,
     content    TEXT                     NOT NULL,
     deleted_at TIMESTAMP WITH TIME ZONE          DEFAULT NULL,

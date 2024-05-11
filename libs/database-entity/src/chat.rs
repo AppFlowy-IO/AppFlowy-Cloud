@@ -73,6 +73,7 @@ pub enum MessageOffset {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
+  pub author: ChatAuthor,
   pub message_id: i64,
   pub content: String,
   pub created_at: DateTime<Utc>,
@@ -83,4 +84,21 @@ pub struct RepeatedChatMessage {
   pub messages: Vec<ChatMessage>,
   pub has_more: bool,
   pub total: i64,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum ChatAuthor {
+  #[default]
+  Unknown,
+  Human {
+    uid: i64,
+  },
+  System,
+  AI,
+}
+
+impl From<serde_json::Value> for ChatAuthor {
+  fn from(value: serde_json::Value) -> Self {
+    serde_json::from_value::<ChatAuthor>(value).unwrap_or_default()
+  }
 }

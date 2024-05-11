@@ -2,7 +2,7 @@ use app_error::AppError;
 use database::chat;
 use database::chat::chat_ops::{insert_chat, insert_chat_message, select_chat_messages};
 use database_entity::chat::{
-  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+  ChatAuthor, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
 };
 use sqlx::PgPool;
 use validator::Validate;
@@ -35,7 +35,7 @@ pub async fn create_chat_message(
 ) -> Result<(), AppError> {
   params.validate()?;
 
-  insert_chat_message(pg_pool, uid, chat_id, params).await?;
+  insert_chat_message(pg_pool, ChatAuthor::Human { uid }, chat_id, params).await?;
   Ok(())
 }
 

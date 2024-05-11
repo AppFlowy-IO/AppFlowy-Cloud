@@ -4,9 +4,10 @@ use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
 use database_entity::chat::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageOffset,
-  RepeatedChatMessage, UpdateChatParams,
+  ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+  MessageOffset, RepeatedChatMessage, UpdateChatParams,
 };
+
 use serde_json::json;
 use sqlx::postgres::PgArguments;
 use sqlx::{Arguments, Executor, Postgres, Transaction};
@@ -102,7 +103,7 @@ pub async fn delete_chat(
   Ok(())
 }
 
-pub async fn get_chat<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn select_chat<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   chat_id: &str,
 ) -> Result<AFChatRow, AppError> {
@@ -129,18 +130,19 @@ pub async fn get_chat<'a, E: Executor<'a, Database = Postgres>>(
 
 pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  uid: i64,
+  author: ChatAuthor,
   chat_id: &str,
   params: CreateChatMessageParams,
 ) -> Result<(), AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
+  let author = json!(author);
   sqlx::query!(
     r#"
-       INSERT INTO af_chat_messages (chat_id, uid, content)
+       INSERT INTO af_chat_messages (chat_id, author, content)
        VALUES ($1, $2, $3)
     "#,
     chat_id,
-    uid,
+    author,
     params.content,
   )
   .execute(executor)
@@ -156,7 +158,7 @@ pub async fn select_chat_messages(
 ) -> Result<RepeatedChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
   let mut query = r#"
-        SELECT message_id, content, created_at
+        SELECT message_id, content, created_at, author
         FROM af_chat_messages
         WHERE chat_id = $1
     "#
@@ -189,13 +191,15 @@ pub async fn select_chat_messages(
     },
   }
 
-  let rows: Vec<(i64, String, DateTime<Utc>)> = sqlx::query_as_with(&query, args)
-    .fetch_all(txn.deref_mut())
-    .await?;
+  let rows: Vec<(i64, String, DateTime<Utc>, serde_json::Value)> =
+    sqlx::query_as_with(&query, args)
+      .fetch_all(txn.deref_mut())
+      .await?;
 
   let messages = rows
     .into_iter()
-    .map(|(message_id, content, created_at)| ChatMessage {
+    .map(|(message_id, content, created_at, author)| ChatMessage {
+      author: serde_json::from_value::<ChatAuthor>(author).unwrap_or_default(),
       message_id,
       content,
       created_at,
@@ -263,7 +267,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
   let messages: Vec<ChatMessage> = sqlx::query_as!(
     ChatMessage,
     r#"
-     SELECT message_id, content, created_at
+     SELECT message_id, content, created_at, author
           FROM af_chat_messages
           WHERE chat_id = $1
           ORDER BY created_at ASC

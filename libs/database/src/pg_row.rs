@@ -195,3 +195,20 @@ pub struct AFCollabRowMeta {
   pub deleted_at: Option<DateTime<Utc>>,
   pub created_at: Option<DateTime<Utc>>,
 }
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct AFChatRow {
+  pub chat_id: Uuid,
+  pub name: String,
+  pub created_at: DateTime<Utc>,
+  pub deleted_at: Option<DateTime<Utc>>,
+  pub rag_ids: serde_json::Value,
+  pub workspace_id: Uuid,
+}
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct AFChatMessageRow {
+  pub message_id: i64,
+  pub chat_id: Uuid,
+  pub content: String,
+  pub created_at: DateTime<Utc>,
+}

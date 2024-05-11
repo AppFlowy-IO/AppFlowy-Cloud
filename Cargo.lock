@@ -522,12 +522,13 @@ dependencies = [
 [[package]]
 name = "appflowy-ai-client"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI?tag=0.0.7#115f185e15f895abf750415584248689b9ff8ea2"
+source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI-Client?tag=0.0.1#ea7caaad27bb9773bcca1d67f7785fcd7d4fbc46"
 dependencies = [
  "anyhow",
  "reqwest 0.12.4",
  "serde",
  "serde_json",
+ "serde_repr",
  "thiserror",
  "tracing",
 ]
@@ -6136,9 +6137,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.36.0"
+version = "1.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61285f6515fa018fb2d1e46eb21223fff441ee8db5d0f1435e8ab4f5cdb80931"
+checksum = "1adbebffeca75fcfd058afa480fb6c0b81e165a0323f9c9d39c9697e37c46787"
 dependencies = [
  "backtrace",
  "bytes",

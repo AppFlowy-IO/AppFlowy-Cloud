@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n       INSERT INTO af_chat_messages (chat_id, author, content)\n       VALUES ($1, $2, $3)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e2c448a5fad523713d2f755935f8cc1e9b66c4b9c40e9e688bc34f5de127f33a"
+}

@@ -149,7 +149,6 @@ members = [
     "libs/appflowy-ai-client",
     # services
     "services/appflowy-history",
-    "services/realtime",
     "services/appflowy-collaborate",
     # xtask
     "xtask",

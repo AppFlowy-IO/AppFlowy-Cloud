@@ -629,6 +629,7 @@ dependencies = [
 name = "appflowy-collaborate"
 version = "0.1.0"
 dependencies = [
+ "access-control",
  "anyhow",
  "app-error",
  "async-stream",
@@ -4630,10 +4631,6 @@ dependencies = [
  "x509-parser",
  "yasna",
 ]
-
-[[package]]
-name = "realtime"
-version = "0.1.0"
 
 [[package]]
 name = "redis"

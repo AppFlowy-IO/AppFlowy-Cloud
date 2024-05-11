@@ -725,3 +725,24 @@ pub async fn select_workspace_pending_invitations(
   .await?;
   Ok(invitee_emails.into_iter().collect())
 }
+
+#[inline]
+pub async fn is_workspace_exist<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+    SELECT EXISTS(
+      SELECT 1
+      FROM af_workspace
+      WHERE workspace_id = $1
+    ) AS user_exists;
+  "#,
+    workspace_id
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}

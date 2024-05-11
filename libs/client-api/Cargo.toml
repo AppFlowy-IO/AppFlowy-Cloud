@@ -12,8 +12,6 @@ reqwest = { version = "0.11.27", features = ["stream", "json"] }
 anyhow = "1.0.79"
 serde_repr = "0.1.18"
 gotrue = { path = "../gotrue" }
-gotrue-entity = { path = "../gotrue-entity" }
-shared-entity = { path = "../shared-entity" }
 tracing = { version = "0.1" }
 thiserror = "1.0.56"
 bytes = "1.5"
@@ -28,21 +26,24 @@ bincode = "1.3.3"
 url = "2.5.0"
 mime = "0.3.17"
 tokio-stream = { version = "0.1.14" }
-collab-rt-entity = { workspace = true }
 chrono = "0.4"
 client-websocket = { workspace = true, features = ["native-tls"] }
 semver = "1.0.22"
 
 collab = { workspace = true, optional = true }
-collab-entity = { workspace = true }
 yrs = { workspace = true, optional = true }
 collab-rt-protocol = { workspace = true }
 workspace-template = { workspace = true, optional = true }
 serde_json.workspace = true
 serde.workspace = true
-database-entity.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
+
+collab-entity = { workspace = true }
+gotrue-entity = { workspace = true }
+shared-entity = { workspace = true }
+collab-rt-entity = { workspace = true }
+database-entity.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"

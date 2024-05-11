@@ -13,10 +13,3 @@ pub(crate) fn validate_not_empty_payload(payload: &[u8]) -> Result<(), Validatio
   }
   Ok(())
 }
-
-pub(crate) fn validate_int_bigger_or_equal_to_zero(i: &i64) -> Result<(), ValidationError> {
-  if *i < 0 {
-    return Err(ValidationError::new("should be bigger or equal to zero"));
-  }
-  Ok(())
-}

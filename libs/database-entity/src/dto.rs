@@ -10,7 +10,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use tracing::error;
 use uuid::Uuid;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {

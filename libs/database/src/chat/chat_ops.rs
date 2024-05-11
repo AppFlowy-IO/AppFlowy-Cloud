@@ -3,18 +3,19 @@ use crate::workspace::is_workspace_exist;
 use anyhow::anyhow;
 use app_error::AppError;
 use database_entity::chat::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+  RepeatedChatMessage, UpdateChatParams,
 };
 use serde_json::json;
-use sqlx::{Executor, Postgres, Transaction};
+use sqlx::postgres::PgArguments;
+use sqlx::{Arguments, Executor, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
-use tracing::instrument;
+
 use uuid::Uuid;
 
 pub async fn insert_chat(
   txn: &mut Transaction<'_, Postgres>,
-  uid: &i64,
   workspace_id: &str,
   params: CreateChatParams,
 ) -> Result<(), AppError> {
@@ -48,21 +49,31 @@ pub async fn insert_chat(
 pub async fn update_chat(
   txn: &mut Transaction<'_, Postgres>,
   chat_id: &Uuid,
-  params: CreateChatParams,
+  params: UpdateChatParams,
 ) -> Result<(), AppError> {
-  let rag_ids = json!(params.rag_ids);
-  sqlx::query!(
-    r#"
-        UPDATE af_chat
-        SET name = $1, rag_ids = $2
-        WHERE chat_id = $3
-    "#,
-    params.name,
-    rag_ids,
-    chat_id,
-  )
-  .execute(txn.deref_mut())
-  .await?;
+  let mut query_parts = vec!["UPDATE af_chat SET".to_string()];
+  let mut args = PgArguments::default();
+  let mut current_param_pos = 1; // Start counting SQL parameters from 1
+
+  if let Some(ref name) = params.name {
+    query_parts.push(format!("name = ${}", current_param_pos));
+    args.add(name);
+    current_param_pos += 1;
+  }
+
+  if let Some(ref rag_ids) = params.rag_ids {
+    query_parts.push(format!("rag_ids = ${}", current_param_pos));
+    let rag_ids_json = json!(rag_ids);
+    args.add(rag_ids_json);
+    current_param_pos += 1;
+  }
+
+  query_parts.push(format!("WHERE chat_id = ${}", current_param_pos));
+  args.add(chat_id);
+
+  let query = query_parts.join(", ") + ";";
+  let query = sqlx::query_with(&query, args);
+  query.execute(txn.deref_mut()).await?;
   Ok(())
 }
 
@@ -111,9 +122,10 @@ pub async fn get_chat<'a, E: Executor<'a, Database = Postgres>>(
 
 pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
+  chat_id: &str,
   params: CreateChatMessageParams,
 ) -> Result<(), AppError> {
-  let chat_id = Uuid::from_str(&params.chat_id)?;
+  let chat_id = Uuid::from_str(chat_id)?;
   sqlx::query!(
     r#"
        INSERT INTO af_chat_messages (chat_id, content)
@@ -128,20 +140,22 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   Ok(())
 }
 
-pub async fn get_chat_messages(
+pub async fn select_chat_messages(
   txn: &mut Transaction<'_, Postgres>,
+  chat_id: &str,
   params: GetChatMessageParams,
 ) -> Result<RepeatedChatMessage, AppError> {
-  let chat_id = Uuid::from_str(&params.chat_id)?;
-  // Get number of messages base on offset and limit. return number of ChatMessage and has_more flag
-  // and the total number of messages.
+  let chat_id = Uuid::from_str(chat_id)?;
+  // Get the messages in descending order of created_at timestamp and message_id. This
+  // ensures that even if two messages have the same timestamp, they will still be sorted
+  // consistently based on their ID.
   let messages: Vec<ChatMessage> = sqlx::query_as!(
     ChatMessage,
     r#"
      SELECT message_id, content, created_at
           FROM af_chat_messages
           WHERE chat_id = $1
-          ORDER BY created_at DESC
+          ORDER BY created_at DESC, message_id DESC
           LIMIT $2 OFFSET $3
    "#,
     &chat_id,
@@ -169,4 +183,24 @@ pub async fn get_chat_messages(
     total,
     has_more,
   })
+}
+
+pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  chat_id: &str,
+) -> Result<Vec<ChatMessage>, AppError> {
+  let chat_id = Uuid::from_str(chat_id)?;
+  let messages: Vec<ChatMessage> = sqlx::query_as!(
+    ChatMessage,
+    r#"
+     SELECT message_id, content, created_at
+          FROM af_chat_messages
+          WHERE chat_id = $1
+          ORDER BY created_at DESC
+   "#,
+    chat_id,
+  )
+  .fetch_all(executor)
+  .await?;
+  Ok(messages)
 }

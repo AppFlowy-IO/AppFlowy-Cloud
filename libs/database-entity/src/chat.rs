@@ -15,10 +15,18 @@ pub struct CreateChatParams {
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
-pub struct CreateChatMessageParams {
+pub struct UpdateChatParams {
   #[validate(custom = "validate_not_empty_str")]
   pub chat_id: String,
 
+  #[validate(custom = "validate_not_empty_str")]
+  pub name: Option<String>,
+
+  pub rag_ids: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
 }
@@ -29,6 +37,7 @@ pub struct GetChatMessageParams {
   pub chat_id: String,
   pub offset: u64,
   pub limit: u64,
+  pub after_message_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

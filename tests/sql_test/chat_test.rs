@@ -1,6 +1,7 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use database::chat::chat_ops::{
-  delete_chat, get_chat, get_chat_messages, insert_chat, insert_chat_message,
+  delete_chat, get_all_chat_messages, get_chat, insert_chat, insert_chat_message,
+  select_chat_messages,
 };
 use database_entity::chat::{CreateChatMessageParams, CreateChatParams, GetChatMessageParams};
 use serde_json::json;
@@ -23,7 +24,6 @@ async fn chat_crud_test(pool: PgPool) {
     let mut txn = pool.begin().await.unwrap();
     insert_chat(
       &mut txn,
-      &user.uid,
       &user.workspace_id,
       CreateChatParams {
         chat_id: chat_id.clone(),
@@ -77,7 +77,6 @@ async fn chat_message_crud_test(pool: PgPool) {
     let mut txn = pool.begin().await.unwrap();
     insert_chat(
       &mut txn,
-      &user.uid,
       &user.workspace_id,
       CreateChatParams {
         chat_id: chat_id.clone(),
@@ -93,10 +92,9 @@ async fn chat_message_crud_test(pool: PgPool) {
   // create chat messages
   for i in 0..5 {
     let params = CreateChatMessageParams {
-      chat_id: chat_id.clone(),
       content: format!("message {}", i),
     };
-    insert_chat_message(&pool, params).await.unwrap();
+    insert_chat_message(&pool, &chat_id, params).await.unwrap();
   }
 
   // get 3 messages
@@ -106,12 +104,15 @@ async fn chat_message_crud_test(pool: PgPool) {
       chat_id: chat_id.clone(),
       limit: 3,
       offset: 0,
+      after_message_id: None,
     };
-    let result = get_chat_messages(&mut txn, params).await.unwrap();
+    let result = select_chat_messages(&mut txn, &chat_id, params)
+      .await
+      .unwrap();
     txn.commit().await.unwrap();
     assert_eq!(result.messages.len(), 3);
     assert_eq!(result.total, 5);
-    assert_eq!(result.has_more, true);
+    assert!(result.has_more);
   }
 
   // get remaining 2 messages
@@ -120,29 +121,22 @@ async fn chat_message_crud_test(pool: PgPool) {
       chat_id: chat_id.clone(),
       limit: 3,
       offset: 3,
+      after_message_id: None,
     };
 
     let mut txn = pool.begin().await.unwrap();
-    let result = get_chat_messages(&mut txn, params).await.unwrap();
+    let result = select_chat_messages(&mut txn, &chat_id, params)
+      .await
+      .unwrap();
     txn.commit().await.unwrap();
     assert_eq!(result.messages.len(), 2);
     assert_eq!(result.total, 5);
-    assert_eq!(result.has_more, false);
+    assert!(!result.has_more);
   }
 
   // get all messages at once
   {
-    let params = GetChatMessageParams {
-      chat_id: chat_id.clone(),
-      limit: 0,
-      offset: 0,
-    };
-
-    let mut txn = pool.begin().await.unwrap();
-    let result = get_chat_messages(&mut txn, params).await.unwrap();
-    txn.commit().await.unwrap();
-    assert_eq!(result.messages.len(), 5);
-    assert_eq!(result.total, 5);
-    assert_eq!(result.has_more, false);
+    let messages = get_all_chat_messages(&pool, &chat_id).await.unwrap();
+    assert_eq!(messages.len(), 5);
   }
 }

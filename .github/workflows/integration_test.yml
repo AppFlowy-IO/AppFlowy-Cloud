@@ -52,6 +52,7 @@ jobs:
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_history:${GITHUB_SHA}
           APPFLOWY_HISTORY_VERSION=${GITHUB_SHA} 
+          APPFLOWY_CLOUD_VERSION=0.1.1
 
 
   test:

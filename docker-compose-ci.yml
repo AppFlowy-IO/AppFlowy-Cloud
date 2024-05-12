@@ -144,7 +144,6 @@ services:
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
-      - SEARCH_ENABLED=true
 
   appflowy_history:
     restart: on-failure

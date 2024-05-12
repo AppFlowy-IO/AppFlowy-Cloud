@@ -1,9 +1,9 @@
-use appflowy_ai_client::client::AppFlowyAIClient;
+use crate::appflowy_ai_client;
 use appflowy_ai_client::dto::CompletionType;
 
 #[tokio::test]
 async fn continue_writing_test() {
-  let client = AppFlowyAIClient::new("http://localhost:5001");
+  let client = appflowy_ai_client();
   let resp = client
     .completion_text("I feel hungry", CompletionType::ContinueWriting)
     .await
@@ -14,7 +14,7 @@ async fn continue_writing_test() {
 
 #[tokio::test]
 async fn improve_writing_test() {
-  let client = AppFlowyAIClient::new("http://localhost:5001");
+  let client = appflowy_ai_client();
   let resp = client
     .completion_text(
       "I fell tired because i sleep not very well last night",
@@ -29,8 +29,7 @@ async fn improve_writing_test() {
 }
 #[tokio::test]
 async fn make_text_shorter_text() {
-  let client = AppFlowyAIClient::new("http://localhost:5001");
-
+  let client = appflowy_ai_client();
   let resp = client
     .completion_text(
       "I have an immense passion and deep-seated affection for Rust, a modern, multi-paradigm, high-performance programming language that I find incredibly satisfying to use due to its focus on safety, speed, and concurrency",

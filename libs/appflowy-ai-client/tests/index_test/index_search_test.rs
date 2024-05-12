@@ -3,7 +3,7 @@ use appflowy_ai_client::dto::{CollabType, Document, SearchDocumentsRequest};
 
 #[tokio::test]
 async fn index_search() {
-  let client = AppFlowyAIClient::new("http://localhost:5001");
+  let client = appflowy_ai_client();
 
   client
     .index_documents(&[

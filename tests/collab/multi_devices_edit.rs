@@ -1,4 +1,4 @@
-use client_api_test_util::*;
+use client_api_test::*;
 use collab_entity::CollabType;
 use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 use serde_json::json;

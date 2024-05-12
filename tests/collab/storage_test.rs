@@ -6,7 +6,7 @@ use sqlx::types::Uuid;
 
 use app_error::ErrorCode;
 use appflowy_collaborate::collab::mem_cache::CollabMemCache;
-use client_api_test_util::*;
+use client_api_test::*;
 use database::collab::CollabMetadata;
 use database_entity::dto::{
   CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,

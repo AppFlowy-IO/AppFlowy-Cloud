@@ -1,4 +1,4 @@
-use client_api_test_util::generate_unique_registered_user_client;
+use client_api_test::generate_unique_registered_user_client;
 use collab_entity::CollabType;
 use database_entity::dto::QueryCollabParams;
 use shared_entity::dto::workspace_dto::CreateWorkspaceParam;

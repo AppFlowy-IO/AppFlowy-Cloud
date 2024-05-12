@@ -7,7 +7,7 @@ use collab::preclude::Collab;
 use collab_entity::CollabType;
 use serde_json::{json, Value};
 
-use client_api_test_util::*;
+use client_api_test::*;
 use database::collab::COLLAB_SNAPSHOT_LIMIT;
 use uuid::Uuid;
 

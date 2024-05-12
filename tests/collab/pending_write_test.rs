@@ -3,7 +3,7 @@ use crate::sql_test::util::{setup_db, test_create_user};
 use appflowy_cloud::biz::collab::queue::StorageQueue;
 use appflowy_cloud::biz::collab::WritePriority;
 use appflowy_collaborate::collab::cache::CollabCache;
-use client_api_test_util::setup_log;
+use client_api_test::setup_log;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use database_entity::dto::{CollabParams, QueryCollab};

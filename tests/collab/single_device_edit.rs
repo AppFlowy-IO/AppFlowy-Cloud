@@ -2,7 +2,7 @@ use crate::collab::util::{
   generate_random_bytes, generate_random_string, make_big_collab_doc_state,
 };
 use assert_json_diff::assert_json_eq;
-use client_api_test_util::*;
+use client_api_test::*;
 use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::json;

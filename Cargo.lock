@@ -522,7 +522,6 @@ dependencies = [
 [[package]]
 name = "appflowy-ai-client"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI-Client?tag=0.0.1#ea7caaad27bb9773bcca1d67f7785fcd7d4fbc46"
 dependencies = [
  "anyhow",
  "reqwest 0.12.4",
@@ -530,6 +529,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -559,7 +559,7 @@ dependencies = [
  "bytes",
  "chrono",
  "client-api",
- "client-api-test-util",
+ "client-api-test",
  "collab",
  "collab-document",
  "collab-entity",
@@ -1506,7 +1506,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "client-api-test-util"
+name = "client-api-test"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -6897,7 +6897,7 @@ name = "wasm-test"
 version = "0.1.0"
 dependencies = [
  "client-api",
- "client-api-test-util",
+ "client-api-test",
  "tokio",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",

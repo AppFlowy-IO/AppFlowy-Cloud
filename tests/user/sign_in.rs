@@ -1,5 +1,5 @@
 use app_error::ErrorCode;
-use client_api_test_util::*;
+use client_api_test::*;
 
 #[tokio::test]
 async fn sign_in_unknown_user() {

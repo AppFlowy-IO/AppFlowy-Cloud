@@ -1,4 +1,4 @@
-use client_api_test_util::*;
+use client_api_test::*;
 
 #[tokio::test]
 async fn sign_out_but_not_sign_in() {

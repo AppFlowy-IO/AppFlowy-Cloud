@@ -1,5 +1,5 @@
 use app_error::ErrorCode;
-use client_api_test_util::*;
+use client_api_test::*;
 use gotrue_entity::dto::AuthProvider;
 use std::time::Duration;
 

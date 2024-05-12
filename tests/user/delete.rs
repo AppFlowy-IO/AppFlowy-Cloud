@@ -1,4 +1,4 @@
-use client_api_test_util::*;
+use client_api_test::*;
 use gotrue::params::{AdminDeleteUserParams, AdminUserParams};
 
 #[tokio::test]

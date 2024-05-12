@@ -73,7 +73,7 @@ tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
 
 # ai
-appflowy-ai-client = { version = "0.1.0" }
+appflowy-ai-client = { path = "libs/appflowy-ai-client" }
 
 collab = { workspace = true }
 collab-document = { workspace = true }
@@ -106,7 +106,7 @@ once_cell = "1.19.0"
 tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
 scraper = "0.17.1"
-client-api-test-util = { path = "libs/client-api-test-util", features = ["collab-sync"] }
+client-api-test = { path = "libs/client-api-test", features = ["collab-sync"] }
 client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "sync_verbose_log", "test_fast_sync", "enable_brotli"] }
 opener = "0.6.1"
 image = "0.23.14"
@@ -143,9 +143,10 @@ members = [
     "libs/collab-rt-protocol",
     "libs/collab-stream",
     "libs/client-websocket",
-    "libs/client-api-test-util",
+    "libs/client-api-test",
     "libs/wasm-test",
     "libs/client-api-wasm",
+    "libs/appflowy-ai-client",
     # services
     "services/appflowy-history",
     "services/realtime",
@@ -210,8 +211,6 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI-Client", tag = "0.0.1" }
-
 # It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
 # So using patch to workaround this issue.
 collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }

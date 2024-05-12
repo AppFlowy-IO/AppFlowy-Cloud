@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
 use client_api::ws::{WSClient, WSClientConfig};
-use client_api_test_util::*;
+use client_api_test::*;
 use serde_json::json;
 use shared_entity::dto::auth_dto::{UpdateUserParams, UserMetaData};
 use std::time::Duration;

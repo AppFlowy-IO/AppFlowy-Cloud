@@ -48,17 +48,4 @@ impl GoTrueJWTClaims {
     let token_data = decode::<Self>(token, &DecodingKey::from_secret(secret), &VALIDATION)?;
     Ok(token_data.claims)
   }
-
-  pub fn verify_claim(claims: &GoTrueJWTClaims) -> Result<(), jsonwebtoken::errors::Error> {
-    let ts_expiry = claims.exp.ok_or_else(|| {
-      jsonwebtoken::errors::ErrorKind::MissingRequiredClaim("expect exp but not found".to_owned())
-    })?;
-
-    let ts_now = chrono::Utc::now().timestamp();
-    if ts_now > ts_expiry {
-      Err(jsonwebtoken::errors::ErrorKind::ExpiredSignature.into())
-    } else {
-      Ok(())
-    }
-  }
 }

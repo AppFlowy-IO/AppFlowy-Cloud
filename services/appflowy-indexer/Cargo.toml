@@ -1,0 +1,30 @@
+[package]
+name = "appflowy-indexer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "appflowy_indexer"
+path = "src/main.rs"
+
+[dependencies]
+collab.workspace = true
+collab-entity.workspace = true
+collab-stream.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+yrs.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager"] }
+futures = "0.3"
+log = "0.4"
+axum = "0.7"
+thiserror = "1.0"
+clap = { version = "4.5", features = ["derive", "env"] }
+tracing-subscriber = { version = "0.3", features = ["tracing-log", "env-filter"] }
+humantime = "2.1"
+dashmap = "5.5"
+uuid = { version = "1.8", features = ["v4"] }

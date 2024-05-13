@@ -661,7 +661,6 @@ dependencies = [
  "tonic-proto",
  "tracing",
  "tracing-bunyan-formatter",
- "tracing-log 0.1.4",
  "tracing-subscriber",
  "unicode-segmentation",
  "url",
@@ -762,45 +761,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "appflowy-search"
+name = "appflowy-indexer"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "assert-json-diff",
  "axum 0.7.4",
- "bincode",
- "chrono",
  "clap",
  "collab",
  "collab-entity",
  "collab-stream",
  "dashmap",
- "database",
- "dotenvy",
  "futures",
- "infra",
+ "humantime",
  "log",
- "openai-api-rs",
- "parking_lot 0.12.1",
- "prost",
- "rand 0.8.5",
  "redis 0.25.2",
  "serde",
  "serde_json",
- "serde_repr",
- "serial_test",
- "sqlx",
  "thiserror",
  "tokio",
  "tokio-stream",
- "tonic",
- "tonic-proto",
- "tower",
- "tower-http",
- "tower-service",
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "yrs",
 ]
 
 [[package]]
@@ -1152,12 +1134,6 @@ dependencies = [
  "object",
  "rustc-demangle",
 ]
-
-[[package]]
-name = "base64"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3441f0f7b02788e948e47f457ca01f1d7e6d92c693bc132c22b087d3141c03ff"
 
 [[package]]
 name = "base64"
@@ -3085,6 +3061,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "humantime"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
+
+[[package]]
 name = "hyper"
 version = "0.14.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3719,22 +3701,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "minreq"
-version = "2.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fdef521c74c2884a4f3570bcdb6d2a77b3c533feb6b27ac2ae72673cc221c64"
-dependencies = [
- "base64 0.12.3",
- "log",
- "once_cell",
- "rustls 0.21.12",
- "rustls-webpki 0.101.7",
- "serde",
- "serde_json",
- "webpki-roots 0.25.3",
-]
-
-[[package]]
 name = "mio"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3941,17 +3907,6 @@ name = "opaque-debug"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
-
-[[package]]
-name = "openai-api-rs"
-version = "4.0.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e5e092cc25a89159c9b95ab21a78bbc80abc3c52075a560d61b9fb154a12324"
-dependencies = [
- "minreq",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "opener"

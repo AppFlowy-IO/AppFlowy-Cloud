@@ -1,5 +1,6 @@
 use crate::collab_handle::CollabHandle;
 use crate::error::Result;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabControlEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
@@ -11,13 +12,13 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::time::interval;
-use tracing::error;
 
 const CONSUMER_NAME: &str = "open_collab";
 
 type Handles = Arc<DashMap<String, Arc<CollabHandle>>>;
 
 pub struct OpenCollabConsumer {
+  #[allow(dead_code)]
   handles: Handles,
   consumer_group: tokio::task::JoinHandle<()>,
 }
@@ -25,6 +26,7 @@ pub struct OpenCollabConsumer {
 impl OpenCollabConsumer {
   pub(crate) async fn new(
     redis_stream: CollabRedisStream,
+    ai_client: AppFlowyAIClient,
     control_stream_key: &str,
     ingest_interval: Duration,
   ) -> Result<Self> {
@@ -37,9 +39,11 @@ impl OpenCollabConsumer {
     let stale_messages = control_group.get_unacked_messages(CONSUMER_NAME).await?;
     Self::handle_messages(
       &mut control_group,
+      &ai_client,
       &redis_stream,
       handles.clone(),
       stale_messages,
+      ingest_interval,
     )
     .await;
 
@@ -55,11 +59,12 @@ impl OpenCollabConsumer {
           if let Some(handles) = weak_handles.upgrade() {
             for message in &messages {
               if let Ok(event) = CollabControlEvent::decode(&message.data) {
-                Self::handle_event(event, &redis_stream, &handles).await;
+                Self::handle_event(event, &redis_stream, &ai_client, &handles, ingest_interval)
+                  .await;
               }
             }
             if let Err(err) = control_group.ack_messages(&messages).await {
-              error!("Failed to ack messages: {:?}", err);
+              tracing::error!("Failed to ack messages: {:?}", err);
             }
           }
         }
@@ -72,11 +77,14 @@ impl OpenCollabConsumer {
     })
   }
 
+  #[inline]
   async fn handle_messages(
     control_group: &mut StreamGroup,
+    ai_client: &AppFlowyAIClient,
     redis_stream: &CollabRedisStream,
     handles: Handles,
     messages: Vec<StreamMessage>,
+    ingest_interval: Duration,
   ) {
     if messages.is_empty() {
       return;
@@ -85,7 +93,7 @@ impl OpenCollabConsumer {
     tracing::trace!("received {} messages", messages.len());
     for message in &messages {
       if let Ok(event) = CollabControlEvent::decode(&message.data) {
-        Self::handle_event(event, redis_stream, &handles).await
+        Self::handle_event(event, redis_stream, ai_client, &handles, ingest_interval).await
       }
     }
 
@@ -98,7 +106,9 @@ impl OpenCollabConsumer {
   async fn handle_event(
     event: CollabControlEvent,
     redis_stream: &CollabRedisStream,
+    ai_client: &AppFlowyAIClient,
     handles: &Handles,
+    ingest_interval: Duration,
   ) {
     match event {
       CollabControlEvent::Open {
@@ -112,10 +122,12 @@ impl OpenCollabConsumer {
           // create a new collab document handle, which will subscribe and apply incoming updates
           let result = CollabHandle::open(
             redis_stream,
-            &object_id,
-            &workspace_id,
+            ai_client.clone(),
+            object_id.clone(),
+            workspace_id.clone(),
             collab_type,
             doc_state,
+            ingest_interval,
           )
           .await;
           match result {

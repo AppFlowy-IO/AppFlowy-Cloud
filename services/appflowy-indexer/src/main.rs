@@ -1,3 +1,4 @@
+use appflowy_ai_client::client::AppFlowyAIClient;
 use clap::Parser;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -41,8 +42,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
   let redis_client = redis::Client::open(config.redis_url)?;
   let collab_stream = CollabRedisStream::new(redis_client).await?;
+  let ai_client = AppFlowyAIClient::new(&config.appflowy_ai_url);
   let consumer = OpenCollabConsumer::new(
     collab_stream,
+    ai_client,
     &config.control_stream_key,
     config.ingest_interval.into(),
   )

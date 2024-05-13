@@ -105,11 +105,11 @@ services:
 
   ai:
     restart: on-failure
-    image: appflowy-ai-appflowy_ai:latest
-    #image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
+    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
     ports:
       - 5001:5001
     environment:
+      - VECTOR_STORE_ENABLED=true
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}

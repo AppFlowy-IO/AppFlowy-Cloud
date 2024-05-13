@@ -8,9 +8,9 @@ use collab_stream::client::CollabRedisStream;
 
 use crate::consumer::OpenCollabConsumer;
 
-mod collab_handle;
-mod consumer;
-mod error;
+pub mod collab_handle;
+pub mod consumer;
+pub mod error;
 
 #[derive(Debug, Parser)]
 pub struct Config {

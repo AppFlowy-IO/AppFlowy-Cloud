@@ -32,7 +32,7 @@ impl OpenCollabConsumer {
   ) -> Result<Self> {
     let handles = Arc::new(DashMap::new());
     let mut control_group = redis_stream
-      .collab_control_stream(&control_stream_key, "indexer")
+      .collab_control_stream(control_stream_key, "indexer")
       .await?;
 
     // Handle stale messages

@@ -1,6 +1,5 @@
-use crate::error::Result;
-use appflowy_ai_client::client::AppFlowyAIClient;
-use appflowy_ai_client::dto::Document;
+use std::time::{Duration, Instant};
+
 use collab::core::collab::{
   DataSource, IndexContent, IndexContentReceiver, MutexCollab, TransactionMutExt, WeakMutexCollab,
 };
@@ -8,13 +7,19 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
-use collab_stream::client::CollabRedisStream;
-use collab_stream::model::{CollabUpdateEvent, StreamMessage};
-use collab_stream::stream_group::{ReadOption, StreamGroup};
-use std::time::{Duration, Instant};
 use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::interval;
+use tracing::instrument;
+
+use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_ai_client::dto::Document;
+use collab_stream::client::CollabRedisStream;
+use collab_stream::model::{CollabUpdateEvent, StreamMessage};
+use collab_stream::stream_group::{ReadOption, StreamGroup};
+
+use crate::error::Result;
+
 const CONSUMER_NAME: &str = "open_collab_handle";
 
 #[allow(dead_code)]
@@ -52,7 +57,9 @@ impl CollabHandle {
       let index_content = collab.subscribe_index_content();
       (MutexCollab::new(collab), index_content)
     };
-    Self::handle_messages(&mut update_stream, &collab, messages).await?;
+    if !messages.is_empty() {
+      Self::handle_collab_updates(&mut update_stream, &collab, messages).await?;
+    }
     let mut tasks = JoinSet::new();
     tasks.spawn(Self::receive_collab_updates(
       update_stream,
@@ -86,9 +93,9 @@ impl CollabHandle {
         .consumer_messages(CONSUMER_NAME, ReadOption::Count(100))
         .await;
       match result {
-        Ok(messages) => {
+        Ok(messages) if !messages.is_empty() => {
           if let Some(collab) = collab.upgrade() {
-            match Self::handle_messages(&mut update_stream, &collab, messages).await {
+            match Self::handle_collab_updates(&mut update_stream, &collab, messages).await {
               Ok(_) => { /* no changes */ },
               Err(err) => tracing::error!("failed to handle messages: {}", err),
             }
@@ -97,6 +104,7 @@ impl CollabHandle {
             return;
           }
         },
+        Ok(_) => { /* no messages */ },
         Err(err) => {
           tracing::error!("failed to receive messages: {}", err);
         },
@@ -104,15 +112,12 @@ impl CollabHandle {
     }
   }
 
-  async fn handle_messages(
+  #[instrument(skip(update_stream, collab, messages), fields(messages = messages.len()))]
+  async fn handle_collab_updates(
     update_stream: &mut StreamGroup,
     collab: &MutexCollab,
     messages: Vec<StreamMessage>,
   ) -> Result<()> {
-    if messages.is_empty() {
-      return Ok(());
-    }
-    tracing::trace!("received {} messages", messages.len());
     if let Some(collab) = collab.try_lock() {
       let mut txn = collab.try_transaction_mut()?;
 
@@ -169,11 +174,13 @@ impl CollabHandle {
               return;
             }
             Ok(update) => {
+              tracing::trace!("received index content event");
               let now = Instant::now();
               // check if enough time has passed since the last index update request
               if now - last_update_time >= interval {
                 match Self::handle_index_event(&client, update, object_id.clone(), workspace_id.clone(), &collab_type).await {
                   Ok(_) => {
+                    tracing::trace!("indexed document content");
                     last_update_time = now;
                     last_update = None;
                   },
@@ -205,6 +212,7 @@ impl CollabHandle {
     }
   }
 
+  #[instrument(skip(client, e))]
   async fn handle_index_event(
     client: &AppFlowyAIClient,
     e: IndexContent,
@@ -241,5 +249,107 @@ impl CollabHandle {
 impl Drop for CollabHandle {
   fn drop(&mut self) {
     self.tasks.abort_all()
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use std::time::Duration;
+
+  use collab::core::transaction::DocTransactionExtension;
+  use collab::preclude::Collab;
+  use collab_entity::CollabType;
+  use yrs::{Map, Subscription};
+
+  use appflowy_ai_client::client::AppFlowyAIClient;
+  use appflowy_ai_client::dto::SearchDocumentsRequest;
+  use collab_stream::client::CollabRedisStream;
+  use collab_stream::model::CollabUpdateEvent;
+  use collab_stream::stream_group::StreamGroup;
+
+  use crate::collab_handle::CollabHandle;
+
+  #[tokio::test]
+  async fn test_indexing_pipeline() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    let redis_stream = redis_stream().await;
+    let workspace_id = uuid::Uuid::new_v4().to_string();
+    let object_id = uuid::Uuid::new_v4().to_string();
+
+    let mut collab = Collab::new(1, object_id.clone(), "device-1".to_string(), vec![], false);
+    collab.initialize();
+    let ai_client = AppFlowyAIClient::new("http://localhost:5001");
+
+    let mut stream_group = redis_stream
+      .collab_update_stream(&workspace_id, &object_id, "indexer")
+      .await
+      .unwrap();
+
+    let _s = collab_update_forwarder(&mut collab, stream_group.clone());
+    let doc = collab.get_doc();
+    let init_state = doc.get_encoded_collab_v1().doc_state;
+    let data_ref = doc.get_or_insert_map("data");
+    collab.with_origin_transact_mut(|txn| {
+      data_ref.insert(txn, "key", "value");
+    });
+
+    let handle = CollabHandle::open(
+      &redis_stream,
+      ai_client.clone(),
+      object_id.clone(),
+      workspace_id.clone(),
+      CollabType::Document,
+      init_state.into(),
+      Duration::from_millis(50),
+    )
+    .await
+    .unwrap();
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    let docs = ai_client
+      .search_documents(&SearchDocumentsRequest {
+        workspaces: vec![workspace_id],
+        query: "key".to_string(),
+        result_count: None,
+      })
+      .await
+      .unwrap();
+
+    println!("{:?}", docs);
+    assert_eq!(docs.len(), 1);
+  }
+
+  pub async fn redis_client() -> redis::Client {
+    let redis_uri = "redis://localhost:6379";
+    redis::Client::open(redis_uri).expect("failed to connect to redis")
+  }
+
+  pub async fn redis_stream() -> CollabRedisStream {
+    let redis_client = redis_client().await;
+    CollabRedisStream::new(redis_client)
+      .await
+      .expect("failed to create stream client")
+  }
+
+  pub fn collab_update_forwarder(collab: &mut Collab, mut stream: StreamGroup) -> Subscription {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    tokio::spawn(async move {
+      while let Some(data) = rx.recv().await {
+        println!("sending update to redis");
+        stream.insert_message(data).await.unwrap();
+      }
+    });
+    collab
+      .get_doc()
+      .observe_update_v1(move |_, e| {
+        println!("Observed update");
+        let e = CollabUpdateEvent::UpdateV1 {
+          encode_update: e.update.clone(),
+        };
+        tx.send(e).unwrap();
+      })
+      .unwrap()
   }
 }

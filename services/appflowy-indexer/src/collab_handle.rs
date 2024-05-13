@@ -54,12 +54,12 @@ impl CollabHandle {
     };
     Self::handle_messages(&mut update_stream, &collab, messages).await?;
     let mut tasks = JoinSet::new();
-    tasks.spawn(Self::receive_messages(
+    tasks.spawn(Self::receive_collab_updates(
       update_stream,
       collab.downgrade(),
       ingest_interval,
     ));
-    tasks.spawn(Self::receive_snapshots(
+    tasks.spawn(Self::receive_index_events(
       index_content,
       ai_client,
       object_id,
@@ -71,7 +71,10 @@ impl CollabHandle {
     Ok(Self { collab, tasks })
   }
 
-  async fn receive_messages(
+  /// In regular time intervals, receive yrs updates and apply them to the locall in-memory collab
+  /// representation. This should emit index content events, which we listen to on
+  /// [Self::receive_index_events].
+  async fn receive_collab_updates(
     mut update_stream: StreamGroup,
     collab: WeakMutexCollab,
     ingest_interval: Duration,
@@ -131,7 +134,10 @@ impl CollabHandle {
 
     Ok(())
   }
-  async fn receive_snapshots(
+
+  /// Receive index content events and send them to the AI client for indexing.
+  /// Debounce the events to avoid flooding the AI client with too many requests.
+  async fn receive_index_events(
     mut stream: IndexContentReceiver,
     client: AppFlowyAIClient,
     object_id: String,
@@ -184,6 +190,9 @@ impl CollabHandle {
     }
   }
 
+  /// Convert the collab type to the AI client's collab type.
+  /// Return `None` if indexing of a documents of given type is not supported - it will not cause
+  /// an error, but will be logged as a warning.
   fn map_collab_type(collab_entity: &CollabType) -> Option<appflowy_ai_client::dto::CollabType> {
     match collab_entity {
       CollabType::Document => Some(appflowy_ai_client::dto::CollabType::Document),

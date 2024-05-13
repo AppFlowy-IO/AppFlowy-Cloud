@@ -151,12 +151,5 @@ fn gotrue_jwt_claims_from_token(
   .map_err(|err| {
     actix_web::error::ErrorUnauthorized(format!("fail to decode token, error:{}", err))
   })?;
-
-  GoTrueJWTClaims::verify_claim(&claims).map_err(|err| {
-    actix_web::error::ErrorUnauthorized(format!(
-      "fail to verify token, claims:{}, error:{}",
-      claims, err
-    ))
-  })?;
   Ok(claims)
 }

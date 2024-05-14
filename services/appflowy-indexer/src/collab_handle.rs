@@ -5,6 +5,8 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
+use tokio::select;
+use tokio::sync::watch::Receiver;
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 use tracing::instrument;
@@ -25,6 +27,7 @@ const CONSUMER_NAME: &str = "open_collab_handle";
 pub struct CollabHandle {
   collab: MutexCollab,
   task: JoinHandle<()>,
+  closing: tokio::sync::watch::Sender<u8>,
 }
 
 impl CollabHandle {
@@ -70,6 +73,7 @@ impl CollabHandle {
       }
     }
 
+    let (closing, closing_rx) = tokio::sync::watch::channel(0);
     let task = tokio::spawn(Self::receive_collab_updates(
       update_stream,
       ai_client,
@@ -78,9 +82,14 @@ impl CollabHandle {
       workspace_id,
       collab_type,
       ingest_interval,
+      closing_rx,
     ));
 
-    Ok(Self { collab, task })
+    Ok(Self {
+      collab,
+      task,
+      closing,
+    })
   }
 
   /// In regular time intervals, receive yrs updates and apply them to the locall in-memory collab
@@ -94,58 +103,81 @@ impl CollabHandle {
     workspace_id: String,
     collab_type: CollabType,
     ingest_interval: Duration,
+    mut closing_rx: Receiver<u8>,
   ) {
     let mut interval = interval(ingest_interval);
     let mut last_updated = Instant::now();
     let mut has_changed = false;
     loop {
-      interval.tick().await;
-      let result = update_stream
-        .consumer_messages(CONSUMER_NAME, ReadOption::Count(100))
-        .await;
-      match result {
-        Ok(messages) => {
-          if let Some(collab) = collab.upgrade() {
-            // check if we received empty message batch, if not: update the collab
-            if !messages.is_empty() {
-              match Self::handle_collab_updates(&mut update_stream, &collab, messages).await {
-                Ok(changed) => has_changed |= changed,
-                Err(err) => tracing::error!("failed to handle messages: {}", err),
-              }
-            }
-
-            // if we received any changes since the last search index update within the time frame
-            // we should re-index the collab
-            let now = Instant::now();
-            if has_changed && now - last_updated >= ingest_interval {
+      select! {
+        Ok(_) = closing_rx.changed() => {
+          tracing::trace!("closing signal received, stopping consumer");
+          if has_changed {
+            if let Some(collab) = collab.upgrade() {
               if let Err(err) = Self::handle_index_event(
-                &ai_client,
-                &collab,
-                object_id.clone(),
-                workspace_id.clone(),
-                &collab_type,
-              )
-              .await
-              {
-                tracing::error!("failed to send index event to appflowy AI: {}", err);
-              } else {
-                tracing::trace!(
-                  "successfully updated collab index {}/{}",
-                  workspace_id,
-                  object_id
-                );
-                last_updated = now;
-                has_changed = false;
-              }
+                    &ai_client,
+                    &collab,
+                    object_id,
+                    workspace_id,
+                    &collab_type,
+                  )
+                  .await
+                  {
+                    tracing::error!("failed to send index event to appflowy AI: {}", err);
+                  }
             }
-          } else {
-            tracing::trace!("collab dropped, stopping consumer");
-            return;
           }
+          return;
         },
-        Err(err) => {
-          tracing::error!("failed to receive messages: {}", err);
-        },
+        _ = interval.tick() => {
+          let result = update_stream
+            .consumer_messages(CONSUMER_NAME, ReadOption::Count(100))
+            .await;
+          match result {
+            Ok(messages) => {
+              if let Some(collab) = collab.upgrade() {
+                // check if we received empty message batch, if not: update the collab
+                if !messages.is_empty() {
+                  match Self::handle_collab_updates(&mut update_stream, &collab, messages).await {
+                    Ok(changed) => has_changed |= changed,
+                    Err(err) => tracing::error!("failed to handle messages: {}", err),
+                  }
+                }
+
+                // if we received any changes since the last search index update within the time frame
+                // we should re-index the collab
+                let now = Instant::now();
+                if has_changed && now - last_updated >= ingest_interval {
+                  if let Err(err) = Self::handle_index_event(
+                    &ai_client,
+                    &collab,
+                    object_id.clone(),
+                    workspace_id.clone(),
+                    &collab_type,
+                  )
+                  .await
+                  {
+                    tracing::error!("failed to send index event to appflowy AI: {}", err);
+                  } else {
+                    tracing::trace!(
+                      "successfully updated collab index {}/{}",
+                      workspace_id,
+                      object_id
+                    );
+                    last_updated = now;
+                    has_changed = false;
+                  }
+                }
+              } else {
+                tracing::trace!("collab dropped, stopping consumer");
+                return;
+              }
+            },
+            Err(err) => {
+              tracing::error!("failed to receive messages: {}", err);
+            },
+          }
+        }
       }
     }
   }
@@ -222,11 +254,10 @@ impl CollabHandle {
     }
     Ok(())
   }
-}
 
-impl Drop for CollabHandle {
-  fn drop(&mut self) {
-    self.task.abort()
+  pub async fn shutdown(self) {
+    let _ = self.closing.send(1);
+    let _ = self.task.await;
   }
 }
 
@@ -237,15 +268,13 @@ mod test {
   use collab::core::transaction::DocTransactionExtension;
   use collab::preclude::Collab;
   use collab_entity::CollabType;
-  use yrs::{Map, Subscription};
+  use yrs::Map;
 
   use appflowy_ai_client::client::AppFlowyAIClient;
   use appflowy_ai_client::dto::SearchDocumentsRequest;
-  use collab_stream::client::CollabRedisStream;
-  use collab_stream::model::CollabUpdateEvent;
-  use collab_stream::stream_group::StreamGroup;
 
   use crate::collab_handle::CollabHandle;
+  use crate::test_utils::{collab_update_forwarder, redis_stream};
 
   #[tokio::test]
   async fn test_indexing_pipeline() {
@@ -272,7 +301,7 @@ mod test {
       views_ref.insert(txn, "key", "value");
     });
 
-    let handle = CollabHandle::open(
+    let _handle = CollabHandle::open(
       &redis_stream,
       ai_client.clone(),
       object_id.clone(),
@@ -284,7 +313,7 @@ mod test {
     .await
     .unwrap();
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
 
     let docs = ai_client
       .search_documents(&SearchDocumentsRequest {
@@ -296,37 +325,5 @@ mod test {
       .unwrap();
 
     assert_eq!(docs.len(), 1);
-  }
-
-  pub async fn redis_client() -> redis::Client {
-    let redis_uri = "redis://localhost:6379";
-    redis::Client::open(redis_uri).expect("failed to connect to redis")
-  }
-
-  pub async fn redis_stream() -> CollabRedisStream {
-    let redis_client = redis_client().await;
-    CollabRedisStream::new(redis_client)
-      .await
-      .expect("failed to create stream client")
-  }
-
-  pub fn collab_update_forwarder(collab: &mut Collab, mut stream: StreamGroup) -> Subscription {
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-    tokio::spawn(async move {
-      while let Some(data) = rx.recv().await {
-        println!("sending update to redis");
-        stream.insert_message(data).await.unwrap();
-      }
-    });
-    collab
-      .get_doc()
-      .observe_update_v1(move |_, e| {
-        println!("Observed update");
-        let e = CollabUpdateEvent::UpdateV1 {
-          encode_update: e.update.clone(),
-        };
-        tx.send(e).unwrap();
-      })
-      .unwrap()
   }
 }

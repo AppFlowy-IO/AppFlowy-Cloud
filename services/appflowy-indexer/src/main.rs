@@ -12,12 +12,15 @@ pub mod collab_handle;
 pub mod consumer;
 pub mod error;
 
+#[cfg(test)]
+mod test_utils;
+
 #[derive(Debug, Parser)]
 pub struct Config {
-  #[clap(long, env = "APPFLOWY_REDIS_URI")]
+  #[clap(long, env = "APPFLOWY_INDEXER_REDIS_URL")]
   pub redis_url: String,
 
-  #[clap(long, env = "APPFLOWY_AI_URI")]
+  #[clap(long, env = "APPFLOWY_INDEXER_AI_URL")]
   pub appflowy_ai_url: String,
 
   #[clap(
@@ -27,7 +30,7 @@ pub struct Config {
   )]
   pub control_stream_key: String,
 
-  #[clap(long, env = "APPFLOWY_INDEXER_INGEST_INTERVAL", default_value = "1m")]
+  #[clap(long, env = "APPFLOWY_INDEXER_INGEST_INTERVAL", default_value = "30s")]
   pub ingest_interval: humantime::Duration,
 }
 

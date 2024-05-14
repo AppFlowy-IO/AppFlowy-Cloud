@@ -15,7 +15,7 @@ use tokio::time::interval;
 
 const CONSUMER_NAME: &str = "open_collab";
 
-type Handles = Arc<DashMap<String, Arc<CollabHandle>>>;
+type Handles = Arc<DashMap<String, CollabHandle>>;
 
 pub struct OpenCollabConsumer {
   #[allow(dead_code)]
@@ -132,7 +132,7 @@ impl OpenCollabConsumer {
           .await;
           match result {
             Ok(handle) => {
-              entry.insert(Arc::new(handle));
+              entry.insert(handle);
             },
             Err(err) => {
               tracing::error!(
@@ -146,7 +146,10 @@ impl OpenCollabConsumer {
         },
       },
       CollabControlEvent::Close { object_id } => {
-        handles.remove(&object_id);
+        if let Some((_, handle)) = handles.remove(&object_id) {
+          // trigger shutdown signal and gracefully wait for handle to complete
+          handle.shutdown().await;
+        }
       },
     }
   }

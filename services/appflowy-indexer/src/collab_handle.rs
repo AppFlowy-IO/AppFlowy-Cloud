@@ -284,7 +284,7 @@ mod test {
     .await
     .unwrap();
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
     let docs = ai_client
       .search_documents(&SearchDocumentsRequest {

@@ -9,7 +9,6 @@ use access_control::access::{enable_access_control, AccessControl};
 
 use crate::api::chat::chat_scope;
 use crate::biz::actix_ws::server::RealtimeServerActor;
-use crate::biz::casbin::WorkspaceAccessControlImpl;
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
@@ -49,6 +48,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
   port: u16,

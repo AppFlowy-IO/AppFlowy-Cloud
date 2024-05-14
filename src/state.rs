@@ -19,9 +19,9 @@ use database::file::bucket_s3_impl::S3BucketStorage;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
+use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::metrics::RequestMetrics;
-use crate::biz::casbin::WorkspaceAccessControlImpl;
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::pg_listener::PgListeners;

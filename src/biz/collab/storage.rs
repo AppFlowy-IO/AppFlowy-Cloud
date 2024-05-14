@@ -22,9 +22,9 @@ use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
   QueryCollabParams, QueryCollabResult, SnapshotData,
 };
+use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::util::CollabValidator;
-use crate::biz::casbin::WorkspaceAccessControlImpl;
 use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
 use crate::biz::collab::metrics::CollabMetrics;
 use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};

@@ -622,6 +622,7 @@ dependencies = [
  "url",
  "uuid",
  "validator",
+ "workspace-access",
  "workspace-template",
 ]
 
@@ -7189,6 +7190,20 @@ checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "workspace-access"
+version = "0.1.0"
+dependencies = [
+ "access-control",
+ "app-error",
+ "async-trait",
+ "database-entity",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

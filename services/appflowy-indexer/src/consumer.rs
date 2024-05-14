@@ -217,7 +217,7 @@ mod test {
     let _s = collab_update_forwarder(&mut collab, update_stream.clone());
     let doc = collab.get_doc();
     let init_state = doc.get_encoded_collab_v1().doc_state;
-    let views_ref = doc.get_or_insert_map("views");
+    let data_ref = doc.get_or_insert_map("data");
     let consumer = OpenCollabConsumer::new(
       redis_stream,
       ai_client.clone(),
@@ -238,10 +238,10 @@ mod test {
       .unwrap();
 
     collab.with_origin_transact_mut(|txn| {
-      views_ref.insert(txn, "key", "value");
+      data_ref.insert(txn, "test-key", "test-value");
     });
 
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
     assert!(
       consumer.handles.contains_key(&object_id),
       "in reaction to open control event, a corresponding handle should be created"
@@ -270,5 +270,6 @@ mod test {
       .unwrap();
 
     assert_eq!(docs.len(), 1);
+    assert!(docs[0].content.contains("test-value"));
   }
 }

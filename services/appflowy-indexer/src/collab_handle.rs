@@ -193,13 +193,12 @@ impl CollabHandle {
       let mut txn = collab.try_transaction_mut()?;
 
       for message in &messages {
-        if let Ok(event) = CollabUpdateEvent::decode(&message.data) {
-          match event {
-            CollabUpdateEvent::UpdateV1 { encode_update } => {
-              let update = Update::decode_v1(&encode_update)?;
-              txn.try_apply_update(update)?;
-            },
-          }
+        match CollabUpdateEvent::decode(&message.data) {
+          Ok(CollabUpdateEvent::UpdateV1 { encode_update }) => {
+            let update = Update::decode_v1(&encode_update)?;
+            txn.try_apply_update(update)?;
+          },
+          Err(err) => tracing::error!("failed to decode update event: {}", err),
         }
       }
       txn.commit();
@@ -224,6 +223,7 @@ impl CollabHandle {
         if let Some(collab) = collab.try_lock() {
           let doc = collab.get_doc();
           let txn = doc.transact();
+
           if let Some(data_ref) = txn.get_map("data") {
             let data = data_ref.to_json(&txn).to_string();
             return Some((appflowy_ai_client::dto::CollabType::Document, data));
@@ -296,9 +296,9 @@ mod test {
     let _s = collab_update_forwarder(&mut collab, stream_group.clone());
     let doc = collab.get_doc();
     let init_state = doc.get_encoded_collab_v1().doc_state;
-    let views_ref = doc.get_or_insert_map("views");
+    let data_ref = doc.get_or_insert_map("data");
     collab.with_origin_transact_mut(|txn| {
-      views_ref.insert(txn, "key", "value");
+      data_ref.insert(txn, "test-key", "test-value");
     });
 
     let _handle = CollabHandle::open(
@@ -325,5 +325,6 @@ mod test {
       .unwrap();
 
     assert_eq!(docs.len(), 1);
+    assert!(docs[0].content.contains("test-value"));
   }
 }

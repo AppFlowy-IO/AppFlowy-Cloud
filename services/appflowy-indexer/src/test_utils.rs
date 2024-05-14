@@ -20,14 +20,12 @@ pub fn collab_update_forwarder(collab: &mut Collab, mut stream: StreamGroup) -> 
   let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
   tokio::spawn(async move {
     while let Some(data) = rx.recv().await {
-      println!("sending update to redis");
       stream.insert_message(data).await.unwrap();
     }
   });
   collab
     .get_doc()
     .observe_update_v1(move |_, e| {
-      println!("Observed update");
       let e = CollabUpdateEvent::UpdateV1 {
         encode_update: e.update.clone(),
       };

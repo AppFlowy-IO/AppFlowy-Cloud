@@ -133,13 +133,14 @@ impl OpenCollabConsumer {
           match result {
             Ok(handle) => {
               entry.insert(handle);
+              tracing::trace!("created a new handle for {}/{}", workspace_id, object_id);
             },
-            Err(err) => {
+            Err(e) => {
               tracing::error!(
-                "failed to open collab handle for {}/{}: {}",
+                "failed to open handle for {}/{}: {}",
                 object_id,
                 workspace_id,
-                err
+                e
               );
             },
           }
@@ -148,6 +149,7 @@ impl OpenCollabConsumer {
       CollabControlEvent::Close { object_id } => {
         if let Some((_, handle)) = handles.remove(&object_id) {
           // trigger shutdown signal and gracefully wait for handle to complete
+          tracing::trace!("shutting down handle for {}", object_id);
           handle.shutdown().await;
         }
       },
@@ -174,5 +176,99 @@ impl Future for OpenCollabConsumer {
 impl Drop for OpenCollabConsumer {
   fn drop(&mut self) {
     self.consumer_group.abort();
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use crate::consumer::OpenCollabConsumer;
+  use crate::test_utils::{collab_update_forwarder, redis_stream};
+  use appflowy_ai_client::client::AppFlowyAIClient;
+  use appflowy_ai_client::dto::SearchDocumentsRequest;
+  use collab::core::transaction::DocTransactionExtension;
+  use collab::preclude::Collab;
+  use collab_entity::CollabType;
+  use collab_stream::model::CollabControlEvent;
+  use std::time::Duration;
+  use yrs::Map;
+
+  #[tokio::test]
+  async fn graceful_handle_shutdown() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    let redis_stream = redis_stream().await;
+    let workspace_id = uuid::Uuid::new_v4().to_string();
+    let object_id = uuid::Uuid::new_v4().to_string();
+
+    let mut collab = Collab::new(1, object_id.clone(), "device-1".to_string(), vec![], false);
+    collab.initialize();
+    let ai_client = AppFlowyAIClient::new("http://localhost:5001");
+
+    let mut control_stream = redis_stream
+      .collab_control_stream("af_collab_control", "indexer")
+      .await
+      .unwrap();
+
+    let update_stream = redis_stream
+      .collab_update_stream(&workspace_id, &object_id, "indexer")
+      .await
+      .unwrap();
+
+    let _s = collab_update_forwarder(&mut collab, update_stream.clone());
+    let doc = collab.get_doc();
+    let init_state = doc.get_encoded_collab_v1().doc_state;
+    let views_ref = doc.get_or_insert_map("views");
+    let consumer = OpenCollabConsumer::new(
+      redis_stream,
+      ai_client.clone(),
+      "af_collab_control",
+      Duration::from_secs(1), // interval longer than test timeout
+    )
+    .await
+    .unwrap();
+
+    control_stream
+      .insert_message(CollabControlEvent::Open {
+        workspace_id: workspace_id.clone(),
+        object_id: object_id.clone(),
+        collab_type: CollabType::Document,
+        doc_state: init_state.into(),
+      })
+      .await
+      .unwrap();
+
+    collab.with_origin_transact_mut(|txn| {
+      views_ref.insert(txn, "key", "value");
+    });
+
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(
+      consumer.handles.contains_key(&object_id),
+      "in reaction to open control event, a corresponding handle should be created"
+    );
+
+    control_stream
+      .insert_message(CollabControlEvent::Close {
+        object_id: object_id.clone(),
+      })
+      .await
+      .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(
+      !consumer.handles.contains_key(&object_id),
+      "in reaction to close control event, a corresponding handle should be destroyed"
+    );
+
+    let docs = ai_client
+      .search_documents(&SearchDocumentsRequest {
+        workspaces: vec![workspace_id],
+        query: "key".to_string(),
+        result_count: None,
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(docs.len(), 1);
   }
 }

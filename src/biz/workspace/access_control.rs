@@ -1,52 +1,29 @@
 #![allow(unused)]
-use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
-use actix_http::Method;
-use async_trait::async_trait;
-use database::user::select_uid_from_uuid;
 
-use sqlx::{Executor, PgPool, Postgres};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::api::workspace::{
-  WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
-};
-use crate::state::UserCache;
-use access_control::act::Action;
+use actix_http::Method;
 use actix_router::{Path, ResourceDef, Url};
 use anyhow::anyhow;
-use app_error::AppError;
-use database_entity::dto::AFRole;
-use std::sync::Arc;
+use async_trait::async_trait;
+use sqlx::{Executor, PgPool, Postgres};
 use tokio::sync::{broadcast, RwLock};
 use tracing::{error, instrument, trace, warn};
 use uuid::Uuid;
 
-#[async_trait]
-pub trait WorkspaceAccessControl: Send + Sync + 'static {
-  async fn enforce_role(
-    &self,
-    uid: &i64,
-    workspace_id: &str,
-    role: AFRole,
-  ) -> Result<bool, AppError>;
+use access_control::act::Action;
+use access_control::workspace::WorkspaceAccessControl;
+use app_error::AppError;
+use database::user::select_uid_from_uuid;
+use database_entity::dto::AFRole;
 
-  async fn enforce_action(
-    &self,
-    uid: &i64,
-    workspace_id: &str,
-    action: Action,
-  ) -> Result<bool, AppError>;
-
-  async fn insert_role(&self, uid: &i64, workspace_id: &Uuid, role: AFRole)
-    -> Result<(), AppError>;
-
-  async fn remove_user_from_workspace(
-    &self,
-    uid: &i64,
-    workspace_id: &Uuid,
-  ) -> Result<(), AppError>;
-}
+use crate::api::workspace::{
+  WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
+};
+use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
+use crate::state::UserCache;
 
 #[derive(Clone)]
 pub struct WorkspaceMiddlewareAccessControl<AC: WorkspaceAccessControl> {

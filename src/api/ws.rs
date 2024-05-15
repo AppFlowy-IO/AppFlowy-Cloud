@@ -1,24 +1,27 @@
-use crate::biz::actix_ws::client::rt_client::RealtimeClient;
-use crate::biz::actix_ws::server::RealtimeServerActor;
-use crate::biz::casbin::RealtimeCollabAccessControlImpl;
-use crate::biz::collab::storage::CollabAccessControlStorage;
-use crate::biz::user::auth::jwt::{authorization_from_token, UserUuid};
-use crate::state::AppState;
+use std::collections::HashMap;
+use std::time::Duration;
+
 use actix::Addr;
 use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
-use app_error::AppError;
-use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
-use collab_rt_entity::RealtimeMessage;
 use semver::Version;
-use shared_entity::response::AppResponseError;
-use std::collections::HashMap;
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, instrument, trace};
+
+use app_error::AppError;
+use appflowy_collaborate::collab::access_control::RealtimeCollabAccessControlImpl;
+use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
+use collab_rt_entity::RealtimeMessage;
+use shared_entity::response::AppResponseError;
+
+use crate::biz::actix_ws::client::rt_client::RealtimeClient;
+use crate::biz::actix_ws::server::RealtimeServerActor;
+use crate::biz::collab::storage::CollabAccessControlStorage;
+use crate::biz::user::auth::jwt::{authorization_from_token, UserUuid};
+use crate::state::AppState;
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws")

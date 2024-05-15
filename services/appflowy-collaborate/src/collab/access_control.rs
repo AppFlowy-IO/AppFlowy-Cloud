@@ -1,12 +1,12 @@
-use crate::biz::collab::access_control::CollabAccessControl;
+use async_trait::async_trait;
+use tracing::instrument;
+
 use access_control::access::ObjectType;
 use access_control::access::{enable_access_control, AccessControl};
 use access_control::act::{Action, ActionVariant};
+use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
 use app_error::AppError;
-use appflowy_collaborate::RealtimeAccessControl;
-use async_trait::async_trait;
 use database_entity::dto::AFAccessLevel;
-use tracing::instrument;
 
 #[derive(Clone)]
 pub struct CollabAccessControlImpl {

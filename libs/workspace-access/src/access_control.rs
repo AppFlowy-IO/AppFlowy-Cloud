@@ -1,12 +1,13 @@
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
+use async_trait::async_trait;
+use tracing::instrument;
+use uuid::Uuid;
+
 use access_control::access::AccessControl;
 use access_control::access::ObjectType;
 use access_control::act::{Action, ActionVariant};
+use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
-use async_trait::async_trait;
 use database_entity::dto::AFRole;
-use tracing::instrument;
-use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct WorkspaceAccessControlImpl {

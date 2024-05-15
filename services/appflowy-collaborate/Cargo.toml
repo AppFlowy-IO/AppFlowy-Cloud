@@ -12,6 +12,7 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
+access-control.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "tokio_error"] }
 dashmap.workspace = true
 async-stream.workspace = true

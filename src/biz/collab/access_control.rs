@@ -7,43 +7,15 @@ use async_trait::async_trait;
 use tracing::{instrument, trace};
 
 use access_control::act::Action;
+use access_control::collab::CollabAccessControl;
+use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::collab::cache::CollabCache;
 use database::collab::CollabStorageAccessControl;
 use database_entity::dto::AFAccessLevel;
 
 use crate::api::workspace::{COLLAB_PATTERN, V1_COLLAB_PATTERN};
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
-
-#[async_trait]
-pub trait CollabAccessControl: Sync + Send + 'static {
-  async fn enforce_action(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    oid: &str,
-    action: Action,
-  ) -> Result<bool, AppError>;
-
-  async fn enforce_access_level(
-    &self,
-    workspace_id: &str,
-    uid: &i64,
-    oid: &str,
-    access_level: AFAccessLevel,
-  ) -> Result<bool, AppError>;
-
-  /// Return the access level of the user in the collab
-  async fn update_access_level_policy(
-    &self,
-    uid: &i64,
-    oid: &str,
-    level: AFAccessLevel,
-  ) -> Result<(), AppError>;
-
-  async fn remove_access_level(&self, uid: &i64, oid: &str) -> Result<(), AppError>;
-}
 
 #[derive(Clone)]
 pub struct CollabMiddlewareAccessControl<AC: CollabAccessControl> {

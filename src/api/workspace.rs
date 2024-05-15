@@ -1,40 +1,40 @@
-use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
-use crate::api::ws::RealtimeServerAddr;
-use crate::biz;
-use crate::biz::actix_ws::entities::ClientStreamMessage;
-use crate::biz::collab::access_control::CollabAccessControl;
-use crate::biz::user::auth::jwt::UserUuid;
-use crate::biz::workspace;
-use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
-use crate::state::AppState;
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
-use app_error::AppError;
 use bytes::BytesMut;
 use collab_entity::CollabType;
-
-use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
-use collab_rt_entity::RealtimeMessage;
-use collab_rt_protocol::validate_encode_collab;
-use database::collab::CollabStorage;
-use database::user::select_uid_from_email;
-use database_entity::dto::*;
 use prost::Message as ProstMessage;
-use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams, SummarizeRowResponse};
-use shared_entity::dto::workspace_dto::*;
-use shared_entity::response::AppResponseError;
-use shared_entity::response::{AppResponse, JsonAppResponse};
 use sqlx::types::uuid;
-
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{error, event, instrument};
 use uuid::Uuid;
 use validator::Validate;
+
+use access_control::collab::CollabAccessControl;
+use app_error::AppError;
+use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
+use collab_rt_entity::RealtimeMessage;
+use collab_rt_protocol::validate_encode_collab;
+use database::collab::CollabStorage;
+use database::user::select_uid_from_email;
+use database_entity::dto::*;
+use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams, SummarizeRowResponse};
+use shared_entity::dto::workspace_dto::*;
+use shared_entity::response::AppResponseError;
+use shared_entity::response::{AppResponse, JsonAppResponse};
+
+use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
+use crate::api::ws::RealtimeServerAddr;
+use crate::biz;
+use crate::biz::actix_ws::entities::ClientStreamMessage;
+use crate::biz::user::auth::jwt::UserUuid;
+use crate::biz::workspace;
+use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
+use crate::state::AppState;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";

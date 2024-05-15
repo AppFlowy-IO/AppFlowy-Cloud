@@ -1,5 +1,15 @@
 version: '3'
 services:
+  nginx:
+    restart: on-failure
+    image: nginx
+    ports:
+      - 80:80   # Disable this if you are using TLS
+      - 443:443
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
+      - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
   minio:
     restart: on-failure
     image: minio/minio
@@ -115,12 +125,6 @@ services:
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
       - APPFLOWY_DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-postgres}
 
-  indexer:
-    restart: on-failure
-    image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
-    ports:
-      - 5001:5001
-    
 
 volumes:
   postgres_data:

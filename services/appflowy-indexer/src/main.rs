@@ -10,6 +10,7 @@ use crate::consumer::OpenCollabConsumer;
 
 pub mod collab_handle;
 pub mod consumer;
+mod document_index;
 pub mod error;
 
 #[cfg(test)]

@@ -1,20 +1,24 @@
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-use collab::core::collab::{DataSource, MutexCollab, TransactionMutExt, WeakMutexCollab};
-use collab::core::origin::CollabOrigin;
+use collab::core::collab::MutexCollab;
+use collab::core::collab::TransactionMutExt;
 use collab::preclude::updates::decoder::Decode;
-use collab::preclude::{Collab, Update};
+use collab::preclude::Update;
 use collab_entity::CollabType;
 use tokio::select;
-use tokio::sync::watch::Receiver;
-use tokio::task::JoinHandle;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::task::JoinSet;
 use tokio::time::interval;
+use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-use yrs::types::ToJson;
-use yrs::{ReadTxn, Transact};
+use yrs::{Doc, Transact};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
-use appflowy_ai_client::dto::Document;
+
+use crate::document_index::DocumentWatcher;
+use appflowy_ai_client::dto::Document as DocumentContent;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabUpdateEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
@@ -25,9 +29,9 @@ const CONSUMER_NAME: &str = "open_collab_handle";
 
 #[allow(dead_code)]
 pub struct CollabHandle {
-  collab: MutexCollab,
-  task: JoinHandle<()>,
-  closing: tokio::sync::watch::Sender<u8>,
+  content: Arc<dyn Indexable>,
+  tasks: JoinSet<()>,
+  closing: CancellationToken,
 }
 
 impl CollabHandle {
@@ -39,7 +43,18 @@ impl CollabHandle {
     collab_type: CollabType,
     doc_state: Vec<u8>,
     ingest_interval: Duration,
-  ) -> Result<Self> {
+  ) -> Result<Option<Self>> {
+    let closing = CancellationToken::new();
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let content: Arc<dyn Indexable> = match collab_type {
+      CollabType::Document => {
+        let mut watcher = DocumentWatcher::new(object_id.clone(), workspace_id.clone(), doc_state)?;
+        watcher.attach_listener(tx);
+        Arc::new(watcher)
+      },
+      _ => return Ok(None),
+    };
+
     let group_name = format!("indexer_{}:{}", workspace_id, object_id);
     let mut update_stream = redis_stream
       .collab_update_stream(&workspace_id, &object_id, &group_name)
@@ -47,49 +62,35 @@ impl CollabHandle {
       .unwrap();
 
     let messages = update_stream.get_unacked_messages(CONSUMER_NAME).await?;
-    let collab = {
-      let mut collab = Collab::new_with_source(
-        CollabOrigin::Empty,
-        &object_id,
-        DataSource::DocStateV1(doc_state),
-        vec![],
-        false,
-      )?;
-      collab.initialize();
-      MutexCollab::new(collab)
-    };
     if !messages.is_empty() {
-      if Self::handle_collab_updates(&mut update_stream, &collab, messages).await? {
-        // for first access (which may have happened after ie. server restart) if we detected any
-        // changes, we try to update index immediately
-        Self::handle_index_event(
-          &ai_client,
-          &collab,
-          object_id.clone(),
-          workspace_id.clone(),
-          &collab_type,
-        )
-        .await?;
-      }
+      Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await?;
     }
 
-    let (closing, closing_rx) = tokio::sync::watch::channel(0);
-    let task = tokio::spawn(Self::receive_collab_updates(
+    let mut tasks = JoinSet::new();
+    tasks.spawn(Self::receive_collab_updates(
       update_stream,
+      Arc::downgrade(&content),
+      object_id.clone(),
+      workspace_id.clone(),
+      collab_type.clone(),
+      ingest_interval,
+      closing.clone(),
+    ));
+    tasks.spawn(Self::process_content_changes(
+      rx,
       ai_client,
-      collab.downgrade(),
       object_id,
       workspace_id,
       collab_type,
       ingest_interval,
-      closing_rx,
+      closing.clone(),
     ));
 
-    Ok(Self {
-      collab,
-      task,
+    Ok(Some(Self {
+      content,
+      tasks,
       closing,
-    })
+    }))
   }
 
   /// In regular time intervals, receive yrs updates and apply them to the locall in-memory collab
@@ -97,36 +98,18 @@ impl CollabHandle {
   /// [Self::receive_index_events].
   async fn receive_collab_updates(
     mut update_stream: StreamGroup,
-    ai_client: AppFlowyAIClient,
-    collab: WeakMutexCollab,
+    content: Weak<dyn Indexable>,
     object_id: String,
     workspace_id: String,
     collab_type: CollabType,
     ingest_interval: Duration,
-    mut closing_rx: Receiver<u8>,
+    closing: CancellationToken,
   ) {
     let mut interval = interval(ingest_interval);
-    let mut last_updated = Instant::now();
-    let mut has_changed = false;
     loop {
       select! {
-        Ok(_) = closing_rx.changed() => {
+        _ = closing.cancelled() => {
           tracing::trace!("closing signal received, stopping consumer");
-          if has_changed {
-            if let Some(collab) = collab.upgrade() {
-              if let Err(err) = Self::handle_index_event(
-                    &ai_client,
-                    &collab,
-                    object_id,
-                    workspace_id,
-                    &collab_type,
-                  )
-                  .await
-                  {
-                    tracing::error!("failed to send index event to appflowy AI: {}", err);
-                  }
-            }
-          }
           return;
         },
         _ = interval.tick() => {
@@ -135,37 +118,11 @@ impl CollabHandle {
             .await;
           match result {
             Ok(messages) => {
-              if let Some(collab) = collab.upgrade() {
+              if let Some(content) = content.upgrade() {
                 // check if we received empty message batch, if not: update the collab
                 if !messages.is_empty() {
-                  match Self::handle_collab_updates(&mut update_stream, &collab, messages).await {
-                    Ok(changed) => has_changed |= changed,
-                    Err(err) => tracing::error!("failed to handle messages: {}", err),
-                  }
-                }
-
-                // if we received any changes since the last search index update within the time frame
-                // we should re-index the collab
-                let now = Instant::now();
-                if has_changed && now - last_updated >= ingest_interval {
-                  if let Err(err) = Self::handle_index_event(
-                    &ai_client,
-                    &collab,
-                    object_id.clone(),
-                    workspace_id.clone(),
-                    &collab_type,
-                  )
-                  .await
-                  {
-                    tracing::error!("failed to send index event to appflowy AI: {}", err);
-                  } else {
-                    tracing::trace!(
-                      "successfully updated collab index {}/{}",
-                      workspace_id,
-                      object_id
-                    );
-                    last_updated = now;
-                    has_changed = false;
+                  if let Err(err) = Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await {
+                    tracing::error!("failed to handle messages: {}", err);
                   }
                 }
               } else {
@@ -187,8 +144,7 @@ impl CollabHandle {
     update_stream: &mut StreamGroup,
     collab: &MutexCollab,
     messages: Vec<StreamMessage>,
-  ) -> Result<bool> {
-    let mut has_changed = false;
+  ) -> Result<()> {
     if let Some(collab) = collab.try_lock() {
       let mut txn = collab.try_transaction_mut()?;
 
@@ -202,63 +158,67 @@ impl CollabHandle {
         }
       }
       txn.commit();
-      has_changed = txn.before_state() != txn.after_state();
-    } else {
-      tracing::error!("failed to lock collab");
     }
     update_stream.ack_messages(&messages).await?;
 
-    Ok(has_changed)
-  }
-
-  /// Convert the collab type to the AI client's collab type.
-  /// Return `None` if indexing of a documents of given type is not supported - it will not cause
-  /// an error, but will be logged as a warning.
-  fn map_collab(
-    collab_entity: &CollabType,
-    collab: &MutexCollab,
-  ) -> Option<(appflowy_ai_client::dto::CollabType, String)> {
-    match collab_entity {
-      CollabType::Document => {
-        if let Some(collab) = collab.try_lock() {
-          let doc = collab.get_doc();
-          let txn = doc.transact();
-
-          if let Some(data_ref) = txn.get_map("data") {
-            let data = data_ref.to_json(&txn).to_string();
-            return Some((appflowy_ai_client::dto::CollabType::Document, data));
-          }
-        }
-        None
-      },
-      _ => None,
-    }
-  }
-
-  #[instrument(skip(client, collab))]
-  async fn handle_index_event(
-    client: &AppFlowyAIClient,
-    collab: &MutexCollab,
-    object_id: String,
-    workspace_id: String,
-    collab_type: &CollabType,
-  ) -> Result<()> {
-    if let Some((collab_type, json)) = Self::map_collab(collab_type, collab) {
-      let document = Document {
-        id: object_id,
-        doc_type: collab_type,
-        workspace_id,
-        content: json,
-      };
-      client.index_documents(&[document]).await?;
-    }
     Ok(())
   }
 
-  pub async fn shutdown(self) {
-    let _ = self.closing.send(1);
-    let _ = self.task.await;
+  async fn process_content_changes(
+    mut rx: UnboundedReceiver<DocumentUpdate>,
+    ai_client: AppFlowyAIClient,
+    object_id: String,
+    workspace_id: String,
+    collab_type: CollabType,
+    ingest_interval: Duration,
+    token: CancellationToken,
+  ) {
+    let mut last_update = Instant::now();
+    let mut inserts = HashMap::new();
+    let mut removals = HashSet::new();
+    loop {
+      select! {
+          _ = token.cancelled() => {
+            tracing::trace!("closing signal received, stopping consumer");
+            return;
+          },
+          Some(update) = rx.recv() => {
+            match update {
+              DocumentUpdate::Update(doc) => {
+                inserts.insert(doc.id.clone(), doc);
+              }
+              DocumentUpdate::Removed(id) => {
+                removals.insert(id);
+              }
+            }
+
+            let now = Instant::now();
+            if now.duration_since(last_update) > ingest_interval {
+              let inserts: Vec<_> = inserts.drain().map(|(_,doc)| doc).collect();
+              match ai_client.index_documents(&inserts).await {
+                Ok(_) => last_update = now,
+                Err(err) => tracing::error!("failed to index document {}/{}: {}", workspace_id, object_id, err),
+              }
+          }
+        }
+      }
+    }
   }
+
+  pub async fn shutdown(mut self) {
+    let _ = self.closing.cancel();
+    while let Some(_) = self.tasks.join_next().await { /* wait for all tasks to finish */ }
+  }
+}
+
+pub trait Indexable: Send + Sync {
+  fn get_collab(&self) -> &MutexCollab;
+  fn attach_listener(&mut self, channel: UnboundedSender<DocumentUpdate>);
+}
+
+pub enum DocumentUpdate {
+  Update(DocumentContent),
+  Removed(String),
 }
 
 #[cfg(test)]

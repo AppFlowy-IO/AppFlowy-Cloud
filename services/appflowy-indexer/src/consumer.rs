@@ -64,8 +64,11 @@ impl OpenCollabConsumer {
               }
             }
             if let Err(err) = control_group.ack_messages(&messages).await {
-              tracing::error!("Failed to ack messages: {:?}", err);
+              tracing::error!("failed to ack messages: {:?}", err);
             }
+          } else {
+            tracing::trace!("consumer handles dropped, exiting");
+            return;
           }
         }
       }
@@ -125,15 +128,23 @@ impl OpenCollabConsumer {
             ai_client.clone(),
             object_id.clone(),
             workspace_id.clone(),
-            collab_type,
+            collab_type.clone(),
             doc_state,
             ingest_interval,
           )
           .await;
           match result {
-            Ok(handle) => {
+            Ok(Some(handle)) => {
               entry.insert(handle);
               tracing::trace!("created a new handle for {}/{}", workspace_id, object_id);
+            },
+            Ok(None) => {
+              tracing::debug!(
+                "document {}/{} of type {} is not indexable",
+                workspace_id,
+                object_id,
+                collab_type
+              );
             },
             Err(e) => {
               tracing::error!(

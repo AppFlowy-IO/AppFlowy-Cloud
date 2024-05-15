@@ -66,6 +66,7 @@ impl Application {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
+    tracing::info!("Server started at {}", listener.local_addr().unwrap());
     let actix_server = run_actix_server(listener, state, config, rt_cmd_recv).await?;
 
     Ok(Self { port, actix_server })

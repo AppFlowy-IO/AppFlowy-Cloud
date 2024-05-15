@@ -15,12 +15,14 @@ path = "src/lib.rs"
 collab.workspace = true
 collab-entity.workspace = true
 collab-stream.workspace = true
+collab-document.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 yrs.workspace = true
 appflowy-ai-client.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
+tokio-util = { version = "0.7" }
 tokio-stream = { version = "0.1", features = ["net"] }
 redis = { workspace = true, features = ["aio", "tokio-comp", "connection-manager"] }
 futures = "0.3"

@@ -1,17 +1,19 @@
-use crate::biz::user::user_init::initialize_workspace_for_user;
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
-use crate::state::AppState;
+use std::ops::DerefMut;
+
 use anyhow::{Context, Result};
+use sqlx::types::uuid;
+use tracing::{event, instrument, trace};
+
+use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
 use database::workspace::select_workspace;
 use database_entity::dto::AFRole;
-use sqlx::types::uuid;
-use std::ops::DerefMut;
-use tracing::{event, instrument, trace};
-
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
+
+use crate::biz::user::user_init::initialize_workspace_for_user;
+use crate::state::AppState;
 
 /// Verify the token from the gotrue server and create the user if it is a new user
 /// Return true if the user is a new user

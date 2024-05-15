@@ -9,9 +9,6 @@ use access_control::access::{enable_access_control, AccessControl};
 
 use crate::api::chat::chat_scope;
 use crate::biz::actix_ws::server::RealtimeServerActor;
-use crate::biz::casbin::{
-  CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
-};
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
@@ -33,6 +30,9 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::collab::access_control::{
+  CollabAccessControlImpl, RealtimeCollabAccessControlImpl,
+};
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::shared_state::RealtimeSharedState;
@@ -48,6 +48,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
   port: u16,

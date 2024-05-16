@@ -1,8 +1,8 @@
 use actix::{Actor, Context, Handler};
-use appflowy_cloud::biz::actix_ws::client::rt_client::{
+use appflowy_collaborate::actix_ws::client::rt_client::{
   HandlerResult, RealtimeClient, RealtimeServer,
 };
-use appflowy_cloud::biz::actix_ws::entities::{ClientMessage, Connect, Disconnect};
+use appflowy_collaborate::actix_ws::entities::{ClientMessage, Connect, Disconnect};
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::RealtimeMessage;
 use semver::Version;

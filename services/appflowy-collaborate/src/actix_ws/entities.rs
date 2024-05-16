@@ -1,5 +1,5 @@
+use crate::error::RealtimeError;
 use actix::{Message, Recipient};
-use appflowy_collaborate::error::RealtimeError;
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;

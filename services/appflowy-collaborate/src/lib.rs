@@ -1,3 +1,4 @@
+pub mod actix_ws;
 mod client;
 pub mod collab;
 pub mod command;

@@ -8,7 +8,6 @@ use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
 use crate::api::chat::chat_scope;
-use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
@@ -30,6 +29,7 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::access_control::{
   CollabAccessControlImpl, RealtimeCollabAccessControlImpl,
 };

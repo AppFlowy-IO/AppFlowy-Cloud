@@ -13,6 +13,8 @@ path = "src/lib.rs"
 
 [dependencies]
 access-control.workspace = true
+actix.workspace = true
+actix-web-actors = { version = "4.3" }
 app-error = { workspace = true, features = ["sqlx_error", "tokio_error"] }
 dashmap.workspace = true
 async-stream.workspace = true
@@ -25,6 +27,7 @@ tokio = { workspace = true, features = ["net", "sync", "macros", "rt-multi-threa
 async-trait = "0.1.77"
 serde.workspace = true
 serde_json.workspace = true
+serde_repr.workspace = true
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono"] }
 thiserror = "1.0.56"
 anyhow = "1"
@@ -37,6 +40,7 @@ collab-folder = { workspace = true }
 collab-document = { workspace = true }
 database.workspace = true
 database-entity.workspace = true
+governor = { version = "0.6.3" }
 yrs.workspace = true
 chrono = "0.4.31"
 collab-rt-entity = { workspace = true, features = ["actix_message"] }

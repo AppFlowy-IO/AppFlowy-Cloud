@@ -70,7 +70,6 @@ impl AppFlowyAIClient {
 
   pub async fn translate_row(&self, json: Value) -> Result<TranslateRowResponse, AIError> {
     let url = format!("{}/translate_row", self.url);
-    trace!("translate_row url: {}", url);
     let resp = self
       .http_client(Method::POST, &url)?
       .json(&json)

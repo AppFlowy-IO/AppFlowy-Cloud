@@ -1,5 +1,5 @@
 use crate::dto::{
-  CompletionResponse, CompletionType, Document, SearchDocumentsRequest, SummarizeRowResponse,
+  CompleteTextResponse, CompletionType, Document, SearchDocumentsRequest, SummarizeRowResponse,
   TranslateRowResponse,
 };
 use crate::error::AIError;
@@ -27,7 +27,7 @@ impl AppFlowyAIClient {
     &self,
     text: &str,
     completion_type: CompletionType,
-  ) -> Result<CompletionResponse, AIError> {
+  ) -> Result<CompleteTextResponse, AIError> {
     if text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
     }
@@ -43,7 +43,7 @@ impl AppFlowyAIClient {
       .json(&params)
       .send()
       .await?;
-    AIResponse::<CompletionResponse>::from_response(resp)
+    AIResponse::<CompleteTextResponse>::from_response(resp)
       .await?
       .into_data()
   }

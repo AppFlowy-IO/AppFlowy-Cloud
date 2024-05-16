@@ -7,6 +7,7 @@ use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
+use crate::api::ai_tool::ai_tool_scope;
 use crate::api::chat::chat_scope;
 use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::collab::access_control::{
@@ -139,6 +140,7 @@ pub async fn run_actix_server(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(chat_scope())
+      .service(ai_tool_scope())
       .service(metrics_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))

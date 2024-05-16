@@ -5474,6 +5474,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "app-error",
+ "appflowy-ai-client",
  "chrono",
  "collab-entity",
  "database-entity",

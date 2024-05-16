@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+pub use appflowy_ai_client::dto::*;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowParams {
   pub workspace_id: String,
@@ -26,4 +27,10 @@ pub enum SummarizeRowData {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompleteTextParams {
+  pub text: String,
+  pub completion_type: CompletionType,
 }

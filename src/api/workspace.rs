@@ -22,7 +22,6 @@ use collab_rt_protocol::validate_encode_collab;
 use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::*;
-use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams, SummarizeRowResponse};
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -131,9 +130,6 @@ pub fn workspace_scope() -> Scope {
       .route(web::get().to(batch_get_collab_handler)) // deprecated: browser cannot use json param
                                                       // for GET request
       .route(web::post().to(batch_get_collab_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/summarize_row").route(web::post().to(summary_row_handler)),
     )
 }
 
@@ -998,42 +994,5 @@ async fn parser_realtime_msg(
       "Unsupported message type: {:?}",
       message
     ))),
-  }
-}
-
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn summary_row_handler(
-  state: Data<AppState>,
-  payload: Json<SummarizeRowParams>,
-) -> Result<Json<AppResponse<SummarizeRowResponse>>> {
-  let params = payload.into_inner();
-  match params.data {
-    SummarizeRowData::Identity { .. } => {
-      return Err(AppError::InvalidRequest("Identity data is not supported".to_string()).into());
-    },
-    SummarizeRowData::Content(content) => {
-      if content.is_empty() {
-        return Ok(
-          AppResponse::Ok()
-            .with_data(SummarizeRowResponse {
-              text: "No content".to_string(),
-            })
-            .into(),
-        );
-      }
-
-      let result = state.ai_client.summarize_row(&content).await;
-      let resp = match result {
-        Ok(resp) => SummarizeRowResponse { text: resp.text },
-        Err(err) => {
-          error!("Failed to summarize row: {:?}", err);
-          SummarizeRowResponse {
-            text: "No content".to_string(),
-          }
-        },
-      };
-
-      Ok(AppResponse::Ok().with_data(resp).into())
-    },
   }
 }

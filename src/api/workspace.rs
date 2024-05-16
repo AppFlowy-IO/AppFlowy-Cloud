@@ -132,9 +132,6 @@ pub fn workspace_scope() -> Scope {
                                                       // for GET request
       .route(web::post().to(batch_get_collab_handler)),
     )
-    .service(
-      web::resource("/{workspace_id}/summarize_row").route(web::post().to(summary_row_handler)),
-    )
 }
 
 pub fn collab_scope() -> Scope {
@@ -998,42 +995,5 @@ async fn parser_realtime_msg(
       "Unsupported message type: {:?}",
       message
     ))),
-  }
-}
-
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn summary_row_handler(
-  state: Data<AppState>,
-  payload: Json<SummarizeRowParams>,
-) -> Result<Json<AppResponse<SummarizeRowResponse>>> {
-  let params = payload.into_inner();
-  match params.data {
-    SummarizeRowData::Identity { .. } => {
-      return Err(AppError::InvalidRequest("Identity data is not supported".to_string()).into());
-    },
-    SummarizeRowData::Content(content) => {
-      if content.is_empty() {
-        return Ok(
-          AppResponse::Ok()
-            .with_data(SummarizeRowResponse {
-              text: "No content".to_string(),
-            })
-            .into(),
-        );
-      }
-
-      let result = state.ai_client.summarize_row(&content).await;
-      let resp = match result {
-        Ok(resp) => SummarizeRowResponse { text: resp.text },
-        Err(err) => {
-          error!("Failed to summarize row: {:?}", err);
-          SummarizeRowResponse {
-            text: "No content".to_string(),
-          }
-        },
-      };
-
-      Ok(AppResponse::Ok().with_data(resp).into())
-    },
   }
 }

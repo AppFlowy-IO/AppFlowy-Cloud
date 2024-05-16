@@ -22,7 +22,6 @@ use collab_rt_protocol::validate_encode_collab;
 use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::*;
-use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams, SummarizeRowResponse};
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};

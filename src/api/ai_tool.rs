@@ -1,10 +1,8 @@
-use crate::biz::chat::ops::create_chat;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
-use actix_web::{web, App, Scope};
+use actix_web::{web, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::CompleteTextResponse;
-use database_entity::chat::CreateChatParams;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };

@@ -1,3 +1,4 @@
+pub mod ai_tool;
 pub mod chat;
 pub mod file_storage;
 pub mod metrics;

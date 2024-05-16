@@ -73,7 +73,7 @@ tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
 
 # ai
-appflowy-ai-client = { path = "libs/appflowy-ai-client" }
+appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }
 
 collab = { workspace = true }
 collab-document = { workspace = true }
@@ -195,6 +195,7 @@ lazy_static = "1.4.0"
 tonic = "0.11"
 prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
+appflowy-ai-client = { path = "libs/appflowy-ai-client" }
 
 # collaboration
 yrs = "0.18.7"

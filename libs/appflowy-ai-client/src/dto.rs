@@ -12,7 +12,7 @@ pub struct TranslateRowResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CompletionResponse {
+pub struct CompleteTextResponse {
   pub text: String,
 }
 

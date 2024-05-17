@@ -3,7 +3,6 @@ use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
 use anyhow::anyhow;
-use async_trait::async_trait;
 use bytes::Bytes;
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use collab::core::origin::CollabOrigin;
@@ -30,9 +29,8 @@ use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::Subscription as YrsSubscription;
 
-#[async_trait]
 pub trait CollabUpdateStreaming: 'static + Send + Sync {
-  async fn send_update(&self, update: Vec<u8>);
+  fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
 }
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
@@ -67,7 +65,7 @@ impl CollabBroadcast {
   ///
   /// The overflow of the incoming events that needs to be propagates will be buffered up to a
   /// provided `buffer_capacity` size.
-  pub async fn new(
+  pub fn new(
     object_id: &str,
     buffer_capacity: usize,
     edit_state: Arc<EditState>,
@@ -87,11 +85,11 @@ impl CollabBroadcast {
       modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
       update_streaming,
     };
-    this.observe_collab_changes(collab).await;
+    this.observe_collab_changes(collab);
     this
   }
 
-  async fn observe_collab_changes(&mut self, collab: &MutexCollab) {
+  fn observe_collab_changes(&mut self, collab: &MutexCollab) {
     let (doc_sub, awareness_sub) = {
       // Observer the document's update and broadcast it to all subscribers.
       let cloned_oid = self.object_id.clone();
@@ -117,12 +115,9 @@ impl CollabBroadcast {
           );
 
           let stream_update = event.update.clone();
-          let cloned_update_streaming = update_streaming.clone();
-          // FIXME: how to maintain the order of the update when using spawn here.
-          tokio::spawn(async move {
-            cloned_update_streaming.send_update(stream_update).await;
-          });
-
+          if let Err(err) = update_streaming.send_update(stream_update) {
+            warn!("fail to send updates to redis:{}", err)
+          }
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
           if let Err(err) = broadcast_sink.send(msg.into()) {

@@ -238,7 +238,7 @@ where
         is_new_collab,
         self.collab_redis_stream.clone(),
       )
-      .await,
+      .await?,
     );
     self.state.insert_group(object_id, group.clone()).await;
     Ok(())

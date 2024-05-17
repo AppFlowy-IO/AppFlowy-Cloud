@@ -1,40 +1,39 @@
-use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
-use crate::api::ws::RealtimeServerAddr;
-use crate::biz;
-use crate::biz::actix_ws::entities::ClientStreamMessage;
-use crate::biz::collab::access_control::CollabAccessControl;
-use crate::biz::user::auth::jwt::UserUuid;
-use crate::biz::workspace;
-use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
-use crate::state::AppState;
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
-use app_error::AppError;
 use bytes::BytesMut;
 use collab_entity::CollabType;
+use prost::Message as ProstMessage;
+use sqlx::types::uuid;
+use tokio::time::Instant;
+use tokio_stream::StreamExt;
+use tokio_tungstenite::tungstenite::Message;
+use tracing::{error, event, instrument};
+use uuid::Uuid;
+use validator::Validate;
 
+use access_control::collab::CollabAccessControl;
+use app_error::AppError;
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
 use database::collab::CollabStorage;
 use database::user::select_uid_from_email;
 use database_entity::dto::*;
-use prost::Message as ProstMessage;
-use shared_entity::dto::ai_dto::{SummarizeRowData, SummarizeRowParams, SummarizeRowResponse};
 use shared_entity::dto::workspace_dto::*;
 use shared_entity::response::AppResponseError;
 use shared_entity::response::{AppResponse, JsonAppResponse};
-use sqlx::types::uuid;
-use std::time::Duration;
-use tokio::time::{sleep, Instant};
-use tokio_stream::StreamExt;
-use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument};
-use uuid::Uuid;
-use validator::Validate;
+
+use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
+use crate::api::ws::RealtimeServerAddr;
+use crate::biz;
+use crate::biz::actix_ws::entities::ClientStreamMessage;
+use crate::biz::user::auth::jwt::UserUuid;
+use crate::biz::workspace;
+use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};
+use crate::state::AppState;
 
 pub const WORKSPACE_ID_PATH: &str = "workspace_id";
 pub const COLLAB_OBJECT_ID_PATH: &str = "object_id";
@@ -127,10 +126,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_member_list_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/collab_list").route(web::get().to(batch_get_collab_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/summarize_row").route(web::post().to(summary_row_handler)),
+      web::resource("/{workspace_id}/collab_list")
+      .route(web::get().to(batch_get_collab_handler)) // deprecated: browser cannot use json param
+                                                      // for GET request
+      .route(web::post().to(batch_get_collab_handler)),
     )
 }
 
@@ -910,45 +909,35 @@ async fn post_realtime_message_stream_handler(
 
   event!(tracing::Level::INFO, "message len: {}", bytes.len());
   let device_id = device_id.to_string();
+  // Only send message to websocket server when the user is connected
+  if !state
+    .realtime_shared_state
+    .is_user_connected(&uid, &device_id)
+    .await
+    .unwrap_or(false)
+  {
+    return Ok(Json(AppResponse::Ok()));
+  }
+
   let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
-  let mut stream_message = Some(ClientStreamMessage {
+  let stream_message = ClientStreamMessage {
     uid,
     device_id,
     message,
-  });
-  const MAX_RETRIES: usize = 3;
-  const RETRY_DELAY: Duration = Duration::from_secs(2);
+  };
 
-  let mut attempts = 0;
-  while attempts < MAX_RETRIES {
-    match stream_message.take() {
-      None => {
-        return Err(AppError::Internal(anyhow!("Unexpected empty stream message")).into());
-      },
-      Some(message_to_send) => {
-        match server.try_send(message_to_send) {
-          Ok(_) => return Ok(Json(AppResponse::Ok())),
-          Err(err) if attempts < MAX_RETRIES - 1 => {
-            attempts += 1;
-            stream_message = Some(err.into_inner());
-            sleep(RETRY_DELAY).await;
-          },
-          Err(err) => {
-            return Err(
-              AppError::Internal(anyhow!(
-                "Failed to send client stream message to websocket server after {} attempts: {}",
-                // attempts starts from 0, so add 1 for accurate count
-                attempts + 1,
-                err
-              ))
-              .into(),
-            );
-          },
-        }
-      },
-    }
+  // When the server is under heavy load, try_send may fail. In client side, it will retry to send
+  // the message later.
+  match server.try_send(stream_message) {
+    Ok(_) => return Ok(Json(AppResponse::Ok())),
+    Err(err) => Err(
+      AppError::Internal(anyhow!(
+        "Failed to send message to websocket server, error:{}",
+        err
+      ))
+      .into(),
+    ),
   }
-  Err(AppError::Internal(anyhow!("Failed to send message to websocket server")).into())
 }
 
 async fn get_workspace_usage_handler(
@@ -1005,42 +994,5 @@ async fn parser_realtime_msg(
       "Unsupported message type: {:?}",
       message
     ))),
-  }
-}
-
-#[instrument(level = "debug", skip(state, payload), err)]
-async fn summary_row_handler(
-  state: Data<AppState>,
-  payload: Json<SummarizeRowParams>,
-) -> Result<Json<AppResponse<SummarizeRowResponse>>> {
-  let params = payload.into_inner();
-  match params.data {
-    SummarizeRowData::Identity { .. } => {
-      return Err(AppError::InvalidRequest("Identity data is not supported".to_string()).into());
-    },
-    SummarizeRowData::Content(content) => {
-      if content.is_empty() {
-        return Ok(
-          AppResponse::Ok()
-            .with_data(SummarizeRowResponse {
-              text: "No content".to_string(),
-            })
-            .into(),
-        );
-      }
-
-      let result = state.ai_client.summarize_row(&content).await;
-      let resp = match result {
-        Ok(resp) => SummarizeRowResponse { text: resp.text },
-        Err(err) => {
-          error!("Failed to summarize row: {:?}", err);
-          SummarizeRowResponse {
-            text: "No content".to_string(),
-          }
-        },
-      };
-
-      Ok(AppResponse::Ok().with_data(resp).into())
-    },
   }
 }

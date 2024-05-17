@@ -522,13 +522,14 @@ dependencies = [
 [[package]]
 name = "appflowy-ai-client"
 version = "0.1.0"
-source = "git+https://github.com/AppFlowy-IO/AppFlowy-AI?rev=6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9#6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9"
 dependencies = [
  "anyhow",
  "reqwest 0.12.4",
  "serde",
  "serde_json",
+ "serde_repr",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -558,7 +559,7 @@ dependencies = [
  "bytes",
  "chrono",
  "client-api",
- "client-api-test-util",
+ "client-api-test",
  "collab",
  "collab-document",
  "collab-entity",
@@ -621,6 +622,7 @@ dependencies = [
  "url",
  "uuid",
  "validator",
+ "workspace-access",
  "workspace-template",
 ]
 
@@ -628,6 +630,7 @@ dependencies = [
 name = "appflowy-collaborate"
 version = "0.1.0"
 dependencies = [
+ "access-control",
  "anyhow",
  "app-error",
  "async-stream",
@@ -647,6 +650,7 @@ dependencies = [
  "futures",
  "futures-util",
  "indexmap 2.2.5",
+ "itertools 0.12.0",
  "lazy_static",
  "md5",
  "parking_lot 0.12.1",
@@ -656,6 +660,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sqlx",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -1458,7 +1463,7 @@ checksum = "702fc72eb24e5a1e48ce58027a675bc24edd52096d5397d4aea7c6dd9eca0bd1"
 
 [[package]]
 name = "client-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "again",
  "anyhow",
@@ -1503,7 +1508,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "client-api-test-util"
+name = "client-api-test"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -4629,10 +4634,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "realtime"
-version = "0.1.0"
-
-[[package]]
 name = "redis"
 version = "0.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5473,6 +5474,7 @@ dependencies = [
  "actix-web",
  "anyhow",
  "app-error",
+ "appflowy-ai-client",
  "chrono",
  "collab-entity",
  "database-entity",
@@ -6134,9 +6136,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.36.0"
+version = "1.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61285f6515fa018fb2d1e46eb21223fff441ee8db5d0f1435e8ab4f5cdb80931"
+checksum = "1adbebffeca75fcfd058afa480fb6c0b81e165a0323f9c9d39c9697e37c46787"
 dependencies = [
  "backtrace",
  "bytes",
@@ -6894,7 +6896,7 @@ name = "wasm-test"
 version = "0.1.0"
 dependencies = [
  "client-api",
- "client-api-test-util",
+ "client-api-test",
  "tokio",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
@@ -7189,6 +7191,20 @@ checksum = "a277a57398d4bfa075df44f501a17cfdf8542d224f0d36095a2adc7aee4ef0a5"
 dependencies = [
  "cfg-if 1.0.0",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "workspace-access"
+version = "0.1.0"
+dependencies = [
+ "access-control",
+ "app-error",
+ "async-trait",
+ "database-entity",
+ "serde",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

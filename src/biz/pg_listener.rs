@@ -1,15 +1,13 @@
-use crate::biz::casbin::pg_listen::{
-  CollabMemberListener, CollabMemberNotification, WorkspaceMemberListener,
-  WorkspaceMemberNotification,
-};
 use crate::biz::user::user_verify::UserListener;
 use anyhow::Error;
+use appflowy_collaborate::collab::notification::CollabMemberNotification;
 use database::pg_row::AFUserNotification;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgListener;
 use sqlx::PgPool;
 use tokio::sync::broadcast;
 use tracing::{error, trace};
+use workspace_access::notification::WorkspaceMemberNotification;
 
 pub struct PgListeners {
   user_listener: UserListener,
@@ -95,3 +93,6 @@ where
     Ok(Self { notify })
   }
 }
+
+pub type CollabMemberListener = PostgresDBListener<CollabMemberNotification>;
+pub type WorkspaceMemberListener = PostgresDBListener<WorkspaceMemberNotification>;

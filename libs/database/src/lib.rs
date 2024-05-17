@@ -1,3 +1,4 @@
+pub mod chat;
 pub mod collab;
 pub mod file;
 pub mod history;

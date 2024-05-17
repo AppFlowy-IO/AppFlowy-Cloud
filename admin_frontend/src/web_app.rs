@@ -157,7 +157,7 @@ async fn login_callback_query_handler(
           let found = accepted_invitations
             .iter()
             .find(|w| w.invite_id.to_string() == invite_id);
-          if let Some(_) = found {
+          if found.is_some() {
             return Ok((jar, render_template(templates::OpenAppFlowyOrDownload {})?));
           }
         }

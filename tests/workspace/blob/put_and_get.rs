@@ -1,6 +1,6 @@
 use super::TestBucket;
 use app_error::ErrorCode;
-use client_api_test_util::{generate_unique_registered_user_client, workspace_id_from_client};
+use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 
 #[tokio::test]
 async fn get_but_not_exists() {
@@ -132,5 +132,34 @@ async fn put_and_delete_workspace() {
       .await
       .is_none();
     assert!(is_none);
+  }
+}
+
+#[tokio::test]
+async fn simulate_30_put_blob_request_test() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+
+  let mut handles = vec![];
+  for _ in 0..30 {
+    let cloned_client = c1.clone();
+    let cloned_workspace_id = workspace_id.clone();
+    let handle = tokio::spawn(async move {
+      let mime = mime::TEXT_PLAIN_UTF_8;
+      let file_id = uuid::Uuid::new_v4().to_string();
+      let url = cloned_client.get_blob_url(&cloned_workspace_id, &file_id);
+      let data = vec![0; 3 * 1024 * 1024];
+      cloned_client.put_blob(&url, data, &mime).await.unwrap();
+      url
+    });
+    handles.push(handle);
+  }
+
+  let results = futures::future::join_all(handles).await;
+  for result in results {
+    let url = result.unwrap();
+    let (_, got_data) = c1.get_blob(&url).await.unwrap();
+    assert_eq!(got_data, vec![0; 3 * 1024 * 1024]);
+    c1.delete_blob(&url).await.unwrap();
   }
 }

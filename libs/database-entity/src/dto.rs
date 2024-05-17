@@ -1,3 +1,4 @@
+use crate::util::{validate_not_empty_payload, validate_not_empty_str};
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 use tracing::error;
 use uuid::Uuid;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
@@ -111,20 +112,6 @@ pub struct DeleteCollabParams {
   pub object_id: String,
   #[validate(custom = "validate_not_empty_str")]
   pub workspace_id: String,
-}
-
-fn validate_not_empty_str(s: &str) -> Result<(), ValidationError> {
-  if s.is_empty() {
-    return Err(ValidationError::new("should not be empty string"));
-  }
-  Ok(())
-}
-
-fn validate_not_empty_payload(payload: &[u8]) -> Result<(), ValidationError> {
-  if payload.is_empty() {
-    return Err(ValidationError::new("should not be empty payload"));
-  }
-  Ok(())
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

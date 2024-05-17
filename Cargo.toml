@@ -73,7 +73,7 @@ tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
 
 # ai
-appflowy-ai-client = { version = "0.1.0" }
+appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }
 
 collab = { workspace = true }
 collab-document = { workspace = true }
@@ -89,6 +89,7 @@ gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 access-control.workspace = true
+workspace-access.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
@@ -106,10 +107,11 @@ once_cell = "1.19.0"
 tempfile = "3.9.0"
 assert-json-diff = "2.0.2"
 scraper = "0.17.1"
-client-api-test-util = { path = "libs/client-api-test-util", features = ["collab-sync"] }
+client-api-test = { path = "libs/client-api-test", features = ["collab-sync"] }
 client-api = { path = "libs/client-api", features = ["collab-sync", "test_util", "sync_verbose_log", "test_fast_sync", "enable_brotli"] }
 opener = "0.6.1"
 image = "0.23.14"
+collab-rt-entity.workspace = true
 
 [[bin]]
 name = "appflowy_cloud"
@@ -136,18 +138,19 @@ members = [
     "libs/gotrue-entity",
     "admin_frontend",
     "libs/app-error",
+    "libs/workspace-access",
     "libs/workspace-template",
     "libs/encrypt",
     "libs/access-control",
     "libs/collab-rt-protocol",
     "libs/collab-stream",
     "libs/client-websocket",
-    "libs/client-api-test-util",
+    "libs/client-api-test",
     "libs/wasm-test",
     "libs/client-api-wasm",
+    "libs/appflowy-ai-client",
     # services
     "services/appflowy-history",
-    "services/realtime",
     "services/appflowy-collaborate",
     # xtask
     "xtask",
@@ -160,7 +163,9 @@ collab-rt-protocol = { path = "libs/collab-rt-protocol" }
 database = { path = "libs/database" }
 database-entity = { path = "libs/database-entity" }
 shared-entity = { path = "libs/shared-entity" }
+gotrue-entity = { path = "libs/gotrue-entity" }
 access-control = { path = "libs/access-control" }
+workspace-access = { path = "libs/workspace-access" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"
@@ -190,13 +195,14 @@ lazy_static = "1.4.0"
 tonic = "0.11"
 prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
+appflowy-ai-client = { path = "libs/appflowy-ai-client" }
 
 # collaboration
 yrs = "0.18.7"
-collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
-collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab = { version = "0.2.0" }
+collab-entity = { version = "0.2.0" }
+collab-folder = { version = "0.2.0" }
+collab-document = { version = "0.2.0" }
 
 [profile.release]
 lto = true
@@ -208,7 +214,12 @@ inherits = "release"
 debug = true
 
 [patch.crates-io]
-appflowy-ai-client = { git = "https://github.com/AppFlowy-IO/AppFlowy-AI", rev = "6da7ac710fa8f7c9d70b33adb5bd86eb6f8790d9" }
+# It's diffcult to resovle different version with the same crate used in AppFlowy Frontend and the Client-API crate.
+# So using patch to workaround this issue.
+collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
+collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "870cd70" }
 
 [features]
 history = []

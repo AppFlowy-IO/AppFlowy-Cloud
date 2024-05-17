@@ -7,14 +7,12 @@ use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
+use crate::api::ai_tool::ai_tool_scope;
+use crate::api::chat::chat_scope;
 use crate::biz::actix_ws::server::RealtimeServerActor;
-use crate::biz::casbin::{
-  CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
-};
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
-use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
@@ -33,7 +31,12 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::collab::access_control::{
+  CollabAccessControlImpl, RealtimeCollabAccessControlImpl,
+};
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
+use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollaborationServer;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
@@ -46,6 +49,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
   port: u16,
@@ -135,6 +139,8 @@ pub async fn run_actix_server(
       .service(collab_scope())
       .service(ws_scope())
       .service(file_storage_scope())
+      .service(chat_scope())
+      .service(ai_tool_scope())
       .service(metrics_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
@@ -226,7 +232,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   )
   .await;
-  let collab_storage = Arc::new(CollabStorageImpl::new(
+  let collab_access_control_storage = Arc::new(CollabStorageImpl::new(
     collab_cache.clone(),
     collab_storage_access_control,
     snapshot_control,
@@ -246,6 +252,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     &config.mailer.smtp_host,
   )
   .await?;
+  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
+  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
+    warn!("Failed to remove all connected users: {:?}", err);
+  }
 
   info!("Application state initialized");
   Ok(AppState {
@@ -256,7 +266,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     gotrue_client,
     redis_connection_manager: redis_conn_manager,
     collab_cache,
-    collab_access_control_storage: collab_storage,
+    collab_access_control_storage,
     collab_access_control,
     workspace_access_control,
     bucket_storage,
@@ -268,6 +278,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     ai_client: appflowy_ai_client,
     #[cfg(feature = "history")]
     grpc_history_client,
+    realtime_shared_state,
   })
 }
 

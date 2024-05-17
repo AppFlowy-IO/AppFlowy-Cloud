@@ -44,7 +44,9 @@ use url::Url;
 use crate::ws::ConnectInfo;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
-use shared_entity::dto::ai_dto::{SummarizeRowParams, SummarizeRowResponse};
+use shared_entity::dto::ai_dto::{
+  CompleteTextParams, CompleteTextResponse, SummarizeRowParams, SummarizeRowResponse,
+};
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -104,7 +106,7 @@ pub struct Client {
   pub(crate) cloud_client: reqwest::Client,
   pub(crate) gotrue_client: gotrue::api::Client,
   pub base_url: String,
-  ws_addr: String,
+  pub ws_addr: String,
   pub device_id: String,
   pub client_version: Version,
   pub(crate) token: Arc<RwLock<ClientToken>>,
@@ -1101,15 +1103,15 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "info", skip_all)]
-  pub fn ws_url(&self) -> String {
-    format!("{}/v1", self.ws_addr)
-  }
-
-  pub async fn ws_connect_info(&self) -> Result<ConnectInfo, AppResponseError> {
-    self
-      .refresh_if_expired(chrono::Local::now().timestamp())
-      .await?;
+  pub async fn ws_connect_info(&self, auto_refresh: bool) -> Result<ConnectInfo, AppResponseError> {
+    if auto_refresh {
+      self
+        .refresh_if_expired(
+          chrono::Local::now().timestamp(),
+          "get websocket connect info",
+        )
+        .await?;
+    }
 
     Ok(ConnectInfo {
       access_token: self.access_token()?,
@@ -1283,13 +1285,13 @@ impl Client {
   }
 
   // Refresh token if given timestamp is close to the token expiration time
-  pub async fn refresh_if_expired(&self, ts: i64) -> Result<(), AppResponseError> {
+  pub async fn refresh_if_expired(&self, ts: i64, reason: &str) -> Result<(), AppResponseError> {
     let expires_at = self.token_expires_at()?;
 
     if ts + 30 > expires_at {
       info!("token is about to expire, refreshing token");
       // Add 30 seconds buffer
-      self.refresh_token().await?;
+      self.refresh_token(reason).await?;
     }
     Ok(())
   }
@@ -1300,7 +1302,7 @@ impl Client {
     params: SummarizeRowParams,
   ) -> Result<SummarizeRowResponse, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/{}/summarize_row",
+      "{}/api/ai/{}/summarize_row",
       self.base_url, params.workspace_id
     );
 
@@ -1317,6 +1319,25 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all)]
+  pub async fn completion_text(
+    &self,
+    workspace_id: &str,
+    params: CompleteTextParams,
+  ) -> Result<CompleteTextResponse, AppResponseError> {
+    let url = format!("{}/api/ai/{}/complete_text", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<CompleteTextResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   #[instrument(level = "debug", skip_all, err)]
   pub async fn http_client_with_auth(
     &self,
@@ -1324,7 +1345,9 @@ impl Client {
     url: &str,
   ) -> Result<RequestBuilder, AppResponseError> {
     let ts_now = chrono::Local::now().timestamp();
-    self.refresh_if_expired(ts_now).await?;
+    self
+      .refresh_if_expired(ts_now, "make http client request")
+      .await?;
 
     let access_token = self.access_token()?;
     trace!("start request: {}, method: {}", url, method);

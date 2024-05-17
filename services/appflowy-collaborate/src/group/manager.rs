@@ -1,24 +1,25 @@
-use crate::group::group_init::CollabGroup;
-use crate::group::state::GroupManagementState;
+use std::sync::Arc;
 
-use crate::error::RealtimeError;
-use crate::metrics::CollabMetricsCalculate;
-use crate::RealtimeAccessControl;
-use app_error::AppError;
 use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::origin::CollabOrigin;
-
-use crate::client::client_msg_router::ClientMessageRouter;
-use crate::group::plugin::HistoryPlugin;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
+use tracing::{instrument, trace, warn};
+
+use access_control::collab::RealtimeAccessControl;
+use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
 use database::collab::CollabStorage;
 use database_entity::dto::QueryCollabParams;
-use std::sync::Arc;
-use tracing::{instrument, trace, warn};
+
+use crate::client::client_msg_router::ClientMessageRouter;
+use crate::error::{CreateGroupFailedReason, RealtimeError};
+use crate::group::group_init::CollabGroup;
+use crate::group::plugin::HistoryPlugin;
+use crate::group::state::GroupManagementState;
+use crate::metrics::CollabMetricsCalculate;
 
 pub struct GroupManager<S, AC> {
   state: GroupManagementState,
@@ -119,10 +120,11 @@ where
       .await
     {
       if metadata.workspace_id != workspace_id {
-        let err = RealtimeError::CollabWorkspaceIdNotMatch {
-          expect: metadata.workspace_id,
-          actual: workspace_id.to_string(),
-        };
+        let err =
+          RealtimeError::CreateGroupFailed(CreateGroupFailedReason::CollabWorkspaceIdNotMatch {
+            expect: metadata.workspace_id,
+            actual: workspace_id.to_string(),
+          });
         warn!(
           "[Realtime]:user_id:{},object_id:{}:{},error:{}",
           uid, object_id, collab_type, err
@@ -145,7 +147,9 @@ where
               false,
             ))
           } else {
-            return Err(RealtimeError::Internal(err.into()));
+            return Err(RealtimeError::CreateGroupFailed(
+              CreateGroupFailedReason::CannotGetCollabData,
+            ));
           }
         },
       };

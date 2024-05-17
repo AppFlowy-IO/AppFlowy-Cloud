@@ -1,4 +1,4 @@
-use client_api_test_util::*;
+use client_api_test::*;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab_document::document::Document;

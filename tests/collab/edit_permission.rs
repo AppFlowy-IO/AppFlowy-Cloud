@@ -1,6 +1,6 @@
 use crate::collab::util::generate_random_string;
 use assert_json_diff::{assert_json_eq, assert_json_include};
-use client_api_test_util::{
+use client_api_test::{
   assert_client_collab_include_value, assert_client_collab_within_secs, assert_server_collab,
   TestClient,
 };

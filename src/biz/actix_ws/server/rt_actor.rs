@@ -1,12 +1,16 @@
-use crate::biz::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
-use crate::biz::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
+use std::ops::Deref;
+
 use actix::{Actor, Context, Handler, ResponseFuture};
+use tracing::{error, info, warn};
+
+use access_control::collab::RealtimeAccessControl;
 use appflowy_collaborate::error::RealtimeError;
-use appflowy_collaborate::{CollaborationServer, RealtimeAccessControl};
+use appflowy_collaborate::CollaborationServer;
 use collab_rt_entity::user::UserDevice;
 use database::collab::CollabStorage;
-use std::ops::Deref;
-use tracing::{error, warn};
+
+use crate::biz::actix_ws::client::rt_client::{RealtimeClientWebsocketSinkImpl, RealtimeServer};
+use crate::biz::actix_ws::entities::{ClientMessage, ClientStreamMessage, Connect, Disconnect};
 
 #[derive(Clone)]
 pub struct RealtimeServerActor<S, AC>(pub CollaborationServer<S, AC>);
@@ -34,7 +38,12 @@ where
   type Context = Context<Self>;
 
   fn started(&mut self, ctx: &mut Self::Context) {
-    ctx.set_mailbox_capacity(3000);
+    let mail_box_size = mail_box_size();
+    info!(
+      "realtime server started with mailbox size: {}",
+      mail_box_size
+    );
+    ctx.set_mailbox_capacity(mail_box_size);
   }
 }
 impl<S, AC> actix::Supervised for RealtimeServerActor<S, AC>
@@ -44,7 +53,17 @@ where
 {
   fn restarting(&mut self, ctx: &mut Context<RealtimeServerActor<S, AC>>) {
     error!("realtime server is restarting");
-    ctx.set_mailbox_capacity(3000);
+    ctx.set_mailbox_capacity(mail_box_size());
+  }
+}
+
+fn mail_box_size() -> usize {
+  match std::env::var("APPFLOWY_WEBSOCKET_MAILBOX_SIZE") {
+    Ok(value) => value.parse::<usize>().unwrap_or_else(|_| {
+      error!("Error: Invalid mailbox size format, defaulting to 6000");
+      6000
+    }),
+    Err(_) => 6000,
   }
 }
 
@@ -107,12 +126,13 @@ where
       message,
     } = client_msg;
 
+    // Get the real-time user by the device ID and user ID. If the user is not found, which means
+    // the user is not connected to the real-time server via websocket.
     let user = self.get_user_by_device(&UserDevice::new(&device_id, uid));
-
     match (user, message.transform()) {
       (Some(user), Ok(messages)) => self.handle_client_message(user, messages),
       (None, _) => {
-        warn!("user:{}|device:{} not found", uid, device_id);
+        warn!("Can't find the realtime user uid:{}, device:{}. User should connect via websocket before", uid,device_id);
         Box::pin(async { Ok(()) })
       },
       (Some(_), Err(err)) => {

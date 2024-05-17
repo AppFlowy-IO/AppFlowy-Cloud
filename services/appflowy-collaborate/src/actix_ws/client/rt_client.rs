@@ -1,4 +1,6 @@
-use crate::biz::actix_ws::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
+use crate::actix_ws::entities::{ClientMessage, Connect, Disconnect, RealtimeMessage};
+use crate::error::RealtimeError;
+use crate::RealtimeClientWebsocketSink;
 use actix::{
   fut, Actor, ActorContext, ActorFutureExt, Addr, AsyncContext, Context, ContextFutureSpawner,
   Handler, MailboxError, Recipient, ResponseFuture, Running, StreamHandler, WrapFuture,
@@ -6,8 +8,6 @@ use actix::{
 use actix_web_actors::ws;
 use actix_web_actors::ws::{CloseCode, CloseReason, ProtocolError, WebsocketContext};
 use anyhow::anyhow;
-use appflowy_collaborate::error::RealtimeError;
-use appflowy_collaborate::RealtimeClientWebsocketSink;
 use async_trait::async_trait;
 use bytes::Bytes;
 use collab_rt_entity::user::RealtimeUser;

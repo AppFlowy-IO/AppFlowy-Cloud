@@ -77,14 +77,14 @@ pub async fn create_app(config: Config) -> Result<Router<Identity>, Error> {
   migrate(&pg_pool).await?;
 
   // Redis
-  let redis_client = redis::Client::open(config.redis_url)
+  let redis_connection_manager = redis::Client::open(config.redis_url)
     .expect("failed to create redis client")
     .get_connection_manager()
     .await
     .expect("failed to get redis connection manager");
 
   let collab_redis_stream =
-    CollabRedisStream::new_with_connection_manager(redis_client.clone()).await;
+    CollabRedisStream::new_with_connection_manager(redis_connection_manager.clone());
   let open_collab_manager = Arc::new(
     OpenCollabManager::new(
       collab_redis_stream,
@@ -95,7 +95,7 @@ pub async fn create_app(config: Config) -> Result<Router<Identity>, Error> {
   );
 
   let state = AppState {
-    redis_client,
+    redis_client: redis_connection_manager,
     open_collab_manager,
     pg_pool,
   };

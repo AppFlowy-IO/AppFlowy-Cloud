@@ -1,11 +1,12 @@
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
 use dashmap::DashMap;
+use std::ops::DerefMut;
 
 use std::sync::Arc;
 
 use crate::error::RealtimeError;
-use crate::group::broadcast::{CollabBroadcast, Subscription};
+use crate::group::broadcast::{CollabBroadcast, CollabUpdateStreaming, Subscription};
 use crate::group::persistence::GroupPersistence;
 use crate::metrics::CollabMetricsCalculate;
 use collab_rt_entity::user::RealtimeUser;
@@ -16,10 +17,16 @@ use database::collab::CollabStorage;
 use collab::core::collab::MutexCollab;
 use futures_util::{SinkExt, StreamExt};
 
+use async_trait::async_trait;
 use collab::entity::EncodedCollab;
+
+use collab_stream::client::CollabRedisStream;
+use collab_stream::error::StreamError;
+use collab_stream::model::{CollabUpdateEvent, StreamBinary};
+use collab_stream::stream_group::StreamGroup;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
-use tokio::sync::mpsc;
-use tracing::{event, trace};
+use tokio::sync::{mpsc, Mutex};
+use tracing::{error, event, trace};
 
 /// A group used to manage a single [Collab] object
 pub struct CollabGroup {
@@ -54,12 +61,20 @@ impl CollabGroup {
     metrics_calculate: CollabMetricsCalculate,
     storage: Arc<S>,
     is_new_collab: bool,
+    collab_redis_stream: Arc<CollabRedisStream>,
   ) -> Self
   where
     S: CollabStorage,
   {
     let edit_state = Arc::new(EditState::new(100, 360, is_new_collab));
-    let broadcast = CollabBroadcast::new(&object_id, 10, edit_state.clone(), &collab).await;
+    let broadcast = CollabBroadcast::new(
+      &object_id,
+      10,
+      edit_state.clone(),
+      &collab,
+      CollabUpdateStreamingImpl::new(&workspace_id, &object_id, collab_redis_stream),
+    )
+    .await;
     let (destroy_group_tx, rx) = mpsc::channel(1);
 
     tokio::spawn(
@@ -282,6 +297,89 @@ impl EditState {
 
     // Determine if we should save based on either condition being met
     edit_count_exceeded || (current_edit_count != prev_edit_count && time_exceeded)
+  }
+}
+
+struct CollabUpdateStreamingImpl {
+  workspace_id: String,
+  object_id: String,
+  collab_redis_stream: Arc<CollabRedisStream>,
+  mem_cache: Mutex<Vec<Vec<u8>>>,
+  update_stream: Mutex<Option<StreamGroup>>,
+}
+
+impl CollabUpdateStreamingImpl {
+  fn new(workspace_id: &str, object_id: &str, collab_redis_stream: Arc<CollabRedisStream>) -> Self {
+    Self {
+      workspace_id: workspace_id.to_string(),
+      object_id: object_id.to_string(),
+      collab_redis_stream,
+      mem_cache: Default::default(),
+      update_stream: Default::default(),
+    }
+  }
+
+  /// Initialize redis update stream
+  /// After initialize the redis update stream, all pending updates will be sent immediately.
+  async fn init_update_stream(&self) -> Result<(), StreamError> {
+    let mut redis_update_stream = self
+      .collab_redis_stream
+      .collab_update_stream(
+        &self.workspace_id,
+        &self.object_id,
+        "collaborate_update_producer",
+      )
+      .await?;
+
+    // Send all pending updates
+    send_pending_updates(&mut redis_update_stream, &self.mem_cache).await;
+    *self.update_stream.lock().await = Some(redis_update_stream);
+    Ok(())
+  }
+}
+
+#[async_trait]
+impl CollabUpdateStreaming for CollabUpdateStreamingImpl {
+  async fn send_update(&self, update: Vec<u8>) {
+    if let Some(redis_update_stream) = self.update_stream.lock().await.deref_mut() {
+      if let Err(err) = redis_update_stream
+        .insert_message(CollabUpdateEvent::UpdateV1 {
+          encode_update: update,
+        })
+        .await
+      {
+        //FIXME: If fail to insert update to redis stream, which will cause missing update issue.
+        error!(
+          "{} fail to insert update into redis stream. error: {}",
+          self.object_id, err
+        );
+      }
+
+      return;
+    }
+
+    // Cache update if the redis update stream is not ready.
+    self.mem_cache.lock().await.push(update);
+    self.init_update_stream().await;
+  }
+}
+
+async fn send_pending_updates(redis_update_stream: &mut StreamGroup, cache: &Mutex<Vec<Vec<u8>>>) {
+  let messages = cache
+    .lock()
+    .await
+    .drain(..)
+    .into_iter()
+    .flat_map(|update| {
+      StreamBinary::try_from(CollabUpdateEvent::UpdateV1 {
+        encode_update: update,
+      })
+      .ok()
+    })
+    .collect::<Vec<StreamBinary>>();
+  // FIXME: How to handle the situation when there are too many messages that need to be sent
+  if let Err(err) = redis_update_stream.insert_messages(messages).await {
+    error!("{} fail to send batch update event. error: {}", err);
   }
 }
 

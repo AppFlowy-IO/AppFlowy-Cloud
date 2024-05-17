@@ -3,6 +3,7 @@ use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
 use anyhow::anyhow;
+use async_trait::async_trait;
 use bytes::Bytes;
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use collab::core::origin::CollabOrigin;
@@ -29,6 +30,10 @@ use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
 use yrs::Subscription as YrsSubscription;
 
+#[async_trait]
+pub trait CollabUpdateStreaming: 'static + Send + Sync {
+  async fn send_update(&self, update: Vec<u8>);
+}
 /// A broadcast can be used to propagate updates produced by yrs [yrs::Doc] and [Awareness]
 /// to subscribes. One broadcast can be used to propagate updates for a single document with
 /// object_id.
@@ -43,6 +48,7 @@ pub struct CollabBroadcast {
   edit_state: Arc<EditState>,
   /// The last modified time of the document.
   pub modified_at: Arc<parking_lot::Mutex<Instant>>,
+  update_streaming: Arc<dyn CollabUpdateStreaming>,
 }
 
 unsafe impl Send for CollabBroadcast {}
@@ -66,7 +72,9 @@ impl CollabBroadcast {
     buffer_capacity: usize,
     edit_state: Arc<EditState>,
     collab: &MutexCollab,
+    update_streaming: impl CollabUpdateStreaming,
   ) -> Self {
+    let update_streaming = Arc::new(update_streaming);
     let object_id = object_id.to_owned();
     // broadcast channel
     let (sender, _) = channel(buffer_capacity);
@@ -77,6 +85,7 @@ impl CollabBroadcast {
       doc_subscription: Default::default(),
       edit_state,
       modified_at: Arc::new(parking_lot::Mutex::new(Instant::now())),
+      update_streaming,
     };
     this.observe_collab_changes(collab).await;
     this
@@ -89,6 +98,7 @@ impl CollabBroadcast {
       let broadcast_sink = self.broadcast_sender.clone();
       let modified_at = self.modified_at.clone();
       let edit_state = self.edit_state.clone();
+      let update_streaming = self.update_streaming.clone();
 
       // Observer the document's update and broadcast it to all subscribers. When one of the clients
       // sends an update to the document that alters its state, the document observer will trigger
@@ -105,6 +115,14 @@ impl CollabBroadcast {
             event.update.len(),
             origin
           );
+
+          let stream_update = event.update.clone();
+          let cloned_update_streaming = update_streaming.clone();
+          // FIXME: how to maintain the order of the update when using spawn here.
+          tokio::spawn(async move {
+            cloned_update_streaming.send_update(stream_update).await;
+          });
+
           let payload = gen_update_message(&event.update);
           let msg = BroadcastSync::new(origin, cloned_oid.clone(), payload, seq_num);
           if let Err(err) = broadcast_sink.send(msg.into()) {

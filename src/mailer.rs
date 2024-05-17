@@ -23,10 +23,12 @@ impl Mailer {
     smtp_username: String,
     smtp_password: String,
     smtp_host: &str,
+    smtp_port: u16,
   ) -> Result<Self, anyhow::Error> {
     let creds = Credentials::new(smtp_username.clone(), smtp_password);
     let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(smtp_host)?
       .credentials(creds)
+      .port(smtp_port)
       .build();
 
     let workspace_invite_template =

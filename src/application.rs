@@ -250,6 +250,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_password.expose_secret().clone(),
     &config.mailer.smtp_host,
+    config.mailer.smtp_port,
   )
   .await?;
   let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());

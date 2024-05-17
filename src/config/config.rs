@@ -23,6 +23,7 @@ pub struct Config {
 #[derive(serde::Deserialize, Clone, Debug)]
 pub struct MailerSetting {
   pub smtp_host: String,
+  pub smtp_port: u16,
   pub smtp_username: String,
   pub smtp_password: Secret<String>,
 }
@@ -178,6 +179,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     mailer: MailerSetting {
       smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),
+      smtp_port: get_env_var("APPFLOWY_MAILER_SMTP_PORT", "465").parse()?,
       smtp_username: get_env_var("APPFLOWY_MAILER_SMTP_USERNAME", "sender@example.com"),
       smtp_password: get_env_var("APPFLOWY_MAILER_SMTP_PASSWORD", "password").into(),
     },

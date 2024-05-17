@@ -112,6 +112,24 @@ services:
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
+      - APPFLOWY_AI_DATABASE_URL=${APPFLOWY_AI_DATABASE_URL}
+
+  postgres_ai:
+    restart: on-failure
+    build:
+      context: ./postgres
+      dockerfile: postgres.Dockerfile
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - PGPORT=5432
+    ports:
+      - 5433:5432
+    volumes:
+      _ postgres_ai_data:/var/lib/postgresql/postgres
 
 volumes:
   postgres_data:
+  postgres_ai_data:

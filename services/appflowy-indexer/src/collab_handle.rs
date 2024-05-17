@@ -223,21 +223,24 @@ pub enum DocumentUpdate {
 
 #[cfg(test)]
 mod test {
+  use collab::core::collab::MutexCollab;
+  use std::sync::Arc;
   use std::time::Duration;
 
-  use collab::core::transaction::DocTransactionExtension;
   use collab::preclude::Collab;
+  use collab_document::document::Document;
   use collab_entity::CollabType;
   use yrs::Map;
 
   use appflowy_ai_client::client::AppFlowyAIClient;
   use appflowy_ai_client::dto::SearchDocumentsRequest;
+  use workspace_template::document::get_started::get_started_document_data;
 
   use crate::collab_handle::CollabHandle;
   use crate::test_utils::{collab_update_forwarder, redis_stream};
 
   #[tokio::test]
-  async fn test_indexing_pipeline() {
+  async fn test_document_indexing_pipeline() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let redis_stream = redis_stream().await;
@@ -254,12 +257,11 @@ mod test {
       .unwrap();
 
     let _s = collab_update_forwarder(&mut collab, stream_group.clone());
-    let doc = collab.get_doc();
-    let init_state = doc.get_encoded_collab_v1().doc_state;
-    let data_ref = doc.get_or_insert_map("data");
-    collab.with_origin_transact_mut(|txn| {
-      data_ref.insert(txn, "test-key", "test-value");
-    });
+
+    let doc_data = get_started_document_data().unwrap();
+    let document =
+      Document::create_with_data(Arc::new(MutexCollab::new(collab)), doc_data).unwrap();
+    let init_state = document.encode_collab().unwrap().doc_state;
 
     let _handle = CollabHandle::open(
       &redis_stream,

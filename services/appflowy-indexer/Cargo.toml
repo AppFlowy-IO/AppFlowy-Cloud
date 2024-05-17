@@ -20,7 +20,7 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 yrs.workspace = true
-appflowy-ai-client.workspace = true
+appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
 tokio-util = { version = "0.7" }
 tokio-stream = { version = "0.1", features = ["net"] }
@@ -38,3 +38,4 @@ env_logger = "0.11.3"
 
 [dev-dependencies]
 env_logger = "0.11"
+workspace-template.workspace = true

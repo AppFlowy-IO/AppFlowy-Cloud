@@ -786,6 +786,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "workspace-template",
  "yrs",
 ]
 

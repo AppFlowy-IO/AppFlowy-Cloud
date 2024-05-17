@@ -631,6 +631,8 @@ name = "appflowy-collaborate"
 version = "0.1.0"
 dependencies = [
  "access-control",
+ "actix",
+ "actix-web-actors",
  "anyhow",
  "app-error",
  "async-stream",
@@ -649,6 +651,7 @@ dependencies = [
  "database-entity",
  "futures",
  "futures-util",
+ "governor",
  "indexmap 2.2.5",
  "itertools 0.12.0",
  "lazy_static",
@@ -660,6 +663,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_repr",
  "sqlx",
  "thiserror",
  "tokio",

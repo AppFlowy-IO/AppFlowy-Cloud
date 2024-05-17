@@ -12,13 +12,13 @@ use tokio::sync::mpsc::Sender;
 use tracing::{debug, error, instrument, trace};
 
 use app_error::AppError;
+use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
+use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::access_control::RealtimeCollabAccessControlImpl;
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
 use shared_entity::response::AppResponseError;
 
-use crate::biz::actix_ws::client::rt_client::RealtimeClient;
-use crate::biz::actix_ws::server::RealtimeServerActor;
 use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::auth::jwt::{authorization_from_token, UserUuid};
 use crate::state::AppState;

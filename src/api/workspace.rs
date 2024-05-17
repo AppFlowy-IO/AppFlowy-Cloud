@@ -16,6 +16,7 @@ use validator::Validate;
 
 use access_control::collab::CollabAccessControl;
 use app_error::AppError;
+use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -29,7 +30,6 @@ use shared_entity::response::{AppResponse, JsonAppResponse};
 use crate::api::util::{compress_type_from_header_value, device_id_from_headers, CollabValidator};
 use crate::api::ws::RealtimeServerAddr;
 use crate::biz;
-use crate::biz::actix_ws::entities::ClientStreamMessage;
 use crate::biz::user::auth::jwt::UserUuid;
 use crate::biz::workspace;
 use crate::domain::compression::{decompress, CompressionType, X_COMPRESSION_TYPE};

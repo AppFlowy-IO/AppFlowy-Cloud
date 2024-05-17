@@ -148,7 +148,7 @@ impl ClientAPI {
     tracing::debug!("batch_get_collab: {:?}", params);
     let workspace_id = workspace_id.as_str();
     let params: Vec<QueryCollab> = params.0.into_iter().map(|p| p.into()).collect();
-    match self.client.batch_post_collab(workspace_id, params).await {
+    match self.client.batch_get_collab(workspace_id, params).await {
       Ok(data) => Ok(BatchClientEncodeCollab::from(data)),
       Err(err) => Err(ClientResponse::from(err)),
     }

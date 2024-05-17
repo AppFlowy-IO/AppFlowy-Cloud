@@ -963,30 +963,6 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  // Support browser, because browser does not support GET method with body
-  #[instrument(level = "info", skip_all, err)]
-  pub async fn batch_post_collab(
-    &self,
-    workspace_id: &str,
-    params: Vec<QueryCollab>,
-  ) -> Result<BatchQueryCollabResult, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/collab_list",
-      self.base_url, workspace_id
-    );
-    let params = BatchQueryCollabParams(params);
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<BatchQueryCollabResult>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
   #[instrument(level = "info", skip_all, err)]
   pub async fn batch_get_collab(
     &self,
@@ -998,8 +974,9 @@ impl Client {
       self.base_url, workspace_id
     );
     let params = BatchQueryCollabParams(params);
+    // Use POST to avoid URL length limit
     let resp = self
-      .http_client_with_auth(Method::GET, &url)
+      .http_client_with_auth(Method::POST, &url)
       .await?
       .json(&params)
       .send()

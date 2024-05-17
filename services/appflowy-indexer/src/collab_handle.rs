@@ -17,7 +17,7 @@ use yrs::{Doc, Transact};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
 
-use crate::document_index::DocumentWatcher;
+use crate::document_watcher::DocumentWatcher;
 use appflowy_ai_client::dto::Document as DocumentContent;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabUpdateEvent, StreamMessage};

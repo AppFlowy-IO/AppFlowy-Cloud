@@ -4,7 +4,7 @@ use sqlx::{
   types::{uuid, Uuid},
   Executor, PgPool, Postgres, Transaction,
 };
-use std::{collections::HashSet, ops::DerefMut};
+use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
 
 use crate::pg_row::AFWorkspaceMemberPermRow;
@@ -711,10 +711,10 @@ pub async fn select_workspace_member_count_from_workspace_id(
 pub async fn select_workspace_pending_invitations(
   pool: &PgPool,
   workspace_id: &Uuid,
-) -> Result<HashSet<String>, AppError> {
-  let invitee_emails = sqlx::query_scalar!(
+) -> Result<HashMap<String, Uuid>, AppError> {
+  let res = sqlx::query!(
     r#"
-      SELECT invitee_email
+      SELECT id, invitee_email
       FROM public.af_workspace_invitation
       WHERE workspace_id = $1
       AND status = 0
@@ -723,7 +723,13 @@ pub async fn select_workspace_pending_invitations(
   )
   .fetch_all(pool)
   .await?;
-  Ok(invitee_emails.into_iter().collect())
+
+  let inv_id_by_email = res
+    .into_iter()
+    .map(|row| (row.invitee_email, row.id))
+    .collect::<HashMap<String, Uuid>>();
+
+  Ok(inv_id_by_email)
 }
 
 #[inline]

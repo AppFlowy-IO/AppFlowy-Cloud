@@ -201,10 +201,6 @@ pub async fn invite_workspace_members(
       tracing::warn!("User already in workspace: {}", invitation.email);
       continue;
     }
-    if pending_invitations.contains(&invitation.email) {
-      tracing::warn!("User already invited: {}", invitation.email);
-      continue;
-    }
 
     let inviter_name = inviter_name.clone();
     let workspace_name = workspace_name.clone();
@@ -216,7 +212,29 @@ pub async fn invite_workspace_members(
     let user_icon_url =
       "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
         .to_string();
-    let invite_id = uuid::Uuid::new_v4();
+
+    let invite_id = match pending_invitations.get(&invitation.email) {
+      None => {
+        // user is not invited yet
+        let invite_id = uuid::Uuid::new_v4();
+        insert_workspace_invitation(
+          &mut txn,
+          &invite_id,
+          workspace_id,
+          inviter,
+          invitation.email.as_str(),
+          invitation.role,
+        )
+        .await?;
+        invite_id
+      },
+      Some(inv) => {
+        tracing::warn!("User already invited: {}", invitation.email);
+        *inv
+      },
+    };
+
+    // Generate a link such that when clicked, the user is added to the workspace.
     let accept_url = gotrue_client
       .admin_generate_link(
         &admin_token,
@@ -236,17 +254,6 @@ pub async fn invite_workspace_members(
       )
       .await?
       .action_link;
-
-    // Generate a link such that when clicked, the user is added to the workspace.
-    insert_workspace_invitation(
-      &mut txn,
-      &invite_id,
-      workspace_id,
-      inviter,
-      invitation.email.as_str(),
-      invitation.role,
-    )
-    .await?;
 
     // send email can be slow, so send email in background
     let cloned_mailer = mailer.clone();

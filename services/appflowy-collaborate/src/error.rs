@@ -1,4 +1,5 @@
 use collab::error::CollabError;
+use collab_stream::error::StreamError;
 use std::fmt::Display;
 
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +57,9 @@ pub enum RealtimeError {
 
   #[error("Internal failure: {0}")]
   Internal(#[from] anyhow::Error),
+
+  #[error("Collab redis stream error: {0}")]
+  StreamError(#[from] StreamError),
 }
 
 #[derive(Debug)]

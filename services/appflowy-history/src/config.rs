@@ -34,7 +34,7 @@ impl Config {
         database_name: get_env_var("APPFLOWY_HISTORY_DATABASE_NAME", "postgres"),
       },
       stream_settings: StreamSetting {
-        control_key: get_env_var("APPFLOWY_HISTORY_CONTROL_STREAM_KEY", CONTROL_STREAM_KEY),
+        control_key: CONTROL_STREAM_KEY.to_string(),
       },
     })
   }

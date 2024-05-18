@@ -32,12 +32,12 @@ sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-
 thiserror = "1.0.56"
 anyhow = "1"
 bytes.workspace = true
-collab-stream.workspace = true
 
 collab = { workspace = true }
 collab-entity = { workspace = true }
 collab-folder = { workspace = true }
 collab-document = { workspace = true }
+collab-stream = { workspace = true }
 database.workspace = true
 database-entity.workspace = true
 governor = { version = "0.6.3" }

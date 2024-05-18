@@ -13,6 +13,7 @@ use tracing::{error, info, trace};
 use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
+use collab_stream::client::CollabRedisStream;
 use database::collab::CollabStorage;
 
 use crate::client::client_msg_router::ClientMessageRouter;
@@ -22,6 +23,7 @@ use crate::error::RealtimeError;
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::metrics::CollabMetricsCalculate;
+use crate::state::RedisConnectionManager;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -42,11 +44,12 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
-  pub fn new(
+  pub async fn new(
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
+    redis_connection_manager: RedisConnectionManager,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -55,11 +58,16 @@ where
     let metrics_calculate = CollabMetricsCalculate::default();
     let connect_state = ConnectState::new();
     let access_control = Arc::new(access_control);
-    let group_manager = Arc::new(GroupManager::new(
-      storage.clone(),
-      access_control.clone(),
-      metrics_calculate.clone(),
-    ));
+    let collab_stream = CollabRedisStream::new_with_connection_manager(redis_connection_manager);
+    let group_manager = Arc::new(
+      GroupManager::new(
+        storage.clone(),
+        access_control.clone(),
+        metrics_calculate.clone(),
+        collab_stream,
+      )
+      .await?,
+    );
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
       Arc::new(Default::default());
 

@@ -252,6 +252,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_password.expose_secret().clone(),
     &config.mailer.smtp_host,
+    config.mailer.smtp_port,
   )
   .await?;
   let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
@@ -405,7 +406,7 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
     .acquire_timeout(Duration::from_secs(10))
     .max_lifetime(Duration::from_secs(30 * 60))
     .idle_timeout(Duration::from_secs(30))
-    .connect_with(setting.with_db())
+    .connect_with(setting.pg_connect_options())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))
 }

@@ -117,7 +117,9 @@ pub async fn run_actix_server(
     RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
+    state.redis_connection_manager.clone(),
   )
+  .await
   .unwrap();
 
   let realtime_server_actor = Supervisor::start(|_| RealtimeServerActor(realtime_server));

@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
 use database::file::bucket_s3_impl::BucketClientS3Impl;
 use database::file::BucketStorage;
@@ -34,7 +35,6 @@ use shared_entity::dto::workspace_dto::{
 use shared_entity::response::AppResponseError;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
-use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::user_init::initialize_workspace_for_user;
 use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
 use crate::state::GoTrueAdmin;

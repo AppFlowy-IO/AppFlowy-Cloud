@@ -671,6 +671,8 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+ "validator",
+ "workspace-access",
  "yrs",
 ]
 

@@ -12,11 +12,11 @@ use tokio::time::timeout;
 use tracing::{error, instrument, trace};
 use validator::Validate;
 
+use crate::collab::access_control::CollabAccessControlImpl;
+use crate::collab::cache::CollabCache;
+use crate::command::{CLCommandSender, CollaborationCommand};
+use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
-use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
-use appflowy_collaborate::collab::cache::CollabCache;
-use appflowy_collaborate::command::{CLCommandSender, CollaborationCommand};
-use appflowy_collaborate::shared_state::RealtimeSharedState;
 use database::collab::{AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
   AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
@@ -24,12 +24,12 @@ use database_entity::dto::{
 };
 use workspace_access::WorkspaceAccessControlImpl;
 
-use crate::api::util::CollabValidator;
-use crate::biz::collab::access_control::CollabStorageAccessControlImpl;
-use crate::biz::collab::metrics::CollabMetrics;
-use crate::biz::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
-use crate::biz::collab::queue_redis_ops::WritePriority;
-use crate::biz::snapshot::SnapshotControl;
+use crate::collab::access_control::CollabStorageAccessControlImpl;
+use crate::collab::queue::{StorageQueue, REDIS_PENDING_WRITE_QUEUE};
+use crate::collab::queue_redis_ops::WritePriority;
+use crate::collab::validator::CollabValidator;
+use crate::metrics::CollabMetrics;
+use crate::snapshot::SnapshotControl;
 use crate::state::RedisConnectionManager;
 
 pub type CollabAccessControlStorage = CollabStorageImpl<

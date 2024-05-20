@@ -305,7 +305,6 @@ impl EditState {
 struct CollabUpdateStreamingImpl {
   sender: mpsc::UnboundedSender<Vec<u8>>,
   stopped: Arc<AtomicBool>,
-  message_processor: tokio::task::JoinHandle<()>,
 }
 
 impl CollabUpdateStreamingImpl {
@@ -319,20 +318,14 @@ impl CollabUpdateStreamingImpl {
       .await?;
     let stopped = Arc::new(AtomicBool::new(false));
     let (sender, receiver) = mpsc::unbounded_channel();
-    let message_processor = {
-      let stopped = stopped.clone();
-      tokio::spawn(async move {
-        if let Err(err) = Self::consume_messages(receiver, stream).await {
-          error!("Failed to consume incoming updates: {}", err);
-        }
-        stopped.store(true, Ordering::SeqCst);
-      })
-    };
-    Ok(Self {
-      sender,
-      stopped,
-      message_processor,
-    })
+    let cloned_stopped = stopped.clone();
+    tokio::spawn(async move {
+      if let Err(err) = Self::consume_messages(receiver, stream).await {
+        error!("Failed to consume incoming updates: {}", err);
+      }
+      cloned_stopped.store(true, Ordering::SeqCst);
+    });
+    Ok(Self { sender, stopped })
   }
 
   async fn consume_messages(

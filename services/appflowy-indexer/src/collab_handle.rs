@@ -1,19 +1,21 @@
 use std::collections::{HashMap, HashSet};
+use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use std::time::{Duration, Instant};
 
-use collab::core::collab::MutexCollab;
 use collab::core::collab::TransactionMutExt;
+use collab::core::collab::{DataSource, MutexCollab};
+use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
 use collab::preclude::Update;
+use collab_document::document::Document;
 use collab_entity::CollabType;
+use futures::{Stream, StreamExt};
 use tokio::select;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinSet;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
-use yrs::{Doc, Transact};
 
 use appflowy_ai_client::client::AppFlowyAIClient;
 
@@ -26,6 +28,11 @@ use collab_stream::stream_group::{ReadOption, StreamGroup};
 use crate::error::Result;
 
 const CONSUMER_NAME: &str = "open_collab_handle";
+
+pub trait Indexable: Send + Sync {
+  fn get_collab(&self) -> &MutexCollab;
+  fn changes(&self) -> Pin<Box<dyn Stream<Item = DocumentUpdate> + Send + Sync>>;
+}
 
 #[allow(dead_code)]
 pub struct CollabHandle {
@@ -45,11 +52,15 @@ impl CollabHandle {
     ingest_interval: Duration,
   ) -> Result<Option<Self>> {
     let closing = CancellationToken::new();
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     let content: Arc<dyn Indexable> = match collab_type {
       CollabType::Document => {
-        let mut watcher = DocumentWatcher::new(object_id.clone(), workspace_id.clone(), doc_state)?;
-        watcher.attach_listener(tx);
+        let content = Document::from_doc_state(
+          CollabOrigin::Empty,
+          DataSource::DocStateV1(doc_state),
+          &object_id,
+          vec![],
+        )?;
+        let watcher = DocumentWatcher::new(object_id.clone(), workspace_id.clone(), content)?;
         Arc::new(watcher)
       },
       _ => return Ok(None),
@@ -77,7 +88,7 @@ impl CollabHandle {
       closing.clone(),
     ));
     tasks.spawn(Self::process_content_changes(
-      rx,
+      content.changes(),
       ai_client,
       object_id,
       workspace_id,
@@ -165,7 +176,7 @@ impl CollabHandle {
   }
 
   async fn process_content_changes(
-    mut rx: UnboundedReceiver<DocumentUpdate>,
+    mut updates: Pin<Box<dyn Stream<Item = DocumentUpdate> + Send + Sync>>,
     ai_client: AppFlowyAIClient,
     object_id: String,
     workspace_id: String,
@@ -182,7 +193,7 @@ impl CollabHandle {
             tracing::trace!("closing signal received, stopping consumer");
             return;
           },
-          Some(update) = rx.recv() => {
+          Some(update) = updates.next() => {
             match update {
               DocumentUpdate::Update(doc) => {
                 inserts.insert(doc.id.clone(), doc);
@@ -211,11 +222,7 @@ impl CollabHandle {
   }
 }
 
-pub trait Indexable: Send + Sync {
-  fn get_collab(&self) -> &MutexCollab;
-  fn attach_listener(&mut self, channel: UnboundedSender<DocumentUpdate>);
-}
-
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DocumentUpdate {
   Update(DocumentContent),
   Removed(String),
@@ -229,8 +236,8 @@ mod test {
 
   use collab::preclude::Collab;
   use collab_document::document::Document;
+  use collab_document::document_data::default_document_data;
   use collab_entity::CollabType;
-  use yrs::Map;
 
   use appflowy_ai_client::client::AppFlowyAIClient;
   use appflowy_ai_client::dto::SearchDocumentsRequest;

@@ -301,6 +301,7 @@ impl EditState {
   }
 }
 
+#[allow(dead_code)]
 struct CollabUpdateStreamingImpl {
   sender: mpsc::UnboundedSender<Vec<u8>>,
   stopped: Arc<AtomicBool>,
@@ -314,7 +315,7 @@ impl CollabUpdateStreamingImpl {
     collab_redis_stream: &CollabRedisStream,
   ) -> Result<Self, StreamError> {
     let stream = collab_redis_stream
-      .collab_update_stream(&workspace_id, &object_id, "collaborate_update_producer")
+      .collab_update_stream(workspace_id, object_id, "collaborate_update_producer")
       .await?;
     let stopped = Arc::new(AtomicBool::new(false));
     let (sender, receiver) = mpsc::unbounded_channel();

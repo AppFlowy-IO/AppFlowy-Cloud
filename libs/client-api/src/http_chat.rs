@@ -1,6 +1,6 @@
 use crate::http::log_request_id;
 use crate::Client;
-use database_entity::chat::{
+use database_entity::dto::{
   ChatMessage, CreateChatMessageParams, CreateChatParams, MessageOffset, RepeatedChatMessage,
 };
 use reqwest::Method;

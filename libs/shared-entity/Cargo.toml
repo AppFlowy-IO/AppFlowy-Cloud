@@ -20,6 +20,7 @@ database-entity.workspace = true
 collab-entity = { workspace = true }
 app-error = { workspace = true }
 chrono = "0.4.31"
+appflowy-ai-client = { workspace = true, features = ["dto"] }
 
 actix-web = { version = "4.4.1", default-features = false, features = ["http2"], optional = true }
 validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }

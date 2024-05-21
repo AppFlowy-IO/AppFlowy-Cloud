@@ -1,6 +1,7 @@
 use lettre::message::header::ContentType;
 use lettre::message::Message;
 use lettre::transport::smtp::authentication::Credentials;
+use lettre::Address;
 use lettre::AsyncSmtpTransport;
 use lettre::AsyncTransport;
 use std::sync::Arc;
@@ -14,6 +15,7 @@ lazy_static::lazy_static! {
 #[derive(Clone)]
 pub struct Mailer {
   smtp_transport: AsyncSmtpTransport<lettre::Tokio1Executor>,
+  smtp_username: String,
 }
 
 impl Mailer {
@@ -21,10 +23,12 @@ impl Mailer {
     smtp_username: String,
     smtp_password: String,
     smtp_host: &str,
+    smtp_port: u16,
   ) -> Result<Self, anyhow::Error> {
-    let creds = Credentials::new(smtp_username, smtp_password);
+    let creds = Credentials::new(smtp_username.clone(), smtp_password);
     let smtp_transport = AsyncSmtpTransport::<lettre::Tokio1Executor>::relay(smtp_host)?
       .credentials(creds)
+      .port(smtp_port)
       .build();
 
     let workspace_invite_template =
@@ -36,7 +40,10 @@ impl Mailer {
       .register_template_string("workspace_invite", workspace_invite_template)
       .unwrap();
 
-    Ok(Self { smtp_transport })
+    Ok(Self {
+      smtp_transport,
+      smtp_username,
+    })
   }
 
   pub async fn send_workspace_invite(
@@ -51,8 +58,8 @@ impl Mailer {
 
     let email = Message::builder()
       .from(lettre::message::Mailbox::new(
-        Some("AppFlowy Notify".to_string()),
-        lettre::Address::new("notify", "appflowy.io")?,
+        Some("AppFlowy Notification".to_string()),
+        self.smtp_username.parse::<Address>()?,
       ))
       .to(lettre::message::Mailbox::new(
         Some(param.username.clone()),

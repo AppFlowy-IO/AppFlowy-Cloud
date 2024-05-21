@@ -1,4 +1,4 @@
-use client_api_test_util::LOCALHOST_GOTRUE;
+use client_api_test::LOCALHOST_GOTRUE;
 use gotrue::api::Client;
 
 #[tokio::test]

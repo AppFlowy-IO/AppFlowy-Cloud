@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime};
 use tokio::time::timeout;
 
 use client_api::ws::{ConnectState, WSClient, WSClientConfig};
-use client_api_test_util::generate_unique_registered_user_client;
+use client_api_test::generate_unique_registered_user_client;
 
 #[tokio::test]
 async fn realtime_connect_test() {

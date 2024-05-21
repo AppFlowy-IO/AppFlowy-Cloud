@@ -1,4 +1,4 @@
-use client_api_test_util::generate_unique_registered_user_client;
+use client_api_test::generate_unique_registered_user_client;
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
 

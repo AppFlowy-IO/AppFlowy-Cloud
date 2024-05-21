@@ -1,5 +1,5 @@
 use app_error::AppError;
-use client_api_test_util::generate_unique_registered_user_client;
+use client_api_test::generate_unique_registered_user_client;
 use futures::future::join_all;
 use std::time::SystemTime;
 

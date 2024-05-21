@@ -1,5 +1,5 @@
 use app_error::ErrorCode;
-use client_api_test_util::TestClient;
+use client_api_test::TestClient;
 use collab::core::transaction::DocTransactionExtension;
 use collab::preclude::Doc;
 

@@ -101,7 +101,7 @@ services:
     volumes:
       - ./docker/pgadmin/servers.json:/pgadmin4/servers.json
 
-  appflowy_ai:
+  ai:
     restart: on-failure
     image: appflowyinc/appflowy_ai:${APPFLOWY_AI_VERSION:-latest}
     ports:

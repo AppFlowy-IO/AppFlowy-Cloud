@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE af_chat\n        SET deleted_at = now()\n        WHERE chat_id = $1\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2c496e29533dd27117fbb688ba2324f04d7cc306181fcf3f82079d5639f632c4"
+}

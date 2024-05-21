@@ -1,3 +1,21 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
+
+use anyhow::Result;
+use dashmap::mapref::entry::Entry;
+use dashmap::DashMap;
+use tokio::sync::Notify;
+use tokio::time::interval;
+use tracing::{error, info, trace};
+
+use access_control::collab::RealtimeAccessControl;
+use collab_rt_entity::user::{RealtimeUser, UserDevice};
+use collab_rt_entity::MessageByObjectId;
+use collab_stream::client::CollabRedisStream;
+use database::collab::CollabStorage;
+
 use crate::client::client_msg_router::ClientMessageRouter;
 use crate::command::{spawn_collaboration_command, CLCommandReceiver};
 use crate::connect_state::ConnectState;
@@ -5,25 +23,8 @@ use crate::error::RealtimeError;
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::metrics::CollabMetricsCalculate;
-use crate::{
-  spawn_metrics, CollabRealtimeMetrics, RealtimeAccessControl, RealtimeClientWebsocketSink,
-};
-use anyhow::Result;
-use collab_rt_entity::user::{RealtimeUser, UserDevice};
-use collab_rt_entity::MessageByObjectId;
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
-use database::collab::CollabStorage;
-
-use std::future::Future;
-
-use std::pin::Pin;
-use std::sync::{Arc, Weak};
-use std::time::Duration;
-
-use tokio::sync::Notify;
-use tokio::time::interval;
-use tracing::{error, info, trace};
+use crate::state::RedisConnectionManager;
+use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
 pub struct CollaborationServer<S, AC> {
@@ -43,11 +44,12 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
-  pub fn new(
+  pub async fn new(
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
+    redis_connection_manager: RedisConnectionManager,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -56,11 +58,16 @@ where
     let metrics_calculate = CollabMetricsCalculate::default();
     let connect_state = ConnectState::new();
     let access_control = Arc::new(access_control);
-    let group_manager = Arc::new(GroupManager::new(
-      storage.clone(),
-      access_control.clone(),
-      metrics_calculate.clone(),
-    ));
+    let collab_stream = CollabRedisStream::new_with_connection_manager(redis_connection_manager);
+    let group_manager = Arc::new(
+      GroupManager::new(
+        storage.clone(),
+        access_control.clone(),
+        metrics_calculate.clone(),
+        collab_stream,
+      )
+      .await?,
+    );
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
       Arc::new(Default::default());
 
@@ -270,11 +277,13 @@ fn spawn_period_check_inactive_group<S, AC>(
 /// When appflowy-collaborate is deployed as a standalone service, we can use tokio multi-thread.
 #[cfg(feature = "collab-rt-multi-thread")]
 mod collaboration_runtime {
-  use lazy_static::lazy_static;
   use std::future::Future;
   use std::io;
+
+  use lazy_static::lazy_static;
   use tokio::runtime;
   use tokio::runtime::Runtime;
+
   lazy_static! {
     pub(crate) static ref COLLAB_RUNTIME: Runtime = default_tokio_runtime().unwrap();
   }

@@ -1,4 +1,4 @@
-use client_api_test_util::{assert_client_collab_include_value, TestClient};
+use client_api_test::{assert_client_collab_include_value, TestClient};
 use collab_entity::CollabType;
 use database_entity::dto::AFAccessLevel;
 use serde_json::{json, Value};

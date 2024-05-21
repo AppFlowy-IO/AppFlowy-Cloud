@@ -44,7 +44,9 @@ use url::Url;
 use crate::ws::ConnectInfo;
 use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
 use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
-use shared_entity::dto::ai_dto::{SummarizeRowParams, SummarizeRowResponse};
+use shared_entity::dto::ai_dto::{
+  CompleteTextParams, CompleteTextResponse, SummarizeRowParams, SummarizeRowResponse,
+};
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -1300,7 +1302,7 @@ impl Client {
     params: SummarizeRowParams,
   ) -> Result<SummarizeRowResponse, AppResponseError> {
     let url = format!(
-      "{}/api/workspace/{}/summarize_row",
+      "{}/api/ai/{}/summarize_row",
       self.base_url, params.workspace_id
     );
 
@@ -1313,6 +1315,25 @@ impl Client {
 
     log_request_id(&resp);
     AppResponse::<SummarizeRowResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn completion_text(
+    &self,
+    workspace_id: &str,
+    params: CompleteTextParams,
+  ) -> Result<CompleteTextResponse, AppResponseError> {
+    let url = format!("{}/api/ai/{}/complete_text", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<CompleteTextResponse>::from_response(resp)
       .await?
       .into_data()
   }

@@ -14,10 +14,10 @@ pub struct CollabRedisStream {
 impl CollabRedisStream {
   pub async fn new(redis_client: redis::Client) -> Result<Self, redis::RedisError> {
     let connection_manager = redis_client.get_connection_manager().await?;
-    Ok(Self::new_with_connection_manager(connection_manager).await)
+    Ok(Self::new_with_connection_manager(connection_manager))
   }
 
-  pub async fn new_with_connection_manager(connection_manager: ConnectionManager) -> Self {
+  pub fn new_with_connection_manager(connection_manager: ConnectionManager) -> Self {
     Self { connection_manager }
   }
 

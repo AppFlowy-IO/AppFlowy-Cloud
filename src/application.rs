@@ -7,14 +7,11 @@ use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
-use crate::biz::actix_ws::server::RealtimeServerActor;
-use crate::biz::casbin::{
-  CollabAccessControlImpl, RealtimeCollabAccessControlImpl, WorkspaceAccessControlImpl,
-};
+use crate::api::ai_tool::ai_tool_scope;
+use crate::api::chat::chat_scope;
 use crate::biz::collab::access_control::{
   CollabMiddlewareAccessControl, CollabStorageAccessControlImpl,
 };
-use crate::biz::collab::cache::CollabCache;
 use crate::biz::collab::storage::CollabStorageImpl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::snapshot::SnapshotControl;
@@ -33,6 +30,11 @@ use actix_web::cookie::Key;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
+use appflowy_collaborate::collab::access_control::{
+  CollabAccessControlImpl, RealtimeCollabAccessControlImpl,
+};
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollaborationServer;
@@ -47,6 +49,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
+use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
   port: u16,
@@ -114,7 +117,9 @@ pub async fn run_actix_server(
     RealtimeCollabAccessControlImpl::new(state.access_control.clone()),
     state.metrics.realtime_metrics.clone(),
     rt_cmd_recv,
+    state.redis_connection_manager.clone(),
   )
+  .await
   .unwrap();
 
   let realtime_server_actor = Supervisor::start(|_| RealtimeServerActor(realtime_server));
@@ -136,6 +141,8 @@ pub async fn run_actix_server(
       .service(collab_scope())
       .service(ws_scope())
       .service(file_storage_scope())
+      .service(chat_scope())
+      .service(ai_tool_scope())
       .service(metrics_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
@@ -245,6 +252,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_password.expose_secret().clone(),
     &config.mailer.smtp_host,
+    config.mailer.smtp_port,
   )
   .await?;
   let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
@@ -398,7 +406,7 @@ async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error>
     .acquire_timeout(Duration::from_secs(10))
     .max_lifetime(Duration::from_secs(30 * 60))
     .idle_timeout(Duration::from_secs(30))
-    .connect_with(setting.with_db())
+    .connect_with(setting.pg_connect_options())
     .await
     .map_err(|e| anyhow::anyhow!("Failed to connect to postgres database: {}", e))
 }

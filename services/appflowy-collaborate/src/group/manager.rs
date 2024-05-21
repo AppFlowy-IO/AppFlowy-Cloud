@@ -1,30 +1,37 @@
-use crate::group::group_init::CollabGroup;
-use crate::group::state::GroupManagementState;
+use std::sync::Arc;
 
-use crate::error::{CreateGroupFailedReason, RealtimeError};
-use crate::metrics::CollabMetricsCalculate;
-use crate::RealtimeAccessControl;
-use app_error::AppError;
 use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::origin::CollabOrigin;
-
-use crate::client::client_msg_router::ClientMessageRouter;
-use crate::group::plugin::HistoryPlugin;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
+use tokio::sync::Mutex;
+use tracing::{error, instrument, trace, warn};
+
+use access_control::collab::RealtimeAccessControl;
+use app_error::AppError;
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::CollabMessage;
+use collab_stream::client::{CollabRedisStream, CONTROL_STREAM_KEY};
+use collab_stream::model::CollabControlEvent;
+use collab_stream::stream_group::StreamGroup;
 use database::collab::CollabStorage;
 use database_entity::dto::QueryCollabParams;
-use std::sync::Arc;
-use tracing::{instrument, trace, warn};
+
+use crate::client::client_msg_router::ClientMessageRouter;
+use crate::error::{CreateGroupFailedReason, RealtimeError};
+use crate::group::group_init::CollabGroup;
+use crate::group::plugin::HistoryPlugin;
+use crate::group::state::GroupManagementState;
+use crate::metrics::CollabMetricsCalculate;
 
 pub struct GroupManager<S, AC> {
   state: GroupManagementState,
   storage: Arc<S>,
   access_control: Arc<AC>,
   metrics_calculate: CollabMetricsCalculate,
+  collab_redis_stream: Arc<CollabRedisStream>,
+  control_event_stream: Arc<Mutex<StreamGroup>>,
 }
 
 impl<S, AC> GroupManager<S, AC>
@@ -32,17 +39,26 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
-  pub fn new(
+  pub async fn new(
     storage: Arc<S>,
     access_control: Arc<AC>,
     metrics_calculate: CollabMetricsCalculate,
-  ) -> Self {
-    Self {
+    collab_stream: CollabRedisStream,
+  ) -> Result<Self, RealtimeError> {
+    let collab_stream = Arc::new(collab_stream);
+    let control_event_stream = collab_stream
+      .collab_control_stream(CONTROL_STREAM_KEY, "collaboration")
+      .await
+      .map_err(|err| RealtimeError::Internal(err.into()))?;
+    let control_event_stream = Arc::new(Mutex::new(control_event_stream));
+    Ok(Self {
       state: GroupManagementState::new(metrics_calculate.clone()),
       storage,
       access_control,
       metrics_calculate,
-    }
+      collab_redis_stream: collab_stream,
+      control_event_stream,
+    })
   }
 
   pub async fn inactive_groups(&self) -> Vec<String> {
@@ -68,6 +84,19 @@ where
   #[instrument(skip(self))]
   async fn remove_group(&self, object_id: &str) {
     self.state.remove_group(object_id).await;
+
+    let close_event = CollabControlEvent::Close {
+      object_id: object_id.to_string(),
+    };
+    if let Err(err) = self
+      .control_event_stream
+      .lock()
+      .await
+      .insert_message(close_event)
+      .await
+    {
+      error!("Failed to insert close event to control stream: {}", err);
+    }
   }
 
   pub async fn subscribe_group(
@@ -133,18 +162,22 @@ where
     }
 
     let result = load_collab(uid, object_id, params, self.storage.clone()).await;
-    let mutex_collab = {
-      let collab = match result {
-        Ok(collab) => collab,
+    let (mutex_collab, encode_collab) = {
+      let (mutex_collab, encode_collab) = match result {
+        Ok(value) => value,
         Err(err) => {
           if err.is_record_not_found() {
             is_new_collab = true;
-            MutexCollab::new(Collab::new_with_origin(
+            let mutex_collab = MutexCollab::new(Collab::new_with_origin(
               CollabOrigin::Server,
               object_id,
               vec![],
               false,
-            ))
+            ));
+            let encode_collab = mutex_collab
+              .lock()
+              .encode_collab_v1(|_| Ok::<_, RealtimeError>(()))?;
+            (mutex_collab, encode_collab)
           } else {
             return Err(RealtimeError::CreateGroupFailed(
               CreateGroupFailedReason::CannotGetCollabData,
@@ -157,15 +190,33 @@ where
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type.clone(),
-        collab.downgrade(),
+        mutex_collab.downgrade(),
         self.storage.clone(),
         is_new_collab,
       ))];
 
-      collab.lock().add_plugins(plugins);
-      collab.lock().initialize();
-      collab
+      mutex_collab.lock().add_plugins(plugins);
+      mutex_collab.lock().initialize();
+      (mutex_collab, encode_collab)
     };
+
+    let cloned_control_event_stream = self.control_event_stream.clone();
+    let open_event = CollabControlEvent::Open {
+      workspace_id: workspace_id.to_string(),
+      object_id: object_id.to_string(),
+      collab_type: collab_type.clone(),
+      doc_state: encode_collab.doc_state.to_vec(),
+    };
+    tokio::spawn(async move {
+      if let Err(err) = cloned_control_event_stream
+        .lock()
+        .await
+        .insert_message(open_event)
+        .await
+      {
+        error!("Failed to insert open event to control stream: {}", err);
+      }
+    });
 
     trace!(
       "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
@@ -174,6 +225,7 @@ where
       object_id,
       collab_type
     );
+
     let group = Arc::new(
       CollabGroup::new(
         uid,
@@ -184,8 +236,9 @@ where
         self.metrics_calculate.clone(),
         self.storage.clone(),
         is_new_collab,
+        self.collab_redis_stream.clone(),
       )
-      .await,
+      .await?,
     );
     self.state.insert_group(object_id, group.clone()).await;
     Ok(())
@@ -198,7 +251,7 @@ async fn load_collab<S>(
   object_id: &str,
   params: QueryCollabParams,
   storage: Arc<S>,
-) -> Result<MutexCollab, AppError>
+) -> Result<(MutexCollab, EncodedCollab), AppError>
 where
   S: CollabStorage,
 {
@@ -214,7 +267,7 @@ where
   )
   .map(MutexCollab::new);
   match result {
-    Ok(collab) => Ok(collab),
+    Ok(collab) => Ok((collab, encode_collab)),
     Err(err) => load_collab_from_snapshot(object_id, params, storage)
       .await
       .ok_or_else(|| AppError::Internal(err.into())),
@@ -225,7 +278,7 @@ async fn load_collab_from_snapshot<S>(
   object_id: &str,
   params: QueryCollabParams,
   storage: Arc<S>,
-) -> Option<MutexCollab>
+) -> Option<(MutexCollab, EncodedCollab)>
 where
   S: CollabStorage,
 {
@@ -244,7 +297,7 @@ where
     false,
   )
   .ok()?;
-  Some(MutexCollab::new(collab))
+  Some((MutexCollab::new(collab), encode_collab))
 }
 
 async fn get_latest_snapshot<S>(

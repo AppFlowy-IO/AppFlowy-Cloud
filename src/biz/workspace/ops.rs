@@ -1,7 +1,13 @@
-use crate::biz::workspace::access_control::WorkspaceAccessControl;
-use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
-use crate::state::GoTrueAdmin;
+use std::collections::HashMap;
+use std::ops::DerefMut;
+use std::sync::Arc;
+
 use anyhow::Context;
+use sqlx::{types::uuid, PgPool};
+use tracing::instrument;
+use uuid::Uuid;
+
+use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
 use database::collab::upsert_collab_member_with_txn;
 use database::file::bucket_s3_impl::BucketClientS3Impl;
@@ -21,23 +27,17 @@ use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
   WorkspaceUsage,
 };
-
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
   CreateWorkspaceMember, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
 };
-
 use shared_entity::response::AppResponseError;
-use sqlx::{types::uuid, PgPool};
-use std::collections::HashMap;
-use std::ops::DerefMut;
-use std::sync::Arc;
-use tracing::instrument;
-use uuid::Uuid;
 use workspace_template::document::get_started::GetStartedDocumentTemplate;
 
 use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::user::user_init::initialize_workspace_for_user;
+use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
+use crate::state::GoTrueAdmin;
 
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
@@ -201,10 +201,6 @@ pub async fn invite_workspace_members(
       tracing::warn!("User already in workspace: {}", invitation.email);
       continue;
     }
-    if pending_invitations.contains(&invitation.email) {
-      tracing::warn!("User already invited: {}", invitation.email);
-      continue;
-    }
 
     let inviter_name = inviter_name.clone();
     let workspace_name = workspace_name.clone();
@@ -216,7 +212,29 @@ pub async fn invite_workspace_members(
     let user_icon_url =
       "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png"
         .to_string();
-    let invite_id = uuid::Uuid::new_v4();
+
+    let invite_id = match pending_invitations.get(&invitation.email) {
+      None => {
+        // user is not invited yet
+        let invite_id = uuid::Uuid::new_v4();
+        insert_workspace_invitation(
+          &mut txn,
+          &invite_id,
+          workspace_id,
+          inviter,
+          invitation.email.as_str(),
+          invitation.role,
+        )
+        .await?;
+        invite_id
+      },
+      Some(inv) => {
+        tracing::warn!("User already invited: {}", invitation.email);
+        *inv
+      },
+    };
+
+    // Generate a link such that when clicked, the user is added to the workspace.
     let accept_url = gotrue_client
       .admin_generate_link(
         &admin_token,
@@ -236,17 +254,6 @@ pub async fn invite_workspace_members(
       )
       .await?
       .action_link;
-
-    // Generate a link such that when clicked, the user is added to the workspace.
-    insert_workspace_invitation(
-      &mut txn,
-      &invite_id,
-      workspace_id,
-      inviter,
-      invitation.email.as_str(),
-      invitation.role,
-    )
-    .await?;
 
     // send email can be slow, so send email in background
     let cloned_mailer = mailer.clone();

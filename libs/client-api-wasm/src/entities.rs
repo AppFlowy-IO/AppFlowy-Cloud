@@ -102,11 +102,7 @@ impl From<AFUserWorkspaceInfo> for UserWorkspace {
     UserWorkspace {
       user: User::from(info.user_profile),
       visiting_workspace_id: info.visiting_workspace.workspace_id.to_string(),
-      workspaces: info
-        .workspaces
-        .into_iter()
-        .map(|workspace| Workspace::from(workspace))
-        .collect(),
+      workspaces: info.workspaces.into_iter().map(Workspace::from).collect(),
     }
   }
 }
@@ -133,7 +129,7 @@ impl From<AFWorkspace> for Workspace {
       database_storage_id: workspace.database_storage_id.to_string(),
       owner_uid: workspace.owner_uid.to_string(),
       owner_name: workspace.owner_name,
-      workspace_type: workspace.workspace_type as i32,
+      workspace_type: workspace.workspace_type,
       workspace_name: workspace.workspace_name,
       created_at: workspace.created_at.timestamp().to_string(),
       icon: workspace.icon,

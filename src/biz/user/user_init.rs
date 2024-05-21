@@ -1,6 +1,6 @@
-use crate::biz::collab::storage::CollabAccessControlStorage;
 use app_error::AppError;
 
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{Any, Collab, MapPrelim};
 use collab_entity::define::WORKSPACE_DATABASES;

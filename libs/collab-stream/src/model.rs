@@ -1,5 +1,6 @@
 use collab_entity::CollabType;
 use std::collections::BTreeMap;
+use std::fmt::Display;
 use std::ops::Deref;
 use std::str::FromStr;
 
@@ -23,9 +24,9 @@ pub struct MessageId {
   pub sequence_number: u16,
 }
 
-impl ToString for MessageId {
-  fn to_string(&self) -> String {
-    format!("{}-{}", self.timestamp_ms, self.sequence_number)
+impl Display for MessageId {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}-{}", self.timestamp_ms, self.sequence_number)
   }
 }
 
@@ -233,9 +234,9 @@ impl FromRedisValue for RedisString {
   }
 }
 
-impl ToString for RedisString {
-  fn to_string(&self) -> String {
-    self.0.clone()
+impl Display for RedisString {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.0.clone())
   }
 }
 

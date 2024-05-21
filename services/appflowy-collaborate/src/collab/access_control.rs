@@ -1,11 +1,15 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 use tracing::instrument;
 
+use crate::collab::cache::CollabCache;
 use access_control::access::ObjectType;
 use access_control::access::{enable_access_control, AccessControl};
 use access_control::act::{Action, ActionVariant};
 use access_control::collab::{CollabAccessControl, RealtimeAccessControl};
+use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
+use database::collab::CollabStorageAccessControl;
 use database_entity::dto::AFAccessLevel;
 
 #[derive(Clone)]
@@ -156,6 +160,88 @@ impl RealtimeAccessControl for RealtimeCollabAccessControlImpl {
   ) -> Result<bool, AppError> {
     self
       .can_perform_action(workspace_id, uid, oid, Action::Read)
+      .await
+  }
+}
+
+#[derive(Clone)]
+pub struct CollabStorageAccessControlImpl<CollabAC, WorkspaceAC> {
+  pub collab_access_control: Arc<CollabAC>,
+  pub workspace_access_control: Arc<WorkspaceAC>,
+  pub cache: CollabCache,
+}
+
+#[async_trait]
+impl<CollabAC, WorkspaceAC> CollabStorageAccessControl
+  for CollabStorageAccessControlImpl<CollabAC, WorkspaceAC>
+where
+  CollabAC: CollabAccessControl,
+  WorkspaceAC: WorkspaceAccessControl,
+{
+  async fn update_policy(
+    &self,
+    uid: &i64,
+    oid: &str,
+    level: AFAccessLevel,
+  ) -> Result<(), AppError> {
+    self
+      .collab_access_control
+      .update_access_level_policy(uid, oid, level)
+      .await
+  }
+
+  async fn enforce_read_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    let collab_exists = self.cache.is_exist(oid).await?;
+    if !collab_exists {
+      // If the collab does not exist, we should not enforce the access control. We consider the user
+      // has the permission to read the collab
+      return Ok(true);
+    }
+    self
+      .collab_access_control
+      .enforce_action(workspace_id, uid, oid, Action::Read)
+      .await
+  }
+
+  async fn enforce_write_collab(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    let collab_exists = self.cache.is_exist(oid).await?;
+    if !collab_exists {
+      // If the collab does not exist, we should not enforce the access control. we consider the user
+      // has the permission to write the collab
+      return Ok(true);
+    }
+    self
+      .collab_access_control
+      .enforce_action(workspace_id, uid, oid, Action::Write)
+      .await
+  }
+
+  async fn enforce_write_workspace(&self, uid: &i64, workspace_id: &str) -> Result<bool, AppError> {
+    self
+      .workspace_access_control
+      .enforce_action(uid, workspace_id, Action::Write)
+      .await
+  }
+
+  async fn enforce_delete(
+    &self,
+    workspace_id: &str,
+    uid: &i64,
+    oid: &str,
+  ) -> Result<bool, AppError> {
+    self
+      .collab_access_control
+      .enforce_access_level(workspace_id, uid, oid, AFAccessLevel::FullAccess)
       .await
   }
 }

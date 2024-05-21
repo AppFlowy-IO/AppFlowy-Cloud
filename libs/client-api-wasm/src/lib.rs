@@ -6,6 +6,7 @@ use client_api::notify::TokenState;
 use client_api::{Client, ClientConfiguration};
 use std::sync::Arc;
 
+use database_entity::dto::QueryCollab;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "enable_wee_alloc")]
@@ -135,6 +136,27 @@ impl ClientAPI {
     tracing::debug!("get_collab: {:?}", params);
     match self.client.get_collab(params.into()).await {
       Ok(data) => Ok(ClientEncodeCollab::from(data.encode_collab)),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn batch_get_collab(
+    &self,
+    workspace_id: String,
+    params: BatchClientQueryCollab,
+  ) -> Result<BatchClientEncodeCollab, ClientResponse> {
+    tracing::debug!("batch_get_collab: {:?}", params);
+    let workspace_id = workspace_id.as_str();
+    let params: Vec<QueryCollab> = params.0.into_iter().map(|p| p.into()).collect();
+    match self.client.batch_post_collab(workspace_id, params).await {
+      Ok(data) => Ok(BatchClientEncodeCollab::from(data)),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn get_user_workspace(&self) -> Result<UserWorkspace, ClientResponse> {
+    match self.client.get_user_workspace_info().await {
+      Ok(workspace_info) => Ok(UserWorkspace::from(workspace_info)),
       Err(err) => Err(ClientResponse::from(err)),
     }
   }

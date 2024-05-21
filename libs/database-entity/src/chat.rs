@@ -33,31 +33,26 @@ pub struct CreateChatMessageParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct GetChatMessageParams {
-  #[validate(custom = "validate_not_empty_str")]
-  pub chat_id: String,
   pub offset: MessageOffset,
   pub limit: u64,
 }
 
 impl GetChatMessageParams {
-  pub fn offset(chat_id: String, offset: u64, limit: u64) -> Self {
+  pub fn offset(offset: u64, limit: u64) -> Self {
     Self {
-      chat_id,
       offset: MessageOffset::Offset(offset),
       limit,
     }
   }
 
-  pub fn after_message_id(chat_id: String, after_message_id: i64, limit: u64) -> Self {
+  pub fn after_message_id(after_message_id: i64, limit: u64) -> Self {
     Self {
-      chat_id,
       offset: MessageOffset::AfterMessageId(after_message_id),
       limit,
     }
   }
-  pub fn before_message_id(chat_id: String, before_message_id: i64, limit: u64) -> Self {
+  pub fn before_message_id(before_message_id: i64, limit: u64) -> Self {
     Self {
-      chat_id,
       offset: MessageOffset::BeforeMessageId(before_message_id),
       limit,
     }

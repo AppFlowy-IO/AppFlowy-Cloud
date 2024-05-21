@@ -190,6 +190,15 @@ pub struct QueryCollab {
   pub object_id: String,
   pub collab_type: CollabType,
 }
+impl QueryCollab {
+  pub fn new<T: ToString>(object_id: T, collab_type: CollabType) -> Self {
+    let object_id = object_id.to_string();
+    Self {
+      object_id,
+      collab_type,
+    }
+  }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchQueryCollabParams(pub Vec<QueryCollab>);

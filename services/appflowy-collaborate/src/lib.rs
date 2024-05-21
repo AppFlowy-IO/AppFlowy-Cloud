@@ -5,10 +5,11 @@ pub mod command;
 pub mod connect_state;
 pub mod error;
 mod group;
-mod metrics;
+pub mod metrics;
 mod permission;
 mod rt_server;
 pub mod shared_state;
+pub mod snapshot;
 mod state;
 mod util;
 

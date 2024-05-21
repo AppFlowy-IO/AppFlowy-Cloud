@@ -965,9 +965,32 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  // The browser will call this API to get the collab list, because the URL length limit and browser can't send the body in GET request
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn batch_post_collab(
+    &self,
+    workspace_id: &str,
+    params: Vec<QueryCollab>,
+  ) -> Result<BatchQueryCollabResult, AppResponseError> {
+    self
+      .send_batch_collab_request(Method::POST, workspace_id, params)
+      .await
+  }
+
   #[instrument(level = "info", skip_all, err)]
   pub async fn batch_get_collab(
     &self,
+    workspace_id: &str,
+    params: Vec<QueryCollab>,
+  ) -> Result<BatchQueryCollabResult, AppResponseError> {
+    self
+      .send_batch_collab_request(Method::GET, workspace_id, params)
+      .await
+  }
+
+  async fn send_batch_collab_request(
+    &self,
+    method: Method,
     workspace_id: &str,
     params: Vec<QueryCollab>,
   ) -> Result<BatchQueryCollabResult, AppResponseError> {
@@ -977,7 +1000,7 @@ impl Client {
     );
     let params = BatchQueryCollabParams(params);
     let resp = self
-      .http_client_with_auth(Method::GET, &url)
+      .http_client_with_auth(method, &url)
       .await?
       .json(&params)
       .send()
@@ -987,7 +1010,6 @@ impl Client {
       .await?
       .into_data()
   }
-
   #[instrument(level = "info", skip_all, err)]
   pub async fn delete_collab(&self, params: DeleteCollabParams) -> Result<(), AppResponseError> {
     let url = format!(

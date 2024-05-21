@@ -1,8 +1,8 @@
 use crate::collab::util::{generate_random_bytes, redis_connection_manager};
 use crate::sql_test::util::{setup_db, test_create_user};
-use appflowy_cloud::biz::collab::queue::StorageQueue;
-use appflowy_cloud::biz::collab::WritePriority;
 use appflowy_collaborate::collab::cache::CollabCache;
+use appflowy_collaborate::collab::queue::StorageQueue;
+use appflowy_collaborate::collab::WritePriority;
 use client_api_test::setup_log;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;

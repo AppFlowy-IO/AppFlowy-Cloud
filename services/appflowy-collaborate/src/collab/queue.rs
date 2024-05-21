@@ -12,16 +12,16 @@ use tokio::sync::Mutex;
 use tokio::time::{interval, sleep, sleep_until, Instant};
 use tracing::{error, instrument, trace, warn};
 
+use crate::collab::cache::CollabCache;
 use app_error::AppError;
-use appflowy_collaborate::collab::cache::CollabCache;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
-use crate::biz::collab::metrics::CollabMetrics;
-use crate::biz::collab::queue_redis_ops::{
+use crate::collab::queue_redis_ops::{
   get_pending_meta, remove_all_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite,
   WritePriority, PENDING_WRITE_META_EXPIRE_SECS,
 };
-use crate::biz::collab::RedisSortedSet;
+use crate::collab::RedisSortedSet;
+use crate::metrics::CollabMetrics;
 use crate::state::RedisConnectionManager;
 
 type PendingWriteSet = Arc<RedisSortedSet>;

@@ -13,6 +13,8 @@ use access_control::metrics::AccessControlMetrics;
 use app_error::AppError;
 use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
 use appflowy_collaborate::collab::cache::CollabCache;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::bucket_s3_impl::S3BucketStorage;
@@ -22,8 +24,6 @@ use snowflake::Snowflake;
 use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::metrics::RequestMetrics;
-use crate::biz::collab::metrics::CollabMetrics;
-use crate::biz::collab::storage::CollabAccessControlStorage;
 use crate::biz::pg_listener::PgListeners;
 use crate::config::config::Config;
 use crate::mailer::Mailer;

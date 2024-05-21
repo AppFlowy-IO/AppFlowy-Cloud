@@ -1,4 +1,4 @@
-use crate::biz::collab::queue::PendingWriteMeta;
+use crate::collab::queue::PendingWriteMeta;
 use crate::state::RedisConnectionManager;
 use app_error::AppError;
 use futures_util::StreamExt;
@@ -235,7 +235,7 @@ impl PartialOrd for PendingWrite {
 
 #[cfg(test)]
 mod tests {
-  use crate::biz::collab::{PendingWrite, RedisSortedSet, WritePriority};
+  use crate::collab::{PendingWrite, RedisSortedSet, WritePriority};
   use anyhow::Context;
   use std::time::Duration;
 

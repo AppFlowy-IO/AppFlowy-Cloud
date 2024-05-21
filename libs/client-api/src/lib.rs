@@ -1,4 +1,8 @@
 mod http;
+mod http_ai;
+mod http_blob;
+mod http_collab;
+mod http_member;
 pub use http::*;
 
 #[cfg(feature = "collab-sync")]
@@ -15,7 +19,6 @@ pub use native::*;
 mod wasm;
 #[cfg(target_arch = "wasm32")]
 pub use wasm::*;
-
 pub mod ws;
 
 pub mod error {

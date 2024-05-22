@@ -9,11 +9,12 @@ use dashmap::mapref::entry::Entry;
 
 use crate::config::StreamSetting;
 use dashmap::DashMap;
+use database::history::ops::get_latest_snapshot;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
-use tonic_proto::history::{HistoryState, SnapshotRequest};
+use tonic_proto::history::{HistoryStatePb, SingleSnapshotInfoPb, SnapshotRequestPb};
 use tracing::{error, trace};
 use uuid::Uuid;
 
@@ -41,11 +42,23 @@ impl OpenCollabManager {
 
   pub async fn get_in_memory_history(
     &self,
-    req: SnapshotRequest,
-  ) -> Result<HistoryState, HistoryError> {
+    req: SnapshotRequestPb,
+  ) -> Result<HistoryStatePb, HistoryError> {
     match self.handles.get(&req.object_id) {
       None => Err(HistoryError::RecordNotFound(req.object_id)),
       Some(handle) => handle.history_state().await,
+    }
+  }
+
+  pub async fn get_latest_snapshot(
+    &self,
+    req: SnapshotRequestPb,
+    pg_pool: &PgPool,
+  ) -> Result<SingleSnapshotInfoPb, HistoryError> {
+    let collab_type = CollabType::from(req.collab_type);
+    match get_latest_snapshot(&req.object_id, &collab_type, pg_pool).await {
+      Ok(Some(pb)) => Ok(pb),
+      _ => Err(HistoryError::RecordNotFound(req.object_id)),
     }
   }
 }
@@ -104,7 +117,7 @@ async fn handle_control_event(
   handles: &Arc<DashMap<String, Arc<OpenCollabHandle>>>,
   pg_pool: &PgPool,
 ) {
-  trace!("Received control event: {:?}", event);
+  trace!("[History] received control event: {}", event);
   match event {
     CollabControlEvent::Open {
       workspace_id,
@@ -114,7 +127,7 @@ async fn handle_control_event(
     } => match handles.entry(object_id.clone()) {
       Entry::Occupied(_) => {},
       Entry::Vacant(entry) => {
-        trace!("Opening collab: {}", object_id);
+        trace!("[History] create collab: {}", object_id);
         match init_collab_handle(
           redis_stream,
           pg_pool,
@@ -136,9 +149,9 @@ async fn handle_control_event(
       },
     },
     CollabControlEvent::Close { object_id } => {
-      trace!("Close collab: {}", object_id);
+      trace!("[History] close collab: {}", object_id);
       if let Some(handle) = handles.get(&object_id) {
-        if let Err(err) = handle.gen_history().await {
+        if let Err(err) = handle.generate_history().await {
           error!(
             "Failed to generate history when receiving close event: {:?}",
             err

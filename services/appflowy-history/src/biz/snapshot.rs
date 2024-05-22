@@ -9,8 +9,8 @@ use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tonic_proto::history::SnapshotMeta;
-use tracing::{error, warn};
+use tonic_proto::history::SnapshotMetaPb;
+use tracing::{error, trace, warn};
 
 #[derive(Clone)]
 pub struct SnapshotGenerator {
@@ -43,7 +43,8 @@ impl SnapshotGenerator {
 
     // keep it simple for now. we just compare the update count to determine if we need to generate a snapshot.
     // in the future, we can use a more sophisticated algorithm to determine when to generate a snapshot.
-    if prev_apply_update_count + 1 >= gen_snapshot_threshold(&self.collab_type) {
+    let threshold = gen_snapshot_threshold(&self.collab_type);
+    if prev_apply_update_count + 1 >= threshold {
       let pending_snapshots = self.pending_snapshots.clone();
       let mutex_collab = self.mutex_collab.clone();
       let object_id = self.object_id.clone();
@@ -79,7 +80,7 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
     CollabType::UserAwareness => 50,
     CollabType::Unknown => {
       if cfg!(debug_assertions) {
-        10
+        5
       } else {
         50
       }
@@ -96,10 +97,12 @@ async fn attempt_gen_snapshot(
   max_retries: usize,
   delay: Duration,
 ) {
+  trace!("[History] attempting to generate snapshot");
   let mut retries = 0;
   while retries < max_retries {
     match gen_snapshot(collab, object_id) {
       Ok(snapshot) => {
+        trace!("[History] did generate snapshot for {}", snapshot.object_id);
         pending_snapshots.write().push(snapshot);
         return;
       },
@@ -117,6 +120,7 @@ async fn attempt_gen_snapshot(
   warn!("Exceeded maximum retry attempts for snapshot generation");
 }
 
+#[inline]
 pub fn gen_snapshot(
   mutex_collab: &MutexCollab,
   object_id: &str,
@@ -202,7 +206,7 @@ impl CollabSnapshot {
   }
 }
 
-impl From<CollabSnapshot> for SnapshotMeta {
+impl From<CollabSnapshot> for SnapshotMetaPb {
   fn from(snapshot: CollabSnapshot) -> Self {
     let snapshot_data = snapshot.encode_v1();
     Self {

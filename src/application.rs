@@ -9,6 +9,7 @@ use access_control::access::{enable_access_control, AccessControl};
 
 use crate::api::ai::ai_tool_scope;
 use crate::api::chat::chat_scope;
+use crate::api::history::history_scope;
 use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::pg_listener::PgListeners;
 use crate::biz::workspace::access_control::WorkspaceMiddlewareAccessControl;
@@ -45,7 +46,9 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
+use tonic_proto::history::history_client::HistoryClient;
+
 use tracing::{info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -140,6 +143,7 @@ pub async fn run_actix_server(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(chat_scope())
+      .service(history_scope())
       .service(ai_tool_scope())
       .service(metrics_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
@@ -241,11 +245,13 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   ));
 
-  #[cfg(feature = "history")]
-  let grpc_history_client =
-    tonic_proto::history::history_client::HistoryClient::connect(config.grpc_history.addrs.clone())
-      .await?;
+  info!("Connecting to history server");
+  let channel = tonic::transport::Channel::from_shared(config.grpc_history.addrs.clone())?
+    .keep_alive_timeout(Duration::from_secs(20))
+    .keep_alive_while_idle(true)
+    .connect_lazy();
 
+  let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_password.expose_secret().clone(),
@@ -277,7 +283,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     gotrue_admin,
     mailer,
     ai_client: appflowy_ai_client,
-    #[cfg(feature = "history")]
     grpc_history_client,
     realtime_shared_state,
   })

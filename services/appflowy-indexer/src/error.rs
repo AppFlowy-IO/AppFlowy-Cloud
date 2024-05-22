@@ -4,14 +4,18 @@ pub enum Error {
   Stream(#[from] collab_stream::error::StreamError),
   #[error(transparent)]
   Collab(#[from] collab::error::CollabError),
-  #[error(transparent)]
-  AIClient(#[from] appflowy_ai_client::error::AIError),
   #[error("yrs update decode error: {0}")]
   UpdateDecode(#[from] yrs::encoding::read::Error),
   #[error("collab document decoding error: {0}")]
   Document(#[from] collab_document::error::DocumentError),
   #[error("couldn't decode JSON: {0}")]
   Serde(#[from] serde_json::Error),
+  #[error("failed to index document fragment: {0}")]
+  Indexer(Box<dyn std::error::Error + Send + Sync>),
+  #[error(transparent)]
+  Sql(#[from] sqlx::Error),
+  #[error("OpenAI failed to process request: {0}")]
+  OpenAI(String),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

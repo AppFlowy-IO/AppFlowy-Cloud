@@ -8,11 +8,11 @@ use collab_document::document::Document;
 use dashmap::DashMap;
 use futures::Stream;
 use tokio::sync::watch::Sender;
-use yrs::types::ToJson;
 use yrs::{GetString, Map, ReadTxn};
 
-use crate::collab_handle::{DocumentUpdate, Indexable};
+use crate::collab_handle::{FragmentUpdate, Indexable};
 use crate::error::Result;
+use crate::indexer::Fragment;
 
 pub struct DocumentWatcher {
   object_id: String,
@@ -25,8 +25,16 @@ unsafe impl Send for DocumentWatcher {}
 unsafe impl Sync for DocumentWatcher {}
 
 impl DocumentWatcher {
-  pub fn new(object_id: String, workspace_id: String, mut content: Document) -> Result<Self> {
+  pub fn new(
+    object_id: String,
+    workspace_id: String,
+    mut content: Document,
+    index_initial_content: bool,
+  ) -> Result<Self> {
     let (tx, receiver) = tokio::sync::watch::channel(DashMap::new());
+    if index_initial_content {
+      Self::index_initial_content(&mut content, &tx)?;
+    }
     Self::attach_listener(&mut content, tx);
     Ok(Self {
       object_id,
@@ -54,11 +62,10 @@ impl DocumentWatcher {
     });
   }
 
-  pub fn as_stream(&self) -> Pin<Box<dyn Stream<Item = DocumentUpdate> + Send + Sync>> {
+  pub fn as_stream(&self) -> Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>> {
     let mut receiver = self.receiver.clone();
     let collab = Arc::downgrade(self.content.get_collab());
-    let workspace_id = self.workspace_id.clone();
-    let _object_id = self.object_id.clone();
+    let object_id = self.object_id.clone();
     Box::pin(stream! {
       while let Ok(()) = receiver.changed().await {
         if let Some(collab) = collab.upgrade() {
@@ -74,32 +81,47 @@ impl DocumentWatcher {
               meta.get(&tx, "text_map").unwrap().cast::<yrs::MapRef>().unwrap()
             };
             let updates: Vec<_> = data.iter().map(|entry| {
-              let key = entry.key();
-              let text = text_map.get(&tx, key).unwrap().cast::<yrs::TextRef>().unwrap();
+              let text_id = entry.key();
+              let text = text_map.get(&tx, text_id).unwrap().cast::<yrs::TextRef>().unwrap();
               let block_content = text.get_string(&tx);
               match entry.value() {
                 DeltaType::Inserted | DeltaType::Updated => {
-                  DocumentUpdate::Update(appflowy_ai_client::dto::Document {
-                    id: key.clone(),
-                    doc_type: appflowy_ai_client::dto::CollabType::Document,
-                    workspace_id: workspace_id.clone(),
+                  FragmentUpdate::Update(Fragment {
+                    fragment_id: entry.key().clone(),
+                    object_id: object_id.clone(),
+                    collab_type: collab_entity::CollabType::Document,
                     content: block_content,
                   })
                 }
-                DeltaType::Removed => DocumentUpdate::Removed(key.clone()),
+                DeltaType::Removed => FragmentUpdate::Removed(text_id.clone()),
               }
             }).collect();
             data.clear();
             updates
           };
+          tracing::trace!("produced update for {} fragments", updates.len());
           for update in updates {
-              yield update;
+            yield update;
           }
         } else {
             break;
         }
       }
     })
+  }
+  fn index_initial_content(
+    document: &mut Document,
+    notifier: &Sender<DashMap<String, DeltaType>>,
+  ) -> Result<()> {
+    let data = document.get_document_data()?;
+    if let Some(text_map) = data.meta.text_map.as_ref() {
+      notifier.send_modify(|map| {
+        for text_id in text_map.keys() {
+          map.insert(text_id.clone(), DeltaType::Inserted);
+        }
+      });
+    }
+    Ok(())
   }
 }
 
@@ -108,21 +130,23 @@ impl Indexable for DocumentWatcher {
     &*self.content.get_collab()
   }
 
-  fn changes(&self) -> Pin<Box<dyn Stream<Item = DocumentUpdate> + Send + Sync>> {
+  fn changes(&self) -> Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>> {
     self.as_stream()
   }
 }
 
 #[cfg(test)]
 mod test {
+  use crate::indexer::Fragment;
   use collab::core::collab::DataSource;
   use collab::core::origin::CollabOrigin;
   use collab_document::document::Document;
   use collab_document::document_data::default_document_collab_data;
+  use collab_entity::CollabType;
   use serde_json::json;
   use tokio_stream::StreamExt;
 
-  use crate::document_watcher::DocumentWatcher;
+  use crate::watchers::DocumentWatcher;
 
   #[tokio::test]
   async fn test_update_generation() {
@@ -137,7 +161,7 @@ mod test {
     )
     .unwrap();
 
-    let watcher = DocumentWatcher::new("o-1".to_string(), "w-1".to_string(), doc).unwrap();
+    let watcher = DocumentWatcher::new("o-1".to_string(), "w-1".to_string(), doc, true).unwrap();
     let mut stream = watcher.as_stream();
 
     let text_id = {
@@ -153,10 +177,10 @@ mod test {
     let update = stream.next().await.unwrap();
     assert_eq!(
       update,
-      super::DocumentUpdate::Update(appflowy_ai_client::dto::Document {
-        id: text_id.clone(),
-        doc_type: appflowy_ai_client::dto::CollabType::Document,
-        workspace_id: "w-1".to_string(),
+      super::FragmentUpdate::Update(Fragment {
+        fragment_id: text_id.clone(),
+        collab_type: CollabType::Document,
+        object_id: "o-1".to_string(),
         content: "A".to_string(),
       })
     );
@@ -169,10 +193,10 @@ mod test {
 
     assert_eq!(
       update,
-      super::DocumentUpdate::Update(appflowy_ai_client::dto::Document {
-        id: text_id,
-        doc_type: appflowy_ai_client::dto::CollabType::Document,
-        workspace_id: "w-1".to_string(),
+      super::FragmentUpdate::Update(Fragment {
+        fragment_id: text_id.clone(),
+        collab_type: CollabType::Document,
+        object_id: "o-1".to_string(),
         content: "BA".to_string(),
       })
     );

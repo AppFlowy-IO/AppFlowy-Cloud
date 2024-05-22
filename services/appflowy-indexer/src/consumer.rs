@@ -1,6 +1,6 @@
 use crate::collab_handle::CollabHandle;
 use crate::error::Result;
-use appflowy_ai_client::client::AppFlowyAIClient;
+use crate::indexer::Indexer;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabControlEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
@@ -26,7 +26,7 @@ pub struct OpenCollabConsumer {
 impl OpenCollabConsumer {
   pub(crate) async fn new(
     redis_stream: CollabRedisStream,
-    ai_client: AppFlowyAIClient,
+    indexer: Arc<dyn Indexer>,
     control_stream_key: &str,
     ingest_interval: Duration,
   ) -> Result<Self> {
@@ -39,7 +39,7 @@ impl OpenCollabConsumer {
     let stale_messages = control_group.get_unacked_messages(CONSUMER_NAME).await?;
     Self::handle_messages(
       &mut control_group,
-      &ai_client,
+      indexer.clone(),
       &redis_stream,
       handles.clone(),
       stale_messages,
@@ -59,8 +59,14 @@ impl OpenCollabConsumer {
           if let Some(handles) = weak_handles.upgrade() {
             for message in &messages {
               if let Ok(event) = CollabControlEvent::decode(&message.data) {
-                Self::handle_event(event, &redis_stream, &ai_client, &handles, ingest_interval)
-                  .await;
+                Self::handle_event(
+                  event,
+                  &redis_stream,
+                  indexer.clone(),
+                  &handles,
+                  ingest_interval,
+                )
+                .await;
               }
             }
             if let Err(err) = control_group.ack_messages(&messages).await {
@@ -83,7 +89,7 @@ impl OpenCollabConsumer {
   #[inline]
   async fn handle_messages(
     control_group: &mut StreamGroup,
-    ai_client: &AppFlowyAIClient,
+    indexer: Arc<dyn Indexer>,
     redis_stream: &CollabRedisStream,
     handles: Handles,
     messages: Vec<StreamMessage>,
@@ -96,7 +102,14 @@ impl OpenCollabConsumer {
     tracing::trace!("received {} messages", messages.len());
     for message in &messages {
       if let Ok(event) = CollabControlEvent::decode(&message.data) {
-        Self::handle_event(event, redis_stream, ai_client, &handles, ingest_interval).await
+        Self::handle_event(
+          event,
+          redis_stream,
+          indexer.clone(),
+          &handles,
+          ingest_interval,
+        )
+        .await
       }
     }
 
@@ -109,7 +122,7 @@ impl OpenCollabConsumer {
   async fn handle_event(
     event: CollabControlEvent,
     redis_stream: &CollabRedisStream,
-    ai_client: &AppFlowyAIClient,
+    indexer: Arc<dyn Indexer>,
     handles: &Handles,
     ingest_interval: Duration,
   ) {
@@ -125,7 +138,7 @@ impl OpenCollabConsumer {
           // create a new collab document handle, which will subscribe and apply incoming updates
           let result = CollabHandle::open(
             redis_stream,
-            ai_client.clone(),
+            indexer,
             object_id.clone(),
             workspace_id.clone(),
             collab_type.clone(),
@@ -193,13 +206,14 @@ impl Drop for OpenCollabConsumer {
 #[cfg(test)]
 mod test {
   use crate::consumer::OpenCollabConsumer;
-  use crate::test_utils::{collab_update_forwarder, redis_stream};
-  use appflowy_ai_client::client::AppFlowyAIClient;
-  use appflowy_ai_client::dto::SearchDocumentsRequest;
+  use crate::indexer::PostgresIndexer;
+  use crate::test_utils::{collab_update_forwarder, db_pool, openai_client, redis_stream};
   use collab::core::transaction::DocTransactionExtension;
   use collab::preclude::Collab;
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
+  use sqlx::PgPool;
+  use std::sync::Arc;
   use std::time::Duration;
   use yrs::Map;
 
@@ -211,9 +225,12 @@ mod test {
     let workspace_id = uuid::Uuid::new_v4().to_string();
     let object_id = uuid::Uuid::new_v4().to_string();
 
+    let db = db_pool().await;
+    let openai = openai_client();
+
     let mut collab = Collab::new(1, object_id.clone(), "device-1".to_string(), vec![], false);
     collab.initialize();
-    let ai_client = AppFlowyAIClient::new("http://localhost:5001");
+    let indexer = Arc::new(PostgresIndexer::new(openai, db.clone()));
 
     let mut control_stream = redis_stream
       .collab_control_stream("af_collab_control", "indexer")
@@ -231,7 +248,7 @@ mod test {
     let data_ref = doc.get_or_insert_map("data");
     let consumer = OpenCollabConsumer::new(
       redis_stream,
-      ai_client.clone(),
+      indexer.clone(),
       "af_collab_control",
       Duration::from_secs(1), // interval longer than test timeout
     )
@@ -271,16 +288,15 @@ mod test {
       "in reaction to close control event, a corresponding handle should be destroyed"
     );
 
-    let docs = ai_client
-      .search_documents(&SearchDocumentsRequest {
-        workspaces: vec![workspace_id],
-        query: "key".to_string(),
-        result_count: None,
-      })
-      .await
-      .unwrap();
+    let contents = sqlx::query!(
+      "SELECT content from af_collab_embeddings WHERE oid = $1",
+      object_id
+    )
+    .fetch_all(&db)
+    .await
+    .unwrap();
 
-    assert_eq!(docs.len(), 1);
-    assert!(docs[0].content.contains("test-value"));
+    assert_eq!(contents.len(), 1);
+    assert_eq!(contents[0].content.as_deref(), Some("test-value"));
   }
 }

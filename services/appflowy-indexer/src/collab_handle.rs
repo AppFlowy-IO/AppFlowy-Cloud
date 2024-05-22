@@ -10,28 +10,26 @@ use collab::preclude::updates::decoder::Decode;
 use collab::preclude::Update;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use futures::{Stream, StreamExt};
+use futures::{Stream, StreamExt, TryFutureExt};
 use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use appflowy_ai_client::client::AppFlowyAIClient;
-
-use crate::document_watcher::DocumentWatcher;
-use appflowy_ai_client::dto::Document as DocumentContent;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabUpdateEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
 
 use crate::error::Result;
+use crate::indexer::{Fragment, FragmentID, Indexer};
+use crate::watchers::DocumentWatcher;
 
 const CONSUMER_NAME: &str = "open_collab_handle";
 
 pub trait Indexable: Send + Sync {
   fn get_collab(&self) -> &MutexCollab;
-  fn changes(&self) -> Pin<Box<dyn Stream<Item = DocumentUpdate> + Send + Sync>>;
+  fn changes(&self) -> Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>>;
 }
 
 #[allow(dead_code)]
@@ -44,7 +42,7 @@ pub struct CollabHandle {
 impl CollabHandle {
   pub(crate) async fn open(
     redis_stream: &CollabRedisStream,
-    ai_client: AppFlowyAIClient,
+    indexer: Arc<dyn Indexer>,
     object_id: String,
     workspace_id: String,
     collab_type: CollabType,
@@ -60,7 +58,7 @@ impl CollabHandle {
           &object_id,
           vec![],
         )?;
-        let watcher = DocumentWatcher::new(object_id.clone(), workspace_id.clone(), content)?;
+        let watcher = DocumentWatcher::new(object_id.clone(), workspace_id.clone(), content, true)?;
         Arc::new(watcher)
       },
       _ => return Ok(None),
@@ -89,7 +87,7 @@ impl CollabHandle {
     ));
     tasks.spawn(Self::process_content_changes(
       content.changes(),
-      ai_client,
+      indexer,
       object_id,
       workspace_id,
       collab_type,
@@ -176,8 +174,8 @@ impl CollabHandle {
   }
 
   async fn process_content_changes(
-    mut updates: Pin<Box<dyn Stream<Item = DocumentUpdate> + Send + Sync>>,
-    ai_client: AppFlowyAIClient,
+    mut updates: Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>>,
+    indexer: Arc<dyn Indexer>,
     object_id: String,
     workspace_id: String,
     collab_type: CollabType,
@@ -187,33 +185,66 @@ impl CollabHandle {
     let mut last_update = Instant::now();
     let mut inserts = HashMap::new();
     let mut removals = HashSet::new();
+    let mut interval = interval(ingest_interval);
     loop {
       select! {
+          _ = interval.tick() => {
+              match Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
+                Ok(_) => last_update = Instant::now(),
+                Err(err) => tracing::error!("failed to publish fragment updates: {}", err),
+              }
+          }
           _ = token.cancelled() => {
-            tracing::trace!("closing signal received, stopping consumer");
+            tracing::trace!("closing signal received, flushing remaining updates");
+            if let Err(err) = Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
+              tracing::error!("failed to publish fragment updates: {}", err);
+            }
             return;
           },
           Some(update) = updates.next() => {
             match update {
-              DocumentUpdate::Update(doc) => {
-                inserts.insert(doc.id.clone(), doc);
+              FragmentUpdate::Update(doc) => {
+                if doc.content.is_empty() {
+                  // we count empty blocks as removals
+                  removals.insert(doc.fragment_id.clone());
+                } else {
+                  inserts.insert(doc.fragment_id.clone(), doc);
+                }
               }
-              DocumentUpdate::Removed(id) => {
+              FragmentUpdate::Removed(id) => {
                 removals.insert(id);
               }
             }
 
             let now = Instant::now();
             if now.duration_since(last_update) > ingest_interval {
-              let inserts: Vec<_> = inserts.drain().map(|(_,doc)| doc).collect();
-              match ai_client.index_documents(&inserts).await {
+              match Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
                 Ok(_) => last_update = now,
-                Err(err) => tracing::error!("failed to index document {}/{}: {}", workspace_id, object_id, err),
+                Err(err) => tracing::error!("failed to publish fragment updates: {}", err),
               }
-          }
+            }
         }
       }
     }
+  }
+
+  async fn publish_updates(
+    indexer: &Arc<dyn Indexer>,
+    inserts: &mut HashMap<FragmentID, Fragment>,
+    removals: &mut HashSet<FragmentID>,
+  ) -> Result<()> {
+    if inserts.is_empty() && removals.is_empty() {
+      return Ok(());
+    }
+    let inserts: Vec<_> = inserts.drain().map(|(_, doc)| doc).collect();
+    tracing::debug!("updating indexes for {} fragments", inserts.len());
+    indexer.update_index(inserts).await?;
+
+    tracing::debug!("removing indexes for {} fragments", removals.len());
+    indexer
+      .remove(&removals.drain().collect::<Vec<_>>())
+      .await?;
+    Ok(())
   }
 
   pub async fn shutdown(mut self) {
@@ -222,32 +253,40 @@ impl CollabHandle {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentUpdate {
-  Update(DocumentContent),
-  Removed(String),
+#[derive(Debug, Clone, PartialEq)]
+pub enum FragmentUpdate {
+  Update(Fragment),
+  Removed(FragmentID),
+}
+
+impl FragmentUpdate {
+  pub fn fragment_id(&self) -> &FragmentID {
+    match self {
+      FragmentUpdate::Update(doc) => &doc.fragment_id,
+      FragmentUpdate::Removed(id) => id,
+    }
+  }
 }
 
 #[cfg(test)]
 mod test {
-  use collab::core::collab::MutexCollab;
   use std::sync::Arc;
   use std::time::Duration;
 
+  use collab::core::collab::MutexCollab;
   use collab::preclude::Collab;
   use collab_document::document::Document;
-  use collab_document::document_data::default_document_data;
   use collab_entity::CollabType;
+  use sqlx::Row;
 
-  use appflowy_ai_client::client::AppFlowyAIClient;
-  use appflowy_ai_client::dto::SearchDocumentsRequest;
   use workspace_template::document::get_started::get_started_document_data;
 
   use crate::collab_handle::CollabHandle;
-  use crate::test_utils::{collab_update_forwarder, redis_stream};
+  use crate::indexer::{Indexer, PostgresIndexer};
+  use crate::test_utils::{collab_update_forwarder, db_pool, openai_client, redis_stream};
 
   #[tokio::test]
-  async fn test_document_indexing_pipeline() {
+  async fn test_indexing_for_new_initialized_document() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let redis_stream = redis_stream().await;
@@ -256,7 +295,9 @@ mod test {
 
     let mut collab = Collab::new(1, object_id.clone(), "device-1".to_string(), vec![], false);
     collab.initialize();
-    let ai_client = AppFlowyAIClient::new("http://localhost:5001");
+    let db = db_pool().await;
+    let openai = openai_client();
+    let indexer: Arc<dyn Indexer> = Arc::new(PostgresIndexer::new(openai, db));
 
     let stream_group = redis_stream
       .collab_update_stream(&workspace_id, &object_id, "indexer")
@@ -266,13 +307,21 @@ mod test {
     let _s = collab_update_forwarder(&mut collab, stream_group.clone());
 
     let doc_data = get_started_document_data().unwrap();
+    let fragments_count = doc_data
+      .meta
+      .text_map
+      .as_ref()
+      .unwrap()
+      .iter()
+      .filter(|(_, v)| !v.is_empty())
+      .count();
     let document =
       Document::create_with_data(Arc::new(MutexCollab::new(collab)), doc_data).unwrap();
     let init_state = document.encode_collab().unwrap().doc_state;
 
     let _handle = CollabHandle::open(
       &redis_stream,
-      ai_client.clone(),
+      indexer.clone(),
       object_id.clone(),
       workspace_id.clone(),
       CollabType::Document,
@@ -284,16 +333,24 @@ mod test {
 
     tokio::time::sleep(Duration::from_millis(2000)).await;
 
-    let docs = ai_client
-      .search_documents(&SearchDocumentsRequest {
-        workspaces: vec![workspace_id],
-        query: "key".to_string(),
-        result_count: None,
-      })
-      .await
-      .unwrap();
+    let db = db_pool().await;
 
-    assert_eq!(docs.len(), 1);
-    assert!(docs[0].content.contains("test-value"));
+    let tx = db.begin().await.unwrap();
+    let records = sqlx::query!(
+      "SELECT oid FROM af_collab_embeddings WHERE oid = $1",
+      object_id
+    )
+    .fetch_all(&db)
+    .await
+    .unwrap();
+
+    let contents =
+      sqlx::query("SELECT content, embedding from af_collab_embeddings WHERE oid = $1")
+        .bind(&object_id)
+        .fetch_all(&db)
+        .await
+        .unwrap();
+
+    assert_eq!(contents.len(), fragments_count);
   }
 }

@@ -1,5 +1,5 @@
-use appflowy_ai_client::client::AppFlowyAIClient;
 use clap::Parser;
+use std::sync::Arc;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
@@ -7,11 +7,13 @@ use tracing_subscriber::Layer;
 use collab_stream::client::CollabRedisStream;
 
 use crate::consumer::OpenCollabConsumer;
+use crate::indexer::PostgresIndexer;
 
-pub mod collab_handle;
-pub mod consumer;
-mod document_watcher;
-pub mod error;
+mod collab_handle;
+mod consumer;
+mod error;
+mod indexer;
+mod watchers;
 
 #[cfg(test)]
 mod test_utils;
@@ -21,8 +23,11 @@ pub struct Config {
   #[clap(long, env = "APPFLOWY_INDEXER_REDIS_URL")]
   pub redis_url: String,
 
-  #[clap(long, env = "APPFLOWY_INDEXER_AI_URL")]
-  pub appflowy_ai_url: String,
+  #[clap(long, env = "APPFLOWY_INDEXER_OPENAI_API_KEY")]
+  pub openai_api_key: String,
+
+  #[clap(long, env = "APPFLOWY_INDEXER_DATABASE_URL")]
+  pub database_url: String,
 
   #[clap(
     long,
@@ -46,10 +51,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
   let redis_client = redis::Client::open(config.redis_url)?;
   let collab_stream = CollabRedisStream::new(redis_client).await?;
-  let ai_client = AppFlowyAIClient::new(&config.appflowy_ai_url);
+  let indexer = PostgresIndexer::open(&config.openai_api_key, &config.database_url).await?;
   let consumer = OpenCollabConsumer::new(
     collab_stream,
-    ai_client,
+    Arc::new(indexer),
     &config.control_stream_key,
     config.ingest_interval.into(),
   )

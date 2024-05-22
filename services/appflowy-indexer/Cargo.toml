@@ -16,11 +16,16 @@ collab.workspace = true
 collab-entity.workspace = true
 collab-stream.workspace = true
 collab-document.workspace = true
+collab-folder.workspace = true
+database.workspace = true
+database-entity.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 yrs.workspace = true
-appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }
+openai_dive.workspace = true
+pgvector = { workspace = true, features = ["sqlx"] }
+sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
 tokio-util = { version = "0.7" }
 tokio-stream = { version = "0.1", features = ["net"] }
@@ -36,6 +41,7 @@ dashmap = "5.5"
 uuid = { version = "1.8", features = ["v4"] }
 env_logger = "0.11.3"
 async-stream = "0.3"
+async-trait = "0.1"
 
 [dev-dependencies]
 env_logger = "0.11"

@@ -14,7 +14,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
 use tonic_proto::history::HistoryState;
-use tracing::error;
+use tracing::{error, trace};
 
 const CONSUMER_NAME: &str = "open_collab_handle";
 pub struct OpenCollabHandle {
@@ -126,7 +126,7 @@ async fn spawn_recv_update(
     None => return Ok(()),
   };
 
-  let interval_duration = Duration::from_secs(2);
+  let interval_duration = Duration::from_secs(5);
   let object_id = object_id.to_string();
   let collab_type = collab_type.clone();
 
@@ -148,14 +148,14 @@ async fn spawn_recv_update(
     {
       // 2.Clear the stale messages if failed to process them.
       if let Err(err) = update_stream.clear().await {
-        error!("Failed to clear stale update messages: {:?}", err);
+        error!("[History]: fail to clear stale update messages: {:?}", err);
       }
       return Err(HistoryError::ApplyStaleMessage(err.to_string()));
     }
 
     // 3.Acknowledge the stale messages.
     if let Err(err) = update_stream.ack_message_ids(message_ids).await {
-      error!("Failed to ack stale messages: {:?}", err);
+      error!("[History ] fail to ack stale messages: {:?}", err);
     }
   }
 
@@ -172,6 +172,11 @@ async fn spawn_recv_update(
           .consumer_messages(CONSUMER_NAME, ReadOption::Undelivered)
           .await
         {
+          if messages.is_empty() {
+            continue;
+          }
+
+          trace!("[History] received {} update messages", messages.len());
           if let Err(e) = process_messages(
             &mut update_stream,
             messages,

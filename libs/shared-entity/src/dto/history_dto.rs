@@ -22,7 +22,9 @@ pub struct HistoryState {
   pub doc_state_version: i32,
 }
 
-///
+/// [HistoryState] contains all the necessary information that can be used to restore the full state
+/// collab. This collab object can restore given [SnapshotMeta]. The snapshot represents the state of
+/// the collab at a certain point in time.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct SnapshotInfo {
   pub history: HistoryState,

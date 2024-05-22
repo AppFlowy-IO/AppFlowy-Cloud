@@ -3,7 +3,7 @@ use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_chat_message, select_chat,
   select_chat_messages,
 };
-use database_entity::chat::{
+use database_entity::dto::{
   ChatAuthor, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
 };
 use serde_json::json;

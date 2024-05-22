@@ -3,7 +3,7 @@ use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
-use database_entity::chat::{
+use database_entity::dto::{
   ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageOffset,
   RepeatedChatMessage,
 };

@@ -1,7 +1,7 @@
 use app_error::AppError;
 use database::chat;
 use database::chat::chat_ops::{insert_chat, insert_chat_message, select_chat_messages};
-use database_entity::chat::{
+use database_entity::dto::{
   ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
   RepeatedChatMessage,
 };

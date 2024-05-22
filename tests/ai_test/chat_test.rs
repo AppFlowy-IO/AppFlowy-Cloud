@@ -1,5 +1,5 @@
 use client_api_test::TestClient;
-use database_entity::chat::{CreateChatMessageParams, CreateChatParams, MessageOffset};
+use database_entity::dto::{CreateChatMessageParams, CreateChatParams, MessageOffset};
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {

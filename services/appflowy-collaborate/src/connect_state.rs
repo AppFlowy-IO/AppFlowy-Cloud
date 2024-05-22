@@ -131,6 +131,7 @@ mod tests {
       device_id.to_string(),
       uuid::Uuid::new_v4().to_string(),
       connect_at,
+      "0.5.8".to_string(),
     )
   }
 

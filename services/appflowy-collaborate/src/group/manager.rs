@@ -153,8 +153,8 @@ where
             expect: metadata.workspace_id,
             actual: workspace_id.to_string(),
             detail: format!(
-              "user_id:{},object_id:{}:{}",
-              user.uid, object_id, collab_type
+              "user_id:{},app_version:{},object_id:{}:{}",
+              user.uid, user.app_version, object_id, collab_type
             ),
           });
         return Err(err);
@@ -220,7 +220,7 @@ where
 
     trace!(
       "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
-      uid,
+      user.uid,
       workspace_id,
       object_id,
       collab_type
@@ -228,7 +228,7 @@ where
 
     let group = Arc::new(
       CollabGroup::new(
-        uid,
+        user.uid,
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type,

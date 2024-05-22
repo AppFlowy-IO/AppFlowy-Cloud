@@ -4,7 +4,7 @@ use database::history::ops::{
   get_latest_snapshot, get_latest_snapshot_state, get_snapshot_meta_list, insert_history,
 };
 use sqlx::PgPool;
-use tonic_proto::history::{SnapshotMeta, SnapshotState};
+use tonic_proto::history::{SnapshotMetaPb, SnapshotStatePb};
 use uuid::Uuid;
 
 #[sqlx::test(migrations = false)]
@@ -24,13 +24,13 @@ async fn insert_snapshot_test(pool: PgPool) {
   let collab_type = CollabType::Document;
 
   let snapshots = vec![
-    SnapshotMeta {
+    SnapshotMetaPb {
       oid: object_id.clone(),
       snapshot: vec![1, 2, 3],
       snapshot_version: 1,
       created_at: timestamp,
     },
-    SnapshotMeta {
+    SnapshotMetaPb {
       oid: object_id.clone(),
       snapshot: vec![3, 4, 5],
       snapshot_version: 1,
@@ -38,7 +38,7 @@ async fn insert_snapshot_test(pool: PgPool) {
     },
   ];
 
-  let snapshot_state = SnapshotState {
+  let snapshot_state = SnapshotStatePb {
     oid: object_id.clone(),
     doc_state: vec![10, 11, 12],
     doc_state_version: 1,
@@ -78,5 +78,5 @@ async fn insert_snapshot_test(pool: PgPool) {
     .unwrap()
     .unwrap();
   assert_eq!(snapshot.history_state.unwrap().doc_state, vec![10, 11, 12]);
-  assert_eq!(snapshot.snapshot, vec![3, 4, 5]);
+  assert_eq!(snapshot.snapshot_meta.unwrap().snapshot, vec![3, 4, 5]);
 }

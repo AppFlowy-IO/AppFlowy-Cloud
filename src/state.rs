@@ -4,7 +4,7 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use dashmap::DashMap;
 use secrecy::{ExposeSecret, Secret};
 use sqlx::PgPool;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -21,6 +21,7 @@ use database::file::bucket_s3_impl::S3BucketStorage;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
+use tonic_proto::history::history_client::HistoryClient;
 use workspace_access::WorkspaceAccessControlImpl;
 
 use crate::api::metrics::RequestMetrics;
@@ -29,7 +30,6 @@ use crate::config::config::Config;
 use crate::mailer::Mailer;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
-
 #[derive(Clone)]
 pub struct AppState {
   pub pg_pool: PgPool,
@@ -50,9 +50,7 @@ pub struct AppState {
   pub mailer: Mailer,
   pub ai_client: AppFlowyAIClient,
   pub realtime_shared_state: RealtimeSharedState,
-  #[cfg(feature = "history")]
-  pub grpc_history_client:
-    tonic_proto::history::history_client::HistoryClient<tonic::transport::Channel>,
+  pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
 }
 
 impl AppState {

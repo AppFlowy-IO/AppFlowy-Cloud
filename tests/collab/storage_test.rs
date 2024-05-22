@@ -1,18 +1,32 @@
+use collab::core::transaction::DocTransactionExtension;
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 use collab::entity::EncodedCollab;
+use collab::preclude::Doc;
 use collab_entity::CollabType;
 use sqlx::types::Uuid;
+use sqlx::PgPool;
+use tokio::sync::Mutex;
+use tokio::time::sleep;
 
 use app_error::ErrorCode;
+use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::mem_cache::CollabMemCache;
+use appflowy_collaborate::collab::queue::StorageQueue;
+use appflowy_collaborate::collab::WritePriority;
 use client_api_test::*;
 use database::collab::CollabMetadata;
 use database_entity::dto::{
-  CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams, QueryCollabResult,
+  CollabParams, CreateCollabParams, DeleteCollabParams, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
+use workspace_template::document::get_started::GetStartedDocumentTemplate;
+use workspace_template::WorkspaceTemplateBuilder;
 
-use crate::collab::util::{redis_connection_manager, test_encode_collab_v1};
+use crate::collab::util::{generate_random_bytes, redis_connection_manager, test_encode_collab_v1};
+use crate::sql_test::util::{setup_db, test_create_user};
 
 #[tokio::test]
 async fn success_insert_collab_test() {
@@ -319,4 +333,250 @@ async fn collab_meta_redis_cache_test() {
   let meta_from_cache = mem_cache.get_collab_meta(&object_id).await.unwrap();
   assert_eq!(meta.workspace_id, meta_from_cache.workspace_id);
   assert_eq!(meta.object_id, meta_from_cache.object_id);
+}
+
+#[tokio::test]
+async fn insert_empty_data_test() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = uuid::Uuid::new_v4().to_string();
+
+  // test all collab type
+  for collab_type in [
+    CollabType::Folder,
+    CollabType::Document,
+    CollabType::UserAwareness,
+    CollabType::WorkspaceDatabase,
+    CollabType::Database,
+    CollabType::DatabaseRow,
+  ] {
+    let params = CreateCollabParams {
+      workspace_id: workspace_id.clone(),
+      object_id: object_id.clone(),
+      encoded_collab_v1: vec![],
+      collab_type,
+    };
+    let error = test_client
+      .api_client
+      .create_collab(params)
+      .await
+      .unwrap_err();
+    assert_eq!(error.code, ErrorCode::NoRequiredData);
+  }
+}
+
+#[tokio::test]
+async fn insert_invalid_data_test() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = uuid::Uuid::new_v4().to_string();
+
+  let doc = Doc::new();
+  let encoded_collab_v1 = doc.get_encoded_collab_v1().encode_to_bytes().unwrap();
+  for collab_type in [
+    CollabType::Folder,
+    CollabType::Document,
+    CollabType::UserAwareness,
+    CollabType::WorkspaceDatabase,
+    CollabType::Database,
+    CollabType::DatabaseRow,
+  ] {
+    let params = CreateCollabParams {
+      workspace_id: workspace_id.clone(),
+      object_id: object_id.clone(),
+      encoded_collab_v1: encoded_collab_v1.clone(),
+      collab_type: collab_type.clone(),
+    };
+    let error = test_client
+      .api_client
+      .create_collab(params)
+      .await
+      .unwrap_err();
+    assert_eq!(
+      error.code,
+      ErrorCode::NoRequiredData,
+      "collab_type: {:?}",
+      collab_type
+    );
+  }
+}
+
+#[tokio::test]
+async fn insert_folder_data_success_test() {
+  let test_client = TestClient::new_user().await;
+  let workspace_id = test_client.workspace_id().await;
+  let object_id = uuid::Uuid::new_v4().to_string();
+  let uid = test_client.uid().await;
+
+  let templates = WorkspaceTemplateBuilder::new(uid, &workspace_id)
+    .with_templates(vec![GetStartedDocumentTemplate])
+    .build()
+    .await
+    .unwrap();
+
+  assert_eq!(templates.len(), 2);
+  for (index, template) in templates.into_iter().enumerate() {
+    if index == 0 {
+      assert_eq!(template.object_type, CollabType::Document);
+    }
+    if index == 1 {
+      assert_eq!(template.object_type, CollabType::Folder);
+    }
+
+    let data = template.object_data.encode_to_bytes().unwrap();
+    let params = CreateCollabParams {
+      workspace_id: workspace_id.clone(),
+      object_id: object_id.clone(),
+      encoded_collab_v1: data,
+      collab_type: template.object_type,
+    };
+    test_client.api_client.create_collab(params).await.unwrap();
+  }
+}
+
+#[sqlx::test(migrations = false)]
+async fn simulate_small_data_set_write(pool: PgPool) {
+  // prepare test prerequisites
+  setup_db(&pool).await.unwrap();
+  setup_log();
+  let conn = redis_connection_manager().await;
+  let user_uuid = uuid::Uuid::new_v4();
+  let name = user_uuid.to_string();
+  let email = format!("{}@appflowy.io", name);
+  let user = test_create_user(&pool, user_uuid, &email, &name)
+    .await
+    .unwrap();
+
+  let collab_cache = CollabCache::new(conn.clone(), pool);
+  let queue_name = uuid::Uuid::new_v4().to_string();
+  let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
+
+  let queries = Arc::new(Mutex::new(Vec::new()));
+  for i in 0..10 {
+    // sleep random seconds less than 2 seconds. because the runtime is single-threaded,
+    // we need sleep a little time to let the runtime switch to other tasks.
+    sleep(Duration::from_millis(i % 2)).await;
+
+    let cloned_storage_queue = storage_queue.clone();
+    let cloned_queries = queries.clone();
+    let cloned_user = user.clone();
+    let encode_collab = EncodedCollab::new_v1(
+      generate_random_bytes(1024),
+      generate_random_bytes(1024 * 1024),
+    );
+    let params = CollabParams {
+      object_id: format!("object_id_{}", i),
+      collab_type: CollabType::Unknown,
+      encoded_collab_v1: encode_collab.encode_to_bytes().unwrap(),
+    };
+    cloned_storage_queue
+      .push(
+        &cloned_user.workspace_id,
+        &cloned_user.uid,
+        &params,
+        WritePriority::Low,
+      )
+      .await
+      .unwrap();
+    cloned_queries.lock().await.push((params, encode_collab));
+  }
+
+  // Allow some time for processing
+  sleep(Duration::from_secs(30)).await;
+
+  // Check that all items are processed correctly
+  for (params, original_encode_collab) in queries.lock().await.iter() {
+    let query = QueryCollab {
+      object_id: params.object_id.clone(),
+      collab_type: params.collab_type.clone(),
+    };
+    let encode_collab_from_disk = collab_cache
+      .get_encode_collab_from_disk(&user.uid, query)
+      .await
+      .unwrap();
+
+    assert_eq!(
+      encode_collab_from_disk.doc_state.len(),
+      original_encode_collab.doc_state.len(),
+      "doc_state length mismatch"
+    );
+    assert_eq!(
+      encode_collab_from_disk.doc_state,
+      original_encode_collab.doc_state
+    );
+
+    assert_eq!(
+      encode_collab_from_disk.state_vector.len(),
+      original_encode_collab.state_vector.len(),
+      "state_vector length mismatch"
+    );
+    assert_eq!(
+      encode_collab_from_disk.state_vector,
+      original_encode_collab.state_vector
+    );
+  }
+}
+
+#[sqlx::test(migrations = false)]
+async fn simulate_large_data_set_write(pool: PgPool) {
+  // prepare test prerequisites
+  setup_db(&pool).await.unwrap();
+  setup_log();
+
+  let conn = redis_connection_manager().await;
+  let user_uuid = uuid::Uuid::new_v4();
+  let name = user_uuid.to_string();
+  let email = format!("{}@appflowy.io", name);
+  let user = test_create_user(&pool, user_uuid, &email, &name)
+    .await
+    .unwrap();
+
+  let collab_cache = CollabCache::new(conn.clone(), pool);
+  let queue_name = uuid::Uuid::new_v4().to_string();
+  let storage_queue = StorageQueue::new(collab_cache.clone(), conn, &queue_name);
+
+  let origin_encode_collab = EncodedCollab::new_v1(
+    generate_random_bytes(10 * 1024),
+    generate_random_bytes(2 * 1024 * 1024),
+  );
+  let params = CollabParams {
+    object_id: uuid::Uuid::new_v4().to_string(),
+    collab_type: CollabType::Unknown,
+    encoded_collab_v1: origin_encode_collab.encode_to_bytes().unwrap(),
+  };
+  storage_queue
+    .push(&user.workspace_id, &user.uid, &params, WritePriority::Low)
+    .await
+    .unwrap();
+
+  // Allow some time for processing
+  sleep(Duration::from_secs(30)).await;
+
+  let query = QueryCollab {
+    object_id: params.object_id.clone(),
+    collab_type: params.collab_type.clone(),
+  };
+  let encode_collab_from_disk = collab_cache
+    .get_encode_collab_from_disk(&user.uid, query)
+    .await
+    .unwrap();
+  assert_eq!(
+    encode_collab_from_disk.doc_state.len(),
+    origin_encode_collab.doc_state.len(),
+    "doc_state length mismatch"
+  );
+  assert_eq!(
+    encode_collab_from_disk.doc_state,
+    origin_encode_collab.doc_state
+  );
+
+  assert_eq!(
+    encode_collab_from_disk.state_vector.len(),
+    origin_encode_collab.state_vector.len(),
+    "state_vector length mismatch"
+  );
+  assert_eq!(
+    encode_collab_from_disk.state_vector,
+    origin_encode_collab.state_vector
+  );
 }

@@ -3,7 +3,7 @@ use crate::biz::history::get_snapshots;
 use collab_entity::CollabType;
 use tonic::{Request, Response, Status};
 use tonic_proto::history::history_server::History;
-use tonic_proto::history::{HistoryState, SnapshotMeta, SnapshotRequest};
+use tonic_proto::history::{RepeatedSnapshotInfoPb, SingleSnapshotInfoPb, SnapshotRequestPb};
 
 pub struct HistoryImpl {
   pub state: AppState,
@@ -26,31 +26,32 @@ pub struct HistoryImpl {
 impl History for HistoryImpl {
   async fn get_snapshots(
     &self,
-    request: Request<SnapshotRequest>,
-  ) -> Result<Response<tonic_proto::history::RepeatedSnapshotMeta>, Status> {
+    request: Request<SnapshotRequestPb>,
+  ) -> Result<Response<tonic_proto::history::RepeatedSnapshotMetaPb>, Status> {
     let request = request.into_inner();
     let collab_type = CollabType::from(request.collab_type);
     let data = get_snapshots(&request.object_id, &collab_type, &self.state.pg_pool).await?;
     Ok(Response::new(data))
   }
 
-  async fn get_in_memory_history(
+  async fn get_num_of_snapshot(
     &self,
-    request: Request<SnapshotRequest>,
-  ) -> Result<Response<HistoryState>, Status> {
+    _request: Request<SnapshotRequestPb>,
+  ) -> Result<Response<RepeatedSnapshotInfoPb>, Status> {
+    todo!()
+  }
+
+  async fn get_latest_snapshot(
+    &self,
+    request: Request<SnapshotRequestPb>,
+  ) -> Result<Response<SingleSnapshotInfoPb>, Status> {
     let request = request.into_inner();
     let resp = self
       .state
       .open_collab_manager
-      .get_in_memory_history(request)
+      .get_latest_snapshot(request, &self.state.pg_pool)
       .await?;
-    Ok(Response::new(resp))
-  }
 
-  async fn get_in_disk_history(
-    &self,
-    _request: Request<SnapshotMeta>,
-  ) -> Result<Response<HistoryState>, Status> {
-    todo!()
+    Ok(Response::new(resp))
   }
 }

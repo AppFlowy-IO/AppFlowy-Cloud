@@ -13,8 +13,8 @@ use parking_lot::MutexGuard;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tonic_proto::history::HistoryState;
-use tracing::error;
+use tonic_proto::history::HistoryStatePb;
+use tracing::{error, trace};
 
 const CONSUMER_NAME: &str = "open_collab_handle";
 pub struct OpenCollabHandle {
@@ -38,6 +38,7 @@ impl OpenCollabHandle {
     history_persistence: Option<Arc<HistoryPersistence>>,
   ) -> Result<Self, HistoryError> {
     let mutex_collab = {
+      // Must set skip_gc = true to avoid the garbage collection of the collab.
       let mut collab = Collab::new_with_source(
         CollabOrigin::Empty,
         object_id,
@@ -79,21 +80,21 @@ impl OpenCollabHandle {
     })
   }
 
-  pub async fn history_state(&self) -> Result<HistoryState, HistoryError> {
+  pub async fn history_state(&self) -> Result<HistoryStatePb, HistoryError> {
     let lock_guard = self
       .mutex_collab
       .try_lock()
       .ok_or(HistoryError::TryLockFail)?;
     let encode_collab =
       lock_guard.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
-    Ok(HistoryState {
+    Ok(HistoryStatePb {
       object_id: self.object_id.clone(),
       doc_state: encode_collab.doc_state.to_vec(),
       doc_state_version: 1,
     })
   }
 
-  pub async fn gen_history(&self) -> Result<(), HistoryError> {
+  pub async fn generate_history(&self) -> Result<(), HistoryError> {
     if let Some(history_persistence) = &self.history_persistence {
       save_history(self.history.clone(), history_persistence.clone()).await;
     }
@@ -126,7 +127,7 @@ async fn spawn_recv_update(
     None => return Ok(()),
   };
 
-  let interval_duration = Duration::from_secs(2);
+  let interval_duration = Duration::from_secs(5);
   let object_id = object_id.to_string();
   let collab_type = collab_type.clone();
 
@@ -148,14 +149,14 @@ async fn spawn_recv_update(
     {
       // 2.Clear the stale messages if failed to process them.
       if let Err(err) = update_stream.clear().await {
-        error!("Failed to clear stale update messages: {:?}", err);
+        error!("[History]: fail to clear stale update messages: {:?}", err);
       }
       return Err(HistoryError::ApplyStaleMessage(err.to_string()));
     }
 
     // 3.Acknowledge the stale messages.
     if let Err(err) = update_stream.ack_message_ids(message_ids).await {
-      error!("Failed to ack stale messages: {:?}", err);
+      error!("[History ] fail to ack stale messages: {:?}", err);
     }
   }
 
@@ -172,6 +173,11 @@ async fn spawn_recv_update(
           .consumer_messages(CONSUMER_NAME, ReadOption::Undelivered)
           .await
         {
+          if messages.is_empty() {
+            continue;
+          }
+
+          trace!("[History] received {} update messages", messages.len());
           if let Err(e) = process_messages(
             &mut update_stream,
             messages,
@@ -240,7 +246,8 @@ fn apply_updates(
 fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<HistoryPersistence>) {
   tokio::spawn(async move {
     let mut interval = if cfg!(debug_assertions) {
-      interval(Duration::from_secs(60))
+      // In debug mode, save the history every 10 seconds.
+      interval(Duration::from_secs(10))
     } else {
       interval(Duration::from_secs(60 * 60))
     };

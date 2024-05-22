@@ -7,4 +7,5 @@ mod websocket;
 mod workspace;
 
 mod ai_test;
+mod collab_history;
 mod yrs_version;

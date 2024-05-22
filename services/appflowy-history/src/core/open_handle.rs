@@ -93,7 +93,7 @@ impl OpenCollabHandle {
     })
   }
 
-  pub async fn gen_history(&self) -> Result<(), HistoryError> {
+  pub async fn generate_history(&self) -> Result<(), HistoryError> {
     if let Some(history_persistence) = &self.history_persistence {
       save_history(self.history.clone(), history_persistence.clone()).await;
     }

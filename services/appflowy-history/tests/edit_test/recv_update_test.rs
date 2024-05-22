@@ -1,7 +1,7 @@
 use crate::edit_test::mock::mock_test_data;
 use crate::util::{check_doc_state_json, redis_stream, run_test_server};
 use collab_entity::CollabType;
-use tonic_proto::history::SnapshotRequest;
+use tonic_proto::history::SnapshotRequestPb;
 
 #[tokio::test]
 async fn apply_update_stream_updates_test() {
@@ -39,7 +39,7 @@ async fn apply_update_stream_updates_test() {
       .unwrap();
   }
 
-  let request = SnapshotRequest {
+  let request = SnapshotRequestPb {
     workspace_id: workspace_id.to_string(),
     object_id: object_id.to_string(),
     collab_type: CollabType::Unknown.value(),
@@ -101,7 +101,7 @@ async fn apply_update_stream_updates_test() {
 //     update_group.insert_message(update_event).await.unwrap();
 //   }
 //
-//   let request = SnapshotRequest {
+//   let request = SnapshotRequestPb {
 //     workspace_id: workspace_id.to_string(),
 //     object_id: object_id.to_string(),
 //     collab_type: CollabType::Unknown.value(),

@@ -13,7 +13,7 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
-use tonic_proto::history::{HistoryState, SnapshotRequest};
+use tonic_proto::history::{HistoryStatePb, SnapshotRequestPb};
 use tracing::{error, trace};
 use uuid::Uuid;
 
@@ -41,8 +41,8 @@ impl OpenCollabManager {
 
   pub async fn get_in_memory_history(
     &self,
-    req: SnapshotRequest,
-  ) -> Result<HistoryState, HistoryError> {
+    req: SnapshotRequestPb,
+  ) -> Result<HistoryStatePb, HistoryError> {
     match self.handles.get(&req.object_id) {
       None => Err(HistoryError::RecordNotFound(req.object_id)),
       Some(handle) => handle.history_state().await,

@@ -13,7 +13,7 @@ use parking_lot::MutexGuard;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::time::interval;
-use tonic_proto::history::HistoryState;
+use tonic_proto::history::HistoryStatePb;
 use tracing::{error, trace};
 
 const CONSUMER_NAME: &str = "open_collab_handle";
@@ -79,14 +79,14 @@ impl OpenCollabHandle {
     })
   }
 
-  pub async fn history_state(&self) -> Result<HistoryState, HistoryError> {
+  pub async fn history_state(&self) -> Result<HistoryStatePb, HistoryError> {
     let lock_guard = self
       .mutex_collab
       .try_lock()
       .ok_or(HistoryError::TryLockFail)?;
     let encode_collab =
       lock_guard.encode_collab_v1(|collab| self.collab_type.validate_require_data(collab))?;
-    Ok(HistoryState {
+    Ok(HistoryStatePb {
       object_id: self.object_id.clone(),
       doc_state: encode_collab.doc_state.to_vec(),
       doc_state_version: 1,
@@ -245,7 +245,7 @@ fn apply_updates(
 fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<HistoryPersistence>) {
   tokio::spawn(async move {
     let mut interval = if cfg!(debug_assertions) {
-      interval(Duration::from_secs(60))
+      interval(Duration::from_secs(10))
     } else {
       interval(Duration::from_secs(60 * 60))
     };

@@ -3,7 +3,7 @@ use crate::biz::history::get_snapshots;
 use collab_entity::CollabType;
 use tonic::{Request, Response, Status};
 use tonic_proto::history::history_server::History;
-use tonic_proto::history::{HistoryState, SnapshotMeta, SnapshotRequest};
+use tonic_proto::history::{HistoryStatePb, SnapshotMetaPb, SnapshotRequestPb};
 
 pub struct HistoryImpl {
   pub state: AppState,
@@ -26,8 +26,8 @@ pub struct HistoryImpl {
 impl History for HistoryImpl {
   async fn get_snapshots(
     &self,
-    request: Request<SnapshotRequest>,
-  ) -> Result<Response<tonic_proto::history::RepeatedSnapshotMeta>, Status> {
+    request: Request<SnapshotRequestPb>,
+  ) -> Result<Response<tonic_proto::history::RepeatedSnapshotMetaPb>, Status> {
     let request = request.into_inner();
     let collab_type = CollabType::from(request.collab_type);
     let data = get_snapshots(&request.object_id, &collab_type, &self.state.pg_pool).await?;
@@ -36,8 +36,8 @@ impl History for HistoryImpl {
 
   async fn get_in_memory_history(
     &self,
-    request: Request<SnapshotRequest>,
-  ) -> Result<Response<HistoryState>, Status> {
+    request: Request<SnapshotRequestPb>,
+  ) -> Result<Response<HistoryStatePb>, Status> {
     let request = request.into_inner();
     let resp = self
       .state
@@ -49,8 +49,8 @@ impl History for HistoryImpl {
 
   async fn get_in_disk_history(
     &self,
-    _request: Request<SnapshotMeta>,
-  ) -> Result<Response<HistoryState>, Status> {
+    _request: Request<SnapshotMetaPb>,
+  ) -> Result<Response<HistoryStatePb>, Status> {
     todo!()
   }
 }

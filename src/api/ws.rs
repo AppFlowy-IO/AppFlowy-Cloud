@@ -104,7 +104,7 @@ async fn start_connect(
   server: Data<RealtimeServerAddr>,
   access_token: String,
   device_id: String,
-  client_version: Version,
+  client_app_version: Version,
   connect_at: i64,
 ) -> Result<HttpResponse> {
   let auth = authorization_from_token(access_token.as_str(), state)?;
@@ -115,18 +115,24 @@ async fn start_connect(
     Ok(uid) => {
       debug!(
         "🚀new websocket connect: uid={}, device_id={}, client_version:{}",
-        uid, device_id, client_version
+        uid, device_id, client_app_version
       );
 
       let session_id = uuid::Uuid::new_v4().to_string();
-      let realtime_user = RealtimeUser::new(uid, device_id, session_id, connect_at);
+      let realtime_user = RealtimeUser::new(
+        uid,
+        device_id,
+        session_id,
+        connect_at,
+        client_app_version.to_string(),
+      );
       let (tx, external_source) = mpsc::channel(100);
       let client = RealtimeClient::new(
         realtime_user,
         server.get_ref().clone(),
         Duration::from_secs(state.config.websocket.heartbeat_interval as u64),
         Duration::from_secs(state.config.websocket.client_timeout as u64),
-        client_version,
+        client_app_version,
         external_source,
         10,
       );

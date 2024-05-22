@@ -144,7 +144,7 @@ where
       // If there is no existing group for the given object_id and the message is an 'init message',
       // then create a new group and add the user as a subscriber to this group.
       if first_message.is_client_init_sync() {
-        self.create_group(first_message).await?;
+        self.create_group(user, first_message).await?;
         self.subscribe_group(user, first_message).await?;
         forward_message_to_group(user, object_id, messages, &self.msg_router_by_user).await;
       } else if let Some(entry) = self.msg_router_by_user.get(user) {
@@ -193,20 +193,22 @@ where
   }
 
   #[instrument(level = "info", skip_all)]
-  async fn create_group(&self, collab_message: &ClientCollabMessage) -> Result<(), RealtimeError> {
+  async fn create_group(
+    &self,
+    user: &RealtimeUser,
+    collab_message: &ClientCollabMessage,
+  ) -> Result<(), RealtimeError> {
     let object_id = collab_message.object_id();
     match collab_message {
       ClientCollabMessage::ClientInitSync { data, .. } => {
-        let uid = data
-          .origin
-          .client_user_id()
-          .ok_or(RealtimeError::ExpectInitSync(
-            "The client user id is empty".to_string(),
-          ))?;
-
         self
           .group_manager
-          .create_group(uid, &data.workspace_id, object_id, data.collab_type.clone())
+          .create_group(
+            user,
+            &data.workspace_id,
+            object_id,
+            data.collab_type.clone(),
+          )
           .await?;
 
         Ok(())

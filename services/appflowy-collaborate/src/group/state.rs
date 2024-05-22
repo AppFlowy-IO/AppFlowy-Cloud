@@ -33,7 +33,7 @@ impl GroupManagementState {
 
   /// Performs a periodic check to remove groups based on the following conditions:
   /// Groups that have been inactive for a specified period of time.
-  pub async fn tick(&self) -> Vec<String> {
+  pub async fn get_inactive_group_ids(&self) -> Vec<String> {
     let mut inactive_group_ids = vec![];
     for entry in self.group_by_object_id.iter() {
       let (object_id, group) = (entry.key(), entry.value());
@@ -148,10 +148,8 @@ impl GroupManagementState {
 
   pub(crate) async fn remove_user(&self, user: &RealtimeUser) {
     let entry = self.editing_by_user.remove(user);
-    let elements = entry.map(|(_, e)| e);
-
-    if let Some(elements) = &elements {
-      for editing in elements {
+    if let Some(editing_objects) = entry.map(|(_, e)| e) {
+      for editing in editing_objects {
         match self.group_by_object_id.try_get(&editing.object_id) {
           TryResult::Present(group) => {
             group.remove_user(user).await;

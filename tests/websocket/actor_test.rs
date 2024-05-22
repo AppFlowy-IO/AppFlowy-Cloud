@@ -14,7 +14,7 @@ use tokio::time::sleep;
 async fn test_handle_message() {
   let device_id = "device_id".to_string();
   let session_id = "session_id".to_string();
-  let user = RealtimeUser::new(1, device_id, session_id, 2);
+  let user = RealtimeUser::new(1, device_id, session_id, 2, "0.5.8".to_string());
   let server = MockRealtimeServer::new(10).start();
   let client_version = Version::new(0, 5, 0);
 
@@ -40,7 +40,7 @@ async fn test_handle_message() {
 async fn server_mailbox_full_test() {
   let device_id = "device_id".to_string();
   let session_id = "session_id".to_string();
-  let user = RealtimeUser::new(1, device_id, session_id, 2);
+  let user = RealtimeUser::new(1, device_id, session_id, 2, "0.5.8".to_string());
   let server = MockRealtimeServer::new(5).start();
   let client_version = Version::new(0, 5, 0);
 
@@ -82,7 +82,7 @@ async fn server_mailbox_full_test() {
 async fn client_rate_limit_hit_test() {
   let device_id = "device_id".to_string();
   let session_id = "session_id".to_string();
-  let user = RealtimeUser::new(1, device_id, session_id, 2);
+  let user = RealtimeUser::new(1, device_id, session_id, 2, "0.5.8".to_string());
   let server = MockRealtimeServer::new(5).start();
   let client_version = Version::new(0, 5, 0);
 

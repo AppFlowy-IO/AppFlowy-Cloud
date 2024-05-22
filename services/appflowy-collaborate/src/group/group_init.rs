@@ -25,7 +25,7 @@ use collab_stream::model::{CollabUpdateEvent, StreamBinary};
 use collab_stream::stream_group::StreamGroup;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use tokio::sync::mpsc;
-use tracing::{error, event, trace};
+use tracing::{debug, error, event, trace};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
 use yrs::Update;
@@ -178,7 +178,18 @@ impl CollabGroup {
     if cfg!(debug_assertions) {
       modified_at.elapsed().as_secs() > 60 && self.subscribers.is_empty()
     } else {
-      modified_at.elapsed().as_secs() > self.timeout_secs() && self.subscribers.is_empty()
+      let elapsed_secs = modified_at.elapsed().as_secs();
+      const MAXIMUM_SECS: u64 = 60 * 60 * 12; // 12 hours
+      if elapsed_secs > MAXIMUM_SECS {
+        debug!(
+          "The group:{} is inactive for {} seconds",
+          self.object_id, elapsed_secs
+        );
+        // If the group is inactive for more than 12 hours, mark it as inactive
+        true
+      } else {
+        elapsed_secs > self.timeout_secs() && self.subscribers.is_empty()
+      }
     }
   }
 

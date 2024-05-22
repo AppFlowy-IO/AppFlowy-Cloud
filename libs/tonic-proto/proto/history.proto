@@ -7,14 +7,15 @@ package history;
 
 service History {
     rpc GetSnapshots (SnapshotRequestPb) returns (RepeatedSnapshotMetaPb);
-    rpc GetHistoryForSnapshot (SnapshotMetaPb) returns (HistoryStatePb);
-    rpc GetLatestHistory (SnapshotRequestPb) returns (HistoryStatePb);
+    rpc GetNumOfSnapshot (SnapshotRequestPb) returns (RepeatedSnapshotInfoPb);
+    rpc GetLatestSnapshot (SnapshotRequestPb) returns (SingleSnapshotInfoPb);
 }
 
 message SnapshotRequestPb {
     string workspace_id = 1;
     string object_id = 2;
     int32 collab_type = 3;
+    int32 num_snapshot = 4;
 }
 
 // SnapshotMetaPB represents metadata for a snapshot.
@@ -45,9 +46,14 @@ message SnapshotStatePb {
     google.protobuf.StringValue deps_snapshot_id = 4; // Optional dependency snapshot ID
 }
 
-message SnapshotInfoPb {
+message SingleSnapshotInfoPb {
     HistoryStatePb history_state = 1;
-    bytes snapshot = 2;  // Additional field specific to SnapshotInfoPB representing the snapshot data
+    SnapshotMetaPb snapshot_meta = 2;
+}
+
+message RepeatedSnapshotInfoPb {
+    HistoryStatePb history_state = 1;
+    repeated SnapshotMetaPb snapshots = 2;
 }
 
 message HistoryStatePb {

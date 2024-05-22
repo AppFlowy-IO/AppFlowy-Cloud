@@ -78,5 +78,5 @@ async fn insert_snapshot_test(pool: PgPool) {
     .unwrap()
     .unwrap();
   assert_eq!(snapshot.history_state.unwrap().doc_state, vec![10, 11, 12]);
-  assert_eq!(snapshot.snapshot, vec![3, 4, 5]);
+  assert_eq!(snapshot.snapshot_meta.unwrap().snapshot, vec![3, 4, 5]);
 }

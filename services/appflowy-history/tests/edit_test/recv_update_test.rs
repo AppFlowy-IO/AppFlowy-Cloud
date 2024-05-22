@@ -43,6 +43,7 @@ async fn apply_update_stream_updates_test() {
     workspace_id: workspace_id.to_string(),
     object_id: object_id.to_string(),
     collab_type: CollabType::Unknown.value(),
+    num_snapshot: 1,
   };
 
   check_doc_state_json(&object_id, 60, mock.expected_json.clone(), move || {
@@ -50,9 +51,9 @@ async fn apply_update_stream_updates_test() {
     let cloned_request = request.clone();
     Box::pin(async move {
       cloned_client
-        .get_latest_history(cloned_request)
+        .get_latest_snapshot(cloned_request)
         .await
-        .map(|r| r.into_inner())
+        .map(|r| r.into_inner().history_state.unwrap())
     })
   })
   .await

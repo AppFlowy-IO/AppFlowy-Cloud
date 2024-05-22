@@ -2,7 +2,7 @@ use crate::http::log_request_id;
 use crate::Client;
 use collab_entity::CollabType;
 use reqwest::Method;
-use shared_entity::dto::history_dto::{HistoryState, RepeatedSnapshotMeta};
+use shared_entity::dto::history_dto::{RepeatedSnapshotMeta, SnapshotInfo};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {
@@ -33,7 +33,7 @@ impl Client {
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
-  ) -> Result<HistoryState, AppResponseError> {
+  ) -> Result<SnapshotInfo, AppResponseError> {
     let collab_type = collab_type.value();
     let url = format!(
       "{}/api/history/{workspace_id}/{object_id}/{collab_type}/latest",
@@ -45,7 +45,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<HistoryState>::from_response(resp)
+    AppResponse::<SnapshotInfo>::from_response(resp)
       .await?
       .into_data()
   }

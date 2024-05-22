@@ -38,6 +38,7 @@ impl OpenCollabHandle {
     history_persistence: Option<Arc<HistoryPersistence>>,
   ) -> Result<Self, HistoryError> {
     let mutex_collab = {
+      // Must set skip_gc = true to avoid the garbage collection of the collab.
       let mut collab = Collab::new_with_source(
         CollabOrigin::Empty,
         object_id,
@@ -245,6 +246,7 @@ fn apply_updates(
 fn spawn_save_history(history: Weak<CollabHistory>, history_persistence: Weak<HistoryPersistence>) {
   tokio::spawn(async move {
     let mut interval = if cfg!(debug_assertions) {
+      // In debug mode, save the history every 10 seconds.
       interval(Duration::from_secs(10))
     } else {
       interval(Duration::from_secs(60 * 60))

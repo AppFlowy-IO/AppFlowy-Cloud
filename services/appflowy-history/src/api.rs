@@ -3,7 +3,7 @@ use crate::biz::history::get_snapshots;
 use collab_entity::CollabType;
 use tonic::{Request, Response, Status};
 use tonic_proto::history::history_server::History;
-use tonic_proto::history::{HistoryStatePb, SnapshotMetaPb, SnapshotRequestPb};
+use tonic_proto::history::{RepeatedSnapshotInfoPb, SingleSnapshotInfoPb, SnapshotRequestPb};
 
 pub struct HistoryImpl {
   pub state: AppState,
@@ -34,23 +34,24 @@ impl History for HistoryImpl {
     Ok(Response::new(data))
   }
 
-  async fn get_history_for_snapshot(
+  async fn get_num_of_snapshot(
     &self,
-    _request: Request<SnapshotMetaPb>,
-  ) -> Result<Response<HistoryStatePb>, Status> {
+    _request: Request<SnapshotRequestPb>,
+  ) -> Result<Response<RepeatedSnapshotInfoPb>, Status> {
     todo!()
   }
 
-  async fn get_latest_history(
+  async fn get_latest_snapshot(
     &self,
     request: Request<SnapshotRequestPb>,
-  ) -> Result<Response<HistoryStatePb>, Status> {
+  ) -> Result<Response<SingleSnapshotInfoPb>, Status> {
     let request = request.into_inner();
     let resp = self
       .state
       .open_collab_manager
-      .get_latest_snapshot(request)
+      .get_latest_snapshot(request, &self.state.pg_pool)
       .await?;
+
     Ok(Response::new(resp))
   }
 }

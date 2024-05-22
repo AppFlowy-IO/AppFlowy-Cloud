@@ -21,3 +21,10 @@ pub struct HistoryState {
   pub doc_state: Vec<u8>,
   pub doc_state_version: i32,
 }
+
+///
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct SnapshotInfo {
+  pub history: HistoryState,
+  pub snapshot_meta: SnapshotMeta,
+}

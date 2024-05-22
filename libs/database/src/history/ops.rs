@@ -3,7 +3,7 @@ use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, PgPool, Postgres};
 use std::ops::DerefMut;
-use tonic_proto::history::{HistoryStatePb, SnapshotInfoPb, SnapshotMetaPb};
+use tonic_proto::history::{HistoryStatePb, SingleSnapshotInfoPb, SnapshotMetaPb};
 use tracing::trace;
 use uuid::Uuid;
 
@@ -154,8 +154,8 @@ async fn insert_snapshot_state<'a, E: Executor<'a, Database = Postgres>>(
     partition_key,
     created_at,
   )
-        .execute(executor)
-        .await?;
+  .execute(executor)
+  .await?;
   Ok(())
 }
 
@@ -192,7 +192,7 @@ pub async fn get_latest_snapshot(
   oid: &str,
   collab_type: &CollabType,
   pool: &PgPool,
-) -> Result<Option<SnapshotInfoPb>, sqlx::Error> {
+) -> Result<Option<SingleSnapshotInfoPb>, sqlx::Error> {
   let mut transaction = pool.begin().await?;
   let partition_key = partition_key_from_collab_type(collab_type);
   // Attempt to fetch the latest snapshot metadata
@@ -213,21 +213,25 @@ pub async fn get_latest_snapshot(
 
   // Return None if no metadata found
   let snapshot_meta = match snapshot_meta {
-    Some(meta) => meta,
+    Some(meta) => SnapshotMetaPb {
+      oid: meta.oid,
+      snapshot: meta.snapshot,
+      snapshot_version: meta.snapshot_version,
+      created_at: meta.created_at,
+    },
     None => return Ok(None),
   };
 
   // Fetch the corresponding state using the metadata's created_at timestamp
-  let snapshot_state = get_latest_snapshot_state(
+  // Return None if no metadata found
+  let snapshot_state = match get_latest_snapshot_state(
     oid,
     snapshot_meta.created_at,
     collab_type,
     transaction.deref_mut(),
   )
-  .await?;
-
-  // Return None if no metadata found
-  let snapshot_state = match snapshot_state {
+  .await?
+  {
     Some(state) => state,
     None => return Ok(None),
   };
@@ -238,8 +242,8 @@ pub async fn get_latest_snapshot(
     doc_state_version: snapshot_state.doc_state_version,
   };
 
-  let snapshot_info = SnapshotInfoPb {
-    snapshot: snapshot_meta.snapshot,
+  let snapshot_info = SingleSnapshotInfoPb {
+    snapshot_meta: Some(snapshot_meta),
     history_state: Some(history_state),
   };
 

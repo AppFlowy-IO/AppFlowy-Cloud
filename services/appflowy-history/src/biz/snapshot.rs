@@ -80,7 +80,7 @@ fn gen_snapshot_threshold(collab_type: &CollabType) -> u32 {
     CollabType::UserAwareness => 50,
     CollabType::Unknown => {
       if cfg!(debug_assertions) {
-        10
+        5
       } else {
         50
       }

@@ -9,11 +9,12 @@ use dashmap::mapref::entry::Entry;
 
 use crate::config::StreamSetting;
 use dashmap::DashMap;
+use database::history::ops::get_latest_snapshot;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::interval;
-use tonic_proto::history::{HistoryStatePb, SnapshotRequestPb};
+use tonic_proto::history::{HistoryStatePb, SingleSnapshotInfoPb, SnapshotRequestPb};
 use tracing::{error, trace};
 use uuid::Uuid;
 
@@ -52,13 +53,12 @@ impl OpenCollabManager {
   pub async fn get_latest_snapshot(
     &self,
     req: SnapshotRequestPb,
-  ) -> Result<HistoryStatePb, HistoryError> {
-    match self.handles.get(&req.object_id) {
-      None => {
-        // TODO(nathan): Get from database
-        Err(HistoryError::RecordNotFound(req.object_id))
-      },
-      Some(handle) => handle.history_state().await,
+    pg_pool: &PgPool,
+  ) -> Result<SingleSnapshotInfoPb, HistoryError> {
+    let collab_type = CollabType::from(req.collab_type);
+    match get_latest_snapshot(&req.object_id, &collab_type, pg_pool).await {
+      Ok(Some(pb)) => Ok(pb),
+      _ => Err(HistoryError::RecordNotFound(req.object_id)),
     }
   }
 }

@@ -6,7 +6,7 @@ use collab::entity::EncodedCollab;
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;
 use tokio::sync::Mutex;
-use tracing::{error, instrument, trace, warn};
+use tracing::{error, instrument, trace};
 
 use access_control::collab::RealtimeAccessControl;
 use app_error::AppError;
@@ -62,7 +62,7 @@ where
   }
 
   pub async fn inactive_groups(&self) -> Vec<String> {
-    self.state.tick().await
+    self.state.get_inactive_group_ids().await
   }
 
   pub async fn contains_user(&self, object_id: &str, user: &RealtimeUser) -> bool {
@@ -132,7 +132,7 @@ where
 
   pub async fn create_group(
     &self,
-    uid: i64,
+    user: &RealtimeUser,
     workspace_id: &str,
     object_id: &str,
     collab_type: CollabType,
@@ -152,16 +152,16 @@ where
           RealtimeError::CreateGroupFailed(CreateGroupFailedReason::CollabWorkspaceIdNotMatch {
             expect: metadata.workspace_id,
             actual: workspace_id.to_string(),
+            detail: format!(
+              "user_id:{},app_version:{},object_id:{}:{}",
+              user.uid, user.app_version, object_id, collab_type
+            ),
           });
-        warn!(
-          "[Realtime]:user_id:{},object_id:{}:{},error:{}",
-          uid, object_id, collab_type, err
-        );
         return Err(err);
       }
     }
 
-    let result = load_collab(uid, object_id, params, self.storage.clone()).await;
+    let result = load_collab(user.uid, object_id, params, self.storage.clone()).await;
     let (mutex_collab, encode_collab) = {
       let (mutex_collab, encode_collab) = match result {
         Ok(value) => value,
@@ -220,7 +220,7 @@ where
 
     trace!(
       "[realtime]: create group: uid:{},workspace_id:{},object_id:{}:{}",
-      uid,
+      user.uid,
       workspace_id,
       object_id,
       collab_type
@@ -228,7 +228,7 @@ where
 
     let group = Arc::new(
       CollabGroup::new(
-        uid,
+        user.uid,
         workspace_id.to_string(),
         object_id.to_string(),
         collab_type,

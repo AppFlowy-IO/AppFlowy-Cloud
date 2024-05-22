@@ -66,15 +66,24 @@ pub struct RealtimeUser {
   ///   generated anew for each connection established, providing a mechanism to uniquely identify and manage
   ///   individual connection sessions. The session ID is used when cleanly handling user disconnections.
   pub session_id: String,
+  /// - `app_version`: A `String` representing the version of the application that the user is using.
+  pub app_version: String,
 }
 
 impl RealtimeUser {
-  pub fn new(uid: i64, device_id: String, session_id: String, connect_at: i64) -> Self {
+  pub fn new(
+    uid: i64,
+    device_id: String,
+    session_id: String,
+    connect_at: i64,
+    app_version: String,
+  ) -> Self {
     Self {
       uid,
       device_id,
       connect_at,
       session_id,
+      app_version,
     }
   }
 

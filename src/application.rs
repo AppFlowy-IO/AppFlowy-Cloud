@@ -7,7 +7,7 @@ use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
-use crate::api::ai_tool::ai_tool_scope;
+use crate::api::ai::ai_tool_scope;
 use crate::api::chat::chat_scope;
 use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
 use crate::biz::pg_listener::PgListeners;

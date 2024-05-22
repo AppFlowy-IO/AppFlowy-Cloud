@@ -3,7 +3,7 @@ use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_chat_message, select_chat,
   select_chat_messages,
 };
-use database_entity::chat::{
+use database_entity::dto::{
   ChatAuthor, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
 };
 use serde_json::json;
@@ -96,7 +96,7 @@ async fn chat_message_crud_test(pool: PgPool) {
     let params = CreateChatMessageParams {
       content: format!("message {}", i),
     };
-    insert_chat_message(&pool, ChatAuthor::Human { uid: user.uid }, &chat_id, params)
+    let _ = insert_chat_message(&pool, ChatAuthor::Human { uid: user.uid }, &chat_id, params)
       .await
       .unwrap();
   }
@@ -105,7 +105,7 @@ async fn chat_message_crud_test(pool: PgPool) {
   {
     // option 1:use offset to get 3 messages => 1,2,3
     let mut txn = pool.begin().await.unwrap();
-    let params = GetChatMessageParams::offset(chat_id.clone(), 0, 3);
+    let params = GetChatMessageParams::offset(0, 3);
     let result_1 = select_chat_messages(&mut txn, &chat_id, params)
       .await
       .unwrap();
@@ -118,7 +118,7 @@ async fn chat_message_crud_test(pool: PgPool) {
     assert!(result_1.has_more);
 
     // option 2:use before_message_id to get 3 messages => 1,2,3
-    let params = GetChatMessageParams::before_message_id(chat_id.clone(), 4, 3);
+    let params = GetChatMessageParams::before_message_id(4, 3);
     let mut txn = pool.begin().await.unwrap();
     let result_2 = select_chat_messages(&mut txn, &chat_id, params)
       .await
@@ -135,7 +135,7 @@ async fn chat_message_crud_test(pool: PgPool) {
   // get two messages: 4,5
   {
     // option 1:use offset to get 2 messages => 4,5
-    let params = GetChatMessageParams::offset(chat_id.clone(), 3, 3);
+    let params = GetChatMessageParams::offset(3, 3);
     let mut txn = pool.begin().await.unwrap();
     let result_1 = select_chat_messages(&mut txn, &chat_id, params)
       .await
@@ -148,7 +148,7 @@ async fn chat_message_crud_test(pool: PgPool) {
     assert!(!result_1.has_more);
 
     // option 2:use after_message_id to get remaining 2 messages => 4,5
-    let params = GetChatMessageParams::after_message_id(chat_id.clone(), 3, 3);
+    let params = GetChatMessageParams::after_message_id(3, 3);
     let mut txn = pool.begin().await.unwrap();
     let result_2 = select_chat_messages(&mut txn, &chat_id, params)
       .await

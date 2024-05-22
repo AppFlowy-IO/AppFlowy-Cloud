@@ -3,33 +3,34 @@ use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
-use database_entity::chat::{
-  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+use database_entity::dto::{
+  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageOffset,
+  RepeatedChatMessage,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
+use std::collections::HashMap;
+use tracing::trace;
 
 pub fn chat_scope() -> Scope {
   web::scope("/api/chat/{workspace_id}")
-    .service(web::resource("/").route(web::post().to(create_chat_handler)))
+    .service(web::resource("").route(web::post().to(create_chat_handler)))
     .service(
       web::resource("/{chat_id}")
         .route(web::delete().to(delete_chat_handler))
-        .route(web::post().to(update_chat_handler)),
+        .route(web::post().to(update_chat_handler))
+        .route(web::get().to(get_chat_message_handler)),
     )
-    .service(
-      web::resource("/{chat_id}/messages")
-        .route(web::get().to(get_chat_message_handler))
-        .route(web::post().to(post_chat_message_handler)),
-    )
+    .service(web::resource("/{chat_id}/message").route(web::post().to(post_chat_message_handler)))
 }
-
 async fn create_chat_handler(
   path: web::Path<String>,
   state: Data<AppState>,
   payload: Json<CreateChatParams>,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let workspace_id = path.into_inner();
-  create_chat(&state.pg_pool, payload.into_inner(), &workspace_id).await?;
+  let params = payload.into_inner();
+  trace!("create new chat: {:?}", params);
+  create_chat(&state.pg_pool, params, &workspace_id).await?;
   Ok(AppResponse::Ok().into())
 }
 
@@ -37,7 +38,7 @@ async fn delete_chat_handler(
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<()>> {
-  let (_, chat_id) = path.into_inner();
+  let (_workspace_id, chat_id) = path.into_inner();
   delete_chat(&state.pg_pool, &chat_id).await?;
   Ok(AppResponse::Ok().into())
 }
@@ -46,29 +47,47 @@ async fn update_chat_handler(
   path: web::Path<(String, String)>,
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<()>> {
-  let (_, chat_id) = path.into_inner();
+  let (_workspace_id, chat_id) = path.into_inner();
   delete_chat(&state.pg_pool, &chat_id).await?;
   Ok(AppResponse::Ok().into())
 }
 
 async fn post_chat_message_handler(
   state: Data<AppState>,
-  chat_id: web::Path<String>,
+  path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<()>> {
-  let chat_id = chat_id.into_inner();
+) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+  let (_workspace_id, chat_id) = path.into_inner();
+  let params = payload.into_inner();
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  create_chat_message(&state.pg_pool, uid, payload.into_inner(), &chat_id).await?;
-  Ok(AppResponse::Ok().into())
+  trace!("create chat:{} message: {:?}", chat_id, params);
+  let message = create_chat_message(&state.pg_pool, uid, params, &chat_id).await?;
+  Ok(AppResponse::Ok().with_data(message).into())
 }
 
 async fn get_chat_message_handler(
-  chat_id: web::Path<String>,
+  path: web::Path<(String, String)>,
+  query: web::Query<HashMap<String, String>>,
   state: Data<AppState>,
-  payload: Json<GetChatMessageParams>,
 ) -> actix_web::Result<JsonAppResponse<RepeatedChatMessage>> {
-  let chat_id = chat_id.into_inner();
-  let messages = get_chat_messages(&state.pg_pool, payload.into_inner(), &chat_id).await?;
+  let mut params = GetChatMessageParams {
+    offset: MessageOffset::Offset(0),
+    limit: query
+      .get("limit")
+      .and_then(|s| s.parse::<u64>().ok())
+      .unwrap_or(10),
+  };
+  if let Some(value) = query.get("offset").and_then(|s| s.parse::<u64>().ok()) {
+    params.offset = MessageOffset::Offset(value);
+  } else if let Some(value) = query.get("after").and_then(|s| s.parse::<i64>().ok()) {
+    params.offset = MessageOffset::AfterMessageId(value);
+  } else if let Some(value) = query.get("before").and_then(|s| s.parse::<i64>().ok()) {
+    params.offset = MessageOffset::BeforeMessageId(value);
+  }
+
+  trace!("get chat messages: {:?}", params);
+  let (_workspace_id, chat_id) = path.into_inner();
+  let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
 }

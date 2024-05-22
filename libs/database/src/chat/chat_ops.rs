@@ -3,7 +3,7 @@ use crate::workspace::is_workspace_exist;
 use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
-use database_entity::chat::{
+use database_entity::dto::{
   ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
   MessageOffset, RepeatedChatMessage, UpdateChatParams,
 };
@@ -133,22 +133,29 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   author: ChatAuthor,
   chat_id: &str,
   params: CreateChatMessageParams,
-) -> Result<(), AppError> {
+) -> Result<ChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
-  let author = json!(author);
-  sqlx::query!(
+  let row = sqlx::query!(
     r#"
-       INSERT INTO af_chat_messages (chat_id, author, content)
-       VALUES ($1, $2, $3)
-    "#,
+        INSERT INTO af_chat_messages (chat_id, author, content)
+        VALUES ($1, $2, $3)
+        RETURNING message_id, created_at
+        "#,
     chat_id,
-    author,
-    params.content,
+    json!(author),
+    &params.content,
   )
-  .execute(executor)
+  .fetch_one(executor)
   .await
   .map_err(|err| AppError::Internal(anyhow!("Failed to insert chat message: {}", err)))?;
-  Ok(())
+
+  let chat_message = ChatMessage {
+    author,
+    message_id: row.message_id,
+    content: params.content,
+    created_at: row.created_at,
+  };
+  Ok(chat_message)
 }
 
 pub async fn select_chat_messages(

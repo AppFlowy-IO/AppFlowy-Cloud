@@ -6,19 +6,20 @@ import "google/protobuf/wrappers.proto";
 package history;
 
 service History {
-    rpc GetSnapshots (SnapshotRequest) returns (RepeatedSnapshotMeta);
-    rpc GetInMemoryHistory (SnapshotRequest) returns (HistoryState);
-    rpc GetInDiskHistory (SnapshotMeta) returns (HistoryState);
+    rpc GetSnapshots (SnapshotRequestPb) returns (RepeatedSnapshotMetaPb);
+    rpc GetNumOfSnapshot (SnapshotRequestPb) returns (RepeatedSnapshotInfoPb);
+    rpc GetLatestSnapshot (SnapshotRequestPb) returns (SingleSnapshotInfoPb);
 }
 
-message SnapshotRequest {
+message SnapshotRequestPb {
     string workspace_id = 1;
     string object_id = 2;
     int32 collab_type = 3;
+    int32 num_snapshot = 4;
 }
 
-// SnapshotMeta represents metadata for a snapshot.
-message SnapshotMeta {
+// SnapshotMetaPB represents metadata for a snapshot.
+message SnapshotMetaPb {
     // The unique identifier for the snapshot.
     string oid = 1;
     // The raw binary snapshot data.
@@ -31,26 +32,31 @@ message SnapshotMeta {
     int64 created_at = 4;
 }
 
-// A container for repeated instances of SnapshotMeta.
-message RepeatedSnapshotMeta {
-    repeated SnapshotMeta items = 1;  // List of SnapshotMeta items
+// A container for repeated instances of SnapshotMetaPB.
+message RepeatedSnapshotMetaPb {
+    repeated SnapshotMetaPb items = 1;  // List of SnapshotMetaPB items
 }
 
 
-// SnapshotState represents the state of a snapshot, including optional dependency IDs.
-message SnapshotState {
+// SnapshotStatePB represents the state of a snapshot, including optional dependency IDs.
+message SnapshotStatePb {
     string oid = 1;                        // Unique identifier for the snapshot
     bytes doc_state = 2;                   // The document state as raw binary data
     int32 doc_state_version = 3;           // Version of the document state format
     google.protobuf.StringValue deps_snapshot_id = 4; // Optional dependency snapshot ID
 }
 
-message SnapshotInfo {
-    HistoryState history_state = 1;
-    bytes snapshot = 2;  // Additional field specific to SnapshotInfo representing the snapshot data
+message SingleSnapshotInfoPb {
+    HistoryStatePb history_state = 1;
+    SnapshotMetaPb snapshot_meta = 2;
 }
 
-message HistoryState {
+message RepeatedSnapshotInfoPb {
+    HistoryStatePb history_state = 1;
+    repeated SnapshotMetaPb snapshots = 2;
+}
+
+message HistoryStatePb {
     string object_id = 1;                  // Unique identifier for the object
     bytes doc_state = 2;                   // The document state as raw binary data
     int32 doc_state_version = 3;           // Version of the document state format, with decoding instructions based on version

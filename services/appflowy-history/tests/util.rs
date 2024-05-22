@@ -21,7 +21,7 @@ use tokio::time::timeout;
 
 use tonic::Status;
 use tonic_proto::history::history_client::HistoryClient;
-use tonic_proto::history::HistoryState;
+use tonic_proto::history::HistoryStatePb;
 
 pub async fn redis_client() -> redis::Client {
   let redis_uri = "redis://localhost:6379";
@@ -128,7 +128,7 @@ pub async fn check_doc_state_json<'a, F>(
   client_action: F,
 ) -> Result<()>
 where
-  F: Fn() -> BoxFuture<'a, Result<HistoryState, Status>> + Send + Sync + 'static,
+  F: Fn() -> BoxFuture<'a, Result<HistoryStatePb, Status>> + Send + Sync + 'static,
 {
   let duration = Duration::from_secs(timeout_secs);
   let check_interval = Duration::from_secs(2);

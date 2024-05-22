@@ -8,7 +8,8 @@ use collab_entity::CollabType;
 use database::history::ops::get_snapshot_meta_list;
 use serde_json::Value;
 use sqlx::PgPool;
-use tonic_proto::history::{RepeatedSnapshotMeta, SnapshotMeta};
+use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
+use tracing::trace;
 
 pub struct CollabHistory {
   object_id: String,
@@ -63,7 +64,7 @@ impl CollabHistory {
       if snapshots.is_empty() {
         return Ok(None);
       }
-
+      trace!("[History] prepare to save snapshots to disk");
       let (doc_state, state_vector) = {
         let lock_guard = mutex_collab.lock();
         let txn = lock_guard.try_transaction()?;
@@ -131,14 +132,14 @@ pub async fn get_snapshots(
   object_id: &str,
   collab_type: &CollabType,
   pg_pool: &PgPool,
-) -> Result<RepeatedSnapshotMeta, HistoryError> {
+) -> Result<RepeatedSnapshotMetaPb, HistoryError> {
   let metas = get_snapshot_meta_list(object_id, collab_type, pg_pool)
     .await
     .unwrap();
 
   let metas = metas
     .into_iter()
-    .map(|meta| SnapshotMeta {
+    .map(|meta| SnapshotMetaPb {
       oid: meta.oid,
       snapshot: meta.snapshot,
       snapshot_version: meta.snapshot_version,
@@ -146,5 +147,5 @@ pub async fn get_snapshots(
     })
     .collect::<Vec<_>>();
 
-  Ok(RepeatedSnapshotMeta { items: metas })
+  Ok(RepeatedSnapshotMetaPb { items: metas })
 }

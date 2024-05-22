@@ -614,7 +614,6 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tonic-proto",
- "tower",
  "tracing",
  "tracing-bunyan-formatter",
  "tracing-log 0.1.4",

@@ -34,7 +34,14 @@ impl History for HistoryImpl {
     Ok(Response::new(data))
   }
 
-  async fn get_in_memory_history(
+  async fn get_history_for_snapshot(
+    &self,
+    _request: Request<SnapshotMetaPb>,
+  ) -> Result<Response<HistoryStatePb>, Status> {
+    todo!()
+  }
+
+  async fn get_latest_history(
     &self,
     request: Request<SnapshotRequestPb>,
   ) -> Result<Response<HistoryStatePb>, Status> {
@@ -42,15 +49,8 @@ impl History for HistoryImpl {
     let resp = self
       .state
       .open_collab_manager
-      .get_in_memory_history(request)
+      .get_latest_snapshot(request)
       .await?;
     Ok(Response::new(resp))
-  }
-
-  async fn get_in_disk_history(
-    &self,
-    _request: Request<SnapshotMetaPb>,
-  ) -> Result<Response<HistoryStatePb>, Status> {
-    todo!()
   }
 }

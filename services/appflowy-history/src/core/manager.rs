@@ -48,6 +48,19 @@ impl OpenCollabManager {
       Some(handle) => handle.history_state().await,
     }
   }
+
+  pub async fn get_latest_snapshot(
+    &self,
+    req: SnapshotRequestPb,
+  ) -> Result<HistoryStatePb, HistoryError> {
+    match self.handles.get(&req.object_id) {
+      None => {
+        // TODO(nathan): Get from database
+        Err(HistoryError::RecordNotFound(req.object_id))
+      },
+      Some(handle) => handle.history_state().await,
+    }
+  }
 }
 
 async fn spawn_control_group(

@@ -14,3 +14,10 @@ pub struct SnapshotMeta {
 pub struct RepeatedSnapshotMeta {
   pub items: Vec<SnapshotMeta>,
 }
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct HistoryState {
+  pub object_id: String,
+  pub doc_state: Vec<u8>,
+  pub doc_state_version: i32,
+}

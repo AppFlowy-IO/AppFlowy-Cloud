@@ -50,7 +50,7 @@ async fn apply_update_stream_updates_test() {
     let cloned_request = request.clone();
     Box::pin(async move {
       cloned_client
-        .get_in_memory_history(cloned_request)
+        .get_latest_history(cloned_request)
         .await
         .map(|r| r.into_inner())
     })

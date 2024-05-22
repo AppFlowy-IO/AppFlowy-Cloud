@@ -30,7 +30,6 @@ use crate::config::config::Config;
 use crate::mailer::Mailer;
 
 pub type RedisConnectionManager = redis::aio::ConnectionManager;
-
 #[derive(Clone)]
 pub struct AppState {
   pub pg_pool: PgPool,
@@ -51,7 +50,7 @@ pub struct AppState {
   pub mailer: Mailer,
   pub ai_client: AppFlowyAIClient,
   pub realtime_shared_state: RealtimeSharedState,
-  pub grpc_history_client: Arc<Mutex<Option<HistoryClient<tonic::transport::Channel>>>>,
+  pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
 }
 
 impl AppState {

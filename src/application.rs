@@ -48,7 +48,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tonic_proto::history::history_client::HistoryClient;
-use tracing::{error, info, warn};
+
+use tracing::{info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
@@ -245,15 +246,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   ));
 
   info!("Connecting to history server");
-  let history_client = match HistoryClient::connect(config.grpc_history.addrs.clone()).await {
-    Ok(history_client) => Some(history_client),
-    Err(err) => {
-      error!("Failed to connect to history server: {:?}", err);
-      None
-    },
-  };
-  let grpc_history_client = Arc::new(Mutex::new(history_client));
+  let channel = tonic::transport::Channel::from_shared(config.grpc_history.addrs.clone())?
+    .keep_alive_timeout(Duration::from_secs(20))
+    .keep_alive_while_idle(true)
+    .connect_lazy();
 
+  let grpc_history_client = Arc::new(Mutex::new(HistoryClient::new(channel)));
   let mailer = Mailer::new(
     config.mailer.smtp_username.clone(),
     config.mailer.smtp_password.expose_secret().clone(),

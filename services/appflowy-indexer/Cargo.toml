@@ -24,7 +24,6 @@ serde.workspace = true
 serde_json.workspace = true
 yrs.workspace = true
 openai_dive.workspace = true
-pgvector = { workspace = true, features = ["sqlx"] }
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
 tokio-util = { version = "0.7" }
@@ -46,3 +45,4 @@ async-trait = "0.1"
 [dev-dependencies]
 env_logger = "0.11"
 workspace-template.workspace = true
+pgvector = { workspace = true, features = ["sqlx"] }

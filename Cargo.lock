@@ -2192,6 +2192,7 @@ dependencies = [
  "collab-entity",
  "database-entity",
  "futures-util",
+ "pgvector",
  "redis 0.25.2",
  "rust-s3",
  "rust_decimal",

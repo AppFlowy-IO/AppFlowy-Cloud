@@ -2,12 +2,14 @@ use std::ops::DerefMut;
 
 use async_trait::async_trait;
 use collab_entity::CollabType;
+use database::index::{
+  remove_collab_embeddings, upsert_collab_embeddings, AFCollabEmbeddingParams,
+};
 use openai_dive::v1::api::Client;
 use openai_dive::v1::models::EmbeddingsEngine;
 use openai_dive::v1::resources::embedding::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
 };
-use pgvector::Vector;
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, PgPool, QueryBuilder};
 
@@ -44,11 +46,10 @@ struct EmbedFragment {
   /// Object, which this fragment belongs to.
   pub object_id: String,
   /// Type of the document object.
-  /// See: migrations/20240412083446_history_init.sql
-  pub partition_key: u32,
+  pub collab_type: CollabType,
   /// Content of the fragment.
   pub content: String,
-  pub embedding: Option<Vector>,
+  pub embedding: Option<Vec<f32>>,
 }
 
 impl From<Fragment> for EmbedFragment {
@@ -56,17 +57,21 @@ impl From<Fragment> for EmbedFragment {
     EmbedFragment {
       fragment_id: fragment.fragment_id,
       object_id: fragment.object_id,
-      partition_key: match fragment.collab_type {
-        CollabType::Document => 0,
-        CollabType::Database => 1,
-        CollabType::WorkspaceDatabase => 2,
-        CollabType::Folder => 3,
-        CollabType::DatabaseRow => 4,
-        CollabType::UserAwareness => 5,
-        CollabType::Unknown => 6, // not really supported
-      },
+      collab_type: fragment.collab_type,
       content: fragment.content,
       embedding: None,
+    }
+  }
+}
+
+impl From<EmbedFragment> for AFCollabEmbeddingParams {
+  fn from(f: EmbedFragment) -> Self {
+    AFCollabEmbeddingParams {
+      fragment_id: f.fragment_id.into(),
+      object_id: f.object_id,
+      collab_type: f.collab_type,
+      content: f.content,
+      embedding: f.embedding,
     }
   }
 }
@@ -94,7 +99,6 @@ impl PostgresIndexer {
       .iter()
       .map(|fragment| fragment.content.clone())
       .collect();
-    println!("inputs: {:#?}", inputs);
     let resp = self
       .openai
       .embeddings()
@@ -117,12 +121,11 @@ impl PostgresIndexer {
     let mut fragments: Vec<_> = fragments.into_iter().map(EmbedFragment::from).collect();
     for e in resp.data.into_iter() {
       let embedding = match e.embedding {
-        EmbeddingOutput::Float(embedding) => Vector::from(
-          embedding
-            .into_iter()
-            .map(|f| f as f32)
-            .collect::<Vec<f32>>(),
-        ),
+        EmbeddingOutput::Float(embedding) => embedding
+          .into_iter()
+          .map(|f| f as f32)
+          .collect::<Vec<f32>>(),
+
         EmbeddingOutput::Base64(_) => unreachable!("Unexpected base64 encoding"),
       };
       fragments[e.index as usize].embedding = Some(embedding);
@@ -136,20 +139,11 @@ impl PostgresIndexer {
       fragments.len()
     );
     let mut tx = self.db.begin().await?;
-    for f in fragments {
-      sqlx::query(
-        r#"INSERT INTO af_collab_embeddings (fragment_id, oid, partition_key, content, embedding)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (fragment_id) DO UPDATE SET content = $4, embedding = $5"#,
-      )
-      .bind(f.fragment_id)
-      .bind(f.object_id)
-      .bind(f.partition_key as i32)
-      .bind(f.content)
-      .bind(f.embedding)
-      .execute(tx.deref_mut())
-      .await?;
-    }
+    upsert_collab_embeddings(
+      &mut tx,
+      fragments.into_iter().map(EmbedFragment::into).collect(),
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
   }
@@ -165,12 +159,7 @@ impl Indexer for PostgresIndexer {
 
   async fn remove(&self, ids: &[FragmentID]) -> Result<()> {
     let mut tx = self.db.begin().await?;
-    sqlx::query!(
-      "DELETE FROM af_collab_embeddings WHERE fragment_id IN (SELECT unnest($1::text[]))",
-      ids
-    )
-    .execute(tx.deref_mut())
-    .await?;
+    remove_collab_embeddings(&mut tx, ids).await?;
     tx.commit().await?;
     Ok(())
   }

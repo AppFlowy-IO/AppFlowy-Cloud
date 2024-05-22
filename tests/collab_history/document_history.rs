@@ -15,6 +15,8 @@ async fn collab_history_and_snapshot_test() {
   let mut test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let object_id = uuid::Uuid::new_v4().to_string();
+
+  // Using [CollabType::Unknown] for testing purposes.
   let collab_type = CollabType::Unknown;
   test_client
     .create_and_edit_collab_with_data(&object_id, &workspace_id, collab_type.clone(), None)

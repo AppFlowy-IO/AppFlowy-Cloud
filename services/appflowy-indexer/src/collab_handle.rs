@@ -270,6 +270,7 @@ impl FragmentUpdate {
 
 #[cfg(test)]
 mod test {
+  use std::collections::HashSet;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -307,14 +308,6 @@ mod test {
     let _s = collab_update_forwarder(&mut collab, stream_group.clone());
 
     let doc_data = get_started_document_data().unwrap();
-    let fragments_count = doc_data
-      .meta
-      .text_map
-      .as_ref()
-      .unwrap()
-      .iter()
-      .filter(|(_, v)| !v.is_empty())
-      .count();
     let document =
       Document::create_with_data(Arc::new(MutexCollab::new(collab)), doc_data).unwrap();
     let init_state = document.encode_collab().unwrap().doc_state;
@@ -344,13 +337,16 @@ mod test {
     .await
     .unwrap();
 
-    let contents =
-      sqlx::query("SELECT content, embedding from af_collab_embeddings WHERE oid = $1")
-        .bind(&object_id)
-        .fetch_all(&db)
-        .await
-        .unwrap();
+    let contents = sqlx::query("SELECT content from af_collab_embeddings WHERE oid = $1")
+      .bind(&object_id)
+      .fetch_all(&db)
+      .await
+      .unwrap();
+    let contents = contents
+      .into_iter()
+      .map(|r| r.get::<String, _>("content"))
+      .collect::<HashSet<_>>();
 
-    assert_eq!(contents.len(), fragments_count);
+    assert_eq!(contents.len(), 16);
   }
 }

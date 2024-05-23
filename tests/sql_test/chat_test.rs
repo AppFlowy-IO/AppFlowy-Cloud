@@ -100,18 +100,19 @@ async fn chat_message_crud_test(pool: PgPool) {
       .await
       .unwrap();
   }
-  let params = GetChatMessageParams::next_back(3);
-  let mut txn = pool.begin().await.unwrap();
-  let result = select_chat_messages(&mut txn, &chat_id, params)
-    .await
-    .unwrap();
-  txn.commit().await.unwrap();
-
-  assert_eq!(result.messages.len(), 3);
-  assert_eq!(result.messages[0].message_id, 2);
-  assert_eq!(result.messages[1].message_id, 3);
-  assert_eq!(result.messages[2].message_id, 4);
-  assert!(result.has_more);
+  {
+    let params = GetChatMessageParams::next_back(3);
+    let mut txn = pool.begin().await.unwrap();
+    let result = select_chat_messages(&mut txn, &chat_id, params)
+      .await
+      .unwrap();
+    txn.commit().await.unwrap();
+    assert_eq!(result.messages.len(), 3);
+    assert_eq!(result.messages[0].message_id, 3);
+    assert_eq!(result.messages[1].message_id, 4);
+    assert_eq!(result.messages[2].message_id, 5);
+    assert!(result.has_more);
+  }
 
   // get 3 messages: 1,2,3
   {
@@ -123,9 +124,9 @@ async fn chat_message_crud_test(pool: PgPool) {
       .unwrap();
     txn.commit().await.unwrap();
     assert_eq!(result_1.messages.len(), 3);
-    assert_eq!(result_1.messages[0].message_id, 3);
+    assert_eq!(result_1.messages[0].message_id, 1);
     assert_eq!(result_1.messages[1].message_id, 2);
-    assert_eq!(result_1.messages[2].message_id, 1);
+    assert_eq!(result_1.messages[2].message_id, 3);
     assert_eq!(result_1.total, 5);
     assert!(result_1.has_more);
 

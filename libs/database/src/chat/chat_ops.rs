@@ -197,7 +197,7 @@ pub async fn select_chat_messages(
       args.add(params.limit as i64);
     },
     MessageCursor::NextBack => {
-      query += " ORDER BY message_id DESC LIMIT $3";
+      query += " ORDER BY message_id DESC LIMIT $2";
       args.add(params.limit as i64);
     },
   }
@@ -207,7 +207,7 @@ pub async fn select_chat_messages(
       .fetch_all(txn.deref_mut())
       .await?;
 
-  let messages = rows
+  let mut messages = rows
     .into_iter()
     .map(|(message_id, content, created_at, author)| ChatMessage {
       author: serde_json::from_value::<ChatAuthor>(author).unwrap_or_default(),
@@ -216,6 +216,10 @@ pub async fn select_chat_messages(
       created_at,
     })
     .collect::<Vec<ChatMessage>>();
+
+  if matches!(params.cursor, MessageCursor::NextBack) {
+    messages.reverse();
+  }
 
   let total = sqlx::query_scalar!(
     r#"

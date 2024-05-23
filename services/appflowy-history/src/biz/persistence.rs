@@ -26,7 +26,7 @@ impl HistoryPersistence {
     collab_type: CollabType,
   ) -> Result<(), HistoryError> {
     trace!(
-      "[History] save {}:{}: {} snapshots and history to disk",
+      "[History] write {}:{}: {} snapshots and history to disk",
       state.object_id,
       collab_type,
       snapshots.len(),

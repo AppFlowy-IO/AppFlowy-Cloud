@@ -36,7 +36,10 @@ pub async fn create_chat_message(
 ) -> Result<QAChatMessage, AppError> {
   params.validate()?;
   let q = insert_chat_message(pg_pool, ChatAuthor::Human { uid }, chat_id, params.content).await?;
-  Ok(QAChatMessage { q, a: None })
+  Ok(QAChatMessage {
+    question: q,
+    answer: None,
+  })
 }
 
 pub async fn get_chat_messages(

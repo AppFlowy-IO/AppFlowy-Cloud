@@ -617,8 +617,8 @@ pub struct ChatMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QAChatMessage {
-  pub q: ChatMessage,
-  pub a: Option<ChatMessage>,
+  pub question: ChatMessage,
+  pub answer: Option<ChatMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

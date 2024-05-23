@@ -1,18 +1,18 @@
+use std::ops::DerefMut;
+use std::sync::Arc;
+
 use collab::core::collab::MutexCollab;
-use collab::preclude::Collab;
 use collab_entity::CollabType;
+use sqlx::PgPool;
+use uuid::Uuid;
+use yrs::Subscription;
+
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::CollabUpdateEvent;
 use collab_stream::stream_group::StreamGroup;
 use database::collab::insert_into_af_collab;
 use database::user::create_user;
 use database_entity::dto::CollabParams;
-use rand::random;
-use sqlx::{PgPool, Postgres, Transaction};
-use std::ops::DerefMut;
-use std::sync::Arc;
-use uuid::Uuid;
-use yrs::Subscription;
 
 pub fn openai_client() -> openai_dive::v1::api::Client {
   let api_key = std::env::var("APPFLOWY_INDEXER_OPENAI_API_KEY").unwrap();

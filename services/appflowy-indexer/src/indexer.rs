@@ -1,7 +1,5 @@
 use async_trait::async_trait;
 use collab_entity::CollabType;
-use database::index::{remove_collab_embeddings, upsert_collab_embeddings};
-use database_entity::dto::AFCollabEmbeddingParams;
 use openai_dive::v1::api::Client;
 use openai_dive::v1::models::EmbeddingsEngine;
 use openai_dive::v1::resources::embedding::{
@@ -10,10 +8,15 @@ use openai_dive::v1::resources::embedding::{
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
+use database::index::{has_collab_embeddings, remove_collab_embeddings, upsert_collab_embeddings};
+use database_entity::dto::AFCollabEmbeddingParams;
+
 use crate::error::Result;
 
 #[async_trait]
 pub trait Indexer: Send + Sync {
+  /// Check if document with given id has been already a corresponding index entry.
+  async fn was_indexed(&self, object_id: &str) -> Result<bool>;
   async fn update_index(&self, documents: Vec<Fragment>) -> Result<()>;
   async fn remove(&self, ids: &[FragmentID]) -> Result<()>;
 }
@@ -146,6 +149,11 @@ impl PostgresIndexer {
 
 #[async_trait]
 impl Indexer for PostgresIndexer {
+  async fn was_indexed(&self, object_id: &str) -> Result<bool> {
+    let found = has_collab_embeddings(&mut self.db.begin().await?, object_id).await?;
+    Ok(found)
+  }
+
   async fn update_index(&self, documents: Vec<Fragment>) -> Result<()> {
     let embeddings = self.get_embeddings(documents).await?;
     self.store_embeddings(embeddings).await?;
@@ -162,7 +170,6 @@ impl Indexer for PostgresIndexer {
 
 #[cfg(test)]
 mod test {
-  use database::workspace;
   use pgvector::Vector;
   use sqlx::Row;
 
@@ -176,7 +183,7 @@ mod test {
     let db = db_pool().await;
     let object_id = uuid::Uuid::new_v4();
     let uid = rand::random();
-    let workspace_id = setup_collab(&db, uid, object_id, vec![]).await;
+    setup_collab(&db, uid, object_id, vec![]).await;
 
     let openai = openai_client();
 

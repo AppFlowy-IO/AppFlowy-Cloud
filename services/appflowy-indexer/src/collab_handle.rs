@@ -50,6 +50,7 @@ impl CollabHandle {
     ingest_interval: Duration,
   ) -> Result<Option<Self>> {
     let closing = CancellationToken::new();
+    let was_indexed = indexer.was_indexed(&object_id).await?;
     let content: Arc<dyn Indexable> = match collab_type {
       CollabType::Document => {
         let content = Document::from_doc_state(
@@ -58,7 +59,12 @@ impl CollabHandle {
           &object_id,
           vec![],
         )?;
-        let watcher = DocumentWatcher::new(object_id.clone(), workspace_id.clone(), content, true)?;
+        let watcher = DocumentWatcher::new(
+          object_id.clone(),
+          workspace_id.clone(),
+          content,
+          !was_indexed,
+        )?;
         Arc::new(watcher)
       },
       _ => return Ok(None),

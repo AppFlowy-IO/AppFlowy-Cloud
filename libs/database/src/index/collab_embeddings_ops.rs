@@ -5,6 +5,19 @@ use sqlx::Transaction;
 
 use database_entity::dto::AFCollabEmbeddingParams;
 
+pub async fn has_collab_embeddings(
+  tx: &mut Transaction<'_, sqlx::Postgres>,
+  oid: &str,
+) -> Result<bool, sqlx::Error> {
+  let result = sqlx::query!(
+    "SELECT EXISTS(SELECT 1 FROM af_collab_embeddings WHERE oid = $1)",
+    oid
+  )
+  .fetch_one(tx.deref_mut())
+  .await?;
+  Ok(result.exists.unwrap_or(false))
+}
+
 pub async fn upsert_collab_embeddings(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   records: Vec<AFCollabEmbeddingParams>,

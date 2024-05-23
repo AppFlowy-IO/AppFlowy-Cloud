@@ -561,6 +561,7 @@ pub struct UpdateChatParams {
 pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
+  pub require_response: bool,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -612,6 +613,12 @@ pub struct ChatMessage {
   pub message_id: i64,
   pub content: String,
   pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QAChatMessage {
+  pub q: ChatMessage,
+  pub a: Option<ChatMessage>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

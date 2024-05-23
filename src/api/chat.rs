@@ -4,7 +4,7 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
 use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor, QAChatMessage,
   RepeatedChatMessage,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -57,7 +57,7 @@ async fn post_chat_message_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+) -> actix_web::Result<JsonAppResponse<QAChatMessage>> {
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
   let uid = state.user_cache.get_user_uid(&uuid).await?;

@@ -4,8 +4,8 @@ use anyhow::anyhow;
 use app_error::AppError;
 use chrono::{DateTime, Utc};
 use database_entity::dto::{
-  ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-  MessageCursor, RepeatedChatMessage, UpdateChatParams,
+  ChatAuthor, ChatMessage, CreateChatParams, GetChatMessageParams, MessageCursor,
+  RepeatedChatMessage, UpdateChatParams,
 };
 
 use serde_json::json;
@@ -132,7 +132,7 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   author: ChatAuthor,
   chat_id: &str,
-  params: CreateChatMessageParams,
+  content: String,
 ) -> Result<ChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
@@ -143,7 +143,7 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
         "#,
     chat_id,
     json!(author),
-    &params.content,
+    &content,
   )
   .fetch_one(executor)
   .await
@@ -152,7 +152,7 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
   let chat_message = ChatMessage {
     author,
     message_id: row.message_id,
-    content: params.content,
+    content,
     created_at: row.created_at,
   };
   Ok(chat_message)

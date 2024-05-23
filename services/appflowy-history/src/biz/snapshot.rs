@@ -44,7 +44,17 @@ impl SnapshotGenerator {
     // keep it simple for now. we just compare the update count to determine if we need to generate a snapshot.
     // in the future, we can use a more sophisticated algorithm to determine when to generate a snapshot.
     let threshold = gen_snapshot_threshold(&self.collab_type);
+    // trace!(
+    //   "[History] did_apply_update: object_id={}, current={}, threshold={}",
+    //   self.object_id,
+    //   prev_apply_update_count,
+    //   threshold,
+    // );
     if prev_apply_update_count + 1 >= threshold {
+      self
+        .apply_update_count
+        .store(0, std::sync::atomic::Ordering::SeqCst);
+
       let pending_snapshots = self.pending_snapshots.clone();
       let mutex_collab = self.mutex_collab.clone();
       let object_id = self.object_id.clone();
@@ -62,9 +72,6 @@ impl SnapshotGenerator {
           warn!("collab is dropped. cannot generate snapshot")
         }
       });
-      self
-        .apply_update_count
-        .store(0, std::sync::atomic::Ordering::SeqCst);
     }
   }
 }

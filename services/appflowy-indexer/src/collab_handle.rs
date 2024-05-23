@@ -312,15 +312,15 @@ mod test {
     };
     let db = db_pool().await;
 
-    let mut tx = db.begin().await.unwrap();
-    let workspace_id = setup_collab(&mut tx, uid, object_id, doc_state.clone()).await;
-    tx.commit().await.unwrap();
+    let workspace_id = setup_collab(&db, uid, object_id, doc_state.clone()).await;
+
+    let object_id = object_id.to_string();
 
     let openai = openai_client();
     let indexer: Arc<dyn Indexer> = Arc::new(PostgresIndexer::new(openai, db));
 
     let stream_group = redis_stream
-      .collab_update_stream(&workspace_id.to_string(), &object_id.to_string(), "indexer")
+      .collab_update_stream(&workspace_id.to_string(), &object_id, "indexer")
       .await
       .unwrap();
 
@@ -329,7 +329,7 @@ mod test {
     let _handle = CollabHandle::open(
       &redis_stream,
       indexer.clone(),
-      object_id.to_string(),
+      object_id.clone(),
       workspace_id.to_string(),
       CollabType::Document,
       doc_state,
@@ -345,7 +345,7 @@ mod test {
     let tx = db.begin().await.unwrap();
     let records = sqlx::query!(
       "SELECT oid FROM af_collab_embeddings WHERE oid = $1",
-      &object_id.to_string()
+      &object_id
     )
     .fetch_all(&db)
     .await

@@ -162,29 +162,31 @@ impl Indexer for PostgresIndexer {
 
 #[cfg(test)]
 mod test {
+  use database::workspace;
   use pgvector::Vector;
   use sqlx::Row;
 
   use crate::indexer::{Indexer, PostgresIndexer};
-  use crate::test_utils::{db_pool, openai_client};
+  use crate::test_utils::{db_pool, openai_client, setup_collab};
 
   #[tokio::test]
   async fn test_indexing_embeddings() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let db = db_pool().await;
+    let object_id = uuid::Uuid::new_v4();
+    let uid = rand::random();
+    let workspace_id = setup_collab(&db, uid, object_id, vec![]).await;
+
     let openai = openai_client();
 
     let indexer = PostgresIndexer::new(openai, db);
 
     let fragment_id = uuid::Uuid::new_v4().to_string();
-    let object_id = uuid::Uuid::new_v4().to_string();
-    let user_id = uuid::Uuid::new_v4();
-    let workspace_id = uuid::Uuid::new_v4().to_string();
 
     let fragments = vec![super::Fragment {
       fragment_id: fragment_id.clone(),
-      object_id: object_id.clone(),
+      object_id: object_id.to_string(),
       collab_type: collab_entity::CollabType::Document,
       content: "Hello, world!".to_string(),
     }];
@@ -221,7 +223,5 @@ mod test {
         .fetch_one(&mut *tx)
         .await;
     assert!(row.is_err());
-
-    tx.commit().await.unwrap();
   }
 }

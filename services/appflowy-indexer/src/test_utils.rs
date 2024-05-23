@@ -27,13 +27,13 @@ pub async fn db_pool() -> PgPool {
     .expect("failed to connect to database")
 }
 
-pub async fn setup_collab(
-  tx: &mut Transaction<'_, Postgres>,
-  uid: i64,
-  object_id: Uuid,
-  encoded_collab: Vec<u8>,
-) -> Uuid {
+pub async fn setup_collab(db: &PgPool, uid: i64, object_id: Uuid, encoded_collab: Vec<u8>) -> Uuid {
+  let mut tx = db.begin().await.unwrap();
   let user_uuid = Uuid::new_v4();
+  sqlx::query!("INSERT INTO auth.users(id) VALUES($1)", &user_uuid)
+    .execute(tx.deref_mut())
+    .await
+    .unwrap();
   let workspace_id = create_user(
     tx.deref_mut(),
     uid,
@@ -44,13 +44,14 @@ pub async fn setup_collab(
   .await
   .unwrap();
   insert_into_af_collab(
-    tx,
+    &mut tx,
     &uid,
     &workspace_id.to_string(),
     &CollabParams::new(object_id.clone(), CollabType::Document, encoded_collab),
   )
   .await
   .unwrap();
+  tx.commit().await.unwrap();
   workspace_id
 }
 

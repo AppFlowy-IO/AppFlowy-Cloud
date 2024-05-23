@@ -265,9 +265,15 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     warn!("Failed to remove all connected users: {:?}", err);
   }
 
+  let openai = config
+    .openai_api_key
+    .clone()
+    .map(|key| openai_dive::v1::api::Client::new(key.expose_secret().clone()));
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
+    openai,
     config: Arc::new(config.clone()),
     user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),

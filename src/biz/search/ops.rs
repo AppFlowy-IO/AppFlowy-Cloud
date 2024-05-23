@@ -1,0 +1,75 @@
+use app_error::ErrorCode;
+use database::index::{search_documents, SearchDocumentParams};
+use openai_dive::v1::models::EmbeddingsEngine;
+use openai_dive::v1::resources::embedding::{
+  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
+};
+use shared_entity::dto::search_dto::{
+  SearchDocumentRequest, SearchDocumentResponse, SearchDocumentResponseItem,
+};
+use shared_entity::response::AppResponseError;
+use sqlx::PgPool;
+use uuid::Uuid;
+
+pub async fn search_document(
+  pg_pool: &PgPool,
+  openai: &openai_dive::v1::api::Client,
+  uid: i64,
+  request: SearchDocumentRequest,
+) -> Result<SearchDocumentResponse, AppResponseError> {
+  let workspace_id = Uuid::parse_str(&request.workspace_id)?;
+  let embeddings = openai
+    .embeddings()
+    .create(EmbeddingParameters {
+      input: EmbeddingInput::String(request.query),
+      model: EmbeddingsEngine::TextEmbedding3Small.to_string(),
+      encoding_format: Some(EmbeddingEncodingFormat::Float),
+      dimensions: Some(1536), // text-embedding-3-small default number of dimensions
+      user: None,
+    })
+    .await
+    .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
+
+  let embedding = embeddings
+    .data
+    .get(0)
+    .ok_or_else(|| AppResponseError::new(ErrorCode::Internal, "OpenAI returned no embeddings"))?;
+  let embedding = match &embedding.embedding {
+    EmbeddingOutput::Float(vector) => vector.iter().map(|&v| v as f32).collect(),
+    EmbeddingOutput::Base64(_) => {
+      return Err(AppResponseError::new(
+        ErrorCode::Internal,
+        "OpenAI returned no embeddings in unsupported format",
+      ))
+    },
+  };
+
+  let mut tx = pg_pool
+    .begin()
+    .await
+    .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
+  let results = search_documents(
+    &mut tx,
+    SearchDocumentParams {
+      user_id: uid,
+      workspace_id,
+      limit: request.limit.unwrap_or(5) as i32,
+      preview: request.preview_size.unwrap_or(50) as i32,
+      embedding,
+    },
+  )
+  .await?;
+  Ok(SearchDocumentResponse {
+    data: results
+      .into_iter()
+      .map(|item| SearchDocumentResponseItem {
+        object_id: item.object_id,
+        workspace_id: item.workpace_id.to_string(),
+        score: item.score,
+        preview: item.content_preview,
+        created_by: item.created_by,
+        created_at: item.created_at,
+      })
+      .collect(),
+  })
+}

@@ -214,6 +214,7 @@ mod test {
   use collab::core::transaction::DocTransactionExtension;
   use collab::preclude::Collab;
   use collab_document::document::Document;
+  use collab_document::document_data::default_document_data;
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
   use serde_json::json;
@@ -243,7 +244,7 @@ mod test {
     );
     collab.initialize();
     let collab = Arc::new(MutexCollab::new(collab));
-    let doc_data = get_started_document_data().unwrap();
+    let doc_data = default_document_data();
 
     let text_id = doc_data
       .meta
@@ -258,9 +259,7 @@ mod test {
     let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
     let doc_state: Vec<u8> = document.encode_collab().unwrap().doc_state.into();
 
-    let mut tx = db.begin().await.unwrap();
-    let workspace_id = setup_collab(&mut tx, uid, object_id, doc_state.clone()).await;
-    tx.commit().await.unwrap();
+    let workspace_id = setup_collab(&db, uid, object_id, doc_state.clone()).await;
 
     let indexer = Arc::new(PostgresIndexer::new(openai, db.clone()));
 
@@ -309,7 +308,7 @@ mod test {
       .await
       .unwrap();
 
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
     assert!(
       !consumer.handles.contains_key(&object_id.to_string()),
       "in reaction to close control event, a corresponding handle should be destroyed"
@@ -323,7 +322,7 @@ mod test {
     .await
     .unwrap();
 
-    assert_eq!(contents.len(), 1);
+    assert_eq!(contents.len(), 16);
     assert_eq!(contents[0].content.as_deref(), Some("test-value"));
   }
 }

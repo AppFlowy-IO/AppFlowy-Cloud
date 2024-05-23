@@ -561,7 +561,7 @@ pub struct UpdateChatParams {
 pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
-  pub require_response: bool,
+  pub require_answer: bool,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

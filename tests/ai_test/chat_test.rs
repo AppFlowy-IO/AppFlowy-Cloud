@@ -23,7 +23,7 @@ async fn create_chat_and_create_messages_test() {
   for i in 0..10 {
     let params = CreateChatMessageParams {
       content: format!("hello world {}", i),
-      require_response: false,
+      require_answer: false,
     };
     let message = test_client
       .api_client

@@ -1,17 +1,14 @@
-use std::ops::DerefMut;
-
 use async_trait::async_trait;
 use collab_entity::CollabType;
-use database::index::{
-  remove_collab_embeddings, upsert_collab_embeddings, AFCollabEmbeddingParams,
-};
+use database::index::{remove_collab_embeddings, upsert_collab_embeddings};
+use database_entity::dto::AFCollabEmbeddingParams;
 use openai_dive::v1::api::Client;
 use openai_dive::v1::models::EmbeddingsEngine;
 use openai_dive::v1::resources::embedding::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::{Executor, PgPool, QueryBuilder};
+use sqlx::PgPool;
 
 use crate::error::Result;
 
@@ -75,8 +72,6 @@ impl From<EmbedFragment> for AFCollabEmbeddingParams {
     }
   }
 }
-
-pub type Embedding = Vec<f64>;
 
 pub struct PostgresIndexer {
   openai: Client,

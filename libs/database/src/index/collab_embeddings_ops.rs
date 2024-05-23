@@ -1,15 +1,9 @@
-use collab_entity::CollabType;
-use pgvector::Vector;
-use sqlx::Transaction;
 use std::ops::DerefMut;
 
-pub struct AFCollabEmbeddingParams {
-  pub fragment_id: String,
-  pub object_id: String,
-  pub collab_type: CollabType,
-  pub content: String,
-  pub embedding: Option<Vec<f32>>,
-}
+use pgvector::Vector;
+use sqlx::Transaction;
+
+use database_entity::dto::AFCollabEmbeddingParams;
 
 pub async fn upsert_collab_embeddings(
   tx: &mut Transaction<'_, sqlx::Postgres>,

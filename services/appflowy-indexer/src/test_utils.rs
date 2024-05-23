@@ -1,8 +1,17 @@
+use collab::core::collab::MutexCollab;
 use collab::preclude::Collab;
+use collab_entity::CollabType;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::CollabUpdateEvent;
 use collab_stream::stream_group::StreamGroup;
-use sqlx::PgPool;
+use database::collab::insert_into_af_collab;
+use database::user::create_user;
+use database_entity::dto::CollabParams;
+use rand::random;
+use sqlx::{PgPool, Postgres, Transaction};
+use std::ops::DerefMut;
+use std::sync::Arc;
+use uuid::Uuid;
 use yrs::Subscription;
 
 pub fn openai_client() -> openai_dive::v1::api::Client {
@@ -18,6 +27,33 @@ pub async fn db_pool() -> PgPool {
     .expect("failed to connect to database")
 }
 
+pub async fn setup_collab(
+  tx: &mut Transaction<'_, Postgres>,
+  uid: i64,
+  object_id: Uuid,
+  encoded_collab: Vec<u8>,
+) -> Uuid {
+  let user_uuid = Uuid::new_v4();
+  let workspace_id = create_user(
+    tx.deref_mut(),
+    uid,
+    &user_uuid,
+    &format!("{user_uuid}@test.email"),
+    &user_uuid.to_string(),
+  )
+  .await
+  .unwrap();
+  insert_into_af_collab(
+    tx,
+    &uid,
+    &workspace_id.to_string(),
+    &CollabParams::new(object_id.clone(), CollabType::Document, encoded_collab),
+  )
+  .await
+  .unwrap();
+  workspace_id
+}
+
 pub async fn redis_client() -> redis::Client {
   let redis_uri =
     std::env::var("APPFLOWY_INDEXER_REDIS_URL").unwrap_or("redis://localhost:6379".to_string());
@@ -31,14 +67,15 @@ pub async fn redis_stream() -> CollabRedisStream {
     .expect("failed to create stream client")
 }
 
-pub fn collab_update_forwarder(collab: &mut Collab, mut stream: StreamGroup) -> Subscription {
+pub fn collab_update_forwarder(collab: Arc<MutexCollab>, mut stream: StreamGroup) -> Subscription {
   let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
   tokio::spawn(async move {
     while let Some(data) = rx.recv().await {
       stream.insert_message(data).await.unwrap();
     }
   });
-  collab
+  let lock = collab.lock();
+  lock
     .get_doc()
     .observe_update_v1(move |_, e| {
       let e = CollabUpdateEvent::UpdateV1 {

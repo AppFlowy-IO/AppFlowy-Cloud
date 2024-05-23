@@ -207,14 +207,20 @@ impl Drop for OpenCollabConsumer {
 mod test {
   use crate::consumer::OpenCollabConsumer;
   use crate::indexer::PostgresIndexer;
-  use crate::test_utils::{collab_update_forwarder, db_pool, openai_client, redis_stream};
+  use crate::test_utils::{
+    collab_update_forwarder, db_pool, openai_client, redis_stream, setup_collab,
+  };
+  use collab::core::collab::MutexCollab;
   use collab::core::transaction::DocTransactionExtension;
   use collab::preclude::Collab;
+  use collab_document::document::Document;
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
+  use serde_json::json;
   use sqlx::PgPool;
   use std::sync::Arc;
   use std::time::Duration;
+  use workspace_template::document::get_started::get_started_document_data;
   use yrs::Map;
 
   #[tokio::test]
@@ -222,14 +228,40 @@ mod test {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let redis_stream = redis_stream().await;
-    let workspace_id = uuid::Uuid::new_v4().to_string();
-    let object_id = uuid::Uuid::new_v4().to_string();
+    let uid = rand::random();
+    let object_id = uuid::Uuid::new_v4();
 
     let db = db_pool().await;
     let openai = openai_client();
 
-    let mut collab = Collab::new(1, object_id.clone(), "device-1".to_string(), vec![], false);
+    let mut collab = Collab::new(
+      uid,
+      object_id.to_string(),
+      "device-1".to_string(),
+      vec![],
+      false,
+    );
     collab.initialize();
+    let collab = Arc::new(MutexCollab::new(collab));
+    let doc_data = get_started_document_data().unwrap();
+
+    let text_id = doc_data
+      .meta
+      .text_map
+      .as_ref()
+      .unwrap()
+      .iter()
+      .next()
+      .unwrap()
+      .0
+      .clone();
+    let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
+    let doc_state: Vec<u8> = document.encode_collab().unwrap().doc_state.into();
+
+    let mut tx = db.begin().await.unwrap();
+    let workspace_id = setup_collab(&mut tx, uid, object_id, doc_state.clone()).await;
+    tx.commit().await.unwrap();
+
     let indexer = Arc::new(PostgresIndexer::new(openai, db.clone()));
 
     let mut control_stream = redis_stream
@@ -238,14 +270,11 @@ mod test {
       .unwrap();
 
     let update_stream = redis_stream
-      .collab_update_stream(&workspace_id, &object_id, "indexer")
+      .collab_update_stream(&workspace_id.to_string(), &object_id.to_string(), "indexer")
       .await
       .unwrap();
 
-    let _s = collab_update_forwarder(&mut collab, update_stream.clone());
-    let doc = collab.get_doc();
-    let init_state = doc.get_encoded_collab_v1().doc_state;
-    let data_ref = doc.get_or_insert_map("data");
+    let _s = collab_update_forwarder(collab.clone(), update_stream.clone());
     let consumer = OpenCollabConsumer::new(
       redis_stream,
       indexer.clone(),
@@ -257,40 +286,38 @@ mod test {
 
     control_stream
       .insert_message(CollabControlEvent::Open {
-        workspace_id: workspace_id.clone(),
-        object_id: object_id.clone(),
+        workspace_id: workspace_id.to_string(),
+        object_id: object_id.to_string(),
         collab_type: CollabType::Document,
-        doc_state: init_state.into(),
+        doc_state,
       })
       .await
       .unwrap();
 
-    collab.with_origin_transact_mut(|txn| {
-      data_ref.insert(txn, "test-key", "test-value");
-    });
+    document.apply_text_delta(&text_id, json!({"insert": "test-value"}).to_string());
 
     tokio::time::sleep(Duration::from_millis(500)).await;
     assert!(
-      consumer.handles.contains_key(&object_id),
+      consumer.handles.contains_key(&object_id.to_string()),
       "in reaction to open control event, a corresponding handle should be created"
     );
 
     control_stream
       .insert_message(CollabControlEvent::Close {
-        object_id: object_id.clone(),
+        object_id: object_id.to_string(),
       })
       .await
       .unwrap();
 
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert!(
-      !consumer.handles.contains_key(&object_id),
+      !consumer.handles.contains_key(&object_id.to_string()),
       "in reaction to close control event, a corresponding handle should be destroyed"
     );
 
     let contents = sqlx::query!(
       "SELECT content from af_collab_embeddings WHERE oid = $1",
-      object_id
+      object_id.to_string()
     )
     .fetch_all(&db)
     .await

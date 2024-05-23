@@ -10,7 +10,7 @@ use collab::preclude::updates::decoder::Decode;
 use collab::preclude::Update;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use futures::{Stream, StreamExt, TryFutureExt};
+use futures::{Stream, StreamExt};
 use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::interval;
@@ -284,41 +284,55 @@ mod test {
 
   use crate::collab_handle::CollabHandle;
   use crate::indexer::{Indexer, PostgresIndexer};
-  use crate::test_utils::{collab_update_forwarder, db_pool, openai_client, redis_stream};
+  use crate::test_utils::{
+    collab_update_forwarder, db_pool, openai_client, redis_stream, setup_collab,
+  };
 
   #[tokio::test]
   async fn test_indexing_for_new_initialized_document() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let redis_stream = redis_stream().await;
-    let workspace_id = uuid::Uuid::new_v4().to_string();
-    let object_id = uuid::Uuid::new_v4().to_string();
+    let uid = rand::random();
+    let object_id = uuid::Uuid::new_v4();
 
-    let mut collab = Collab::new(1, object_id.clone(), "device-1".to_string(), vec![], false);
+    let mut collab = Collab::new(
+      uid,
+      object_id.to_string(),
+      "device-1".to_string(),
+      vec![],
+      false,
+    );
     collab.initialize();
+    let mut collab = Arc::new(MutexCollab::new(collab));
+    let doc_state: Vec<u8> = {
+      let doc_data = get_started_document_data().unwrap();
+      let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
+      document.encode_collab().unwrap().doc_state.into()
+    };
     let db = db_pool().await;
+
+    let mut tx = db.begin().await.unwrap();
+    let workspace_id = setup_collab(&mut tx, uid, object_id, doc_state.clone()).await;
+    tx.commit().await.unwrap();
+
     let openai = openai_client();
     let indexer: Arc<dyn Indexer> = Arc::new(PostgresIndexer::new(openai, db));
 
     let stream_group = redis_stream
-      .collab_update_stream(&workspace_id, &object_id, "indexer")
+      .collab_update_stream(&workspace_id.to_string(), &object_id.to_string(), "indexer")
       .await
       .unwrap();
 
-    let _s = collab_update_forwarder(&mut collab, stream_group.clone());
-
-    let doc_data = get_started_document_data().unwrap();
-    let document =
-      Document::create_with_data(Arc::new(MutexCollab::new(collab)), doc_data).unwrap();
-    let init_state = document.encode_collab().unwrap().doc_state;
+    let _s = collab_update_forwarder(collab, stream_group.clone());
 
     let _handle = CollabHandle::open(
       &redis_stream,
       indexer.clone(),
-      object_id.clone(),
-      workspace_id.clone(),
+      object_id.to_string(),
+      workspace_id.to_string(),
       CollabType::Document,
-      init_state.into(),
+      doc_state,
       Duration::from_millis(50),
     )
     .await
@@ -331,7 +345,7 @@ mod test {
     let tx = db.begin().await.unwrap();
     let records = sqlx::query!(
       "SELECT oid FROM af_collab_embeddings WHERE oid = $1",
-      object_id
+      &object_id.to_string()
     )
     .fetch_all(&db)
     .await

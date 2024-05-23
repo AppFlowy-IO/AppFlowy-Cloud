@@ -688,3 +688,12 @@ impl ChatAuthor {
     }
   }
 }
+
+#[derive(Debug, Clone)]
+pub struct AFCollabEmbeddingParams {
+  pub fragment_id: String,
+  pub object_id: String,
+  pub collab_type: CollabType,
+  pub content: String,
+  pub embedding: Option<Vec<f32>>,
+}

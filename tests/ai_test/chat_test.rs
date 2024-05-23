@@ -1,5 +1,5 @@
 use client_api_test::TestClient;
-use database_entity::dto::{CreateChatMessageParams, CreateChatParams, MessageOffset};
+use database_entity::dto::{CreateChatMessageParams, CreateChatParams, MessageCursor};
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -39,7 +39,7 @@ async fn create_chat_and_create_messages_test() {
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageOffset::BeforeMessageId(messages[2].message_id),
+      MessageCursor::BeforeMessageId(messages[2].message_id),
       10,
     )
     .await
@@ -62,7 +62,7 @@ async fn create_chat_and_create_messages_test() {
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageOffset::AfterMessageId(messages[2].message_id),
+      MessageCursor::AfterMessageId(messages[2].message_id),
       2,
     )
     .await
@@ -84,7 +84,7 @@ async fn create_chat_and_create_messages_test() {
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageOffset::AfterMessageId(messages[7].message_id),
+      MessageCursor::AfterMessageId(messages[7].message_id),
       100,
     )
     .await

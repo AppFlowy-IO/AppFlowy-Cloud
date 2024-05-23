@@ -565,37 +565,45 @@ pub struct CreateChatMessageParams {
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct GetChatMessageParams {
-  pub offset: MessageOffset,
+  pub cursor: MessageCursor,
   pub limit: u64,
 }
 
 impl GetChatMessageParams {
   pub fn offset(offset: u64, limit: u64) -> Self {
     Self {
-      offset: MessageOffset::Offset(offset),
+      cursor: MessageCursor::Offset(offset),
       limit,
     }
   }
 
   pub fn after_message_id(after_message_id: i64, limit: u64) -> Self {
     Self {
-      offset: MessageOffset::AfterMessageId(after_message_id),
+      cursor: MessageCursor::AfterMessageId(after_message_id),
       limit,
     }
   }
   pub fn before_message_id(before_message_id: i64, limit: u64) -> Self {
     Self {
-      offset: MessageOffset::BeforeMessageId(before_message_id),
+      cursor: MessageCursor::BeforeMessageId(before_message_id),
+      limit,
+    }
+  }
+
+  pub fn next_back(limit: u64) -> Self {
+    Self {
+      cursor: MessageCursor::NextBack,
       limit,
     }
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MessageOffset {
+pub enum MessageCursor {
   Offset(u64),
   AfterMessageId(i64),
   BeforeMessageId(i64),
+  NextBack,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

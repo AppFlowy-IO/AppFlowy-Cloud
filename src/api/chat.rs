@@ -4,7 +4,7 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
 use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageOffset,
+  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
   RepeatedChatMessage,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -72,18 +72,20 @@ async fn get_chat_message_handler(
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<RepeatedChatMessage>> {
   let mut params = GetChatMessageParams {
-    offset: MessageOffset::Offset(0),
+    cursor: MessageCursor::Offset(0),
     limit: query
       .get("limit")
       .and_then(|s| s.parse::<u64>().ok())
       .unwrap_or(10),
   };
   if let Some(value) = query.get("offset").and_then(|s| s.parse::<u64>().ok()) {
-    params.offset = MessageOffset::Offset(value);
+    params.cursor = MessageCursor::Offset(value);
   } else if let Some(value) = query.get("after").and_then(|s| s.parse::<i64>().ok()) {
-    params.offset = MessageOffset::AfterMessageId(value);
+    params.cursor = MessageCursor::AfterMessageId(value);
   } else if let Some(value) = query.get("before").and_then(|s| s.parse::<i64>().ok()) {
-    params.offset = MessageOffset::BeforeMessageId(value);
+    params.cursor = MessageCursor::BeforeMessageId(value);
+  } else {
+    params.cursor = MessageCursor::NextBack;
   }
 
   trace!("get chat messages: {:?}", params);

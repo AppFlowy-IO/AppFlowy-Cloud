@@ -5,7 +5,7 @@ use app_error::AppError;
 use chrono::{DateTime, Utc};
 use database_entity::dto::{
   ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-  MessageOffset, RepeatedChatMessage, UpdateChatParams,
+  MessageCursor, RepeatedChatMessage, UpdateChatParams,
 };
 
 use serde_json::json;
@@ -178,22 +178,26 @@ pub async fn select_chat_messages(
   // AfterMessageId(3, 5):   [4]  [5]  has_more = false
   // BeforeMessageId(3, 5):  [1]  [2]  has_more = false
   // Offset(3, 5):           [4]  [5]  has_more = true
-  match params.offset {
-    MessageOffset::AfterMessageId(after_message_id) => {
+  match params.cursor {
+    MessageCursor::AfterMessageId(after_message_id) => {
       query += " AND message_id > $2";
       args.add(after_message_id);
       query += " ORDER BY message_id ASC LIMIT $3";
       args.add(params.limit as i64);
     },
-    MessageOffset::Offset(offset) => {
+    MessageCursor::Offset(offset) => {
       query += " ORDER BY message_id ASC LIMIT $2 OFFSET $3";
       args.add(params.limit as i64);
       args.add(offset as i64);
     },
-    MessageOffset::BeforeMessageId(before_message_id) => {
+    MessageCursor::BeforeMessageId(before_message_id) => {
       query += " AND message_id < $2";
       args.add(before_message_id);
       query += " ORDER BY message_id ASC LIMIT $3";
+      args.add(params.limit as i64);
+    },
+    MessageCursor::NextBack => {
+      query += " ORDER BY message_id DESC LIMIT $3";
       args.add(params.limit as i64);
     },
   }
@@ -225,8 +229,8 @@ pub async fn select_chat_messages(
   .await?
   .unwrap_or(0);
 
-  let has_more = match params.offset {
-    MessageOffset::AfterMessageId(_) => {
+  let has_more = match params.cursor {
+    MessageCursor::AfterMessageId(_) => {
       if messages.is_empty() {
         false
       } else {
@@ -241,8 +245,8 @@ pub async fn select_chat_messages(
         .unwrap_or(false)
       }
     },
-    MessageOffset::Offset(offset) => (offset + params.limit) < total as u64,
-    MessageOffset::BeforeMessageId(_) => {
+    MessageCursor::Offset(offset) => (offset + params.limit) < total as u64,
+    MessageCursor::BeforeMessageId(_) => {
       if messages.is_empty() {
         false
       } else {
@@ -257,6 +261,7 @@ pub async fn select_chat_messages(
         .unwrap_or(false)
       }
     },
+    MessageCursor::NextBack => params.limit < total as u64,
   };
 
   Ok(RepeatedChatMessage {

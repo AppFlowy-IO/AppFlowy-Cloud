@@ -542,10 +542,7 @@ impl From<i16> for AFWorkspaceInvitationStatus {
 pub struct CreateChatParams {
   #[validate(custom = "validate_not_empty_str")]
   pub chat_id: String,
-
-  #[validate(custom = "validate_not_empty_str")]
   pub name: String,
-
   pub rag_ids: Vec<String>,
 }
 

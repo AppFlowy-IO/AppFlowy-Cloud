@@ -61,7 +61,7 @@ async fn post_chat_message_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  trace!("create chat:{} message: {:?}", chat_id, params);
+  trace!("insert chat message into {}", chat_id);
   let message = create_chat_message(&state.pg_pool, uid, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(message).into())
 }

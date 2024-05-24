@@ -4,6 +4,7 @@ pub mod gotrue;
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
 
+#[cfg(feature = "appflowy_ai_error")]
 use appflowy_ai_client::error::AIError;
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -319,8 +320,8 @@ impl actix_web::error::ResponseError for AppError {
 }
 
 #[cfg(feature = "appflowy_ai_error")]
-impl From<appflowy_ai_client::error::AIError> for AppError {
-  fn from(err: appflowy_ai_client::error::AIError) -> Self {
+impl From<AIError> for AppError {
+  fn from(err: AIError) -> Self {
     match err {
       AIError::Internal(err) => AppError::Internal(err),
       AIError::RequestTimeout(err) => AppError::RequestTimeout(err),

@@ -59,12 +59,7 @@ impl CollabHandle {
           &object_id,
           vec![],
         )?;
-        let watcher = DocumentWatcher::new(
-          object_id.clone(),
-          workspace_id.clone(),
-          content,
-          !was_indexed,
-        )?;
+        let watcher = DocumentWatcher::new(object_id.clone(), content, !was_indexed)?;
         Arc::new(watcher)
       },
       _ => return Ok(None),
@@ -87,7 +82,6 @@ impl CollabHandle {
       Arc::downgrade(&content),
       object_id.clone(),
       workspace_id.clone(),
-      collab_type.clone(),
       ingest_interval,
       closing.clone(),
     ));
@@ -96,7 +90,6 @@ impl CollabHandle {
       indexer,
       object_id,
       workspace_id,
-      collab_type,
       ingest_interval,
       closing.clone(),
     ));
@@ -116,7 +109,6 @@ impl CollabHandle {
     content: Weak<dyn Indexable>,
     object_id: String,
     workspace_id: String,
-    collab_type: CollabType,
     ingest_interval: Duration,
     closing: CancellationToken,
   ) {
@@ -124,7 +116,7 @@ impl CollabHandle {
     loop {
       select! {
         _ = closing.cancelled() => {
-          tracing::trace!("closing signal received, stopping consumer");
+          tracing::trace!("document {}/{} watcher cancelled, stopping.", workspace_id, object_id);
           return;
         },
         _ = interval.tick() => {
@@ -137,7 +129,7 @@ impl CollabHandle {
                 // check if we received empty message batch, if not: update the collab
                 if !messages.is_empty() {
                   if let Err(err) = Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await {
-                    tracing::error!("failed to handle messages: {}", err);
+                    tracing::error!("document {}/{} watcher failed to handle updates: {}", workspace_id, object_id, err);
                   }
                 }
               } else {
@@ -146,7 +138,7 @@ impl CollabHandle {
               }
             },
             Err(err) => {
-              tracing::error!("failed to receive messages: {}", err);
+              tracing::error!("document {}/{} watcher failed to receive messages: {}", workspace_id, object_id, err);
             },
           }
         }
@@ -184,7 +176,6 @@ impl CollabHandle {
     indexer: Arc<dyn Indexer>,
     object_id: String,
     workspace_id: String,
-    collab_type: CollabType,
     ingest_interval: Duration,
     token: CancellationToken,
   ) {
@@ -197,13 +188,13 @@ impl CollabHandle {
           _ = interval.tick() => {
               match Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
                 Ok(_) => last_update = Instant::now(),
-                Err(err) => tracing::error!("failed to publish fragment updates: {}", err),
+                Err(err) => tracing::error!("document {}/{} watcher failed to publish fragment updates: {}", workspace_id, object_id, err),
               }
           }
           _ = token.cancelled() => {
-            tracing::trace!("closing signal received, flushing remaining updates");
+            tracing::trace!("document {}/{} watcher closing signal received, flushing remaining updates", workspace_id, object_id);
             if let Err(err) = Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
-              tracing::error!("failed to publish fragment updates: {}", err);
+              tracing::error!("document {}/{} watcher failed to publish fragment updates: {}", workspace_id, object_id, err);
             }
             return;
           },
@@ -226,7 +217,7 @@ impl CollabHandle {
             if now.duration_since(last_update) > ingest_interval {
               match Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
                 Ok(_) => last_update = now,
-                Err(err) => tracing::error!("failed to publish fragment updates: {}", err),
+                Err(err) => tracing::error!("document {}/{} watcher failed to publish fragment updates: {}", workspace_id, object_id, err),
               }
             }
         }
@@ -259,19 +250,11 @@ impl CollabHandle {
   }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum FragmentUpdate {
   Update(Fragment),
   Removed(FragmentID),
-}
-
-impl FragmentUpdate {
-  pub fn fragment_id(&self) -> &FragmentID {
-    match self {
-      FragmentUpdate::Update(doc) => &doc.fragment_id,
-      FragmentUpdate::Removed(id) => id,
-    }
-  }
 }
 
 #[cfg(test)]
@@ -310,7 +293,7 @@ mod test {
       false,
     );
     collab.initialize();
-    let mut collab = Arc::new(MutexCollab::new(collab));
+    let collab = Arc::new(MutexCollab::new(collab));
     let doc_state: Vec<u8> = {
       let doc_data = get_started_document_data().unwrap();
       let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
@@ -347,15 +330,6 @@ mod test {
     tokio::time::sleep(Duration::from_millis(2000)).await;
 
     let db = db_pool().await;
-
-    let tx = db.begin().await.unwrap();
-    let records = sqlx::query!(
-      "SELECT oid FROM af_collab_embeddings WHERE oid = $1",
-      &object_id
-    )
-    .fetch_all(&db)
-    .await
-    .unwrap();
 
     let contents = sqlx::query("SELECT content from af_collab_embeddings WHERE oid = $1")
       .bind(&object_id)

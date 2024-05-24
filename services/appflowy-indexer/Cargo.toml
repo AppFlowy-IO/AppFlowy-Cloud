@@ -8,9 +8,6 @@ edition = "2021"
 name = "appflowy_indexer"
 path = "src/main.rs"
 
-[lib]
-path = "src/lib.rs"
-
 [dependencies]
 collab.workspace = true
 collab-entity.workspace = true

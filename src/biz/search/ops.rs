@@ -32,7 +32,7 @@ pub async fn search_document(
 
   let embedding = embeddings
     .data
-    .get(0)
+    .first()
     .ok_or_else(|| AppResponseError::new(ErrorCode::Internal, "OpenAI returned no embeddings"))?;
   let embedding = match &embedding.embedding {
     EmbeddingOutput::Float(vector) => vector.iter().map(|&v| v as f32).collect(),

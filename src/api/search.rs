@@ -26,6 +26,6 @@ async fn document_search(
     Some(openai) => openai,
     None => return Err(AppError::Internal(anyhow!("OpenAI API key not configured")).into()),
   };
-  let resp = search_document(&state.pg_pool, &openai, uid, request).await?;
+  let resp = search_document(&state.pg_pool, openai, uid, request).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }

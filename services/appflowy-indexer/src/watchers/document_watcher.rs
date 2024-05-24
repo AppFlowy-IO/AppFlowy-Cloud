@@ -9,9 +9,7 @@ use collab_document::document::Document;
 use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures::Stream;
-use redis::Commands;
 use tokio::sync::watch::Sender;
-use yrs::{GetString, Map, ReadTxn};
 
 use crate::collab_handle::{FragmentUpdate, Indexable};
 use crate::error::Result;
@@ -19,7 +17,6 @@ use crate::indexer::Fragment;
 
 pub struct DocumentWatcher {
   object_id: String,
-  workspace_id: String,
   content: Document,
   receiver: tokio::sync::watch::Receiver<DashMap<String, DeltaType>>,
 }
@@ -30,7 +27,6 @@ unsafe impl Sync for DocumentWatcher {}
 impl DocumentWatcher {
   pub fn new(
     object_id: String,
-    workspace_id: String,
     mut content: Document,
     index_initial_content: bool,
   ) -> Result<Self> {
@@ -41,7 +37,6 @@ impl DocumentWatcher {
     Self::attach_listener(&mut content, tx);
     Ok(Self {
       object_id,
-      workspace_id,
       content,
       receiver,
     })
@@ -194,7 +189,7 @@ mod test {
     )
     .unwrap();
 
-    let watcher = DocumentWatcher::new("o-1".to_string(), "w-1".to_string(), doc, true).unwrap();
+    let watcher = DocumentWatcher::new("o-1".to_string(), doc, true).unwrap();
     let mut stream = watcher.as_stream();
 
     let text_id = {

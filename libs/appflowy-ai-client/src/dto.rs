@@ -12,6 +12,22 @@ pub struct TranslateRowResponse {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatQuestion {
+  pub chat_id: String,
+  pub data: MessageData,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MessageData {
+  pub content: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ChatAnswer {
+  pub content: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompleteTextResponse {
   pub text: String,
 }

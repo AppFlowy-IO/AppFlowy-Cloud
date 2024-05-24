@@ -91,14 +91,9 @@ async fn chat_message_crud_test(pool: PgPool) {
 
   // create chat messages
   for i in 0..5 {
-    let _ = insert_chat_message(
-      &pool,
-      ChatAuthor::Human { uid: user.uid },
-      &chat_id,
-      format!("message {}", i),
-    )
-    .await
-    .unwrap();
+    let _ = insert_chat_message(&pool, ChatAuthor::Human, &chat_id, format!("message {}", i))
+      .await
+      .unwrap();
   }
   {
     let params = GetChatMessageParams::next_back(3);

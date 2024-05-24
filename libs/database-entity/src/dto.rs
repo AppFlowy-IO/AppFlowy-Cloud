@@ -651,15 +651,14 @@ pub struct RepeatedChatMessage {
   pub total: i64,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum ChatAuthor {
   #[default]
-  Unknown,
-  Human {
-    uid: i64,
-  },
-  System,
-  AI,
+  Unknown = 0,
+  Human = 1,
+  System = 2,
+  AI = 3,
 }
 
 impl From<serde_json::Value> for ChatAuthor {

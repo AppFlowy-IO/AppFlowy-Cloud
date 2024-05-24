@@ -3,7 +3,7 @@ use crate::dto::{
   SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
 };
 use crate::error::AIError;
-use reqwest::{Method, RequestBuilder};
+use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
@@ -173,5 +173,22 @@ where
       None => Err(AIError::InvalidRequest("Empty payload".to_string())),
       Some(data) => Ok(data),
     }
+  }
+}
+
+impl From<reqwest::Error> for AIError {
+  fn from(error: reqwest::Error) -> Self {
+    if error.is_timeout() {
+      return AIError::RequestTimeout(error.to_string());
+    }
+
+    if error.is_request() {
+      return if error.status() == Some(StatusCode::PAYLOAD_TOO_LARGE) {
+        AIError::PayloadTooLarge(error.to_string())
+      } else {
+        AIError::InvalidRequest(format!("{:?}", error))
+      };
+    }
+    AIError::Internal(error.into())
   }
 }

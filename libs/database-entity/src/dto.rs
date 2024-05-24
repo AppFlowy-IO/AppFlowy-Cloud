@@ -653,7 +653,7 @@ pub struct RepeatedChatMessage {
 
 #[derive(Debug, Default, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
-pub enum ChatAuthor {
+pub enum ChatAuthorType {
   #[default]
   Unknown = 0,
   Human = 1,
@@ -661,8 +661,8 @@ pub enum ChatAuthor {
   AI = 3,
 }
 
-impl From<serde_json::Value> for ChatAuthor {
-  fn from(value: serde_json::Value) -> Self {
-    serde_json::from_value::<ChatAuthor>(value).unwrap_or_default()
-  }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatAuthor {
+  pub author_id: i64,
+  pub author_type: ChatAuthorType,
 }

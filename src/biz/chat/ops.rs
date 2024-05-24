@@ -4,8 +4,8 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use database::chat;
 use database::chat::chat_ops::{insert_chat, insert_chat_message, select_chat_messages};
 use database_entity::dto::{
-  ChatAuthor, ChatMessageType, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-  QAChatMessage, RepeatedChatMessage,
+  ChatAuthor, ChatAuthorType, ChatMessageType, CreateChatMessageParams, CreateChatParams,
+  GetChatMessageParams, QAChatMessage, RepeatedChatMessage,
 };
 use sqlx::PgPool;
 use std::ops::DerefMut;
@@ -34,7 +34,7 @@ pub(crate) async fn delete_chat(pg_pool: &PgPool, chat_id: &str) -> Result<(), A
 
 pub async fn create_chat_message(
   pg_pool: &PgPool,
-  _uid: i64,
+  uid: i64,
   params: CreateChatMessageParams,
   chat_id: &str,
   ai_client: &AppFlowyAIClient,
@@ -65,14 +65,32 @@ pub async fn create_chat_message(
       err
     ))
   })?;
-  let question =
-    insert_chat_message(txn.deref_mut(), ChatAuthor::Human, chat_id, params.content).await?;
+
+  let question = insert_chat_message(
+    txn.deref_mut(),
+    ChatAuthor {
+      author_id: uid,
+      author_type: ChatAuthorType::Human,
+    },
+    chat_id,
+    params.content,
+  )
+  .await?;
 
   let answer = match params.message_type {
     ChatMessageType::System => None,
-    ChatMessageType::User => {
-      Some(insert_chat_message(txn.deref_mut(), ChatAuthor::AI, chat_id, answer_content).await?)
-    },
+    ChatMessageType::User => Some(
+      insert_chat_message(
+        txn.deref_mut(),
+        ChatAuthor {
+          author_id: uid,
+          author_type: ChatAuthorType::AI,
+        },
+        chat_id,
+        answer_content,
+      )
+      .await?,
+    ),
   };
 
   txn

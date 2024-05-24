@@ -1,9 +1,9 @@
 use crate::dto::{
-  CompleteTextResponse, CompletionType, Document, SearchDocumentsRequest, SummarizeRowResponse,
-  TranslateRowResponse,
+  ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document, MessageData,
+  SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
 };
 use crate::error::AIError;
-use reqwest::{Method, RequestBuilder};
+use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
@@ -21,6 +21,14 @@ impl AppFlowyAIClient {
     let url = url.to_string();
     let client = reqwest::Client::new();
     Self { client, url }
+  }
+
+  pub async fn health_check(&self) -> Result<(), AIError> {
+    let url = format!("{}/health", self.url);
+    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    let text = resp.text().await?;
+    info!("health response: {:?}", text);
+    Ok(())
   }
 
   pub async fn completion_text(
@@ -91,7 +99,7 @@ impl AppFlowyAIClient {
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
-      return Err(anyhow::anyhow!("got error code: {}, body: {}", status_code, body).into());
+      return Err(anyhow::anyhow!("error: {}, {}", status_code, body).into());
     }
     Ok(())
   }
@@ -107,6 +115,24 @@ impl AppFlowyAIClient {
       .send()
       .await?;
     AIResponse::<Vec<Document>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn send_question(&self, chat_id: &str, content: &str) -> Result<ChatAnswer, AIError> {
+    let json = ChatQuestion {
+      chat_id: chat_id.to_string(),
+      data: MessageData {
+        content: content.to_string(),
+      },
+    };
+    let url = format!("{}/chat/message", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&json)
+      .send()
+      .await?;
+    AIResponse::<ChatAnswer>::from_response(resp)
       .await?
       .into_data()
   }
@@ -134,7 +160,7 @@ where
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
-      anyhow::bail!("got error code: {}, body: {}", status_code, body)
+      anyhow::bail!("error code: {}, {}", status_code, body)
     }
 
     let bytes = resp.bytes().await?;
@@ -147,5 +173,22 @@ where
       None => Err(AIError::InvalidRequest("Empty payload".to_string())),
       Some(data) => Ok(data),
     }
+  }
+}
+
+impl From<reqwest::Error> for AIError {
+  fn from(error: reqwest::Error) -> Self {
+    if error.is_timeout() {
+      return AIError::RequestTimeout(error.to_string());
+    }
+
+    if error.is_request() {
+      return if error.status() == Some(StatusCode::PAYLOAD_TOO_LARGE) {
+        AIError::PayloadTooLarge(error.to_string())
+      } else {
+        AIError::InvalidRequest(format!("{:?}", error))
+      };
+    }
+    AIError::Internal(error.into())
   }
 }

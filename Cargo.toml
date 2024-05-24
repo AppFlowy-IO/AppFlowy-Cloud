@@ -91,7 +91,7 @@ gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
 access-control.workspace = true
 workspace-access.workspace = true
-app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error", "appflowy_ai_error"] }
 shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 collab-rt-entity.workspace = true
@@ -198,7 +198,7 @@ lazy_static = "1.4.0"
 tonic = "0.11"
 prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
-appflowy-ai-client = { path = "libs/appflowy-ai-client" }
+appflowy-ai-client = { path = "libs/appflowy-ai-client", default-features = false }
 
 # collaboration
 yrs = "0.18.7"

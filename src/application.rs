@@ -197,7 +197,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
 
-  info!("Connecting to AppFlowy AI: {}", config.appflowy_ai.url());
+  info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
 
   // Pg listeners

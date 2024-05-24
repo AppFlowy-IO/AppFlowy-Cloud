@@ -542,10 +542,7 @@ impl From<i16> for AFWorkspaceInvitationStatus {
 pub struct CreateChatParams {
   #[validate(custom = "validate_not_empty_str")]
   pub chat_id: String,
-
-  #[validate(custom = "validate_not_empty_str")]
   pub name: String,
-
   pub rag_ids: Vec<String>,
 }
 
@@ -564,41 +561,73 @@ pub struct UpdateChatParams {
 pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
+  pub message_type: ChatMessageType,
 }
 
+#[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ChatMessageType {
+  System = 0,
+  #[default]
+  User = 1,
+}
+
+impl CreateChatMessageParams {
+  pub fn new_system<T: ToString>(content: T) -> Self {
+    Self {
+      content: content.to_string(),
+      message_type: ChatMessageType::System,
+    }
+  }
+
+  pub fn new_user<T: ToString>(content: T) -> Self {
+    Self {
+      content: content.to_string(),
+      message_type: ChatMessageType::User,
+    }
+  }
+}
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct GetChatMessageParams {
-  pub offset: MessageOffset,
+  pub cursor: MessageCursor,
   pub limit: u64,
 }
 
 impl GetChatMessageParams {
   pub fn offset(offset: u64, limit: u64) -> Self {
     Self {
-      offset: MessageOffset::Offset(offset),
+      cursor: MessageCursor::Offset(offset),
       limit,
     }
   }
 
   pub fn after_message_id(after_message_id: i64, limit: u64) -> Self {
     Self {
-      offset: MessageOffset::AfterMessageId(after_message_id),
+      cursor: MessageCursor::AfterMessageId(after_message_id),
       limit,
     }
   }
   pub fn before_message_id(before_message_id: i64, limit: u64) -> Self {
     Self {
-      offset: MessageOffset::BeforeMessageId(before_message_id),
+      cursor: MessageCursor::BeforeMessageId(before_message_id),
+      limit,
+    }
+  }
+
+  pub fn next_back(limit: u64) -> Self {
+    Self {
+      cursor: MessageCursor::NextBack,
       limit,
     }
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MessageOffset {
+pub enum MessageCursor {
   Offset(u64),
   AfterMessageId(i64),
   BeforeMessageId(i64),
+  NextBack,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -610,21 +639,26 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QAChatMessage {
+  pub question: ChatMessage,
+  pub answer: Option<ChatMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepeatedChatMessage {
   pub messages: Vec<ChatMessage>,
   pub has_more: bool,
   pub total: i64,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum ChatAuthor {
   #[default]
-  Unknown,
-  Human {
-    uid: i64,
-  },
-  System,
-  AI,
+  Unknown = 0,
+  Human = 1,
+  System = 2,
+  AI = 3,
 }
 
 impl From<serde_json::Value> for ChatAuthor {

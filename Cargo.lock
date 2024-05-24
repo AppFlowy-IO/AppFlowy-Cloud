@@ -502,6 +502,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "appflowy-ai-client",
  "bincode",
  "getrandom 0.2.12",
  "reqwest 0.11.27",
@@ -531,6 +532,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

@@ -110,11 +110,11 @@ async fn chat_qa_test() {
     .await
     .unwrap();
 
-  let params = CreateChatMessageParams::new_system("where is singapore?");
+  let params = CreateChatMessageParams::new_user("where is singapore?");
   let message = test_client
     .api_client
     .create_chat_message(&workspace_id, &chat_id, params)
     .await
     .unwrap();
-  println!("{:?}", message);
+  assert!(!message.answer.unwrap().content.is_empty());
 }

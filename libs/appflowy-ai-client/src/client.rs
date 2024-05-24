@@ -23,6 +23,14 @@ impl AppFlowyAIClient {
     Self { client, url }
   }
 
+  pub async fn health_check(&self) -> Result<(), AIError> {
+    let url = format!("{}/health", self.url);
+    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    let text = resp.text().await?;
+    info!("health response: {:?}", text);
+    Ok(())
+  }
+
   pub async fn completion_text(
     &self,
     text: &str,
@@ -91,7 +99,7 @@ impl AppFlowyAIClient {
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
-      return Err(anyhow::anyhow!("got error code: {}, body: {}", status_code, body).into());
+      return Err(anyhow::anyhow!("error: {}, {}", status_code, body).into());
     }
     Ok(())
   }
@@ -152,7 +160,7 @@ where
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
-      anyhow::bail!("got error code: {}, body: {}", status_code, body)
+      anyhow::bail!("error code: {}, {}", status_code, body)
     }
 
     let bytes = resp.bytes().await?;

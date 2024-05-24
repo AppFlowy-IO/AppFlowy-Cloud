@@ -30,6 +30,10 @@ pub async fn search_document(
     .await
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
 
+  if let Some(usage) = embeddings.usage {
+    tracing::debug!("OpenAI API usage: {} tokens", usage.total_tokens)
+  }
+
   let embedding = embeddings
     .data
     .first()

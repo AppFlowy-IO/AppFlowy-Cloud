@@ -1,7 +1,7 @@
 use crate::http::log_request_id;
 use crate::Client;
 use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, MessageOffset, RepeatedChatMessage,
+  CreateChatMessageParams, CreateChatParams, MessageCursor, QAChatMessage, RepeatedChatMessage,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -42,7 +42,7 @@ impl Client {
     workspace_id: &str,
     chat_id: &str,
     params: CreateChatMessageParams,
-  ) -> Result<ChatMessage, AppResponseError> {
+  ) -> Result<QAChatMessage, AppResponseError> {
     let url = format!(
       "{}/api/chat/{workspace_id}/{chat_id}/message",
       self.base_url
@@ -54,7 +54,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<ChatMessage>::from_response(resp)
+    AppResponse::<QAChatMessage>::from_response(resp)
       .await?
       .into_data()
   }
@@ -63,21 +63,22 @@ impl Client {
     &self,
     workspace_id: &str,
     chat_id: &str,
-    offset: MessageOffset,
+    offset: MessageCursor,
     limit: u64,
   ) -> Result<RepeatedChatMessage, AppResponseError> {
     let mut url = format!("{}/api/chat/{workspace_id}/{chat_id}", self.base_url);
     let mut query_params = vec![("limit", limit.to_string())];
     match offset {
-      MessageOffset::Offset(offset_value) => {
+      MessageCursor::Offset(offset_value) => {
         query_params.push(("offset", offset_value.to_string()));
       },
-      MessageOffset::AfterMessageId(message_id) => {
+      MessageCursor::AfterMessageId(message_id) => {
         query_params.push(("after", message_id.to_string()));
       },
-      MessageOffset::BeforeMessageId(message_id) => {
+      MessageCursor::BeforeMessageId(message_id) => {
         query_params.push(("before", message_id.to_string()));
       },
+      MessageCursor::NextBack => {},
     }
     let query = serde_urlencoded::to_string(&query_params).unwrap();
     url = format!("{}?{}", url, query);

@@ -4,7 +4,7 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
 use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageOffset,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor, QAChatMessage,
   RepeatedChatMessage,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -57,12 +57,13 @@ async fn post_chat_message_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+) -> actix_web::Result<JsonAppResponse<QAChatMessage>> {
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  trace!("create chat:{} message: {:?}", chat_id, params);
-  let message = create_chat_message(&state.pg_pool, uid, params, &chat_id).await?;
+  trace!("insert chat message into {}", chat_id);
+  let message =
+    create_chat_message(&state.pg_pool, uid, params, &chat_id, &state.ai_client).await?;
   Ok(AppResponse::Ok().with_data(message).into())
 }
 
@@ -72,18 +73,20 @@ async fn get_chat_message_handler(
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<RepeatedChatMessage>> {
   let mut params = GetChatMessageParams {
-    offset: MessageOffset::Offset(0),
+    cursor: MessageCursor::Offset(0),
     limit: query
       .get("limit")
       .and_then(|s| s.parse::<u64>().ok())
       .unwrap_or(10),
   };
   if let Some(value) = query.get("offset").and_then(|s| s.parse::<u64>().ok()) {
-    params.offset = MessageOffset::Offset(value);
+    params.cursor = MessageCursor::Offset(value);
   } else if let Some(value) = query.get("after").and_then(|s| s.parse::<i64>().ok()) {
-    params.offset = MessageOffset::AfterMessageId(value);
+    params.cursor = MessageCursor::AfterMessageId(value);
   } else if let Some(value) = query.get("before").and_then(|s| s.parse::<i64>().ok()) {
-    params.offset = MessageOffset::BeforeMessageId(value);
+    params.cursor = MessageCursor::BeforeMessageId(value);
+  } else {
+    params.cursor = MessageCursor::NextBack;
   }
 
   trace!("get chat messages: {:?}", params);

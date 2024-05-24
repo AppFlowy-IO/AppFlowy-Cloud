@@ -3,9 +3,7 @@ use database::chat::chat_ops::{
   delete_chat, get_all_chat_messages, insert_chat, insert_chat_message, select_chat,
   select_chat_messages,
 };
-use database_entity::dto::{
-  ChatAuthor, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-};
+use database_entity::dto::{ChatAuthor, CreateChatParams, GetChatMessageParams};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -93,12 +91,22 @@ async fn chat_message_crud_test(pool: PgPool) {
 
   // create chat messages
   for i in 0..5 {
-    let params = CreateChatMessageParams {
-      content: format!("message {}", i),
-    };
-    let _ = insert_chat_message(&pool, ChatAuthor::Human { uid: user.uid }, &chat_id, params)
+    let _ = insert_chat_message(&pool, ChatAuthor::Human, &chat_id, format!("message {}", i))
       .await
       .unwrap();
+  }
+  {
+    let params = GetChatMessageParams::next_back(3);
+    let mut txn = pool.begin().await.unwrap();
+    let result = select_chat_messages(&mut txn, &chat_id, params)
+      .await
+      .unwrap();
+    txn.commit().await.unwrap();
+    assert_eq!(result.messages.len(), 3);
+    assert_eq!(result.messages[0].message_id, 3);
+    assert_eq!(result.messages[1].message_id, 4);
+    assert_eq!(result.messages[2].message_id, 5);
+    assert!(result.has_more);
   }
 
   // get 3 messages: 1,2,3

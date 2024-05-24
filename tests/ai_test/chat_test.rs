@@ -1,5 +1,5 @@
 use client_api_test::TestClient;
-use database_entity::dto::{CreateChatMessageParams, CreateChatParams, MessageOffset};
+use database_entity::dto::{CreateChatMessageParams, CreateChatParams, MessageCursor};
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -21,9 +21,7 @@ async fn create_chat_and_create_messages_test() {
 
   let mut messages = vec![];
   for i in 0..10 {
-    let params = CreateChatMessageParams {
-      content: format!("hello world {}", i),
-    };
+    let params = CreateChatMessageParams::new_system(format!("hello world {}", i));
     let message = test_client
       .api_client
       .create_chat_message(&workspace_id, &chat_id, params)
@@ -39,7 +37,7 @@ async fn create_chat_and_create_messages_test() {
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageOffset::BeforeMessageId(messages[2].message_id),
+      MessageCursor::BeforeMessageId(messages[2].question.message_id),
       10,
     )
     .await
@@ -49,11 +47,11 @@ async fn create_chat_and_create_messages_test() {
   assert_eq!(message_before_third.messages.len(), 2);
   assert_eq!(
     message_before_third.messages[0].message_id,
-    messages[0].message_id
+    messages[0].question.message_id
   );
   assert_eq!(
     message_before_third.messages[1].message_id,
-    messages[1].message_id
+    messages[1].question.message_id
   );
 
   // get message after third message
@@ -62,7 +60,7 @@ async fn create_chat_and_create_messages_test() {
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageOffset::AfterMessageId(messages[2].message_id),
+      MessageCursor::AfterMessageId(messages[2].question.message_id),
       2,
     )
     .await
@@ -71,11 +69,11 @@ async fn create_chat_and_create_messages_test() {
   assert_eq!(message_after_third.messages.len(), 2);
   assert_eq!(
     message_after_third.messages[0].message_id,
-    messages[3].message_id
+    messages[3].question.message_id
   );
   assert_eq!(
     message_after_third.messages[1].message_id,
-    messages[4].message_id
+    messages[4].question.message_id
   );
 
   // get all messages after 8th message
@@ -84,7 +82,7 @@ async fn create_chat_and_create_messages_test() {
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageOffset::AfterMessageId(messages[7].message_id),
+      MessageCursor::AfterMessageId(messages[7].question.message_id),
       100,
     )
     .await
@@ -93,4 +91,30 @@ async fn create_chat_and_create_messages_test() {
   // has_more should be false because we only have 10 messages
   assert!(!remaining_messages.has_more);
   assert_eq!(remaining_messages.messages.len(), 2);
+}
+
+#[tokio::test]
+async fn chat_qa_test() {
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "my second chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  let params = CreateChatMessageParams::new_user("where is singapore?");
+  let message = test_client
+    .api_client
+    .create_chat_message(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+  assert!(!message.answer.unwrap().content.is_empty());
 }

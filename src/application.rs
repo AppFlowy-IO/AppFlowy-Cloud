@@ -7,7 +7,6 @@ use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
-use crate::api::ai::ai_tool_scope;
 use crate::api::chat::chat_scope;
 use crate::api::history::history_scope;
 use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
@@ -49,6 +48,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tonic_proto::history::history_client::HistoryClient;
 
+use crate::api::search::search_scope;
 use tracing::{info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -145,8 +145,8 @@ pub async fn run_actix_server(
       .service(file_storage_scope())
       .service(chat_scope())
       .service(history_scope())
-      .service(ai_tool_scope())
       .service(metrics_scope())
+      .service(search_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))

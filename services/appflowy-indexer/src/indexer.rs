@@ -82,6 +82,7 @@ pub struct PostgresIndexer {
 }
 
 impl PostgresIndexer {
+  #[allow(dead_code)]
   pub async fn open(openai_api_key: &str, pg_conn: &str) -> Result<Self> {
     let openai = Client::new(openai_api_key.to_string());
     let db = PgPool::connect(&pg_conn).await?;

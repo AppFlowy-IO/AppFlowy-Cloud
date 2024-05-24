@@ -15,9 +15,9 @@ pub async fn search_document(
   pg_pool: &PgPool,
   openai: &openai_dive::v1::api::Client,
   uid: i64,
+  workspace_id: Uuid,
   request: SearchDocumentRequest,
 ) -> Result<SearchDocumentResponse, AppResponseError> {
-  let workspace_id = Uuid::parse_str(&request.workspace_id)?;
   let embeddings = openai
     .embeddings()
     .create(EmbeddingParameters {

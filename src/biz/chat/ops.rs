@@ -1,11 +1,14 @@
+use anyhow::anyhow;
 use app_error::AppError;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use database::chat;
 use database::chat::chat_ops::{insert_chat, insert_chat_message, select_chat_messages};
 use database_entity::dto::{
-  ChatAuthor, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, QAChatMessage,
-  RepeatedChatMessage,
+  ChatAuthor, ChatMessageType, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+  QAChatMessage, RepeatedChatMessage,
 };
 use sqlx::PgPool;
+use std::ops::DerefMut;
 use validator::Validate;
 
 pub(crate) async fn create_chat(
@@ -33,13 +36,43 @@ pub async fn create_chat_message(
   uid: i64,
   params: CreateChatMessageParams,
   chat_id: &str,
+  ai_client: &AppFlowyAIClient,
 ) -> Result<QAChatMessage, AppError> {
   params.validate()?;
-  let q = insert_chat_message(pg_pool, ChatAuthor::Human { uid }, chat_id, params.content).await?;
-  Ok(QAChatMessage {
-    question: q,
-    answer: None,
-  })
+
+  let answer_content = match params.message_type {
+    ChatMessageType::System => None,
+    ChatMessageType::User => Some(
+      ai_client
+        .send_question(chat_id, &params.content)
+        .await
+        .map(|answer| answer.content)?,
+    ),
+  };
+
+  let mut txn = pg_pool.begin().await.map_err(|err| {
+    AppError::Internal(anyhow!(
+      "failed to start transaction for inserting chat message: {}",
+      err
+    ))
+  })?;
+  let question = insert_chat_message(
+    txn.deref_mut(),
+    ChatAuthor::Human { uid },
+    chat_id,
+    params.content,
+  )
+  .await?;
+  let mut answer = None;
+  if let Some(content) = answer_content {
+    answer = Some(insert_chat_message(txn.deref_mut(), ChatAuthor::AI, chat_id, content).await?);
+  }
+  txn
+    .commit()
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("failed to insert chat message: {}", err)))?;
+
+  Ok(QAChatMessage { question, answer })
 }
 
 pub async fn get_chat_messages(

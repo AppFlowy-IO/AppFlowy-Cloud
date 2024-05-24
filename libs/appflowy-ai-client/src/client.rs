@@ -1,6 +1,6 @@
 use crate::dto::{
-  CompleteTextResponse, CompletionType, Document, SearchDocumentsRequest, SummarizeRowResponse,
-  TranslateRowResponse,
+  ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document, MessageData,
+  SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
 };
 use crate::error::AIError;
 use reqwest::{Method, RequestBuilder};
@@ -107,6 +107,24 @@ impl AppFlowyAIClient {
       .send()
       .await?;
     AIResponse::<Vec<Document>>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn send_question(&self, chat_id: &str, content: &str) -> Result<ChatAnswer, AIError> {
+    let json = ChatQuestion {
+      chat_id: chat_id.to_string(),
+      data: MessageData {
+        content: content.to_string(),
+      },
+    };
+    let url = format!("{}/chat/message", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&json)
+      .send()
+      .await?;
+    AIResponse::<ChatAnswer>::from_response(resp)
       .await?
       .into_data()
   }

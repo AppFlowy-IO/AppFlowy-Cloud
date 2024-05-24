@@ -561,9 +561,32 @@ pub struct UpdateChatParams {
 pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
-  pub require_answer: bool,
+  pub message_type: ChatMessageType,
 }
 
+#[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ChatMessageType {
+  System = 0,
+  #[default]
+  User = 1,
+}
+
+impl CreateChatMessageParams {
+  pub fn new_system<T: ToString>(content: T) -> Self {
+    Self {
+      content: content.to_string(),
+      message_type: ChatMessageType::System,
+    }
+  }
+
+  pub fn new_user<T: ToString>(content: T) -> Self {
+    Self {
+      content: content.to_string(),
+      message_type: ChatMessageType::User,
+    }
+  }
+}
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct GetChatMessageParams {
   pub cursor: MessageCursor,

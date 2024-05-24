@@ -21,10 +21,7 @@ async fn create_chat_and_create_messages_test() {
 
   let mut messages = vec![];
   for i in 0..10 {
-    let params = CreateChatMessageParams {
-      content: format!("hello world {}", i),
-      require_answer: false,
-    };
+    let params = CreateChatMessageParams::new_system(format!("hello world {}", i));
     let message = test_client
       .api_client
       .create_chat_message(&workspace_id, &chat_id, params)
@@ -94,4 +91,30 @@ async fn create_chat_and_create_messages_test() {
   // has_more should be false because we only have 10 messages
   assert!(!remaining_messages.has_more);
   assert_eq!(remaining_messages.messages.len(), 2);
+}
+
+#[tokio::test]
+async fn chat_qa_test() {
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "my second chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  let params = CreateChatMessageParams::new_system("where is singapore?");
+  let message = test_client
+    .api_client
+    .create_chat_message(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+  println!("{:?}", message);
 }

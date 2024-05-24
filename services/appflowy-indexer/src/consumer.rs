@@ -319,6 +319,6 @@ mod test {
     .unwrap();
 
     assert_ne!(contents.len(), 0);
-    assert_eq!(contents[0].content.as_deref(), Some("test-value"));
+    assert_eq!(contents[0].content.as_deref(), Some("test-value\n"));
   }
 }

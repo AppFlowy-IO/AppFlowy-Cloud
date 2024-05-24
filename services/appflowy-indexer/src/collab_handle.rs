@@ -367,6 +367,6 @@ mod test {
       .map(|r| r.get::<String, _>("content"))
       .collect::<HashSet<_>>();
 
-    assert_eq!(contents.len(), 16);
+    assert_eq!(contents.len(), 1);
   }
 }

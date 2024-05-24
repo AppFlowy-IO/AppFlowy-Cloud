@@ -1,12 +1,15 @@
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
 
 use async_stream::stream;
 use collab::core::collab::MutexCollab;
-use collab_document::blocks::DeltaType;
+use collab_document::blocks::{DeltaType, DocumentData, TextDelta};
 use collab_document::document::Document;
+use collab_entity::CollabType;
 use dashmap::DashMap;
 use futures::Stream;
+use redis::Commands;
 use tokio::sync::watch::Sender;
 use yrs::{GetString, Map, ReadTxn};
 
@@ -62,53 +65,6 @@ impl DocumentWatcher {
     });
   }
 
-  pub fn as_stream(&self) -> Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>> {
-    let mut receiver = self.receiver.clone();
-    let collab = Arc::downgrade(self.content.get_collab());
-    let object_id = self.object_id.clone();
-    Box::pin(stream! {
-      while let Ok(()) = receiver.changed().await {
-        if let Some(collab) = collab.upgrade() {
-          let updates = {
-            let data = receiver.borrow();
-            let lock = collab.lock();
-            let tx = lock.transact();
-            let text_map = {
-              //TODO: make document navigator capable of reusing the transactions
-              let root = tx.get_map("data").unwrap();
-              let document = root.get(&tx, "document").unwrap().cast::<yrs::MapRef>().unwrap();
-              let meta = document.get(&tx, "meta").unwrap().cast::<yrs::MapRef>().unwrap();
-              meta.get(&tx, "text_map").unwrap().cast::<yrs::MapRef>().unwrap()
-            };
-            let updates: Vec<_> = data.iter().map(|entry| {
-              let text_id = entry.key();
-              let text = text_map.get(&tx, text_id).unwrap().cast::<yrs::TextRef>().unwrap();
-              let block_content = text.get_string(&tx);
-              match entry.value() {
-                DeltaType::Inserted | DeltaType::Updated => {
-                  FragmentUpdate::Update(Fragment {
-                    fragment_id: entry.key().clone(),
-                    object_id: object_id.clone(),
-                    collab_type: collab_entity::CollabType::Document,
-                    content: block_content,
-                  })
-                }
-                DeltaType::Removed => FragmentUpdate::Removed(text_id.clone()),
-              }
-            }).collect();
-            data.clear();
-            updates
-          };
-          tracing::trace!("produced update for {} fragments", updates.len());
-          for update in updates {
-            yield update;
-          }
-        } else {
-            break;
-        }
-      }
-    })
-  }
   fn index_initial_content(
     document: &mut Document,
     notifier: &Sender<DashMap<String, DeltaType>>,
@@ -122,6 +78,74 @@ impl DocumentWatcher {
       });
     }
     Ok(())
+  }
+
+  pub fn as_stream(&self) -> Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>> {
+    let mut receiver = self.receiver.clone();
+    let collab = Arc::downgrade(self.content.get_collab());
+    let object_id = self.object_id.clone();
+    Box::pin(stream! {
+      while let Ok(()) = receiver.changed().await {
+        if let Some(collab) = collab.upgrade() {
+          receiver.borrow().clear();
+          match Self::get_document_content(collab) {
+            Ok(content) => {
+              yield FragmentUpdate::Update(Fragment {
+                fragment_id: object_id.clone(),
+                collab_type: CollabType::Document,
+                object_id: object_id.clone(),
+                content,
+              });
+            },
+            Err(err) => tracing::error!("Failed to get document content: {}", err),
+          }
+        } else {
+            break;
+        }
+      }
+    })
+  }
+
+  fn get_document_content(collab: Arc<MutexCollab>) -> Result<String> {
+    let document = Document::open(collab)?;
+    let document_data = document.get_document_data()?;
+    let content = Self::document_to_plain_text(&document_data);
+    Ok(content)
+  }
+
+  fn document_to_plain_text(document: &DocumentData) -> String {
+    let mut buf = String::new();
+    if let Some(text_map) = document.meta.text_map.as_ref() {
+      let mut blocks = VecDeque::new();
+      blocks.push_back(&document.page_id);
+      while let Some(block_id) = blocks.pop_front() {
+        if let Some(block) = document.blocks.get(block_id) {
+          if block.external_type.as_deref() == Some("text") {
+            if let Some(text_id) = block.external_id.as_deref() {
+              if let Some(json) = text_map.get(text_id) {
+                match serde_json::from_str::<Vec<TextDelta>>(&json) {
+                  Ok(deltas) => {
+                    for delta in deltas {
+                      if let TextDelta::Inserted(text, _) = delta {
+                        buf.push_str(&text);
+                      }
+                    }
+                  },
+                  Err(err) => {
+                    tracing::error!("text_id `{}` is not a valid delta array: {}", text_id, err)
+                  },
+                }
+              }
+              buf.push('\n');
+            }
+          }
+          if let Some(children) = document.meta.children_map.get(&block.children) {
+            blocks.extend(children);
+          }
+        }
+      }
+    }
+    buf
   }
 }
 
@@ -145,8 +169,17 @@ mod test {
   use collab_entity::CollabType;
   use serde_json::json;
   use tokio_stream::StreamExt;
+  use workspace_template::document::get_started::get_started_document_data;
 
   use crate::watchers::DocumentWatcher;
+
+  #[test]
+  fn document_plain_text() {
+    let doc = get_started_document_data().unwrap();
+    let text = DocumentWatcher::document_to_plain_text(&doc);
+    let expected = "\nWelcome to AppFlowy!\nHere are the basics\nClick anywhere and just start typing.\nHighlight any text, and use the editing menu to style your writing however you like.\nAs soon as you type / a menu will pop up. Select different types of content blocks you can add.\nType / followed by /bullet or /num to create a list.\nClick + New Page button at the bottom of your sidebar to add a new page.\nClick + next to any page title in the sidebar to quickly add a new subpage, Document, Grid, or Kanban Board.\n\n\nKeyboard shortcuts, markdown, and code block\nKeyboard shortcuts guide\nMarkdown reference\nType /code to insert a code block\n// This is the main function.\nfn main() {\n    // Print text to the console.\n    println!(\"Hello World!\");\n}\n\nHave a question❓\nClick ? at the bottom right for help and support.\n\n\nLike AppFlowy? Follow us:\nGitHub\nTwitter: @appflowy\nNewsletter\n\n\n\n\n";
+    assert_eq!(&text, expected);
+  }
 
   #[tokio::test]
   async fn test_update_generation() {
@@ -178,10 +211,10 @@ mod test {
     assert_eq!(
       update,
       super::FragmentUpdate::Update(Fragment {
-        fragment_id: text_id.clone(),
+        fragment_id: "o-1".to_string(),
         collab_type: CollabType::Document,
         object_id: "o-1".to_string(),
-        content: "A".to_string(),
+        content: "A\n".to_string(),
       })
     );
 
@@ -194,10 +227,10 @@ mod test {
     assert_eq!(
       update,
       super::FragmentUpdate::Update(Fragment {
-        fragment_id: text_id.clone(),
+        fragment_id: "o-1".to_string(),
         collab_type: CollabType::Document,
         object_id: "o-1".to_string(),
-        content: "BA".to_string(),
+        content: "BA\n".to_string(),
       })
     );
   }

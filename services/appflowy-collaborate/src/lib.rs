@@ -7,6 +7,7 @@ pub mod error;
 mod group;
 pub mod metrics;
 mod permission;
+mod pg_listener;
 mod rt_server;
 pub mod shared_state;
 pub mod snapshot;

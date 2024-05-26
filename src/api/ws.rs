@@ -6,6 +6,7 @@ use actix_http::header::AUTHORIZATION;
 use actix_web::web::{Data, Path, Payload};
 use actix_web::{get, web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
+use secrecy::Secret;
 use semver::Version;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
@@ -16,11 +17,11 @@ use appflowy_collaborate::actix_ws::client::rt_client::RealtimeClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
 use appflowy_collaborate::collab::access_control::RealtimeCollabAccessControlImpl;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use authentication::jwt::{authorization_from_token, UserUuid};
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
 use collab_rt_entity::RealtimeMessage;
 use shared_entity::response::AppResponseError;
 
-use crate::biz::user::auth::jwt::{authorization_from_token, UserUuid};
 use crate::state::AppState;
 
 pub fn ws_scope() -> Scope {
@@ -41,6 +42,7 @@ pub async fn establish_ws_connection(
   payload: Payload,
   path: Path<(String, String)>,
   state: Data<AppState>,
+  jwt_secret: Data<Secret<String>>,
   server: Data<RealtimeServerAddr>,
 ) -> Result<HttpResponse> {
   let (access_token, device_id) = path.into_inner();
@@ -50,6 +52,7 @@ pub async fn establish_ws_connection(
     &request,
     payload,
     &state,
+    &jwt_secret,
     server,
     access_token,
     device_id,
@@ -64,6 +67,7 @@ pub async fn establish_ws_connection_v1(
   request: HttpRequest,
   payload: Payload,
   state: Data<AppState>,
+  jwt_secret: Data<Secret<String>>,
   server: Data<RealtimeServerAddr>,
   web::Query(query_params): web::Query<HashMap<String, String>>,
 ) -> Result<HttpResponse> {
@@ -86,6 +90,7 @@ pub async fn establish_ws_connection_v1(
     &request,
     payload,
     &state,
+    &jwt_secret,
     server,
     access_token,
     device_id,
@@ -101,13 +106,14 @@ async fn start_connect(
   request: &HttpRequest,
   payload: Payload,
   state: &Data<AppState>,
+  jwt_secret: &Data<Secret<String>>,
   server: Data<RealtimeServerAddr>,
   access_token: String,
   device_id: String,
   client_app_version: Version,
   connect_at: i64,
 ) -> Result<HttpResponse> {
-  let auth = authorization_from_token(access_token.as_str(), state)?;
+  let auth = authorization_from_token(access_token.as_str(), jwt_secret)?;
   let user_uuid = UserUuid::from_auth(auth)?;
   let result = state.user_cache.get_user_uid(&user_uuid).await;
 

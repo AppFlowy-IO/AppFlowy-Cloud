@@ -93,10 +93,7 @@ async fn chat_message_crud_test(pool: PgPool) {
   for i in 0..5 {
     let _ = insert_chat_message(
       &pool,
-      ChatAuthor {
-        author_id: 0,
-        author_type: ChatAuthorType::System,
-      },
+      ChatAuthor::new(0, ChatAuthorType::System),
       &chat_id,
       format!("message {}", i),
     )

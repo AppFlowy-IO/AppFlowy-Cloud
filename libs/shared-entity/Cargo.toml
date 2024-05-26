@@ -13,7 +13,7 @@ serde = "1.0.195"
 serde_json.workspace = true
 serde_repr = "0.1.18"
 thiserror = "1.0.56"
-reqwest.workspace = true
+reqwest = { worspace = true, features = ["stream"] }
 uuid = { version = "1.6.1", features = ["v4"] }
 gotrue-entity = { path = "../gotrue-entity" }
 database-entity.workspace = true
@@ -25,6 +25,7 @@ appflowy-ai-client = { workspace = true, default-features = false, features = ["
 actix-web = { version = "4.4.1", default-features = false, features = ["http2"], optional = true }
 validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }
 rust-s3 = { version = "0.34.0-rc4", optional = true }
+futures = "0.3.30"
 
 
 [features]

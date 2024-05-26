@@ -1,5 +1,5 @@
 use actix_web::web::Bytes;
-use anyhow::anyhow;
+
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
 use async_stream::stream;
@@ -7,12 +7,11 @@ use database::chat;
 use database::chat::chat_ops::{insert_chat, insert_chat_message, select_chat_messages};
 use database_entity::dto::{
   ChatAuthor, ChatAuthorType, ChatMessageType, CreateChatMessageParams, CreateChatParams,
-  GetChatMessageParams, QAChatMessage, RepeatedChatMessage,
+  GetChatMessageParams, RepeatedChatMessage,
 };
 use futures::stream::Stream;
 use sqlx::PgPool;
-use std::ops::DerefMut;
-use tracing::trace;
+
 use validator::Validate;
 
 pub(crate) async fn create_chat(

@@ -5487,6 +5487,7 @@ dependencies = [
  "chrono",
  "collab-entity",
  "database-entity",
+ "futures",
  "gotrue-entity",
  "reqwest 0.11.27",
  "rust-s3",

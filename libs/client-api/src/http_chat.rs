@@ -1,8 +1,9 @@
 use crate::http::log_request_id;
 use crate::Client;
 use database_entity::dto::{
-  CreateChatMessageParams, CreateChatParams, MessageCursor, QAChatMessage, RepeatedChatMessage,
+  ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor, RepeatedChatMessage,
 };
+use futures_core::Stream;
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 
@@ -42,7 +43,7 @@ impl Client {
     workspace_id: &str,
     chat_id: &str,
     params: CreateChatMessageParams,
-  ) -> Result<QAChatMessage, AppResponseError> {
+  ) -> Result<impl Stream<Item = Result<ChatMessage, AppResponseError>>, AppResponseError> {
     let url = format!(
       "{}/api/chat/{workspace_id}/{chat_id}/message",
       self.base_url
@@ -54,9 +55,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<QAChatMessage>::from_response(resp)
-      .await?
-      .into_data()
+    AppResponse::<ChatMessage>::stream_response(resp).await
   }
 
   pub async fn get_chat_messages(

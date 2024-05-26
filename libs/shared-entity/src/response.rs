@@ -3,6 +3,7 @@ use std::borrow::Cow;
 
 use app_error::AppError;
 pub use app_error::ErrorCode;
+use futures::stream::{Stream, StreamExt};
 use std::fmt::{Debug, Display};
 
 #[cfg(feature = "cloud")]
@@ -140,6 +141,23 @@ where
     let bytes = resp.bytes().await?;
     let resp = serde_json::from_slice(&bytes)?;
     Ok(resp)
+  }
+
+  pub async fn stream_response(
+    resp: reqwest::Response,
+  ) -> Result<impl Stream<Item = Result<T, AppResponseError>>, AppResponseError> {
+    let status_code = resp.status();
+    if !status_code.is_success() {
+      let body = resp.text().await?;
+      return Err(AppResponseError::new(ErrorCode::Internal, body));
+    }
+
+    let stream = resp.bytes_stream().map(|item| {
+      item.map_err(AppResponseError::from).and_then(|bytes| {
+        serde_json::from_slice::<T>(bytes.as_ref()).map_err(AppResponseError::from)
+      })
+    });
+    Ok(stream)
   }
 }
 #[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]

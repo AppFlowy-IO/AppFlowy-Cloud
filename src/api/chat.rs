@@ -2,14 +2,16 @@ use crate::biz::chat::ops::{create_chat, create_chat_message, delete_chat, get_c
 use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
-use actix_web::{web, Scope};
+use actix_web::{web, HttpResponse, Scope};
+use app_error::AppError;
 use database_entity::dto::{
-  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor, QAChatMessage,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
   RepeatedChatMessage,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
 use tracing::trace;
+use validator::Validate;
 
 pub fn chat_scope() -> Scope {
   web::scope("/api/chat/{workspace_id}")
@@ -57,14 +59,28 @@ async fn post_chat_message_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
-) -> actix_web::Result<JsonAppResponse<QAChatMessage>> {
+) -> actix_web::Result<HttpResponse> {
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
+
+  if let Err(err) = params.validate() {
+    return Ok(HttpResponse::from_error(AppError::from(err)));
+  }
+
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  trace!("insert chat message into {}", chat_id);
-  let message =
-    create_chat_message(&state.pg_pool, uid, params, &chat_id, &state.ai_client).await?;
-  Ok(AppResponse::Ok().with_data(message).into())
+  let message_stream = create_chat_message(
+    &state.pg_pool,
+    uid,
+    chat_id,
+    params,
+    state.ai_client.clone(),
+  )
+  .await;
+  Ok(
+    HttpResponse::Ok()
+      .content_type("application/json")
+      .streaming(message_stream),
+  )
 }
 
 async fn get_chat_message_handler(

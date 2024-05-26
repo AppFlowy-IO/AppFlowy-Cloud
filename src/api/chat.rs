@@ -1,4 +1,4 @@
-use crate::biz::chat::ops::{create_chat, create_chat_message2, delete_chat, get_chat_messages};
+use crate::biz::chat::ops::{create_chat, create_chat_message, delete_chat, get_chat_messages};
 use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -54,20 +54,6 @@ async fn update_chat_handler(
   Ok(AppResponse::Ok().into())
 }
 
-// async fn post_chat_message_handler(
-//   state: Data<AppState>,
-//   path: web::Path<(String, String)>,
-//   payload: Json<CreateChatMessageParams>,
-//   uuid: UserUuid,
-// ) -> actix_web::Result<JsonAppResponse<QAChatMessage>> {
-//   let (_workspace_id, chat_id) = path.into_inner();
-//   let params = payload.into_inner();
-//   let uid = state.user_cache.get_user_uid(&uuid).await?;
-//   let message =
-//     create_chat_message(&state.pg_pool, uid, params, &chat_id, &state.ai_client).await?;
-//   Ok(AppResponse::Ok().with_data(message).into())
-// }
-
 async fn post_chat_message_handler(
   state: Data<AppState>,
   path: web::Path<(String, String)>,
@@ -82,7 +68,7 @@ async fn post_chat_message_handler(
   }
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let message_stream = create_chat_message2(
+  let message_stream = create_chat_message(
     &state.pg_pool,
     uid,
     chat_id,

@@ -7,8 +7,11 @@ use redis::streams::{
   StreamReadOptions,
 };
 use redis::{pipe, AsyncCommands, RedisResult};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 
-use tracing::{error, trace};
+use tracing::{error, trace, warn};
 
 #[derive(Clone)]
 pub struct StreamGroup {
@@ -17,8 +20,13 @@ pub struct StreamGroup {
   group_name: String,
   config: StreamConfig,
   last_expiration_set: Option<DateTime<Utc>>,
+  cancel_token: Arc<CancellationToken>,
 }
-
+impl Drop for StreamGroup {
+  fn drop(&mut self) {
+    self.cancel_token.cancel();
+  }
+}
 impl StreamGroup {
   pub fn new(stream_key: String, group_name: &str, connection_manager: ConnectionManager) -> Self {
     let config = StreamConfig {
@@ -34,14 +42,18 @@ impl StreamGroup {
     connection_manager: ConnectionManager,
     config: StreamConfig,
   ) -> Self {
+    let cancel_token = Arc::new(CancellationToken::new());
     let group_name = group_name.to_string();
-    Self {
+    let group = Self {
       group_name,
       connection_manager,
       stream_key,
       config,
       last_expiration_set: None,
-    }
+      cancel_token,
+    };
+    group.spawn_periodic_check();
+    group
   }
 
   /// Ensures the consumer group exists, creating it if necessary.
@@ -328,6 +340,7 @@ impl StreamGroup {
     let now = Utc::now();
     if let Some(expire_time) = self.config.expire_time_in_secs {
       let should_set_expiration = match self.last_expiration_set {
+        // Set expiration if it has been more than an hour since the last set
         Some(last_set) => now.signed_duration_since(last_set) > chrono::Duration::seconds(60 * 60),
         None => true,
       };
@@ -343,6 +356,43 @@ impl StreamGroup {
 
     Ok(())
   }
+
+  /// Spawns a periodic task to check the stream length.
+  fn spawn_periodic_check(&self) {
+    if let Some(max_len) = self.config.max_len {
+      let stream_key = self.stream_key.clone();
+      let mut connection_manager = self.connection_manager.clone();
+      let cancel_token = self.cancel_token.clone();
+      tokio::spawn(async move {
+        // Check every hour
+        let mut interval = tokio::time::interval(Duration::from_secs(3600));
+        loop {
+          tokio::select! {
+              _ = interval.tick() => {
+                if let Ok(len) = get_stream_length(&mut connection_manager, &stream_key).await {
+                  if len + 100 > max_len {
+                    warn!("stream len is going to exceed the max len: {}, current: {}", max_len, len);
+                  }
+                }
+              }
+              _ = cancel_token.cancelled() => {
+                trace!("Stream length check task cancelled.");
+                break;
+              }
+          }
+        }
+      });
+    }
+  }
+}
+
+/// Checks if the stream length exceeds the maximum length.
+async fn get_stream_length(
+  connection_manager: &mut ConnectionManager,
+  stream_key: &str,
+) -> Result<usize, StreamError> {
+  let current_len: usize = connection_manager.xlen(stream_key).await?;
+  Ok(current_len)
 }
 
 pub enum ReadOption {

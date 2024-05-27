@@ -30,7 +30,12 @@ impl CollabRedisStream {
     key: &str,
     group_name: &str,
   ) -> Result<StreamGroup, StreamError> {
-    let mut group = StreamGroup::new(key.to_string(), group_name, self.connection_manager.clone());
+    let mut group = StreamGroup::new_with_config(
+      key.to_string(),
+      group_name,
+      self.connection_manager.clone(),
+      StreamConfig::new().with_max_len(1000),
+    );
     group.ensure_consumer_group().await?;
     Ok(group)
   }
@@ -46,7 +51,11 @@ impl CollabRedisStream {
       stream_key,
       group_name,
       self.connection_manager.clone(),
-      StreamConfig::new().with_max_len(1000),
+      StreamConfig::new()
+        // 1000 messages
+        .with_max_len(1000)
+        // 12 hours
+        .with_expire_time(60 * 60 * 12),
     );
     group.ensure_consumer_group().await?;
     Ok(group)

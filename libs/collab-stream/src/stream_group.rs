@@ -1,5 +1,6 @@
 use crate::error::StreamError;
 use crate::model::{MessageId, StreamBinary, StreamMessage, StreamMessageByStreamKey};
+use chrono::{DateTime, Utc};
 use redis::aio::ConnectionManager;
 use redis::streams::{
   StreamClaimOptions, StreamClaimReply, StreamMaxlen, StreamPendingData, StreamPendingReply,
@@ -15,33 +16,14 @@ pub struct StreamGroup {
   stream_key: String,
   group_name: String,
   config: StreamConfig,
-}
-
-#[derive(Clone)]
-pub struct StreamConfig {
-  max_len: Option<usize>,
-}
-
-impl Default for StreamConfig {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-impl StreamConfig {
-  pub fn new() -> Self {
-    Self { max_len: None }
-  }
-  pub fn with_max_len(mut self, max_len: usize) -> Self {
-    self.max_len = Some(max_len);
-    self
-  }
+  last_expiration_set: Option<DateTime<Utc>>,
 }
 
 impl StreamGroup {
   pub fn new(stream_key: String, group_name: &str, connection_manager: ConnectionManager) -> Self {
     let config = StreamConfig {
       max_len: Some(1000),
+      expire_time_in_secs: None,
     };
     Self::new_with_config(stream_key, group_name, connection_manager, config)
   }
@@ -58,6 +40,7 @@ impl StreamGroup {
       connection_manager,
       stream_key,
       config,
+      last_expiration_set: None,
     }
   }
 
@@ -149,6 +132,9 @@ impl StreamGroup {
     }
 
     pipe.query_async(&mut self.connection_manager).await?;
+    if let Err(err) = self.set_expiration().await {
+      error!("set expiration fail: {:?}", err);
+    }
     Ok(())
   }
 
@@ -176,6 +162,10 @@ impl StreamGroup {
           .xadd(&self.stream_key, "*", tuple.as_slice())
           .await?;
       },
+    }
+
+    if let Err(err) = self.set_expiration().await {
+      error!("set expiration fail: {:?}", err);
     }
     Ok(())
   }
@@ -326,10 +316,73 @@ impl StreamGroup {
       .await?;
     Ok(())
   }
+
+  /// For now, we only call this function after inserting messages into the stream.
+  ///
+  /// Inserting a Redis EXPIRE command after adding messages ensures that the stream's
+  /// TTL (time-to-live) is updated whenever new data is inserted. This is crucial for streams
+  /// where data needs to be automatically cleaned up after a certain period. Setting the expiration
+  /// after every insertion guarantees that the stream will expire correctly, even if messages are
+  /// inserted at irregular intervals.
+  async fn set_expiration(&mut self) -> Result<(), StreamError> {
+    let now = Utc::now();
+    if let Some(expire_time) = self.config.expire_time_in_secs {
+      let should_set_expiration = match self.last_expiration_set {
+        Some(last_set) => now.signed_duration_since(last_set) > chrono::Duration::seconds(60 * 60),
+        None => true,
+      };
+
+      if should_set_expiration {
+        self
+          .connection_manager
+          .expire(&self.stream_key, expire_time)
+          .await?;
+        self.last_expiration_set = Some(now);
+      }
+    }
+
+    Ok(())
+  }
 }
 
 pub enum ReadOption {
   Undelivered,
   Count(usize),
   After(MessageId),
+}
+
+#[derive(Clone)]
+pub struct StreamConfig {
+  /// Sets the maximum length of the stream.
+  max_len: Option<usize>,
+  /// Set the time in secs for the stream to expire. After the time has passed, the stream will be
+  /// automatically deleted. All messages in the stream will be removed.
+  ///
+  /// If the stream does not exist (e.g., it has expired), inserting a message will automatically
+  /// create the stream.
+  expire_time_in_secs: Option<i64>,
+}
+
+impl Default for StreamConfig {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl StreamConfig {
+  pub fn new() -> Self {
+    Self {
+      max_len: None,
+      expire_time_in_secs: None,
+    }
+  }
+  pub fn with_max_len(mut self, max_len: usize) -> Self {
+    self.max_len = Some(max_len);
+    self
+  }
+
+  pub fn with_expire_time(mut self, expire_time_in_secs: i64) -> Self {
+    self.expire_time_in_secs = Some(expire_time_in_secs);
+    self
+  }
 }

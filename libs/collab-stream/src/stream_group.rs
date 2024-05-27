@@ -6,6 +6,7 @@ use redis::streams::{
   StreamReadOptions,
 };
 use redis::{pipe, AsyncCommands, RedisResult};
+
 use tracing::{error, trace};
 
 #[derive(Clone)]
@@ -13,15 +14,50 @@ pub struct StreamGroup {
   connection_manager: ConnectionManager,
   stream_key: String,
   group_name: String,
+  config: StreamConfig,
+}
+
+#[derive(Clone)]
+pub struct StreamConfig {
+  max_len: Option<usize>,
+}
+
+impl Default for StreamConfig {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl StreamConfig {
+  pub fn new() -> Self {
+    Self { max_len: None }
+  }
+  pub fn with_max_len(mut self, max_len: usize) -> Self {
+    self.max_len = Some(max_len);
+    self
+  }
 }
 
 impl StreamGroup {
   pub fn new(stream_key: String, group_name: &str, connection_manager: ConnectionManager) -> Self {
+    let config = StreamConfig {
+      max_len: Some(1000),
+    };
+    Self::new_with_config(stream_key, group_name, connection_manager, config)
+  }
+
+  pub fn new_with_config(
+    stream_key: String,
+    group_name: &str,
+    connection_manager: ConnectionManager,
+    config: StreamConfig,
+  ) -> Self {
     let group_name = group_name.to_string();
     Self {
       group_name,
       connection_manager,
       stream_key,
+      config,
     }
   }
 
@@ -98,8 +134,20 @@ impl StreamGroup {
     for message in messages {
       let message = message.into();
       let tuple = message.into_tuple_array();
-      pipe.xadd(&self.stream_key, "*", tuple.as_slice());
+      if let Some(len) = self.config.max_len {
+        pipe
+          .cmd("XADD")
+          .arg(&self.stream_key)
+          .arg("MAXLEN")
+          .arg("~")
+          .arg(len)
+          .arg("*")
+          .arg(&tuple);
+      } else {
+        pipe.cmd("XADD").arg(&self.stream_key).arg("*").arg(&tuple);
+      }
     }
+
     pipe.query_async(&mut self.connection_manager).await?;
     Ok(())
   }
@@ -115,10 +163,20 @@ impl StreamGroup {
 
   pub async fn insert_binary(&mut self, message: StreamBinary) -> Result<(), StreamError> {
     let tuple = message.into_tuple_array();
-    self
-      .connection_manager
-      .xadd(&self.stream_key, "*", tuple.as_slice())
-      .await?;
+    match self.config.max_len {
+      Some(max_len) => {
+        self
+          .connection_manager
+          .xadd_maxlen(&self.stream_key, StreamMaxlen::Approx(max_len), "*", &tuple)
+          .await?;
+      },
+      None => {
+        self
+          .connection_manager
+          .xadd(&self.stream_key, "*", tuple.as_slice())
+          .await?;
+      },
+    }
     Ok(())
   }
 

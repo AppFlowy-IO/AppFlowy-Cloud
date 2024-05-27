@@ -97,6 +97,7 @@ async fn spawn_control_group(
         .await
       {
         if let Some(handles) = weak_handles.upgrade() {
+          trace!("[History] received {} control messages", messages.len());
           for message in &messages {
             if let Ok(event) = CollabControlEvent::decode(&message.data) {
               handle_control_event(&redis_stream, event, &handles, &pg_pool).await;
@@ -127,7 +128,11 @@ async fn handle_control_event(
     } => match handles.entry(object_id.clone()) {
       Entry::Occupied(_) => {},
       Entry::Vacant(entry) => {
-        trace!("[History] create collab: {}", object_id);
+        trace!(
+          "[History] create collab: {}, collab_type:{}",
+          object_id,
+          collab_type
+        );
         match init_collab_handle(
           redis_stream,
           pg_pool,

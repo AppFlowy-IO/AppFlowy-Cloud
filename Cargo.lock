@@ -553,7 +553,6 @@ dependencies = [
  "app-error",
  "appflowy-ai-client",
  "appflowy-collaborate",
- "argon2",
  "assert-json-diff",
  "async-stream",
  "async-trait",

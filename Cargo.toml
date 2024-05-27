@@ -35,7 +35,6 @@ futures-util = { workspace = true, features = ["std", "io"] }
 once_cell = "1.19.0"
 chrono = { version = "0.4.37", features = ["serde", "clock"], default-features = false }
 derive_more = { version = "0.99" }
-argon2 = { version = "0.5", features = ["std"] }
 secrecy.workspace = true
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"

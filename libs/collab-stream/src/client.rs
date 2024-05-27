@@ -52,8 +52,8 @@ impl CollabRedisStream {
       group_name,
       self.connection_manager.clone(),
       StreamConfig::new()
-        // 1000 messages
-        .with_max_len(1000)
+        // 2000 messages
+        .with_max_len(2000)
         // 12 hours
         .with_expire_time(60 * 60 * 12),
     );

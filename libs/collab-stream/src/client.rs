@@ -1,7 +1,7 @@
 use crate::error::StreamError;
 use crate::pubsub::{CollabStreamPub, CollabStreamSub};
 use crate::stream::CollabStream;
-use crate::stream_group::StreamGroup;
+use crate::stream_group::{StreamConfig, StreamGroup};
 use redis::aio::ConnectionManager;
 
 pub const CONTROL_STREAM_KEY: &str = "af_collab_control";
@@ -30,7 +30,12 @@ impl CollabRedisStream {
     key: &str,
     group_name: &str,
   ) -> Result<StreamGroup, StreamError> {
-    let mut group = StreamGroup::new(key.to_string(), group_name, self.connection_manager.clone());
+    let mut group = StreamGroup::new_with_config(
+      key.to_string(),
+      group_name,
+      self.connection_manager.clone(),
+      StreamConfig::new().with_max_len(1000),
+    );
     group.ensure_consumer_group().await?;
     Ok(group)
   }
@@ -42,7 +47,16 @@ impl CollabRedisStream {
     group_name: &str,
   ) -> Result<StreamGroup, StreamError> {
     let stream_key = format!("af_collab_update-{}-{}", workspace_id, oid);
-    let mut group = StreamGroup::new(stream_key, group_name, self.connection_manager.clone());
+    let mut group = StreamGroup::new_with_config(
+      stream_key,
+      group_name,
+      self.connection_manager.clone(),
+      StreamConfig::new()
+        // 1000 messages
+        .with_max_len(1000)
+        // 12 hours
+        .with_expire_time(60 * 60 * 12),
+    );
     group.ensure_consumer_group().await?;
     Ok(group)
   }

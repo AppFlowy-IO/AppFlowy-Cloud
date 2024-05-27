@@ -13,7 +13,7 @@ use crate::state::AppState;
 
 pub fn search_scope() -> Scope {
   web::scope("/api/search/{workspace_id}")
-    .service(web::resource("/").route(web::get().to(document_search)))
+    .service(web::resource("").route(web::get().to(document_search)))
 }
 #[tracing::instrument(skip(state, auth, payload), err)]
 async fn document_search(

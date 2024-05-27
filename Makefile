@@ -1,4 +1,4 @@
-ROOT = "./build"
+ROOT = "./script"
 SEMVER_VERSION=$(shell grep version Cargo.toml | awk -F"\"" '{print $$2}' | head -n 1)
 
 .PHONY: run test

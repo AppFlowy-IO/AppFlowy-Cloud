@@ -40,7 +40,7 @@ done
 
 # Generate protobuf files for collab-rt-entity crate.
 # To run sqlx prepare, we need to build the collab-rt-entity crate first
-./build/code_gen.sh
+./script/code_gen.sh
 
 # Require if there are any changes to the database schema
 # To build AppFlowy-Cloud binary, we requires the .sqlx files

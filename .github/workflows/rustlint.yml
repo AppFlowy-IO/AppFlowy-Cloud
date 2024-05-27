@@ -44,7 +44,7 @@ jobs:
         run: cp dev.env .env
 
       - name: Code Gen
-        working-directory: ./build
+        working-directory: ./script
         run: ./code_gen.sh
 
       - name: Rustfmt

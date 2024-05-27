@@ -312,7 +312,6 @@ impl EditState {
   }
 }
 
-#[allow(dead_code)]
 struct CollabUpdateStreamingImpl {
   sender: mpsc::UnboundedSender<Vec<u8>>,
   stopped: Arc<AtomicBool>,

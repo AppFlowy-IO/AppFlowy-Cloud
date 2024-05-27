@@ -98,7 +98,12 @@ impl FromRequest for Authorization {
 }
 
 fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::Error> {
-  let jwt_secret_data = req.app_data::<Data<Secret<String>>>()?;
+  let jwt_secret_data =
+    req
+      .app_data::<Data<Secret<String>>>()
+      .ok_or(actix_web::error::ErrorInternalServerError(
+        "jwt secret not found",
+      ))?;
   let bearer = req
     .headers()
     .get("Authorization")

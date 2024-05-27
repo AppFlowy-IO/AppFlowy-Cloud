@@ -6,7 +6,6 @@ use tracing::{event, instrument, trace};
 
 use access_control::workspace::WorkspaceAccessControl;
 use app_error::AppError;
-use database::pg_row::AFUserNotification;
 use database::user::{create_user, is_user_exist};
 use database::workspace::select_workspace;
 use database_entity::dto::AFRole;
@@ -79,7 +78,6 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
   Ok(is_new)
 }
 
-pub type UserListener = crate::biz::pg_listener::PostgresDBListener<AFUserNotification>;
 // Best effort to get user's name after oauth
 fn name_from_user_metadata(value: &serde_json::Value) -> String {
   value

@@ -13,6 +13,7 @@ use sqlx::postgres::PgArguments;
 use sqlx::{Arguments, Executor, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
+use tracing::warn;
 
 use uuid::Uuid;
 
@@ -209,11 +210,19 @@ pub async fn select_chat_messages(
 
   let mut messages = rows
     .into_iter()
-    .map(|(message_id, content, created_at, author)| ChatMessage {
-      author: serde_json::from_value::<ChatAuthor>(author).unwrap_or_default(),
-      message_id,
-      content,
-      created_at,
+    .flat_map(|(message_id, content, created_at, author)| {
+      match serde_json::from_value::<ChatAuthor>(author) {
+        Ok(author) => Some(ChatMessage {
+          author,
+          message_id,
+          content,
+          created_at,
+        }),
+        Err(err) => {
+          warn!("Failed to deserialize author: {}", err);
+          None
+        },
+      }
     })
     .collect::<Vec<ChatMessage>>();
 
@@ -280,8 +289,8 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
   chat_id: &str,
 ) -> Result<Vec<ChatMessage>, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
-  let messages: Vec<ChatMessage> = sqlx::query_as!(
-    ChatMessage,
+  let rows = sqlx::query!(
+    // ChatMessage,
     r#"
      SELECT message_id, content, created_at, author
           FROM af_chat_messages
@@ -292,5 +301,24 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
   )
   .fetch_all(executor)
   .await?;
+
+  let messages = rows
+    .into_iter()
+    .flat_map(
+      |row| match serde_json::from_value::<ChatAuthor>(row.author) {
+        Ok(author) => Some(ChatMessage {
+          author,
+          message_id: row.message_id,
+          content: row.content,
+          created_at: row.created_at,
+        }),
+        Err(err) => {
+          warn!("Failed to deserialize author: {}", err);
+          None
+        },
+      },
+    )
+    .collect::<Vec<ChatMessage>>();
+
   Ok(messages)
 }

@@ -59,6 +59,7 @@ async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     config.ingest_interval.into(),
   )
   .await?;
+  tracing::info!("AppFlowy Indexer started!");
   consumer.await;
   Ok(())
 }

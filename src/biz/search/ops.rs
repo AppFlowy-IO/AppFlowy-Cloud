@@ -31,7 +31,7 @@ pub async fn search_document(
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
 
   if let Some(usage) = embeddings.usage {
-    tracing::debug!("OpenAI API usage: {} tokens", usage.total_tokens)
+    tracing::info!("OpenAI API usage: {}", usage.total_tokens)
   }
 
   let embedding = embeddings
@@ -57,8 +57,8 @@ pub async fn search_document(
     SearchDocumentParams {
       user_id: uid,
       workspace_id,
-      limit: request.limit.unwrap_or(5) as i32,
-      preview: request.preview_size.unwrap_or(50) as i32,
+      limit: request.limit.unwrap_or(10) as i32,
+      preview: request.preview_size.unwrap_or(180) as i32,
       embedding,
     },
   )

@@ -99,7 +99,7 @@ impl OpenCollabConsumer {
       return;
     }
 
-    tracing::trace!("received {} messages", messages.len());
+    tracing::debug!("received {} messages from Redis", messages.len());
     for message in &messages {
       if let Ok(event) = CollabControlEvent::decode(&message.data) {
         Self::handle_event(
@@ -149,7 +149,7 @@ impl OpenCollabConsumer {
           match result {
             Ok(Some(handle)) => {
               entry.insert(handle);
-              tracing::trace!("created a new handle for {}/{}", workspace_id, object_id);
+              tracing::info!("created a new handle for {}/{}", workspace_id, object_id);
             },
             Ok(None) => {
               tracing::debug!(
@@ -173,7 +173,7 @@ impl OpenCollabConsumer {
       CollabControlEvent::Close { object_id } => {
         if let Some((_, handle)) = handles.remove(&object_id) {
           // trigger shutdown signal and gracefully wait for handle to complete
-          tracing::trace!("shutting down handle for {}", object_id);
+          tracing::info!("shutting down handle for {}", object_id);
           handle.shutdown().await;
         }
       },

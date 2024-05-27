@@ -89,6 +89,7 @@ impl PostgresIndexer {
     Ok(Self { openai, db })
   }
 
+  #[allow(dead_code)]
   pub fn new(openai: Client, db: PgPool) -> Self {
     Self { openai, db }
   }
@@ -113,7 +114,7 @@ impl PostgresIndexer {
 
     tracing::trace!("fetched {} embeddings", resp.data.len());
     if let Some(usage) = resp.usage {
-      tracing::trace!("OpenAI API usage: {}", usage.prompt_tokens);
+      tracing::info!("OpenAI API usage: {}", usage.total_tokens);
       //TODO: report usage statistics
     }
 

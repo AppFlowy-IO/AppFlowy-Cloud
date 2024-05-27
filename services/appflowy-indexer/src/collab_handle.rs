@@ -234,10 +234,10 @@ impl CollabHandle {
       return Ok(());
     }
     let inserts: Vec<_> = inserts.drain().map(|(_, doc)| doc).collect();
-    tracing::debug!("updating indexes for {} fragments", inserts.len());
+    tracing::info!("updating indexes for {} fragments", inserts.len());
     indexer.update_index(inserts).await?;
 
-    tracing::debug!("removing indexes for {} fragments", removals.len());
+    tracing::info!("removing indexes for {} fragments", removals.len());
     indexer
       .remove(&removals.drain().collect::<Vec<_>>())
       .await?;

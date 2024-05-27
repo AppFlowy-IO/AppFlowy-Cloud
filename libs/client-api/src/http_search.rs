@@ -14,7 +14,7 @@ impl Client {
     limit: u32,
     preview_size: u32,
   ) -> Result<SearchDocumentResponse, AppResponseError> {
-    let query = serde_urlencoded::to_string(&[
+    let query = serde_urlencoded::to_string([
       ("query", query),
       ("limit", &limit.to_string()),
       ("preview_size", &preview_size.to_string()),

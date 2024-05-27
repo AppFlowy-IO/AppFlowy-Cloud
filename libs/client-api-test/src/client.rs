@@ -38,7 +38,7 @@ fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str
 
 /// Return a client that connects to the local host. It requires to run the server locally.
 /// ```shell
-/// ./build/run_local_server.sh
+/// ./script/run_local_server.sh
 /// ```
 pub fn localhost_client() -> Client {
   let device_id = Uuid::new_v4().to_string();

@@ -57,10 +57,12 @@ pub struct SearchDocumentItem {
   pub object_id: String,
   /// Workspace identifier, given document belongs to.
   pub workspace_id: Uuid,
-  /// Partition key, which maps directly onto [CollabType].
+  /// Partition key, which maps directly onto [collab_entity::CollabType].
   pub collab_type: i32,
+  /// Type of the content to be presented. Maps directly onto [database_entity::dto::EmbeddingContentType].
+  pub content_type: i32,
   /// First N character of the indexed content.
-  pub content_preview: String,
+  pub content_preview: Option<String>,
   /// Name of the user who's an owner of the document.
   pub created_by: String,
   /// When the document was created.

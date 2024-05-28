@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
 use database::index::{has_collab_embeddings, remove_collab_embeddings, upsert_collab_embeddings};
-use database_entity::dto::AFCollabEmbeddingParams;
+use database_entity::dto::{AFCollabEmbeddingParams, EmbeddingContentType};
 
 use crate::error::Result;
 
@@ -33,6 +33,8 @@ pub struct Fragment {
   pub object_id: String,
   /// Type of the document object.
   pub collab_type: CollabType,
+  /// Type of the content, current fragment represents.
+  pub content_type: EmbeddingContentType,
   /// Content of the fragment.
   pub content: String,
 }
@@ -49,6 +51,7 @@ struct EmbedFragment {
   pub collab_type: CollabType,
   /// Content of the fragment.
   pub content: String,
+  pub content_type: EmbeddingContentType,
   pub embedding: Option<Vec<f32>>,
 }
 
@@ -59,6 +62,7 @@ impl From<Fragment> for EmbedFragment {
       object_id: fragment.object_id,
       collab_type: fragment.collab_type,
       content: fragment.content,
+      content_type: fragment.content_type,
       embedding: None,
     }
   }
@@ -70,6 +74,7 @@ impl From<EmbedFragment> for AFCollabEmbeddingParams {
       fragment_id: f.fragment_id.into(),
       object_id: f.object_id,
       collab_type: f.collab_type,
+      content_type: f.content_type,
       content: f.content,
       embedding: f.embedding,
     }
@@ -172,6 +177,7 @@ impl Indexer for PostgresIndexer {
 
 #[cfg(test)]
 mod test {
+  use database_entity::dto::EmbeddingContentType;
   use pgvector::Vector;
   use sqlx::Row;
 
@@ -197,6 +203,7 @@ mod test {
       fragment_id: fragment_id.clone(),
       object_id: object_id.to_string(),
       collab_type: collab_entity::CollabType::Document,
+      content_type: EmbeddingContentType::PlainText,
       content: "Hello, world!".to_string(),
     }];
 

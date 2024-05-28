@@ -8,6 +8,7 @@ use collab_document::blocks::{DeltaType, DocumentData, TextDelta};
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use dashmap::DashMap;
+use database_entity::dto::EmbeddingContentType;
 use futures::Stream;
 use tokio::sync::watch::Sender;
 
@@ -88,6 +89,7 @@ impl DocumentWatcher {
               yield FragmentUpdate::Update(Fragment {
                 fragment_id: object_id.clone(),
                 collab_type: CollabType::Document,
+                content_type: EmbeddingContentType::PlainText,
                 object_id: object_id.clone(),
                 content,
               });
@@ -162,6 +164,7 @@ mod test {
   use collab_document::document::Document;
   use collab_document::document_data::default_document_collab_data;
   use collab_entity::CollabType;
+  use database_entity::dto::EmbeddingContentType;
   use serde_json::json;
   use tokio_stream::StreamExt;
   use workspace_template::document::get_started::get_started_document_data;
@@ -208,6 +211,7 @@ mod test {
       super::FragmentUpdate::Update(Fragment {
         fragment_id: "o-1".to_string(),
         collab_type: CollabType::Document,
+        content_type: EmbeddingContentType::PlainText,
         object_id: "o-1".to_string(),
         content: "A\n".to_string(),
       })
@@ -224,6 +228,7 @@ mod test {
       super::FragmentUpdate::Update(Fragment {
         fragment_id: "o-1".to_string(),
         collab_type: CollabType::Document,
+        content_type: EmbeddingContentType::PlainText,
         object_id: "o-1".to_string(),
         content: "BA\n".to_string(),
       })

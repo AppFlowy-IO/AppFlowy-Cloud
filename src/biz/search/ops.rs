@@ -4,7 +4,9 @@ use openai_dive::v1::models::EmbeddingsEngine;
 use openai_dive::v1::resources::embedding::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
 };
-use shared_entity::dto::search_dto::{SearchDocumentRequest, SearchDocumentResponseItem};
+use shared_entity::dto::search_dto::{
+  SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem,
+};
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -68,6 +70,7 @@ pub async fn search_document(
         object_id: item.object_id,
         workspace_id: item.workspace_id.to_string(),
         score: item.score,
+        content_type: SearchContentType::from_record(item.content_type),
         preview: item.content_preview,
         created_by: item.created_by,
         created_at: item.created_at,

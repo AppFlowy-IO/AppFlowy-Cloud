@@ -170,7 +170,9 @@ mod test {
   use database_entity::dto::EmbeddingContentType;
   use serde_json::json;
   use tokio_stream::StreamExt;
-  use workspace_template::document::get_started::get_started_document_data;
+  use workspace_template::document::get_started::{
+    get_initial_document_data, get_started_document_data,
+  };
 
   use crate::watchers::DocumentWatcher;
 
@@ -179,6 +181,14 @@ mod test {
     let doc = get_started_document_data().unwrap();
     let text = DocumentWatcher::document_to_plain_text(&doc);
     let expected = "\nWelcome to AppFlowy!\nHere are the basics\nClick anywhere and just start typing.\nHighlight any text, and use the editing menu to style your writing however you like.\nAs soon as you type / a menu will pop up. Select different types of content blocks you can add.\nType / followed by /bullet or /num to create a list.\nClick + New Page button at the bottom of your sidebar to add a new page.\nClick + next to any page title in the sidebar to quickly add a new subpage, Document, Grid, or Kanban Board.\n\n\nKeyboard shortcuts, markdown, and code block\nKeyboard shortcuts guide\nMarkdown reference\nType /code to insert a code block\n// This is the main function.\nfn main() {\n    // Print text to the console.\n    println!(\"Hello World!\");\n}\n\nHave a question❓\nClick ? at the bottom right for help and support.\n\n\nLike AppFlowy? Follow us:\nGitHub\nTwitter: @appflowy\nNewsletter\n\n\n\n\n";
+    assert_eq!(&text, expected);
+  }
+
+  #[test]
+  fn document_plain_text_with_nested_blocks() {
+    let doc = get_initial_document_data().unwrap();
+    let text = DocumentWatcher::document_to_plain_text(&doc);
+    let expected = "Welcome to AppFlowy!\nHere are the basics\nHere is H3\nClick anywhere and just start typing.\nClick Enter to create a new line.\nHighlight any text, and use the editing menu to style your writing however you like.\nAs soon as you type / a menu will pop up. Select different types of content blocks you can add.\nType / followed by /bullet or /num to create a list.\nClick + New Page button at the bottom of your sidebar to add a new page.\nClick + next to any page title in the sidebar to quickly add a new subpage, Document, Grid, or Kanban Board.\n\n\nKeyboard shortcuts, markdown, and code block\nKeyboard shortcuts guide\nMarkdown reference\nType /code to insert a code block\n// This is the main function.\nfn main() {\n    // Print text to the console.\n    println!(\"Hello World!\");\n}\n\nThis is a paragraph\nThis is a paragraph\nHave a question❓\nClick ? at the bottom right for help and support.\nThis is a paragraph\nThis is a paragraph\nClick ? at the bottom right for help and support.\n\n\nLike AppFlowy? Follow us:\nGitHub\nTwitter: @appflowy\nNewsletter\n\n\n\n\n";
     assert_eq!(&text, expected);
   }
 

@@ -28,6 +28,7 @@ FROM debian:bookworm-slim AS runtime
 WORKDIR /app/services/appflowy-indexer
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends openssl \
+    && apt-get install ca-certificates \
     && apt-get install protobuf-compiler -y \
     # Clean up
     && apt-get autoremove -y \

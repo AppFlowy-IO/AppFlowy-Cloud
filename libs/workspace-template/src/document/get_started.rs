@@ -128,3 +128,8 @@ pub fn get_started_document_data() -> Result<DocumentData, Error> {
   let json_str = include_str!("../../assets/read_me.json");
   JsonToDocumentParser::json_str_to_document(json_str)
 }
+
+pub fn get_initial_document_data() -> Result<DocumentData, Error> {
+  let json_str = include_str!("../../assets/initial_document.json");
+  JsonToDocumentParser::json_str_to_document(json_str)
+}

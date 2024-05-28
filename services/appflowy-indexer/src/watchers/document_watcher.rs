@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -113,9 +112,10 @@ impl DocumentWatcher {
   fn document_to_plain_text(document: &DocumentData) -> String {
     let mut buf = String::new();
     if let Some(text_map) = document.meta.text_map.as_ref() {
-      let mut blocks = VecDeque::new();
-      blocks.push_back(&document.page_id);
-      while let Some(block_id) = blocks.pop_front() {
+      let mut stack = Vec::new();
+      stack.push(&document.page_id);
+      // do a depth-first scan of the document blocks
+      while let Some(block_id) = stack.pop() {
         if let Some(block) = document.blocks.get(block_id) {
           if block.external_type.as_deref() == Some("text") {
             if let Some(text_id) = block.external_id.as_deref() {
@@ -137,7 +137,10 @@ impl DocumentWatcher {
             }
           }
           if let Some(children) = document.meta.children_map.get(&block.children) {
-            blocks.extend(children);
+            // we want to process children blocks in the same order they are given in children_map
+            // however stack.pop gives us the last element first, so we push children
+            // in reverse order
+            stack.extend(children.iter().rev());
           }
         }
       }

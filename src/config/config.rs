@@ -14,6 +14,7 @@ pub struct Config {
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub redis_uri: Secret<String>,
+  pub openai_api_key: Option<Secret<String>>,
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
   pub grpc_history: GrpcHistorySetting,
@@ -160,6 +161,9 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "60").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
+    openai_api_key: std::env::var("APPFLOWY_OPENAI_API_KEY")
+      .map(Secret::from)
+      .ok(),
     s3: S3Setting {
       use_minio: get_env_var("APPFLOWY_S3_USE_MINIO", "true")
         .parse()

@@ -1,5 +1,15 @@
 version: '3'
 services:
+  nginx:
+    restart: on-failure
+    image: nginx
+    ports:
+      - 80:80   # Disable this if you are using TLS
+      - 443:443
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl/certificate.crt:/etc/nginx/ssl/certificate.crt
+      - ./nginx/ssl/private_key.key:/etc/nginx/ssl/private_key.key
   minio:
     restart: on-failure
     image: minio/minio
@@ -12,7 +22,9 @@ services:
 
   postgres:
     restart: on-failure
-    image: postgres
+    build:
+      context: ./postgres
+      dockerfile: postgres.Dockerfile
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
@@ -107,9 +119,12 @@ services:
     ports:
       - 5001:5001
     environment:
+      - VECTOR_STORE_ENABLED=true
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
+      - APPFLOWY_DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-postgres}
+
 
 volumes:
   postgres_data:

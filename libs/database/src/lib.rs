@@ -2,6 +2,7 @@ pub mod chat;
 pub mod collab;
 pub mod file;
 pub mod history;
+pub mod index;
 pub mod listener;
 pub mod pg_row;
 pub mod resource_usage;

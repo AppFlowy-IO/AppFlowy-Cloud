@@ -21,6 +21,7 @@ mod wasm;
 #[cfg(target_arch = "wasm32")]
 pub use wasm::*;
 mod http_chat;
+mod http_search;
 pub mod ws;
 
 pub mod error {

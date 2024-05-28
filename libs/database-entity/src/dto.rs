@@ -688,3 +688,23 @@ impl ChatAuthor {
     }
   }
 }
+
+#[derive(Debug, Clone)]
+pub struct AFCollabEmbeddingParams {
+  pub fragment_id: String,
+  pub object_id: String,
+  pub collab_type: CollabType,
+  pub content_type: EmbeddingContentType,
+  pub content: String,
+  pub embedding: Option<Vec<f32>>,
+}
+
+/// Type of content stored by the embedding.
+/// Currently only plain text of the document is supported.
+/// In the future, we might support other kinds like i.e. PDF, images or image-extracted text.
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Serialize_repr, Deserialize_repr, Eq, PartialEq)]
+pub enum EmbeddingContentType {
+  /// The plain text representation of the document.
+  PlainText = 0,
+}

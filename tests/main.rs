@@ -7,4 +7,5 @@ mod workspace;
 
 mod ai_test;
 mod collab_history;
+mod search;
 mod yrs_version;

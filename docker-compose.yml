@@ -27,7 +27,11 @@ services:
 
   postgres:
     restart: on-failure
-    image: postgres
+    build:
+      context: ./postgres
+      dockerfile: postgres.Dockerfile
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
@@ -111,6 +115,7 @@ services:
       - APPFLOWY_DATABASE_MAX_CONNECTIONS=${APPFLOWY_DATABASE_MAX_CONNECTIONS}
       - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
+      - APPFLOWY_OPENAI_API_KEY=${APPFLOWY_OPENAI_API_KEY}
     build:
       context: .
       dockerfile: Dockerfile
@@ -153,6 +158,19 @@ services:
       - APPFLOWY_HISTORY_REDIS_URL=redis://redis:6379
       - APPFLOWY_HISTORY_ENVIRONMENT=production
       - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
+
+  appflowy_indexer:
+    restart: on-failure
+    image: appflowyinc/appflowy_indexer:${APPFLOWY_INDEXER_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: ./services/appflowy-indexer/Dockerfile
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - APPFLOWY_INDEXER_REDIS_URL=redis://redis:6379
+      - APPFLOWY_INDEXER_ENVIRONMENT=production
+      - APPFLOWY_INDEXER_DATABASE_URL=${APPFLOWY_INDEXER_DATABASE_URL}
+      - APPFLOWY_INDEXER_OPENAI_API_KEY=${APPFLOWY_INDEXER_OPENAI_API_KEY}
 
 volumes:
   postgres_data:

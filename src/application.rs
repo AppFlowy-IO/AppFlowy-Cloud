@@ -7,7 +7,6 @@ use crate::api::ws::ws_scope;
 use crate::mailer::Mailer;
 use access_control::access::{enable_access_control, AccessControl};
 
-use crate::api::ai::ai_tool_scope;
 use crate::api::chat::chat_scope;
 use crate::api::history::history_scope;
 use crate::biz::collab::access_control::CollabMiddlewareAccessControl;
@@ -49,6 +48,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tonic_proto::history::history_client::HistoryClient;
 
+use crate::api::search::search_scope;
 use tracing::{info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -66,6 +66,7 @@ impl Application {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
+    tracing::info!("Server started at {}", listener.local_addr().unwrap());
     let actix_server = run_actix_server(listener, state, config, rt_cmd_recv).await?;
 
     Ok(Self { port, actix_server })
@@ -144,8 +145,8 @@ pub async fn run_actix_server(
       .service(file_storage_scope())
       .service(chat_scope())
       .service(history_scope())
-      .service(ai_tool_scope())
       .service(metrics_scope())
+      .service(search_scope())
       .app_data(Data::new(state.metrics.registry.clone()))
       .app_data(Data::new(state.metrics.request_metrics.clone()))
       .app_data(Data::new(state.metrics.realtime_metrics.clone()))
@@ -264,9 +265,20 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     warn!("Failed to remove all connected users: {:?}", err);
   }
 
+  let openai = match &config.openai_api_key {
+    Some(key) if !key.expose_secret().is_empty() => Some(openai_dive::v1::api::Client::new(
+      key.expose_secret().clone(),
+    )),
+    _ => {
+      warn!("OpenAI API key not configured. Set APPFLOWY_OPENAI_API_KEY environment variable to enable OpenAI API.");
+      None
+    },
+  };
+
   info!("Application state initialized");
   Ok(AppState {
     pg_pool,
+    openai,
     config: Arc::new(config.clone()),
     user_cache,
     id_gen: Arc::new(RwLock::new(Snowflake::new(1))),

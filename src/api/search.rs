@@ -28,7 +28,14 @@ async fn document_search(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let openai = match &state.openai {
     Some(openai) => openai,
-    None => return Err(AppError::Internal(anyhow!("OpenAI API key not configured")).into()),
+    None => {
+      return Err(
+        AppError::Internal(anyhow!(
+          "Search API is not supported by this AppFlowy-Cloud instance"
+        ))
+        .into(),
+      )
+    },
   };
   let resp = search_document(&state.pg_pool, openai, uid, workspace_id, request).await?;
   Ok(AppResponse::Ok().with_data(resp).into())

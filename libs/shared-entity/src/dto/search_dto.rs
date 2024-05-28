@@ -11,15 +11,10 @@ pub struct SearchDocumentRequest {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SearchDocumentResponse {
-  pub data: Vec<SearchDocumentResponseItem>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SearchDocumentResponseItem {
   pub object_id: String,
   pub workspace_id: String,
-  pub score: f32,
+  pub score: f64,
   pub preview: String,
   pub created_by: String,
   pub created_at: DateTime<Utc>,

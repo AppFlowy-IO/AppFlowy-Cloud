@@ -49,8 +49,8 @@ async fn test_document_indexing_and_search() {
     .search_documents(&workspace_id, "Appflowy", 1, 20)
     .await
     .unwrap();
-  assert_eq!(search_resp.data.len(), 1);
-  let item = &search_resp.data[0];
+  assert_eq!(search_resp.len(), 1);
+  let item = &search_resp[0];
   assert_eq!(item.object_id, object_id);
   assert_eq!(item.preview, "\nWelcome to AppFlowy");
 }

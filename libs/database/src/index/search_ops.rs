@@ -56,9 +56,9 @@ pub struct SearchDocumentItem {
   /// Document identifier.
   pub object_id: String,
   /// Workspace identifier, given document belongs to.
-  pub workpace_id: Uuid,
+  pub workspace_id: Uuid,
   /// Partition key, which maps directly onto [CollabType].
-  pub partition_key: i64,
+  pub collab_type: i32,
   /// First N character of the indexed content.
   pub content_preview: String,
   /// Name of the user who's an owner of the document.
@@ -66,5 +66,5 @@ pub struct SearchDocumentItem {
   /// When the document was created.
   pub created_at: DateTime<Utc>,
   /// Similarity score to an original query. Lower is better.
-  pub score: f32,
+  pub score: f64,
 }

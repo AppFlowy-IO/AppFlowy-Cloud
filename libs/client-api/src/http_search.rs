@@ -1,6 +1,6 @@
 use app_error::ErrorCode;
 use reqwest::Method;
-use shared_entity::dto::search_dto::SearchDocumentResponse;
+use shared_entity::dto::search_dto::SearchDocumentResponseItem;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::http::log_request_id;
@@ -13,7 +13,7 @@ impl Client {
     query: &str,
     limit: u32,
     preview_size: u32,
-  ) -> Result<SearchDocumentResponse, AppResponseError> {
+  ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
     let query = serde_urlencoded::to_string([
       ("query", query),
       ("limit", &limit.to_string()),
@@ -27,7 +27,7 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<SearchDocumentResponse>::from_response(resp)
+    AppResponse::<Vec<SearchDocumentResponseItem>>::from_response(resp)
       .await?
       .into_data()
   }

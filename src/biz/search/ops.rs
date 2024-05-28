@@ -4,9 +4,7 @@ use openai_dive::v1::models::EmbeddingsEngine;
 use openai_dive::v1::resources::embedding::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
 };
-use shared_entity::dto::search_dto::{
-  SearchDocumentRequest, SearchDocumentResponse, SearchDocumentResponseItem,
-};
+use shared_entity::dto::search_dto::{SearchDocumentRequest, SearchDocumentResponseItem};
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -17,7 +15,7 @@ pub async fn search_document(
   uid: i64,
   workspace_id: Uuid,
   request: SearchDocumentRequest,
-) -> Result<SearchDocumentResponse, AppResponseError> {
+) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
   let embeddings = openai
     .embeddings()
     .create(EmbeddingParameters {
@@ -63,17 +61,17 @@ pub async fn search_document(
     },
   )
   .await?;
-  Ok(SearchDocumentResponse {
-    data: results
+  Ok(
+    results
       .into_iter()
       .map(|item| SearchDocumentResponseItem {
         object_id: item.object_id,
-        workspace_id: item.workpace_id.to_string(),
+        workspace_id: item.workspace_id.to_string(),
         score: item.score,
         preview: item.content_preview,
         created_by: item.created_by,
         created_at: item.created_at,
       })
       .collect(),
-  })
+  )
 }

@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use uuid::Uuid;
 
 use app_error::AppError;
-use shared_entity::dto::search_dto::{SearchDocumentRequest, SearchDocumentResponse};
+use shared_entity::dto::search_dto::{SearchDocumentRequest, SearchDocumentResponseItem};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 
 use crate::biz::search::search_document;
@@ -21,7 +21,7 @@ async fn document_search(
   path: web::Path<Uuid>,
   payload: Query<SearchDocumentRequest>,
   state: Data<AppState>,
-) -> actix_web::Result<JsonAppResponse<SearchDocumentResponse>> {
+) -> actix_web::Result<JsonAppResponse<Vec<SearchDocumentResponseItem>>> {
   let workspace_id = path.into_inner();
   let request = payload.into_inner();
   let user_uuid = auth.uuid()?;

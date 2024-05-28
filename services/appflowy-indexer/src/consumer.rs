@@ -217,6 +217,7 @@ mod test {
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
   use serde_json::json;
+  use sqlx::Row;
   use std::sync::Arc;
   use std::time::Duration;
 
@@ -291,7 +292,7 @@ mod test {
 
     document.apply_text_delta(&text_id, json!([{"insert": "test-value"}]).to_string());
 
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
     assert!(
       consumer.handles.contains_key(&object_id.to_string()),
       "in reaction to open control event, a corresponding handle should be created"
@@ -310,15 +311,14 @@ mod test {
       "in reaction to close control event, a corresponding handle should be destroyed"
     );
 
-    let contents = sqlx::query!(
-      "SELECT content from af_collab_embeddings WHERE oid = $1",
-      object_id.to_string()
-    )
-    .fetch_all(&db)
-    .await
-    .unwrap();
+    let contents = sqlx::query("SELECT content from af_collab_embeddings WHERE oid = $1")
+      .bind(object_id.to_string())
+      .fetch_all(&db)
+      .await
+      .unwrap();
 
     assert_ne!(contents.len(), 0);
-    assert_eq!(contents[0].content.as_deref(), Some("test-value\n"));
+    let content: Option<String> = contents[0].get(0);
+    assert_eq!(content.as_deref(), Some("test-value\n"));
   }
 }

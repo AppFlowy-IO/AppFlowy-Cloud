@@ -30,7 +30,8 @@ pub async fn db_pool() -> PgPool {
 pub async fn setup_collab(db: &PgPool, uid: i64, object_id: Uuid, encoded_collab: Vec<u8>) -> Uuid {
   let mut tx = db.begin().await.unwrap();
   let user_uuid = Uuid::new_v4();
-  sqlx::query!("INSERT INTO auth.users(id) VALUES($1)", &user_uuid)
+  sqlx::query("INSERT INTO auth.users(id) VALUES($1)")
+    .bind(&user_uuid)
     .execute(tx.deref_mut())
     .await
     .unwrap();

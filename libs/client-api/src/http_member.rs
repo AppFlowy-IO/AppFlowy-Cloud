@@ -3,7 +3,7 @@ use crate::Client;
 use database_entity::dto::{
   AFCollabMember, AFCollabMembers, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
   AFWorkspaceMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
-  UpdateCollabMemberParams,
+  QueryWorkspaceMember, UpdateCollabMemberParams,
 };
 use reqwest::Method;
 use shared_entity::dto::workspace_dto::{
@@ -264,6 +264,26 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<AFCollabMembers>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_workspace_member(
+    &self,
+    params: QueryWorkspaceMember,
+  ) -> Result<AFWorkspaceMember, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/member/user/{}",
+      self.base_url, params.workspace_id, params.uid,
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<AFWorkspaceMember>::from_response(resp)
       .await?
       .into_data()
   }

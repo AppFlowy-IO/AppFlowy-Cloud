@@ -476,3 +476,27 @@ async fn add_workspace_member_and_then_member_get_member_list() {
     .unwrap_err();
   assert_eq!(error.code, ErrorCode::NotEnoughPermissions);
 }
+
+#[tokio::test]
+async fn workspace_member_through_user_id() {
+  let owner = TestClient::new_user_without_ws_conn().await;
+  let member_1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = owner.workspace_id().await;
+
+  let owner_member = owner
+    .get_workspace_member(&workspace_id, owner.uid().await)
+    .await;
+  assert_eq!(owner_member.role, AFRole::Owner);
+
+  owner
+    .invite_and_accepted_workspace_member(&workspace_id, &member_1, AFRole::Member)
+    .await
+    .unwrap();
+
+  let member_1_member = member_1
+    .get_workspace_member(&workspace_id, member_1.uid().await)
+    .await;
+  assert_eq!(member_1_member.role, AFRole::Member);
+
+  assert_ne!(owner_member.role, member_1_member.role);
+}

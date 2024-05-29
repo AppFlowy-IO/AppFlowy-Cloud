@@ -1,10 +1,10 @@
-use crate::telemetry::spawn_blocking_with_tracing;
+use actix_web::rt::task::JoinHandle;
 use anyhow::Context;
 use argon2::password_hash::SaltString;
 use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 use secrecy::{ExposeSecret, Secret};
 
-use crate::biz::user::auth::AuthError;
+use crate::error::AuthError;
 use sqlx::PgPool;
 
 pub struct Credentials {
@@ -89,4 +89,13 @@ fn verify_password_hash(
     )
     .context("Invalid password.")
     .map_err(|_| AuthError::InvalidPassword)
+}
+
+pub fn spawn_blocking_with_tracing<F, R>(f: F) -> JoinHandle<R>
+where
+  F: FnOnce() -> R + Send + 'static,
+  R: Send + 'static,
+{
+  let current_span = tracing::Span::current();
+  actix_web::rt::task::spawn_blocking(move || current_span.in_scope(f))
 }

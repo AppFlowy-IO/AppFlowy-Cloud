@@ -2,15 +2,13 @@ use actix_http::Payload;
 use actix_web::{web::Data, FromRequest, HttpRequest};
 
 use gotrue_entity::gotrue_jwt::GoTrueJWTClaims;
-use secrecy::ExposeSecret;
+use secrecy::{ExposeSecret, Secret};
 use serde::{Deserialize, Serialize};
 use sqlx::types::{uuid, Uuid};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use std::str::FromStr;
 use tracing::instrument;
-
-use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserUuid(uuid::Uuid);
@@ -99,14 +97,13 @@ impl FromRequest for Authorization {
   }
 }
 
-// impl RealtimeUser for Authorization {
-//   fn id(&self) -> &str {
-//     &self.uuid_str
-//   }
-// }
-
 fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::Error> {
-  let state = req.app_data::<Data<AppState>>().unwrap();
+  let jwt_secret_data =
+    req
+      .app_data::<Data<Secret<String>>>()
+      .ok_or(actix_web::error::ErrorInternalServerError(
+        "jwt secret not found",
+      ))?;
   let bearer = req
     .headers()
     .get("Authorization")
@@ -124,15 +121,15 @@ fn get_auth_from_request(req: &HttpRequest) -> Result<Authorization, actix_web::
       "Invalid Authorization header, missing Bearer",
     ))?;
 
-  authorization_from_token(token, state)
+  authorization_from_token(token, jwt_secret_data)
 }
 
 #[instrument(level = "trace", skip_all, err)]
 pub fn authorization_from_token(
   token: &str,
-  state: &Data<AppState>,
+  jwt_secret: &Data<Secret<String>>,
 ) -> Result<Authorization, actix_web::Error> {
-  let claims = gotrue_jwt_claims_from_token(token, state)?;
+  let claims = gotrue_jwt_claims_from_token(token, jwt_secret)?;
   Ok(Authorization {
     token: token.to_string(),
     claims,
@@ -142,14 +139,11 @@ pub fn authorization_from_token(
 #[instrument(level = "trace", skip_all, err)]
 fn gotrue_jwt_claims_from_token(
   token: &str,
-  state: &Data<AppState>,
+  jwt_secret: &Data<Secret<String>>,
 ) -> Result<GoTrueJWTClaims, actix_web::Error> {
-  let claims = GoTrueJWTClaims::decode(
-    token,
-    state.config.gotrue.jwt_secret.expose_secret().as_bytes(),
-  )
-  .map_err(|err| {
-    actix_web::error::ErrorUnauthorized(format!("fail to decode token, error:{}", err))
-  })?;
+  let claims =
+    GoTrueJWTClaims::decode(token, jwt_secret.expose_secret().as_bytes()).map_err(|err| {
+      actix_web::error::ErrorUnauthorized(format!("fail to decode token, error:{}", err))
+    })?;
   Ok(claims)
 }

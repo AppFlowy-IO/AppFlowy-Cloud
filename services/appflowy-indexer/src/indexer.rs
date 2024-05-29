@@ -120,7 +120,7 @@ impl PostgresIndexer {
 
     tracing::trace!("fetched {} embeddings", resp.data.len());
     let tokens_used = if let Some(usage) = resp.usage {
-      tracing::info!("OpenAI API usage: {}", usage.total_tokens);
+      tracing::info!("OpenAI API index tokens used: {}", usage.total_tokens);
       usage.total_tokens
     } else {
       0

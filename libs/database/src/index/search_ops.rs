@@ -12,11 +12,17 @@ pub async fn search_documents(
 ) -> Result<Vec<SearchDocumentItem>, sqlx::Error> {
   let query = sqlx::query_as::<_, SearchDocumentItem>(
     r#"
-    UPDATE af_workspace SET search_token_usage = search_token_usage + $6 WHERE workspace_id = $2;
+    WITH workspace AS (
+      UPDATE af_workspace
+      SET search_token_usage = search_token_usage + $6
+      WHERE workspace_id = $2
+      RETURNING workspace_id
+    )
     SELECT
       em.oid AS object_id,
       collab.workspace_id,
       em.partition_key AS collab_type,
+      em.content_type,
       LEFT(em.content, $4) AS content_preview,
       u.name AS created_by,
       collab.created_at AS created_at,

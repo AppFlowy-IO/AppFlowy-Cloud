@@ -31,7 +31,11 @@ pub async fn search_document(
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
 
   let tokens_used = if let Some(usage) = embeddings.usage {
-    tracing::info!("OpenAI API usage: {}", usage.total_tokens);
+    tracing::info!(
+      "workspace {} OpenAI API search tokens used: {}",
+      workspace_id,
+      usage.total_tokens
+    );
     usage.total_tokens
   } else {
     0
@@ -67,6 +71,7 @@ pub async fn search_document(
     tokens_used,
   )
   .await?;
+  tx.commit().await?;
   Ok(
     results
       .into_iter()

@@ -73,10 +73,13 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}/leave").route(web::post().to(leave_workspace_handler)))
     .service(
       web::resource("/{workspace_id}/member")
-        .route(web::get().to(get_workspace_members_handler))
-        .route(web::post().to(create_workspace_members_handler)) // deprecated, use invite flow instead
-        .route(web::put().to(update_workspace_member_handler))
-        .route(web::delete().to(remove_workspace_member_handler))
+      .route(web::get().to(get_workspace_members_handler))
+      .route(web::post().to(create_workspace_members_handler)) // deprecated, use invite flow instead
+      .route(web::put().to(update_workspace_member_handler))
+      .route(web::delete().to(remove_workspace_member_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/member/user/{user_id}").route(web::get().to(get_workspace_member_handler))
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}")
@@ -336,6 +339,24 @@ async fn remove_workspace_member_handler(
   .await?;
 
   Ok(AppResponse::Ok().into())
+}
+
+#[instrument(skip_all, err)]
+async fn get_workspace_member_handler(
+  state: Data<AppState>,
+  path: web::Path<(Uuid, i64)>,
+) -> Result<JsonAppResponse<AFWorkspaceMember>> {
+  let (workspace_id, user_id) = path.into_inner();
+  let member_row =
+    workspace::ops::get_workspace_member(&user_id, &state.pg_pool, &workspace_id).await?;
+  let member = AFWorkspaceMember {
+    name: member_row.name,
+    email: member_row.email,
+    role: member_row.role,
+    avatar_url: None,
+  };
+
+  Ok(AppResponse::Ok().with_data(member).into())
 }
 
 #[instrument(level = "debug", skip_all, err)]

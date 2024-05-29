@@ -343,7 +343,6 @@ async fn remove_workspace_member_handler(
 
 #[instrument(skip_all, err)]
 async fn get_workspace_member_handler(
-  _user_uuid: UserUuid,
   state: Data<AppState>,
   path: web::Path<(Uuid, i64)>,
 ) -> Result<JsonAppResponse<AFWorkspaceMember>> {

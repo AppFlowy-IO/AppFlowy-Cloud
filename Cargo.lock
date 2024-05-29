@@ -596,10 +596,10 @@ dependencies = [
  "app-error",
  "appflowy-ai-client",
  "appflowy-collaborate",
- "argon2",
  "assert-json-diff",
  "async-stream",
  "async-trait",
+ "authentication",
  "brotli",
  "bytes",
  "chrono",
@@ -979,6 +979,23 @@ dependencies = [
  "serde_json",
  "url",
  "webpki-roots 0.25.3",
+]
+
+[[package]]
+name = "authentication"
+version = "0.1.0"
+dependencies = [
+ "actix-http",
+ "actix-web",
+ "anyhow",
+ "argon2",
+ "gotrue-entity",
+ "rand 0.8.5",
+ "secrecy",
+ "serde",
+ "sqlx",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

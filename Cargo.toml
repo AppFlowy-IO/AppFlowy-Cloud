@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 actix.workspace = true
-actix-web = { version = "4.5.1", default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
+actix-web.workspace = true
 actix-http = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-rt = "2.9.0"
 actix-web-actors = { version = "4.3" }
@@ -35,8 +35,7 @@ futures-util = { workspace = true, features = ["std", "io"] }
 once_cell = "1.19.0"
 chrono = { version = "0.4.37", features = ["serde", "clock"], default-features = false }
 derive_more = { version = "0.99" }
-argon2 = { version = "0.5", features = ["std"] }
-secrecy = { version = "0.8", features = ["serde"] }
+secrecy.workspace = true
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"
 thiserror = "1.0.56"
@@ -90,6 +89,7 @@ database-entity.workspace = true
 gotrue = { path = "libs/gotrue" }
 gotrue-entity = { path = "libs/gotrue-entity" }
 infra = { path = "libs/infra" }
+authentication.workspace = true
 access-control.workspace = true
 workspace-access.workspace = true
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error", "appflowy_ai_error"] }
@@ -143,6 +143,7 @@ members = [
     "libs/workspace-access",
     "libs/workspace-template",
     "libs/encrypt",
+    "libs/authentication",
     "libs/access-control",
     "libs/collab-rt-protocol",
     "libs/collab-stream",
@@ -167,12 +168,14 @@ database = { path = "libs/database" }
 database-entity = { path = "libs/database-entity" }
 shared-entity = { path = "libs/shared-entity" }
 gotrue-entity = { path = "libs/gotrue-entity" }
+authentication = { path = "libs/authentication" }
 access-control = { path = "libs/access-control" }
 workspace-access = { path = "libs/workspace-access" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"
 collab-stream = { path = "libs/collab-stream" }
+secrecy = { version = "0.8", features = ["serde"] }
 serde_json = "1.0.111"
 serde_repr = "0.1.18"
 serde = { version = "1.0.195", features = ["derive"] }
@@ -181,6 +184,7 @@ workspace-template = { path = "libs/workspace-template" }
 uuid = { version = "1.6.1", features = ["v4"] }
 anyhow = "1.0.79"
 actix = "0.13.3"
+actix-web = { version = "4.5.1", default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-http = { version = "3.6.0", default-features = false }
 tokio = { version = "1.36.0", features = ["sync"] }
 tokio-stream = "0.1.14"

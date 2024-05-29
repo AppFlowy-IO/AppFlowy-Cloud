@@ -1,9 +1,9 @@
 use crate::biz::chat::ops::{create_chat, create_chat_message, delete_chat, get_chat_messages};
-use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpResponse, Scope};
 use app_error::AppError;
+use authentication::jwt::UserUuid;
 use database_entity::dto::{
   CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
   RepeatedChatMessage,

@@ -1,5 +1,4 @@
 use crate::api::workspace::{COLLAB_OBJECT_ID_PATH, WORKSPACE_ID_PATH};
-use crate::biz::user::auth::jwt::UserUuid;
 use crate::state::AppState;
 use access_control::access::enable_access_control;
 use actix_router::{Path, Url};
@@ -10,6 +9,7 @@ use actix_web::web::Data;
 use actix_web::Error;
 use app_error::AppError;
 use async_trait::async_trait;
+use authentication::jwt::UserUuid;
 use dashmap::DashMap;
 use futures_util::future::LocalBoxFuture;
 use once_cell::sync::Lazy;

@@ -30,9 +30,12 @@ pub async fn search_document(
     .await
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
 
-  if let Some(usage) = embeddings.usage {
-    tracing::info!("OpenAI API usage: {}", usage.total_tokens)
-  }
+  let tokens_used = if let Some(usage) = embeddings.usage {
+    tracing::info!("OpenAI API usage: {}", usage.total_tokens);
+    usage.total_tokens
+  } else {
+    0
+  };
 
   let embedding = embeddings
     .data
@@ -61,6 +64,7 @@ pub async fn search_document(
       preview: request.preview_size.unwrap_or(180) as i32,
       embedding,
     },
+    tokens_used,
   )
   .await?;
   Ok(

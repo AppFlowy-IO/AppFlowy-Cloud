@@ -4,11 +4,11 @@ use anyhow::anyhow;
 use uuid::Uuid;
 
 use app_error::AppError;
+use authentication::jwt::Authorization;
 use shared_entity::dto::search_dto::{SearchDocumentRequest, SearchDocumentResponseItem};
 use shared_entity::response::{AppResponse, JsonAppResponse};
 
 use crate::biz::search::search_document;
-use crate::biz::user::auth::jwt::Authorization;
 use crate::state::AppState;
 
 pub fn search_scope() -> Scope {

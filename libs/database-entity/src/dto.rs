@@ -286,6 +286,14 @@ pub struct QueryCollabMembers {
   pub object_id: String,
 }
 
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct QueryWorkspaceMember {
+  #[validate(custom = "validate_not_empty_str")]
+  pub workspace_id: String,
+
+  pub uid: i64,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AFCollabMember {
   pub uid: i64,

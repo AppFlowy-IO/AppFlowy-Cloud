@@ -20,7 +20,7 @@ use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
   insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
   select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
-  select_workspace_member_list, select_workspace_total_collab_bytes,
+  select_workspace_member, select_workspace_member_list, select_workspace_total_collab_bytes,
   update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
   upsert_workspace_member, upsert_workspace_member_with_txn,
 };
@@ -420,6 +420,14 @@ pub async fn get_workspace_members(
   workspace_id: &Uuid,
 ) -> Result<Vec<AFWorkspaceMemberRow>, AppResponseError> {
   Ok(select_workspace_member_list(pg_pool, workspace_id).await?)
+}
+
+pub async fn get_workspace_member(
+  uid: &i64,
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<AFWorkspaceMemberRow, AppResponseError> {
+  Ok(select_workspace_member(pg_pool, uid, workspace_id).await?)
 }
 
 pub async fn update_workspace_member(

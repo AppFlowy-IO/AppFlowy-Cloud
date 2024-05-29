@@ -6,6 +6,7 @@ use assert_json_diff::{
 use bytes::Bytes;
 #[cfg(feature = "collab-sync")]
 use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
+use client_api::entity::QueryWorkspaceMember;
 use client_api::ws::{WSClient, WSClientConfig};
 use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::collab_state::SyncState;
@@ -257,11 +258,33 @@ impl TestClient {
       .await
       .unwrap()
   }
+
   pub async fn try_get_workspace_members(
     &self,
     workspace_id: &str,
   ) -> Result<Vec<AFWorkspaceMember>, AppResponseError> {
     self.api_client.get_workspace_members(workspace_id).await
+  }
+
+  pub async fn get_workspace_member(&self, workspace_id: &str, user_id: i64) -> AFWorkspaceMember {
+    let params = QueryWorkspaceMember {
+      workspace_id: workspace_id.to_string(),
+      uid: user_id,
+    };
+    self.api_client.get_workspace_member(params).await.unwrap()
+  }
+
+  pub async fn try_get_workspace_member(
+    &self,
+    workspace_id: &str,
+    user_id: i64,
+  ) -> Result<AFWorkspaceMember, AppResponseError> {
+    let params = QueryWorkspaceMember {
+      workspace_id: workspace_id.to_string(),
+      uid: user_id,
+    };
+
+    self.api_client.get_workspace_member(params).await
   }
 
   pub async fn add_collab_member(

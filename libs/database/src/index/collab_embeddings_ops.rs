@@ -2,6 +2,7 @@ use std::ops::DerefMut;
 
 use pgvector::Vector;
 use sqlx::Transaction;
+use uuid::Uuid;
 
 use database_entity::dto::AFCollabEmbeddingParams;
 
@@ -20,8 +21,20 @@ pub async fn has_collab_embeddings(
 
 pub async fn upsert_collab_embeddings(
   tx: &mut Transaction<'_, sqlx::Postgres>,
+  workspace_id: &Uuid,
+  tokens_used: u32,
   records: Vec<AFCollabEmbeddingParams>,
 ) -> Result<(), sqlx::Error> {
+  if tokens_used > 0 {
+    sqlx::query(
+      "UPDATE af_workspace SET index_token_usage = index_token_usage + $2 WHERE workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .bind(tokens_used as i64)
+    .execute(tx.deref_mut())
+    .await?;
+  }
+
   for r in records {
     sqlx::query(
       r#"INSERT INTO af_collab_embeddings (fragment_id, oid, partition_key, content_type, content, embedding, indexed_at)

@@ -16,6 +16,7 @@ use tokio::task::JoinSet;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
+use uuid::Uuid;
 
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabUpdateEvent, StreamMessage};
@@ -75,6 +76,8 @@ impl CollabHandle {
     if !messages.is_empty() {
       Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await?;
     }
+    let workspace_id =
+      Uuid::parse_str(&workspace_id).map_err(|e| crate::error::Error::InvalidWorkspace(e))?;
 
     let mut tasks = JoinSet::new();
     tasks.spawn(Self::receive_collab_updates(
@@ -108,7 +111,7 @@ impl CollabHandle {
     mut update_stream: StreamGroup,
     content: Weak<dyn Indexable>,
     object_id: String,
-    workspace_id: String,
+    workspace_id: Uuid,
     ingest_interval: Duration,
     closing: CancellationToken,
   ) {
@@ -175,7 +178,7 @@ impl CollabHandle {
     mut updates: Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>>,
     indexer: Arc<dyn Indexer>,
     object_id: String,
-    workspace_id: String,
+    workspace_id: Uuid,
     ingest_interval: Duration,
     token: CancellationToken,
   ) {
@@ -186,14 +189,14 @@ impl CollabHandle {
     loop {
       select! {
           _ = interval.tick() => {
-              match Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
+              match Self::publish_updates(&indexer, &workspace_id, &mut inserts, &mut removals).await {
                 Ok(_) => last_update = Instant::now(),
                 Err(err) => tracing::error!("document {}/{} watcher failed to publish fragment updates: {}", workspace_id, object_id, err),
               }
           }
           _ = token.cancelled() => {
             tracing::trace!("document {}/{} watcher closing signal received, flushing remaining updates", workspace_id, object_id);
-            if let Err(err) = Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
+            if let Err(err) = Self::publish_updates(&indexer, &workspace_id, &mut inserts, &mut removals).await {
               tracing::error!("document {}/{} watcher failed to publish fragment updates: {}", workspace_id, object_id, err);
             }
             return;
@@ -215,7 +218,7 @@ impl CollabHandle {
 
             let now = Instant::now();
             if now.duration_since(last_update) > ingest_interval {
-              match Self::publish_updates(&indexer, &mut inserts, &mut removals).await {
+              match Self::publish_updates(&indexer, &workspace_id, &mut inserts, &mut removals).await {
                 Ok(_) => last_update = now,
                 Err(err) => tracing::error!("document {}/{} watcher failed to publish fragment updates: {}", workspace_id, object_id, err),
               }
@@ -227,6 +230,7 @@ impl CollabHandle {
 
   async fn publish_updates(
     indexer: &Arc<dyn Indexer>,
+    workspace_id: &Uuid,
     inserts: &mut HashMap<FragmentID, Fragment>,
     removals: &mut HashSet<FragmentID>,
   ) -> Result<()> {
@@ -236,7 +240,7 @@ impl CollabHandle {
     let inserts: Vec<_> = inserts.drain().map(|(_, doc)| doc).collect();
     if !inserts.is_empty() {
       tracing::info!("updating indexes for {} fragments", inserts.len());
-      indexer.update_index(inserts).await?;
+      indexer.update_index(workspace_id, inserts).await?;
     }
 
     if !removals.is_empty() {
@@ -346,5 +350,14 @@ mod test {
       .collect::<HashSet<_>>();
 
     assert_eq!(contents.len(), 1);
+
+    let tokens: i64 =
+      sqlx::query("SELECT index_token_usage from af_workspace WHERE workspace_id = $1")
+        .bind(&workspace_id)
+        .fetch_one(&db)
+        .await
+        .unwrap()
+        .get(0);
+    assert_ne!(tokens, 0);
   }
 }

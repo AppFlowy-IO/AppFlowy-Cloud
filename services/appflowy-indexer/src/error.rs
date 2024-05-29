@@ -14,6 +14,8 @@ pub enum Error {
   Sql(#[from] sqlx::Error),
   #[error("OpenAI failed to process request: {0}")]
   OpenAI(String),
+  #[error("invalid workspace ID: {0}")]
+  InvalidWorkspace(uuid::Error),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

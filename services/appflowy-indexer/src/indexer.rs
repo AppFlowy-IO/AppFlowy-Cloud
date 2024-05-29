@@ -7,6 +7,7 @@ use openai_dive::v1::resources::embedding::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use uuid::Uuid;
 
 use database::index::{has_collab_embeddings, remove_collab_embeddings, upsert_collab_embeddings};
 use database_entity::dto::{AFCollabEmbeddingParams, EmbeddingContentType};
@@ -17,7 +18,7 @@ use crate::error::Result;
 pub trait Indexer: Send + Sync {
   /// Check if document with given id has been already a corresponding index entry.
   async fn was_indexed(&self, object_id: &str) -> Result<bool>;
-  async fn update_index(&self, documents: Vec<Fragment>) -> Result<()>;
+  async fn update_index(&self, workspace_id: &Uuid, documents: Vec<Fragment>) -> Result<()>;
   async fn remove(&self, ids: &[FragmentID]) -> Result<()>;
 }
 
@@ -99,7 +100,7 @@ impl PostgresIndexer {
     Self { openai, db }
   }
 
-  async fn get_embeddings(&self, fragments: Vec<Fragment>) -> Result<Vec<EmbedFragment>> {
+  async fn get_embeddings(&self, fragments: Vec<Fragment>) -> Result<Embeddings> {
     let inputs: Vec<_> = fragments
       .iter()
       .map(|fragment| fragment.content.clone())
@@ -118,10 +119,12 @@ impl PostgresIndexer {
       .map_err(|e| crate::error::Error::OpenAI(e.to_string()))?;
 
     tracing::trace!("fetched {} embeddings", resp.data.len());
-    if let Some(usage) = resp.usage {
-      tracing::info!("OpenAI API usage: {}", usage.total_tokens);
-      //TODO: report usage statistics
-    }
+    let tokens_used = if let Some(usage) = resp.usage {
+      tracing::info!("OpenAI API index tokens used: {}", usage.total_tokens);
+      usage.total_tokens
+    } else {
+      0
+    };
 
     let mut fragments: Vec<_> = fragments.into_iter().map(EmbedFragment::from).collect();
     for e in resp.data.into_iter() {
@@ -135,23 +138,37 @@ impl PostgresIndexer {
       };
       fragments[e.index as usize].embedding = Some(embedding);
     }
-    Ok(fragments)
+    Ok(Embeddings {
+      tokens_used,
+      fragments,
+    })
   }
 
-  async fn store_embeddings(&self, fragments: Vec<EmbedFragment>) -> Result<()> {
+  async fn store_embeddings(&self, workspace_id: &Uuid, embeddings: Embeddings) -> Result<()> {
     tracing::trace!(
       "storing {} embeddings inside of vector database",
-      fragments.len()
+      embeddings.fragments.len()
     );
     let mut tx = self.db.begin().await?;
     upsert_collab_embeddings(
       &mut tx,
-      fragments.into_iter().map(EmbedFragment::into).collect(),
+      workspace_id,
+      embeddings.tokens_used,
+      embeddings
+        .fragments
+        .into_iter()
+        .map(EmbedFragment::into)
+        .collect(),
     )
     .await?;
     tx.commit().await?;
     Ok(())
   }
+}
+
+struct Embeddings {
+  tokens_used: u32,
+  fragments: Vec<EmbedFragment>,
 }
 
 #[async_trait]
@@ -161,9 +178,9 @@ impl Indexer for PostgresIndexer {
     Ok(found)
   }
 
-  async fn update_index(&self, documents: Vec<Fragment>) -> Result<()> {
+  async fn update_index(&self, workspace_id: &Uuid, documents: Vec<Fragment>) -> Result<()> {
     let embeddings = self.get_embeddings(documents).await?;
-    self.store_embeddings(embeddings).await?;
+    self.store_embeddings(workspace_id, embeddings).await?;
     Ok(())
   }
 
@@ -191,7 +208,7 @@ mod test {
     let db = db_pool().await;
     let object_id = uuid::Uuid::new_v4();
     let uid = rand::random();
-    setup_collab(&db, uid, object_id, vec![]).await;
+    let workspace_id = setup_collab(&db, uid, object_id, vec![]).await;
 
     let openai = openai_client();
 
@@ -209,10 +226,13 @@ mod test {
 
     // resolve embeddings from OpenAI
     let embeddings = indexer.get_embeddings(fragments).await.unwrap();
-    assert_eq!(embeddings[0].embedding.is_some(), true);
+    assert_eq!(embeddings.fragments[0].embedding.is_some(), true);
 
     // store embeddings in DB
-    indexer.store_embeddings(embeddings).await.unwrap();
+    indexer
+      .store_embeddings(&workspace_id, embeddings)
+      .await
+      .unwrap();
 
     // search for embedding
     let mut tx = indexer.db.begin().await.unwrap();

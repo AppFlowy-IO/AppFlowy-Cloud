@@ -97,6 +97,10 @@ async fn spawn_control_group(
         .await
       {
         if let Some(handles) = weak_handles.upgrade() {
+          if messages.is_empty() {
+            continue;
+          }
+
           trace!("[History] received {} control messages", messages.len());
           for message in &messages {
             if let Ok(event) = CollabControlEvent::decode(&message.data) {

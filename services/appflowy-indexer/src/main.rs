@@ -1,8 +1,8 @@
 use clap::Parser;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
+use tracing::subscriber::set_global_default;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
+use tracing_subscriber::EnvFilter;
 
 use collab_stream::client::CollabRedisStream;
 
@@ -38,13 +38,22 @@ pub struct Config {
 
   #[clap(long, env = "APPFLOWY_INDEXER_INGEST_INTERVAL", default_value = "30s")]
   pub ingest_interval: humantime::Duration,
+
+  #[clap(
+    long,
+    env = "APPFLOWY_INDEXER_ENVIRONMENT",
+    default_value = "local",
+    value_enum
+  )]
+  pub app_env: Environment,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-  setup_tracing();
+  dotenvy::dotenv().ok();
 
   let config = Config::parse();
+  init_subscriber(&config.app_env);
   run_server(config).await
 }
 
@@ -64,18 +73,41 @@ async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
   Ok(())
 }
 
-fn setup_tracing() {
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", "info");
-  }
+fn init_subscriber(app_env: &Environment) {
+  static START: Once = Once::new();
+  START.call_once(|| {
+    let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
+    let mut filters = vec![];
+    filters.push(format!("appflowy_history={}", level));
+    let env_filter = EnvFilter::new(filters.join(","));
 
-  let registry = tracing_subscriber::registry();
+    let builder = tracing_subscriber::fmt()
+      .with_target(true)
+      .with_max_level(tracing::Level::TRACE)
+      .with_thread_ids(false)
+      .with_file(false);
 
-  registry
-    .with(
-      tracing_subscriber::fmt::layer()
-        .with_ansi(false)
-        .with_filter(tracing_subscriber::EnvFilter::from_default_env()),
-    )
-    .init();
+    match app_env {
+      Environment::Local => {
+        let subscriber = builder
+          .with_ansi(true)
+          .with_target(false)
+          .with_file(false)
+          .pretty()
+          .finish()
+          .with(env_filter);
+        set_global_default(subscriber).unwrap();
+      },
+      Environment::Production => {
+        let subscriber = builder.json().finish().with(env_filter);
+        set_global_default(subscriber).unwrap();
+      },
+    }
+  });
+}
+
+#[derive(Clone, Debug, clap::ValueEnum)]
+pub enum Environment {
+  Local,
+  Production,
 }

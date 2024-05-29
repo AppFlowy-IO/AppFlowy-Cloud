@@ -778,6 +778,7 @@ dependencies = [
  "dashmap",
  "database",
  "database-entity",
+ "dotenvy",
  "env_logger",
  "futures",
  "humantime",

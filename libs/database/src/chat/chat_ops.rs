@@ -183,7 +183,7 @@ pub async fn select_chat_messages(
     MessageCursor::AfterMessageId(after_message_id) => {
       query += " AND message_id > $2";
       args.add(after_message_id);
-      query += " ORDER BY message_id ASC LIMIT $3";
+      query += " ORDER BY message_id DESC LIMIT $3";
       args.add(params.limit as i64);
     },
     MessageCursor::Offset(offset) => {
@@ -194,7 +194,7 @@ pub async fn select_chat_messages(
     MessageCursor::BeforeMessageId(before_message_id) => {
       query += " AND message_id < $2";
       args.add(before_message_id);
-      query += " ORDER BY message_id ASC LIMIT $3";
+      query += " ORDER BY message_id DESC LIMIT $3";
       args.add(params.limit as i64);
     },
     MessageCursor::NextBack => {
@@ -208,7 +208,7 @@ pub async fn select_chat_messages(
       .fetch_all(txn.deref_mut())
       .await?;
 
-  let mut messages = rows
+  let messages = rows
     .into_iter()
     .flat_map(|(message_id, content, created_at, author)| {
       match serde_json::from_value::<ChatAuthor>(author) {
@@ -225,10 +225,6 @@ pub async fn select_chat_messages(
       }
     })
     .collect::<Vec<ChatMessage>>();
-
-  if matches!(params.cursor, MessageCursor::NextBack) {
-    messages.reverse();
-  }
 
   let total = sqlx::query_scalar!(
     r#"
@@ -250,7 +246,7 @@ pub async fn select_chat_messages(
         sqlx::query!(
           "SELECT EXISTS(SELECT 1 FROM af_chat_messages WHERE chat_id = $1 AND message_id > $2)",
           &chat_id,
-          messages.last().as_ref().unwrap().message_id
+          messages[0].message_id
         )
         .fetch_one(txn.deref_mut())
         .await?
@@ -266,7 +262,7 @@ pub async fn select_chat_messages(
         sqlx::query!(
           "SELECT EXISTS(SELECT 1 FROM af_chat_messages WHERE chat_id = $1 AND message_id < $2)",
           &chat_id,
-          messages[0].message_id
+          messages.last().as_ref().unwrap().message_id
         )
         .fetch_one(txn.deref_mut())
         .await?

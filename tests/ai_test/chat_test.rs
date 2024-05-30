@@ -34,32 +34,29 @@ async fn create_chat_and_create_messages_test() {
       .unwrap();
     messages.push(message);
   }
+  // DESC is the default order
+  messages.reverse();
 
   // get messages before third message. it should return first two messages even though we asked
   // for 10 messages
+  assert_eq!(messages[7].content, "hello world 2");
   let message_before_third = test_client
     .api_client
     .get_chat_messages(
       &workspace_id,
       &chat_id,
-      MessageCursor::BeforeMessageId(messages[2].message_id),
+      MessageCursor::BeforeMessageId(messages[7].message_id),
       10,
     )
     .await
     .unwrap();
-
   assert!(!message_before_third.has_more);
   assert_eq!(message_before_third.messages.len(), 2);
-  assert_eq!(
-    message_before_third.messages[0].message_id,
-    messages[0].message_id
-  );
-  assert_eq!(
-    message_before_third.messages[1].message_id,
-    messages[1].message_id
-  );
+  assert_eq!(message_before_third.messages[0].content, "hello world 1");
+  assert_eq!(message_before_third.messages[1].content, "hello world 0");
 
   // get message after third message
+  assert_eq!(messages[2].content, "hello world 7");
   let message_after_third = test_client
     .api_client
     .get_chat_messages(
@@ -70,32 +67,28 @@ async fn create_chat_and_create_messages_test() {
     )
     .await
     .unwrap();
-  assert!(message_after_third.has_more);
+  assert!(!message_after_third.has_more);
   assert_eq!(message_after_third.messages.len(), 2);
-  assert_eq!(
-    message_after_third.messages[0].message_id,
-    messages[3].message_id
-  );
-  assert_eq!(
-    message_after_third.messages[1].message_id,
-    messages[4].message_id
-  );
+  assert_eq!(message_after_third.messages[0].content, "hello world 9");
+  assert_eq!(message_after_third.messages[1].content, "hello world 8");
 
-  // get all messages after 8th message
-  let remaining_messages = test_client
+  let next_back = test_client
     .api_client
-    .get_chat_messages(
-      &workspace_id,
-      &chat_id,
-      MessageCursor::AfterMessageId(messages[7].message_id),
-      100,
-    )
+    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 3)
     .await
     .unwrap();
+  assert!(next_back.has_more);
+  assert_eq!(next_back.messages.len(), 3);
+  assert_eq!(next_back.messages[0].content, "hello world 9");
+  assert_eq!(next_back.messages[1].content, "hello world 8");
 
-  // has_more should be false because we only have 10 messages
-  assert!(!remaining_messages.has_more);
-  assert_eq!(remaining_messages.messages.len(), 2);
+  let next_back = test_client
+    .api_client
+    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 100)
+    .await
+    .unwrap();
+  assert!(!next_back.has_more);
+  assert_eq!(next_back.messages.len(), 10);
 }
 
 #[tokio::test]

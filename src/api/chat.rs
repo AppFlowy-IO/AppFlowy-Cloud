@@ -108,6 +108,5 @@ async fn get_chat_message_handler(
   trace!("get chat messages: {:?}", params);
   let (_workspace_id, chat_id) = path.into_inner();
   let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
-  trace!("get chat messages: {:?}", messages.messages);
   Ok(AppResponse::Ok().with_data(messages).into())
 }

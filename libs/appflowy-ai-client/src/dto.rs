@@ -28,6 +28,20 @@ pub struct ChatAnswer {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RepeatedRelatedQuestion {
+  pub message_id: i64,
+  pub items: Vec<RelatedQuestion>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RelatedQuestion {
+  pub content: String,
+
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CompleteTextResponse {
   pub text: String,
 }

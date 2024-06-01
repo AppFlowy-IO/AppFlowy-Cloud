@@ -1,6 +1,6 @@
 use crate::dto::{
   ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document, MessageData,
-  SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
+  RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
 };
 use crate::error::AIError;
 use anyhow::anyhow;
@@ -159,6 +159,18 @@ impl AppFlowyAIClient {
       .send()
       .await?;
     AIResponse::<String>::stream_response(resp).await
+  }
+
+  pub async fn get_related_question(
+    &self,
+    chat_id: &str,
+    message_id: &i64,
+  ) -> Result<RepeatedRelatedQuestion, AIError> {
+    let url = format!("{}/chat/{chat_id}/{message_id}/related_question", self.url);
+    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    AIResponse::<RepeatedRelatedQuestion>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   fn http_client(&self, method: Method, url: &str) -> Result<RequestBuilder, AIError> {

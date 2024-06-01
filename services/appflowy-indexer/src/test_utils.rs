@@ -31,7 +31,7 @@ pub async fn setup_collab(db: &PgPool, uid: i64, object_id: Uuid, encoded_collab
   let mut tx = db.begin().await.unwrap();
   let user_uuid = Uuid::new_v4();
   sqlx::query("INSERT INTO auth.users(id) VALUES($1)")
-    .bind(&user_uuid)
+    .bind(user_uuid)
     .execute(tx.deref_mut())
     .await
     .unwrap();
@@ -48,7 +48,7 @@ pub async fn setup_collab(db: &PgPool, uid: i64, object_id: Uuid, encoded_collab
     &mut tx,
     &uid,
     &workspace_id.to_string(),
-    &CollabParams::new(object_id.clone(), CollabType::Document, encoded_collab),
+    &CollabParams::new(object_id, CollabType::Document, encoded_collab),
   )
   .await
   .unwrap();

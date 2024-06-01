@@ -572,6 +572,12 @@ pub struct CreateChatMessageParams {
   pub message_type: ChatMessageType,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateChatMessageParams {
+  pub message_id: i64,
+  pub meta_data: HashMap<String, String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum ChatMessageType {

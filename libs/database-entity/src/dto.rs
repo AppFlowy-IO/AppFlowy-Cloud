@@ -644,6 +644,7 @@ pub struct ChatMessage {
   pub message_id: i64,
   pub content: String,
   pub created_at: DateTime<Utc>,
+  pub meta_data: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

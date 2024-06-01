@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n     SELECT message_id, content, created_at, author\n          FROM af_chat_messages\n          WHERE chat_id = $1\n          ORDER BY created_at ASC\n   ",
+  "query": "\n     SELECT message_id, content, created_at, author, meta_data\n          FROM af_chat_messages\n          WHERE chat_id = $1\n          ORDER BY created_at ASC\n   ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "author",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "meta_data",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "533ef0f5237ca12ce0c6ca1dc938cc8dd34603b256f36dc683013264018332fc"
+  "hash": "69b0bbc97c37de47ad3f9cfe4f0099496470100d49903e34c8f773c43f094b2f"
 }

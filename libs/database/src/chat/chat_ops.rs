@@ -155,6 +155,7 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
     message_id: row.message_id,
     content,
     created_at: row.created_at,
+    meta_data: Default::default(),
   };
   Ok(chat_message)
 }
@@ -203,20 +204,26 @@ pub async fn select_chat_messages(
     },
   }
 
-  let rows: Vec<(i64, String, DateTime<Utc>, serde_json::Value)> =
-    sqlx::query_as_with(&query, args)
-      .fetch_all(txn.deref_mut())
-      .await?;
+  let rows: Vec<(
+    i64,
+    String,
+    DateTime<Utc>,
+    serde_json::Value,
+    serde_json::Value,
+  )> = sqlx::query_as_with(&query, args)
+    .fetch_all(txn.deref_mut())
+    .await?;
 
   let messages = rows
     .into_iter()
-    .flat_map(|(message_id, content, created_at, author)| {
+    .flat_map(|(message_id, content, created_at, author, meta_data)| {
       match serde_json::from_value::<ChatAuthor>(author) {
         Ok(author) => Some(ChatMessage {
           author,
           message_id,
           content,
           created_at,
+          meta_data,
         }),
         Err(err) => {
           warn!("Failed to deserialize author: {}", err);
@@ -288,7 +295,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
   let rows = sqlx::query!(
     // ChatMessage,
     r#"
-     SELECT message_id, content, created_at, author
+     SELECT message_id, content, created_at, author, meta_data
           FROM af_chat_messages
           WHERE chat_id = $1
           ORDER BY created_at ASC
@@ -307,6 +314,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
           message_id: row.message_id,
           content: row.content,
           created_at: row.created_at,
+          meta_data: row.meta_data,
         }),
         Err(err) => {
           warn!("Failed to deserialize author: {}", err);

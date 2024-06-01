@@ -3,10 +3,14 @@ use crate::dto::{
   SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
 };
 use crate::error::AIError;
+use anyhow::anyhow;
+use futures::{Stream, StreamExt};
+use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::borrow::Cow;
+
 use tracing::{info, trace};
 
 #[derive(Clone, Debug)]
@@ -137,6 +141,26 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
+  pub async fn stream_question(
+    &self,
+    chat_id: &str,
+    content: &str,
+  ) -> Result<impl Stream<Item = Result<String, AIError>>, AIError> {
+    let json = ChatQuestion {
+      chat_id: chat_id.to_string(),
+      data: MessageData {
+        content: content.to_string(),
+      },
+    };
+    let url = format!("{}/chat/stream_message", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&json)
+      .send()
+      .await?;
+    AIResponse::<String>::stream_response(resp).await
+  }
+
   fn http_client(&self, method: Method, url: &str) -> Result<RequestBuilder, AIError> {
     let request_builder = self.client.request(method, url);
     Ok(request_builder)
@@ -174,8 +198,27 @@ where
       Some(data) => Ok(data),
     }
   }
-}
 
+  pub async fn stream_response(
+    resp: reqwest::Response,
+  ) -> Result<impl Stream<Item = Result<String, AIError>>, AIError> {
+    let status_code = resp.status();
+    if !status_code.is_success() {
+      let body = resp.text().await?;
+      return Err(AIError::InvalidRequest(body));
+    }
+    let stream = resp.bytes_stream().map(|item| {
+      item
+        .map_err(|err| AIError::Internal(err.into()))
+        .and_then(|bytes| {
+          String::from_utf8(bytes.to_vec())
+            .map(|s| s.replace('\n', ""))
+            .map_err(|err| AIError::Internal(anyhow!("Parser AI response error: {:?}", err)))
+        })
+    });
+    Ok(stream)
+  }
+}
 impl From<reqwest::Error> for AIError {
   fn from(error: reqwest::Error) -> Self {
     if error.is_timeout() {

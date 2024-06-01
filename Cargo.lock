@@ -568,6 +568,8 @@ name = "appflowy-ai-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
+ "futures",
  "reqwest 0.12.4",
  "serde",
  "serde_json",

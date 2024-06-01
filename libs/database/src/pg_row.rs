@@ -204,6 +204,7 @@ pub struct AFChatRow {
   pub deleted_at: Option<DateTime<Utc>>,
   pub rag_ids: serde_json::Value,
   pub workspace_id: Uuid,
+  pub meta_data: serde_json::Value,
 }
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AFChatMessageRow {

@@ -157,7 +157,7 @@ async fn generate_chat_message_answer_test() {
 
   let answer = test_client
     .api_client
-    .generate_chat_message_answer(&workspace_id, &chat_id, messages[0].message_id)
+    .generate_question_answer(&workspace_id, &chat_id, messages[0].message_id)
     .await
     .unwrap();
 

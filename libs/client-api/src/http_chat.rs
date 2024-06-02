@@ -80,7 +80,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn generate_chat_message_answer(
+  pub async fn generate_question_answer(
     &self,
     workspace_id: &str,
     chat_id: &str,

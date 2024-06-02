@@ -31,8 +31,7 @@ pub fn chat_scope() -> Scope {
         .route(web::get().to(get_related_message_handler)),
     )
     .service(
-      web::resource("/{chat_id}/{message_id}/answer")
-        .route(web::get().to(generate_message_answer_handler)),
+      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(generate_answer_handler)),
     )
     .service(
       web::resource("/{chat_id}/message")
@@ -112,7 +111,7 @@ async fn get_related_message_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-async fn generate_message_answer_handler(
+async fn generate_answer_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {

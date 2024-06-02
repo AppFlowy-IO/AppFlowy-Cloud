@@ -72,7 +72,7 @@ impl From<Fragment> for EmbedFragment {
 impl From<EmbedFragment> for AFCollabEmbeddingParams {
   fn from(f: EmbedFragment) -> Self {
     AFCollabEmbeddingParams {
-      fragment_id: f.fragment_id.into(),
+      fragment_id: f.fragment_id,
       object_id: f.object_id,
       collab_type: f.collab_type,
       content_type: f.content_type,
@@ -91,7 +91,7 @@ impl PostgresIndexer {
   #[allow(dead_code)]
   pub async fn open(openai_api_key: &str, pg_conn: &str) -> Result<Self> {
     let openai = Client::new(openai_api_key.to_string());
-    let db = PgPool::connect(&pg_conn).await?;
+    let db = PgPool::connect(pg_conn).await?;
     Ok(Self { openai, db })
   }
 
@@ -226,7 +226,7 @@ mod test {
 
     // resolve embeddings from OpenAI
     let embeddings = indexer.get_embeddings(fragments).await.unwrap();
-    assert_eq!(embeddings.fragments[0].embedding.is_some(), true);
+    assert!(embeddings.fragments[0].embedding.is_some());
 
     // store embeddings in DB
     indexer

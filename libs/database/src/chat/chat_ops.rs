@@ -5,12 +5,12 @@ use app_error::AppError;
 use chrono::{DateTime, Utc};
 use database_entity::dto::{
   ChatAuthor, ChatMessage, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatParams,
+  RepeatedChatMessage, UpdateChatMessageParams, UpdateChatParams,
 };
 
 use serde_json::json;
 use sqlx::postgres::PgArguments;
-use sqlx::{Arguments, Executor, Postgres, Transaction};
+use sqlx::{Arguments, Executor, PgPool, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
 use tracing::warn;
@@ -167,7 +167,7 @@ pub async fn select_chat_messages(
 ) -> Result<RepeatedChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
   let mut query = r#"
-        SELECT message_id, content, created_at, author
+        SELECT message_id, content, created_at, author, meta_data
         FROM af_chat_messages
         WHERE chat_id = $1
     "#
@@ -325,4 +325,31 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
     .collect::<Vec<ChatMessage>>();
 
   Ok(messages)
+}
+
+pub async fn update_chat_message(
+  pg_pool: &PgPool,
+  params: UpdateChatMessageParams,
+) -> Result<(), AppError> {
+  for (key, value) in params.meta_data.iter() {
+    sqlx::query(
+      r#"
+           UPDATE af_chat_messages
+           SET meta_data = jsonb_set(
+               COALESCE(meta_data, '{}'),
+               $2,
+               $3::jsonb,
+               true
+           )
+           WHERE id = $1
+           "#,
+    )
+    .bind(params.message_id)
+    .bind(format!("{{{}}}", key))
+    .bind(value)
+    .execute(pg_pool)
+    .await?;
+  }
+
+  Ok(())
 }

@@ -117,4 +117,12 @@ async fn chat_qa_test() {
 
   let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
   assert_eq!(messages.len(), 2);
+
+  let related_questions = test_client
+    .api_client
+    .get_chat_related_question(&workspace_id, &chat_id, messages[1].message_id)
+    .await
+    .unwrap();
+  assert_eq!(related_questions.items.len(), 3);
+  println!("related questions: {:?}", related_questions.items);
 }

@@ -152,7 +152,7 @@ impl AppFlowyAIClient {
         content: content.to_string(),
       },
     };
-    let url = format!("{}/chat/stream_message", self.url);
+    let url = format!("{}/chat/message/stream", self.url);
     let resp = self
       .http_client(Method::POST, &url)?
       .json(&json)

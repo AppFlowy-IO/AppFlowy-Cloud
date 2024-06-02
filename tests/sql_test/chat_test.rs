@@ -1,6 +1,6 @@
 use crate::sql_test::util::{setup_db, test_create_user};
 use database::chat::chat_ops::{
-  delete_chat, get_all_chat_messages, insert_chat, insert_chat_message, select_chat,
+  delete_chat, get_all_chat_messages, insert_chat, insert_question_message, select_chat,
   select_chat_messages,
 };
 use database_entity::dto::{ChatAuthor, ChatAuthorType, CreateChatParams, GetChatMessageParams};
@@ -91,7 +91,7 @@ async fn chat_message_crud_test(pool: PgPool) {
 
   // create chat messages
   for i in 0..5 {
-    let _ = insert_chat_message(
+    let _ = insert_question_message(
       &pool,
       ChatAuthor::new(0, ChatAuthorType::System),
       &chat_id,

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE af_chat_messages\n        SET reply_message_id = $2\n        WHERE message_id = $1\n      ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bbb3c31ea7e9c0a3bdabbc23b2730ee0254f38a7c1457f917c8f37f1e1aefa12"
+}

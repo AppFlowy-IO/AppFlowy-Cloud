@@ -138,45 +138,98 @@ pub async fn insert_answer_message_with_transaction(
   question_message_id: i64,
 ) -> Result<ChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
-  let row = sqlx::query!(
+  let existing_reply_message_id: Option<i64> = sqlx::query_scalar!(
     r#"
+      SELECT reply_message_id
+      FROM af_chat_messages
+      WHERE message_id = $1
+    "#,
+    question_message_id
+  )
+  .fetch_one(transaction.deref_mut())
+  .await?;
+
+  if let Some(reply_id) = existing_reply_message_id {
+    // If there is an existing reply_message_id, update the existing message
+    sqlx::query!(
+      r#"
+         UPDATE af_chat_messages
+         SET content = $2,
+             author = $3,
+             created_at = CURRENT_TIMESTAMP
+         WHERE message_id = $1
+      "#,
+      reply_id,
+      &content,
+      json!(author),
+    )
+    .execute(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to update chat message: {}", err)))?;
+
+    let row = sqlx::query!(
+      r#"
+        SELECT message_id, content, created_at, author, meta_data, reply_message_id
+        FROM af_chat_messages
+        WHERE message_id = $1
+      "#,
+      reply_id
+    )
+    .fetch_one(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to fetch updated message: {}", err)))?;
+
+    let chat_message = ChatMessage {
+      author,
+      message_id: row.message_id,
+      content: row.content,
+      created_at: row.created_at,
+      meta_data: row.meta_data,
+      reply_message_id: Some(question_message_id),
+    };
+
+    Ok(chat_message)
+  } else {
+    // Insert a new chat message
+    let row = sqlx::query!(
+      r#"
         INSERT INTO af_chat_messages (chat_id, author, content)
         VALUES ($1, $2, $3)
         RETURNING message_id, created_at
-        "#,
-    chat_id,
-    json!(author),
-    &content,
-  )
-  .fetch_one(transaction.deref_mut())
-  .await
-  .map_err(|err| AppError::Internal(anyhow!("Failed to insert chat message: {}", err)))?;
+      "#,
+      chat_id,
+      json!(author),
+      &content,
+    )
+    .fetch_one(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to insert chat message: {}", err)))?;
 
-  // Get existing chat message with given question_message_id, update 'reply_message_id' with
-  // the new inserted message
-  sqlx::query!(
-    r#"
+    // Update the question message with the new reply_message_id
+    sqlx::query!(
+      r#"
         UPDATE af_chat_messages
         SET reply_message_id = $2
         WHERE message_id = $1
-        "#,
-    question_message_id,
-    row.message_id,
-  )
-  .execute(transaction.deref_mut())
-  .await
-  .map_err(|err| AppError::Internal(anyhow!("Failed to update reply_message_id: {}", err)))?;
+      "#,
+      question_message_id,
+      row.message_id,
+    )
+    .execute(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to update reply_message_id: {}", err)))?;
 
-  let chat_message = ChatMessage {
-    author,
-    message_id: row.message_id,
-    content,
-    created_at: row.created_at,
-    meta_data: Default::default(),
-    reply_message_id: None,
-  };
+    let chat_message = ChatMessage {
+      author,
+      message_id: row.message_id,
+      content,
+      created_at: row.created_at,
+      meta_data: Default::default(),
+      reply_message_id: None,
+    };
 
-  Ok(chat_message)
+    Ok(chat_message)
+  }
 }
 
 pub async fn insert_answer_message(

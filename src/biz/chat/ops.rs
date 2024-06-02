@@ -80,7 +80,6 @@ pub async fn generate_chat_message_answer(
 
   // Save the answer to the database
   let mut txn = pg_pool.begin().await?;
-  delete_answer_message_by_question_message_id(&mut txn, question_message_id).await?;
   let message = insert_answer_message_with_transaction(
     &mut txn,
     ChatAuthor::ai(),

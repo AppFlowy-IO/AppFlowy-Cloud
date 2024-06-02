@@ -11,9 +11,16 @@ async fn qa_test() {
     .await
     .unwrap();
   assert!(!resp.content.is_empty());
+
+  let questions = client
+    .get_related_question(&chat_id, &1)
+    .await
+    .unwrap()
+    .items;
+  println!("questions: {:?}", questions);
+  assert_eq!(questions.len(), 3)
 }
 #[tokio::test]
-
 async fn stop_steam_test() {
   let client = appflowy_ai_client();
   client.health_check().await.unwrap();
@@ -35,11 +42,12 @@ async fn stop_steam_test() {
   assert_ne!(count, 0);
 }
 
+#[tokio::test]
 async fn steam_test() {
   let client = appflowy_ai_client();
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
-  let mut stream = client
+  let stream = client
     .stream_question(&chat_id, "I feel hungry")
     .await
     .unwrap();

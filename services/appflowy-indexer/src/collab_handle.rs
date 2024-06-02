@@ -77,14 +77,14 @@ impl CollabHandle {
       Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await?;
     }
     let workspace_id =
-      Uuid::parse_str(&workspace_id).map_err(|e| crate::error::Error::InvalidWorkspace(e))?;
+      Uuid::parse_str(&workspace_id).map_err(crate::error::Error::InvalidWorkspace)?;
 
     let mut tasks = JoinSet::new();
     tasks.spawn(Self::receive_collab_updates(
       update_stream,
       Arc::downgrade(&content),
       object_id.clone(),
-      workspace_id.clone(),
+      workspace_id,
       ingest_interval,
       closing.clone(),
     ));
@@ -253,8 +253,8 @@ impl CollabHandle {
   }
 
   pub async fn shutdown(mut self) {
-    let _ = self.closing.cancel();
-    while let Some(_) = self.tasks.join_next().await { /* wait for all tasks to finish */ }
+    self.closing.cancel();
+    while self.tasks.join_next().await.is_some() { /* wait for all tasks to finish */ }
   }
 }
 
@@ -353,7 +353,7 @@ mod test {
 
     let tokens: i64 =
       sqlx::query("SELECT index_token_usage from af_workspace WHERE workspace_id = $1")
-        .bind(&workspace_id)
+        .bind(workspace_id)
         .fetch_one(&db)
         .await
         .unwrap()

@@ -5,6 +5,7 @@ use database_entity::dto::{
 };
 use futures_core::Stream;
 use reqwest::Method;
+use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {
@@ -56,6 +57,26 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<ChatMessage>::stream_response(resp).await
+  }
+  pub async fn get_chat_related_question(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    message_id: i64,
+  ) -> Result<RepeatedRelatedQuestion, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/related_question",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<RepeatedRelatedQuestion>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   pub async fn get_chat_messages(

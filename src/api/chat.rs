@@ -3,14 +3,17 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpResponse, Scope};
 use app_error::AppError;
+use appflowy_ai_client::dto::RepeatedRelatedQuestion;
 use authentication::jwt::UserUuid;
+use database::chat::chat_ops::update_chat_message;
 use database_entity::dto::{
   CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage,
+  RepeatedChatMessage, UpdateChatMessageParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
-use tracing::trace;
+
+use tracing::{instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -22,7 +25,15 @@ pub fn chat_scope() -> Scope {
         .route(web::post().to(update_chat_handler))
         .route(web::get().to(get_chat_message_handler)),
     )
-    .service(web::resource("/{chat_id}/message").route(web::post().to(post_chat_message_handler)))
+    .service(
+      web::resource("/{chat_id}/{message_id}/related_question")
+        .route(web::get().to(get_related_message_handler)),
+    )
+    .service(
+      web::resource("/{chat_id}/message")
+        .route(web::post().to(post_chat_message_handler))
+        .route(web::put().to(update_chat_message_handler)),
+    )
 }
 async fn create_chat_handler(
   path: web::Path<String>,
@@ -83,6 +94,29 @@ async fn post_chat_message_handler(
   )
 }
 
+async fn update_chat_message_handler(
+  state: Data<AppState>,
+  payload: Json<UpdateChatMessageParams>,
+) -> actix_web::Result<JsonAppResponse<()>> {
+  let params = payload.into_inner();
+  update_chat_message(&state.pg_pool, params).await?;
+  Ok(AppResponse::Ok().into())
+}
+
+async fn get_related_message_handler(
+  path: web::Path<(String, String, i64)>,
+  state: Data<AppState>,
+) -> actix_web::Result<JsonAppResponse<RepeatedRelatedQuestion>> {
+  let (_workspace_id, chat_id, message_id) = path.into_inner();
+  let resp = state
+    .ai_client
+    .get_related_question(&chat_id, &message_id)
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?;
+  Ok(AppResponse::Ok().with_data(resp).into())
+}
+
+#[instrument(level = "debug", skip_all, err)]
 async fn get_chat_message_handler(
   path: web::Path<(String, String)>,
   query: web::Query<HashMap<String, String>>,

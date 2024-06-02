@@ -120,7 +120,7 @@ impl DocumentWatcher {
           if block.external_type.as_deref() == Some("text") {
             if let Some(text_id) = block.external_id.as_deref() {
               if let Some(json) = text_map.get(text_id) {
-                match serde_json::from_str::<Vec<TextDelta>>(&json) {
+                match serde_json::from_str::<Vec<TextDelta>>(json) {
                   Ok(deltas) => {
                     for delta in deltas {
                       if let TextDelta::Inserted(text, _) = delta {
@@ -151,7 +151,7 @@ impl DocumentWatcher {
 
 impl Indexable for DocumentWatcher {
   fn get_collab(&self) -> &MutexCollab {
-    &*self.content.get_collab()
+    self.content.get_collab()
   }
 
   fn changes(&self) -> Pin<Box<dyn Stream<Item = FragmentUpdate> + Send + Sync>> {
@@ -253,9 +253,7 @@ mod test {
     let blocks = &data.blocks;
     let (_, block) = blocks
       .iter()
-        //TODO: Block::external_type should probably be an enum
-      .filter(|(_, b)| b.external_type.as_deref() == Some("text"))
-      .next()
+      .find(|(_, b)| b.external_type.as_deref() == Some("text"))
       .unwrap();
     block.clone()
   }

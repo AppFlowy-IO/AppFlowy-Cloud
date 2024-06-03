@@ -1,11 +1,17 @@
 use crate::collab_handle::CollabHandle;
 use crate::error::Result;
-use crate::indexer::Indexer;
+use crate::indexer::{Fragment, Indexer, UnindexedCollab};
+use collab::core::collab::DataSource;
+use collab::core::origin::CollabOrigin;
+use collab_document::document::Document;
+use collab_entity::CollabType;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::model::{CollabControlEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
+use database_entity::dto::EmbeddingContentType;
+use futures::StreamExt;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -34,6 +40,9 @@ impl OpenCollabConsumer {
     let mut control_group = redis_stream
       .collab_control_stream(control_stream_key, "indexer")
       .await?;
+
+    // Handle unindexed documents
+    Self::handle_unindexed_collabs(indexer.clone()).await;
 
     // Handle stale messages
     let stale_messages = control_group.get_unacked_messages(CONSUMER_NAME).await?;
@@ -84,6 +93,71 @@ impl OpenCollabConsumer {
       handles,
       consumer_group,
     })
+  }
+
+  async fn handle_unindexed_collabs(indexer: Arc<dyn Indexer>) {
+    let mut stream = indexer.get_unindexed_collabs();
+    while let Some(result) = stream.next().await {
+      match result {
+        Ok(collab) => {
+          if let Err(err) = Self::index_collab(&indexer, &collab).await {
+            tracing::warn!(
+              "failed to index collab {}/{}: {}",
+              collab.workspace_id,
+              collab.object_id,
+              err
+            );
+          }
+        },
+        Err(err) => {
+          tracing::error!("failed to get unindexed documents: {}", err);
+          break;
+        },
+      }
+    }
+  }
+
+  async fn index_collab(indexer: &Arc<dyn Indexer>, collab: &UnindexedCollab) -> Result<()> {
+    let fragment = {
+      match &collab.collab_type {
+        CollabType::Document => {
+          tracing::trace!(
+            "indexing document {}/{}",
+            collab.workspace_id,
+            collab.object_id
+          );
+
+          let document = Document::from_doc_state(
+            CollabOrigin::Empty,
+            DataSource::DocStateV1(collab.collab.doc_state.to_vec()),
+            &collab.object_id,
+            vec![],
+          )?;
+          let data = document.get_document_data()?;
+          let content = crate::extract::document_to_plain_text(&data);
+          Fragment {
+            fragment_id: collab.object_id.clone(),
+            object_id: collab.object_id.clone(),
+            collab_type: collab.collab_type.clone(),
+            content_type: EmbeddingContentType::PlainText,
+            content,
+          }
+        },
+        collab_type => {
+          tracing::warn!(
+            "cannot index collab {}/{} because {:?} type is not supported",
+            collab.workspace_id,
+            collab.object_id,
+            collab_type
+          );
+          return Ok(());
+        },
+      }
+    };
+    indexer
+      .update_index(&collab.workspace_id, vec![fragment])
+      .await?;
+    Ok(())
   }
 
   #[inline]
@@ -216,6 +290,7 @@ mod test {
   use collab_document::document_data::default_document_data;
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
+  use database::index::has_collab_embeddings;
   use serde_json::json;
   use sqlx::Row;
   use std::sync::Arc;
@@ -320,5 +395,59 @@ mod test {
     assert_ne!(contents.len(), 0);
     let content: Option<String> = contents[0].get(0);
     assert_eq!(content.as_deref(), Some("test-value\n"));
+  }
+
+  #[tokio::test]
+  async fn index_documents_at_start() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    let redis_stream = redis_stream().await;
+    let uid = rand::random();
+    let object_id = uuid::Uuid::new_v4();
+
+    let db = db_pool().await;
+    let openai = openai_client();
+
+    let mut collab = Collab::new(
+      uid,
+      object_id.to_string(),
+      "device-1".to_string(),
+      vec![],
+      false,
+    );
+    collab.initialize();
+    let collab = Arc::new(MutexCollab::new(collab));
+    let doc_data = default_document_data();
+    let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
+    let doc_state: Vec<u8> = document.encode_collab().unwrap().doc_state.into();
+
+    let _workspace_id = setup_collab(&db, uid, object_id, doc_state.clone()).await;
+
+    {
+      let mut tx = db.begin().await.unwrap();
+      let has_embedding = has_collab_embeddings(&mut tx, &object_id.to_string())
+        .await
+        .unwrap();
+      assert!(!has_embedding, "collab should not have embeddings at start");
+    }
+
+    let indexer = Arc::new(PostgresIndexer::new(openai, db.clone()));
+
+    let _consumer = OpenCollabConsumer::new(
+      redis_stream,
+      indexer.clone(),
+      "af_collab_control",
+      Duration::from_secs(1), // interval longer than test timeout
+    )
+    .await
+    .unwrap();
+
+    {
+      let mut tx = db.begin().await.unwrap();
+      let has_embedding = has_collab_embeddings(&mut tx, &object_id.to_string())
+        .await
+        .unwrap();
+      assert!(has_embedding, "collab should be indexed after start");
+    }
   }
 }

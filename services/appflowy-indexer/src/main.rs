@@ -15,6 +15,7 @@ mod error;
 mod indexer;
 mod watchers;
 
+mod extract;
 #[cfg(test)]
 mod test_utils;
 
@@ -61,6 +62,7 @@ async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
   let redis_client = redis::Client::open(config.redis_url)?;
   let collab_stream = CollabRedisStream::new(redis_client).await?;
   let indexer = PostgresIndexer::open(&config.openai_api_key, &config.database_url).await?;
+  tracing::info!("Starting AppFlowy Indexer...");
   let consumer = OpenCollabConsumer::new(
     collab_stream,
     Arc::new(indexer),

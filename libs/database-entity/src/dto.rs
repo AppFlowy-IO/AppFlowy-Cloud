@@ -573,9 +573,16 @@ pub struct CreateChatMessageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateChatMessageParams {
+pub struct UpdateChatMessageMetaParams {
   pub message_id: i64,
   pub meta_data: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateChatMessageContentParams {
+  pub chat_id: String,
+  pub message_id: i64,
+  pub content: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
@@ -651,6 +658,7 @@ pub struct ChatMessage {
   pub content: String,
   pub created_at: DateTime<Utc>,
   pub meta_data: serde_json::Value,
+  pub reply_message_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -722,4 +730,9 @@ pub struct AFCollabEmbeddingParams {
 pub enum EmbeddingContentType {
   /// The plain text representation of the document.
   PlainText = 0,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateChatMessageResponse {
+  pub answer: Option<ChatMessage>,
 }

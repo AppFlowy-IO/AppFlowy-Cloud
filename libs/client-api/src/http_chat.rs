@@ -2,6 +2,7 @@ use crate::http::log_request_id;
 use crate::Client;
 use database_entity::dto::{
   ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor, RepeatedChatMessage,
+  UpdateChatMessageContentParams,
 };
 use futures_core::Stream;
 use reqwest::Method;
@@ -58,6 +59,48 @@ impl Client {
     log_request_id(&resp);
     AppResponse::<ChatMessage>::stream_response(resp).await
   }
+
+  pub async fn update_chat_message(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    params: UpdateChatMessageContentParams,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn generate_question_answer(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    message_id: i64,
+  ) -> Result<ChatMessage, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatMessage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn get_chat_related_question(
     &self,
     workspace_id: &str,

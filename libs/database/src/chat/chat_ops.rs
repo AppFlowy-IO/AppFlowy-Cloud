@@ -5,7 +5,8 @@ use app_error::AppError;
 use chrono::{DateTime, Utc};
 use database_entity::dto::{
   ChatAuthor, ChatMessage, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageParams, UpdateChatParams,
+  RepeatedChatMessage, UpdateChatMessageContentParams, UpdateChatMessageMetaParams,
+  UpdateChatParams,
 };
 
 use serde_json::json;
@@ -129,7 +130,129 @@ pub async fn select_chat<'a, E: Executor<'a, Database = Postgres>>(
   }
 }
 
-pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn insert_answer_message_with_transaction(
+  transaction: &mut Transaction<'_, Postgres>,
+  author: ChatAuthor,
+  chat_id: &str,
+  content: String,
+  question_message_id: i64,
+) -> Result<ChatMessage, AppError> {
+  let chat_id = Uuid::from_str(chat_id)?;
+  let existing_reply_message_id: Option<i64> = sqlx::query_scalar!(
+    r#"
+      SELECT reply_message_id
+      FROM af_chat_messages
+      WHERE message_id = $1
+    "#,
+    question_message_id
+  )
+  .fetch_one(transaction.deref_mut())
+  .await?;
+
+  if let Some(reply_id) = existing_reply_message_id {
+    // If there is an existing reply_message_id, update the existing message
+    sqlx::query!(
+      r#"
+         UPDATE af_chat_messages
+         SET content = $2,
+             author = $3,
+             created_at = CURRENT_TIMESTAMP
+         WHERE message_id = $1
+      "#,
+      reply_id,
+      &content,
+      json!(author),
+    )
+    .execute(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to update chat message: {}", err)))?;
+
+    let row = sqlx::query!(
+      r#"
+        SELECT message_id, content, created_at, author, meta_data, reply_message_id
+        FROM af_chat_messages
+        WHERE message_id = $1
+      "#,
+      reply_id
+    )
+    .fetch_one(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to fetch updated message: {}", err)))?;
+
+    let chat_message = ChatMessage {
+      author,
+      message_id: row.message_id,
+      content: row.content,
+      created_at: row.created_at,
+      meta_data: row.meta_data,
+      reply_message_id: Some(question_message_id),
+    };
+
+    Ok(chat_message)
+  } else {
+    // Insert a new chat message
+    let row = sqlx::query!(
+      r#"
+        INSERT INTO af_chat_messages (chat_id, author, content)
+        VALUES ($1, $2, $3)
+        RETURNING message_id, created_at
+      "#,
+      chat_id,
+      json!(author),
+      &content,
+    )
+    .fetch_one(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to insert chat message: {}", err)))?;
+
+    // Update the question message with the new reply_message_id
+    sqlx::query!(
+      r#"
+        UPDATE af_chat_messages
+        SET reply_message_id = $2
+        WHERE message_id = $1
+      "#,
+      question_message_id,
+      row.message_id,
+    )
+    .execute(transaction.deref_mut())
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to update reply_message_id: {}", err)))?;
+
+    let chat_message = ChatMessage {
+      author,
+      message_id: row.message_id,
+      content,
+      created_at: row.created_at,
+      meta_data: Default::default(),
+      reply_message_id: None,
+    };
+
+    Ok(chat_message)
+  }
+}
+
+pub async fn insert_answer_message(
+  pg_pool: &PgPool,
+  author: ChatAuthor,
+  chat_id: &str,
+  content: String,
+  question_message_id: i64,
+) -> Result<ChatMessage, AppError> {
+  let mut txn = pg_pool.begin().await?;
+  let chat_message =
+    insert_answer_message_with_transaction(&mut txn, author, chat_id, content, question_message_id)
+      .await?;
+  txn.commit().await.map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Failed to commit transaction to insert answer message: {}",
+      err
+    ))
+  })?;
+  Ok(chat_message)
+}
+
+pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   author: ChatAuthor,
   chat_id: &str,
@@ -156,6 +279,7 @@ pub async fn insert_chat_message<'a, E: Executor<'a, Database = Postgres>>(
     content,
     created_at: row.created_at,
     meta_data: Default::default(),
+    reply_message_id: None,
   };
   Ok(chat_message)
 }
@@ -167,7 +291,7 @@ pub async fn select_chat_messages(
 ) -> Result<RepeatedChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
   let mut query = r#"
-        SELECT message_id, content, created_at, author, meta_data
+        SELECT message_id, content, created_at, author, meta_data, reply_message_id
         FROM af_chat_messages
         WHERE chat_id = $1
     "#
@@ -204,33 +328,38 @@ pub async fn select_chat_messages(
     },
   }
 
+  #[allow(clippy::type_complexity)]
   let rows: Vec<(
     i64,
     String,
     DateTime<Utc>,
     serde_json::Value,
     serde_json::Value,
+    Option<i64>,
   )> = sqlx::query_as_with(&query, args)
     .fetch_all(txn.deref_mut())
     .await?;
 
   let messages = rows
     .into_iter()
-    .flat_map(|(message_id, content, created_at, author, meta_data)| {
-      match serde_json::from_value::<ChatAuthor>(author) {
-        Ok(author) => Some(ChatMessage {
-          author,
-          message_id,
-          content,
-          created_at,
-          meta_data,
-        }),
-        Err(err) => {
-          warn!("Failed to deserialize author: {}", err);
-          None
-        },
-      }
-    })
+    .flat_map(
+      |(message_id, content, created_at, author, meta_data, reply_message_id)| {
+        match serde_json::from_value::<ChatAuthor>(author) {
+          Ok(author) => Some(ChatMessage {
+            author,
+            message_id,
+            content,
+            created_at,
+            meta_data,
+            reply_message_id,
+          }),
+          Err(err) => {
+            warn!("Failed to deserialize author: {}", err);
+            None
+          },
+        }
+      },
+    )
     .collect::<Vec<ChatMessage>>();
 
   let total = sqlx::query_scalar!(
@@ -295,7 +424,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
   let rows = sqlx::query!(
     // ChatMessage,
     r#"
-     SELECT message_id, content, created_at, author, meta_data
+     SELECT message_id, content, created_at, author, meta_data, reply_message_id
           FROM af_chat_messages
           WHERE chat_id = $1
           ORDER BY created_at ASC
@@ -315,6 +444,7 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
           content: row.content,
           created_at: row.created_at,
           meta_data: row.meta_data,
+          reply_message_id: row.reply_message_id,
         }),
         Err(err) => {
           warn!("Failed to deserialize author: {}", err);
@@ -327,29 +457,98 @@ pub async fn get_all_chat_messages<'a, E: Executor<'a, Database = Postgres>>(
   Ok(messages)
 }
 
-pub async fn update_chat_message(
-  pg_pool: &PgPool,
-  params: UpdateChatMessageParams,
+pub async fn delete_answer_message_by_question_message_id(
+  transaction: &mut Transaction<'_, Postgres>,
+  message_id: i64,
 ) -> Result<(), AppError> {
-  for (key, value) in params.meta_data.iter() {
-    sqlx::query(
+  // Step 1: Get the reply_message_id of the chat message with the given message_id
+  let reply_message_id: Option<i64> = sqlx::query_scalar!(
+    r#"
+      SELECT reply_message_id
+      FROM af_chat_messages
+      WHERE message_id = $1
+    "#,
+    message_id
+  )
+  .fetch_one(transaction.deref_mut())
+  .await?;
+
+  if let Some(reply_id) = reply_message_id {
+    // Step 2: Delete the chat message with the reply_message_id
+    sqlx::query!(
       r#"
-           UPDATE af_chat_messages
-           SET meta_data = jsonb_set(
-               COALESCE(meta_data, '{}'),
-               $2,
-               $3::jsonb,
-               true
-           )
-           WHERE id = $1
-           "#,
+        DELETE FROM af_chat_messages
+        WHERE message_id = $1
+      "#,
+      reply_id
     )
-    .bind(params.message_id)
-    .bind(format!("{{{}}}", key))
-    .bind(value)
-    .execute(pg_pool)
+    .execute(transaction.deref_mut())
     .await?;
   }
 
   Ok(())
+}
+
+pub async fn update_chat_message_content(
+  transaction: &mut Transaction<'_, Postgres>,
+  params: &UpdateChatMessageContentParams,
+) -> Result<(), AppError> {
+  sqlx::query(
+    r#"
+            UPDATE af_chat_messages
+            SET content = $2,
+                edited_at = CURRENT_TIMESTAMP
+            WHERE message_id = $1
+            "#,
+  )
+  .bind(params.message_id)
+  .bind(&params.content)
+  .execute(transaction.deref_mut())
+  .await?;
+
+  Ok(())
+}
+
+pub async fn update_chat_message_meta(
+  transaction: &mut Transaction<'_, Postgres>,
+  params: &UpdateChatMessageMetaParams,
+) -> Result<(), AppError> {
+  for (key, value) in params.meta_data.iter() {
+    sqlx::query(
+      r#"
+            UPDATE af_chat_messages
+            SET meta_data = jsonb_set(
+                COALESCE(meta_data, '{}'),
+                $2,
+                $3::jsonb,
+                true
+            )
+            WHERE message_id = $1
+            "#,
+    )
+    .bind(params.message_id)
+    .bind(format!("{{{}}}", key))
+    .bind(value)
+    .execute(transaction.deref_mut())
+    .await?;
+  }
+
+  Ok(())
+}
+
+pub async fn select_chat_message_content<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  message_id: i64,
+) -> Result<String, AppError> {
+  let row = sqlx::query!(
+    r#"
+        SELECT content
+        FROM af_chat_messages
+        WHERE message_id = $1
+        "#,
+    message_id,
+  )
+  .fetch_one(executor)
+  .await?;
+  Ok(row.content)
 }

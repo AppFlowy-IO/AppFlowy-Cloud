@@ -21,7 +21,7 @@ async fn qa_test() {
   assert_eq!(questions.len(), 3)
 }
 #[tokio::test]
-async fn stop_steam_test() {
+async fn stop_stream_test() {
   let client = appflowy_ai_client();
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
@@ -43,7 +43,7 @@ async fn stop_steam_test() {
 }
 
 #[tokio::test]
-async fn steam_test() {
+async fn stream_test() {
   let client = appflowy_ai_client();
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();

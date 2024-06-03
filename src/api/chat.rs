@@ -1,14 +1,16 @@
-use crate::biz::chat::ops::{create_chat, create_chat_message, delete_chat, get_chat_messages};
+use crate::biz::chat::ops::{
+  create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
+  update_chat_message,
+};
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpResponse, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::RepeatedRelatedQuestion;
 use authentication::jwt::UserUuid;
-use database::chat::chat_ops::update_chat_message;
 use database_entity::dto::{
-  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageParams,
+  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
+  RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
@@ -22,7 +24,6 @@ pub fn chat_scope() -> Scope {
     .service(
       web::resource("/{chat_id}")
         .route(web::delete().to(delete_chat_handler))
-        .route(web::post().to(update_chat_handler))
         .route(web::get().to(get_chat_message_handler)),
     )
     .service(
@@ -30,8 +31,11 @@ pub fn chat_scope() -> Scope {
         .route(web::get().to(get_related_message_handler)),
     )
     .service(
+      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(generate_answer_handler)),
+    )
+    .service(
       web::resource("/{chat_id}/message")
-        .route(web::post().to(post_chat_message_handler))
+        .route(web::post().to(create_chat_message_handler))
         .route(web::put().to(update_chat_message_handler)),
     )
 }
@@ -56,16 +60,7 @@ async fn delete_chat_handler(
   Ok(AppResponse::Ok().into())
 }
 
-async fn update_chat_handler(
-  path: web::Path<(String, String)>,
-  state: Data<AppState>,
-) -> actix_web::Result<JsonAppResponse<()>> {
-  let (_workspace_id, chat_id) = path.into_inner();
-  delete_chat(&state.pg_pool, &chat_id).await?;
-  Ok(AppResponse::Ok().into())
-}
-
-async fn post_chat_message_handler(
+async fn create_chat_message_handler(
   state: Data<AppState>,
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
@@ -96,10 +91,10 @@ async fn post_chat_message_handler(
 
 async fn update_chat_message_handler(
   state: Data<AppState>,
-  payload: Json<UpdateChatMessageParams>,
+  payload: Json<UpdateChatMessageContentParams>,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
-  update_chat_message(&state.pg_pool, params).await?;
+  update_chat_message(&state.pg_pool, params, state.ai_client.clone()).await?;
   Ok(AppResponse::Ok().into())
 }
 
@@ -114,6 +109,21 @@ async fn get_related_message_handler(
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
   Ok(AppResponse::Ok().with_data(resp).into())
+}
+
+async fn generate_answer_handler(
+  path: web::Path<(String, String, i64)>,
+  state: Data<AppState>,
+) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+  let (_workspace_id, chat_id, message_id) = path.into_inner();
+  let message = generate_chat_message_answer(
+    &state.pg_pool,
+    state.ai_client.clone(),
+    message_id,
+    &chat_id,
+  )
+  .await?;
+  Ok(AppResponse::Ok().with_data(message).into())
 }
 
 #[instrument(level = "debug", skip_all, err)]

@@ -2,6 +2,7 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 
 use collab::core::collab::MutexCollab;
+use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -27,7 +28,12 @@ pub async fn db_pool() -> PgPool {
     .expect("failed to connect to database")
 }
 
-pub async fn setup_collab(db: &PgPool, uid: i64, object_id: Uuid, encoded_collab: Vec<u8>) -> Uuid {
+pub async fn setup_collab(
+  db: &PgPool,
+  uid: i64,
+  object_id: Uuid,
+  encoded_collab: &EncodedCollab,
+) -> Uuid {
   let mut tx = db.begin().await.unwrap();
   let user_uuid = Uuid::new_v4();
   sqlx::query("INSERT INTO auth.users(id) VALUES($1)")
@@ -48,7 +54,11 @@ pub async fn setup_collab(db: &PgPool, uid: i64, object_id: Uuid, encoded_collab
     &mut tx,
     &uid,
     &workspace_id.to_string(),
-    &CollabParams::new(object_id, CollabType::Document, encoded_collab),
+    &CollabParams::new(
+      object_id,
+      CollabType::Document,
+      encoded_collab.encode_to_bytes().unwrap(),
+    ),
   )
   .await
   .unwrap();

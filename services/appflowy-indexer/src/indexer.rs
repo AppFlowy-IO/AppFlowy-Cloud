@@ -1,9 +1,10 @@
+use std::pin::Pin;
+
 use async_stream::try_stream;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab::error::CollabError;
 use collab_entity::CollabType;
-use database::collab::select_blob_from_af_collab;
 use futures::Stream;
 use openai_dive::v1::api::Client;
 use openai_dive::v1::models::EmbeddingsEngine;
@@ -12,9 +13,9 @@ use openai_dive::v1::resources::embedding::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use std::pin::Pin;
 use uuid::Uuid;
 
+use database::collab::select_blob_from_af_collab;
 use database::index::{
   get_collabs_without_embeddings, has_collab_embeddings, remove_collab_embeddings,
   upsert_collab_embeddings,
@@ -212,8 +213,8 @@ impl Indexer for PostgresIndexer {
   fn get_unindexed_collabs(&self) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab>>>> {
     let db = self.db.clone();
     Box::pin(try_stream! {
-      let mut tx = db.begin().await?;
-      let collabs = get_collabs_without_embeddings(&mut tx).await?;
+      let collabs = get_collabs_without_embeddings(&db).await?;
+
       if !collabs.is_empty() {
         tracing::trace!("found {} unindexed collabs", collabs.len());
       }
@@ -245,9 +246,12 @@ impl Indexer for PostgresIndexer {
 
 #[cfg(test)]
 mod test {
-  use database_entity::dto::EmbeddingContentType;
+  use axum::body::Bytes;
+  use collab::entity::{EncodedCollab, EncoderVersion};
   use pgvector::Vector;
   use sqlx::Row;
+
+  use database_entity::dto::EmbeddingContentType;
 
   use crate::indexer::{Indexer, PostgresIndexer};
   use crate::test_utils::{db_pool, openai_client, setup_collab};
@@ -259,7 +263,17 @@ mod test {
     let db = db_pool().await;
     let object_id = uuid::Uuid::new_v4();
     let uid = rand::random();
-    let workspace_id = setup_collab(&db, uid, object_id, vec![]).await;
+    let workspace_id = setup_collab(
+      &db,
+      uid,
+      object_id,
+      &EncodedCollab {
+        state_vector: Bytes::from(vec![1, 2, 3]),
+        doc_state: Bytes::from(vec![4, 5, 6]),
+        version: EncoderVersion::V1,
+      },
+    )
+    .await;
 
     let openai = openai_client();
 

@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 
 use collab_entity::CollabType;
 use pgvector::Vector;
-use sqlx::Transaction;
+use sqlx::{Executor, Postgres, Transaction};
 use uuid::Uuid;
 
 use database_entity::dto::AFCollabEmbeddingParams;
@@ -67,9 +67,12 @@ pub async fn remove_collab_embeddings(
   Ok(())
 }
 
-pub async fn get_collabs_without_embeddings(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
-) -> Result<Vec<CollabId>, sqlx::Error> {
+pub async fn get_collabs_without_embeddings<'a, E>(
+  executor: E,
+) -> Result<Vec<CollabId>, sqlx::Error>
+where
+  E: Executor<'a, Database = Postgres>,
+{
   let oids = sqlx::query!(
     r#"
   select c.workspace_id, c.oid, c.partition_key
@@ -79,7 +82,7 @@ pub async fn get_collabs_without_embeddings(
     from af_collab_embeddings em
     where em.oid = c.oid and em.partition_key = 0)"# // atm. get only documents
   )
-  .fetch_all(tx.deref_mut())
+  .fetch_all(executor)
   .await?;
   Ok(
     oids

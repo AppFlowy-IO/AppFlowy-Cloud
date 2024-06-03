@@ -41,7 +41,6 @@ services:
       - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
     volumes:
       - ./migrations/before:/docker-entrypoint-initdb.d
-  #      - postgres_data:/var/lib/postgresql/data
 
   redis:
     restart: on-failure
@@ -144,8 +143,8 @@ services:
       - "5001:5001"
     environment:
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
-      - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
+      - APPFLOWY_AI_DATABASE_URL=${APPFLOWY_AI_DATABASE_URL}
 
   appflowy_history:
     restart: on-failure

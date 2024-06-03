@@ -119,12 +119,9 @@ services:
     ports:
       - 5001:5001
     environment:
-      - VECTOR_STORE_ENABLED=true
       - OPENAI_API_KEY=${APPFLOWY_AI_OPENAI_API_KEY}
-      - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
       - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
-      - APPFLOWY_DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@${POSTGRES_HOST:-postgres}:5432/${POSTGRES_DB:-postgres}
-
+      - APPFLOWY_AI_DATABASE_URL=${APPFLOWY_AI_DATABASE_URL}
 
 volumes:
   postgres_data:

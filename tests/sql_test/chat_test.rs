@@ -108,9 +108,9 @@ async fn chat_message_crud_test(pool: PgPool) {
       .unwrap();
     txn.commit().await.unwrap();
     assert_eq!(result.messages.len(), 3);
-    assert_eq!(result.messages[0].message_id, 3);
+    assert_eq!(result.messages[0].message_id, 5);
     assert_eq!(result.messages[1].message_id, 4);
-    assert_eq!(result.messages[2].message_id, 5);
+    assert_eq!(result.messages[2].message_id, 3);
     assert!(result.has_more);
   }
 
@@ -138,9 +138,9 @@ async fn chat_message_crud_test(pool: PgPool) {
       .unwrap();
     txn.commit().await.unwrap();
     assert_eq!(result_2.messages.len(), 3);
-    assert_eq!(result_2.messages[0].message_id, 1);
+    assert_eq!(result_2.messages[0].message_id, 3);
     assert_eq!(result_2.messages[1].message_id, 2);
-    assert_eq!(result_2.messages[2].message_id, 3);
+    assert_eq!(result_2.messages[2].message_id, 1);
     assert_eq!(result_2.total, 5);
     assert!(!result_2.has_more);
   }
@@ -168,8 +168,8 @@ async fn chat_message_crud_test(pool: PgPool) {
       .unwrap();
     txn.commit().await.unwrap();
     assert_eq!(result_2.messages.len(), 2);
-    assert_eq!(result_2.messages[0].message_id, 4);
-    assert_eq!(result_2.messages[1].message_id, 5);
+    assert_eq!(result_2.messages[0].message_id, 5);
+    assert_eq!(result_2.messages[1].message_id, 4);
     assert_eq!(result_2.total, 5);
     assert!(!result_2.has_more);
   }

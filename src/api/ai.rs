@@ -9,7 +9,7 @@ use shared_entity::dto::ai_dto::{
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use tracing::{error, instrument};
 
-pub fn ai_tool_scope() -> Scope {
+pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
     .service(web::resource("/complete_text").route(web::post().to(complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))

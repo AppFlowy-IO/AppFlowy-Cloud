@@ -3,9 +3,13 @@ use std::borrow::Cow;
 
 use app_error::AppError;
 pub use app_error::ErrorCode;
-use futures::stream::{Stream, StreamExt};
+use futures::stream::Stream;
+use futures::TryStreamExt;
+use serde::de::DeserializeOwned;
+use serde_json::StreamDeserializer;
 use std::fmt::{Debug, Display};
-use tracing::error;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 #[cfg(feature = "cloud")]
 pub use crate::response_actix::*;
@@ -153,20 +157,86 @@ where
       return Err(AppResponseError::new(ErrorCode::Internal, body));
     }
 
-    let stream = resp.bytes_stream().map(|item| {
-      item.map_err(AppResponseError::from).and_then(|bytes| {
-        match serde_json::from_slice::<T>(bytes.as_ref()) {
-          Ok(data) => Ok(data),
-          Err(err) => {
-            error!("Failed to parse stream message: {}, data: {:?}", err, bytes);
-            Err(AppResponseError::from(err))
-          },
-        }
-      })
-    });
-    Ok(stream)
+    let stream = resp.bytes_stream().map_err(AppResponseError::from);
+    Ok(JsonStream::new(stream))
+
+    // let stream = resp.bytes_stream().map(|item| {
+    //   item.map_err(AppResponseError::from).and_then(|bytes| {
+    //     match serde_json::from_slice::<T>(bytes.as_ref()) {
+    //       Ok(data) => Ok(data),
+    //       Err(err) => {
+    //         error!("Failed to parse stream message: {}, data: {:?}", err, bytes);
+    //         Err(AppResponseError::from(err))
+    //       },
+    //     }
+    //   })
+    // });
+    // Ok(stream)
   }
 }
+
+#[pin_project::pin_project]
+pub struct JsonStream<T> {
+  stream: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, AppResponseError>> + Send>>,
+  buffer: Vec<u8>,
+  _marker: std::marker::PhantomData<T>,
+}
+
+impl<T> JsonStream<T> {
+  pub fn new<S>(stream: S) -> Self
+  where
+    S: Stream<Item = Result<bytes::Bytes, AppResponseError>> + Send + 'static,
+  {
+    JsonStream {
+      stream: Box::pin(stream),
+      buffer: Vec::new(),
+      _marker: std::marker::PhantomData,
+    }
+  }
+}
+
+impl<T> Stream for JsonStream<T>
+where
+  T: DeserializeOwned,
+{
+  type Item = Result<T, AppResponseError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let this = self.project();
+
+    loop {
+      match futures::ready!(this.stream.as_mut().poll_next(cx)) {
+        Some(Ok(bytes)) => {
+          this.buffer.extend_from_slice(&bytes);
+
+          let de = StreamDeserializer::new(serde_json::de::SliceRead::new(&this.buffer));
+          let mut iter = de.into_iter();
+
+          if let Some(result) = iter.next() {
+            match result {
+              Ok(value) => {
+                let remaining = iter.byte_offset();
+                this.buffer.drain(0..remaining);
+                return Poll::Ready(Some(Ok(value)));
+              },
+              Err(err) => {
+                if err.is_eof() {
+                  // Need more data
+                  continue;
+                } else {
+                  return Poll::Ready(Some(Err(AppResponseError::from(err))));
+                }
+              },
+            }
+          }
+        },
+        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
+        None => return Poll::Ready(None),
+      }
+    }
+  }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
 pub struct AppResponseError {
   #[serde(deserialize_with = "default_error_code")]

@@ -3,7 +3,7 @@ use std::borrow::Cow;
 
 use app_error::AppError;
 pub use app_error::ErrorCode;
-use futures::stream::{Stream, StreamExt};
+use serde::de::DeserializeOwned;
 use std::fmt::{Debug, Display};
 
 #[cfg(feature = "cloud")]
@@ -129,7 +129,7 @@ where
 
 impl<T> AppResponse<T>
 where
-  T: serde::de::DeserializeOwned + 'static,
+  T: DeserializeOwned + 'static,
 {
   pub async fn from_response(resp: reqwest::Response) -> Result<Self, anyhow::Error> {
     let status_code = resp.status();
@@ -142,24 +142,8 @@ where
     let resp = serde_json::from_slice(&bytes)?;
     Ok(resp)
   }
-
-  pub async fn stream_response(
-    resp: reqwest::Response,
-  ) -> Result<impl Stream<Item = Result<T, AppResponseError>>, AppResponseError> {
-    let status_code = resp.status();
-    if !status_code.is_success() {
-      let body = resp.text().await?;
-      return Err(AppResponseError::new(ErrorCode::Internal, body));
-    }
-
-    let stream = resp.bytes_stream().map(|item| {
-      item.map_err(AppResponseError::from).and_then(|bytes| {
-        serde_json::from_slice::<T>(bytes.as_ref()).map_err(AppResponseError::from)
-      })
-    });
-    Ok(stream)
-  }
 }
+
 #[derive(Clone, Debug, Serialize, Deserialize, thiserror::Error)]
 pub struct AppResponseError {
   #[serde(deserialize_with = "default_error_code")]

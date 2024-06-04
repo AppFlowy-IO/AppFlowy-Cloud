@@ -21,7 +21,6 @@ collab-entity = { workspace = true }
 app-error = { workspace = true }
 chrono = "0.4.31"
 appflowy-ai-client = { workspace = true, default-features = false, features = ["dto"] }
-tracing.workspace = true
 pin-project = "1.1.5"
 
 actix-web = { version = "4.4.1", default-features = false, features = ["http2"], optional = true }

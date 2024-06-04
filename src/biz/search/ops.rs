@@ -21,7 +21,7 @@ pub async fn search_document(
   let embeddings = openai
     .embeddings()
     .create(EmbeddingParameters {
-      input: EmbeddingInput::String(request.query),
+      input: EmbeddingInput::String(request.query.clone()),
       model: EmbeddingsEngine::TextEmbedding3Small.to_string(),
       encoding_format: Some(EmbeddingEncodingFormat::Float),
       dimensions: Some(1536), // text-embedding-3-small default number of dimensions
@@ -50,7 +50,7 @@ pub async fn search_document(
     EmbeddingOutput::Base64(_) => {
       return Err(AppResponseError::new(
         ErrorCode::Internal,
-        "OpenAI returned no embeddings in unsupported format",
+        "OpenAI returned embeddings in unsupported format",
       ))
     },
   };
@@ -72,6 +72,13 @@ pub async fn search_document(
   )
   .await?;
   tx.commit().await?;
+  tracing::trace!(
+    "user {} search request in workspace {} returned {} results for query: `{}`",
+    uid,
+    workspace_id,
+    results.len(),
+    request.query
+  );
   Ok(
     results
       .into_iter()

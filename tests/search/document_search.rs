@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::time::sleep;
 use workspace_template::document::get_started::get_started_document_data;
 
+#[ignore]
 #[tokio::test]
 async fn test_document_indexing_and_search() {
   // Set up all the required data

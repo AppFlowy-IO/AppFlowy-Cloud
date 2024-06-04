@@ -83,6 +83,7 @@ async fn create_chat_message_handler(
     state.ai_client.clone(),
   )
   .await;
+
   Ok(
     HttpResponse::Ok()
       .content_type("application/json")

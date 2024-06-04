@@ -16,6 +16,7 @@ use database_entity::dto::{
 };
 use futures::stream::Stream;
 use sqlx::PgPool;
+use tracing::error;
 
 use validator::Validate;
 
@@ -118,6 +119,7 @@ pub async fn create_chat_message(
       ).await {
           Ok(question) => question,
           Err(err) => {
+              error!("Failed to insert question message: {}", err);
               yield Err(err);
               return;
           }
@@ -125,14 +127,15 @@ pub async fn create_chat_message(
 
       let question_id = question.message_id;
       let question_bytes = match serde_json::to_vec(&question) {
-          Ok(bytes) => bytes,
+          Ok(s) => Bytes::from(s),
           Err(err) => {
+              error!("Failed to serialize question message: {}", err);
               yield Err(AppError::from(err));
               return;
           }
       };
 
-      yield Ok::<Bytes, AppError>(Bytes::from(question_bytes));
+      yield Ok::<Bytes, AppError>(question_bytes);
 
       // Insert answer message
       match params.message_type {
@@ -141,6 +144,7 @@ pub async fn create_chat_message(
               let content = match ai_client.send_question(&chat_id, &params.content).await {
                   Ok(response) => response.content,
                   Err(err) => {
+                      error!("Failed to send question to AI: {}", err);
                       yield Err(AppError::from(err));
                       return;
                   }
@@ -149,20 +153,22 @@ pub async fn create_chat_message(
               let answer = match insert_answer_message(&pg_pool, ChatAuthor::ai(), &chat_id, content.clone(),question_id).await {
                   Ok(answer) => answer,
                   Err(err) => {
+                      error!("Failed to insert answer message: {}", err);
                       yield Err(err);
                       return;
                   }
               };
 
               let answer_bytes = match serde_json::to_vec(&answer) {
-                  Ok(bytes) => bytes,
+                  Ok(s) => Bytes::from(s),
                   Err(err) => {
+                      error!("Failed to serialize answer message: {}", err);
                       yield Err(AppError::from(err));
                       return;
                   }
               };
 
-              yield Ok::<Bytes, AppError>(Bytes::from(answer_bytes));
+              yield Ok::<Bytes, AppError>(answer_bytes);
           }
       }
   };

@@ -48,6 +48,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use tonic_proto::history::history_client::HistoryClient;
 
+use crate::api::ai::ai_completion_scope;
 use crate::api::search::search_scope;
 use tracing::{info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
@@ -144,6 +145,7 @@ pub async fn run_actix_server(
       .service(ws_scope())
       .service(file_storage_scope())
       .service(chat_scope())
+      .service(ai_completion_scope())
       .service(history_scope())
       .service(metrics_scope())
       .service(search_scope())

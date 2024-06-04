@@ -60,6 +60,7 @@ async fn delete_chat_handler(
   Ok(AppResponse::Ok().into())
 }
 
+#[instrument(level = "info", skip_all, err)]
 async fn create_chat_message_handler(
   state: Data<AppState>,
   path: web::Path<(String, String)>,

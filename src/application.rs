@@ -249,7 +249,10 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     metrics.collab_metrics.clone(),
   ));
 
-  info!("Connecting to history server");
+  info!(
+    "Connecting to history server: {}",
+    config.grpc_history.addrs
+  );
   let channel = tonic::transport::Channel::from_shared(config.grpc_history.addrs.clone())?
     .keep_alive_timeout(Duration::from_secs(20))
     .keep_alive_while_idle(true)

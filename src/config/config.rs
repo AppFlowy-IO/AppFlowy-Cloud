@@ -161,7 +161,7 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
       client_timeout: get_env_var("APPFLOWY_WEBSOCKET_CLIENT_TIMEOUT", "60").parse()?,
     },
     redis_uri: get_env_var("APPFLOWY_REDIS_URI", "redis://localhost:6379").into(),
-    openai_api_key: std::env::var("APPFLOWY_AI_OPENAI_API_KEY")
+    openai_api_key: std::env::var("APPFLOWY_OPENAI_API_KEY")
       .map(Secret::from)
       .ok(),
     s3: S3Setting {

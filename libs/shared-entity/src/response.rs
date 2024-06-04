@@ -221,7 +221,6 @@ where
               },
               Err(err) => {
                 if err.is_eof() {
-                  // Need more data
                   continue;
                 } else {
                   return Poll::Ready(Some(Err(AppResponseError::from(err))));

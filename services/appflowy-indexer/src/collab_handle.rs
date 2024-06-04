@@ -302,14 +302,14 @@ mod test {
     );
     collab.initialize();
     let collab = Arc::new(MutexCollab::new(collab));
-    let doc_state: Vec<u8> = {
+    let encoded_collab = {
       let doc_data = get_started_document_data().unwrap();
       let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
-      document.encode_collab().unwrap().doc_state.into()
+      document.encode_collab().unwrap()
     };
     let db = db_pool().await;
 
-    let workspace_id = setup_collab(&db, uid, object_id, doc_state.clone()).await;
+    let workspace_id = setup_collab(&db, uid, object_id, &encoded_collab).await;
 
     let object_id = object_id.to_string();
 
@@ -329,7 +329,7 @@ mod test {
       object_id.clone(),
       workspace_id.to_string(),
       CollabType::Document,
-      doc_state,
+      encoded_collab.doc_state.to_vec(),
       Duration::from_millis(50),
     )
     .await

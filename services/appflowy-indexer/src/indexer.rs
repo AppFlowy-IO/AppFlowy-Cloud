@@ -1,5 +1,11 @@
+use std::pin::Pin;
+
+use async_stream::try_stream;
 use async_trait::async_trait;
+use collab::entity::EncodedCollab;
+use collab::error::CollabError;
 use collab_entity::CollabType;
+use futures::Stream;
 use openai_dive::v1::api::Client;
 use openai_dive::v1::models::EmbeddingsEngine;
 use openai_dive::v1::resources::embedding::{
@@ -9,7 +15,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use database::index::{has_collab_embeddings, remove_collab_embeddings, upsert_collab_embeddings};
+use database::collab::select_blob_from_af_collab;
+use database::index::{
+  get_collabs_without_embeddings, has_collab_embeddings, remove_collab_embeddings,
+  upsert_collab_embeddings,
+};
 use database_entity::dto::{AFCollabEmbeddingParams, EmbeddingContentType};
 
 use crate::error::Result;
@@ -20,6 +30,15 @@ pub trait Indexer: Send + Sync {
   async fn was_indexed(&self, object_id: &str) -> Result<bool>;
   async fn update_index(&self, workspace_id: &Uuid, documents: Vec<Fragment>) -> Result<()>;
   async fn remove(&self, ids: &[FragmentID]) -> Result<()>;
+  /// Returns a list of object ids, that have not been indexed yet.
+  fn get_unindexed_collabs(&self) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab>>>>;
+}
+
+pub struct UnindexedCollab {
+  pub workspace_id: Uuid,
+  pub object_id: String,
+  pub collab_type: CollabType,
+  pub collab: EncodedCollab,
 }
 
 pub type FragmentID = String;
@@ -190,13 +209,49 @@ impl Indexer for PostgresIndexer {
     tx.commit().await?;
     Ok(())
   }
+
+  fn get_unindexed_collabs(&self) -> Pin<Box<dyn Stream<Item = Result<UnindexedCollab>>>> {
+    let db = self.db.clone();
+    Box::pin(try_stream! {
+      let collabs = get_collabs_without_embeddings(&db).await?;
+
+      if !collabs.is_empty() {
+        tracing::trace!("found {} unindexed collabs", collabs.len());
+      }
+      for cid in collabs {
+        match &cid.collab_type {
+          CollabType::Document => {
+            let collab =
+              select_blob_from_af_collab(&db, &CollabType::Document, &cid.object_id).await?;
+            let collab = EncodedCollab::decode_from_bytes(&collab)
+              .map_err(|err| crate::error::Error::Collab(CollabError::Internal(err)))?;
+            yield UnindexedCollab {
+              workspace_id: cid.workspace_id,
+              object_id: cid.object_id,
+              collab_type: cid.collab_type,
+              collab,
+            };
+          },
+          CollabType::Database
+          | CollabType::WorkspaceDatabase
+          | CollabType::Folder
+          | CollabType::DatabaseRow
+          | CollabType::UserAwareness
+          | CollabType::Unknown => { /* atm. only document types are supported */ },
+        }
+      }
+    })
+  }
 }
 
 #[cfg(test)]
 mod test {
-  use database_entity::dto::EmbeddingContentType;
+  use axum::body::Bytes;
+  use collab::entity::{EncodedCollab, EncoderVersion};
   use pgvector::Vector;
   use sqlx::Row;
+
+  use database_entity::dto::EmbeddingContentType;
 
   use crate::indexer::{Indexer, PostgresIndexer};
   use crate::test_utils::{db_pool, openai_client, setup_collab};
@@ -208,7 +263,17 @@ mod test {
     let db = db_pool().await;
     let object_id = uuid::Uuid::new_v4();
     let uid = rand::random();
-    let workspace_id = setup_collab(&db, uid, object_id, vec![]).await;
+    let workspace_id = setup_collab(
+      &db,
+      uid,
+      object_id,
+      &EncodedCollab {
+        state_vector: Bytes::from(vec![1, 2, 3]),
+        doc_state: Bytes::from(vec![4, 5, 6]),
+        version: EncoderVersion::V1,
+      },
+    )
+    .await;
 
     let openai = openai_client();
 

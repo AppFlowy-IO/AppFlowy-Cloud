@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::sync::{Arc, Once};
+use std::sync::Arc;
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::EnvFilter;
@@ -15,6 +15,7 @@ mod error;
 mod indexer;
 mod watchers;
 
+mod extract;
 #[cfg(test)]
 mod test_utils;
 
@@ -61,6 +62,7 @@ async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
   let redis_client = redis::Client::open(config.redis_url)?;
   let collab_stream = CollabRedisStream::new(redis_client).await?;
   let indexer = PostgresIndexer::open(&config.openai_api_key, &config.database_url).await?;
+  tracing::info!("Starting AppFlowy Indexer...");
   let consumer = OpenCollabConsumer::new(
     collab_stream,
     Arc::new(indexer),
@@ -74,36 +76,33 @@ async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn init_subscriber(app_env: &Environment) {
-  static START: Once = Once::new();
-  START.call_once(|| {
-    let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
-    let mut filters = vec![];
-    filters.push(format!("appflowy_history={}", level));
-    let env_filter = EnvFilter::new(filters.join(","));
+  let level = std::env::var("RUST_LOG").unwrap_or("info".to_string());
+  let mut filters = vec![];
+  filters.push(format!("appflowy_indexer={}", level));
+  let env_filter = EnvFilter::new(filters.join(","));
 
-    let builder = tracing_subscriber::fmt()
-      .with_target(true)
-      .with_max_level(tracing::Level::TRACE)
-      .with_thread_ids(false)
-      .with_file(false);
+  let builder = tracing_subscriber::fmt()
+    .with_target(true)
+    .with_max_level(tracing::Level::TRACE)
+    .with_thread_ids(false)
+    .with_file(false);
 
-    match app_env {
-      Environment::Local => {
-        let subscriber = builder
-          .with_ansi(true)
-          .with_target(false)
-          .with_file(false)
-          .pretty()
-          .finish()
-          .with(env_filter);
-        set_global_default(subscriber).unwrap();
-      },
-      Environment::Production => {
-        let subscriber = builder.json().finish().with(env_filter);
-        set_global_default(subscriber).unwrap();
-      },
-    }
-  });
+  match app_env {
+    Environment::Local => {
+      let subscriber = builder
+        .with_ansi(true)
+        .with_target(false)
+        .with_file(false)
+        .pretty()
+        .finish()
+        .with(env_filter);
+      set_global_default(subscriber).unwrap();
+    },
+    Environment::Production => {
+      let subscriber = builder.json().finish().with(env_filter);
+      set_global_default(subscriber).unwrap();
+    },
+  }
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]

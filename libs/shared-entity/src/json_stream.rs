@@ -57,10 +57,8 @@ where
       match futures::ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
           this.buffer.extend_from_slice(&bytes);
-
-          let de = StreamDeserializer::new(serde_json::de::SliceRead::new(&this.buffer));
+          let de = StreamDeserializer::new(serde_json::de::SliceRead::new(this.buffer));
           let mut iter = de.into_iter();
-
           if let Some(result) = iter.next() {
             match result {
               Ok(value) => {

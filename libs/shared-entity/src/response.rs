@@ -5,6 +5,7 @@ use app_error::AppError;
 pub use app_error::ErrorCode;
 use futures::stream::{Stream, StreamExt};
 use std::fmt::{Debug, Display};
+use tracing::error;
 
 #[cfg(feature = "cloud")]
 pub use crate::response_actix::*;
@@ -154,7 +155,13 @@ where
 
     let stream = resp.bytes_stream().map(|item| {
       item.map_err(AppResponseError::from).and_then(|bytes| {
-        serde_json::from_slice::<T>(bytes.as_ref()).map_err(AppResponseError::from)
+        match serde_json::from_slice::<T>(bytes.as_ref()) {
+          Ok(data) => Ok(data),
+          Err(err) => {
+            error!("Failed to parse stream message: {}, data: {:?}", err, bytes);
+            Err(AppResponseError::from(err))
+          },
+        }
       })
     });
     Ok(stream)

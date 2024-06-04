@@ -5691,6 +5691,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "thiserror",
+ "tracing",
  "uuid",
  "validator",
 ]

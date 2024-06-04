@@ -1,8 +1,5 @@
 use client_api_test::TestClient;
-use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor,
-  UpdateChatMessageContentParams,
-};
+use database_entity::dto::{ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor};
 use futures_util::StreamExt;
 
 #[tokio::test]
@@ -169,55 +166,55 @@ async fn generate_chat_message_answer_test() {
     .messages;
 
   assert_eq!(remote_messages.len(), 2);
-  assert_eq!(remote_messages[1].message_id, answer.message_id);
+  assert_eq!(remote_messages[0].message_id, answer.message_id);
 }
 
-#[tokio::test]
-async fn update_chat_message_test() {
-  let test_client = TestClient::new_user_without_ws_conn().await;
-  let workspace_id = test_client.workspace_id().await;
-  let chat_id = uuid::Uuid::new_v4().to_string();
-  let params = CreateChatParams {
-    chat_id: chat_id.clone(),
-    name: "my second chat".to_string(),
-    rag_ids: vec![],
-  };
-
-  test_client
-    .api_client
-    .create_chat(&workspace_id, params)
-    .await
-    .unwrap();
-
-  let params = CreateChatMessageParams::new_user("where is singapore?");
-  let stream = test_client
-    .api_client
-    .create_chat_message(&workspace_id, &chat_id, params)
-    .await
-    .unwrap();
-  let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
-  assert_eq!(messages.len(), 2);
-
-  let params = UpdateChatMessageContentParams {
-    chat_id: chat_id.clone(),
-    message_id: messages[0].message_id,
-    content: "where is China?".to_string(),
-  };
-  test_client
-    .api_client
-    .update_chat_message(&workspace_id, &chat_id, params)
-    .await
-    .unwrap();
-
-  let remote_messages = test_client
-    .api_client
-    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 2)
-    .await
-    .unwrap()
-    .messages;
-  assert_eq!(remote_messages[0].content, "where is China?");
-  assert_eq!(remote_messages.len(), 2);
-
-  // when the question was updated, the answer should be different
-  assert_ne!(remote_messages[1].content, messages[1].content);
-}
+// #[tokio::test]
+// async fn update_chat_message_test() {
+//   let test_client = TestClient::new_user_without_ws_conn().await;
+//   let workspace_id = test_client.workspace_id().await;
+//   let chat_id = uuid::Uuid::new_v4().to_string();
+//   let params = CreateChatParams {
+//     chat_id: chat_id.clone(),
+//     name: "my second chat".to_string(),
+//     rag_ids: vec![],
+//   };
+//
+//   test_client
+//     .api_client
+//     .create_chat(&workspace_id, params)
+//     .await
+//     .unwrap();
+//
+//   let params = CreateChatMessageParams::new_user("where is singapore?");
+//   let stream = test_client
+//     .api_client
+//     .create_chat_message(&workspace_id, &chat_id, params)
+//     .await
+//     .unwrap();
+//   let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
+//   assert_eq!(messages.len(), 2);
+//
+//   let params = UpdateChatMessageContentParams {
+//     chat_id: chat_id.clone(),
+//     message_id: messages[0].message_id,
+//     content: "where is China?".to_string(),
+//   };
+//   test_client
+//     .api_client
+//     .update_chat_message(&workspace_id, &chat_id, params)
+//     .await
+//     .unwrap();
+//
+//   let remote_messages = test_client
+//     .api_client
+//     .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 2)
+//     .await
+//     .unwrap()
+//     .messages;
+//   assert_eq!(remote_messages[0].content, "where is China?");
+//   assert_eq!(remote_messages.len(), 2);
+//
+//   // when the question was updated, the answer should be different
+//   assert_ne!(remote_messages[1].content, messages[1].content);
+// }

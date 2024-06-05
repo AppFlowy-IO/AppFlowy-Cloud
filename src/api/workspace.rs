@@ -70,7 +70,7 @@ pub fn workspace_scope() -> Scope {
       .route(web::delete().to(delete_workspace_handler))
     )
     .service(web::resource("/{workspace_id}/settings")
-        .route(web::post().to(get_workspace_settings_handler))
+        .route(web::get().to(get_workspace_settings_handler))
         .route(web::post().to(post_workspace_settings_handler))
     )
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))

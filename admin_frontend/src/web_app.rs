@@ -28,6 +28,7 @@ fn page_router() -> Router<AppState> {
     .route("/", get(home_handler))
     .route("/login", get(login_handler))
     .route("/login-callback", get(login_callback_handler))
+    .route("/payment-success", get(payment_success_handler))
     .route("/login-callback-query", get(login_callback_query_handler))
     .route(
       "/open-appflowy-or-download",
@@ -65,6 +66,10 @@ async fn open_appflowy_or_download_handler() -> Result<Html<String>, WebAppError
 
 async fn login_callback_handler() -> Result<Html<String>, WebAppError> {
   render_template(templates::LoginCallback {})
+}
+
+async fn payment_success_handler() -> Result<Html<String>, WebAppError> {
+  render_template(templates::PaymentSuccessRedirect {})
 }
 
 async fn login_callback_query_handler(

@@ -19,6 +19,10 @@ pub struct OpenAppFlowyOrDownload {}
 pub struct LoginCallback {}
 
 #[derive(Template)]
+#[template(path = "pages/payment_success_redirect.html")]
+pub struct PaymentSuccessRedirect {}
+
+#[derive(Template)]
 #[template(path = "components/user_usage.html")]
 pub struct UserUsage {
   pub workspace_count: usize,

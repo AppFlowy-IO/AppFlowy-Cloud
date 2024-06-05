@@ -490,7 +490,7 @@ pub async fn update_workspace_settings(
     .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
   let mut tx = pg_pool.begin().await?;
-  upsert_workspace_settings(&mut tx, workspace_id, &workspace_settings).await?;
+  upsert_workspace_settings(&mut tx, workspace_id, workspace_settings).await?;
   tx.commit().await?;
   Ok(())
 }

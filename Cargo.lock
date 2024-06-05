@@ -639,6 +639,7 @@ dependencies = [
  "opener",
  "openssl",
  "pgvector",
+ "pin-project",
  "prometheus-client",
  "prost",
  "rand 0.8.5",

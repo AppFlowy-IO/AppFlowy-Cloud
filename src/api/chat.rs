@@ -1,6 +1,6 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, delete_chat, generate_chat_message_answer, get_chat_messages,
-  update_chat_message,
+  create_chat, create_chat_message, create_chat_question, delete_chat,
+  generate_chat_message_answer, get_chat_messages, update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -8,14 +8,23 @@ use actix_web::{web, HttpResponse, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::RepeatedRelatedQuestion;
 use authentication::jwt::UserUuid;
+use bytes::Bytes;
 use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams, MessageCursor,
-  RepeatedChatMessage, UpdateChatMessageContentParams,
+  ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
+  MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
 };
+use futures::Stream;
+use futures_util::{FutureExt, TryStreamExt};
+use pin_project::pin_project;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tokio::sync::oneshot;
+use tokio::task;
 
-use tracing::{instrument, trace};
+use database::chat;
+use tracing::{error, info, instrument, trace, warn};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -31,12 +40,17 @@ pub fn chat_scope() -> Scope {
         .route(web::get().to(get_related_message_handler)),
     )
     .service(
-      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(generate_answer_handler)),
-    )
-    .service(
       web::resource("/{chat_id}/message")
         .route(web::post().to(create_chat_message_handler))
         .route(web::put().to(update_chat_message_handler)),
+    )
+    .service(
+      web::resource("/{chat_id}/message/question").route(web::post().to(create_question_handler)),
+    )
+    .service(web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(answer_handler)))
+    .service(
+      web::resource("/{chat_id}/{message_id}/answer/stream")
+        .route(web::get().to(answer_stream_handler)),
     )
 }
 async fn create_chat_handler(
@@ -113,7 +127,21 @@ async fn get_related_message_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-async fn generate_answer_handler(
+async fn create_question_handler(
+  state: Data<AppState>,
+  path: web::Path<(String, String)>,
+  payload: Json<CreateChatMessageParams>,
+  uuid: UserUuid,
+) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+  let (_workspace_id, chat_id) = path.into_inner();
+  let params = payload.into_inner();
+
+  let uid = state.user_cache.get_user_uid(&uuid).await?;
+  let resp = create_chat_question(&state.pg_pool, uid, chat_id, params).await?;
+  Ok(AppResponse::Ok().with_data(resp).into())
+}
+
+async fn answer_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
@@ -126,6 +154,58 @@ async fn generate_answer_handler(
   )
   .await?;
   Ok(AppResponse::Ok().with_data(message).into())
+}
+
+#[instrument(level = "info", skip_all, err)]
+async fn answer_stream_handler(
+  path: web::Path<(String, String, i64)>,
+  state: Data<AppState>,
+) -> actix_web::Result<HttpResponse> {
+  let (_workspace_id, chat_id, question_id) = path.into_inner();
+  let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let new_answer_stream = state
+    .ai_client
+    .stream_question(&chat_id, &content)
+    .await
+    .map_err(|err| AppError::Internal(err.into()))?;
+
+  let state = state.clone();
+  let chat_id = chat_id.clone();
+  let finish_action = move |collected_bytes: Vec<u8>| {
+    task::spawn(async move {
+      if let Ok(final_message) = String::from_utf8(collected_bytes) {
+        match chat::chat_ops::insert_answer_message(
+          &state.pg_pool,
+          ChatAuthor::ai(),
+          &chat_id,
+          final_message,
+          question_id,
+        )
+        .await
+        {
+          Ok(message) => {
+            let json_bytes = serde_json::to_vec(&message)?;
+            Ok(Bytes::from(json_bytes))
+          },
+          Err(err) => {
+            error!("Failed to insert answer message: {}", err);
+            Err(AppError::Internal(err.into()))
+          },
+        }
+      } else {
+        error!("Stream finished with invalid UTF-8 data.");
+        Err(AppError::InvalidRequest("Invalid UTF-8 data".to_string()))
+      }
+    })
+  };
+
+  let new_answer_stream = new_answer_stream.map_err(AppError::from);
+  let finish_answer_stream = CollectingStream::new(new_answer_stream, finish_action);
+  Ok(
+    HttpResponse::Ok()
+      .content_type("text/event-stream")
+      .streaming(finish_answer_stream),
+  )
 }
 
 #[instrument(level = "debug", skip_all, err)]
@@ -155,4 +235,94 @@ async fn get_chat_message_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
+}
+#[pin_project]
+pub struct CollectingStream<S, F> {
+  #[pin]
+  stream: S,
+  buffer: Vec<u8>,
+  action: Option<F>,
+  state: CollectingStreamType,
+  result_receiver: Option<oneshot::Receiver<Result<Bytes, AppError>>>,
+}
+
+enum CollectingStreamType {
+  AnswerString,
+  AnswerMessage,
+}
+
+impl<S, F> CollectingStream<S, F> {
+  pub fn new(stream: S, action: F) -> Self {
+    CollectingStream {
+      stream,
+      buffer: Vec::new(),
+      action: Some(action),
+      state: CollectingStreamType::AnswerString,
+      result_receiver: None,
+    }
+  }
+}
+
+impl<S, F> Stream for CollectingStream<S, F>
+where
+  S: Stream<Item = Result<String, AppError>>,
+  F: FnOnce(Vec<u8>) -> task::JoinHandle<Result<Bytes, AppError>> + Send + 'static,
+{
+  type Item = Result<Bytes, AppError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let mut this = self.project();
+    match this.state {
+      CollectingStreamType::AnswerString => {
+        //
+        match this.stream.as_mut().poll_next(cx) {
+          Poll::Ready(Some(Ok(item))) => {
+            info!("Answer stream item: {:?}", item);
+            let bytes = item.into_bytes();
+            this.buffer.extend_from_slice(&bytes);
+            Poll::Ready(Some(Ok(Bytes::from(bytes))))
+          },
+          Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
+          Poll::Ready(None) => {
+            if let Some(action) = this.action.take() {
+              let buffer = std::mem::take(this.buffer);
+              let (sender, receiver) = oneshot::channel();
+              *this.result_receiver = Some(receiver);
+              *this.state = CollectingStreamType::AnswerMessage;
+
+              // Spawn the async task to handle the buffer and send the result
+              tokio::spawn(async move {
+                let result = action(buffer).await;
+                info!("Answer stream finished: {:?}", result);
+                let _ = sender.send(result.unwrap()).unwrap();
+              });
+
+              Poll::Pending
+            } else {
+              Poll::Ready(None)
+            }
+          },
+          Poll::Pending => Poll::Pending,
+        }
+      },
+      CollectingStreamType::AnswerMessage => {
+        if let Some(receiver) = this.result_receiver.as_mut() {
+          match receiver.poll_unpin(cx) {
+            Poll::Ready(Ok(result)) => {
+              this.result_receiver.take();
+              info!("Answer message sent: {:?}", result);
+              Poll::Ready(Some(result))
+            },
+            Poll::Ready(Err(_)) => {
+              info!("Answer message receiver dropped");
+              Poll::Ready(None)
+            },
+            Poll::Pending => Poll::Pending,
+          }
+        } else {
+          Poll::Ready(None)
+        }
+      },
+    }
+  }
 }

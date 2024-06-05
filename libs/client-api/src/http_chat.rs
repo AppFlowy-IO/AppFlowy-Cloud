@@ -8,6 +8,7 @@ use futures_core::Stream;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
 use shared_entity::response::{AppResponse, AppResponseError};
+use shared_entity::response_stream::EitherStringOrMessage;
 
 impl Client {
   pub async fn create_chat(
@@ -40,7 +41,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn create_chat_message(
+  pub async fn create_chat_qa_message(
     &self,
     workspace_id: &str,
     chat_id: &str,
@@ -57,7 +58,93 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<ChatMessage>::stream_response(resp).await
+    AppResponse::<ChatMessage>::json_response_stream(resp).await
+  }
+
+  pub async fn create_question(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    params: CreateChatMessageParams,
+  ) -> Result<ChatMessage, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message/question",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatMessage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Stream the answer to a question message.
+  pub async fn stream_answer(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    message_id: i64,
+  ) -> Result<impl Stream<Item = Result<String, AppResponseError>>, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer/stream",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatMessage>::new_line_response_stream(resp).await
+  }
+
+  pub async fn stream_answer2(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    message_id: i64,
+  ) -> Result<
+    impl Stream<Item = Result<EitherStringOrMessage<String, ChatMessage>, AppResponseError>>,
+    AppResponseError,
+  > {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer/stream",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::answer_response_stream(resp).await
+  }
+
+  /// Returns the answer to a question message.
+  pub async fn get_answer(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    message_id: i64,
+  ) -> Result<ChatMessage, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatMessage>::from_response(resp)
+      .await?
+      .into_data()
   }
 
   pub async fn update_chat_message(
@@ -78,27 +165,6 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  pub async fn generate_question_answer(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    message_id: i64,
-  ) -> Result<ChatMessage, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::from_response(resp)
-      .await?
-      .into_data()
   }
 
   pub async fn get_chat_related_question(

@@ -65,7 +65,7 @@ jobs:
       matrix:
         include:
           - test_service: "appflowy_cloud"
-            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --exclude appflowy_indexer"
+            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --exclude appflowy-indexer"
           - test_service: "appflowy_history"
             test_cmd: "-p appflowy-history"
           - test_service: "appflowy_indexer"

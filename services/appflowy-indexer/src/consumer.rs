@@ -35,6 +35,7 @@ impl OpenCollabConsumer {
     indexer: Arc<dyn Indexer>,
     control_stream_key: &str,
     ingest_interval: Duration,
+    preindex: bool,
   ) -> Result<Self> {
     let handles = Arc::new(DashMap::new());
     let mut control_group = redis_stream
@@ -42,7 +43,9 @@ impl OpenCollabConsumer {
       .await?;
 
     // Handle unindexed documents
-    Self::handle_unindexed_collabs(indexer.clone()).await;
+    if preindex {
+      Self::handle_unindexed_collabs(indexer.clone()).await;
+    }
 
     // Handle stale messages
     let stale_messages = control_group.get_unacked_messages(CONSUMER_NAME).await?;
@@ -350,6 +353,7 @@ mod test {
       indexer.clone(),
       "af_collab_control",
       Duration::from_secs(1), // interval longer than test timeout
+      false,
     )
     .await
     .unwrap();
@@ -442,6 +446,7 @@ mod test {
       indexer.clone(),
       "af_collab_control",
       Duration::from_secs(1), // interval longer than test timeout
+      true,
     )
     .await
     .unwrap();

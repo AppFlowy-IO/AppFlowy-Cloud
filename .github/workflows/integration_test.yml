@@ -68,6 +68,8 @@ jobs:
             test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --exclude appflowy_indexer"
           - test_service: "appflowy_history"
             test_cmd: "-p appflowy-history"
+          - test_service: "appflowy_indexer"
+            test_cmd: "-p appflowy-indexer"
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable

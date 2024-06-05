@@ -1,10 +1,14 @@
+use std::borrow::Cow;
+use std::env;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
 use collab::core::collab::MutexCollab;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
+use lazy_static::lazy_static;
 use sqlx::PgPool;
+use tracing::warn;
 use uuid::Uuid;
 use yrs::Subscription;
 
@@ -15,15 +19,35 @@ use database::collab::insert_into_af_collab;
 use database::user::create_user;
 use database_entity::dto::CollabParams;
 
+lazy_static! {
+  pub static ref APPFLOWY_INDEXER_OPENAI_API_KEY: Cow<'static, str> =
+    get_env_var("APPFLOWY_INDEXER_OPENAI_API_KEY", "");
+  pub static ref APPFLOWY_INDEXER_DATABASE_URL: Cow<'static, str> = get_env_var(
+    "APPFLOWY_INDEXER_DATABASE_URL",
+    "postgres://postgres:password@localhost:5432/postgres"
+  );
+  pub static ref APPFLOWY_INDEXER_REDIS_URL: Cow<'static, str> =
+    get_env_var("APPFLOWY_INDEXER_REDIS_URL", "redis://localhost:6379");
+}
+
+#[allow(dead_code)]
+fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {
+  dotenvy::dotenv().ok();
+  match env::var(key) {
+    Ok(value) => Cow::Owned(value),
+    Err(_) => {
+      warn!("could not read env var {}: using default: {}", key, default);
+      Cow::Borrowed(default)
+    },
+  }
+}
+
 pub fn openai_client() -> openai_dive::v1::api::Client {
-  let api_key = std::env::var("APPFLOWY_INDEXER_OPENAI_API_KEY").unwrap();
-  openai_dive::v1::api::Client::new(api_key)
+  openai_dive::v1::api::Client::new(APPFLOWY_INDEXER_OPENAI_API_KEY.to_string())
 }
 
 pub async fn db_pool() -> PgPool {
-  let database_url = std::env::var("APPFLOWY_INDEXER_DATABASE_URL")
-    .unwrap_or("postgres://postgres:password@localhost:5432/postgres".to_string());
-  PgPool::connect(&database_url)
+  PgPool::connect(&APPFLOWY_INDEXER_DATABASE_URL)
     .await
     .expect("failed to connect to database")
 }
@@ -67,9 +91,7 @@ pub async fn setup_collab(
 }
 
 pub async fn redis_client() -> redis::Client {
-  let redis_uri =
-    std::env::var("APPFLOWY_INDEXER_REDIS_URL").unwrap_or("redis://localhost:6379".to_string());
-  redis::Client::open(redis_uri).expect("failed to connect to redis")
+  redis::Client::open(APPFLOWY_INDEXER_REDIS_URL.to_string()).expect("failed to connect to redis")
 }
 
 pub async fn redis_stream() -> CollabRedisStream {

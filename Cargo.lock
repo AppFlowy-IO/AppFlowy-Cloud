@@ -785,6 +785,7 @@ dependencies = [
  "env_logger",
  "futures",
  "humantime",
+ "lazy_static",
  "log",
  "openai_dive",
  "pgvector",

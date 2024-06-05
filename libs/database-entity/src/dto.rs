@@ -498,6 +498,12 @@ pub struct AFWorkspace {
 #[derive(Serialize, Deserialize)]
 pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 
+#[derive(Default, Serialize, Deserialize)]
+pub struct AFWorkspaceSettings {
+  #[serde(default)]
+  pub disable_indexing: bool,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AFUserWorkspaceInfo {
   pub user_profile: AFUserProfile,

@@ -289,7 +289,7 @@ mod test {
   use collab_document::document_data::default_document_data;
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
-  use database::index::has_collab_embeddings;
+  use database::index::get_index_status;
   use serde_json::json;
   use sqlx::Row;
   use std::sync::Arc;
@@ -425,10 +425,14 @@ mod test {
 
     {
       let mut tx = db.begin().await.unwrap();
-      let has_embedding = has_collab_embeddings(&mut tx, &object_id.to_string())
+      let status = get_index_status(&mut tx, &object_id.to_string())
         .await
         .unwrap();
-      assert!(!has_embedding, "collab should not have embeddings at start");
+      assert_eq!(
+        status,
+        Some(false),
+        "collab should not have embeddings at start"
+      );
     }
 
     let indexer = Arc::new(PostgresIndexer::new(openai, db.clone()));
@@ -444,10 +448,10 @@ mod test {
 
     {
       let mut tx = db.begin().await.unwrap();
-      let has_embedding = has_collab_embeddings(&mut tx, &object_id.to_string())
+      let status = get_index_status(&mut tx, &object_id.to_string())
         .await
         .unwrap();
-      assert!(has_embedding, "collab should be indexed after start");
+      assert_eq!(status, Some(true), "collab should be indexed after start");
     }
   }
 }

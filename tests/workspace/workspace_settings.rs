@@ -1,3 +1,4 @@
+use app_error::ErrorCode;
 use client_api::Client;
 use client_api_test::generate_unique_registered_user_client;
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus, AFWorkspaceSettings};
@@ -29,26 +30,34 @@ async fn get_and_set_workspace_by_owner() {
 async fn get_and_set_workspace_by_non_owner() {
   let (alice_client, _alice) = generate_unique_registered_user_client().await;
   let workspaces = alice_client.get_workspaces().await.unwrap().0;
-  let workspace_id = workspaces.first().unwrap().workspace_id;
+  let alice_workspace_id = workspaces.first().unwrap().workspace_id;
 
   let (bob_client, bob) = generate_unique_registered_user_client().await;
 
-  invite_user_to_workspace(&workspace_id, &alice_client, &bob_client, &bob.email).await;
+  invite_user_to_workspace(&alice_workspace_id, &alice_client, &bob_client, &bob.email).await;
 
   let resp = bob_client
-    .get_workspace_settings(&workspace_id.to_string())
+    .get_workspace_settings(&alice_workspace_id.to_string())
     .await;
-  assert!(resp.is_err());
+  assert!(
+    resp.is_err(),
+    "non-owner should not have access to workspace settings"
+  );
+  assert_eq!(resp.err().unwrap().code, ErrorCode::UserUnAuthorized);
 
   let resp = bob_client
     .update_workspace_settings(
-      &workspace_id.to_string(),
+      &alice_workspace_id.to_string(),
       &AFWorkspaceSettings {
         disable_indexing: true,
       },
     )
     .await;
-  assert!(resp.is_err());
+  assert!(
+    resp.is_err(),
+    "non-owner should not be able to edit workspace settings"
+  );
+  assert_eq!(resp.err().unwrap().code, ErrorCode::UserUnAuthorized);
 }
 
 async fn invite_user_to_workspace(

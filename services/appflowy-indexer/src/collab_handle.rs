@@ -23,7 +23,7 @@ use collab_stream::model::{CollabUpdateEvent, StreamMessage};
 use collab_stream::stream_group::{ReadOption, StreamGroup};
 
 use crate::error::Result;
-use crate::indexer::{Fragment, FragmentID, Indexer};
+use crate::indexer::{Fragment, FragmentID, IndexStatus, Indexer};
 use crate::watchers::DocumentWatcher;
 
 const CONSUMER_NAME: &str = "open_collab_handle";
@@ -51,7 +51,18 @@ impl CollabHandle {
     ingest_interval: Duration,
   ) -> Result<Option<Self>> {
     let closing = CancellationToken::new();
-    let was_indexed = indexer.was_indexed(&object_id).await?;
+    let was_indexed = match indexer.index_status(&object_id).await? {
+      IndexStatus::Indexed => true,
+      IndexStatus::NotIndexed => false,
+      IndexStatus::NotPermitted => {
+        tracing::trace!(
+          "document {}/{} is not permitted to be indexed",
+          workspace_id,
+          object_id
+        );
+        return Ok(None);
+      },
+    };
     let content: Arc<dyn Indexable> = match collab_type {
       CollabType::Document => {
         let content = Document::from_doc_state(

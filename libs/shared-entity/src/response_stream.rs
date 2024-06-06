@@ -1,7 +1,6 @@
 use crate::response::{AppResponse, AppResponseError};
 use app_error::ErrorCode;
 use bytes::{Buf, Bytes, BytesMut};
-use database_entity::dto::ChatMessage;
 use futures::{ready, Stream, TryStreamExt};
 
 use pin_project::pin_project;
@@ -9,6 +8,7 @@ use serde::de::DeserializeOwned;
 use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
 
+use crate::dto::ai_dto::EitherStringOrChatMessage;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -289,10 +289,4 @@ impl Stream for AnswerStream {
       }
     }
   }
-}
-
-#[derive(Debug)]
-pub enum EitherStringOrChatMessage {
-  Left(String),
-  Right(ChatMessage),
 }

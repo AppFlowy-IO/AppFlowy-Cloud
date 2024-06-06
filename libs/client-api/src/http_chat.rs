@@ -6,9 +6,8 @@ use database_entity::dto::{
 };
 use futures_core::Stream;
 use reqwest::Method;
-use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
+use shared_entity::dto::ai_dto::{EitherStringOrChatMessage, RepeatedRelatedQuestion};
 use shared_entity::response::{AppResponse, AppResponseError};
-use shared_entity::response_stream::EitherStringOrChatMessage;
 
 impl Client {
   pub async fn create_chat(
@@ -83,27 +82,7 @@ impl Client {
       .into_data()
   }
 
-  /// Stream the answer to a question message.
   pub async fn stream_answer(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    message_id: i64,
-  ) -> Result<impl Stream<Item = Result<String, AppResponseError>>, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer/stream",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::new_line_response_stream(resp).await
-  }
-
-  pub async fn stream_answer2(
     &self,
     workspace_id: &str,
     chat_id: &str,

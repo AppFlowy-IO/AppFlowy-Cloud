@@ -194,7 +194,7 @@ async fn generate_stream_answer_test() {
 
   let mut answer_stream = test_client
     .api_client
-    .stream_answer2(&workspace_id, &chat_id, question.message_id)
+    .stream_answer(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
 

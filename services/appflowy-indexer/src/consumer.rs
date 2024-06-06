@@ -35,6 +35,7 @@ impl OpenCollabConsumer {
     indexer: Arc<dyn Indexer>,
     control_stream_key: &str,
     ingest_interval: Duration,
+    preindex: bool,
   ) -> Result<Self> {
     let handles = Arc::new(DashMap::new());
     let mut control_group = redis_stream
@@ -42,7 +43,9 @@ impl OpenCollabConsumer {
       .await?;
 
     // Handle unindexed documents
-    Self::handle_unindexed_collabs(indexer.clone()).await;
+    if preindex {
+      Self::handle_unindexed_collabs(indexer.clone()).await;
+    }
 
     // Handle stale messages
     let stale_messages = control_group.get_unacked_messages(CONSUMER_NAME).await?;
@@ -289,7 +292,7 @@ mod test {
   use collab_document::document_data::default_document_data;
   use collab_entity::CollabType;
   use collab_stream::model::CollabControlEvent;
-  use database::index::has_collab_embeddings;
+  use database::index::get_index_status;
   use serde_json::json;
   use sqlx::Row;
   use std::sync::Arc;
@@ -350,6 +353,7 @@ mod test {
       indexer.clone(),
       "af_collab_control",
       Duration::from_secs(1), // interval longer than test timeout
+      false,
     )
     .await
     .unwrap();
@@ -425,10 +429,14 @@ mod test {
 
     {
       let mut tx = db.begin().await.unwrap();
-      let has_embedding = has_collab_embeddings(&mut tx, &object_id.to_string())
+      let status = get_index_status(&mut tx, &object_id.to_string())
         .await
         .unwrap();
-      assert!(!has_embedding, "collab should not have embeddings at start");
+      assert_eq!(
+        status,
+        Some(false),
+        "collab should not have embeddings at start"
+      );
     }
 
     let indexer = Arc::new(PostgresIndexer::new(openai, db.clone()));
@@ -438,16 +446,17 @@ mod test {
       indexer.clone(),
       "af_collab_control",
       Duration::from_secs(1), // interval longer than test timeout
+      true,
     )
     .await
     .unwrap();
 
     {
       let mut tx = db.begin().await.unwrap();
-      let has_embedding = has_collab_embeddings(&mut tx, &object_id.to_string())
+      let status = get_index_status(&mut tx, &object_id.to_string())
         .await
         .unwrap();
-      assert!(has_embedding, "collab should be indexed after start");
+      assert_eq!(status, Some(true), "collab should be indexed after start");
     }
   }
 }

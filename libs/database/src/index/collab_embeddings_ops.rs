@@ -7,17 +7,31 @@ use uuid::Uuid;
 
 use database_entity::dto::AFCollabEmbeddingParams;
 
-pub async fn has_collab_embeddings(
+pub async fn get_index_status(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   oid: &str,
-) -> Result<bool, sqlx::Error> {
+) -> Result<Option<bool>, sqlx::Error> {
   let result = sqlx::query!(
-    "SELECT EXISTS(SELECT 1 FROM af_collab_embeddings WHERE oid = $1)",
+    r#"
+SELECT
+  w.settings['disable_indexing']::boolean as disable_indexing,
+  CASE
+    WHEN w.settings['disable_indexing']::boolean THEN
+      FALSE
+    ELSE
+      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = c.partition_key AND m.oid = c.oid)
+  END as has_index
+FROM af_collab c
+JOIN af_workspace w ON c.workspace_id = w.workspace_id
+WHERE c.oid = $1"#,
     oid
   )
   .fetch_one(tx.deref_mut())
   .await?;
-  Ok(result.exists.unwrap_or(false))
+  if result.disable_indexing.unwrap_or(false) {
+    return Ok(None);
+  }
+  Ok(Some(result.has_index.unwrap_or(false)))
 }
 
 pub async fn upsert_collab_embeddings(

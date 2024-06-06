@@ -43,5 +43,6 @@ dotenvy = "0.15.0"
 
 [dev-dependencies]
 env_logger = "0.11"
+lazy_static.workspace = true
 workspace-template.workspace = true
 pgvector = { workspace = true, features = ["sqlx"] }

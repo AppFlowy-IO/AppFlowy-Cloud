@@ -202,16 +202,14 @@ async fn generate_stream_answer_test() {
     println!("message: {:?}", message);
   }
 
-  // let remote_messages = test_client
-  //   .api_client
-  //   .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 2)
-  //   .await
-  //   .unwrap()
-  //   .messages;
-  //
-  // assert_eq!(remote_messages.len(), 2);
-  //
-  // println!("answer: {}", answer);
+  let remote_messages = test_client
+    .api_client
+    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 2)
+    .await
+    .unwrap()
+    .messages;
+
+  assert_eq!(remote_messages.len(), 2);
 }
 
 // #[tokio::test]

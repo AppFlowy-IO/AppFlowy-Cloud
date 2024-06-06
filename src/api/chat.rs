@@ -24,7 +24,8 @@ use tokio::sync::oneshot;
 use tokio::task;
 
 use database::chat;
-use tracing::{error, info, instrument, trace, warn};
+
+use tracing::{error, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -169,8 +170,6 @@ async fn answer_stream_handler(
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
 
-  let state = state.clone();
-  let chat_id = chat_id.clone();
   let finish_action = move |collected_bytes: Vec<u8>| {
     task::spawn(async move {
       if let Ok(final_message) = String::from_utf8(collected_bytes) {
@@ -236,6 +235,53 @@ async fn get_chat_message_handler(
   let messages = get_chat_messages(&state.pg_pool, params, &chat_id).await?;
   Ok(AppResponse::Ok().with_data(messages).into())
 }
+
+#[pin_project]
+pub struct FinalAnswerStream<S, F> {
+  #[pin]
+  stream: S,
+  buffer: Vec<u8>,
+  action: Option<F>,
+}
+
+impl<S, F> FinalAnswerStream<S, F> {
+  pub fn new(stream: S, action: F) -> Self {
+    FinalAnswerStream {
+      stream,
+      buffer: Vec::new(),
+      action: Some(action),
+    }
+  }
+}
+
+impl<S, F> Stream for FinalAnswerStream<S, F>
+where
+  S: Stream<Item = Result<String, AppError>>,
+  F: FnOnce(Vec<u8>),
+{
+  type Item = Result<Bytes, AppError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let this = self.project();
+
+    match this.stream.poll_next(cx) {
+      Poll::Ready(Some(Ok(item))) => {
+        let bytes = item.into_bytes();
+        this.buffer.extend_from_slice(&bytes);
+        Poll::Ready(Some(Ok(Bytes::from(bytes))))
+      },
+      Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
+      Poll::Ready(None) => {
+        if let Some(action) = this.action.take() {
+          action(std::mem::take(this.buffer));
+        }
+        Poll::Ready(None)
+      },
+      Poll::Pending => Poll::Pending,
+    }
+  }
+}
+
 #[pin_project]
 pub struct CollectingStream<S, F> {
   #[pin]
@@ -265,7 +311,7 @@ impl<S, F> CollectingStream<S, F> {
 
 impl<S, F> Stream for CollectingStream<S, F>
 where
-  S: Stream<Item = Result<String, AppError>>,
+  S: Stream<Item = Result<Bytes, AppError>>,
   F: FnOnce(Vec<u8>) -> task::JoinHandle<Result<Bytes, AppError>> + Send + 'static,
 {
   type Item = Result<Bytes, AppError>;
@@ -274,13 +320,10 @@ where
     let mut this = self.project();
     match this.state {
       CollectingStreamType::AnswerString => {
-        //
         match this.stream.as_mut().poll_next(cx) {
-          Poll::Ready(Some(Ok(item))) => {
-            info!("Answer stream item: {:?}", item);
-            let bytes = item.into_bytes();
+          Poll::Ready(Some(Ok(bytes))) => {
             this.buffer.extend_from_slice(&bytes);
-            Poll::Ready(Some(Ok(Bytes::from(bytes))))
+            Poll::Ready(Some(Ok(bytes)))
           },
           Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
           Poll::Ready(None) => {
@@ -293,12 +336,13 @@ where
               // Spawn the async task to handle the buffer and send the result
               tokio::spawn(async move {
                 let result = action(buffer).await;
-                info!("Answer stream finished: {:?}", result);
-                let _ = sender.send(result.unwrap()).unwrap();
+                sender.send(result.unwrap()).unwrap();
               });
 
-              Poll::Pending
+              // Return the comma as the delimiter.
+              Poll::Ready(Some(Ok(Bytes::from("\0"))))
             } else {
+              // If action is None, it means the stream is finished.
               Poll::Ready(None)
             }
           },
@@ -310,13 +354,9 @@ where
           match receiver.poll_unpin(cx) {
             Poll::Ready(Ok(result)) => {
               this.result_receiver.take();
-              info!("Answer message sent: {:?}", result);
               Poll::Ready(Some(result))
             },
-            Poll::Ready(Err(_)) => {
-              info!("Answer message receiver dropped");
-              Poll::Ready(None)
-            },
+            Poll::Ready(Err(_)) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
           }
         } else {

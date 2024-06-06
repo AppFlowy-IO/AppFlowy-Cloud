@@ -1,10 +1,14 @@
 use crate::response::{AppResponse, AppResponseError};
 use app_error::ErrorCode;
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use database_entity::dto::ChatMessage;
-use futures::{Stream, TryStreamExt};
+use futures::{ready, Stream, TryStreamExt};
+
 use pin_project::pin_project;
 use serde::de::DeserializeOwned;
+use serde_json::de::SliceRead;
+use serde_json::StreamDeserializer;
+
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -41,7 +45,7 @@ where
   pub async fn answer_response_stream(
     resp: reqwest::Response,
   ) -> Result<
-    impl Stream<Item = Result<EitherStringOrMessage<String, ChatMessage>, AppResponseError>>,
+    impl Stream<Item = Result<EitherStringOrChatMessage, AppResponseError>>,
     AppResponseError,
   > {
     let status_code = resp.status();
@@ -85,10 +89,10 @@ where
     let this = self.project();
 
     loop {
-      match futures::ready!(this.stream.as_mut().poll_next(cx)) {
+      match ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
           this.buffer.extend_from_slice(&bytes);
-          let de = serde_json::StreamDeserializer::new(serde_json::de::SliceRead::new(this.buffer));
+          let de = StreamDeserializer::new(SliceRead::new(this.buffer));
           let mut iter = de.into_iter();
           if let Some(result) = iter.next() {
             match result {
@@ -144,7 +148,6 @@ impl Stream for NewlineStream {
       match futures::ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
           this.buffer.extend_from_slice(&bytes);
-
           if let Some(pos) = this.buffer.iter().position(|&b| b == b'\n') {
             let line = this.buffer.split_to(pos + 1);
             let line = &line[..line.len() - 1]; // Remove the newline character
@@ -174,12 +177,34 @@ impl Stream for NewlineStream {
   }
 }
 
+/// AnswerStream is a custom stream handler designed to process incoming byte streams.
+/// It alternates between handling text strings and JSON objects based on specific delimiters.
+///
+/// - When in `ReceivingStrings` state:
+///   - It accumulates bytes into `string_buffer`.
+///   - It splits the buffer at newline characters (`\n`) to extract complete text strings.
+///   - If a null byte (`\0`) delimiter is encountered, it switches to `ReceivingJson` state.
+///
+/// - When in `ReceivingJson` state:
+///   - It accumulates bytes into `json_buffer`.
+///   - It attempts to deserialize the accumulated bytes into JSON objects.
+///   - If deserialization is successful, it returns the JSON object and removes the processed bytes from the buffer.
+///
+/// This stream returns either text strings or deserialized JSON objects as `EitherStringOrChatMessage`,
+/// and handles errors appropriately during the conversion and deserialization processes.
 #[pin_project]
 pub struct AnswerStream {
   #[pin]
   stream: Pin<Box<dyn Stream<Item = Result<Bytes, AppResponseError>> + Send>>,
-  buffer: BytesMut,
+  string_buffer: BytesMut,
+  json_buffer: BytesMut,
   finished: bool,
+  state: AnswerStreamState,
+}
+
+enum AnswerStreamState {
+  ReceivingStrings,
+  ReceivingJson,
 }
 
 impl AnswerStream {
@@ -189,14 +214,16 @@ impl AnswerStream {
   {
     AnswerStream {
       stream: Box::pin(stream),
-      buffer: BytesMut::new(),
+      string_buffer: BytesMut::new(),
+      json_buffer: BytesMut::new(),
       finished: false,
+      state: AnswerStreamState::ReceivingStrings,
     }
   }
 }
 
 impl Stream for AnswerStream {
-  type Item = Result<EitherStringOrMessage<String, ChatMessage>, AppResponseError>;
+  type Item = Result<EitherStringOrChatMessage, AppResponseError>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
@@ -206,41 +233,58 @@ impl Stream for AnswerStream {
     }
 
     loop {
-      match futures::ready!(this.stream.as_mut().poll_next(cx)) {
+      match ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
-          this.buffer.extend_from_slice(&bytes);
+          match this.state {
+            AnswerStreamState::ReceivingStrings => {
+              this.string_buffer.extend_from_slice(&bytes);
 
-          if let Some(pos) = this.buffer.iter().position(|&b| b == b'\n') {
-            let line = this.buffer.split_to(pos + 1);
-            let line = &line[..line.len() - 1]; // Remove the newline character
+              // Each element in the stream is a text string ending with a newline character.
+              // Therefore, we can split the buffer at the newline character to extract the text.
+              if let Some(pos) = this.string_buffer.iter().position(|&b| b == b'\n') {
+                let line = this.string_buffer.split_to(pos + 1);
+                let line = &line[..line.len() - 1]; // Remove the newline character
 
-            match String::from_utf8(line.to_vec()) {
-              Ok(value) => return Poll::Ready(Some(Ok(EitherStringOrMessage::Left(value)))),
-              Err(err) => return Poll::Ready(Some(Err(AppResponseError::from(err)))),
-            }
+                return match String::from_utf8(line.to_vec()) {
+                  Ok(value) => Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value)))),
+                  Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),
+                };
+              } else if this.string_buffer.iter().any(|&b| b == b'\0') {
+                // When a \0 byte delimiter is received, switch to receiving JSON
+                *this.state = AnswerStreamState::ReceivingJson;
+                this.string_buffer.clear();
+              }
+            },
+            AnswerStreamState::ReceivingJson => {
+              this.json_buffer.extend_from_slice(&bytes);
+              let slice_read = SliceRead::new(&this.json_buffer[..]);
+              let deserializer = StreamDeserializer::new(slice_read);
+              let mut iter = deserializer.into_iter();
+              if let Some(result) = iter.next() {
+                match result {
+                  Ok(value) => {
+                    // Get the byte offset of the remaining unprocessed bytes
+                    let remaining = iter.byte_offset();
+
+                    // Advance the json_buffer to remove processed bytes
+                    this.json_buffer.advance(remaining);
+                    return Poll::Ready(Some(Ok(EitherStringOrChatMessage::Right(value))));
+                  },
+                  Err(err) => {
+                    if err.is_eof() {
+                      continue;
+                    } else {
+                      return Poll::Ready(Some(Err(AppResponseError::from(err))));
+                    }
+                  },
+                }
+              }
+            },
           }
         },
         Some(Err(err)) => return Poll::Ready(Some(Err(err))),
         None => {
-          if !this.buffer.is_empty() {
-            match String::from_utf8(this.buffer.to_vec()) {
-              Ok(value) => {
-                this.buffer.clear();
-                *this.finished = true;
-                match serde_json::from_str::<ChatMessage>(&value) {
-                  Ok(message) => {
-                    return Poll::Ready(Some(Ok(EitherStringOrMessage::Right(message))));
-                  },
-                  Err(err) => {
-                    return Poll::Ready(Some(Err(AppResponseError::from(err))));
-                  },
-                }
-              },
-              Err(err) => return Poll::Ready(Some(Err(AppResponseError::from(err)))),
-            }
-          } else {
-            return Poll::Ready(None);
-          }
+          return Poll::Ready(None);
         },
       }
     }
@@ -248,7 +292,7 @@ impl Stream for AnswerStream {
 }
 
 #[derive(Debug)]
-pub enum EitherStringOrMessage<L, R> {
-  Left(L),
-  Right(R),
+pub enum EitherStringOrChatMessage {
+  Left(String),
+  Right(ChatMessage),
 }

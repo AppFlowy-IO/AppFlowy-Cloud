@@ -8,7 +8,7 @@ use futures_core::Stream;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
 use shared_entity::response::{AppResponse, AppResponseError};
-use shared_entity::response_stream::EitherStringOrMessage;
+use shared_entity::response_stream::EitherStringOrChatMessage;
 
 impl Client {
   pub async fn create_chat(
@@ -109,7 +109,7 @@ impl Client {
     chat_id: &str,
     message_id: i64,
   ) -> Result<
-    impl Stream<Item = Result<EitherStringOrMessage<String, ChatMessage>, AppResponseError>>,
+    impl Stream<Item = Result<EitherStringOrChatMessage, AppResponseError>>,
     AppResponseError,
   > {
     let url = format!(

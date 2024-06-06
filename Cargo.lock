@@ -5687,6 +5687,7 @@ dependencies = [
  "database-entity",
  "futures",
  "gotrue-entity",
+ "log",
  "pin-project",
  "reqwest 0.11.27",
  "rust-s3",

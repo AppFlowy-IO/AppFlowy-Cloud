@@ -46,6 +46,7 @@ pub struct RequestMetrics {
   requests_count: Family<PathLabel, Counter>,
   requests_latency: Family<PathLabel, CounterWithExemplar<TraceLabel>>,
   requests_result: Family<ResultLabel, CounterWithExemplar<TraceLabel>>,
+  openai_token_usage: Counter,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, EncodeLabelSet, Debug, Default)]
@@ -59,6 +60,7 @@ impl RequestMetrics {
       requests_count: Family::default(),
       requests_latency: Family::default(),
       requests_result: Family::default(),
+      openai_token_usage: Counter::default(),
     }
   }
 
@@ -81,7 +83,16 @@ impl RequestMetrics {
       "status code of response",
       af_metrics.requests_result.clone(),
     );
+    af_registry.register(
+      "search_tokens_used",
+      "OpenAI API tokens used for search requests",
+      af_metrics.openai_token_usage.clone(),
+    );
     af_metrics
+  }
+
+  pub fn record_search_tokens_used(&self, tokens: u32) {
+    self.openai_token_usage.inc_by(tokens as u64);
   }
 
   // app services/middleware should call this method to increase the request count for the path

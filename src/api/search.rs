@@ -37,6 +37,7 @@ async fn document_search(
       )
     },
   };
-  let resp = search_document(&state.pg_pool, openai, uid, workspace_id, request).await?;
+  let metrics = &*state.metrics.request_metrics;
+  let resp = search_document(&state.pg_pool, openai, uid, workspace_id, request, metrics).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }

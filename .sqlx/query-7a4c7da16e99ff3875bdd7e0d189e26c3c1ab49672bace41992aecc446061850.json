@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SElECT settings FROM af_workspace WHERE workspace_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "settings",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7a4c7da16e99ff3875bdd7e0d189e26c3c1ab49672bace41992aecc446061850"
+}

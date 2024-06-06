@@ -1,4 +1,6 @@
-use database_entity::dto::{AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus};
+use database_entity::dto::{
+  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
+};
 use futures_util::stream::BoxStream;
 use sqlx::{
   types::{uuid, Uuid},
@@ -751,4 +753,40 @@ pub async fn is_workspace_exist<'a, E: Executor<'a, Database = Postgres>>(
   .await?;
 
   Ok(exists.unwrap_or(false))
+}
+
+pub async fn select_workspace_settings<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Option<AFWorkspaceSettings>, AppError> {
+  let json = sqlx::query_scalar!(
+    r#"SElECT settings FROM af_workspace WHERE workspace_id = $1"#,
+    workspace_id
+  )
+  .fetch_one(executor)
+  .await?;
+
+  match json {
+    None => Ok(None),
+    Some(value) => {
+      let settings: AFWorkspaceSettings = serde_json::from_value(value)?;
+      Ok(Some(settings))
+    },
+  }
+}
+pub async fn upsert_workspace_settings(
+  tx: &mut Transaction<'_, Postgres>,
+  workspace_id: &Uuid,
+  settings: &AFWorkspaceSettings,
+) -> Result<(), AppError> {
+  let json = serde_json::to_value(settings)?;
+  sqlx::query!(
+    r#"UPDATE af_workspace SET settings = $1 WHERE workspace_id = $2"#,
+    json,
+    workspace_id
+  )
+  .execute(tx.deref_mut())
+  .await?;
+
+  Ok(())
 }

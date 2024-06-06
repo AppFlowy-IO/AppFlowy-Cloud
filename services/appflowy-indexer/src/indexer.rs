@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use database::collab::select_blob_from_af_collab;
 use database::index::{
-  get_collabs_without_embeddings, has_collab_embeddings, remove_collab_embeddings,
+  get_collabs_without_embeddings, get_index_status, remove_collab_embeddings,
   upsert_collab_embeddings,
 };
 use database_entity::dto::{AFCollabEmbeddingParams, EmbeddingContentType};
@@ -27,7 +27,7 @@ use crate::error::Result;
 #[async_trait]
 pub trait Indexer: Send + Sync {
   /// Check if document with given id has been already a corresponding index entry.
-  async fn was_indexed(&self, object_id: &str) -> Result<bool>;
+  async fn index_status(&self, object_id: &str) -> Result<IndexStatus>;
   async fn update_index(&self, workspace_id: &Uuid, documents: Vec<Fragment>) -> Result<()>;
   async fn remove(&self, ids: &[FragmentID]) -> Result<()>;
   /// Returns a list of object ids, that have not been indexed yet.
@@ -39,6 +39,16 @@ pub struct UnindexedCollab {
   pub object_id: String,
   pub collab_type: CollabType,
   pub collab: EncodedCollab,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IndexStatus {
+  /// Document is indexed and up-to-date.
+  Indexed,
+  /// Document is not indexed.
+  NotIndexed,
+  /// Document should never be indexed.
+  NotPermitted,
 }
 
 pub type FragmentID = String;
@@ -192,9 +202,13 @@ struct Embeddings {
 
 #[async_trait]
 impl Indexer for PostgresIndexer {
-  async fn was_indexed(&self, object_id: &str) -> Result<bool> {
-    let found = has_collab_embeddings(&mut self.db.begin().await?, object_id).await?;
-    Ok(found)
+  async fn index_status(&self, object_id: &str) -> Result<IndexStatus> {
+    let found = get_index_status(&mut self.db.begin().await?, object_id).await?;
+    match found {
+      None => Ok(IndexStatus::NotPermitted),
+      Some(true) => Ok(IndexStatus::Indexed),
+      Some(false) => Ok(IndexStatus::NotIndexed),
+    }
   }
 
   async fn update_index(&self, workspace_id: &Uuid, documents: Vec<Fragment>) -> Result<()> {

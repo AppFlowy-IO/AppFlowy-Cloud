@@ -47,6 +47,9 @@ pub struct Config {
     value_enum
   )]
   pub app_env: Environment,
+
+  #[clap(long, env = "APPFLOWY_INDEXER_PREINDEX", default_value = "true")]
+  pub preindex: bool,
 }
 
 #[tokio::main]
@@ -68,6 +71,7 @@ async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
     Arc::new(indexer),
     &config.control_stream_key,
     config.ingest_interval.into(),
+    config.preindex,
   )
   .await?;
   tracing::info!("AppFlowy Indexer started!");

@@ -42,15 +42,17 @@ jobs:
 
       - name: Build Docker Images
         run: |
-          docker compose build appflowy_cloud appflowy_history
+          docker compose build appflowy_cloud appflowy_history appflowy_indexer
 
       - name: Push docker images to docker hub
         run: |
           docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker tag appflowyinc/appflowy_history appflowyinc/appflowy_history:${GITHUB_SHA}
+          docker tag appflowyinc/appflowy_indexer appflowyinc/appflowy_indexer:${GITHUB_SHA}
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_history:${GITHUB_SHA}
+          docker push appflowyinc/appflowy_indexer:${GITHUB_SHA}
           APPFLOWY_HISTORY_VERSION=${GITHUB_SHA} 
           APPFLOWY_CLOUD_VERSION=0.1.1
 
@@ -63,9 +65,11 @@ jobs:
       matrix:
         include:
           - test_service: "appflowy_cloud"
-            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client"
+            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --exclude appflowy-indexer"
           - test_service: "appflowy_history"
             test_cmd: "-p appflowy-history"
+          - test_service: "appflowy_indexer"
+            test_cmd: "-p appflowy-indexer"
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable
@@ -90,8 +94,10 @@ jobs:
           sed -i 's/APPFLOWY_MAILER_SMTP_USERNAME=.*/APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
           sed -i 's/APPFLOWY_MAILER_SMTP_PASSWORD=.*/APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
           sed -i 's/APPFLOWY_AI_OPENAI_API_KEY=.*/APPFLOWY_AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
-          sed -i 's/APPFLOWY_INDEXER_OPENAI_API_KEY=.*/APPFLOWY_INDEXER_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
           sed -i 's/APPFLOWY_OPENAI_API_KEY=.*/APPFLOWY_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
+          sed -i 's/APPFLOWY_INDEXER_OPENAI_API_KEY=.*/APPFLOWY_INDEXER_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
+          sed -i 's/APPFLOWY_INDEXER_REDIS_URL=.*/APPFLOWY_INDEXER_REDIS_URL=redis:\/\/localhost:6379/' .env
+          sed -i 's/APPFLOWY_INDEXER_DATABASE_URL=.*/APPFLOWY_INDEXER_DATABASE_URL=postgres:\/\/postgres:password@localhost:5432\/postgres/' .env
 
       - name: Update Nginx Configuration
         # the wasm-pack headless tests will run on random ports, so we need to allow all origins

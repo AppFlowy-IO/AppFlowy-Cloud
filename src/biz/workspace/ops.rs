@@ -8,7 +8,7 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use access_control::workspace::WorkspaceAccessControl;
-use app_error::AppError;
+use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
 use database::file::bucket_s3_impl::BucketClientS3Impl;
@@ -20,13 +20,14 @@ use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
   insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
   select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
-  select_workspace_member, select_workspace_member_list, select_workspace_total_collab_bytes,
-  update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
-  upsert_workspace_member, upsert_workspace_member_with_txn,
+  select_workspace_member, select_workspace_member_list, select_workspace_settings,
+  select_workspace_total_collab_bytes, update_updated_at_of_workspace,
+  update_workspace_invitation_set_status_accepted, upsert_workspace_member,
+  upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  WorkspaceUsage,
+  AFWorkspaceSettings, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
@@ -463,4 +464,49 @@ pub async fn get_workspace_document_total_bytes(
   Ok(WorkspaceUsage {
     total_document_size: byte_count,
   })
+}
+
+pub async fn get_workspace_settings(
+  pg_pool: &PgPool,
+  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_id: &Uuid,
+  owner_uid: &i64,
+) -> Result<AFWorkspaceSettings, AppResponseError> {
+  let has_access = workspace_access_control
+    .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+
+  if !has_access {
+    return Err(AppResponseError::new(
+      ErrorCode::UserUnAuthorized,
+      "Only workspace owner can access workspace settings",
+    ));
+  }
+
+  let settings = select_workspace_settings(pg_pool, workspace_id).await?;
+  Ok(settings.unwrap_or_default())
+}
+
+pub async fn update_workspace_settings(
+  pg_pool: &PgPool,
+  workspace_access_control: &impl WorkspaceAccessControl,
+  workspace_id: &Uuid,
+  owner_uid: &i64,
+  workspace_settings: &AFWorkspaceSettings,
+) -> Result<(), AppResponseError> {
+  let has_access = workspace_access_control
+    .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
+    .await?;
+
+  if !has_access {
+    return Err(AppResponseError::new(
+      ErrorCode::UserUnAuthorized,
+      "Only workspace owner can edit workspace settings",
+    ));
+  }
+
+  let mut tx = pg_pool.begin().await?;
+  upsert_workspace_settings(&mut tx, workspace_id, workspace_settings).await?;
+  tx.commit().await?;
+  Ok(())
 }

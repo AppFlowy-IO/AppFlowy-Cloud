@@ -69,6 +69,10 @@ pub fn workspace_scope() -> Scope {
     .service(web::resource("/{workspace_id}")
       .route(web::delete().to(delete_workspace_handler))
     )
+    .service(web::resource("/{workspace_id}/settings")
+        .route(web::get().to(get_workspace_settings_handler))
+        .route(web::post().to(post_workspace_settings_handler))
+    )
     .service(web::resource("/{workspace_id}/open").route(web::put().to(open_workspace_handler)))
     .service(web::resource("/{workspace_id}/leave").route(web::post().to(leave_workspace_handler)))
     .service(
@@ -292,6 +296,42 @@ async fn post_accept_workspace_invite_handler(
     &state.workspace_access_control,
     &user_uuid,
     &invite_id,
+  )
+  .await?;
+  Ok(AppResponse::Ok().into())
+}
+
+#[instrument(skip_all, err, fields(user_uuid))]
+async fn get_workspace_settings_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
+) -> Result<JsonAppResponse<AFWorkspaceSettings>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let settings = workspace::ops::get_workspace_settings(
+    &state.pg_pool,
+    &state.workspace_access_control,
+    &workspace_id,
+    &uid,
+  )
+  .await?;
+  Ok(AppResponse::Ok().with_data(settings).into())
+}
+
+#[instrument(level = "info", skip_all, err, fields(user_uuid))]
+async fn post_workspace_settings_handler(
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+  workspace_id: web::Path<Uuid>,
+  data: Json<AFWorkspaceSettings>,
+) -> Result<JsonAppResponse<()>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  workspace::ops::update_workspace_settings(
+    &state.pg_pool,
+    &state.workspace_access_control,
+    &workspace_id,
+    &uid,
+    &data.into_inner(),
   )
   .await?;
   Ok(AppResponse::Ok().into())

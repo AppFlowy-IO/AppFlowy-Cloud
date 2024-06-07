@@ -25,7 +25,7 @@ use tokio::task;
 
 use database::chat;
 
-use tracing::{error, instrument, trace};
+use tracing::{error, info, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -343,8 +343,7 @@ where
                 sender.send(result.unwrap()).unwrap();
               });
 
-              // Return the comma as the delimiter.
-              Poll::Ready(Some(Ok(Bytes::from("\0"))))
+              Poll::Ready(Some(Ok(Bytes::from(""))))
             } else {
               // If action is None, it means the stream is finished.
               Poll::Ready(None)

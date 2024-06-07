@@ -185,7 +185,7 @@ async fn generate_stream_answer_test() {
     .create_chat(&workspace_id, params)
     .await
     .unwrap();
-  let params = CreateChatMessageParams::new_user("where is singapore?");
+  let params = CreateChatMessageParams::new_user("Teach me how to write a article?");
   let question = test_client
     .api_client
     .create_question(&workspace_id, &chat_id, params)

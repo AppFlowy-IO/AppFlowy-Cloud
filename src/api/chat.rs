@@ -5,7 +5,7 @@ use crate::biz::chat::ops::{
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpResponse, Scope};
-use anyhow::anyhow;
+
 use app_error::AppError;
 use appflowy_ai_client::dto::RepeatedRelatedQuestion;
 use authentication::jwt::UserUuid;
@@ -20,16 +20,15 @@ use pin_project::pin_project;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
+
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tokio::task;
 
 use database::chat;
 
-use database::chat::chat_ops::insert_answer_message_with_transaction;
-use tracing::{error, info, instrument, trace};
+use database::chat::chat_ops::insert_answer_message;
+use tracing::{error, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -159,24 +158,17 @@ async fn create_answer_handler(
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
   let payload = payload.into_inner();
-  payload.validate()?;
+  payload.validate().map_err(AppError::from)?;
 
   let (_workspace_id, chat_id) = path.into_inner();
-  let mut txn = state.pg_pool.begin().await?;
-  let message = insert_answer_message_with_transaction(
-    &mut txn,
+  let message = insert_answer_message(
+    &state.pg_pool,
     ChatAuthor::ai(),
     &chat_id,
     payload.content,
     payload.question_message_id,
   )
   .await?;
-  txn.commit().await.map_err(|err| {
-    AppError::Internal(anyhow!(
-      "Failed to commit transaction to update chat message: {}",
-      err
-    ))
-  })?;
 
   Ok(AppResponse::Ok().with_data(message).into())
 }
@@ -405,38 +397,5 @@ where
         }
       },
     }
-  }
-}
-
-struct DroppableStream<S> {
-  inner: S,
-  drop_flag: Arc<AtomicBool>,
-}
-impl<S> DroppableStream<S> {
-  fn new(stream: S, drop_flag: Arc<AtomicBool>) -> Self {
-    Self {
-      inner: stream,
-      drop_flag,
-    }
-  }
-}
-
-impl<S> Stream for DroppableStream<S>
-where
-  S: Stream<Item = Result<Bytes, AppError>> + Unpin,
-{
-  type Item = Result<Bytes, AppError>;
-
-  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    let inner = Pin::new(&mut self.get_mut().inner);
-    inner.poll_next(cx)
-  }
-}
-
-impl<S> Drop for DroppableStream<S> {
-  fn drop(&mut self) {
-    self
-      .drop_flag
-      .store(true, std::sync::atomic::Ordering::SeqCst);
   }
 }

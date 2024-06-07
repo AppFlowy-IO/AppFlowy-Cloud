@@ -322,7 +322,11 @@ where
       CollectingStreamType::AnswerString => {
         match this.stream.as_mut().poll_next(cx) {
           Poll::Ready(Some(Ok(bytes))) => {
-            this.buffer.extend_from_slice(&bytes);
+            if let Some(&b'\n') = bytes.last() {
+              this.buffer.extend_from_slice(&bytes[..bytes.len() - 1]);
+            } else {
+              this.buffer.extend_from_slice(&bytes);
+            }
             Poll::Ready(Some(Ok(bytes)))
           },
           Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),

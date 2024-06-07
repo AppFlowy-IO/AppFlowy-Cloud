@@ -243,16 +243,30 @@ impl Stream for AnswerStream {
               // Therefore, we can split the buffer at the newline character to extract the text.
               if let Some(pos) = this.string_buffer.iter().position(|&b| b == b'\n') {
                 let line = this.string_buffer.split_to(pos + 1);
-                let line = &line[..line.len() - 1]; // Remove the newline character
+                let line = &line[..line.len() - 1];
 
                 return match String::from_utf8(line.to_vec()) {
-                  Ok(value) => Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value)))),
+                  Ok(value) => {
+                    eprintln!("stream value: {:?}", value);
+                    Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value))))
+                  },
                   Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),
                 };
               } else if this.string_buffer.iter().any(|&b| b == b'\0') {
+                this.string_buffer.truncate(this.string_buffer.len() - 1);
+
+                if !this.string_buffer.is_empty() {
+                  match String::from_utf8(this.string_buffer.to_vec()) {
+                    Ok(value) => {
+                      this.string_buffer.clear();
+                      return Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value))));
+                    },
+                    Err(err) => return Poll::Ready(Some(Err(AppResponseError::from(err)))),
+                  }
+                }
+
                 // When a \0 byte delimiter is received, switch to receiving JSON
                 *this.state = AnswerStreamState::ReceivingJson;
-                this.string_buffer.clear();
               }
             },
             AnswerStreamState::ReceivingJson => {

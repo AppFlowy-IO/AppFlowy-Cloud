@@ -1,6 +1,7 @@
 use client_api_test::TestClient;
 use database_entity::dto::{ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor};
 use futures_util::StreamExt;
+use shared_entity::dto::ai_dto::StringOrMessage;
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -198,9 +199,18 @@ async fn generate_stream_answer_test() {
     .await
     .unwrap();
 
+  let mut answer = None;
   while let Some(message) = answer_stream.next().await {
-    println!("message: {:?}", message);
+    // println!("message: {:?}", message);
+    let message = message.unwrap();
+    match message {
+      StringOrMessage::Left(_) => {},
+      StringOrMessage::Right(message) => {
+        answer = Some(message);
+      },
+    }
   }
+  assert!(answer.is_some());
 
   let remote_messages = test_client
     .api_client

@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde_json::de::SliceRead;
 use serde_json::StreamDeserializer;
 
-use crate::dto::ai_dto::EitherStringOrChatMessage;
+use crate::dto::ai_dto::StringOrMessage;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -44,10 +44,7 @@ where
   }
   pub async fn answer_response_stream(
     resp: reqwest::Response,
-  ) -> Result<
-    impl Stream<Item = Result<EitherStringOrChatMessage, AppResponseError>>,
-    AppResponseError,
-  > {
+  ) -> Result<impl Stream<Item = Result<StringOrMessage, AppResponseError>>, AppResponseError> {
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
@@ -214,7 +211,7 @@ impl AnswerStream {
 }
 
 impl Stream for AnswerStream {
-  type Item = Result<EitherStringOrChatMessage, AppResponseError>;
+  type Item = Result<StringOrMessage, AppResponseError>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
@@ -228,13 +225,12 @@ impl Stream for AnswerStream {
         Some(Ok(bytes)) => {
           // Each stream bytes if it comes with a newline character it will be a string. it's
           // guaranteed by the server
-
           const NEW_LINE: &[u8; 1] = b"\n";
           if bytes.ends_with(NEW_LINE) {
             let bytes = &bytes[..bytes.len() - NEW_LINE.len()];
 
             return match String::from_utf8(bytes.to_vec()) {
-              Ok(value) => Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value)))),
+              Ok(value) => Poll::Ready(Some(Ok(StringOrMessage::Left(value)))),
               Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),
             };
           } else {
@@ -250,7 +246,7 @@ impl Stream for AnswerStream {
 
                   // Advance the json_buffer to remove processed bytes
                   this.json_buffer.advance(remaining);
-                  return Poll::Ready(Some(Ok(EitherStringOrChatMessage::Right(value))));
+                  return Poll::Ready(Some(Ok(StringOrMessage::Right(value))));
                 },
                 Err(err) => {
                   if err.is_eof() {

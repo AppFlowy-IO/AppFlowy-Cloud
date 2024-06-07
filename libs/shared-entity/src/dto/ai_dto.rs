@@ -38,7 +38,7 @@ pub struct CompleteTextParams {
 }
 
 #[derive(Debug)]
-pub enum EitherStringOrChatMessage {
+pub enum StringOrMessage {
   Left(String),
   Right(ChatMessage),
 }

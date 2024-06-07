@@ -5,13 +5,14 @@ use crate::biz::chat::ops::{
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpResponse, Scope};
+use anyhow::anyhow;
 use app_error::AppError;
 use appflowy_ai_client::dto::RepeatedRelatedQuestion;
 use authentication::jwt::UserUuid;
 use bytes::Bytes;
 use database_entity::dto::{
-  ChatAuthor, ChatMessage, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-  MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
+  ChatAuthor, ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams,
+  GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use futures::Stream;
 use futures_util::{FutureExt, TryStreamExt};
@@ -19,13 +20,16 @@ use pin_project::pin_project;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tokio::task;
 
 use database::chat;
 
-use tracing::{error, instrument, trace};
+use database::chat::chat_ops::insert_answer_message_with_transaction;
+use tracing::{error, info, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -46,9 +50,16 @@ pub fn chat_scope() -> Scope {
         .route(web::put().to(update_chat_message_handler)),
     )
     .service(
+      // Create a question for given chat
       web::resource("/{chat_id}/message/question").route(web::post().to(create_question_handler)),
     )
-    .service(web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(answer_handler)))
+      // create a answer for given chat
+    .service(web::resource("/{chat_id}/message/answer").route(web::post().to(create_answer_handler)))
+    .service(
+      // Generate answer for given question.
+      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(gen_answer_handler)),
+    )
+      // Stream the answer for given question.
     .service(
       web::resource("/{chat_id}/{message_id}/answer/stream")
         .route(web::get().to(answer_stream_handler)),
@@ -142,7 +153,34 @@ async fn create_question_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-async fn answer_handler(
+async fn create_answer_handler(
+  path: web::Path<(String, String)>,
+  payload: Json<CreateAnswerMessageParams>,
+  state: Data<AppState>,
+) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
+  let payload = payload.into_inner();
+  payload.validate()?;
+
+  let (_workspace_id, chat_id) = path.into_inner();
+  let mut txn = state.pg_pool.begin().await?;
+  let message = insert_answer_message_with_transaction(
+    &mut txn,
+    ChatAuthor::ai(),
+    &chat_id,
+    payload.content,
+    payload.question_message_id,
+  )
+  .await?;
+  txn.commit().await.map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Failed to commit transaction to update chat message: {}",
+      err
+    ))
+  })?;
+
+  Ok(AppResponse::Ok().with_data(message).into())
+}
+async fn gen_answer_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
@@ -164,7 +202,7 @@ async fn answer_stream_handler(
 ) -> actix_web::Result<HttpResponse> {
   let (_workspace_id, chat_id, question_id) = path.into_inner();
   let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
-  let new_answer_stream = state
+  let answer_stream = state
     .ai_client
     .stream_question(&chat_id, &content)
     .await
@@ -198,7 +236,7 @@ async fn answer_stream_handler(
     })
   };
 
-  let new_answer_stream = new_answer_stream.map_err(AppError::from);
+  let new_answer_stream = answer_stream.map_err(AppError::from);
   let finish_answer_stream = CollectingStream::new(new_answer_stream, finish_action);
   Ok(
     HttpResponse::Ok()
@@ -367,5 +405,38 @@ where
         }
       },
     }
+  }
+}
+
+struct DroppableStream<S> {
+  inner: S,
+  drop_flag: Arc<AtomicBool>,
+}
+impl<S> DroppableStream<S> {
+  fn new(stream: S, drop_flag: Arc<AtomicBool>) -> Self {
+    Self {
+      inner: stream,
+      drop_flag,
+    }
+  }
+}
+
+impl<S> Stream for DroppableStream<S>
+where
+  S: Stream<Item = Result<Bytes, AppError>> + Unpin,
+{
+  type Item = Result<Bytes, AppError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let inner = Pin::new(&mut self.get_mut().inner);
+    inner.poll_next(cx)
+  }
+}
+
+impl<S> Drop for DroppableStream<S> {
+  fn drop(&mut self) {
+    self
+      .drop_flag
+      .store(true, std::sync::atomic::Ordering::SeqCst);
   }
 }

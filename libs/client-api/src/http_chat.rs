@@ -1,12 +1,12 @@
 use crate::http::log_request_id;
 use crate::Client;
 use database_entity::dto::{
-  ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor, RepeatedChatMessage,
-  UpdateChatMessageContentParams,
+  ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
+  RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use futures_core::Stream;
 use reqwest::Method;
-use shared_entity::dto::ai_dto::{EitherStringOrChatMessage, RepeatedRelatedQuestion};
+use shared_entity::dto::ai_dto::{RepeatedRelatedQuestion, StringOrMessage};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {
@@ -82,15 +82,34 @@ impl Client {
       .into_data()
   }
 
+  pub async fn create_answer(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    params: CreateAnswerMessageParams,
+  ) -> Result<ChatMessage, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message/answer",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatMessage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn stream_answer(
     &self,
     workspace_id: &str,
     chat_id: &str,
     message_id: i64,
-  ) -> Result<
-    impl Stream<Item = Result<EitherStringOrChatMessage, AppResponseError>>,
-    AppResponseError,
-  > {
+  ) -> Result<impl Stream<Item = Result<StringOrMessage, AppResponseError>>, AppResponseError> {
     let url = format!(
       "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer/stream",
       self.base_url

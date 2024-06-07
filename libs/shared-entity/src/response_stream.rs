@@ -228,7 +228,11 @@ impl Stream for AnswerStream {
         Some(Ok(bytes)) => {
           // Each stream bytes if it comes with a newline character it will be a string. it's
           // guaranteed by the server
-          if bytes.ends_with(b"\n") {
+
+          const NEW_LINE: &[u8; 1] = b"\n";
+          if bytes.ends_with(NEW_LINE) {
+            let bytes = &bytes[..bytes.len() - NEW_LINE.len()];
+
             return match String::from_utf8(bytes.to_vec()) {
               Ok(value) => Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value)))),
               Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),

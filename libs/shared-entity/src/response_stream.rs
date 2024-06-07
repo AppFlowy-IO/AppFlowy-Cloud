@@ -145,7 +145,7 @@ impl Stream for NewlineStream {
     let mut this = self.project();
 
     loop {
-      match futures::ready!(this.stream.as_mut().poll_next(cx)) {
+      match ready!(this.stream.as_mut().poll_next(cx)) {
         Some(Ok(bytes)) => {
           this.buffer.extend_from_slice(&bytes);
           if let Some(pos) = this.buffer.iter().position(|&b| b == b'\n') {
@@ -196,7 +196,6 @@ impl Stream for NewlineStream {
 pub struct AnswerStream {
   #[pin]
   stream: Pin<Box<dyn Stream<Item = Result<Bytes, AppResponseError>> + Send>>,
-  string_buffer: BytesMut,
   json_buffer: BytesMut,
   finished: bool,
 }
@@ -208,7 +207,6 @@ impl AnswerStream {
   {
     AnswerStream {
       stream: Box::pin(stream),
-      string_buffer: BytesMut::new(),
       json_buffer: BytesMut::new(),
       finished: false,
     }
@@ -231,18 +229,11 @@ impl Stream for AnswerStream {
           // Each stream bytes if it comes with a newline character it will be a string. it's
           // guaranteed by the server
           if bytes.ends_with(b"\n") {
-            this.string_buffer.extend_from_slice(&bytes);
-            if let Some(pos) = this.string_buffer.iter().position(|&b| b == b'\n') {
-              let line = this.string_buffer.split_to(pos + 1);
-              let line = &line[..line.len() - 1];
-
-              return match String::from_utf8(line.to_vec()) {
-                Ok(value) => Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value)))),
-                Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),
-              };
-            }
+            return match String::from_utf8(bytes.to_vec()) {
+              Ok(value) => Poll::Ready(Some(Ok(EitherStringOrChatMessage::Left(value)))),
+              Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),
+            };
           } else {
-            eprintln!("json bytes: {:?}", String::from_utf8(bytes.to_vec()));
             this.json_buffer.extend_from_slice(&bytes);
             let slice_read = SliceRead::new(&this.json_buffer[..]);
             let deserializer = StreamDeserializer::new(slice_read);

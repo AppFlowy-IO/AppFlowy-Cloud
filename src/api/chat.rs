@@ -25,7 +25,7 @@ use tokio::task;
 
 use database::chat;
 
-use tracing::{error, info, instrument, trace};
+use tracing::{error, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {

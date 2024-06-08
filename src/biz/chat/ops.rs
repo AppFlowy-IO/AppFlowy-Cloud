@@ -188,3 +188,22 @@ pub async fn get_chat_messages(
   txn.commit().await?;
   Ok(messages)
 }
+
+pub async fn create_chat_question(
+  pg_pool: &PgPool,
+  uid: i64,
+  chat_id: String,
+  params: CreateChatMessageParams,
+) -> Result<ChatMessage, AppError> {
+  let params = params.clone();
+  let chat_id = chat_id.clone();
+  let pg_pool = pg_pool.clone();
+  let question = insert_question_message(
+    &pg_pool,
+    ChatAuthor::new(uid, ChatAuthorType::Human),
+    &chat_id,
+    params.content.clone(),
+  )
+  .await?;
+  Ok(question)
+}

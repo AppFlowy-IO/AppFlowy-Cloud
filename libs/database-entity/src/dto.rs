@@ -742,3 +742,11 @@ pub enum EmbeddingContentType {
 pub struct UpdateChatMessageResponse {
   pub answer: Option<ChatMessage>,
 }
+
+#[derive(Debug, Clone, Validate, Serialize, Deserialize)]
+pub struct CreateAnswerMessageParams {
+  #[validate(custom = "validate_not_empty_str")]
+  pub content: String,
+
+  pub question_message_id: i64,
+}

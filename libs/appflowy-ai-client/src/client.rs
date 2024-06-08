@@ -3,7 +3,8 @@ use crate::dto::{
   RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse, TranslateRowResponse,
 };
 use crate::error::AIError;
-use anyhow::anyhow;
+
+use bytes::Bytes;
 use futures::{Stream, StreamExt};
 use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
@@ -145,7 +146,7 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
-  ) -> Result<impl Stream<Item = Result<String, AIError>>, AIError> {
+  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
       data: MessageData {
@@ -158,7 +159,7 @@ impl AppFlowyAIClient {
       .json(&json)
       .send()
       .await?;
-    AIResponse::<String>::stream_response(resp).await
+    AIResponse::<()>::stream_response(resp).await
   }
 
   pub async fn get_related_question(
@@ -213,21 +214,15 @@ where
 
   pub async fn stream_response(
     resp: reqwest::Response,
-  ) -> Result<impl Stream<Item = Result<String, AIError>>, AIError> {
+  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
       return Err(AIError::InvalidRequest(body));
     }
-    let stream = resp.bytes_stream().map(|item| {
-      item
-        .map_err(|err| AIError::Internal(err.into()))
-        .and_then(|bytes| {
-          String::from_utf8(bytes.to_vec())
-            .map(|s| s.replace('\n', ""))
-            .map_err(|err| AIError::Internal(anyhow!("Parser AI response error: {:?}", err)))
-        })
-    });
+    let stream = resp
+      .bytes_stream()
+      .map(|item| item.map_err(|err| AIError::Internal(err.into())));
     Ok(stream)
   }
 }

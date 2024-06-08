@@ -1,4 +1,5 @@
 use crate::appflowy_ai_client;
+
 use futures::stream::StreamExt;
 
 #[tokio::test]
@@ -51,6 +52,14 @@ async fn stream_test() {
     .stream_question(&chat_id, "I feel hungry")
     .await
     .unwrap();
+
+  let stream = stream.map(|item| {
+    item.map(|bytes| {
+      String::from_utf8(bytes.to_vec())
+        .map(|s| s.replace('\n', ""))
+        .unwrap()
+    })
+  });
 
   let messages: Vec<String> = stream.map(|message| message.unwrap()).collect().await;
   println!("final answer: {}", messages.join(""));

@@ -3,6 +3,7 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
+use std::string::FromUtf8Error;
 
 #[cfg(feature = "appflowy_ai_error")]
 use appflowy_ai_client::error::AIError;
@@ -97,6 +98,9 @@ pub enum AppError {
   #[error(transparent)]
   SerdeError(#[from] serde_json::Error),
 
+  #[error(transparent)]
+  Utf8Error(#[from] FromUtf8Error),
+
   #[error("{0}")]
   Connect(String),
 
@@ -175,6 +179,7 @@ impl AppError {
       AppError::BincodeError(_) => ErrorCode::Internal,
       AppError::NoRequiredData(_) => ErrorCode::NoRequiredData,
       AppError::OverrideWithIncorrectData(_) => ErrorCode::OverrideWithIncorrectData,
+      AppError::Utf8Error(_) => ErrorCode::Internal,
     }
   }
 }

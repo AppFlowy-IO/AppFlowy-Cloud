@@ -1,6 +1,7 @@
 use client_api_test::TestClient;
 use database_entity::dto::{ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor};
 use futures_util::StreamExt;
+use shared_entity::dto::ai_dto::StringOrMessage;
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -25,7 +26,7 @@ async fn create_chat_and_create_messages_test() {
     let params = CreateChatMessageParams::new_system(format!("hello world {}", i));
     let message = test_client
       .api_client
-      .create_chat_message(&workspace_id, &chat_id, params)
+      .create_chat_qa_message(&workspace_id, &chat_id, params)
       .await
       .unwrap()
       .next()
@@ -111,7 +112,7 @@ async fn chat_qa_test() {
   let params = CreateChatMessageParams::new_user("where is singapore?");
   let stream = test_client
     .api_client
-    .create_chat_message(&workspace_id, &chat_id, params)
+    .create_chat_qa_message(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
@@ -146,7 +147,7 @@ async fn generate_chat_message_answer_test() {
   let params = CreateChatMessageParams::new_user("where is singapore?");
   let stream = test_client
     .api_client
-    .create_chat_message(&workspace_id, &chat_id, params)
+    .create_chat_qa_message(&workspace_id, &chat_id, params)
     .await
     .unwrap();
   let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
@@ -154,7 +155,7 @@ async fn generate_chat_message_answer_test() {
 
   let answer = test_client
     .api_client
-    .generate_question_answer(&workspace_id, &chat_id, messages[0].message_id)
+    .get_answer(&workspace_id, &chat_id, messages[0].message_id)
     .await
     .unwrap();
 
@@ -167,6 +168,58 @@ async fn generate_chat_message_answer_test() {
 
   assert_eq!(remote_messages.len(), 2);
   assert_eq!(remote_messages[0].message_id, answer.message_id);
+}
+
+#[tokio::test]
+async fn generate_stream_answer_test() {
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "my second chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+  let params = CreateChatMessageParams::new_user("Teach me how to write a article?");
+  let question = test_client
+    .api_client
+    .create_question(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+
+  let mut answer_stream = test_client
+    .api_client
+    .stream_answer(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+
+  let mut answer = None;
+  while let Some(message) = answer_stream.next().await {
+    // println!("message: {:?}", message);
+    let message = message.unwrap();
+    match message {
+      StringOrMessage::Left(_) => {},
+      StringOrMessage::Right(message) => {
+        answer = Some(message);
+      },
+    }
+  }
+  assert!(answer.is_some());
+
+  let remote_messages = test_client
+    .api_client
+    .get_chat_messages(&workspace_id, &chat_id, MessageCursor::NextBack, 2)
+    .await
+    .unwrap()
+    .messages;
+
+  assert_eq!(remote_messages.len(), 2);
 }
 
 // #[tokio::test]

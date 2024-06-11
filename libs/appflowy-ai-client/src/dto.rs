@@ -105,7 +105,7 @@ pub struct TranslateRowData {
   pub include_header: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TranslateRowResponse {
   pub items: Vec<HashMap<String, String>>,
 }

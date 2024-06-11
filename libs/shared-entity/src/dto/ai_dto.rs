@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 
 pub use appflowy_ai_client::dto::*;
 use database_entity::dto::ChatMessage;

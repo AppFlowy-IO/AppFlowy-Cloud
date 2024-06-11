@@ -3,6 +3,7 @@ use crate::Client;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, CompleteTextResponse, SummarizeRowParams, SummarizeRowResponse,
+  TranslateRowParams, TranslateRowResponse,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
@@ -27,6 +28,29 @@ impl Client {
 
     log_request_id(&resp);
     AppResponse::<SummarizeRowResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn translate_row(
+    &self,
+    params: TranslateRowParams,
+  ) -> Result<TranslateRowResponse, AppResponseError> {
+    let url = format!(
+      "{}/api/ai/{}/translate_row",
+      self.base_url, params.workspace_id
+    );
+
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    AppResponse::<TranslateRowResponse>::from_response(resp)
       .await?
       .into_data()
   }

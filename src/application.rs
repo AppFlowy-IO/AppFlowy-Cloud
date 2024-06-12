@@ -23,6 +23,7 @@ use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
+use actix_web::middleware::NormalizePath;
 use actix_web::{dev::Server, web, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
@@ -128,6 +129,7 @@ pub async fn run_actix_server(
   let realtime_server_actor = Supervisor::start(|_| RealtimeServerActor(realtime_server));
   let mut server = HttpServer::new(move || {
     App::new()
+      .wrap(NormalizePath::trim())
        // Middleware is registered for each App, scope, or Resource and executed in opposite order as registration
       .wrap(MetricsMiddleware)
       .wrap(IdentityMiddleware::default())

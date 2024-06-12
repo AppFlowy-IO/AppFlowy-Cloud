@@ -1,3 +1,4 @@
+use crate::api::metrics::RequestMetrics;
 use app_error::ErrorCode;
 use database::index::{search_documents, SearchDocumentParams};
 use openai_dive::v1::models::EmbeddingsEngine;
@@ -17,6 +18,7 @@ pub async fn search_document(
   uid: i64,
   workspace_id: Uuid,
   request: SearchDocumentRequest,
+  metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
   let embeddings = openai
     .embeddings()
@@ -31,6 +33,7 @@ pub async fn search_document(
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
 
   let tokens_used = if let Some(usage) = embeddings.usage {
+    metrics.record_search_tokens_used(&workspace_id, usage.total_tokens);
     tracing::info!(
       "workspace {} OpenAI API search tokens used: {}",
       workspace_id,

@@ -1,15 +1,17 @@
 use crate::appflowy_ai_client;
-use std::collections::HashMap;
 
-use appflowy_ai_client::dto::TranslateRowData;
+use appflowy_ai_client::dto::{TranslateItem, TranslateRowData};
 
 #[tokio::test]
 async fn translate_row_test() {
   let client = appflowy_ai_client();
 
-  let mut cells = HashMap::new();
+  let mut cells = Vec::new();
   for (key, value) in [("book name", "Atomic Habits"), ("author", "James Clear")].iter() {
-    cells.insert(key.to_string(), value.to_string());
+    cells.push(TranslateItem {
+      title: key.to_string(),
+      content: value.to_string(),
+    });
   }
 
   let data = TranslateRowData {

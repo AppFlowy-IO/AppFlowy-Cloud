@@ -100,11 +100,16 @@ pub struct TranslateRowParams {
 /// Represents different types of content that can be used to summarize a database row.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TranslateRowData {
-  pub cells: HashMap<String, String>,
+  pub cells: Vec<TranslateItem>,
   pub language: String,
   pub include_header: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TranslateItem {
+  pub title: String,
+  pub content: String,
+}
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TranslateRowResponse {
   pub items: Vec<HashMap<String, String>>,

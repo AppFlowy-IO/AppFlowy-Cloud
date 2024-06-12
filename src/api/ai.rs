@@ -2,7 +2,7 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
 use app_error::AppError;
-use appflowy_ai_client::dto::CompleteTextResponse;
+use appflowy_ai_client::dto::{CompleteTextResponse, TranslateRowParams, TranslateRowResponse};
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
@@ -13,6 +13,7 @@ pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
     .service(web::resource("/complete_text").route(web::post().to(complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
+    .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
 }
 
 async fn complete_text_handler(
@@ -61,6 +62,26 @@ async fn summarize_row_handler(
       };
 
       Ok(AppResponse::Ok().with_data(resp).into())
+    },
+  }
+}
+
+#[instrument(level = "debug", skip(state, payload), err)]
+async fn translate_row_handler(
+  state: web::Data<AppState>,
+  payload: web::Json<TranslateRowParams>,
+) -> actix_web::Result<Json<AppResponse<TranslateRowResponse>>> {
+  let params = payload.into_inner();
+
+  match state.ai_client.translate_row(params.data).await {
+    Ok(resp) => Ok(AppResponse::Ok().with_data(resp).into()),
+    Err(err) => {
+      error!("Failed to translate row: {:?}", err);
+      Ok(
+        AppResponse::Ok()
+          .with_data(TranslateRowResponse::default())
+          .into(),
+      )
     },
   }
 }

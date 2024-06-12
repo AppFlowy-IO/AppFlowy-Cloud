@@ -1,14 +1,10 @@
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TranslateRowResponse {
-  text: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -93,4 +89,28 @@ pub enum CollabType {
   DatabaseRow = 4,
   UserAwareness = 5,
   Unknown = 6,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TranslateRowParams {
+  pub workspace_id: String,
+  pub data: TranslateRowData,
+}
+
+/// Represents different types of content that can be used to summarize a database row.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TranslateRowData {
+  pub cells: Vec<TranslateItem>,
+  pub language: String,
+  pub include_header: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TranslateItem {
+  pub title: String,
+  pub content: String,
+}
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TranslateRowResponse {
+  pub items: Vec<HashMap<String, String>>,
 }

@@ -9,6 +9,7 @@ use prometheus_client::metrics::exemplar::CounterWithExemplar;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub fn metrics_scope() -> Scope {
   web::scope("/metrics").service(web::resource("").route(web::get().to(metrics_handler)))
@@ -38,6 +39,11 @@ pub struct ResultLabel {
   pub status_code: u16,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+pub struct WorkspaceLabel {
+  pub workspace: String,
+}
+
 // Metrics contains list of metrics that are collected by the application.
 // Metric types: https://prometheus.io/docs/concepts/metric_types
 // Application handlers should call the corresponding methods to update the metrics.
@@ -46,6 +52,7 @@ pub struct RequestMetrics {
   requests_count: Family<PathLabel, Counter>,
   requests_latency: Family<PathLabel, CounterWithExemplar<TraceLabel>>,
   requests_result: Family<ResultLabel, CounterWithExemplar<TraceLabel>>,
+  openai_token_usage: Family<WorkspaceLabel, Counter>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq, EncodeLabelSet, Debug, Default)]
@@ -59,6 +66,7 @@ impl RequestMetrics {
       requests_count: Family::default(),
       requests_latency: Family::default(),
       requests_result: Family::default(),
+      openai_token_usage: Family::default(),
     }
   }
 
@@ -81,7 +89,21 @@ impl RequestMetrics {
       "status code of response",
       af_metrics.requests_result.clone(),
     );
+    af_registry.register(
+      "search_tokens_used",
+      "OpenAI API tokens used for search requests",
+      af_metrics.openai_token_usage.clone(),
+    );
     af_metrics
+  }
+
+  pub fn record_search_tokens_used(&self, workspace_id: &Uuid, tokens: u32) {
+    self
+      .openai_token_usage
+      .get_or_create(&WorkspaceLabel {
+        workspace: workspace_id.to_string(),
+      })
+      .inc_by(tokens as u64);
   }
 
   // app services/middleware should call this method to increase the request count for the path

@@ -1213,18 +1213,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "billing"
-version = "0.1.0"
-dependencies = [
- "client-api",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "shared-entity",
- "tokio",
-]
-
-[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,12 +1,13 @@
 use crate::http::log_request_id;
 use crate::Client;
+use bytes::Bytes;
 use database_entity::dto::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
   RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use futures_core::Stream;
 use reqwest::Method;
-use shared_entity::dto::ai_dto::{RepeatedRelatedQuestion, StringOrMessage};
+use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {
@@ -109,7 +110,7 @@ impl Client {
     workspace_id: &str,
     chat_id: &str,
     message_id: i64,
-  ) -> Result<impl Stream<Item = Result<StringOrMessage, AppResponseError>>, AppResponseError> {
+  ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
     let url = format!(
       "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer/stream",
       self.base_url

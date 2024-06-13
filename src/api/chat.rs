@@ -28,7 +28,7 @@ use tokio::task;
 use database::chat;
 
 use database::chat::chat_ops::insert_answer_message;
-use tracing::{error, instrument, trace};
+use tracing::{error, info, instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -352,11 +352,7 @@ where
       CollectingStreamType::AnswerString => {
         match this.stream.as_mut().poll_next(cx) {
           Poll::Ready(Some(Ok(bytes))) => {
-            if let Some(&b'\n') = bytes.last() {
-              this.buffer.extend_from_slice(&bytes[..bytes.len() - 1]);
-            } else {
-              this.buffer.extend_from_slice(&bytes);
-            }
+            this.buffer.extend_from_slice(&bytes);
             Poll::Ready(Some(Ok(bytes)))
           },
           Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
@@ -385,9 +381,9 @@ where
       CollectingStreamType::AnswerMessage => {
         if let Some(receiver) = this.result_receiver.as_mut() {
           match receiver.poll_unpin(cx) {
-            Poll::Ready(Ok(result)) => {
+            Poll::Ready(Ok(_)) => {
               this.result_receiver.take();
-              Poll::Ready(Some(result))
+              Poll::Ready(None)
             },
             Poll::Ready(Err(_)) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,

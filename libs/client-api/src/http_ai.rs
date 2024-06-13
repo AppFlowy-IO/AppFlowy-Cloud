@@ -2,8 +2,8 @@ use crate::http::log_request_id;
 use crate::Client;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::{
-  CompleteTextParams, CompleteTextResponse, SummarizeRowParams, SummarizeRowResponse,
-  TranslateRowParams, TranslateRowResponse,
+  CompleteTextParams, CompleteTextResponse, SummarizeRowParams, SummarizeRowResponse, TagRowParams,
+  TagRowResponse, TranslateRowParams, TranslateRowResponse,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
@@ -55,6 +55,22 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all)]
+  pub async fn tag_row(&self, params: TagRowParams) -> Result<TagRowResponse, AppResponseError> {
+    let url = format!("{}/api/ai/{}/tag_row", self.base_url, params.workspace_id);
+
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    AppResponse::<TagRowResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
   #[instrument(level = "info", skip_all)]
   pub async fn completion_text(
     &self,

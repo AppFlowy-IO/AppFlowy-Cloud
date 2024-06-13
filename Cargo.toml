@@ -160,6 +160,7 @@ members = [
     # xtask
     "xtask",
     "libs/tonic-proto",
+    "libs/billing",
 ]
 
 [workspace.dependencies]

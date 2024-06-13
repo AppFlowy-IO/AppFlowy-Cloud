@@ -7,7 +7,7 @@ use database_entity::dto::{
 };
 use futures_core::Stream;
 use reqwest::Method;
-use shared_entity::dto::ai_dto::{RepeatedRelatedQuestion, StringOrMessage};
+use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {

@@ -19,7 +19,7 @@ use crate::indexer::Fragment;
 pub struct DocumentWatcher {
   object_id: String,
   content: Document,
-  receiver: tokio::sync::watch::Receiver<DashMap<String, DeltaType>>,
+  receiver: tokio::sync::watch::Receiver<u64>,
 }
 
 unsafe impl Send for DocumentWatcher {}
@@ -31,7 +31,7 @@ impl DocumentWatcher {
     mut content: Document,
     index_initial_content: bool,
   ) -> Result<Self> {
-    let (tx, receiver) = tokio::sync::watch::channel(DashMap::new());
+    let (tx, receiver) = tokio::sync::watch::channel(0);
     if index_initial_content {
       Self::index_initial_content(&mut content, &tx)?;
     }
@@ -43,35 +43,16 @@ impl DocumentWatcher {
     })
   }
 
-  fn attach_listener(document: &mut Document, notifier: Sender<DashMap<String, DeltaType>>) {
-    document.subscribe_block_changed(move |blocks, _| {
-      let changes: Vec<_> = blocks
-        .iter()
-        .flat_map(|block| {
-          block
-            .iter()
-            .map(|payload| (payload.id.clone(), payload.command.clone()))
-        })
-        .collect();
-      notifier.send_modify(|map| {
-        for (id, command) in changes {
-          map.insert(id, command);
-        }
-      })
+  fn attach_listener(document: &mut Document, notifier: Sender<u64>) {
+    document.subscribe_block_changed(move |_, _| {
+      notifier.send_modify(|i| *i += 1);
     });
   }
 
-  fn index_initial_content(
-    document: &mut Document,
-    notifier: &Sender<DashMap<String, DeltaType>>,
-  ) -> Result<()> {
+  fn index_initial_content(document: &mut Document, notifier: &Sender<u64>) -> Result<()> {
     let data = document.get_document_data()?;
-    if let Some(text_map) = data.meta.text_map.as_ref() {
-      notifier.send_modify(|map| {
-        for text_id in text_map.keys() {
-          map.insert(text_id.clone(), DeltaType::Inserted);
-        }
-      });
+    if let Some(_) = data.meta.text_map.as_ref() {
+      notifier.send_modify(|i| *i += 1);
     }
     Ok(())
   }
@@ -83,7 +64,6 @@ impl DocumentWatcher {
     Box::pin(stream! {
       while let Ok(()) = receiver.changed().await {
         if let Some(collab) = collab.upgrade() {
-          receiver.borrow().clear();
           match Self::get_document_content(collab) {
             Ok(content) => {
               yield FragmentUpdate::Update(Fragment {

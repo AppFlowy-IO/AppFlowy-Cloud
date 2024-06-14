@@ -8,23 +8,17 @@ pub fn document_to_plain_text(document: &DocumentData) -> String {
     // do a depth-first scan of the document blocks
     while let Some(block_id) = stack.pop() {
       if let Some(block) = document.blocks.get(block_id) {
-        if block.external_type.as_deref() == Some("text") {
-          if let Some(text_id) = block.external_id.as_deref() {
-            if let Some(json) = text_map.get(text_id) {
-              match serde_json::from_str::<Vec<TextDelta>>(json) {
-                Ok(deltas) => {
-                  for delta in deltas {
-                    if let TextDelta::Inserted(text, _) = delta {
-                      buf.push_str(&text);
-                    }
-                  }
-                },
-                Err(err) => {
-                  tracing::error!("text_id `{}` is not a valid delta array: {}", text_id, err)
-                },
+        if let Some(delta) = block.data.get("delta") {
+          if let Ok(deltas) = serde_json::from_value::<Vec<TextDelta>>(delta.clone()) {
+            for delta in deltas {
+              if let TextDelta::Inserted(text, _) = delta {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                  buf.push_str(&trimmed);
+                  buf.push(' ');
+                }
               }
             }
-            buf.push('\n');
           }
         }
         if let Some(children) = document.meta.children_map.get(&block.children) {
@@ -36,6 +30,7 @@ pub fn document_to_plain_text(document: &DocumentData) -> String {
       }
     }
   }
+  //tracing::trace!("Document plain text: `{}`", buf);
   buf
 }
 

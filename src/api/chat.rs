@@ -28,7 +28,7 @@ use tokio::task;
 use database::chat;
 
 use database::chat::chat_ops::insert_answer_message;
-use tracing::{error, instrument, trace};
+use tracing::{instrument, trace};
 use validator::Validate;
 
 pub fn chat_scope() -> Scope {
@@ -52,7 +52,7 @@ pub fn chat_scope() -> Scope {
       // Create a question for given chat
       web::resource("/{chat_id}/message/question").route(web::post().to(create_question_handler)),
     )
-      // create a answer for given chat
+      // create an answer for given chat
     .service(web::resource("/{chat_id}/message/answer").route(web::post().to(create_answer_handler)))
     .service(
       // Generate answer for given question.
@@ -200,40 +200,11 @@ async fn answer_stream_handler(
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
 
-  let finish_action = move |collected_bytes: Vec<u8>| {
-    task::spawn(async move {
-      if let Ok(final_message) = String::from_utf8(collected_bytes) {
-        match chat::chat_ops::insert_answer_message(
-          &state.pg_pool,
-          ChatAuthor::ai(),
-          &chat_id,
-          final_message,
-          question_id,
-        )
-        .await
-        {
-          Ok(message) => {
-            let json_bytes = serde_json::to_vec(&message)?;
-            Ok(Bytes::from(json_bytes))
-          },
-          Err(err) => {
-            error!("Failed to insert answer message: {}", err);
-            Err(AppError::Internal(err.into()))
-          },
-        }
-      } else {
-        error!("Stream finished with invalid UTF-8 data.");
-        Err(AppError::InvalidRequest("Invalid UTF-8 data".to_string()))
-      }
-    })
-  };
-
   let new_answer_stream = answer_stream.map_err(AppError::from);
-  let finish_answer_stream = CollectingStream::new(new_answer_stream, finish_action);
   Ok(
     HttpResponse::Ok()
       .content_type("text/event-stream")
-      .streaming(finish_answer_stream),
+      .streaming(new_answer_stream),
   )
 }
 
@@ -312,6 +283,7 @@ where
   }
 }
 
+#[allow(dead_code)]
 #[pin_project]
 pub struct CollectingStream<S, F> {
   #[pin]
@@ -352,11 +324,7 @@ where
       CollectingStreamType::AnswerString => {
         match this.stream.as_mut().poll_next(cx) {
           Poll::Ready(Some(Ok(bytes))) => {
-            if let Some(&b'\n') = bytes.last() {
-              this.buffer.extend_from_slice(&bytes[..bytes.len() - 1]);
-            } else {
-              this.buffer.extend_from_slice(&bytes);
-            }
+            this.buffer.extend_from_slice(&bytes);
             Poll::Ready(Some(Ok(bytes)))
           },
           Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
@@ -385,9 +353,9 @@ where
       CollectingStreamType::AnswerMessage => {
         if let Some(receiver) = this.result_receiver.as_mut() {
           match receiver.poll_unpin(cx) {
-            Poll::Ready(Ok(result)) => {
+            Poll::Ready(Ok(_)) => {
               this.result_receiver.take();
-              Poll::Ready(Some(result))
+              Poll::Ready(None)
             },
             Poll::Ready(Err(_)) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,

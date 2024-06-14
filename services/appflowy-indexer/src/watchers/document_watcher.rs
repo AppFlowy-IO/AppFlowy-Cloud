@@ -3,10 +3,8 @@ use std::sync::Arc;
 
 use async_stream::stream;
 use collab::core::collab::MutexCollab;
-use collab_document::blocks::DeltaType;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use dashmap::DashMap;
 use database_entity::dto::EmbeddingContentType;
 use futures::Stream;
 use tokio::sync::watch::Sender;
@@ -149,7 +147,7 @@ mod test {
         collab_type: CollabType::Document,
         content_type: EmbeddingContentType::PlainText,
         object_id: "o-1".to_string(),
-        content: "A\n".to_string(),
+        content: "A ".to_string(),
       })
     );
 
@@ -166,7 +164,7 @@ mod test {
         collab_type: CollabType::Document,
         content_type: EmbeddingContentType::PlainText,
         object_id: "o-1".to_string(),
-        content: "BA\n".to_string(),
+        content: "BA ".to_string(),
       })
     );
   }

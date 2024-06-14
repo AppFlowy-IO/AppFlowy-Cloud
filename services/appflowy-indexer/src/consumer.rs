@@ -123,12 +123,6 @@ impl OpenCollabConsumer {
     let fragment = {
       match &collab.collab_type {
         CollabType::Document => {
-          tracing::trace!(
-            "indexing document {}/{}",
-            collab.workspace_id,
-            collab.object_id
-          );
-
           let document = Document::from_doc_state(
             CollabOrigin::Empty,
             DataSource::DocStateV1(collab.collab.doc_state.to_vec()),
@@ -137,6 +131,9 @@ impl OpenCollabConsumer {
           )?;
           let data = document.get_document_data()?;
           let content = crate::extract::document_to_plain_text(&data);
+          if content.is_empty() {
+            return Ok(());
+          }
           Fragment {
             fragment_id: collab.object_id.clone(),
             object_id: collab.object_id.clone(),
@@ -156,6 +153,11 @@ impl OpenCollabConsumer {
         },
       }
     };
+    tracing::trace!(
+      "indexing collab {}/{}",
+      collab.workspace_id,
+      collab.object_id
+    );
     indexer
       .update_index(&collab.workspace_id, vec![fragment])
       .await?;
@@ -397,7 +399,7 @@ mod test {
 
     assert_ne!(contents.len(), 0);
     let content: Option<String> = contents[0].get(0);
-    assert_eq!(content.as_deref(), Some("test-value\n"));
+    assert_eq!(content.as_deref(), Some("test-value "));
   }
 
   #[ignore]

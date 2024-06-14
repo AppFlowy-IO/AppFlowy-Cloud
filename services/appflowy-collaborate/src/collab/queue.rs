@@ -17,8 +17,8 @@ use app_error::AppError;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 use crate::collab::queue_redis_ops::{
-  get_pending_meta, remove_all_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite,
-  WritePriority, PENDING_WRITE_META_EXPIRE_SECS,
+  get_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite, WritePriority,
+  PENDING_WRITE_META_EXPIRE_SECS,
 };
 use crate::collab::RedisSortedSet;
 use crate::metrics::CollabMetrics;
@@ -170,7 +170,8 @@ impl StorageQueue {
   #[cfg(debug_assertions)]
   pub async fn clear(&self) -> Result<(), AppError> {
     self.pending_write_set.clear().await?;
-    remove_all_pending_meta(self.connection_manager.clone()).await?;
+    crate::collab::queue_redis_ops::remove_all_pending_meta(self.connection_manager.clone())
+      .await?;
     Ok(())
   }
 

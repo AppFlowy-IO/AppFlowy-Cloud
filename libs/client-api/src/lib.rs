@@ -1,5 +1,6 @@
 mod http;
 mod http_ai;
+mod http_billing;
 mod http_blob;
 mod http_collab;
 mod http_history;

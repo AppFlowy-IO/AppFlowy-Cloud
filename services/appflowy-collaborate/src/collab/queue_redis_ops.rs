@@ -8,6 +8,7 @@ use serde_repr::{Deserialize_repr, Serialize_repr};
 
 pub(crate) const PENDING_WRITE_META_EXPIRE_SECS: u64 = 604800; // 7 days in seconds
 
+#[allow(dead_code)]
 pub(crate) async fn remove_all_pending_meta(
   mut connection_manager: RedisConnectionManager,
 ) -> Result<(), AppError> {

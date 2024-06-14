@@ -790,3 +790,64 @@ pub async fn upsert_workspace_settings(
 
   Ok(())
 }
+
+#[inline]
+pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  new_namespace: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET publish_namespace = $1
+      WHERE workspace_id = $2
+    "#,
+    new_namespace,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
+      workspace_id, new_namespace, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  publisher_uuid: &Uuid,
+  metadata: &serde_json::Value,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_collab (doc_name, published_by, workspace_id, metadata)
+      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
+      ON CONFLICT (workspace_id, doc_name) DO UPDATE
+      SET metadata = $4
+    "#,
+    doc_name,
+    publisher_uuid,
+    workspace_id,
+    metadata
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert or replace publish collab meta, workspace_id: {}, doc_name: {}, publisher_uuid: {}, rows_affected: {}",
+      workspace_id, doc_name, publisher_uuid, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}

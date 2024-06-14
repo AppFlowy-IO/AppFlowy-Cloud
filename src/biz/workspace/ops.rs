@@ -18,12 +18,12 @@ use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
-  insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
-  select_workspace_member, select_workspace_member_list, select_workspace_settings,
-  select_workspace_total_collab_bytes, update_updated_at_of_workspace,
-  update_workspace_invitation_set_status_accepted, upsert_workspace_member,
-  upsert_workspace_member_with_txn, upsert_workspace_settings,
+  insert_or_replace_publish_collab_meta, insert_user_workspace, insert_workspace_invitation,
+  rename_workspace, select_all_user_workspaces, select_user_is_workspace_owner, select_workspace,
+  select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
+  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
+  update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
+  upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
@@ -111,6 +111,38 @@ pub async fn patch_workspace(
     change_workspace_icon(&mut tx, workspace_id, workspace_icon).await?;
   }
   tx.commit().await?;
+  Ok(())
+}
+
+pub async fn update_workspace_namespace(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  new_namespace: &str,
+) -> Result<(), AppError> {
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  check_workspace_namespace(new_namespace).await?;
+  update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
+  Ok(())
+}
+
+pub async fn publish_workspace_collab(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  publisher_uuid: &Uuid,
+  metadata: &serde_json::Value,
+) -> Result<(), AppError> {
+  insert_or_replace_publish_collab_meta(pg_pool, workspace_id, doc_name, publisher_uuid, metadata)
+    .await?;
+  Ok(())
+}
+
+pub async fn publish_workspace_collab_data(
+  _pg_pool: &PgPool,
+  _workspace_id: &Uuid,
+  _view_id: &Uuid,
+) -> Result<(), AppError> {
   Ok(())
 }
 
@@ -453,12 +485,7 @@ pub async fn get_workspace_document_total_bytes(
   user_uuid: &Uuid,
   workspace_id: &Uuid,
 ) -> Result<WorkspaceUsage, AppError> {
-  let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-  if !is_owner {
-    return Err(AppError::UserUnAuthorized(
-      "User is not the owner of the workspace".to_string(),
-    ));
-  }
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
 
   let byte_count = select_workspace_total_collab_bytes(pg_pool, workspace_id).await?;
   Ok(WorkspaceUsage {
@@ -508,5 +535,38 @@ pub async fn update_workspace_settings(
   let mut tx = pg_pool.begin().await?;
   upsert_workspace_settings(&mut tx, workspace_id, workspace_settings).await?;
   tx.commit().await?;
+  Ok(())
+}
+
+async fn check_workspace_owner(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  match select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await? {
+    true => Ok(()),
+    false => Err(AppError::UserUnAuthorized(
+      "User is not the owner of the workspace".to_string(),
+    )),
+  }
+}
+
+async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {
+  // Check len
+  if new_namespace.len() < 8 {
+    return Err(AppError::InvalidRequest(
+      "Namespace must be at least 8 characters long".to_string(),
+    ));
+  }
+
+  // Only contain alphanumeric characters and hyphens
+  for c in new_namespace.chars() {
+    if !c.is_alphanumeric() && c != '-' {
+      return Err(AppError::InvalidRequest(
+        "Namespace must only contain alphanumeric characters and hyphens".to_string(),
+      ));
+    }
+  }
+
   Ok(())
 }

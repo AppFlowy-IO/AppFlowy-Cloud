@@ -129,6 +129,14 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
+      web::resource("/{workspace_id}/publish-namespace")
+        .route(web::put().to(put_publish_namespace_handler))
+    )
+     .service(
+       web::resource("/{workspace_id}/collab/{object_id}/publish")
+         .route(web::post().to(post_publish_collab_handler))
+     )
+    .service(
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
         .route(web::get().to(get_collab_member_list_handler)),
     )
@@ -934,6 +942,43 @@ async fn remove_collab_member_handler(
   biz::collab::ops::delete_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
     .await?;
 
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn put_publish_namespace_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  payload: Json<UpdatePublishNamespace>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let workspace_id = workspace_id.into_inner();
+  let new_namespace = payload.into_inner().new_namespace;
+  biz::workspace::ops::update_workspace_namespace(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    &new_namespace,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn post_publish_collab_handler(
+  path_param: web::Path<(Uuid, String)>,
+  user_uuid: UserUuid,
+  payload: String,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  let metadata = serde_json::Value::from(payload);
+  biz::workspace::ops::publish_workspace_collab(
+    &state.pg_pool,
+    &workspace_id,
+    &doc_name,
+    &user_uuid,
+    &metadata,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

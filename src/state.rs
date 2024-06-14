@@ -18,6 +18,7 @@ use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
 use database::file::bucket_s3_impl::S3BucketStorage;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;

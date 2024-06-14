@@ -11,7 +11,7 @@ use access_control::workspace::WorkspaceAccessControl;
 use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
-use database::file::bucket_s3_impl::BucketClientS3Impl;
+use database::file::bucket_s3_impl::{BucketClientS3Impl, S3BucketStorage};
 use database::file::BucketStorage;
 use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use database::resource_usage::get_all_workspace_blob_metadata;
@@ -43,7 +43,7 @@ use crate::state::GoTrueAdmin;
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  bucket_storage: &Arc<BucketStorage<BucketClientS3Impl>>,
+  bucket_storage: &Arc<S3BucketStorage>,
 ) -> Result<(), AppResponseError> {
   // remove files from s3
 

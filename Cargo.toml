@@ -48,6 +48,8 @@ bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
 rust-s3 = { version = "0.34.0-rc4", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
+aws-sdk-s3 = { version = "1.36.0", features = ["behavior-version-latest"] }
+aws-config = { version = "1.5.1", features = ["behavior-version-latest"] }
 redis = { workspace = true, features = ["json", "tokio-comp", "connection-manager"] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json", "tracing-log"] }

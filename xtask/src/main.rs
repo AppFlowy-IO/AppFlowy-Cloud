@@ -33,14 +33,14 @@ async fn main() -> Result<()> {
     .spawn()
     .context("Failed to start AppFlowy-History process")?;
 
-  let mut appflowy_indexer_cmd = Command::new("cargo")
-    .args([
-      "run",
-      "--manifest-path",
-      "./services/appflowy-indexer/Cargo.toml",
-    ])
-    .spawn()
-    .context("Failed to start AppFlowy-Indexer process")?;
+  // let mut appflowy_indexer_cmd = Command::new("cargo")
+  //   .args([
+  //     "run",
+  //     "--manifest-path",
+  //     "./services/appflowy-indexer/Cargo.toml",
+  //   ])
+  //   .spawn()
+  //   .context("Failed to start AppFlowy-Indexer process")?;
 
   select! {
       status = appflowy_cloud_cmd.wait() => {
@@ -49,9 +49,9 @@ async fn main() -> Result<()> {
       status = appflowy_history_cmd.wait() => {
           handle_process_exit(status?, appflowy_history_bin_name)?;
       },
-      status = appflowy_indexer_cmd.wait() => {
-          handle_process_exit(status?, appflowy_indexer_bin_name)?;
-      },
+      // status = appflowy_indexer_cmd.wait() => {
+      //     handle_process_exit(status?, appflowy_indexer_bin_name)?;
+      // },
   }
 
   Ok(())

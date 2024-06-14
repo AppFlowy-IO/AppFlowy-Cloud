@@ -1,12 +1,13 @@
+use crate::file::s3_client_impl::AwsS3BucketClientImpl;
 use crate::file::{BucketClient, BucketStorage, ResponseBlob};
 use app_error::AppError;
 use async_trait::async_trait;
 
-pub type S3BucketStorage = BucketStorage<BucketClientS3Impl>;
+pub type S3BucketStorage = BucketStorage<AwsS3BucketClientImpl>;
 
 impl S3BucketStorage {
-  pub fn from_s3_bucket(bucket: s3::Bucket, pg_pool: sqlx::PgPool) -> Self {
-    Self::new(BucketClientS3Impl(bucket), pg_pool)
+  pub fn from_bucket_impl(client: AwsS3BucketClientImpl, pg_pool: sqlx::PgPool) -> Self {
+    Self::new(client, pg_pool)
   }
 }
 

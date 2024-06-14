@@ -37,6 +37,9 @@ use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
+use aws_sdk_s3::config::endpoint::Endpoint;
+use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
+use aws_sdk_s3::operation::create_bucket::CreateBucketError;
 use database::file::bucket_s3_impl::S3BucketStorage;
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
@@ -51,6 +54,7 @@ use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::ai::ai_completion_scope;
 use crate::api::search::search_scope;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use tracing::{info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -191,8 +195,14 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   // Bucket storage
   info!("Setting up S3 bucket...");
-  let s3_bucket = get_aws_s3_bucket(&config.s3).await?;
-  let bucket_storage = Arc::new(S3BucketStorage::from_s3_bucket(s3_bucket, pg_pool.clone()));
+  let s3_client = AwsS3BucketClientImpl::new(
+    get_aws_s3_client(&config.s3).await?,
+    config.s3.bucket.clone(),
+  );
+  let bucket_storage = Arc::new(S3BucketStorage::from_bucket_impl(
+    s3_client,
+    pg_pool.clone(),
+  ));
 
   // Gotrue
   info!("Connecting to GoTrue...");
@@ -379,6 +389,58 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
     .await
     .context("failed to get the connection manager")?;
   Ok(manager)
+}
+
+async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {
+  // Parse the region
+  let credentials = Credentials::new(
+    s3_setting.access_key.clone(),
+    s3_setting.secret_key.expose_secret().clone(),
+    None,
+    None,
+    "custom",
+  );
+  let shared_credentials = SharedCredentialsProvider::new(credentials);
+
+  // Configure the AWS SDK
+  let config = if s3_setting.use_minio {
+    aws_sdk_s3::Config::builder()
+      .endpoint_url(&s3_setting.minio_url)
+      .credentials_provider(shared_credentials)
+      .region(Region::new(s3_setting.region.clone()))
+      .build()
+  } else {
+    aws_sdk_s3::Config::builder()
+      .credentials_provider(shared_credentials)
+      .region(Region::new(s3_setting.region.clone()))
+      .build()
+  };
+  let client = aws_sdk_s3::Client::from_conf(config);
+  create_bucket_if_not_exists(&client, &s3_setting.bucket).await?;
+  Ok(client)
+}
+
+async fn create_bucket_if_not_exists(
+  client: &aws_sdk_s3::Client,
+  bucket: &str,
+) -> Result<(), Error> {
+  match client.create_bucket().bucket(bucket).send().await {
+    Ok(_) => Ok(()),
+    Err(err) => {
+      if let Some(service_error) = err.as_service_error() {
+        match service_error {
+          CreateBucketError::BucketAlreadyOwnedByYou(_)
+          | CreateBucketError::BucketAlreadyExists(_) => {
+            info!("Bucket already exists");
+            Ok(())
+          },
+          _ => Err(err.into()),
+        }
+      } else {
+        Ok(())
+      }
+    },
+  }
 }
 
 async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> {

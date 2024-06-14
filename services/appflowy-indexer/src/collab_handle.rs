@@ -178,8 +178,9 @@ impl CollabHandle {
           Err(err) => tracing::error!("failed to decode update event: {}", err),
         }
       }
-      txn.commit();
-    }
+    } else {
+      tracing::warn!("failed to obtain a collab lock");
+    };
     update_stream.ack_messages(&messages).await?;
 
     Ok(())

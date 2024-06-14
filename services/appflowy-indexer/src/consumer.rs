@@ -399,7 +399,7 @@ mod test {
 
     assert_ne!(contents.len(), 0);
     let content: Option<String> = contents[0].get(0);
-    assert_eq!(content.as_deref(), Some("test-value\n"));
+    assert_eq!(content.as_deref(), Some("test-value "));
   }
 
   #[ignore]

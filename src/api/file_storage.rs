@@ -61,10 +61,12 @@ pub fn file_storage_scope() -> Scope {
 async fn create_upload(
   state: web::Data<AppState>,
   req: web::Json<CreateUploadRequest>,
+  content_type: web::Header<ContentType>,
 ) -> Result<JsonAppResponse<CreateUploadResponse>> {
+  let content_type = content_type.into_inner().to_string();
   let resp = state
     .bucket_storage
-    .create_upload(req.into_inner())
+    .create_upload(req.into_inner(), content_type)
     .await
     .map_err(AppResponseError::from)?;
 

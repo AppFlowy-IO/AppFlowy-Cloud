@@ -128,12 +128,14 @@ impl BucketClient for AwsS3BucketClientImpl {
   async fn create_upload(
     &self,
     req: CreateUploadRequest,
+    content_type: String,
   ) -> Result<CreateUploadResponse, AppError> {
     let multipart_upload_res = self
       .client
       .create_multipart_upload()
       .bucket(&self.bucket)
       .key(&req.key)
+      .content_type(content_type)
       .send()
       .await
       .map_err(|err| anyhow!("Failed to create upload: {}", err))?;
@@ -141,19 +143,23 @@ impl BucketClient for AwsS3BucketClientImpl {
     match multipart_upload_res.upload_id {
       None => Err(anyhow!("Failed to create upload: upload_id is None").into()),
       Some(upload_id) => Ok(CreateUploadResponse {
-        key: req.key,
+        file_id: req.key,
         upload_id,
       }),
     }
   }
 
   async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {
+    if req.body.is_empty() {
+      return Err(AppError::InvalidRequest("body is empty".to_string()));
+    }
+
     let body = ByteStream::from(req.body);
     let upload_part_res = self
       .client
       .upload_part()
       .bucket(&self.bucket)
-      .key(&req.key)
+      .key(&req.file_id)
       .upload_id(&req.upload_id)
       .part_number(req.part_number)
       .body(body)
@@ -197,7 +203,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       .client
       .complete_multipart_upload()
       .bucket(&self.bucket)
-      .key(&req.key)
+      .key(&req.file_id)
       .upload_id(&req.upload_id)
       .multipart_upload(completed_multipart_upload)
       .send()

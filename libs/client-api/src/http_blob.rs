@@ -2,6 +2,9 @@ use crate::http::log_request_id;
 use crate::Client;
 use app_error::AppError;
 use bytes::Bytes;
+use database_entity::file_dto::{
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+};
 use futures_util::StreamExt;
 use mime::Mime;
 use reqwest::{header, Method, StatusCode};
@@ -15,6 +18,69 @@ impl Client {
       "{}/api/file_storage/{}/blob/{}",
       self.base_url, workspace_id, file_id
     )
+  }
+
+  pub async fn create_multi_upload(
+    &self,
+    workspace_id: &str,
+    req: CreateUploadRequest,
+    mime: &Mime,
+  ) -> Result<CreateUploadResponse, AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/create_upload",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .header(header::CONTENT_TYPE, mime.to_string())
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<CreateUploadResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn upload_part(
+    &self,
+    workspace_id: &str,
+    req: UploadPartRequest,
+  ) -> Result<UploadPartRequest, AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/upload_part",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<UploadPartRequest>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn complete_upload(
+    &self,
+    workspace_id: &str,
+    req: CompleteUploadRequest,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/blob/complete_upload",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
   #[instrument(level = "info", skip_all)]

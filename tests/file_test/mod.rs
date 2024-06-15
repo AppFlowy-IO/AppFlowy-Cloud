@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::ops::Deref;
 
+mod multiple_part_test;
 mod put_and_get;
 mod usage;
+
 use appflowy_cloud::application::get_aws_s3_client;
 use appflowy_cloud::config::config::S3Setting;
 use database::file::s3_client_impl::AwsS3BucketClientImpl;

@@ -33,8 +33,11 @@ pub trait BucketClient {
   where
     P: AsRef<str> + Send;
 
-  async fn create_upload(&self, req: CreateUploadRequest)
-    -> Result<CreateUploadResponse, AppError>;
+  async fn create_upload(
+    &self,
+    req: CreateUploadRequest,
+    content_type: String,
+  ) -> Result<CreateUploadResponse, AppError>;
   async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError>;
   async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError>;
 }
@@ -110,8 +113,9 @@ where
   pub async fn create_upload(
     &self,
     req: CreateUploadRequest,
+    content_type: String,
   ) -> Result<CreateUploadResponse, AppError> {
-    self.client.create_upload(req).await
+    self.client.create_upload(req, content_type).await
   }
 
   pub async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {

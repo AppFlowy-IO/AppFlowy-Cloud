@@ -7,13 +7,13 @@ pub struct CreateUploadRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateUploadResponse {
-  pub key: String,
+  pub file_id: String,
   pub upload_id: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct UploadPartRequest {
-  pub key: String,
+  pub file_id: String,
   pub upload_id: String,
   pub part_number: i32,
   pub body: Vec<u8>,
@@ -27,7 +27,7 @@ pub struct UploadPartResponse {
 
 #[derive(Serialize, Deserialize)]
 pub struct CompleteUploadRequest {
-  pub key: String,
+  pub file_id: String,
   pub upload_id: String,
   pub parts: Vec<CompletedPartRequest>,
 }
@@ -40,7 +40,7 @@ pub struct CompletedPartRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct CompleteUploadResponse {
-  pub key: String,
+  pub file_id: String,
   pub upload_id: String,
   pub parts: Vec<CompletedPartRequest>,
 }

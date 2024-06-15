@@ -129,6 +129,14 @@ pub fn workspace_scope() -> Scope {
         .route(web::delete().to(remove_collab_member_handler)),
     )
     .service(
+      web::resource("/published/{publish_namespace}/{doc_name}")
+        .route(web::get().to(get_published_collab_handler))
+    )
+    .service(
+      web::resource("/published/{publish_namespace}/{doc_name}/blob")
+        .route(web::get().to(get_published_collab_blob_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
     )
@@ -970,6 +978,34 @@ async fn put_publish_namespace_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
+async fn get_published_collab_handler(
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<serde_json::Value>>> {
+  let (workspace_namespace, doc_name) = path_param.into_inner();
+  let metadata = biz::workspace::ops::get_published_collab_using_publish_namespace(
+    &state.pg_pool,
+    &workspace_namespace,
+    &doc_name,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok().with_data(metadata)))
+}
+
+async fn get_published_collab_blob_handler(
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Vec<u8>> {
+  let (publish_namespace, doc_name) = path_param.into_inner();
+  let collab_data = biz::workspace::ops::get_published_collab_blob_with_publish_namespace(
+    &state.pg_pool,
+    &publish_namespace,
+    &doc_name,
+  )
+  .await?;
+  Ok(collab_data)
+}
+
 async fn put_publish_collab_handler(
   path_param: web::Path<(Uuid, String)>,
   user_uuid: UserUuid,
@@ -995,7 +1031,7 @@ async fn get_publish_collab_handler(
 ) -> Result<Json<AppResponse<serde_json::Value>>> {
   let (workspace_id, doc_name) = path_param.into_inner();
   let metadata =
-    biz::workspace::ops::get_publish_collab(&state.pg_pool, &workspace_id, &doc_name).await?;
+    biz::workspace::ops::get_published_collab(&state.pg_pool, &workspace_id, &doc_name).await?;
   Ok(Json(AppResponse::Ok().with_data(metadata)))
 }
 

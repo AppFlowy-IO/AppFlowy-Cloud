@@ -145,6 +145,32 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
+pub async fn select_user_is_collab_publisher(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_uuid: &Uuid,
+  doc_name: &str,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_published_collab
+        WHERE workspace_id = $1
+            AND doc_name = $2
+            AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
+      );
+    "#,
+    workspace_uuid,
+    doc_name,
+    user_uuid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
 #[inline]
 pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
   exectuor: E,
@@ -846,6 +872,35 @@ pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database 
     tracing::error!(
       "Failed to insert or replace publish collab meta, workspace_id: {}, doc_name: {}, publisher_uuid: {}, rows_affected: {}",
       workspace_id, doc_name, publisher_uuid, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      DELETE FROM af_published_collab
+      WHERE workspace_id = $1 AND doc_name = $2
+    "#,
+    workspace_id,
+    doc_name,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete published collab, workspace_id: {}, doc_name: {}, rows_affected: {}",
+      workspace_id,
+      doc_name,
+      res.rows_affected()
     );
   }
 

@@ -133,7 +133,12 @@ pub fn workspace_scope() -> Scope {
         .route(web::put().to(put_publish_namespace_handler))
     )
     .service(
-      web::resource("/{workspace_id}/collab/{object_id}/publish")
+      web::resource("/{workspace_id}/publish/{doc_name}/blob")
+        .route(web::put().to(put_publish_collab_blob_handler))
+        .route(web::get().to(get_publish_collab_blob_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/publish/{doc_name}")
         .route(web::put().to(put_publish_collab_handler))
         .route(web::delete().to(delete_publish_collab_handler))
     )
@@ -981,6 +986,35 @@ async fn put_publish_collab_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn put_publish_collab_blob_handler(
+  path_param: web::Path<(Uuid, String)>,
+  user_uuid: UserUuid,
+  collab_data: Bytes,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  biz::workspace::ops::put_published_collab_blob(
+    &state.pg_pool,
+    &workspace_id,
+    &doc_name,
+    &user_uuid,
+    &collab_data,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_publish_collab_blob_handler(
+  path_param: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+) -> Result<Vec<u8>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  let collab_data =
+    biz::workspace::ops::get_published_collab_blob(&state.pg_pool, &workspace_id, &doc_name)
+      .await?;
+  Ok(collab_data)
 }
 
 async fn delete_publish_collab_handler(

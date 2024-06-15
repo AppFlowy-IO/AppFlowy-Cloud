@@ -906,3 +906,54 @@ pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
 
   Ok(())
 }
+
+#[inline]
+pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  blob: &[u8],
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_published_collab
+      SET blob = $1
+      WHERE workspace_id = $2 AND doc_name = $3
+    "#,
+    blob,
+    workspace_id,
+    doc_name,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+        "Failed to insert or replace published collab blob, workspace_id: {}, doc_name: {}, rows_affected: {}",
+        workspace_id, doc_name, res.rows_affected()
+      );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+) -> Result<Vec<u8>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT blob
+      FROM af_published_collab
+      WHERE workspace_id = $1 AND doc_name = $2
+    "#,
+    workspace_id,
+    doc_name,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}

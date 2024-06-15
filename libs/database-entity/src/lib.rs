@@ -1,3 +1,3 @@
 pub mod dto;
-mod file_dto;
+pub mod file_dto;
 mod util;

@@ -6,6 +6,10 @@ use app_error::AppError;
 use async_trait::async_trait;
 use sqlx::PgPool;
 
+use database_entity::file_dto::{
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  UploadPartResponse,
+};
 use tracing::{instrument, warn};
 use uuid::Uuid;
 
@@ -28,6 +32,11 @@ pub trait BucketClient {
   async fn get_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
   where
     P: AsRef<str> + Send;
+
+  async fn create_upload(&self, req: CreateUploadRequest)
+    -> Result<CreateUploadResponse, AppError>;
+  async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError>;
+  async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError>;
 }
 
 pub struct BucketStorage<C> {
@@ -96,5 +105,20 @@ where
     let obj_key = format!("{}/{}", workspace_id, file_id);
     let blob = self.client.get_blob(obj_key).await?.to_blob();
     Ok(blob)
+  }
+
+  pub async fn create_upload(
+    &self,
+    req: CreateUploadRequest,
+  ) -> Result<CreateUploadResponse, AppError> {
+    self.client.create_upload(req).await
+  }
+
+  pub async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {
+    self.client.upload_part(req).await
+  }
+
+  pub async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError> {
+    self.client.complete_upload(req).await
   }
 }

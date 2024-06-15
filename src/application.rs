@@ -393,7 +393,7 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
   Ok(manager)
 }
 
-async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {
+pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {
   trace!("Connecting to S3 with setting: {:?}", &s3_setting);
   let credentials = Credentials::new(
     s3_setting.access_key.clone(),

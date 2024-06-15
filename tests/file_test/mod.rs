@@ -1,8 +1,13 @@
 use std::borrow::Cow;
+use std::ops::Deref;
 
 mod put_and_get;
 mod usage;
+use appflowy_cloud::application::get_aws_s3_client;
+use appflowy_cloud::config::config::S3Setting;
+use database::file::s3_client_impl::AwsS3BucketClientImpl;
 use lazy_static::lazy_static;
+use secrecy::Secret;
 use tracing::warn;
 
 lazy_static! {
@@ -16,58 +21,46 @@ lazy_static! {
     get_env_var("LOCALHOST_MINIO_BUCKET_NAME", "appflowy");
 }
 
-pub struct TestBucket(pub s3::Bucket);
+pub struct TestBucket(pub AwsS3BucketClientImpl);
+
+impl Deref for TestBucket {
+  type Target = AwsS3BucketClientImpl;
+
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
 
 impl TestBucket {
   pub async fn new() -> Self {
-    let region = s3::Region::Custom {
-      region: "".to_owned(),
-      endpoint: LOCALHOST_MINIO_URL.to_string(),
+    let setting = S3Setting {
+      use_minio: true,
+      minio_url: LOCALHOST_MINIO_URL.to_string(),
+      access_key: LOCALHOST_MINIO_ACCESS_KEY.to_string(),
+      secret_key: Secret::new(LOCALHOST_MINIO_SECRET_KEY.to_string()),
+      bucket: LOCALHOST_MINIO_BUCKET_NAME.to_string(),
+      region: "".to_string(),
     };
-
-    let cred = s3::creds::Credentials {
-      access_key: Some(LOCALHOST_MINIO_ACCESS_KEY.to_string()),
-      secret_key: Some(LOCALHOST_MINIO_SECRET_KEY.to_string()),
-      security_token: None,
-      session_token: None,
-      expiration: None,
-    };
-
-    match s3::Bucket::create_with_path_style(
-      &LOCALHOST_MINIO_BUCKET_NAME,
-      region.clone(),
-      cred.clone(),
-      s3::BucketConfiguration::default(),
-    )
-    .await
-    {
-      Ok(_) => {},
-      Err(e) => match e {
-        s3::error::S3Error::HttpFailWithBody(409, _) => {},
-        _ => panic!("could not create bucket: {}", e),
-      },
-    }
-
-    Self(
-      s3::Bucket::new(&LOCALHOST_MINIO_BUCKET_NAME, region.clone(), cred.clone())
-        .unwrap()
-        .with_path_style(),
-    )
+    let client = AwsS3BucketClientImpl::new(
+      get_aws_s3_client(&setting).await.unwrap(),
+      setting.bucket.clone(),
+    );
+    Self(client)
   }
 
-  pub async fn get_object(&self, workspace_id: &str, file_id: &str) -> Option<bytes::Bytes> {
-    let object_key = format!("{}/{}", workspace_id, file_id);
-    match self.0.get_object(&object_key).await {
-      Ok(resp) => {
-        assert!(resp.status_code() == 200);
-        Some(resp.bytes().to_owned())
-      },
-      Err(err) => match err {
-        s3::error::S3Error::HttpFailWithBody(404, _) => None,
-        _ => panic!("could not get object: {}", err),
-      },
-    }
-  }
+  // pub async fn get_object(&self, workspace_id: &str, file_id: &str) -> Option<bytes::Bytes> {
+  //   let object_key = format!("{}/{}", workspace_id, file_id);
+  //   match self.0.get_object(&object_key).await {
+  //     Ok(resp) => {
+  //       assert!(resp.status_code() == 200);
+  //       Some(resp.bytes().to_owned())
+  //     },
+  //     Err(err) => match err {
+  //       s3::error::S3Error::HttpFailWithBody(404, _) => None,
+  //       _ => panic!("could not get object: {}", err),
+  //     },
+  //   }
+  // }
 }
 
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {

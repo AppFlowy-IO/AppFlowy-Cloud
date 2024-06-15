@@ -12,6 +12,10 @@ use actix_web::{HttpResponse, Result};
 use app_error::AppError;
 use chrono::DateTime;
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
+use database_entity::file_dto::{
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  UploadPartResponse,
+};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
@@ -42,6 +46,55 @@ pub fn file_storage_scope() -> Scope {
       web::resource("/{workspace_id}/blobs")
         .route(web::get().to(get_all_workspace_blob_metadata_handler)),
     )
+    .service(
+      web::resource("/{workspace_id}/blob/create_upload").route(web::post().to(create_upload)),
+    )
+    .service(
+      web::resource("/{workspace_id}/blob/upload_part").route(web::post().to(upload_part_handler)),
+    )
+    .service(
+      web::resource("/{workspace_id}/blob/complete_upload")
+        .route(web::post().to(complete_upload_handler)),
+    )
+}
+
+async fn create_upload(
+  state: web::Data<AppState>,
+  req: web::Json<CreateUploadRequest>,
+) -> Result<JsonAppResponse<CreateUploadResponse>> {
+  let resp = state
+    .bucket_storage
+    .create_upload(req.into_inner())
+    .await
+    .map_err(AppResponseError::from)?;
+
+  Ok(AppResponse::Ok().with_data(resp).into())
+}
+
+async fn upload_part_handler(
+  state: web::Data<AppState>,
+  req: web::Json<UploadPartRequest>,
+) -> Result<JsonAppResponse<UploadPartResponse>> {
+  let resp = state
+    .bucket_storage
+    .upload_part(req.into_inner())
+    .await
+    .map_err(AppResponseError::from)?;
+
+  Ok(AppResponse::Ok().with_data(resp).into())
+}
+
+async fn complete_upload_handler(
+  state: web::Data<AppState>,
+  req: web::Json<CompleteUploadRequest>,
+) -> Result<JsonAppResponse<()>> {
+  state
+    .bucket_storage
+    .complete_upload(req.into_inner())
+    .await
+    .map_err(AppResponseError::from)?;
+
+  Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip(state, payload), err)]

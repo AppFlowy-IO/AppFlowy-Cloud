@@ -20,12 +20,13 @@ use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_published_collab, delete_workspace_members,
   get_invitation_by_id, insert_or_replace_publish_collab_meta,
   insert_or_replace_published_collab_blob, insert_user_workspace, insert_workspace_invitation,
-  rename_workspace, select_all_user_workspaces, select_published_collab_blob,
-  select_user_is_collab_publisher, select_user_is_workspace_owner, select_workspace,
-  select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
-  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
-  update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
-  upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
+  rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
+  select_published_collab_blob, select_user_is_collab_publisher, select_user_is_workspace_owner,
+  select_workspace, select_workspace_invitations_for_user, select_workspace_member,
+  select_workspace_member_list, select_workspace_settings, select_workspace_total_collab_bytes,
+  update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
+  update_workspace_publish_namespace, upsert_workspace_member, upsert_workspace_member_with_txn,
+  upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
@@ -128,7 +129,7 @@ pub async fn update_workspace_namespace(
   Ok(())
 }
 
-pub async fn publish_workspace_collab(
+pub async fn publish_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   doc_name: &str,
@@ -150,6 +151,15 @@ pub async fn put_published_collab_blob(
   check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
   insert_or_replace_published_collab_blob(pg_pool, workspace_id, doc_name, collab_data).await?;
   Ok(())
+}
+
+pub async fn get_publish_collab(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  doc_name: &str,
+) -> Result<serde_json::Value, AppError> {
+  let metadata = select_publish_collab_meta(pg_pool, workspace_id, doc_name).await?;
+  Ok(metadata)
 }
 
 pub async fn get_published_collab_blob(

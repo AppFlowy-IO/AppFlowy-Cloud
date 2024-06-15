@@ -27,3 +27,4 @@ EXECUTE FUNCTION update_updated_at();
 
 -- every workspace have a prefix for published view
 ALTER TABLE af_workspace ADD COLUMN publish_namespace TEXT UNIQUE;
+CREATE INDEX IF NOT EXISTS publish_namespace_idx ON af_workspace(publish_namespace);

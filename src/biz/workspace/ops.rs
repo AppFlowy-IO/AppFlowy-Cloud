@@ -22,11 +22,11 @@ use database::workspace::{
   insert_or_replace_published_collab_blob, insert_user_workspace, insert_workspace_invitation,
   rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
   select_published_collab_blob, select_user_is_collab_publisher, select_user_is_workspace_owner,
-  select_workspace, select_workspace_invitations_for_user, select_workspace_member,
-  select_workspace_member_list, select_workspace_settings, select_workspace_total_collab_bytes,
-  update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
-  update_workspace_publish_namespace, upsert_workspace_member, upsert_workspace_member_with_txn,
-  upsert_workspace_settings,
+  select_workspace, select_workspace_id_by_namespace, select_workspace_invitations_for_user,
+  select_workspace_member, select_workspace_member_list, select_workspace_settings,
+  select_workspace_total_collab_bytes, update_updated_at_of_workspace,
+  update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
+  upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
@@ -153,7 +153,7 @@ pub async fn put_published_collab_blob(
   Ok(())
 }
 
-pub async fn get_publish_collab(
+pub async fn get_published_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   doc_name: &str,
@@ -162,12 +162,30 @@ pub async fn get_publish_collab(
   Ok(metadata)
 }
 
+pub async fn get_published_collab_using_publish_namespace(
+  pg_pool: &PgPool,
+  publish_namespace: &str,
+  doc_name: &str,
+) -> Result<serde_json::Value, AppError> {
+  let workspace_id = select_workspace_id_by_namespace(pg_pool, publish_namespace).await?;
+  get_published_collab(pg_pool, &workspace_id, doc_name).await
+}
+
 pub async fn get_published_collab_blob(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
   doc_name: &str,
 ) -> Result<Vec<u8>, AppError> {
   select_published_collab_blob(pg_pool, workspace_id, doc_name).await
+}
+
+pub async fn get_published_collab_blob_with_publish_namespace(
+  pg_pool: &PgPool,
+  publish_namespace: &str,
+  doc_name: &str,
+) -> Result<Vec<u8>, AppError> {
+  let workspace_id = select_workspace_id_by_namespace(pg_pool, publish_namespace).await?;
+  select_published_collab_blob(pg_pool, &workspace_id, doc_name).await
 }
 
 pub async fn delete_published_workspace_collab(

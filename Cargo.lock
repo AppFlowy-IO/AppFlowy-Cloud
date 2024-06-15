@@ -648,7 +648,6 @@ dependencies = [
  "rcgen",
  "redis 0.25.2",
  "reqwest 0.11.27",
- "rust-s3",
  "scraper",
  "secrecy",
  "semver",
@@ -982,11 +981,9 @@ dependencies = [
  "http 0.2.11",
  "log",
  "native-tls",
- "rustls 0.21.12",
  "serde",
  "serde_json",
  "url",
- "webpki-roots 0.25.3",
 ]
 
 [[package]]
@@ -2655,7 +2652,6 @@ dependencies = [
  "futures-util",
  "pgvector",
  "redis 0.25.2",
- "rust-s3",
  "rust_decimal",
  "serde",
  "serde_json",

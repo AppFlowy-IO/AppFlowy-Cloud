@@ -19,6 +19,7 @@ use crate::middleware::request_id::RequestIdMiddleware;
 use crate::self_signed::create_self_signed_certificate;
 use crate::state::{AppMetrics, AppState, GoTrueAdmin, UserCache};
 use actix::Supervisor;
+
 use actix_identity::IdentityMiddleware;
 use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
@@ -37,16 +38,17 @@ use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
-use aws_sdk_s3::config::endpoint::Endpoint;
+
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
-use database::file::bucket_s3_impl::S3BucketStorage;
+use aws_sdk_s3::types::{BucketInfo, BucketType, CreateBucketConfiguration};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
 use snowflake::Snowflake;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::net::TcpListener;
+
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
@@ -54,8 +56,8 @@ use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::ai::ai_completion_scope;
 use crate::api::search::search_scope;
-use database::file::s3_client_impl::AwsS3BucketClientImpl;
-use tracing::{info, warn};
+use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
+use tracing::{error, info, trace, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
@@ -392,7 +394,7 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
 }
 
 async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {
-  // Parse the region
+  trace!("Connecting to S3 with setting: {:?}", &s3_setting);
   let credentials = Credentials::new(
     s3_setting.access_key.clone(),
     s3_setting.secret_key.expose_secret().clone(),
@@ -403,17 +405,14 @@ async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client,
   let shared_credentials = SharedCredentialsProvider::new(credentials);
 
   // Configure the AWS SDK
+  let config_builder = aws_sdk_s3::Config::builder()
+    .credentials_provider(shared_credentials)
+    .force_path_style(true)
+    .region(Region::new(s3_setting.region.clone()));
   let config = if s3_setting.use_minio {
-    aws_sdk_s3::Config::builder()
-      .endpoint_url(&s3_setting.minio_url)
-      .credentials_provider(shared_credentials)
-      .region(Region::new(s3_setting.region.clone()))
-      .build()
+    config_builder.endpoint_url(&s3_setting.minio_url).build()
   } else {
-    aws_sdk_s3::Config::builder()
-      .credentials_provider(shared_credentials)
-      .region(Region::new(s3_setting.region.clone()))
-      .build()
+    config_builder.build()
   };
   let client = aws_sdk_s3::Client::from_conf(config);
   create_bucket_if_not_exists(&client, &s3_setting.bucket).await?;
@@ -424,8 +423,21 @@ async fn create_bucket_if_not_exists(
   client: &aws_sdk_s3::Client,
   bucket: &str,
 ) -> Result<(), Error> {
-  match client.create_bucket().bucket(bucket).send().await {
-    Ok(_) => Ok(()),
+  let bucket_cfg = CreateBucketConfiguration::builder()
+    .bucket(BucketInfo::builder().r#type(BucketType::Directory).build())
+    .build();
+
+  match client
+    .create_bucket()
+    .create_bucket_configuration(bucket_cfg)
+    .bucket(bucket)
+    .send()
+    .await
+  {
+    Ok(_) => {
+      info!("bucket created successfully: {}", bucket);
+      Ok(())
+    },
     Err(err) => {
       if let Some(service_error) = err.as_service_error() {
         match service_error {
@@ -437,51 +449,11 @@ async fn create_bucket_if_not_exists(
           _ => Err(err.into()),
         }
       } else {
+        error!("Failed to create bucket: {:?}", err);
         Ok(())
       }
     },
   }
-}
-
-async fn get_aws_s3_bucket(s3_setting: &S3Setting) -> Result<s3::Bucket, Error> {
-  info!("Connecting to S3 bucket with setting: {:?}", &s3_setting);
-  let region = {
-    match s3_setting.use_minio {
-      true => s3::Region::Custom {
-        region: s3_setting.region.to_owned(),
-        endpoint: s3_setting.minio_url.to_owned(),
-      },
-      false => s3_setting
-        .region
-        .parse::<s3::Region>()
-        .context("failed to parser s3 setting")?,
-    }
-  };
-
-  let cred = s3::creds::Credentials {
-    access_key: Some(s3_setting.access_key.to_owned()),
-    secret_key: Some(s3_setting.secret_key.expose_secret().to_owned()),
-    security_token: None,
-    session_token: None,
-    expiration: None,
-  };
-
-  match s3::Bucket::create_with_path_style(
-    &s3_setting.bucket,
-    region.clone(),
-    cred.clone(),
-    s3::BucketConfiguration::default(),
-  )
-  .await
-  {
-    Ok(_) => Ok(()),
-    Err(e) => match e {
-      s3::error::S3Error::HttpFailWithBody(409, _) => Ok(()), // Bucket already exists
-      _ => Err(e),
-    },
-  }?;
-
-  Ok(s3::Bucket::new(&s3_setting.bucket, region.clone(), cred.clone())?.with_path_style())
 }
 
 async fn get_connection_pool(setting: &DatabaseSetting) -> Result<PgPool, Error> {

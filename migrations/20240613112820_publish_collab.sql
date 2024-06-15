@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS af_published_collab (
     published_by BIGINT NOT NULL REFERENCES af_user(uid) ON DELETE CASCADE,
     workspace_id UUID   NOT NULL REFERENCES af_workspace(workspace_id) ON DELETE CASCADE,
     metadata     JSONB  NOT NULL,
+    blob         BYTEA  NOT NULL DEFAULT '',
     created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 

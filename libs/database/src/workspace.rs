@@ -879,6 +879,28 @@ pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database 
 }
 
 #[inline]
+pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+) -> Result<serde_json::Value, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+    SELECT metadata
+    FROM af_published_collab
+    WHERE workspace_id = $1
+      AND doc_name = $2
+    "#,
+    workspace_id,
+    doc_name,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+#[inline]
 pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,

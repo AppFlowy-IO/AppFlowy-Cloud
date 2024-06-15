@@ -140,6 +140,7 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/publish/{doc_name}")
         .route(web::put().to(put_publish_collab_handler))
+        .route(web::get().to(get_publish_collab_handler))
         .route(web::delete().to(delete_publish_collab_handler))
     )
     .service(
@@ -977,7 +978,7 @@ async fn put_publish_collab_handler(
 ) -> Result<Json<AppResponse<()>>> {
   let (workspace_id, doc_name) = path_param.into_inner();
   let metadata = serde_json::Value::from(payload);
-  biz::workspace::ops::publish_workspace_collab(
+  biz::workspace::ops::publish_collab(
     &state.pg_pool,
     &workspace_id,
     &doc_name,
@@ -986,6 +987,16 @@ async fn put_publish_collab_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_publish_collab_handler(
+  path_param: web::Path<(Uuid, String)>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<serde_json::Value>>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  let metadata =
+    biz::workspace::ops::get_publish_collab(&state.pg_pool, &workspace_id, &doc_name).await?;
+  Ok(Json(AppResponse::Ok().with_data(metadata)))
 }
 
 async fn put_publish_collab_blob_handler(

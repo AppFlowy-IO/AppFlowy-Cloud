@@ -6,9 +6,9 @@ use aws_sdk_s3::types::CompletedPart;
 use bytes::Bytes;
 use client_api::ChunkedBytes;
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
-use database::file::{BucketClient, ResponseBlob};
+use database::file::{BlobKey, BucketClient, ResponseBlob};
 use database_entity::file_dto::{
-  CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, UploadPartRequest,
+  CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, UploadPartData,
 };
 use uuid::Uuid;
 
@@ -41,13 +41,11 @@ async fn multiple_part_put_and_get_test() {
     let resp = c1
       .upload_part(
         &workspace_id,
-        UploadPartRequest {
-          file_id: file_id.clone(),
-          parent_dir: parent_dir.clone(),
-          upload_id: upload.upload_id.clone(),
-          part_number: index as i32 + 1,
-          body: next.to_vec(),
-        },
+        &parent_dir,
+        &file_id,
+        &upload.upload_id,
+        index as i32 + 1,
+        next.to_vec(),
       )
       .await
       .unwrap();
@@ -110,13 +108,11 @@ async fn single_part_put_and_get_test() {
     let resp = c1
       .upload_part(
         &workspace_id,
-        UploadPartRequest {
-          file_id: file_id.clone(),
-          parent_dir: workspace_id.clone(),
-          upload_id: upload.upload_id.clone(),
-          part_number: index as i32 + 1,
-          body: next.to_vec(),
-        },
+        &workspace_id,
+        &file_id,
+        &upload.upload_id,
+        index as i32 + 1,
+        next.to_vec(),
       )
       .await
       .unwrap();
@@ -167,16 +163,7 @@ async fn empty_part_upload_test() {
     .unwrap();
 
   let result = c1
-    .upload_part(
-      &workspace_id,
-      UploadPartRequest {
-        file_id: file_id.clone(),
-        parent_dir: workspace_id.clone(),
-        upload_id: upload.upload_id.clone(),
-        part_number: 1,
-        body: Vec::new(),
-      },
-    )
+    .upload_part(&workspace_id, "", &file_id, &upload.upload_id, 1, vec![])
     .await
     .unwrap_err();
   assert_eq!(result.code, ErrorCode::InvalidRequest)
@@ -219,16 +206,17 @@ async fn perform_upload_test(
   let chunk_size = 5 * 1024 * 1024; // 5 MB
   let file_id = Uuid::new_v4().to_string();
   let workspace_id = Uuid::new_v4();
+  let parent_dir = workspace_id.to_string();
 
   let req = CreateUploadRequest {
     file_id: file_id.clone(),
-    parent_dir: "".to_string(),
+    parent_dir: parent_dir.clone(),
     content_type: "text".to_string(),
   };
 
   let key = BlobPathV1 {
     workspace_id,
-    parent_dir: "".to_string(),
+    parent_dir: parent_dir.clone(),
     file_id,
   };
   let upload = test_bucket.create_upload(key, req).await.unwrap();
@@ -253,16 +241,15 @@ async fn perform_upload_test(
     let chunk = &blob[start..end];
     let part_number = (chunk_index + 1) as i32;
 
-    let req = UploadPartRequest {
+    let req = UploadPartData {
       file_id: upload.file_id.clone(),
-      parent_dir: "".to_string(),
       upload_id: upload.upload_id.clone(),
       part_number,
       body: chunk.to_vec(),
     };
     let key = BlobPathV1 {
       workspace_id,
-      parent_dir: "".to_string(),
+      parent_dir: parent_dir.clone(),
       file_id: upload.file_id.clone(),
     };
     let resp = test_bucket.upload_part(&key, req).await.unwrap();
@@ -277,7 +264,7 @@ async fn perform_upload_test(
 
   let complete_req = CompleteUploadRequest {
     file_id: upload.file_id.clone(),
-    parent_dir: "".to_string(),
+    parent_dir: parent_dir.clone(),
     upload_id: upload.upload_id.clone(),
     parts: completed_parts
       .into_iter()
@@ -287,9 +274,10 @@ async fn perform_upload_test(
       })
       .collect(),
   };
+
   let key = BlobPathV1 {
     workspace_id,
-    parent_dir: "".to_string(),
+    parent_dir: parent_dir.clone(),
     file_id: upload.file_id.clone(),
   };
   test_bucket
@@ -298,7 +286,7 @@ async fn perform_upload_test(
     .unwrap();
 
   // Verify the upload
-  let object = test_bucket.get_blob(&upload.file_id).await.unwrap();
+  let object = test_bucket.get_blob(&key.object_key()).await.unwrap();
   assert_eq!(object.len(), file_size, "Failed for {}", description);
   assert_eq!(object.to_blob(), blob, "Failed for {}", description);
 }

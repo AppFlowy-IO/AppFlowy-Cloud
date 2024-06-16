@@ -5,7 +5,7 @@ use crate::resource_usage::{
 use app_error::AppError;
 use async_trait::async_trait;
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
   UploadPartResponse,
 };
 use sqlx::PgPool;
@@ -36,7 +36,7 @@ pub trait BucketClient {
   async fn upload_part(
     &self,
     key: &impl BlobKey,
-    req: UploadPartRequest,
+    req: UploadPartData,
   ) -> Result<UploadPartResponse, AppError>;
   async fn complete_upload(
     &self,
@@ -137,7 +137,7 @@ where
   pub async fn upload_part(
     &self,
     key: impl BlobKey,
-    req: UploadPartRequest,
+    req: UploadPartData,
   ) -> Result<UploadPartResponse, AppError> {
     self.client.upload_part(&key, req).await
   }

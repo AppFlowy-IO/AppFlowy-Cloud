@@ -14,7 +14,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
 use aws_sdk_s3::Client;
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
   UploadPartResponse,
 };
 
@@ -189,7 +189,7 @@ impl BucketClient for AwsS3BucketClientImpl {
   async fn upload_part(
     &self,
     key: &impl BlobKey,
-    req: UploadPartRequest,
+    req: UploadPartData,
   ) -> Result<UploadPartResponse, AppError> {
     if req.body.is_empty() {
       return Err(AppError::InvalidRequest("body is empty".to_string()));

@@ -25,15 +25,14 @@ pub struct CreateUploadResponse {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct UploadPartRequest {
+pub struct UploadPartData {
   pub file_id: String,
-  pub parent_dir: String,
   pub upload_id: String,
   pub part_number: i32,
   pub body: Vec<u8>,
 }
 
-impl Display for UploadPartRequest {
+impl Display for UploadPartData {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(
       f,

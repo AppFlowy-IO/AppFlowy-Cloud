@@ -14,7 +14,7 @@ use chrono::DateTime;
 use database::file::BlobKey;
 use database::resource_usage::{get_all_workspace_blob_metadata, get_workspace_usage_size};
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartData,
   UploadPartResponse,
 };
 
@@ -51,7 +51,7 @@ pub fn file_storage_scope() -> Scope {
     )
     .service(web::resource("/{workspace_id}/create_upload").route(web::post().to(create_upload)))
     .service(
-      web::resource("/{workspace_id}/upload_part/{file_id}/{upload_id}/{part_num}")
+      web::resource("/{workspace_id}/upload_part/{parent_dir}/{file_id}/{upload_id}/{part_num}")
         .route(web::put().to(upload_part_handler)),
     )
     .service(
@@ -92,8 +92,8 @@ async fn create_upload(
 
 #[derive(Deserialize)]
 struct UploadPartPath {
-  #[allow(unused)]
   workspace_id: Uuid,
+  parent_dir: String,
   file_id: String,
   upload_id: String,
   part_num: i32,
@@ -123,9 +123,8 @@ async fn upload_part_handler(
       .into(),
     );
   }
-  let req = UploadPartRequest {
-    file_id: path_params.file_id,
-    parent_dir: path_params.workspace_id.to_string(),
+  let data = UploadPartData {
+    file_id: path_params.file_id.clone(),
     upload_id: path_params.upload_id,
     part_number: path_params.part_num,
     body: content,
@@ -133,13 +132,13 @@ async fn upload_part_handler(
 
   let key = BlobPathV1 {
     workspace_id: path_params.workspace_id,
-    parent_dir: req.parent_dir.clone(),
-    file_id: req.file_id.clone(),
+    parent_dir: path_params.parent_dir,
+    file_id: path_params.file_id,
   };
 
   let resp = state
     .bucket_storage
-    .upload_part(key, req)
+    .upload_part(key, data)
     .await
     .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().with_data(resp).into())

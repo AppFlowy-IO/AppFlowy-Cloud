@@ -3,9 +3,7 @@ use app_error::ErrorCode;
 use bytes::Bytes;
 use client_api::ChunkedBytes;
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
-use database_entity::file_dto::{
-  CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, UploadPartRequest,
-};
+use database_entity::file_dto::{CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -27,7 +25,7 @@ async fn delete_dir_test() {
 async fn delete_dir_test2() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
-  let dir = workspace_id.clone();
+  let parent_dir = workspace_id.clone();
   let mime = mime::TEXT_PLAIN_UTF_8;
   let mut file_ids = vec![];
 
@@ -40,7 +38,7 @@ async fn delete_dir_test2() {
         &workspace_id,
         CreateUploadRequest {
           file_id: file_id.clone(),
-          parent_dir: dir.clone(),
+          parent_dir: parent_dir.clone(),
           content_type: mime.to_string(),
         },
       )
@@ -54,13 +52,11 @@ async fn delete_dir_test2() {
       let resp = c1
         .upload_part(
           &workspace_id,
-          UploadPartRequest {
-            file_id: file_id.clone(),
-            parent_dir: dir.clone(),
-            upload_id: upload.upload_id.clone(),
-            part_number: index as i32 + 1,
-            body: next.to_vec(),
-          },
+          &parent_dir,
+          &file_id,
+          &upload.upload_id,
+          index as i32 + 1,
+          next.to_vec(),
         )
         .await
         .unwrap();
@@ -73,14 +69,14 @@ async fn delete_dir_test2() {
 
     let req = CompleteUploadRequest {
       file_id: file_id.clone(),
-      parent_dir: dir.clone(),
+      parent_dir: parent_dir.clone(),
       upload_id: upload.upload_id,
       parts: completed_parts,
     };
     c1.complete_upload(&workspace_id, req).await.unwrap();
 
     let blob = c1
-      .get_blob_v1(&workspace_id, &dir, &file_id)
+      .get_blob_v1(&workspace_id, &parent_dir, &file_id)
       .await
       .unwrap()
       .1;
@@ -91,7 +87,7 @@ async fn delete_dir_test2() {
 
   for file_id in file_ids {
     let error = c1
-      .get_blob_v1(&workspace_id, &dir, &file_id)
+      .get_blob_v1(&workspace_id, &parent_dir, &file_id)
       .await
       .unwrap_err();
     assert_eq!(error.code, ErrorCode::RecordNotFound);

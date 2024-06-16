@@ -10,8 +10,7 @@ use bytes::Bytes;
 use collab_rt_entity::HttpRealtimeMessage;
 use database_entity::dto::{CollabParams, QueryCollabParams};
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
-  UploadPartResponse,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
 };
 use futures_util::stream;
 use prost::Message;
@@ -59,27 +58,26 @@ impl Client {
   pub async fn upload_part(
     &self,
     workspace_id: &str,
-    req: UploadPartRequest,
+    parent_dir: &str,
+    file_id: &str,
+    upload_id: &str,
+    part_number: i32,
+    body: Vec<u8>,
   ) -> Result<UploadPartResponse, AppResponseError> {
-    trace!("upload_part: {}", req);
-    let file_id = req.file_id;
-    let upload_id = req.upload_id;
-    let part_number = req.part_number;
-
-    if req.body.is_empty() {
+    if body.is_empty() {
       return Err(AppResponseError::from(AppError::InvalidRequest(
         "Empty body".to_string(),
       )));
     }
 
     let url = format!(
-      "{}/api/file_storage/{workspace_id}/upload_part/{file_id}/{upload_id}/{part_number}",
+      "{}/api/file_storage/{workspace_id}/upload_part/{parent_dir}/{file_id}/{upload_id}/{part_number}",
       self.base_url
     );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
-      .body(req.body)
+      .body(body)
       .send()
       .await?;
     log_request_id(&resp);

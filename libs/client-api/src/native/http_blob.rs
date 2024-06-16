@@ -403,7 +403,7 @@ impl FileDir for FileDirImpl<'_> {
 
 #[cfg(test)]
 mod tests {
-  use crate::http_blob::ChunkedBytes;
+  use crate::ChunkedBytes;
   use bytes::Bytes;
   use std::env::temp_dir;
   use tokio::io::AsyncWriteExt;

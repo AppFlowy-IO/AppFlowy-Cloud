@@ -279,6 +279,12 @@ impl BucketClient for AwsS3BucketClientImpl {
         })
         .collect();
 
+      trace!(
+        "objects_to_delete: {:?} at directory: {}",
+        objects_to_delete.len(),
+        dir
+      );
+
       // Step 2: Delete the listed objects in batches of 1000
       while !objects_to_delete.is_empty() {
         let batch = if objects_to_delete.len() > 1000 {
@@ -286,6 +292,15 @@ impl BucketClient for AwsS3BucketClientImpl {
         } else {
           Vec::new()
         };
+
+        trace!(
+          "Deleting {} objects: {:?}",
+          dir,
+          objects_to_delete
+            .iter()
+            .map(|object| &object.key)
+            .collect::<Vec<&String>>()
+        );
 
         let delete = Delete::builder()
           .set_objects(Some(objects_to_delete))
@@ -314,9 +329,15 @@ impl BucketClient for AwsS3BucketClientImpl {
         objects_to_delete = batch;
       }
 
-      if list_objects.is_truncated.is_none() {
-        break;
+      match list_objects.is_truncated {
+        None => break,
+        Some(is_truncated) => {
+          if !is_truncated {
+            break;
+          }
+        },
       }
+
       continuation_token = list_objects.next_continuation_token;
     }
 

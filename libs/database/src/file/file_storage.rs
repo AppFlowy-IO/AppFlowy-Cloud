@@ -10,7 +10,7 @@ use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, FileDir, UploadPartRequest,
   UploadPartResponse,
 };
-use tracing::{instrument, warn};
+use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
 pub trait ResponseBlob {
@@ -58,6 +58,7 @@ where
   }
 
   pub async fn remove_dir(&self, dir: &str) -> Result<(), AppError> {
+    info!("removing dir: {}", dir);
     self.client.remove_dir(dir).await?;
     Ok(())
   }

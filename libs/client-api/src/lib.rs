@@ -1,7 +1,7 @@
 mod http;
 mod http_ai;
 mod http_billing;
-pub mod http_blob;
+
 mod http_collab;
 mod http_history;
 mod http_member;

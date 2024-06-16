@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::ops::Deref;
 
+mod delete_dir_test;
 mod multiple_part_test;
 mod put_and_get;
 mod usage;

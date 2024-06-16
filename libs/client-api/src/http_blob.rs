@@ -5,12 +5,10 @@ use app_error::AppError;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
 use mime::Mime;
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::{AppResponse, AppResponseError};
 
-use database_entity::file_dto::FileDir;
 use tracing::instrument;
 
 impl Client {
@@ -73,13 +71,11 @@ impl Client {
   pub async fn get_blob_v1(
     &self,
     workspace_id: &str,
-    dir: &str,
+    parent_dir: &str,
     file_id: &str,
   ) -> Result<(Mime, Vec<u8>), AppResponseError> {
-    let object_key = FileDirImpl { dir, file_id }.object_key();
-    let object_key = utf8_percent_encode(&object_key, NON_ALPHANUMERIC).to_string();
     let url = format!(
-      "{}/api/file_storage/{workspace_id}/v1/blob/{object_key}",
+      "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url
     );
     self.get_blob(&url).await
@@ -89,14 +85,11 @@ impl Client {
   pub async fn delete_blob_v1(
     &self,
     workspace_id: &str,
-    dir: &str,
+    parent_dir: &str,
     file_id: &str,
   ) -> Result<(), AppResponseError> {
-    let object_key = FileDirImpl { dir, file_id }.object_key();
-    let file_id = utf8_percent_encode(&object_key, NON_ALPHANUMERIC).to_string();
-
     let url = format!(
-      "{}/api/file_storage/{workspace_id}/v1/blob/{file_id}",
+      "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url
     );
     let resp = self
@@ -112,13 +105,11 @@ impl Client {
   pub async fn get_blob_v1_metadata(
     &self,
     workspace_id: &str,
-    dir: &str,
+    parent_dir: &str,
     file_id: &str,
   ) -> Result<BlobMetadata, AppResponseError> {
-    let object_key = FileDirImpl { dir, file_id }.object_key();
-    let object_key = utf8_percent_encode(&object_key, NON_ALPHANUMERIC).to_string();
     let url = format!(
-      "{}/api/file_storage/{workspace_id}/v1/metadata/{object_key}",
+      "{}/api/file_storage/{workspace_id}/v1/metadata/{parent_dir}/{file_id}",
       self.base_url
     );
     let resp = self
@@ -218,20 +209,5 @@ impl Client {
     AppResponse::<RepeatedBlobMetaData>::from_response(resp)
       .await?
       .into_data()
-  }
-}
-
-struct FileDirImpl<'a> {
-  pub dir: &'a str,
-  pub file_id: &'a str,
-}
-
-impl FileDir for FileDirImpl<'_> {
-  fn directory(&self) -> &str {
-    self.dir
-  }
-
-  fn file_id(&self) -> &str {
-    self.file_id
   }
 }

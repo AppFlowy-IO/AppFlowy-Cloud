@@ -1,6 +1,7 @@
 use super::TestBucket;
 use crate::collab::util::{generate_random_bytes, generate_random_string};
 use app_error::ErrorCode;
+use appflowy_cloud::api::file_storage::BlobPathV1;
 use aws_sdk_s3::types::CompletedPart;
 use bytes::Bytes;
 use client_api::ChunkedBytes;
@@ -15,7 +16,7 @@ use uuid::Uuid;
 async fn multiple_part_put_and_get_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
-  let dir = workspace_id.clone();
+  let parent_dir = workspace_id.clone();
   let mime = mime::TEXT_PLAIN_UTF_8;
   let text = generate_random_string(8 * 1024 * 1024);
   let file_id = Uuid::new_v4().to_string();
@@ -25,7 +26,7 @@ async fn multiple_part_put_and_get_test() {
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
-        directory: dir.clone(),
+        parent_dir: parent_dir.clone(),
         content_type: mime.to_string(),
       },
     )
@@ -42,7 +43,7 @@ async fn multiple_part_put_and_get_test() {
         &workspace_id,
         UploadPartRequest {
           file_id: file_id.clone(),
-          directory: dir.clone(),
+          parent_dir: parent_dir.clone(),
           upload_id: upload.upload_id.clone(),
           part_number: index as i32 + 1,
           body: next.to_vec(),
@@ -63,14 +64,14 @@ async fn multiple_part_put_and_get_test() {
 
   let req = CompleteUploadRequest {
     file_id: file_id.clone(),
-    directory: dir.clone(),
+    parent_dir: parent_dir.clone(),
     upload_id: upload.upload_id,
     parts: completed_parts,
   };
   c1.complete_upload(&workspace_id, req).await.unwrap();
 
   let blob = c1
-    .get_blob_v1(&workspace_id, &dir, &file_id)
+    .get_blob_v1(&workspace_id, &parent_dir, &file_id)
     .await
     .unwrap()
     .1;
@@ -93,7 +94,7 @@ async fn single_part_put_and_get_test() {
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
-        directory: workspace_id.clone(),
+        parent_dir: workspace_id.clone(),
         content_type: mime.to_string(),
       },
     )
@@ -111,7 +112,7 @@ async fn single_part_put_and_get_test() {
         &workspace_id,
         UploadPartRequest {
           file_id: file_id.clone(),
-          directory: workspace_id.clone(),
+          parent_dir: workspace_id.clone(),
           upload_id: upload.upload_id.clone(),
           part_number: index as i32 + 1,
           body: next.to_vec(),
@@ -130,7 +131,7 @@ async fn single_part_put_and_get_test() {
 
   let req = CompleteUploadRequest {
     file_id: file_id.clone(),
-    directory: workspace_id.clone(),
+    parent_dir: workspace_id.clone(),
     upload_id: upload.upload_id,
     parts: completed_parts,
   };
@@ -158,7 +159,7 @@ async fn empty_part_upload_test() {
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
-        directory: workspace_id.clone(),
+        parent_dir: workspace_id.clone(),
         content_type: mime.to_string(),
       },
     )
@@ -170,7 +171,7 @@ async fn empty_part_upload_test() {
       &workspace_id,
       UploadPartRequest {
         file_id: file_id.clone(),
-        directory: workspace_id.clone(),
+        parent_dir: workspace_id.clone(),
         upload_id: upload.upload_id.clone(),
         part_number: 1,
         body: Vec::new(),
@@ -216,13 +217,21 @@ async fn perform_upload_test(
   description: &str,
 ) {
   let chunk_size = 5 * 1024 * 1024; // 5 MB
+  let file_id = Uuid::new_v4().to_string();
+  let workspace_id = Uuid::new_v4();
 
   let req = CreateUploadRequest {
-    file_id: Uuid::new_v4().to_string(),
-    directory: "".to_string(),
+    file_id: file_id.clone(),
+    parent_dir: "".to_string(),
     content_type: "text".to_string(),
   };
-  let upload = test_bucket.create_upload(req).await.unwrap();
+
+  let key = BlobPathV1 {
+    workspace_id,
+    parent_dir: "".to_string(),
+    file_id,
+  };
+  let upload = test_bucket.create_upload(key, req).await.unwrap();
 
   let mut chunk_count = (file_size / chunk_size) + 1;
   let mut size_of_last_chunk = file_size % chunk_size;
@@ -246,12 +255,17 @@ async fn perform_upload_test(
 
     let req = UploadPartRequest {
       file_id: upload.file_id.clone(),
-      directory: "".to_string(),
+      parent_dir: "".to_string(),
       upload_id: upload.upload_id.clone(),
       part_number,
       body: chunk.to_vec(),
     };
-    let resp = test_bucket.upload_part(req).await.unwrap();
+    let key = BlobPathV1 {
+      workspace_id,
+      parent_dir: "".to_string(),
+      file_id: upload.file_id.clone(),
+    };
+    let resp = test_bucket.upload_part(&key, req).await.unwrap();
 
     completed_parts.push(
       CompletedPart::builder()
@@ -263,7 +277,7 @@ async fn perform_upload_test(
 
   let complete_req = CompleteUploadRequest {
     file_id: upload.file_id.clone(),
-    directory: "".to_string(),
+    parent_dir: "".to_string(),
     upload_id: upload.upload_id.clone(),
     parts: completed_parts
       .into_iter()
@@ -273,7 +287,15 @@ async fn perform_upload_test(
       })
       .collect(),
   };
-  test_bucket.complete_upload(complete_req).await.unwrap();
+  let key = BlobPathV1 {
+    workspace_id,
+    parent_dir: "".to_string(),
+    file_id: upload.file_id.clone(),
+  };
+  test_bucket
+    .complete_upload(&key, complete_req)
+    .await
+    .unwrap();
 
   // Verify the upload
   let object = test_bucket.get_blob(&upload.file_id).await.unwrap();

@@ -59,25 +59,31 @@ pub fn file_storage_scope() -> Scope {
         .route(web::put().to(complete_upload_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/v1/blob/{object_key}")
+      web::resource("/{workspace_id}/v1/blob/{parent_dir}/{file_id}")
         .route(web::get().to(get_blob_v1_handler))
         .route(web::delete().to(delete_blob_v1_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/v1/metadata/{object_key}")
+      web::resource("/{workspace_id}/v1/metadata/{parent_dir}/{file_id}")
         .route(web::get().to(get_blob_metadata_v1_handler)),
     )
 }
 
 #[instrument(skip_all, err)]
 async fn create_upload(
+  workspace_id: web::Path<Uuid>,
   state: web::Data<AppState>,
   req: web::Json<CreateUploadRequest>,
 ) -> Result<JsonAppResponse<CreateUploadResponse>> {
   let req = req.into_inner();
+  let key = BlobPathV1 {
+    workspace_id: workspace_id.into_inner(),
+    parent_dir: req.parent_dir.clone(),
+    file_id: req.file_id.clone(),
+  };
   let resp = state
     .bucket_storage
-    .create_upload(req)
+    .create_upload(key, req)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -85,9 +91,9 @@ async fn create_upload(
 }
 
 #[derive(Deserialize)]
-struct PathParams {
+struct UploadPartPath {
   #[allow(unused)]
-  workspace_id: String,
+  workspace_id: Uuid,
   file_id: String,
   upload_id: String,
   part_num: i32,
@@ -95,7 +101,7 @@ struct PathParams {
 
 #[instrument(level = "debug", skip_all, err)]
 async fn upload_part_handler(
-  path: web::Path<PathParams>,
+  path: web::Path<UploadPartPath>,
   state: web::Data<AppState>,
   content_length: web::Header<ContentLength>,
   mut payload: Payload,
@@ -119,15 +125,21 @@ async fn upload_part_handler(
   }
   let req = UploadPartRequest {
     file_id: path_params.file_id,
-    directory: path_params.workspace_id,
+    parent_dir: path_params.workspace_id.to_string(),
     upload_id: path_params.upload_id,
     part_number: path_params.part_num,
     body: content,
   };
 
+  let key = BlobPathV1 {
+    workspace_id: path_params.workspace_id,
+    parent_dir: req.parent_dir.clone(),
+    file_id: req.file_id.clone(),
+  };
+
   let resp = state
     .bucket_storage
-    .upload_part(req)
+    .upload_part(key, req)
     .await
     .map_err(AppResponseError::from)?;
   Ok(AppResponse::Ok().with_data(resp).into())
@@ -139,9 +151,15 @@ async fn complete_upload_handler(
   req: web::Json<CompleteUploadRequest>,
 ) -> Result<JsonAppResponse<()>> {
   let req = req.into_inner();
+
+  let key = BlobPathV1 {
+    workspace_id: workspace_id.into_inner(),
+    parent_dir: req.parent_dir.clone(),
+    file_id: req.file_id.clone(),
+  };
   state
     .bucket_storage
-    .complete_upload(workspace_id.into_inner(), req)
+    .complete_upload(key, req)
     .await
     .map_err(AppResponseError::from)?;
 
@@ -429,9 +447,10 @@ impl BlobKey for BlobPathV0 {
 
 /// Use [BlobPathV1] when put/get object by multiple upload parts
 #[derive(Deserialize, Debug)]
-struct BlobPathV1 {
-  workspace_id: Uuid,
-  object_key: String,
+pub struct BlobPathV1 {
+  pub workspace_id: Uuid,
+  pub parent_dir: String,
+  pub file_id: String,
 }
 
 impl BlobKey for BlobPathV1 {
@@ -440,14 +459,14 @@ impl BlobKey for BlobPathV1 {
   }
 
   fn object_key(&self) -> String {
-    self.object_key.clone()
+    format!("{}/{}/{}", self.workspace_id, self.parent_dir, self.file_id)
   }
 
   fn meta_key(&self) -> &str {
-    &self.object_key
+    &self.file_id
   }
 
   fn e_tag(&self) -> &str {
-    &self.object_key
+    &self.file_id
   }
 }

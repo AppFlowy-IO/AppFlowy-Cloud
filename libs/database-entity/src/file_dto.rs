@@ -1,34 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-pub trait FileDir {
-  fn directory(&self) -> &str;
-  fn file_id(&self) -> &str;
-
-  fn object_key(&self) -> String {
-    if self.directory().is_empty() {
-      self.file_id().to_string()
-    } else {
-      format!("{}/{}", self.directory(), self.file_id())
-    }
-  }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct CreateUploadRequest {
   pub file_id: String,
-  pub directory: String,
+  pub parent_dir: String,
   pub content_type: String,
-}
-
-impl FileDir for CreateUploadRequest {
-  fn directory(&self) -> &str {
-    &self.directory
-  }
-
-  fn file_id(&self) -> &str {
-    &self.file_id
-  }
 }
 
 impl Display for CreateUploadRequest {
@@ -50,20 +27,10 @@ pub struct CreateUploadResponse {
 #[derive(Serialize, Deserialize)]
 pub struct UploadPartRequest {
   pub file_id: String,
-  pub directory: String,
+  pub parent_dir: String,
   pub upload_id: String,
   pub part_number: i32,
   pub body: Vec<u8>,
-}
-
-impl FileDir for UploadPartRequest {
-  fn directory(&self) -> &str {
-    &self.directory
-  }
-
-  fn file_id(&self) -> &str {
-    &self.file_id
-  }
 }
 
 impl Display for UploadPartRequest {
@@ -88,19 +55,9 @@ pub struct UploadPartResponse {
 #[derive(Serialize, Deserialize)]
 pub struct CompleteUploadRequest {
   pub file_id: String,
-  pub directory: String,
+  pub parent_dir: String,
   pub upload_id: String,
   pub parts: Vec<CompletedPartRequest>,
-}
-
-impl FileDir for CompleteUploadRequest {
-  fn directory(&self) -> &str {
-    &self.directory
-  }
-
-  fn file_id(&self) -> &str {
-    &self.file_id
-  }
 }
 
 impl Display for CompleteUploadRequest {

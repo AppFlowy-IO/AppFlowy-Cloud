@@ -14,7 +14,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier};
 use aws_sdk_s3::Client;
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, FileDir, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
   UploadPartResponse,
 };
 
@@ -157,9 +157,10 @@ impl BucketClient for AwsS3BucketClientImpl {
   /// https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html
   async fn create_upload(
     &self,
+    key: impl BlobKey,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError> {
-    let object_key = req.object_key();
+    let object_key = key.object_key();
     trace!(
       "Creating upload to S3 bucket:{}, key {}, request: {}",
       self.bucket,
@@ -185,12 +186,15 @@ impl BucketClient for AwsS3BucketClientImpl {
     }
   }
 
-  async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {
+  async fn upload_part(
+    &self,
+    key: &impl BlobKey,
+    req: UploadPartRequest,
+  ) -> Result<UploadPartResponse, AppError> {
     if req.body.is_empty() {
       return Err(AppError::InvalidRequest("body is empty".to_string()));
     }
-
-    let object_key = req.object_key();
+    let object_key = key.object_key();
     trace!(
       "Uploading part to S3 bucket:{}, key {}, request: {}",
       self.bucket,
@@ -220,8 +224,12 @@ impl BucketClient for AwsS3BucketClientImpl {
   }
 
   /// Return the content length and content type of the uploaded object
-  async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(usize, String), AppError> {
-    let object_key = req.object_key();
+  async fn complete_upload(
+    &self,
+    key: &impl BlobKey,
+    req: CompleteUploadRequest,
+  ) -> Result<(usize, String), AppError> {
+    let object_key = key.object_key();
     trace!(
       "Completing upload to S3 bucket:{}, key {}, request: {}",
       self.bucket,

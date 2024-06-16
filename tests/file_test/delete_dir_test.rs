@@ -40,7 +40,7 @@ async fn delete_dir_test2() {
         &workspace_id,
         CreateUploadRequest {
           file_id: file_id.clone(),
-          directory: dir.clone(),
+          parent_dir: dir.clone(),
           content_type: mime.to_string(),
         },
       )
@@ -56,7 +56,7 @@ async fn delete_dir_test2() {
           &workspace_id,
           UploadPartRequest {
             file_id: file_id.clone(),
-            directory: dir.clone(),
+            parent_dir: dir.clone(),
             upload_id: upload.upload_id.clone(),
             part_number: index as i32 + 1,
             body: next.to_vec(),
@@ -73,7 +73,7 @@ async fn delete_dir_test2() {
 
     let req = CompleteUploadRequest {
       file_id: file_id.clone(),
-      directory: dir.clone(),
+      parent_dir: dir.clone(),
       upload_id: upload.upload_id,
       parts: completed_parts,
     };

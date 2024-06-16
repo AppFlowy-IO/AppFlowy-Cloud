@@ -4,12 +4,11 @@ use crate::resource_usage::{
 };
 use app_error::AppError;
 use async_trait::async_trait;
-use sqlx::PgPool;
-
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, FileDir, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
   UploadPartResponse,
 };
+use sqlx::PgPool;
 use tracing::{info, instrument, warn};
 use uuid::Uuid;
 
@@ -29,10 +28,21 @@ pub trait BucketClient {
 
   async fn get_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError>;
 
-  async fn create_upload(&self, req: CreateUploadRequest)
-    -> Result<CreateUploadResponse, AppError>;
-  async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError>;
-  async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(usize, String), AppError>;
+  async fn create_upload(
+    &self,
+    key: impl BlobKey,
+    req: CreateUploadRequest,
+  ) -> Result<CreateUploadResponse, AppError>;
+  async fn upload_part(
+    &self,
+    key: &impl BlobKey,
+    req: UploadPartRequest,
+  ) -> Result<UploadPartResponse, AppError>;
+  async fn complete_upload(
+    &self,
+    key: &impl BlobKey,
+    req: CompleteUploadRequest,
+  ) -> Result<(usize, String), AppError>;
 
   async fn remove_dir(&self, dir: &str) -> Result<(), AppError>;
 }
@@ -118,34 +128,39 @@ where
 
   pub async fn create_upload(
     &self,
+    key: impl BlobKey,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError> {
-    self.client.create_upload(req).await
+    self.client.create_upload(key, req).await
   }
 
-  pub async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {
-    self.client.upload_part(req).await
+  pub async fn upload_part(
+    &self,
+    key: impl BlobKey,
+    req: UploadPartRequest,
+  ) -> Result<UploadPartResponse, AppError> {
+    self.client.upload_part(&key, req).await
   }
 
   pub async fn complete_upload(
     &self,
-    workspace_id: Uuid,
+    key: impl BlobKey,
     req: CompleteUploadRequest,
   ) -> Result<(), AppError> {
-    let object_key = req.object_key();
-    if is_blob_metadata_exists(&self.pg_pool, &workspace_id, &object_key).await? {
+    if is_blob_metadata_exists(&self.pg_pool, key.workspace_id(), &key.object_key()).await? {
       warn!(
         "file already exists, workspace_id: {}, request: {}",
-        workspace_id, req
+        key.workspace_id(),
+        req
       );
       return Ok(());
     }
 
-    let (content_length, content_type) = self.client.complete_upload(req).await?;
+    let (content_length, content_type) = self.client.complete_upload(&key, req).await?;
     insert_blob_metadata(
       &self.pg_pool,
-      &object_key,
-      &workspace_id,
+      key.meta_key(),
+      key.workspace_id(),
       &content_type,
       content_length,
     )

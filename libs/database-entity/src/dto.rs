@@ -278,7 +278,7 @@ pub struct CollabMemberIdentify {
   pub object_id: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct UpdatePublishNamespace {
   pub new_namespace: String,
 }

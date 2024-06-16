@@ -23,7 +23,8 @@ use database::workspace::{
   rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
   select_published_collab_blob, select_user_is_collab_publisher, select_user_is_workspace_owner,
   select_workspace, select_workspace_id_by_namespace, select_workspace_invitations_for_user,
-  select_workspace_member, select_workspace_member_list, select_workspace_settings,
+  select_workspace_member, select_workspace_member_list, select_workspace_publish_namespace,
+  select_workspace_publish_namespace_exists, select_workspace_settings,
   select_workspace_total_collab_bytes, update_updated_at_of_workspace,
   update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
   upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
@@ -117,7 +118,7 @@ pub async fn patch_workspace(
   Ok(())
 }
 
-pub async fn update_workspace_namespace(
+pub async fn set_workspace_namespace(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
@@ -125,8 +126,28 @@ pub async fn update_workspace_namespace(
 ) -> Result<(), AppError> {
   check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   check_workspace_namespace(new_namespace).await?;
+  if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
+    return Err(AppError::PublishNamespaceAlreadyTaken(
+      "publish namespace is already taken".to_string(),
+    ));
+  };
   update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
   Ok(())
+}
+
+pub async fn get_workspace_namespace(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<String, AppError> {
+  let namespace = match select_workspace_publish_namespace(pg_pool, workspace_id).await? {
+    Some(namespace) => namespace,
+    None => {
+      return Err(AppError::PublishNamespaceNotSet(
+        "publish namespace is not set for the workspace".to_string(),
+      ))
+    },
+  };
+  Ok(namespace)
 }
 
 pub async fn publish_collab(
@@ -149,6 +170,7 @@ pub async fn put_published_collab_blob(
   collab_data: &[u8],
 ) -> Result<(), AppError> {
   check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
+  check_collab_doc_name(doc_name).await?;
   insert_or_replace_published_collab_blob(pg_pool, workspace_id, doc_name, collab_data).await?;
   Ok(())
 }
@@ -640,5 +662,25 @@ async fn check_workspace_owner_or_publisher(
       ));
     }
   }
+  Ok(())
+}
+
+async fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
+  // Check len
+  if doc_name.len() > 20 {
+    return Err(AppError::InvalidRequest(
+      "Document name must be at most 20 characters long".to_string(),
+    ));
+  }
+
+  // Only contain alphanumeric characters and hyphens
+  for c in doc_name.chars() {
+    if !c.is_alphanumeric() && c != '-' {
+      return Err(AppError::InvalidRequest(
+        "Document name must only contain alphanumeric characters and hyphens".to_string(),
+      ));
+    }
+  }
+
   Ok(())
 }

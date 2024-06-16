@@ -1,4 +1,4 @@
-use client_api_test::generate_unique_registered_user_client;
+use client_api_test::{generate_unique_registered_user_client, localhost_client};
 
 #[tokio::test]
 async fn test_get_publish_namespace_not_set() {
@@ -62,6 +62,41 @@ async fn test_set_publish_namespace_set() {
       .err()
       .unwrap();
     assert_eq!(format!("{:?}", err.code), "InvalidRequest");
+  }
+}
+
+#[tokio::test]
+async fn test_publish_doc() {
+  #[derive(serde::Serialize, serde::Deserialize)]
+  struct Metadata {
+    title: String,
+  }
+
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&c).await;
+  let my_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace)
+    .await
+    .unwrap();
+
+  c.publish_collab(
+    &workspace_id,
+    "my_doc",
+    Metadata {
+      title: "my_title".to_string(),
+    },
+  )
+  .await
+  .unwrap();
+
+  {
+    // Non login user should be able to view the published collab metadata
+    let non_login = localhost_client();
+    let published_collab = non_login
+      .get_publish_collab::<Metadata>(&workspace_id, "my_doc")
+      .await
+      .unwrap();
+    assert_eq!(published_collab.title, "my_title");
   }
 }
 

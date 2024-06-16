@@ -2,12 +2,10 @@ use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
 };
 use futures_util::stream::BoxStream;
-use sqlx::{
-  types::{uuid, Uuid},
-  Executor, PgPool, Postgres, Transaction,
-};
+use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
 use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
+use uuid::Uuid;
 
 use crate::pg_row::AFWorkspaceMemberPermRow;
 use crate::pg_row::{
@@ -925,7 +923,7 @@ pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database 
     doc_name,
     publisher_uuid,
     workspace_id,
-    metadata
+    metadata,
   )
   .execute(executor)
   .await?;
@@ -946,7 +944,7 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
   workspace_id: &Uuid,
   doc_name: &str,
 ) -> Result<serde_json::Value, AppError> {
-  let res = sqlx::query_scalar!(
+  let res = sqlx::query!(
     r#"
     SELECT metadata
     FROM af_published_collab
@@ -958,8 +956,8 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
   )
   .fetch_one(executor)
   .await?;
-
-  Ok(res)
+  let metadata: serde_json::Value = res.metadata;
+  Ok(metadata)
 }
 
 #[inline]

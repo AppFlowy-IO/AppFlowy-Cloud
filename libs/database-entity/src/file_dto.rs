@@ -79,7 +79,7 @@ impl Display for UploadPartRequest {
   }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct UploadPartResponse {
   pub e_tag: String,
   pub part_num: i32,

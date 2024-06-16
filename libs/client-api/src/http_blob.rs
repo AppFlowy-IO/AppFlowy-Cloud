@@ -62,6 +62,12 @@ impl Client {
     let upload_id = req.upload_id;
     let part_number = req.part_number;
 
+    if req.body.is_empty() {
+      return Err(AppResponseError::from(AppError::InvalidRequest(
+        "Empty body".to_string(),
+      )));
+    }
+
     let url = format!(
       "{}/api/file_storage/{workspace_id}/upload_part/{file_id}/{upload_id}/{part_number}",
       self.base_url

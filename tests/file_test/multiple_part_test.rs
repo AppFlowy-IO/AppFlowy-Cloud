@@ -1,5 +1,6 @@
 use super::TestBucket;
 use crate::collab::util::{generate_random_bytes, generate_random_string};
+use app_error::ErrorCode;
 use aws_sdk_s3::types::CompletedPart;
 use bytes::Bytes;
 use client_api::http_blob::ChunkedBytes;
@@ -145,7 +146,6 @@ async fn single_part_put_and_get_test() {
 }
 
 #[tokio::test]
-#[should_panic]
 async fn empty_part_upload_test() {
   // Test with empty part
   let (c1, _user1) = generate_unique_registered_user_client().await;
@@ -165,7 +165,7 @@ async fn empty_part_upload_test() {
     .await
     .unwrap();
 
-  let resp = c1
+  let result = c1
     .upload_part(
       &workspace_id,
       UploadPartRequest {
@@ -177,7 +177,8 @@ async fn empty_part_upload_test() {
       },
     )
     .await
-    .unwrap();
+    .unwrap_err();
+  assert_eq!(result.code, ErrorCode::InvalidRequest)
 }
 
 #[tokio::test]

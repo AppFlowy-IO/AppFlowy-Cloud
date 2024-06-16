@@ -16,6 +16,7 @@ use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
   UploadPartResponse,
 };
+use serde::Deserialize;
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData, WorkspaceSpaceUsage};
 use shared_entity::response::{AppResponse, AppResponseError, JsonAppResponse};
 use sqlx::types::Uuid;
@@ -23,7 +24,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{error, event, instrument};
+use tracing::{error, event, instrument, trace};
 
 use crate::state::AppState;
 
@@ -46,43 +47,77 @@ pub fn file_storage_scope() -> Scope {
       web::resource("/{workspace_id}/blobs")
         .route(web::get().to(get_all_workspace_blob_metadata_handler)),
     )
+    .service(web::resource("/{workspace_id}/create_upload").route(web::post().to(create_upload)))
     .service(
-      web::resource("/{workspace_id}/blob/create_upload").route(web::post().to(create_upload)),
+      web::resource("/{workspace_id}/upload_part/{file_id}/{upload_id}/{part_num}")
+        .route(web::put().to(upload_part_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/blob/upload_part").route(web::post().to(upload_part_handler)),
-    )
-    .service(
-      web::resource("/{workspace_id}/blob/complete_upload")
-        .route(web::post().to(complete_upload_handler)),
+      web::resource("/{workspace_id}/complete_upload")
+        .route(web::put().to(complete_upload_handler)),
     )
 }
 
+#[instrument(skip_all, err)]
 async fn create_upload(
   state: web::Data<AppState>,
   req: web::Json<CreateUploadRequest>,
-  content_type: web::Header<ContentType>,
 ) -> Result<JsonAppResponse<CreateUploadResponse>> {
-  let content_type = content_type.into_inner().to_string();
+  let req = req.into_inner();
   let resp = state
     .bucket_storage
-    .create_upload(req.into_inner(), content_type)
+    .create_upload(req)
     .await
     .map_err(AppResponseError::from)?;
 
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
+#[derive(Deserialize)]
+struct PathParams {
+  #[allow(unused)]
+  workspace_id: String,
+  file_id: String,
+  upload_id: String,
+  part_num: i32,
+}
+
+#[instrument(level = "debug", skip_all, err)]
 async fn upload_part_handler(
+  path: web::Path<PathParams>,
   state: web::Data<AppState>,
-  req: web::Json<UploadPartRequest>,
+  content_length: web::Header<ContentLength>,
+  mut payload: Payload,
 ) -> Result<JsonAppResponse<UploadPartResponse>> {
+  let path_params = path.into_inner();
+  let content_length = content_length.into_inner().into_inner();
+  let mut content = Vec::with_capacity(content_length);
+  while let Some(chunk) = payload.try_next().await? {
+    content.extend_from_slice(&chunk);
+  }
+
+  if content.len() != content_length {
+    return Err(
+      AppError::InvalidRequest(format!(
+        "Content length is {}, but received {} bytes",
+        content_length,
+        content.len()
+      ))
+      .into(),
+    );
+  }
+  let req = UploadPartRequest {
+    file_id: path_params.file_id,
+    upload_id: path_params.upload_id,
+    part_number: path_params.part_num,
+    body: content,
+  };
+
   let resp = state
     .bucket_storage
-    .upload_part(req.into_inner())
+    .upload_part(req)
     .await
     .map_err(AppResponseError::from)?;
-
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
@@ -90,9 +125,10 @@ async fn complete_upload_handler(
   state: web::Data<AppState>,
   req: web::Json<CompleteUploadRequest>,
 ) -> Result<JsonAppResponse<()>> {
+  let req = req.into_inner();
   state
     .bucket_storage
-    .complete_upload(req.into_inner())
+    .complete_upload(req)
     .await
     .map_err(AppResponseError::from)?;
 

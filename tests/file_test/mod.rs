@@ -49,20 +49,6 @@ impl TestBucket {
     );
     Self(client)
   }
-
-  // pub async fn get_object(&self, workspace_id: &str, file_id: &str) -> Option<bytes::Bytes> {
-  //   let object_key = format!("{}/{}", workspace_id, file_id);
-  //   match self.0.get_object(&object_key).await {
-  //     Ok(resp) => {
-  //       assert!(resp.status_code() == 200);
-  //       Some(resp.bytes().to_owned())
-  //     },
-  //     Err(err) => match err {
-  //       s3::error::S3Error::HttpFailWithBody(404, _) => None,
-  //       _ => panic!("could not get object: {}", err),
-  //     },
-  //   }
-  // }
 }
 
 fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str> {

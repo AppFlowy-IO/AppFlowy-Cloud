@@ -10,7 +10,7 @@ use database_entity::file_dto::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
   UploadPartResponse,
 };
-use tracing::{instrument, warn};
+use tracing::{instrument, trace, warn};
 use uuid::Uuid;
 
 pub trait ResponseBlob {
@@ -33,11 +33,8 @@ pub trait BucketClient {
   where
     P: AsRef<str> + Send;
 
-  async fn create_upload(
-    &self,
-    req: CreateUploadRequest,
-    content_type: String,
-  ) -> Result<CreateUploadResponse, AppError>;
+  async fn create_upload(&self, req: CreateUploadRequest)
+    -> Result<CreateUploadResponse, AppError>;
   async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError>;
   async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError>;
 }
@@ -113,16 +110,18 @@ where
   pub async fn create_upload(
     &self,
     req: CreateUploadRequest,
-    content_type: String,
   ) -> Result<CreateUploadResponse, AppError> {
-    self.client.create_upload(req, content_type).await
+    trace!("create upload: {}", req);
+    self.client.create_upload(req).await
   }
 
   pub async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {
+    trace!("Upload part: {}", req);
     self.client.upload_part(req).await
   }
 
   pub async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError> {
+    trace!("Complete upload: {}", req);
     self.client.complete_upload(req).await
   }
 }

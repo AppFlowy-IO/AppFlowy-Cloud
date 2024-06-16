@@ -1,11 +1,74 @@
 use super::TestBucket;
-use crate::collab::util::generate_random_bytes;
+use crate::collab::util::{generate_random_bytes, generate_random_string};
 use aws_sdk_s3::types::CompletedPart;
+use bytes::Bytes;
+use client_api::http_blob::ChunkedBytes;
+use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
 use database::file::{BucketClient, ResponseBlob};
 use database_entity::file_dto::{
   CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, UploadPartRequest,
 };
 use uuid::Uuid;
+
+#[tokio::test]
+async fn multiple_part_put_and_get_test() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let mime = mime::TEXT_PLAIN_UTF_8;
+  let text = generate_random_string(8 * 1024 * 1024);
+  let file_id = uuid::Uuid::new_v4().to_string();
+
+  let upload = c1
+    .create_multi_upload(
+      &workspace_id,
+      CreateUploadRequest {
+        file_id: file_id.clone(),
+        content_type: mime.to_string(),
+      },
+    )
+    .await
+    .unwrap();
+  let chunked_bytes = ChunkedBytes::from_bytes(Bytes::from(text.clone())).unwrap();
+  assert_eq!(chunked_bytes.offsets.len(), 2);
+
+  let mut completed_parts = Vec::new();
+  let mut iter = chunked_bytes.iter().enumerate();
+  while let Some((index, next)) = iter.next() {
+    let resp = c1
+      .upload_part(
+        &workspace_id,
+        UploadPartRequest {
+          file_id: file_id.clone(),
+          upload_id: upload.upload_id.clone(),
+          part_number: index as i32 + 1,
+          body: next.to_vec(),
+        },
+      )
+      .await
+      .unwrap();
+
+    completed_parts.push(CompletedPartRequest {
+      e_tag: resp.e_tag,
+      part_number: resp.part_num,
+    });
+  }
+
+  assert_eq!(completed_parts.len(), 2);
+  assert_eq!(completed_parts[0].part_number, 1);
+  assert_eq!(completed_parts[1].part_number, 2);
+
+  let req = CompleteUploadRequest {
+    file_id: file_id.clone(),
+    upload_id: upload.upload_id,
+    parts: completed_parts,
+  };
+  c1.complete_upload(&workspace_id, req).await.unwrap();
+
+  let url = c1.get_blob_url(&workspace_id, &file_id);
+  let blob = c1.get_blob(&url).await.unwrap().1;
+  let blob_text = String::from_utf8(blob.to_vec()).unwrap();
+  assert_eq!(blob_text, text);
+}
 #[tokio::test]
 async fn multiple_part_upload_test() {
   let test_bucket = TestBucket::new().await;
@@ -43,12 +106,10 @@ async fn perform_upload_test(
   let chunk_size = 5 * 1024 * 1024; // 5 MB
 
   let req = CreateUploadRequest {
-    key: Uuid::new_v4().to_string(),
+    file_id: Uuid::new_v4().to_string(),
+    content_type: "text".to_string(),
   };
-  let upload = test_bucket
-    .create_upload(req, "text".to_string())
-    .await
-    .unwrap();
+  let upload = test_bucket.create_upload(req).await.unwrap();
 
   let mut chunk_count = (file_size / chunk_size) + 1;
   let mut size_of_last_chunk = file_size % chunk_size;

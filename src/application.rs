@@ -146,7 +146,10 @@ pub async fn run_actix_server(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
-      .app_data(web::JsonConfig::default().limit(5 * 1024 * 1024))
+      .app_data(web::JsonConfig::default().limit(10 * 1024 * 1024).error_handler(|err, req| {
+        error!("Failed to parse json: {:?} for request: {}", err, req.path());
+        actix_web::error::ErrorBadRequest("Invalid JSON")
+      }))
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())

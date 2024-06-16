@@ -30,17 +30,12 @@ impl S3BucketStorage {
 pub struct AwsS3BucketClientImpl {
   client: Client,
   bucket: String,
-  upload_sessions: Arc<Mutex<HashMap<String, Vec<CompletedPart>>>>,
 }
 
 impl AwsS3BucketClientImpl {
   pub fn new(client: Client, bucket: String) -> Self {
     debug_assert!(!bucket.is_empty());
-    AwsS3BucketClientImpl {
-      client,
-      bucket,
-      upload_sessions: Arc::new(Default::default()),
-    }
+    AwsS3BucketClientImpl { client, bucket }
   }
 }
 
@@ -125,17 +120,18 @@ impl BucketClient for AwsS3BucketClientImpl {
     }
   }
 
+  /// Create a new upload session
+  /// https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html
   async fn create_upload(
     &self,
     req: CreateUploadRequest,
-    content_type: String,
   ) -> Result<CreateUploadResponse, AppError> {
     let multipart_upload_res = self
       .client
       .create_multipart_upload()
       .bucket(&self.bucket)
-      .key(&req.key)
-      .content_type(content_type)
+      .key(&req.file_id)
+      .content_type(req.content_type)
       .send()
       .await
       .map_err(|err| anyhow!("Failed to create upload: {}", err))?;
@@ -143,7 +139,7 @@ impl BucketClient for AwsS3BucketClientImpl {
     match multipart_upload_res.upload_id {
       None => Err(anyhow!("Failed to create upload: upload_id is None").into()),
       Some(upload_id) => Ok(CreateUploadResponse {
-        file_id: req.key,
+        file_id: req.file_id,
         upload_id,
       }),
     }
@@ -169,32 +165,24 @@ impl BucketClient for AwsS3BucketClientImpl {
 
     match upload_part_res.e_tag {
       None => Err(anyhow!("Failed to upload part: e_tag is None").into()),
-      Some(e_tag) => {
-        let mut sessions = self.upload_sessions.lock().await;
-        let parts = sessions
-          .entry(req.upload_id.clone())
-          .or_insert_with(Vec::new);
-        parts.push(
-          CompletedPart::builder()
-            .e_tag(e_tag.clone())
-            .part_number(req.part_number)
-            .build(),
-        );
-        Ok(UploadPartResponse {
-          part_num: req.part_number,
-          e_tag,
-        })
-      },
+      Some(e_tag) => Ok(UploadPartResponse {
+        part_num: req.part_number,
+        e_tag,
+      }),
     }
   }
 
   async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError> {
-    let parts = self
-      .upload_sessions
-      .lock()
-      .await
-      .remove(&req.upload_id)
-      .unwrap_or_else(Vec::new);
+    let parts = req
+      .parts
+      .into_iter()
+      .map(|part| {
+        CompletedPart::builder()
+          .e_tag(part.e_tag)
+          .part_number(part.part_number)
+          .build()
+      })
+      .collect::<Vec<_>>();
     let completed_multipart_upload = CompletedMultipartUpload::builder()
       .set_parts(Some(parts))
       .build();

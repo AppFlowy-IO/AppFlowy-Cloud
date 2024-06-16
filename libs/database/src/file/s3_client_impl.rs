@@ -249,7 +249,6 @@ impl BucketClient for AwsS3BucketClientImpl {
 
   async fn remove_dir(&self, dir: &str) -> Result<(), AppError> {
     let mut continuation_token = None;
-
     loop {
       let list_objects = self
         .client
@@ -329,6 +328,7 @@ impl BucketClient for AwsS3BucketClientImpl {
         objects_to_delete = batch;
       }
 
+      // is_truncated is true if there are more objects to list. If it's false, it means we have listed all objects in the directory
       match list_objects.is_truncated {
         None => break,
         Some(is_truncated) => {

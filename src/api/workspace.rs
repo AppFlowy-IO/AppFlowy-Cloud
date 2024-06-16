@@ -989,7 +989,7 @@ async fn get_publish_namespace_handler(
 async fn get_published_collab_handler(
   path_param: web::Path<(String, String)>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<serde_json::Value>>> {
+) -> Result<Json<serde_json::Value>> {
   let (workspace_namespace, doc_name) = path_param.into_inner();
   let metadata = biz::workspace::ops::get_published_collab_using_publish_namespace(
     &state.pg_pool,
@@ -997,7 +997,7 @@ async fn get_published_collab_handler(
     &doc_name,
   )
   .await?;
-  Ok(Json(AppResponse::Ok().with_data(metadata)))
+  Ok(Json(metadata))
 }
 
 async fn get_published_collab_blob_handler(

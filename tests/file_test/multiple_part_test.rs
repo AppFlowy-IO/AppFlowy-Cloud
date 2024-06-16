@@ -14,15 +14,17 @@ use uuid::Uuid;
 async fn multiple_part_put_and_get_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
+  let dir = workspace_id.clone();
   let mime = mime::TEXT_PLAIN_UTF_8;
   let text = generate_random_string(8 * 1024 * 1024);
-  let file_id = uuid::Uuid::new_v4().to_string();
+  let file_id = Uuid::new_v4().to_string();
 
   let upload = c1
-    .create_multi_upload(
+    .create_upload(
       &workspace_id,
       CreateUploadRequest {
         file_id: file_id.clone(),
+        directory: dir.clone(),
         content_type: mime.to_string(),
       },
     )
@@ -32,13 +34,14 @@ async fn multiple_part_put_and_get_test() {
   assert_eq!(chunked_bytes.offsets.len(), 2);
 
   let mut completed_parts = Vec::new();
-  let mut iter = chunked_bytes.iter().enumerate();
-  while let Some((index, next)) = iter.next() {
+  let iter = chunked_bytes.iter().enumerate();
+  for (index, next) in iter {
     let resp = c1
       .upload_part(
         &workspace_id,
         UploadPartRequest {
           file_id: file_id.clone(),
+          directory: dir.clone(),
           upload_id: upload.upload_id.clone(),
           part_number: index as i32 + 1,
           body: next.to_vec(),
@@ -59,16 +62,124 @@ async fn multiple_part_put_and_get_test() {
 
   let req = CompleteUploadRequest {
     file_id: file_id.clone(),
+    directory: dir.clone(),
     upload_id: upload.upload_id,
     parts: completed_parts,
   };
   c1.complete_upload(&workspace_id, req).await.unwrap();
 
-  let url = c1.get_blob_url(&workspace_id, &file_id);
-  let blob = c1.get_blob(&url).await.unwrap().1;
+  let blob = c1
+    .get_blob_v1(&workspace_id, &dir, &file_id)
+    .await
+    .unwrap()
+    .1;
+
   let blob_text = String::from_utf8(blob.to_vec()).unwrap();
   assert_eq!(blob_text, text);
 }
+
+#[tokio::test]
+async fn single_part_put_and_get_test() {
+  // Test with smaller file (single part)
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let mime = mime::TEXT_PLAIN_UTF_8;
+  let text = generate_random_string(1024);
+  let file_id = Uuid::new_v4().to_string();
+
+  let upload = c1
+    .create_upload(
+      &workspace_id,
+      CreateUploadRequest {
+        file_id: file_id.clone(),
+        directory: workspace_id.clone(),
+        content_type: mime.to_string(),
+      },
+    )
+    .await
+    .unwrap();
+
+  let chunked_bytes = ChunkedBytes::from_bytes(Bytes::from(text.clone())).unwrap();
+  assert_eq!(chunked_bytes.offsets.len(), 1);
+
+  let mut completed_parts = Vec::new();
+  let iter = chunked_bytes.iter().enumerate();
+  for (index, next) in iter {
+    let resp = c1
+      .upload_part(
+        &workspace_id,
+        UploadPartRequest {
+          file_id: file_id.clone(),
+          directory: workspace_id.clone(),
+          upload_id: upload.upload_id.clone(),
+          part_number: index as i32 + 1,
+          body: next.to_vec(),
+        },
+      )
+      .await
+      .unwrap();
+
+    completed_parts.push(CompletedPartRequest {
+      e_tag: resp.e_tag,
+      part_number: resp.part_num,
+    });
+  }
+  assert_eq!(completed_parts.len(), 1);
+  assert_eq!(completed_parts[0].part_number, 1);
+
+  let req = CompleteUploadRequest {
+    file_id: file_id.clone(),
+    directory: workspace_id.clone(),
+    upload_id: upload.upload_id,
+    parts: completed_parts,
+  };
+  c1.complete_upload(&workspace_id, req).await.unwrap();
+
+  let blob = c1
+    .get_blob_v1(&workspace_id, &workspace_id, &file_id)
+    .await
+    .unwrap()
+    .1;
+  let blob_text = String::from_utf8(blob.to_vec()).unwrap();
+  assert_eq!(blob_text, text);
+}
+
+#[tokio::test]
+#[should_panic]
+async fn empty_part_upload_test() {
+  // Test with empty part
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let mime = mime::TEXT_PLAIN_UTF_8;
+  let file_id = Uuid::new_v4().to_string();
+
+  let upload = c1
+    .create_upload(
+      &workspace_id,
+      CreateUploadRequest {
+        file_id: file_id.clone(),
+        directory: workspace_id.clone(),
+        content_type: mime.to_string(),
+      },
+    )
+    .await
+    .unwrap();
+
+  let resp = c1
+    .upload_part(
+      &workspace_id,
+      UploadPartRequest {
+        file_id: file_id.clone(),
+        directory: workspace_id.clone(),
+        upload_id: upload.upload_id.clone(),
+        part_number: 1,
+        body: Vec::new(),
+      },
+    )
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 async fn multiple_part_upload_test() {
   let test_bucket = TestBucket::new().await;
@@ -107,6 +218,7 @@ async fn perform_upload_test(
 
   let req = CreateUploadRequest {
     file_id: Uuid::new_v4().to_string(),
+    directory: "".to_string(),
     content_type: "text".to_string(),
   };
   let upload = test_bucket.create_upload(req).await.unwrap();
@@ -133,6 +245,7 @@ async fn perform_upload_test(
 
     let req = UploadPartRequest {
       file_id: upload.file_id.clone(),
+      directory: "".to_string(),
       upload_id: upload.upload_id.clone(),
       part_number,
       body: chunk.to_vec(),
@@ -149,6 +262,7 @@ async fn perform_upload_test(
 
   let complete_req = CompleteUploadRequest {
     file_id: upload.file_id.clone(),
+    directory: "".to_string(),
     upload_id: upload.upload_id.clone(),
     parts: completed_parts
       .into_iter()

@@ -72,6 +72,7 @@ tonic.workspace = true
 prost.workspace = true
 tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
+percent-encoding = "2.3.1"
 
 # ai
 appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }

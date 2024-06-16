@@ -4,11 +4,12 @@ use anyhow::anyhow;
 use app_error::AppError;
 use bytes::Bytes;
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, FileDir, UploadPartRequest,
   UploadPartResponse,
 };
-use futures_util::StreamExt;
+use futures_util::TryStreamExt;
 use mime::Mime;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -25,14 +26,15 @@ impl Client {
     )
   }
 
-  pub async fn create_multi_upload(
+  pub async fn create_upload(
     &self,
     workspace_id: &str,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppResponseError> {
+    trace!("create_upload: {}", req);
     let url = format!(
-      "{}/api/file_storage/{}/create_upload",
-      self.base_url, workspace_id
+      "{}/api/file_storage/{workspace_id}/create_upload",
+      self.base_url
     );
     let resp = self
       .http_client_with_auth(Method::POST, &url)
@@ -143,6 +145,70 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "info", skip_all)]
+  pub async fn get_blob_v1(
+    &self,
+    workspace_id: &str,
+    dir: &str,
+    file_id: &str,
+  ) -> Result<(Mime, Vec<u8>), AppResponseError> {
+    let object_key = FileDirImpl { dir, file_id }.object_key();
+    let file_id = utf8_percent_encode(&object_key, NON_ALPHANUMERIC).to_string();
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/v1/blob/{file_id}",
+      self.base_url
+    );
+    self.get_blob(&url).await
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn delete_blob_v1(
+    &self,
+    workspace_id: &str,
+    dir: &str,
+    file_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let object_key = FileDirImpl { dir, file_id }.object_key();
+    let file_id = utf8_percent_encode(&object_key, NON_ALPHANUMERIC).to_string();
+
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/v1/blob/{file_id}",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn get_blob_v1_metadata(
+    &self,
+    workspace_id: &str,
+    dir: &str,
+    file_id: &str,
+  ) -> Result<BlobMetadata, AppResponseError> {
+    let object_key = FileDirImpl { dir, file_id }.object_key();
+    let file_id = utf8_percent_encode(&object_key, NON_ALPHANUMERIC).to_string();
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/v1/metadata/{file_id}",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    AppResponse::<BlobMetadata>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
   #[instrument(level = "info", skip_all)]
@@ -155,42 +221,37 @@ impl Client {
     log_request_id(&resp);
 
     match resp.status() {
-      reqwest::StatusCode::OK => {
-        // get mime from resp header
-        let mime = {
-          match resp.headers().get(header::CONTENT_TYPE) {
-            Some(v) => match v.to_str() {
-              Ok(v) => match v.parse::<Mime>() {
-                Ok(v) => v,
-                Err(e) => {
-                  tracing::error!("failed to parse mime from header: {:?}", e);
-                  mime::TEXT_PLAIN
-                },
-              },
-              Err(e) => {
-                tracing::error!("failed to get mime from header: {:?}", e);
-                mime::TEXT_PLAIN
-              },
-            },
-            None => mime::TEXT_PLAIN,
-          }
-        };
+      StatusCode::OK => {
+        let mime = resp
+          .headers()
+          .get(header::CONTENT_TYPE)
+          .and_then(|v| v.to_str().ok())
+          .and_then(|v| v.parse::<Mime>().ok())
+          .unwrap_or(mime::TEXT_PLAIN);
 
-        let mut stream = resp.bytes_stream();
-        let mut acc: Vec<u8> = Vec::new();
-        while let Some(raw_bytes) = stream.next().await {
-          acc.extend_from_slice(&raw_bytes?);
-        }
-        Ok((mime, acc))
+        let bytes = resp
+          .bytes_stream()
+          .try_fold(Vec::new(), |mut acc, chunk| async move {
+            acc.extend_from_slice(&chunk);
+            Ok(acc)
+          })
+          .await?;
+
+        Ok((mime, bytes))
       },
-      reqwest::StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
+      StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
         url.to_owned(),
       ))),
-      c => Err(AppResponseError::from(AppError::Unhandled(format!(
-        "status code: {}, message: {}",
-        c,
-        resp.text().await?
-      )))),
+      status => {
+        let message = resp
+          .text()
+          .await
+          .unwrap_or_else(|_| "Unknown error".to_string());
+        Err(AppResponseError::from(AppError::Unhandled(format!(
+          "status code: {}, message: {}",
+          status, message
+        ))))
+      },
     }
   }
 
@@ -251,9 +312,6 @@ impl Deref for ChunkedBytes {
 
 impl ChunkedBytes {
   pub fn from_bytes(data: Bytes) -> Result<Self, anyhow::Error> {
-    if data.len() < CHUNK_SIZE {
-      return Err(anyhow!("File size is less than 5 MB"));
-    }
     let offsets = split_into_chunks(&data);
     Ok(ChunkedBytes { data, offsets })
   }
@@ -263,10 +321,6 @@ impl ChunkedBytes {
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer).await?;
     let data = Bytes::from(buffer);
-
-    if data.len() < CHUNK_SIZE {
-      return Err(anyhow!("File size is less than 5 MB"));
-    }
 
     let offsets = split_into_chunks(&data);
     Ok(ChunkedBytes { data, offsets })
@@ -326,12 +380,42 @@ pub async fn get_chunk(
   Ok(chunk)
 }
 
+struct FileDirImpl<'a> {
+  pub dir: &'a str,
+  pub file_id: &'a str,
+}
+
+impl FileDir for FileDirImpl<'_> {
+  fn directory(&self) -> &str {
+    self.dir
+  }
+
+  fn file_id(&self) -> &str {
+    self.file_id
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use crate::http_blob::ChunkedBytes;
   use bytes::Bytes;
   use std::env::temp_dir;
   use tokio::io::AsyncWriteExt;
+
+  #[tokio::test]
+  async fn test_chunked_bytes_less_than_chunk_size() {
+    let data = Bytes::from(vec![0; 1024 * 1024]); // 1 MB of zeroes
+    let chunked_data = ChunkedBytes::from_bytes(data.clone()).unwrap();
+
+    // Check if the offsets are correct
+    assert_eq!(chunked_data.offsets.len(), 1); // Should have 1 chunk
+    assert_eq!(chunked_data.offsets[0], (0, 1024 * 1024));
+
+    // Check if the data can be iterated correctly
+    let mut iter = chunked_data.iter();
+    assert_eq!(iter.next().unwrap().len(), 1024 * 1024);
+    assert!(iter.next().is_none());
+  }
 
   #[tokio::test]
   async fn test_chunked_bytes_from_bytes() {

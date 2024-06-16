@@ -7,10 +7,10 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 
 use database_entity::file_dto::{
-  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, FileDir, UploadPartRequest,
   UploadPartResponse,
 };
-use tracing::{instrument, trace, warn};
+use tracing::{instrument, warn};
 use uuid::Uuid;
 
 pub trait ResponseBlob {
@@ -21,22 +21,27 @@ pub trait ResponseBlob {
 pub trait BucketClient {
   type ResponseData: ResponseBlob;
 
-  async fn pub_blob<P>(&self, id: P, content: &[u8]) -> Result<(), AppError>
+  async fn pub_blob<P>(&self, id: &P, content: &[u8]) -> Result<(), AppError>
   where
-    P: AsRef<str> + Send;
+    P: BlobKey;
 
-  async fn delete_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
-  where
-    P: AsRef<str> + Send;
+  async fn delete_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError>;
 
-  async fn get_blob<P>(&self, id: P) -> Result<Self::ResponseData, AppError>
-  where
-    P: AsRef<str> + Send;
+  async fn get_blob(&self, object_key: &str) -> Result<Self::ResponseData, AppError>;
 
   async fn create_upload(&self, req: CreateUploadRequest)
     -> Result<CreateUploadResponse, AppError>;
   async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError>;
-  async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError>;
+  async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(usize, String), AppError>;
+
+  async fn remove_dir(&self, dir: &str) -> Result<(), AppError>;
+}
+
+pub trait BlobKey: Send + Sync {
+  fn workspace_id(&self) -> &Uuid;
+  fn object_key(&self) -> String;
+  fn meta_key(&self) -> &str;
+  fn e_tag(&self) -> &str;
 }
 
 pub struct BucketStorage<C> {
@@ -52,30 +57,34 @@ where
     Self { client, pg_pool }
   }
 
+  pub async fn remove_dir(&self, dir: &str) -> Result<(), AppError> {
+    self.client.remove_dir(dir).await?;
+    Ok(())
+  }
+
   #[instrument(skip_all, err)]
   #[inline]
-  pub async fn put_blob(
+  pub async fn put_blob<K: BlobKey>(
     &self,
-    workspace_id: Uuid,
-    file_id: String,
+    key: K,
     file_data: Vec<u8>,
     file_type: String,
   ) -> Result<(), AppError> {
-    if is_blob_metadata_exists(&self.pg_pool, &workspace_id, &file_id).await? {
+    if is_blob_metadata_exists(&self.pg_pool, key.workspace_id(), key.meta_key()).await? {
       warn!(
-        "file already exists, workspace_id: {}, file_id: {}",
-        workspace_id, file_id
+        "file already exists, workspace_id: {}, meta_key: {}",
+        key.workspace_id(),
+        key.meta_key()
       );
       return Ok(());
     }
 
-    let obj_key = format!("{}/{}", workspace_id, file_id);
-    self.client.pub_blob(obj_key, &file_data).await?;
+    self.client.pub_blob(&key, &file_data).await?;
 
     insert_blob_metadata(
       &self.pg_pool,
-      &file_id,
-      &workspace_id,
+      key.meta_key(),
+      key.workspace_id(),
       &file_type,
       file_data.len(),
     )
@@ -83,11 +92,11 @@ where
     Ok(())
   }
 
-  pub async fn delete_blob(&self, workspace_id: &Uuid, file_id: &str) -> Result<(), AppError> {
-    let obj_key = format!("{}/{}", workspace_id, file_id);
+  pub async fn delete_blob(&self, key: impl BlobKey) -> Result<(), AppError> {
+    self.client.delete_blob(&key.object_key()).await?;
+
     let mut tx = self.pg_pool.begin().await?;
-    delete_blob_metadata(&mut tx, workspace_id, file_id).await?;
-    self.client.delete_blob(obj_key).await?;
+    delete_blob_metadata(&mut tx, key.workspace_id(), key.meta_key()).await?;
     tx.commit().await?;
     Ok(())
   }
@@ -95,15 +104,14 @@ where
   pub async fn get_blob_metadata(
     &self,
     workspace_id: &Uuid,
-    file_id: &str,
+    meta_key: &str,
   ) -> Result<AFBlobMetadataRow, AppError> {
-    let metadata = get_blob_metadata(&self.pg_pool, workspace_id, file_id).await?;
+    let metadata = get_blob_metadata(&self.pg_pool, workspace_id, meta_key).await?;
     Ok(metadata)
   }
 
-  pub async fn get_blob(&self, workspace_id: &Uuid, file_id: &str) -> Result<Vec<u8>, AppError> {
-    let obj_key = format!("{}/{}", workspace_id, file_id);
-    let blob = self.client.get_blob(obj_key).await?.to_blob();
+  pub async fn get_blob(&self, key: &impl BlobKey) -> Result<Vec<u8>, AppError> {
+    let blob = self.client.get_blob(&key.object_key()).await?.to_blob();
     Ok(blob)
   }
 
@@ -111,17 +119,36 @@ where
     &self,
     req: CreateUploadRequest,
   ) -> Result<CreateUploadResponse, AppError> {
-    trace!("create upload: {}", req);
     self.client.create_upload(req).await
   }
 
   pub async fn upload_part(&self, req: UploadPartRequest) -> Result<UploadPartResponse, AppError> {
-    trace!("Upload part: {}", req);
     self.client.upload_part(req).await
   }
 
-  pub async fn complete_upload(&self, req: CompleteUploadRequest) -> Result<(), AppError> {
-    trace!("Complete upload: {}", req);
-    self.client.complete_upload(req).await
+  pub async fn complete_upload(
+    &self,
+    workspace_id: Uuid,
+    req: CompleteUploadRequest,
+  ) -> Result<(), AppError> {
+    let object_key = req.object_key();
+    if is_blob_metadata_exists(&self.pg_pool, &workspace_id, &object_key).await? {
+      warn!(
+        "file already exists, workspace_id: {}, request: {}",
+        workspace_id, req
+      );
+      return Ok(());
+    }
+
+    let (content_length, content_type) = self.client.complete_upload(req).await?;
+    insert_blob_metadata(
+      &self.pg_pool,
+      &object_key,
+      &workspace_id,
+      &content_type,
+      content_length,
+    )
+    .await?;
+    Ok(())
   }
 }

@@ -402,6 +402,7 @@ fn payload_to_async_read(payload: Payload) -> Pin<Box<dyn AsyncRead>> {
   Box::pin(reader)
 }
 
+/// Use [BlobPathV0] when get/put object by single part
 #[derive(Deserialize, Debug)]
 struct BlobPathV0 {
   workspace_id: Uuid,
@@ -426,6 +427,7 @@ impl BlobKey for BlobPathV0 {
   }
 }
 
+/// Use [BlobPathV1] when put/get object by multiple upload parts
 #[derive(Deserialize, Debug)]
 struct BlobPathV1 {
   workspace_id: Uuid,

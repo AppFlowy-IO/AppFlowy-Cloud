@@ -1017,11 +1017,10 @@ async fn get_published_collab_blob_handler(
 async fn put_publish_collab_handler(
   path_param: web::Path<(Uuid, String)>,
   user_uuid: UserUuid,
-  payload: String,
+  metadata: Json<serde_json::Value>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let (workspace_id, doc_name) = path_param.into_inner();
-  let metadata = serde_json::Value::from(payload);
   biz::workspace::ops::publish_collab(
     &state.pg_pool,
     &workspace_id,
@@ -1036,11 +1035,11 @@ async fn put_publish_collab_handler(
 async fn get_publish_collab_handler(
   path_param: web::Path<(Uuid, String)>,
   state: Data<AppState>,
-) -> Result<Json<AppResponse<serde_json::Value>>> {
+) -> Result<Json<serde_json::Value>> {
   let (workspace_id, doc_name) = path_param.into_inner();
   let metadata =
     biz::workspace::ops::get_published_collab(&state.pg_pool, &workspace_id, &doc_name).await?;
-  Ok(Json(AppResponse::Ok().with_data(metadata)))
+  Ok(Json(metadata))
 }
 
 async fn put_publish_collab_blob_handler(

@@ -1,5 +1,6 @@
 use database_entity::dto::UpdatePublishNamespace;
 use reqwest::Method;
+use serde_json::json;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::Client;
@@ -37,5 +38,53 @@ impl Client {
       .await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn publish_collab<T>(
+    &self,
+    workspace_id: &str,
+    doc_name: &str,
+    metadata: T,
+  ) -> Result<(), AppResponseError>
+  where
+    T: serde::Serialize,
+  {
+    let url = format!(
+      "{}/api/workspace/{}/publish/{}",
+      self.base_url, workspace_id, doc_name
+    );
+
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&metadata)
+      .send()
+      .await?;
+
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn get_publish_collab<T>(
+    &self,
+    workspace_id: &str,
+    doc_name: &str,
+  ) -> Result<T, AppResponseError>
+  where
+    T: serde::de::DeserializeOwned + 'static,
+  {
+    let url = format!(
+      "{}/api/workspace/{}/publish/{}",
+      self.base_url, workspace_id, doc_name
+    );
+
+    let resp = self
+      .cloud_client
+      .get(&url)
+      .send()
+      .await?
+      .error_for_status()?
+      .json::<T>()
+      .await?;
+    Ok(resp)
   }
 }

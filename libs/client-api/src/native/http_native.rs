@@ -6,21 +6,107 @@ use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
+use bytes::Bytes;
 use collab_rt_entity::HttpRealtimeMessage;
 use database_entity::dto::{CollabParams, QueryCollabParams};
+use database_entity::file_dto::{
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartRequest,
+  UploadPartResponse,
+};
 use futures_util::stream;
 use prost::Message;
 use reqwest::{Body, Method};
 use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
+use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Retry, RetryIf};
-use tracing::{event, info, instrument};
+use tracing::{event, info, instrument, trace};
 
+const CHUNK_SIZE: usize = 5 * 1024 * 1024; // 5 MB
 impl Client {
+  pub async fn create_upload(
+    &self,
+    workspace_id: &str,
+    req: CreateUploadRequest,
+  ) -> Result<CreateUploadResponse, AppResponseError> {
+    trace!("create_upload: {}", req);
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/create_upload",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<CreateUploadResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Upload a part of a file. The part number should be 1-based.
+  ///
+  /// In Amazon S3, the minimum chunk size for multipart uploads is 5 MB,except for the last part,
+  /// which can be smaller.(https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)
+  pub async fn upload_part(
+    &self,
+    workspace_id: &str,
+    req: UploadPartRequest,
+  ) -> Result<UploadPartResponse, AppResponseError> {
+    trace!("upload_part: {}", req);
+    let file_id = req.file_id;
+    let upload_id = req.upload_id;
+    let part_number = req.part_number;
+
+    if req.body.is_empty() {
+      return Err(AppResponseError::from(AppError::InvalidRequest(
+        "Empty body".to_string(),
+      )));
+    }
+
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/upload_part/{file_id}/{upload_id}/{part_number}",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .body(req.body)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<UploadPartResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn complete_upload(
+    &self,
+    workspace_id: &str,
+    req: CompleteUploadRequest,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/complete_upload",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
   #[instrument(level = "debug", skip_all)]
   pub async fn get_collab(
     &self,
@@ -202,4 +288,165 @@ where
   T::Output: Send + 'static,
 {
   tokio::spawn(future)
+}
+
+pub struct ChunkedBytes {
+  pub data: Bytes,
+  pub offsets: Vec<(usize, usize)>,
+}
+
+impl Deref for ChunkedBytes {
+  type Target = Bytes;
+
+  fn deref(&self) -> &Self::Target {
+    &self.data
+  }
+}
+
+impl ChunkedBytes {
+  pub fn from_bytes(data: Bytes) -> Result<Self, anyhow::Error> {
+    let offsets = split_into_chunks(&data);
+    Ok(ChunkedBytes { data, offsets })
+  }
+
+  pub async fn from_file(file_path: &PathBuf) -> Result<Self, anyhow::Error> {
+    let mut file = tokio::fs::File::open(file_path).await?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).await?;
+    let data = Bytes::from(buffer);
+
+    let offsets = split_into_chunks(&data);
+    Ok(ChunkedBytes { data, offsets })
+  }
+
+  pub fn iter(&self) -> ChunkedBytesIterator {
+    ChunkedBytesIterator {
+      chunked_data: self,
+      current_index: 0,
+    }
+  }
+}
+
+pub struct ChunkedBytesIterator<'a> {
+  chunked_data: &'a ChunkedBytes,
+  current_index: usize,
+}
+impl<'a> Iterator for ChunkedBytesIterator<'a> {
+  type Item = Bytes;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.current_index >= self.chunked_data.offsets.len() {
+      None
+    } else {
+      let (start, end) = self.chunked_data.offsets[self.current_index];
+      self.current_index += 1;
+      Some(self.chunked_data.data.slice(start..end))
+    }
+  }
+}
+// Function to split input bytes into several chunks and return offsets
+pub fn split_into_chunks(data: &Bytes) -> Vec<(usize, usize)> {
+  let mut offsets = Vec::new();
+  let mut start = 0;
+
+  while start < data.len() {
+    let end = std::cmp::min(start + CHUNK_SIZE, data.len());
+    offsets.push((start, end));
+    start = end;
+  }
+  offsets
+}
+
+// Function to get chunk data using chunk number
+pub async fn get_chunk(
+  data: Bytes,
+  chunk_number: usize,
+  offsets: &[(usize, usize)],
+) -> Result<Bytes, anyhow::Error> {
+  if chunk_number >= offsets.len() {
+    return Err(anyhow!("Chunk number out of range"));
+  }
+
+  let (start, end) = offsets[chunk_number];
+  let chunk = data.slice(start..end);
+
+  Ok(chunk)
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::ChunkedBytes;
+  use bytes::Bytes;
+  use std::env::temp_dir;
+  use tokio::io::AsyncWriteExt;
+
+  #[tokio::test]
+  async fn test_chunked_bytes_less_than_chunk_size() {
+    let data = Bytes::from(vec![0; 1024 * 1024]); // 1 MB of zeroes
+    let chunked_data = ChunkedBytes::from_bytes(data.clone()).unwrap();
+
+    // Check if the offsets are correct
+    assert_eq!(chunked_data.offsets.len(), 1); // Should have 1 chunk
+    assert_eq!(chunked_data.offsets[0], (0, 1024 * 1024));
+
+    // Check if the data can be iterated correctly
+    let mut iter = chunked_data.iter();
+    assert_eq!(iter.next().unwrap().len(), 1024 * 1024);
+    assert!(iter.next().is_none());
+  }
+
+  #[tokio::test]
+  async fn test_chunked_bytes_from_bytes() {
+    let data = Bytes::from(vec![0; 15 * 1024 * 1024]); // 15 MB of zeroes
+    let chunked_data = ChunkedBytes::from_bytes(data.clone()).unwrap();
+
+    // Check if the offsets are correct
+    assert_eq!(chunked_data.offsets.len(), 3); // Should have 3 chunks
+    assert_eq!(chunked_data.offsets[0], (0, 5 * 1024 * 1024));
+    assert_eq!(chunked_data.offsets[1], (5 * 1024 * 1024, 10 * 1024 * 1024));
+    assert_eq!(
+      chunked_data.offsets[2],
+      (10 * 1024 * 1024, 15 * 1024 * 1024)
+    );
+
+    // Check if the data can be iterated correctly
+    let mut iter = chunked_data.iter();
+    assert_eq!(iter.next().unwrap().len(), 5 * 1024 * 1024);
+    assert_eq!(iter.next().unwrap().len(), 5 * 1024 * 1024);
+    assert_eq!(iter.next().unwrap().len(), 5 * 1024 * 1024);
+    assert!(iter.next().is_none());
+  }
+
+  #[tokio::test]
+  async fn test_chunked_bytes_from_file() {
+    // Create a temporary file with 15 MB of zeroes
+    let mut file_path = temp_dir();
+    file_path.push("test_file");
+
+    let mut file = tokio::fs::File::create(&file_path).await.unwrap();
+    file.write_all(&vec![0; 15 * 1024 * 1024]).await.unwrap();
+    file.flush().await.unwrap();
+
+    // Read the file into ChunkedBytes
+    let chunked_data = ChunkedBytes::from_file(&file_path).await.unwrap();
+
+    // Check if the offsets are correct
+    assert_eq!(chunked_data.offsets.len(), 3); // Should have 3 chunks
+    assert_eq!(chunked_data.offsets[0], (0, 5 * 1024 * 1024));
+    assert_eq!(chunked_data.offsets[1], (5 * 1024 * 1024, 10 * 1024 * 1024));
+    assert_eq!(
+      chunked_data.offsets[2],
+      (10 * 1024 * 1024, 15 * 1024 * 1024)
+    );
+
+    // Check if the data can be iterated correctly
+    let mut iter = chunked_data.iter();
+    assert_eq!(iter.next().unwrap().len(), 5 * 1024 * 1024);
+    assert_eq!(iter.next().unwrap().len(), 5 * 1024 * 1024);
+    assert_eq!(iter.next().unwrap().len(), 5 * 1024 * 1024);
+    assert!(iter.next().is_none());
+
+    // Clean up the temporary file
+    tokio::fs::remove_file(file_path).await.unwrap();
+  }
 }

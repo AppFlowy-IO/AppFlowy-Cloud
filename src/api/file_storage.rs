@@ -59,12 +59,12 @@ pub fn file_storage_scope() -> Scope {
         .route(web::put().to(complete_upload_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/v1/blob/{file_id}")
+      web::resource("/{workspace_id}/v1/blob/{object_key}")
         .route(web::get().to(get_blob_v1_handler))
         .route(web::delete().to(delete_blob_v1_handler)),
     )
     .service(
-      web::resource("/{workspace_id}/v1/metadata/{file_id}")
+      web::resource("/{workspace_id}/v1/metadata/{object_key}")
         .route(web::get().to(get_blob_metadata_v1_handler)),
     )
 }
@@ -431,7 +431,7 @@ impl BlobKey for BlobPathV0 {
 #[derive(Deserialize, Debug)]
 struct BlobPathV1 {
   workspace_id: Uuid,
-  file_id: String,
+  object_key: String,
 }
 
 impl BlobKey for BlobPathV1 {
@@ -440,14 +440,14 @@ impl BlobKey for BlobPathV1 {
   }
 
   fn object_key(&self) -> String {
-    self.file_id.clone()
+    self.object_key.clone()
   }
 
   fn meta_key(&self) -> &str {
-    &self.file_id
+    &self.object_key
   }
 
   fn e_tag(&self) -> &str {
-    &self.file_id
+    &self.object_key
   }
 }

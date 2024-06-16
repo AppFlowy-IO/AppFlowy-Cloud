@@ -46,9 +46,6 @@ pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{ob
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
-    // deprecated, use the api below instead
-    .service(web::resource("/list").route(web::get().to(list_workspace_handler)))
-
     .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
       .route(web::post().to(create_workspace_handler))
@@ -139,6 +136,7 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
+        .route(web::get().to(get_publish_namespace_handler))
     )
     .service(
       web::resource("/{workspace_id}/publish/{doc_name}/blob")
@@ -968,7 +966,7 @@ async fn put_publish_namespace_handler(
 ) -> Result<Json<AppResponse<()>>> {
   let workspace_id = workspace_id.into_inner();
   let new_namespace = payload.into_inner().new_namespace;
-  biz::workspace::ops::update_workspace_namespace(
+  biz::workspace::ops::set_workspace_namespace(
     &state.pg_pool,
     &user_uuid,
     &workspace_id,
@@ -976,6 +974,16 @@ async fn put_publish_namespace_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_publish_namespace_handler(
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<String>>> {
+  let workspace_id = workspace_id.into_inner();
+  let namespace =
+    biz::workspace::ops::get_workspace_namespace(&state.pg_pool, &workspace_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(namespace)))
 }
 
 async fn get_published_collab_handler(

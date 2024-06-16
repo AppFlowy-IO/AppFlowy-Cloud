@@ -818,6 +818,30 @@ pub async fn upsert_workspace_settings(
 }
 
 #[inline]
+pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  namespace: &str,
+) -> Result<bool, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_workspace
+        WHERE workspace_id = $1
+          AND publish_namespace = $2
+      )
+    "#,
+    workspace_id,
+    namespace,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res.unwrap_or(false))
+}
+
+#[inline]
 pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
@@ -843,6 +867,25 @@ pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = P
   }
 
   Ok(())
+}
+
+#[inline]
+pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Option<String>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT publish_namespace
+      FROM af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
 }
 
 #[inline]

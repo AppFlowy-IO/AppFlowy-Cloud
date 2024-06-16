@@ -18,14 +18,14 @@ async fn test_set_publish_namespace_set() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), namespace.clone())
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
     .await
     .unwrap();
 
   {
     // cannot set the same namespace
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), namespace.clone())
+      .set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
       .await
       .err()
       .unwrap();
@@ -34,7 +34,7 @@ async fn test_set_publish_namespace_set() {
   {
     // can replace the namespace
     let namespace = uuid::Uuid::new_v4().to_string();
-    c.set_workspace_publish_namespace(&workspace_id.to_string(), namespace.clone())
+    c.set_workspace_publish_namespace(&workspace_id.to_string(), &namespace)
       .await
       .unwrap();
 
@@ -47,7 +47,7 @@ async fn test_set_publish_namespace_set() {
   {
     // cannot set namespace too short
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "a".to_string()) // too short
+      .set_workspace_publish_namespace(&workspace_id.to_string(), "a") // too short
       .await
       .err()
       .unwrap();
@@ -57,7 +57,7 @@ async fn test_set_publish_namespace_set() {
   {
     // cannot set namespace with invalid chars
     let err = c
-      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!".to_string()) // invalid chars
+      .set_workspace_publish_namespace(&workspace_id.to_string(), "/|(*&)(&#@!") // invalid chars
       .await
       .err()
       .unwrap();
@@ -75,7 +75,7 @@ async fn test_publish_doc() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let my_namespace = uuid::Uuid::new_v4().to_string();
-  c.set_workspace_publish_namespace(&workspace_id.to_string(), my_namespace)
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), &my_namespace)
     .await
     .unwrap();
 
@@ -93,7 +93,14 @@ async fn test_publish_doc() {
     // Non login user should be able to view the published collab metadata
     let non_login = localhost_client();
     let published_collab = non_login
-      .get_publish_collab::<Metadata>(&workspace_id, "my_doc")
+      .get_published_collab::<Metadata>(&workspace_id, "my_doc")
+      .await
+      .unwrap();
+    assert_eq!(published_collab.title, "my_title");
+
+    // using workspace publish_namespace instead
+    let published_collab = non_login
+      .get_published_collab_using_publish_namespace::<Metadata>(&my_namespace, "my_doc")
       .await
       .unwrap();
     assert_eq!(published_collab.title, "my_title");

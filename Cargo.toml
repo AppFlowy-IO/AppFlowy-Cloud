@@ -156,6 +156,7 @@ members = [
     "libs/wasm-test",
     "libs/client-api-wasm",
     "libs/appflowy-ai-client",
+    "libs/client-api-entity",
     # services
     "services/appflowy-history",
     "services/appflowy-indexer",
@@ -211,6 +212,7 @@ tonic-proto = { path = "libs/tonic-proto" }
 appflowy-ai-client = { path = "libs/appflowy-ai-client", default-features = false }
 openai_dive = { version = "0.4", features = ["rustls-tls"] }
 pgvector = { version = "0.3", features = ["sqlx"] }
+client-api-entity = { path = "libs/client-api-entity" }
 
 # collaboration
 yrs = "0.18.7"

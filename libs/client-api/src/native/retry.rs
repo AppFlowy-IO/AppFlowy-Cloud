@@ -5,8 +5,8 @@ use crate::ws::{
 };
 use crate::Client;
 use app_error::gotrue::GoTrueError;
+use client_api_entity::QueryCollabParams;
 use client_websocket::{connect_async, WebSocketStream};
-use database_entity::dto::QueryCollabParams;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use parking_lot::RwLock;
 use reqwest::header::HeaderMap;

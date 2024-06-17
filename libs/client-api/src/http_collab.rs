@@ -1,7 +1,7 @@
 use crate::http::log_request_id;
 use crate::{spawn_blocking_brotli_compress, Client};
 use app_error::AppError;
-use database_entity::dto::{
+use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CreateCollabParams, DeleteCollabParams,
   QueryCollab,
 };

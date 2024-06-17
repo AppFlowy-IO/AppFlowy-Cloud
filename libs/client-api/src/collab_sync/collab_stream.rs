@@ -3,9 +3,9 @@ use crate::collab_sync::{
   start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
 };
 
+use client_api_entity::{validate_data_for_folder, CollabType};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab_entity::{validate_data_for_folder, CollabType};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{
   handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,

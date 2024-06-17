@@ -66,11 +66,6 @@ async fn test_set_publish_namespace_set() {
 
 #[tokio::test]
 async fn test_publish_doc() {
-  #[derive(serde::Serialize, serde::Deserialize)]
-  struct Metadata {
-    title: String,
-  }
-
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&c).await;
   let my_namespace = uuid::Uuid::new_v4().to_string();
@@ -118,6 +113,29 @@ async fn test_publish_doc() {
       .unwrap();
     assert!(collab_data == "some_collab_data");
   }
+
+  c.delete_published_collab(&workspace_id, my_doc_name)
+    .await
+    .unwrap();
+
+  {
+    // Deleted collab should not be accessible
+    let guest_client = localhost_client();
+    let err = guest_client
+      .get_published_collab::<Metadata>(&my_namespace, my_doc_name)
+      .await
+      .err()
+      .unwrap();
+    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+
+    let guest_client = localhost_client();
+    let err = guest_client
+      .get_published_collab_blob(&my_namespace, my_doc_name)
+      .await
+      .err()
+      .unwrap();
+    assert_eq!(format!("{:?}", err.code), "RecordNotFound");
+  }
 }
 
 async fn get_first_workspace_string(c: &client_api::Client) -> String {
@@ -129,4 +147,9 @@ async fn get_first_workspace_string(c: &client_api::Client) -> String {
     .unwrap()
     .workspace_id
     .to_string()
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Metadata {
+  title: String,
 }

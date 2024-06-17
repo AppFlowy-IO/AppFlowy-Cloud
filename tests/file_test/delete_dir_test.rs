@@ -7,7 +7,7 @@ use database_entity::file_dto::{CompleteUploadRequest, CompletedPartRequest, Cre
 use uuid::Uuid;
 
 #[tokio::test]
-async fn delete_dir_test() {
+async fn delete_workspace_resource_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
   let mime = mime::TEXT_PLAIN_UTF_8;
@@ -22,10 +22,10 @@ async fn delete_dir_test() {
 }
 
 #[tokio::test]
-async fn delete_dir_test2() {
+async fn delete_workspace_sub_folder_resource_test() {
   let (c1, _user1) = generate_unique_registered_user_client().await;
   let workspace_id = workspace_id_from_client(&c1).await;
-  let parent_dir = workspace_id.clone();
+  let parent_dir = format!("SubFolder:{}", uuid::Uuid::new_v4());
   let mime = mime::TEXT_PLAIN_UTF_8;
   let mut file_ids = vec![];
 

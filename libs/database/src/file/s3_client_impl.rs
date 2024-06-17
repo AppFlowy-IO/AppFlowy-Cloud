@@ -255,14 +255,14 @@ impl BucketClient for AwsS3BucketClientImpl {
       .await
   }
 
-  async fn remove_dir(&self, dir: &str) -> Result<(), AppError> {
+  async fn remove_dir(&self, parent_dir: &str) -> Result<(), AppError> {
     let mut continuation_token = None;
     loop {
       let list_objects = self
         .client
         .list_objects_v2()
         .bucket(&self.bucket)
-        .prefix(dir)
+        .prefix(parent_dir)
         .set_continuation_token(continuation_token.clone())
         .send()
         .await
@@ -289,7 +289,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       trace!(
         "objects_to_delete: {:?} at directory: {}",
         objects_to_delete.len(),
-        dir
+        parent_dir
       );
 
       // Step 2: Delete the listed objects in batches of 1000
@@ -302,7 +302,7 @@ impl BucketClient for AwsS3BucketClientImpl {
 
         trace!(
           "Deleting {} objects: {:?}",
-          dir,
+          parent_dir,
           objects_to_delete
             .iter()
             .map(|object| &object.key)

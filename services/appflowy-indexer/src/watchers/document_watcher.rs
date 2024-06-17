@@ -49,7 +49,7 @@ impl DocumentWatcher {
 
   fn index_initial_content(document: &mut Document, notifier: &Sender<u64>) -> Result<()> {
     let data = document.get_document_data()?;
-    if let Some(_) = data.meta.text_map.as_ref() {
+    if data.meta.text_map.as_ref().is_some() {
       notifier.send_modify(|i| *i += 1);
     }
     Ok(())

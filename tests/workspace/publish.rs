@@ -93,17 +93,16 @@ async fn test_publish_doc() {
     // Non login user should be able to view the published collab metadata
     let non_login = localhost_client();
     let published_collab = non_login
-      .get_published_collab::<Metadata>(&workspace_id, "my_doc")
+      .get_published_collab::<Metadata>(&my_namespace, "my_doc")
       .await
       .unwrap();
     assert_eq!(published_collab.title, "my_title");
 
-    // using workspace publish_namespace instead
-    let published_collab = non_login
-      .get_published_collab_using_publish_namespace::<Metadata>(&my_namespace, "my_doc")
+    let collab_data = non_login
+      .get_published_collab_blob(&my_namespace, "my_doc")
       .await
       .unwrap();
-    assert_eq!(published_collab.title, "my_title");
+    assert!(collab_data.is_empty());
   }
 }
 

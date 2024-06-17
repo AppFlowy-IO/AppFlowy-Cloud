@@ -887,25 +887,6 @@ pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = P
 }
 
 #[inline]
-pub async fn select_workspace_id_by_namespace<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  publish_namespace: &str,
-) -> Result<Uuid, AppError> {
-  let res = sqlx::query_scalar!(
-    r#"
-      SELECT workspace_id
-      FROM af_workspace
-      WHERE publish_namespace = $1
-    "#,
-    publish_namespace,
-  )
-  .fetch_one(executor)
-  .await?;
-
-  Ok(res)
-}
-
-#[inline]
 pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
@@ -941,17 +922,17 @@ pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database 
 #[inline]
 pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  workspace_id: &Uuid,
+  publish_namespace: &str,
   doc_name: &str,
 ) -> Result<serde_json::Value, AppError> {
   let res = sqlx::query!(
     r#"
     SELECT metadata
     FROM af_published_collab
-    WHERE workspace_id = $1
+    WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
       AND doc_name = $2
     "#,
-    workspace_id,
+    publish_namespace,
     doc_name,
   )
   .fetch_one(executor)
@@ -1022,16 +1003,17 @@ pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Databas
 #[inline]
 pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  workspace_id: &Uuid,
+  publish_namespace: &str,
   doc_name: &str,
 ) -> Result<Vec<u8>, AppError> {
   let res = sqlx::query_scalar!(
     r#"
       SELECT blob
       FROM af_published_collab
-      WHERE workspace_id = $1 AND doc_name = $2
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      AND doc_name = $2
     "#,
-    workspace_id,
+    publish_namespace,
     doc_name,
   )
   .fetch_one(executor)

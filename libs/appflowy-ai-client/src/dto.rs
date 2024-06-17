@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
@@ -113,4 +114,81 @@ pub struct TranslateItem {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TranslateRowResponse {
   pub items: Vec<HashMap<String, String>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum EmbeddingInput {
+  /// The string that will be turned into an embedding.
+  String(String),
+  /// The array of strings that will be turned into an embedding.
+  StringArray(Vec<String>),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum EmbeddingOutput {
+  Float(Vec<f64>),
+  Base64(String),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Embedding {
+  /// An integer representing the index of the embedding in the list of embeddings.
+  pub index: i32,
+  /// The embedding value, which is an instance of `EmbeddingOutput`.
+  pub embedding: EmbeddingOutput,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EmbeddingResponse {
+  /// A string that is always set to "embedding".
+  pub object: String,
+  /// A list of `Embedding` objects.
+  pub data: Vec<Embedding>,
+  /// A string representing the model used to generate the embeddings.
+  pub model: String,
+  /// An integer representing the total number of tokens used.
+  pub total_tokens: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum EmbeddingEncodingFormat {
+  Float,
+  Base64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct EmbeddingRequest {
+  /// An instance of `EmbeddingInput` containing the data to be embedded.
+  pub input: EmbeddingInput,
+  /// A string representing the model to use for generating embeddings.
+  pub model: String,
+  /// An integer representing the chunk size for processing.
+  pub chunk_size: i32,
+  /// An instance of `EmbeddingEncodingFormat` representing the format of the embedding.
+  pub encoding_format: EmbeddingEncodingFormat,
+  /// An integer representing the number of dimensions for the embedding.
+  pub dimensions: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum EmbeddingsModel {
+  #[serde(rename = "text-embedding-3-small")]
+  TextEmbedding3Small,
+  #[serde(rename = "text-embedding-3-large")]
+  TextEmbedding3Large,
+  #[serde(rename = "text-embedding-ada-002")]
+  TextEmbeddingAda002,
+}
+
+impl Display for EmbeddingsModel {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      EmbeddingsModel::TextEmbedding3Small => write!(f, "text-embedding-3-small"),
+      EmbeddingsModel::TextEmbedding3Large => write!(f, "text-embedding-3-large"),
+      EmbeddingsModel::TextEmbeddingAda002 => write!(f, "text-embedding-ada-002"),
+    }
+  }
 }

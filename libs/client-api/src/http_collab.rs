@@ -7,7 +7,6 @@ use client_api_entity::{
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
-use std::time::Duration;
 use tracing::instrument;
 
 impl Client {
@@ -35,7 +34,7 @@ impl Client {
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-      builder = builder.timeout(Duration::from_secs(60));
+      builder = builder.timeout(std::time::Duration::from_secs(60));
     }
 
     let resp = builder.body(compress_bytes).send().await?;

@@ -40,6 +40,7 @@ app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
 
 shared-entity = { workspace = true }
+collab-rt-entity = { workspace = true }
 client-api-entity.workspace = true
 serde_urlencoded = "0.7.1"
 

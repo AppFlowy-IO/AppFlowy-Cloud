@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use database_entity::dto::UpdatePublishNamespace;
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -67,35 +68,11 @@ impl Client {
 
   pub async fn get_published_collab<T>(
     &self,
-    workspace_id: &str,
-    doc_name: &str,
-  ) -> Result<T, AppResponseError>
-  where
-    T: serde::de::DeserializeOwned + 'static,
-  {
-    let url = format!(
-      "{}/api/workspace/{}/publish/{}",
-      self.base_url, workspace_id, doc_name
-    );
-
-    let resp = self
-      .cloud_client
-      .get(&url)
-      .send()
-      .await?
-      .error_for_status()?
-      .json::<T>()
-      .await?;
-    Ok(resp)
-  }
-
-  pub async fn get_published_collab_using_publish_namespace<T>(
-    &self,
     publish_namespace: &str,
     doc_name: &str,
   ) -> Result<T, AppResponseError>
   where
-    T: serde::de::DeserializeOwned + 'static,
+    T: serde::de::DeserializeOwned,
   {
     let url = format!(
       "{}/api/workspace/published/{}/{}",
@@ -107,9 +84,40 @@ impl Client {
       .get(&url)
       .send()
       .await?
+      .error_for_status()?;
+
+    let txt = resp.text().await?;
+
+    if let Ok(app_err) = serde_json::from_str::<AppResponseError>(&txt) {
+      return Err(app_err);
+    }
+
+    let meta = serde_json::from_str::<T>(&txt)?;
+    Ok(meta)
+  }
+
+  pub async fn get_published_collab_blob(
+    &self,
+    publish_namespace: &str,
+    doc_name: &str,
+  ) -> Result<Bytes, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published/{}/{}/blob",
+      self.base_url, publish_namespace, doc_name
+    );
+    let bytes = self
+      .cloud_client
+      .get(&url)
+      .send()
+      .await?
       .error_for_status()?
-      .json::<T>()
+      .bytes()
       .await?;
-    Ok(resp)
+
+    if let Ok(app_err) = serde_json::from_slice::<AppResponseError>(&bytes) {
+      return Err(app_err);
+    }
+
+    Ok(bytes)
   }
 }

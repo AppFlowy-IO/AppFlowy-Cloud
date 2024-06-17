@@ -75,7 +75,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/member")
       .route(web::get().to(get_workspace_members_handler))
-      .route(web::post().to(create_workspace_members_handler)) // deprecated, use invite flow instead
       .route(web::put().to(update_workspace_member_handler))
       .route(web::delete().to(remove_workspace_member_handler))
     )
@@ -141,12 +140,10 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/publish/{doc_name}/blob")
         .route(web::put().to(put_publish_collab_blob_handler))
-        .route(web::get().to(get_publish_collab_blob_handler))
     )
     .service(
       web::resource("/{workspace_id}/publish/{doc_name}")
         .route(web::put().to(put_publish_collab_handler))
-        .route(web::get().to(get_publish_collab_handler))
         .route(web::delete().to(delete_publish_collab_handler))
     )
     .service(
@@ -249,26 +246,6 @@ async fn list_workspace_handler(
     })
     .collect::<Vec<_>>();
   Ok(AppResponse::Ok().with_data(AFWorkspaces(workspaces)).into())
-}
-
-// Deprecated
-#[instrument(skip(payload, state), err)]
-async fn create_workspace_members_handler(
-  user_uuid: UserUuid,
-  workspace_id: web::Path<Uuid>,
-  payload: Json<CreateWorkspaceMembers>,
-  state: Data<AppState>,
-) -> Result<JsonAppResponse<()>> {
-  let create_members = payload.into_inner();
-  workspace::ops::add_workspace_members(
-    &state.pg_pool,
-    &user_uuid,
-    &workspace_id,
-    create_members.0,
-    &state.workspace_access_control,
-  )
-  .await?;
-  Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip(payload, state), err)]
@@ -991,12 +968,9 @@ async fn get_published_collab_handler(
   state: Data<AppState>,
 ) -> Result<Json<serde_json::Value>> {
   let (workspace_namespace, doc_name) = path_param.into_inner();
-  let metadata = biz::workspace::ops::get_published_collab_using_publish_namespace(
-    &state.pg_pool,
-    &workspace_namespace,
-    &doc_name,
-  )
-  .await?;
+  let metadata =
+    biz::workspace::ops::get_published_collab(&state.pg_pool, &workspace_namespace, &doc_name)
+      .await?;
   Ok(Json(metadata))
 }
 
@@ -1005,12 +979,9 @@ async fn get_published_collab_blob_handler(
   state: Data<AppState>,
 ) -> Result<Vec<u8>> {
   let (publish_namespace, doc_name) = path_param.into_inner();
-  let collab_data = biz::workspace::ops::get_published_collab_blob_with_publish_namespace(
-    &state.pg_pool,
-    &publish_namespace,
-    &doc_name,
-  )
-  .await?;
+  let collab_data =
+    biz::workspace::ops::get_published_collab_blob(&state.pg_pool, &publish_namespace, &doc_name)
+      .await?;
   Ok(collab_data)
 }
 
@@ -1032,16 +1003,6 @@ async fn put_publish_collab_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-async fn get_publish_collab_handler(
-  path_param: web::Path<(Uuid, String)>,
-  state: Data<AppState>,
-) -> Result<Json<serde_json::Value>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
-  let metadata =
-    biz::workspace::ops::get_published_collab(&state.pg_pool, &workspace_id, &doc_name).await?;
-  Ok(Json(metadata))
-}
-
 async fn put_publish_collab_blob_handler(
   path_param: web::Path<(Uuid, String)>,
   user_uuid: UserUuid,
@@ -1058,17 +1019,6 @@ async fn put_publish_collab_blob_handler(
   )
   .await?;
   Ok(Json(AppResponse::Ok()))
-}
-
-async fn get_publish_collab_blob_handler(
-  path_param: web::Path<(Uuid, String)>,
-  state: Data<AppState>,
-) -> Result<Vec<u8>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
-  let collab_data =
-    biz::workspace::ops::get_published_collab_blob(&state.pg_pool, &workspace_id, &doc_name)
-      .await?;
-  Ok(collab_data)
 }
 
 async fn delete_publish_collab_handler(

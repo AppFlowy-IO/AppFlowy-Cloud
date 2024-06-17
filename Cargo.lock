@@ -656,6 +656,7 @@ dependencies = [
  "shared-entity",
  "snowflake",
  "sqlx",
+ "sqlx-core",
  "tempfile",
  "thiserror",
  "tokio",

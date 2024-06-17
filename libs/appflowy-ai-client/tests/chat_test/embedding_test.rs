@@ -16,5 +16,5 @@ async fn embedding_test() {
   };
   let result = client.embeddings(request).await.unwrap();
   assert!(result.total_tokens > 0);
-  assert!(result.data.len() > 0);
+  assert!(!result.data.is_empty());
 }

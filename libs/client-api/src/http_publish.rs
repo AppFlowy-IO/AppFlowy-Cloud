@@ -40,7 +40,6 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
-      .get(&url)
       .send()
       .await?;
     AppResponse::<String>::from_response(resp)

@@ -58,7 +58,7 @@ fn push_deltas_to_str(buf: &mut String, deltas: Vec<TextDelta>) {
     if let TextDelta::Inserted(text, _) = delta {
       let trimmed = text.trim();
       if !trimmed.is_empty() {
-        buf.push_str(&trimmed);
+        buf.push_str(trimmed);
         buf.push(' ');
       }
     }

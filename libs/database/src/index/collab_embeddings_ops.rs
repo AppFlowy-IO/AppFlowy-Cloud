@@ -41,8 +41,11 @@ pub async fn upsert_collab_embeddings(
   records: Vec<AFCollabEmbeddingParams>,
 ) -> Result<(), sqlx::Error> {
   if tokens_used > 0 {
-    sqlx::query(
-      "UPDATE af_workspace SET index_token_usage = index_token_usage + $2 WHERE workspace_id = $1",
+    sqlx::query(r#"
+      INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
+      VALUES (now()::date, $1, 0, 0, $2)
+      ON CONFLICT (created_at, workspace_id) DO UPDATE
+      SET index_tokens_consumed = af_workspace_ai_usage.index_tokens_consumed + $2"#,
     )
     .bind(workspace_id)
     .bind(tokens_used as i64)

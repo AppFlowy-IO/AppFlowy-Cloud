@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use database_entity::dto::{PublishInfo, UpdatePublishNamespace};
+use database_entity::dto::{PublishInfo, PublishItem, UpdatePublishNamespace};
 use reqwest::{Body, Method};
 use shared_entity::response::{AppResponse, AppResponseError};
 
@@ -47,25 +47,20 @@ impl Client {
       .into_data()
   }
 
-  pub async fn publish_collab<T>(
+  pub async fn publish_collabs<T>(
     &self,
     workspace_id: &str,
-    view_id: &uuid::Uuid,
-    doc_name: &str,
-    metadata: T,
+    items: &[PublishItem<T>],
   ) -> Result<(), AppResponseError>
   where
     T: serde::Serialize,
   {
-    let url = format!(
-      "{}/api/workspace/{}/publish/{}/{}",
-      self.base_url, workspace_id, view_id, doc_name,
-    );
+    let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id,);
 
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
       .await?
-      .json(&metadata)
+      .json(items)
       .send()
       .await?;
 

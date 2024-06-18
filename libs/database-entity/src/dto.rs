@@ -313,6 +313,13 @@ pub struct PublishInfo {
   pub view_id: Uuid,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PublishItem<Metadata> {
+  pub view_id: uuid::Uuid,
+  pub doc_name: String,
+  pub metadata: Metadata,
+}
+
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 #[repr(i32)]
 pub enum AFRole {

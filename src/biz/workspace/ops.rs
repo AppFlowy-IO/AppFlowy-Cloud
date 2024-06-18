@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+
+use database_entity::dto::PublishInfo;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
@@ -21,9 +23,9 @@ use database::workspace::{
   get_invitation_by_id, insert_or_replace_publish_collab_meta,
   insert_or_replace_published_collab_blob, insert_user_workspace, insert_workspace_invitation,
   rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
-  select_published_collab_blob, select_user_is_collab_publisher, select_user_is_workspace_owner,
-  select_workspace, select_workspace_invitations_for_user, select_workspace_member,
-  select_workspace_member_list, select_workspace_publish_namespace,
+  select_published_collab_blob, select_published_collab_info, select_user_is_collab_publisher,
+  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
+  select_workspace_member, select_workspace_member_list, select_workspace_publish_namespace,
   select_workspace_publish_namespace_exists, select_workspace_settings,
   select_workspace_total_collab_bytes, update_updated_at_of_workspace,
   update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
@@ -199,6 +201,13 @@ pub async fn get_published_collab_blob(
   doc_name: &str,
 ) -> Result<Vec<u8>, AppError> {
   select_published_collab_blob(pg_pool, publish_namespace, doc_name).await
+}
+
+pub async fn get_published_collab_info(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+) -> Result<PublishInfo, AppError> {
+  select_published_collab_info(pg_pool, view_id).await
 }
 
 pub async fn delete_published_workspace_collab(

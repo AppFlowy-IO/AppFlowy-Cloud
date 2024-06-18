@@ -306,6 +306,13 @@ pub struct AFCollabMember {
   pub permission: AFPermission,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PublishInfo {
+  pub namespace: Option<String>,
+  pub doc_name: String,
+  pub view_id: Uuid,
+}
+
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 #[repr(i32)]
 pub enum AFRole {

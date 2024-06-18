@@ -206,6 +206,7 @@ pub struct AFChatRow {
   pub workspace_id: Uuid,
   pub meta_data: serde_json::Value,
 }
+
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct AFChatMessageRow {
   pub message_id: i64,

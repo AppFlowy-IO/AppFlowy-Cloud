@@ -86,13 +86,21 @@ async fn test_publish_doc() {
   .unwrap();
 
   {
-    // Non login user should be able to view the published collab metadata
+    // Non login user should be able to view the published collab
     let guest_client = localhost_client();
     let published_collab = guest_client
       .get_published_collab::<Metadata>(&my_namespace, my_doc_name)
       .await
       .unwrap();
     assert_eq!(published_collab.title, "my_title");
+
+    let publish_info = guest_client
+      .get_published_collab_info(&view_id)
+      .await
+      .unwrap();
+    assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
+    assert_eq!(publish_info.doc_name, my_doc_name);
+    assert_eq!(publish_info.view_id, view_id);
 
     let collab_data = guest_client
       .get_published_collab_blob(&my_namespace, my_doc_name)

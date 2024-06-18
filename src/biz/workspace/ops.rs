@@ -135,7 +135,7 @@ pub async fn set_workspace_namespace(
   Ok(())
 }
 
-pub async fn get_workspace_namespace(
+pub async fn get_workspace_publish_namespace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<String, AppError> {

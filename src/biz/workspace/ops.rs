@@ -153,26 +153,34 @@ pub async fn get_workspace_publish_namespace(
 pub async fn publish_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
+  view_id: &Uuid,
   doc_name: &str,
   publisher_uuid: &Uuid,
   metadata: &serde_json::Value,
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, doc_name).await?;
+  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, view_id).await?;
   check_collab_doc_name(doc_name).await?;
-  insert_or_replace_publish_collab_meta(pg_pool, workspace_id, doc_name, publisher_uuid, metadata)
-    .await?;
+  insert_or_replace_publish_collab_meta(
+    pg_pool,
+    workspace_id,
+    view_id,
+    doc_name,
+    publisher_uuid,
+    metadata,
+  )
+  .await?;
   Ok(())
 }
 
 pub async fn put_published_collab_blob(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_id: &Uuid,
   publisher_uuid: &Uuid,
   collab_data: &[u8],
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, doc_name).await?;
-  insert_or_replace_published_collab_blob(pg_pool, workspace_id, doc_name, collab_data).await?;
+  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, view_id).await?;
+  insert_or_replace_published_collab_blob(pg_pool, workspace_id, view_id, collab_data).await?;
   Ok(())
 }
 
@@ -196,11 +204,11 @@ pub async fn get_published_collab_blob(
 pub async fn delete_published_workspace_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_id: &Uuid,
   user_uuid: &Uuid,
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
-  delete_published_collab(pg_pool, workspace_id, doc_name).await?;
+  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, view_id).await?;
+  delete_published_collab(pg_pool, workspace_id, view_id).await?;
   Ok(())
 }
 
@@ -585,12 +593,12 @@ async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_id: &Uuid,
 ) -> Result<(), AppError> {
   let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   if !is_owner {
     let is_publisher =
-      select_user_is_collab_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
+      select_user_is_collab_publisher(pg_pool, user_uuid, workspace_id, view_id).await?;
     if !is_publisher {
       return Err(AppError::UserUnAuthorized(
         "User is not the owner of the workspace or the publisher of the document".to_string(),

@@ -73,8 +73,10 @@ async fn test_publish_doc() {
     .unwrap();
 
   let my_doc_name = "my-doc";
+  let view_id = uuid::Uuid::new_v4();
   c.publish_collab(
     &workspace_id,
+    &view_id,
     my_doc_name,
     Metadata {
       title: "my_title".to_string(),
@@ -99,7 +101,7 @@ async fn test_publish_doc() {
     assert!(collab_data.is_empty()); // empty data because publisher need to set it
   }
 
-  c.put_published_collab_blob(&workspace_id, my_doc_name, "some_collab_data")
+  c.put_published_collab_blob(&workspace_id, &view_id, "some_collab_data")
     .await
     .unwrap();
 
@@ -113,7 +115,7 @@ async fn test_publish_doc() {
     assert!(collab_data == "some_collab_data");
   }
 
-  c.delete_published_collab(&workspace_id, my_doc_name)
+  c.delete_published_collab(&workspace_id, &view_id)
     .await
     .unwrap();
 

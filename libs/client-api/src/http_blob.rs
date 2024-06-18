@@ -66,6 +66,12 @@ impl Client {
       .await?
       .into_data()
   }
+  pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
+    format!(
+      "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
+      self.base_url
+    )
+  }
 
   #[instrument(level = "info", skip_all)]
   pub async fn get_blob_v1(
@@ -74,10 +80,7 @@ impl Client {
     parent_dir: &str,
     file_id: &str,
   ) -> Result<(Mime, Vec<u8>), AppResponseError> {
-    let url = format!(
-      "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
-      self.base_url
-    );
+    let url = self.get_blob_url_v1(workspace_id, parent_dir, file_id);
     self.get_blob(&url).await
   }
 

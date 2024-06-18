@@ -2,12 +2,10 @@ use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
 };
 use futures_util::stream::BoxStream;
-use sqlx::{
-  types::{uuid, Uuid},
-  Executor, PgPool, Postgres, Transaction,
-};
+use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
 use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
+use uuid::Uuid;
 
 use crate::pg_row::AFWorkspaceMemberPermRow;
 use crate::pg_row::{
@@ -138,6 +136,32 @@ pub async fn select_user_is_workspace_owner(
   "#,
     workspace_uuid,
     user_uuid
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(exists.unwrap_or(false))
+}
+
+pub async fn select_user_is_collab_publisher(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_uuid: &Uuid,
+  doc_name: &str,
+) -> Result<bool, AppError> {
+  let exists = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_published_collab
+        WHERE workspace_id = $1
+            AND doc_name = $2
+            AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
+      );
+    "#,
+    workspace_uuid,
+    doc_name,
+    user_uuid,
   )
   .fetch_one(pg_pool)
   .await?;
@@ -789,4 +813,211 @@ pub async fn upsert_workspace_settings(
   .await?;
 
   Ok(())
+}
+
+#[inline]
+pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  namespace: &str,
+) -> Result<bool, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_workspace
+        WHERE workspace_id = $1
+          AND publish_namespace = $2
+      )
+    "#,
+    workspace_id,
+    namespace,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res.unwrap_or(false))
+}
+
+#[inline]
+pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  new_namespace: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET publish_namespace = $1
+      WHERE workspace_id = $2
+    "#,
+    new_namespace,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
+      workspace_id, new_namespace, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<Option<String>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT publish_namespace
+      FROM af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+#[inline]
+pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  publisher_uuid: &Uuid,
+  metadata: &serde_json::Value,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_collab (doc_name, published_by, workspace_id, metadata)
+      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
+      ON CONFLICT (workspace_id, doc_name) DO UPDATE
+      SET metadata = $4
+    "#,
+    doc_name,
+    publisher_uuid,
+    workspace_id,
+    metadata,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert or replace publish collab meta, workspace_id: {}, doc_name: {}, publisher_uuid: {}, rows_affected: {}",
+      workspace_id, doc_name, publisher_uuid, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  publish_namespace: &str,
+  doc_name: &str,
+) -> Result<serde_json::Value, AppError> {
+  let res = sqlx::query!(
+    r#"
+    SELECT metadata
+    FROM af_published_collab
+    WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      AND doc_name = $2
+    "#,
+    publish_namespace,
+    doc_name,
+  )
+  .fetch_one(executor)
+  .await?;
+  let metadata: serde_json::Value = res.metadata;
+  Ok(metadata)
+}
+
+#[inline]
+pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      DELETE FROM af_published_collab
+      WHERE workspace_id = $1 AND doc_name = $2
+    "#,
+    workspace_id,
+    doc_name,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete published collab, workspace_id: {}, doc_name: {}, rows_affected: {}",
+      workspace_id,
+      doc_name,
+      res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  blob: &[u8],
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_published_collab
+      SET blob = $1
+      WHERE workspace_id = $2 AND doc_name = $3
+    "#,
+    blob,
+    workspace_id,
+    doc_name,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+        "Failed to insert or replace published collab blob, workspace_id: {}, doc_name: {}, rows_affected: {}",
+        workspace_id, doc_name, res.rows_affected()
+      );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  publish_namespace: &str,
+  doc_name: &str,
+) -> Result<Vec<u8>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT blob
+      FROM af_published_collab
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      AND doc_name = $2
+    "#,
+    publish_namespace,
+    doc_name,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
 }

@@ -46,9 +46,6 @@ pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{ob
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
-    // deprecated, use the api below instead
-    .service(web::resource("/list").route(web::get().to(list_workspace_handler)))
-
     .service(web::resource("")
       .route(web::get().to(list_workspace_handler))
       .route(web::post().to(create_workspace_handler))
@@ -78,7 +75,6 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/{workspace_id}/member")
       .route(web::get().to(get_workspace_members_handler))
-      .route(web::post().to(create_workspace_members_handler)) // deprecated, use invite flow instead
       .route(web::put().to(update_workspace_member_handler))
       .route(web::delete().to(remove_workspace_member_handler))
     )
@@ -127,6 +123,28 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_collab_member_handler))
         .route(web::put().to(update_collab_member_handler))
         .route(web::delete().to(remove_collab_member_handler)),
+    )
+    .service(
+      web::resource("/published/{publish_namespace}/{doc_name}")
+        .route(web::get().to(get_published_collab_handler))
+    )
+    .service(
+      web::resource("/published/{publish_namespace}/{doc_name}/blob")
+        .route(web::get().to(get_published_collab_blob_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/publish-namespace")
+        .route(web::put().to(put_publish_namespace_handler))
+        .route(web::get().to(get_publish_namespace_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/publish/{doc_name}/blob")
+        .route(web::put().to(put_publish_collab_blob_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/publish/{doc_name}")
+        .route(web::put().to(put_publish_collab_handler))
+        .route(web::delete().to(delete_publish_collab_handler))
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
@@ -228,26 +246,6 @@ async fn list_workspace_handler(
     })
     .collect::<Vec<_>>();
   Ok(AppResponse::Ok().with_data(AFWorkspaces(workspaces)).into())
-}
-
-// Deprecated
-#[instrument(skip(payload, state), err)]
-async fn create_workspace_members_handler(
-  user_uuid: UserUuid,
-  workspace_id: web::Path<Uuid>,
-  payload: Json<CreateWorkspaceMembers>,
-  state: Data<AppState>,
-) -> Result<JsonAppResponse<()>> {
-  let create_members = payload.into_inner();
-  workspace::ops::add_workspace_members(
-    &state.pg_pool,
-    &user_uuid,
-    &workspace_id,
-    create_members.0,
-    &state.workspace_access_control,
-  )
-  .await?;
-  Ok(AppResponse::Ok().into())
 }
 
 #[instrument(skip(payload, state), err)]
@@ -934,6 +932,108 @@ async fn remove_collab_member_handler(
   biz::collab::ops::delete_collab_member(&state.pg_pool, &payload, &state.collab_access_control)
     .await?;
 
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn put_publish_namespace_handler(
+  user_uuid: UserUuid,
+  workspace_id: web::Path<Uuid>,
+  payload: Json<UpdatePublishNamespace>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let workspace_id = workspace_id.into_inner();
+  let new_namespace = payload.into_inner().new_namespace;
+  biz::workspace::ops::set_workspace_namespace(
+    &state.pg_pool,
+    &user_uuid,
+    &workspace_id,
+    &new_namespace,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn get_publish_namespace_handler(
+  workspace_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<String>>> {
+  let workspace_id = workspace_id.into_inner();
+  let namespace =
+    biz::workspace::ops::get_workspace_publish_namespace(&state.pg_pool, &workspace_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(namespace)))
+}
+
+async fn get_published_collab_handler(
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Json<serde_json::Value>> {
+  let (workspace_namespace, doc_name) = path_param.into_inner();
+  let metadata =
+    biz::workspace::ops::get_published_collab(&state.pg_pool, &workspace_namespace, &doc_name)
+      .await?;
+  Ok(Json(metadata))
+}
+
+async fn get_published_collab_blob_handler(
+  path_param: web::Path<(String, String)>,
+  state: Data<AppState>,
+) -> Result<Vec<u8>> {
+  let (publish_namespace, doc_name) = path_param.into_inner();
+  let collab_data =
+    biz::workspace::ops::get_published_collab_blob(&state.pg_pool, &publish_namespace, &doc_name)
+      .await?;
+  Ok(collab_data)
+}
+
+async fn put_publish_collab_handler(
+  path_param: web::Path<(Uuid, String)>,
+  user_uuid: UserUuid,
+  metadata: Json<serde_json::Value>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  biz::workspace::ops::publish_collab(
+    &state.pg_pool,
+    &workspace_id,
+    &doc_name,
+    &user_uuid,
+    &metadata,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn put_publish_collab_blob_handler(
+  path_param: web::Path<(Uuid, String)>,
+  user_uuid: UserUuid,
+  collab_data: Bytes,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  biz::workspace::ops::put_published_collab_blob(
+    &state.pg_pool,
+    &workspace_id,
+    &doc_name,
+    &user_uuid,
+    &collab_data,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_publish_collab_handler(
+  path_param: web::Path<(Uuid, String)>,
+  user_uuid: UserUuid,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<()>>> {
+  let (workspace_id, doc_name) = path_param.into_inner();
+  biz::workspace::ops::delete_published_workspace_collab(
+    &state.pg_pool,
+    &workspace_id,
+    &doc_name,
+    &user_uuid,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

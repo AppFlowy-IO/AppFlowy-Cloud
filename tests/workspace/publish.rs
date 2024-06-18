@@ -13,7 +13,6 @@ async fn test_set_publish_namespace_set() {
       .err()
       .unwrap();
 
-    assert_eq!(format!("{:?}", err.code), "PublishNamespaceNotSet");
     if format!("{:?}", err.code) != "PublishNamespaceNotSet" {
       panic!(
         "Expected PublishNamespaceNotSet, got: code {:?}, message {:?}",

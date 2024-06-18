@@ -50,6 +50,7 @@ impl Client {
   pub async fn publish_collab<T>(
     &self,
     workspace_id: &str,
+    view_id: &uuid::Uuid,
     doc_name: &str,
     metadata: T,
   ) -> Result<(), AppResponseError>
@@ -57,8 +58,8 @@ impl Client {
     T: serde::Serialize,
   {
     let url = format!(
-      "{}/api/workspace/{}/publish/{}",
-      self.base_url, workspace_id, doc_name
+      "{}/api/workspace/{}/publish/{}/{}",
+      self.base_url, workspace_id, view_id, doc_name,
     );
 
     let resp = self
@@ -74,7 +75,7 @@ impl Client {
   pub async fn put_published_collab_blob<T>(
     &self,
     workspace_id: &str,
-    doc_name: &str,
+    view_id: &uuid::Uuid,
     data: T,
   ) -> Result<(), AppResponseError>
   where
@@ -82,7 +83,7 @@ impl Client {
   {
     let url = format!(
       "{}/api/workspace/{}/publish/{}/blob",
-      self.base_url, workspace_id, doc_name
+      self.base_url, workspace_id, view_id
     );
     let resp = self
       .http_client_with_auth(Method::PUT, &url)
@@ -96,11 +97,11 @@ impl Client {
   pub async fn delete_published_collab(
     &self,
     workspace_id: &str,
-    doc_name: &str,
+    view_id: &uuid::Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/publish/{}",
-      self.base_url, workspace_id, doc_name
+      self.base_url, workspace_id, view_id
     );
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
@@ -111,8 +112,30 @@ impl Client {
   }
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct PublishInfo {
+  pub namespace: String,
+  pub doc_name: String,
+  pub view_id: uuid::Uuid,
+}
+
 // Guest API (no login required)
 impl Client {
+  pub async fn get_published_info(
+    &self,
+    view_id: &uuid::Uuid,
+  ) -> Result<PublishInfo, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published_info/{}",
+      self.base_url, view_id,
+    );
+
+    let resp = self.cloud_client.get(&url).send().await?;
+    AppResponse::<PublishInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn get_published_collab<T>(
     &self,
     publish_namespace: &str,

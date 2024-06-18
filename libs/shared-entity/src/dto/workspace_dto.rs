@@ -120,3 +120,10 @@ pub struct CollabResponse {
   #[serde(default)]
   pub object_id: String,
 }
+
+#[derive(Debug, serde::Deserialize)]
+pub struct PublishInfo {
+  pub namespace: String,
+  pub doc_name: String,
+  pub view_id: uuid::Uuid,
+}

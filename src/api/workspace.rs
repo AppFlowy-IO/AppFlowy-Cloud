@@ -138,12 +138,15 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_publish_namespace_handler))
     )
     .service(
-      web::resource("/{workspace_id}/publish/{doc_name}/blob")
+      web::resource("/{workspace_id}/publish/{view_id}/blob")
         .route(web::put().to(put_publish_collab_blob_handler))
     )
     .service(
-      web::resource("/{workspace_id}/publish/{doc_name}")
+      web::resource("/{workspace_id}/publish/{view_id}/{doc_name}")
         .route(web::put().to(put_publish_collab_handler))
+    )
+    .service(
+      web::resource("/{workspace_id}/publish/{view_id}")
         .route(web::delete().to(delete_publish_collab_handler))
     )
     .service(
@@ -986,15 +989,16 @@ async fn get_published_collab_blob_handler(
 }
 
 async fn put_publish_collab_handler(
-  path_param: web::Path<(Uuid, String)>,
+  path_param: web::Path<(Uuid, Uuid, String)>,
   user_uuid: UserUuid,
   metadata: Json<serde_json::Value>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
+  let (workspace_id, view_id, doc_name) = path_param.into_inner();
   biz::workspace::ops::publish_collab(
     &state.pg_pool,
     &workspace_id,
+    &view_id,
     &doc_name,
     &user_uuid,
     &metadata,
@@ -1004,16 +1008,16 @@ async fn put_publish_collab_handler(
 }
 
 async fn put_publish_collab_blob_handler(
-  path_param: web::Path<(Uuid, String)>,
+  path_param: web::Path<(Uuid, Uuid)>,
   user_uuid: UserUuid,
   collab_data: Bytes,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
+  let (workspace_id, view_id) = path_param.into_inner();
   biz::workspace::ops::put_published_collab_blob(
     &state.pg_pool,
     &workspace_id,
-    &doc_name,
+    &view_id,
     &user_uuid,
     &collab_data,
   )
@@ -1022,15 +1026,15 @@ async fn put_publish_collab_blob_handler(
 }
 
 async fn delete_publish_collab_handler(
-  path_param: web::Path<(Uuid, String)>,
+  path_param: web::Path<(Uuid, Uuid)>,
   user_uuid: UserUuid,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
+  let (workspace_id, view_id) = path_param.into_inner();
   biz::workspace::ops::delete_published_workspace_collab(
     &state.pg_pool,
     &workspace_id,
-    &doc_name,
+    &view_id,
     &user_uuid,
   )
   .await?;

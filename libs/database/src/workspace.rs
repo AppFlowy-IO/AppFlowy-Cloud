@@ -147,7 +147,7 @@ pub async fn select_user_is_collab_publisher(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
-  doc_name: &str,
+  view_id: &Uuid,
 ) -> Result<bool, AppError> {
   let exists = sqlx::query_scalar!(
     r#"
@@ -155,12 +155,12 @@ pub async fn select_user_is_collab_publisher(
         SELECT 1
         FROM af_published_collab
         WHERE workspace_id = $1
-            AND doc_name = $2
+            AND view_id = $2
             AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
       );
     "#,
     workspace_uuid,
-    doc_name,
+    view_id,
     user_uuid,
   )
   .fetch_one(pg_pool)
@@ -890,20 +890,22 @@ pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = P
 pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
+  view_id: &Uuid,
   doc_name: &str,
   publisher_uuid: &Uuid,
   metadata: &serde_json::Value,
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
-      INSERT INTO af_published_collab (doc_name, published_by, workspace_id, metadata)
-      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
-      ON CONFLICT (workspace_id, doc_name) DO UPDATE
-      SET metadata = $4
+      INSERT INTO af_published_collab (workspace_id, view_id, doc_name, published_by, metadata)
+      VALUES ($1, $2, $3, (SELECT uid FROM af_user WHERE uuid = $4), $5)
+      ON CONFLICT (workspace_id, view_id) DO UPDATE
+      SET metadata = $5
     "#,
+    workspace_id,
+    view_id,
     doc_name,
     publisher_uuid,
-    workspace_id,
     metadata,
   )
   .execute(executor)
@@ -945,24 +947,24 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
 pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_id: &Uuid,
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
       DELETE FROM af_published_collab
-      WHERE workspace_id = $1 AND doc_name = $2
+      WHERE workspace_id = $1 AND view_id = $2
     "#,
     workspace_id,
-    doc_name,
+    view_id,
   )
   .execute(executor)
   .await?;
 
   if res.rows_affected() != 1 {
     tracing::error!(
-      "Failed to delete published collab, workspace_id: {}, doc_name: {}, rows_affected: {}",
+      "Failed to delete published collab, workspace_id: {}, view_id: {}, rows_affected: {}",
       workspace_id,
-      doc_name,
+      view_id,
       res.rows_affected()
     );
   }
@@ -974,18 +976,19 @@ pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_id: &Uuid,
   blob: &[u8],
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
       UPDATE af_published_collab
       SET blob = $1
-      WHERE workspace_id = $2 AND doc_name = $3
+      WHERE workspace_id = $2
+        AND view_id = $3
     "#,
     blob,
     workspace_id,
-    doc_name,
+    view_id,
   )
   .execute(executor)
   .await?;
@@ -993,7 +996,7 @@ pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Databas
   if res.rows_affected() != 1 {
     tracing::error!(
         "Failed to insert or replace published collab blob, workspace_id: {}, doc_name: {}, rows_affected: {}",
-        workspace_id, doc_name, res.rows_affected()
+        workspace_id, view_id, res.rows_affected()
       );
   }
 

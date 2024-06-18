@@ -1,3 +1,4 @@
+use client_api::entity::PublishItem;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 
 #[tokio::test]
@@ -72,15 +73,23 @@ async fn test_publish_doc() {
     .await
     .unwrap();
 
-  let my_doc_name = "my-doc";
-  let view_id = uuid::Uuid::new_v4();
-  c.publish_collab(
+  // &view_id,
+  // my_doc_name,
+  // Metadata {
+  //   title: "my_title".to_string(),
+  // },
+
+  let doc_name1 = "doc1";
+  let view_id_1 = uuid::Uuid::new_v4();
+  c.publish_collabs::<Metadata>(
     &workspace_id,
-    &view_id,
-    my_doc_name,
-    Metadata {
-      title: "my_title".to_string(),
-    },
+    &[PublishItem {
+      view_id: view_id_1,
+      doc_name: doc_name1.to_string(),
+      metadata: Metadata {
+        title: "my_title".to_string(),
+      },
+    }],
   )
   .await
   .unwrap();
@@ -89,27 +98,27 @@ async fn test_publish_doc() {
     // Non login user should be able to view the published collab
     let guest_client = localhost_client();
     let published_collab = guest_client
-      .get_published_collab::<Metadata>(&my_namespace, my_doc_name)
+      .get_published_collab::<Metadata>(&my_namespace, doc_name1)
       .await
       .unwrap();
     assert_eq!(published_collab.title, "my_title");
 
     let publish_info = guest_client
-      .get_published_collab_info(&view_id)
+      .get_published_collab_info(&view_id_1)
       .await
       .unwrap();
     assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
-    assert_eq!(publish_info.doc_name, my_doc_name);
-    assert_eq!(publish_info.view_id, view_id);
+    assert_eq!(publish_info.doc_name, doc_name1);
+    assert_eq!(publish_info.view_id, view_id_1);
 
     let collab_data = guest_client
-      .get_published_collab_blob(&my_namespace, my_doc_name)
+      .get_published_collab_blob(&my_namespace, doc_name1)
       .await
       .unwrap();
     assert!(collab_data.is_empty()); // empty data because publisher need to set it
   }
 
-  c.put_published_collab_blob(&workspace_id, &view_id, "some_collab_data")
+  c.put_published_collab_blob(&workspace_id, &view_id_1, "some_collab_data")
     .await
     .unwrap();
 
@@ -117,13 +126,13 @@ async fn test_publish_doc() {
     // Non login user should be able to view the published collab data
     let guest_client = localhost_client();
     let collab_data = guest_client
-      .get_published_collab_blob(&my_namespace, my_doc_name)
+      .get_published_collab_blob(&my_namespace, doc_name1)
       .await
       .unwrap();
     assert!(collab_data == "some_collab_data");
   }
 
-  c.delete_published_collab(&workspace_id, &view_id)
+  c.delete_published_collab(&workspace_id, &view_id_1)
     .await
     .unwrap();
 
@@ -131,7 +140,7 @@ async fn test_publish_doc() {
     // Deleted collab should not be accessible
     let guest_client = localhost_client();
     let err = guest_client
-      .get_published_collab::<Metadata>(&my_namespace, my_doc_name)
+      .get_published_collab::<Metadata>(&my_namespace, doc_name1)
       .await
       .err()
       .unwrap();
@@ -139,7 +148,7 @@ async fn test_publish_doc() {
 
     let guest_client = localhost_client();
     let err = guest_client
-      .get_published_collab_blob(&my_namespace, my_doc_name)
+      .get_published_collab_blob(&my_namespace, doc_name1)
       .await
       .err()
       .unwrap();

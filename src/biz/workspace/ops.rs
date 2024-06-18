@@ -20,7 +20,7 @@ use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_published_collab, delete_workspace_members,
-  get_invitation_by_id, insert_or_replace_publish_collab_meta,
+  get_invitation_by_id, insert_or_replace_publish_collab_metas,
   insert_or_replace_published_collab_blob, insert_user_workspace, insert_workspace_invitation,
   rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
   select_published_collab_blob, select_published_collab_info, select_user_is_collab_publisher,
@@ -33,7 +33,7 @@ use database::workspace::{
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceSettings, WorkspaceUsage,
+  AFWorkspaceSettings, PublishItem, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
@@ -152,25 +152,17 @@ pub async fn get_workspace_publish_namespace(
   Ok(namespace)
 }
 
-pub async fn publish_collab(
+pub async fn publish_collabs(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  view_id: &Uuid,
-  doc_name: &str,
   publisher_uuid: &Uuid,
-  metadata: &serde_json::Value,
+  publish_items: &[PublishItem<serde_json::Value>],
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, view_id).await?;
-  check_collab_doc_name(doc_name).await?;
-  insert_or_replace_publish_collab_meta(
-    pg_pool,
-    workspace_id,
-    view_id,
-    doc_name,
-    publisher_uuid,
-    metadata,
-  )
-  .await?;
+  for publish_item in publish_items {
+    check_collab_doc_name(publish_item.doc_name.as_str())?;
+  }
+  insert_or_replace_publish_collab_metas(pg_pool, workspace_id, publisher_uuid, publish_items)
+    .await?;
   Ok(())
 }
 
@@ -617,7 +609,7 @@ async fn check_workspace_owner_or_publisher(
   Ok(())
 }
 
-async fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
+fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
   // Check len
   if doc_name.len() > 20 {
     return Err(AppError::InvalidRequest(

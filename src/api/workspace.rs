@@ -43,6 +43,8 @@ pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member
 pub const WORKSPACE_INVITE_PATTERN: &str = "/api/workspace/{workspace_id}/invite";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
 pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{object_id}";
+pub const WORKSPACE_PUBLISH_NAMESPACE_PATTERN: &str =
+  "/api/workspace/{workspace_id}/publish-namespace";
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
@@ -146,7 +148,7 @@ pub fn workspace_scope() -> Scope {
         .route(web::put().to(put_publish_collab_blob_handler))
     )
     .service(
-      web::resource("/{workspace_id}/publish/{view_id}/{doc_name}")
+      web::resource("/{workspace_id}/publish")
         .route(web::put().to(put_publish_collab_handler))
     )
     .service(
@@ -1003,21 +1005,21 @@ async fn get_published_collab_info_handler(
 }
 
 async fn put_publish_collab_handler(
-  path_param: web::Path<(Uuid, Uuid, String)>,
+  workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
-  metadata: Json<serde_json::Value>,
+  metadata: Json<Vec<PublishItem<serde_json::Value>>>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, view_id, doc_name) = path_param.into_inner();
-  biz::workspace::ops::publish_collab(
+  let workspace_id = workspace_id.into_inner();
+
+  biz::workspace::ops::publish_collabs(
     &state.pg_pool,
     &workspace_id,
-    &view_id,
-    &doc_name,
     &user_uuid,
-    &metadata,
+    &metadata.into_inner(),
   )
   .await?;
+
   Ok(Json(AppResponse::Ok()))
 }
 

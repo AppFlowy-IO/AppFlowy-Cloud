@@ -17,13 +17,17 @@ use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use database::resource_usage::get_all_workspace_blob_metadata;
 use database::user::select_uid_from_email;
 use database::workspace::{
-  change_workspace_icon, delete_from_workspace, delete_workspace_members, get_invitation_by_id,
-  insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
-  select_workspace_member, select_workspace_member_list, select_workspace_settings,
+  change_workspace_icon, delete_from_workspace, delete_published_collab, delete_workspace_members,
+  get_invitation_by_id, insert_or_replace_publish_collab_meta,
+  insert_or_replace_published_collab_blob, insert_user_workspace, insert_workspace_invitation,
+  rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
+  select_published_collab_blob, select_user_is_collab_publisher, select_user_is_workspace_owner,
+  select_workspace, select_workspace_invitations_for_user, select_workspace_member,
+  select_workspace_member_list, select_workspace_publish_namespace,
+  select_workspace_publish_namespace_exists, select_workspace_settings,
   select_workspace_total_collab_bytes, update_updated_at_of_workspace,
-  update_workspace_invitation_set_status_accepted, upsert_workspace_member,
-  upsert_workspace_member_with_txn, upsert_workspace_settings,
+  update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
+  upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
@@ -111,6 +115,92 @@ pub async fn patch_workspace(
     change_workspace_icon(&mut tx, workspace_id, workspace_icon).await?;
   }
   tx.commit().await?;
+  Ok(())
+}
+
+pub async fn set_workspace_namespace(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  new_namespace: &str,
+) -> Result<(), AppError> {
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  check_workspace_namespace(new_namespace).await?;
+  if select_workspace_publish_namespace_exists(pg_pool, workspace_id, new_namespace).await? {
+    return Err(AppError::PublishNamespaceAlreadyTaken(
+      "publish namespace is already taken".to_string(),
+    ));
+  };
+  update_workspace_publish_namespace(pg_pool, workspace_id, new_namespace).await?;
+  Ok(())
+}
+
+pub async fn get_workspace_publish_namespace(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+) -> Result<String, AppError> {
+  let namespace = match select_workspace_publish_namespace(pg_pool, workspace_id).await? {
+    Some(namespace) => namespace,
+    None => {
+      return Err(AppError::PublishNamespaceNotSet(
+        "publish namespace is not set for the workspace".to_string(),
+      ))
+    },
+  };
+  Ok(namespace)
+}
+
+pub async fn publish_collab(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  publisher_uuid: &Uuid,
+  metadata: &serde_json::Value,
+) -> Result<(), AppError> {
+  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, doc_name).await?;
+  check_collab_doc_name(doc_name).await?;
+  insert_or_replace_publish_collab_meta(pg_pool, workspace_id, doc_name, publisher_uuid, metadata)
+    .await?;
+  Ok(())
+}
+
+pub async fn put_published_collab_blob(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  publisher_uuid: &Uuid,
+  collab_data: &[u8],
+) -> Result<(), AppError> {
+  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, doc_name).await?;
+  insert_or_replace_published_collab_blob(pg_pool, workspace_id, doc_name, collab_data).await?;
+  Ok(())
+}
+
+pub async fn get_published_collab(
+  pg_pool: &PgPool,
+  publish_namespace: &str,
+  doc_name: &str,
+) -> Result<serde_json::Value, AppError> {
+  let metadata = select_publish_collab_meta(pg_pool, publish_namespace, doc_name).await?;
+  Ok(metadata)
+}
+
+pub async fn get_published_collab_blob(
+  pg_pool: &PgPool,
+  publish_namespace: &str,
+  doc_name: &str,
+) -> Result<Vec<u8>, AppError> {
+  select_published_collab_blob(pg_pool, publish_namespace, doc_name).await
+}
+
+pub async fn delete_published_workspace_collab(
+  pg_pool: &PgPool,
+  workspace_id: &Uuid,
+  doc_name: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
+  delete_published_collab(pg_pool, workspace_id, doc_name).await?;
   Ok(())
 }
 
@@ -295,54 +385,6 @@ pub async fn list_workspace_invitations_for_user(
   Ok(invis)
 }
 
-/// Deprecated: use invitation workflow instead
-/// Returns the list of uid of members that are added to the workspace.
-/// Adds members to a workspace.
-///
-/// This function is responsible for adding a list of members to a specified workspace.
-/// Each member is associated with a role, which determines their access level within the workspace.
-/// The function performs the following operations:
-/// 1. Begins a database transaction.
-/// 2. For each member:
-///    - Determines the access level based on the member's role.
-///    - If the member exists (based on their email), inserts them into the workspace and updates their collaboration access level.
-/// 3. Commits the database transaction.
-#[instrument(level = "debug", skip_all, err)]
-pub async fn add_workspace_members(
-  pg_pool: &PgPool,
-  _user_uuid: &Uuid,
-  workspace_id: &Uuid,
-  members: Vec<CreateWorkspaceMember>,
-  workspace_access_control: &impl WorkspaceAccessControl,
-) -> Result<(), AppError> {
-  let mut txn = pg_pool
-    .begin()
-    .await
-    .context("Begin transaction to insert workspace members")?;
-
-  let mut role_by_uid = HashMap::new();
-  for member in members.into_iter() {
-    let access_level = AFAccessLevel::from(&member.role);
-    let uid = select_uid_from_email(txn.deref_mut(), &member.email).await?;
-    upsert_workspace_member_with_txn(&mut txn, workspace_id, &member.email, member.role.clone())
-      .await?;
-    upsert_collab_member_with_txn(uid, workspace_id.to_string(), &access_level, &mut txn).await?;
-    role_by_uid.insert(uid, member.role);
-  }
-
-  for (uid, role) in role_by_uid {
-    workspace_access_control
-      .insert_role(&uid, workspace_id, role)
-      .await?;
-  }
-  txn
-    .commit()
-    .await
-    .context("Commit transaction to insert workspace members")?;
-
-  Ok(())
-}
-
 // use in tests only
 pub async fn add_workspace_members_db_only(
   pg_pool: &PgPool,
@@ -453,12 +495,7 @@ pub async fn get_workspace_document_total_bytes(
   user_uuid: &Uuid,
   workspace_id: &Uuid,
 ) -> Result<WorkspaceUsage, AppError> {
-  let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
-  if !is_owner {
-    return Err(AppError::UserUnAuthorized(
-      "User is not the owner of the workspace".to_string(),
-    ));
-  }
+  check_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
 
   let byte_count = select_workspace_total_collab_bytes(pg_pool, workspace_id).await?;
   Ok(WorkspaceUsage {
@@ -508,5 +545,77 @@ pub async fn update_workspace_settings(
   let mut tx = pg_pool.begin().await?;
   upsert_workspace_settings(&mut tx, workspace_id, workspace_settings).await?;
   tx.commit().await?;
+  Ok(())
+}
+
+async fn check_workspace_owner(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<(), AppError> {
+  match select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await? {
+    true => Ok(()),
+    false => Err(AppError::UserUnAuthorized(
+      "User is not the owner of the workspace".to_string(),
+    )),
+  }
+}
+
+async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> {
+  // Check len
+  if new_namespace.len() < 8 {
+    return Err(AppError::InvalidRequest(
+      "Namespace must be at least 8 characters long".to_string(),
+    ));
+  }
+
+  // Only contain alphanumeric characters and hyphens
+  for c in new_namespace.chars() {
+    if !c.is_alphanumeric() && c != '-' {
+      return Err(AppError::InvalidRequest(
+        "Namespace must only contain alphanumeric characters and hyphens".to_string(),
+      ));
+    }
+  }
+
+  Ok(())
+}
+
+async fn check_workspace_owner_or_publisher(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+  doc_name: &str,
+) -> Result<(), AppError> {
+  let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
+  if !is_owner {
+    let is_publisher =
+      select_user_is_collab_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
+    if !is_publisher {
+      return Err(AppError::UserUnAuthorized(
+        "User is not the owner of the workspace or the publisher of the document".to_string(),
+      ));
+    }
+  }
+  Ok(())
+}
+
+async fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
+  // Check len
+  if doc_name.len() > 20 {
+    return Err(AppError::InvalidRequest(
+      "Document name must be at most 20 characters long".to_string(),
+    ));
+  }
+
+  // Only contain alphanumeric characters and hyphens
+  for c in doc_name.chars() {
+    if !c.is_alphanumeric() && c != '-' {
+      return Err(AppError::InvalidRequest(
+        "Document name must only contain alphanumeric characters and hyphens".to_string(),
+      ));
+    }
+  }
+
   Ok(())
 }

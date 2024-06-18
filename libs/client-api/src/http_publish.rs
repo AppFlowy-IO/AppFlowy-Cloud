@@ -1,10 +1,7 @@
 use bytes::Bytes;
-use database_entity::dto::UpdatePublishNamespace;
+use database_entity::dto::{PublishInfo, UpdatePublishNamespace};
 use reqwest::{Body, Method};
-use shared_entity::{
-  dto::workspace_dto::PublishInfo,
-  response::{AppResponse, AppResponseError},
-};
+use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::Client;
 
@@ -117,11 +114,11 @@ impl Client {
 
 // Guest API (no login required)
 impl Client {
-  pub async fn get_published_info(
+  pub async fn get_published_collab_info(
     &self,
     view_id: &uuid::Uuid,
   ) -> Result<PublishInfo, AppResponseError> {
-    let url = format!("{}/api/workspace/published_info/{}", self.base_url, view_id,);
+    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id,);
 
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<PublishInfo>::from_response(resp)

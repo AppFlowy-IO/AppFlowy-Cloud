@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      UPDATE af_published_collab\n      SET blob = $1\n      WHERE workspace_id = $2\n        AND view_id = $3\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c51b2030045bd58b1b3ac2ed12c24fedd32b19b456f2a865860cad597903fa5b"
+}

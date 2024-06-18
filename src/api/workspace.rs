@@ -133,6 +133,10 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_published_collab_blob_handler))
     )
     .service(
+      web::resource("/published-info/{view_id}")
+        .route(web::get().to(get_published_collab_info_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
         .route(web::get().to(get_publish_namespace_handler))
@@ -986,6 +990,16 @@ async fn get_published_collab_blob_handler(
     biz::workspace::ops::get_published_collab_blob(&state.pg_pool, &publish_namespace, &doc_name)
       .await?;
   Ok(collab_data)
+}
+
+async fn get_published_collab_info_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfo>>> {
+  let view_id = view_id.into_inner();
+  let collab_data =
+    biz::workspace::ops::get_published_collab_info(&state.pg_pool, &view_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(collab_data)))
 }
 
 async fn put_publish_collab_handler(

@@ -286,7 +286,7 @@ mod test {
   use crate::consumer::OpenCollabConsumer;
   use crate::indexer::PostgresIndexer;
   use crate::test_utils::{
-    collab_update_forwarder, db_pool, openai_client, redis_stream, setup_collab,
+    ai_client, collab_update_forwarder, db_pool, redis_stream, setup_collab,
   };
   use collab::core::collab::MutexCollab;
   use collab::preclude::Collab;
@@ -309,7 +309,7 @@ mod test {
     let object_id = uuid::Uuid::new_v4();
 
     let db = db_pool().await;
-    let openai = openai_client();
+    let openai = ai_client();
 
     let mut collab = Collab::new(
       uid,
@@ -412,7 +412,7 @@ mod test {
     let object_id = uuid::Uuid::new_v4();
 
     let db = db_pool().await;
-    let openai = openai_client();
+    let openai = ai_client();
 
     let mut collab = Collab::new(
       uid,

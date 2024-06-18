@@ -772,6 +772,7 @@ dependencies = [
 name = "appflowy-indexer"
 version = "0.1.0"
 dependencies = [
+ "appflowy-ai-client",
  "async-stream",
  "async-trait",
  "axum 0.7.4",
@@ -790,7 +791,6 @@ dependencies = [
  "humantime",
  "lazy_static",
  "log",
- "openai_dive",
  "pgvector",
  "rand 0.8.5",
  "redis 0.25.2",

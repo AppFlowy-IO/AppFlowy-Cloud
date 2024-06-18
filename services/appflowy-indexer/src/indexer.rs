@@ -1,16 +1,15 @@
 use std::pin::Pin;
 
+use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_ai_client::dto::{
+  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingRequest, EmbeddingsModel,
+};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use collab::entity::EncodedCollab;
 use collab::error::CollabError;
 use collab_entity::CollabType;
 use futures::Stream;
-use openai_dive::v1::api::Client;
-use openai_dive::v1::models::EmbeddingsEngine;
-use openai_dive::v1::resources::embedding::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
-};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -112,21 +111,21 @@ impl From<EmbedFragment> for AFCollabEmbeddingParams {
 }
 
 pub struct PostgresIndexer {
-  openai: Client,
+  ai_client: AppFlowyAIClient,
   db: PgPool,
 }
 
 impl PostgresIndexer {
   #[allow(dead_code)]
-  pub async fn open(openai_api_key: &str, pg_conn: &str) -> Result<Self> {
-    let openai = Client::new(openai_api_key.to_string());
+  pub async fn open(appflowy_ai_url: &str, pg_conn: &str) -> Result<Self> {
+    let ai_client = AppFlowyAIClient::new(appflowy_ai_url);
     let db = PgPool::connect(pg_conn).await?;
-    Ok(Self { openai, db })
+    Ok(Self { ai_client, db })
   }
 
   #[allow(dead_code)]
-  pub fn new(openai: Client, db: PgPool) -> Self {
-    Self { openai, db }
+  pub fn new(ai_client: AppFlowyAIClient, db: PgPool) -> Self {
+    Self { ai_client, db }
   }
 
   async fn get_embeddings(&self, fragments: Vec<Fragment>) -> Result<Embeddings> {
@@ -135,25 +134,18 @@ impl PostgresIndexer {
       .map(|fragment| fragment.content.clone())
       .collect();
     let resp = self
-      .openai
-      .embeddings()
-      .create(EmbeddingParameters {
+      .ai_client
+      .embeddings(EmbeddingRequest {
         input: EmbeddingInput::StringArray(inputs),
-        model: EmbeddingsEngine::TextEmbedding3Small.to_string(),
-        encoding_format: Some(EmbeddingEncodingFormat::Float),
-        dimensions: Some(1536), // text-embedding-3-small default number of dimensions
-        user: None,
+        model: EmbeddingsModel::TextEmbedding3Small.to_string(),
+        chunk_size: 0,
+        encoding_format: EmbeddingEncodingFormat::Float,
+        dimensions: 1536,
       })
       .await
       .map_err(|e| crate::error::Error::OpenAI(e.to_string()))?;
 
     tracing::trace!("fetched {} embeddings", resp.data.len());
-    let tokens_used = if let Some(usage) = resp.usage {
-      tracing::info!("OpenAI API index tokens used: {}", usage.total_tokens);
-      usage.total_tokens
-    } else {
-      0
-    };
 
     let mut fragments: Vec<_> = fragments.into_iter().map(EmbedFragment::from).collect();
     for e in resp.data.into_iter() {
@@ -168,7 +160,7 @@ impl PostgresIndexer {
       fragments[e.index as usize].embedding = Some(embedding);
     }
     Ok(Embeddings {
-      tokens_used,
+      tokens_used: resp.total_tokens as u32,
       fragments,
     })
   }
@@ -268,7 +260,7 @@ mod test {
   use database_entity::dto::EmbeddingContentType;
 
   use crate::indexer::{Indexer, PostgresIndexer};
-  use crate::test_utils::{db_pool, openai_client, setup_collab};
+  use crate::test_utils::{ai_client, db_pool, setup_collab};
 
   #[tokio::test]
   async fn test_indexing_embeddings() {
@@ -289,7 +281,7 @@ mod test {
     )
     .await;
 
-    let openai = openai_client();
+    let openai = ai_client();
 
     let indexer = PostgresIndexer::new(openai, db);
 

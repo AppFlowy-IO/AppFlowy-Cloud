@@ -3,6 +3,7 @@ use std::env;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
+use appflowy_ai_client::client::AppFlowyAIClient;
 use collab::core::collab::MutexCollab;
 use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
@@ -20,8 +21,8 @@ use database::user::create_user;
 use database_entity::dto::CollabParams;
 
 lazy_static! {
-  pub static ref APPFLOWY_INDEXER_OPENAI_API_KEY: Cow<'static, str> =
-    get_env_var("APPFLOWY_INDEXER_OPENAI_API_KEY", "");
+  pub static ref APPFLOWY_INDEXER_AI_URL: Cow<'static, str> =
+    get_env_var("APPFLOWY_INDEXER_AI_URL", "http://localhost:5001");
   pub static ref APPFLOWY_INDEXER_DATABASE_URL: Cow<'static, str> = get_env_var(
     "APPFLOWY_INDEXER_DATABASE_URL",
     "postgres://postgres:password@localhost:5432/postgres"
@@ -42,8 +43,8 @@ fn get_env_var<'default>(key: &str, default: &'default str) -> Cow<'default, str
   }
 }
 
-pub fn openai_client() -> openai_dive::v1::api::Client {
-  openai_dive::v1::api::Client::new(APPFLOWY_INDEXER_OPENAI_API_KEY.to_string())
+pub fn ai_client() -> AppFlowyAIClient {
+  AppFlowyAIClient::new(&APPFLOWY_INDEXER_AI_URL)
 }
 
 pub async fn db_pool() -> PgPool {

@@ -294,7 +294,7 @@ mod test {
   use crate::collab_handle::CollabHandle;
   use crate::indexer::{Indexer, PostgresIndexer};
   use crate::test_utils::{
-    collab_update_forwarder, db_pool, openai_client, redis_stream, setup_collab,
+    ai_client, collab_update_forwarder, db_pool, redis_stream, setup_collab,
   };
 
   #[tokio::test]
@@ -325,7 +325,7 @@ mod test {
 
     let object_id = object_id.to_string();
 
-    let openai = openai_client();
+    let openai = ai_client();
     let indexer: Arc<dyn Indexer> = Arc::new(PostgresIndexer::new(openai, db));
 
     let stream_group = redis_stream

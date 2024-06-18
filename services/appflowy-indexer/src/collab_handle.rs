@@ -287,7 +287,7 @@ mod test {
   use collab::preclude::Collab;
   use collab_document::document::Document;
   use collab_entity::CollabType;
-  use sqlx::Row;
+  use sqlx::{Postgres, Row};
 
   use workspace_template::document::get_started::get_started_document_data;
 
@@ -363,13 +363,14 @@ mod test {
 
     assert_eq!(contents.len(), 1);
 
-    let tokens: i64 =
-      sqlx::query("SELECT index_token_usage from af_workspace WHERE workspace_id = $1")
-        .bind(workspace_id)
-        .fetch_one(&db)
-        .await
-        .unwrap()
-        .get(0);
+    let tokens: i64 = sqlx::query_scalar::<Postgres, Option<i64>>(
+      "SELECT index_tokens_consumed from af_workspace_ai_usage WHERE workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_one(&db)
+    .await
+    .unwrap()
+    .unwrap_or(0);
     assert_ne!(tokens, 0);
   }
 }

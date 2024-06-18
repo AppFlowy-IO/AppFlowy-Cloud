@@ -13,9 +13,11 @@ pub async fn search_documents(
   let query = sqlx::query_as::<_, SearchDocumentItem>(
     r#"
     WITH workspace AS (
-      UPDATE af_workspace
-      SET search_token_usage = search_token_usage + $6
-      WHERE workspace_id = $2
+      INSERT INTO af_workspace_ai_usage(created_at, workspace_id, search_requests, search_tokens_consumed, index_tokens_consumed)
+      VALUES (now()::date, $2, 1, $6, 0)
+      ON CONFLICT (created_at, workspace_id) DO UPDATE
+      SET search_requests = af_workspace_ai_usage.search_requests + 1,
+          search_tokens_consumed = af_workspace_ai_usage.search_tokens_consumed + $6
       RETURNING workspace_id
     )
     SELECT

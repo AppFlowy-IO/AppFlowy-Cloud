@@ -15,8 +15,10 @@ tracing = { version = "0.1", optional = true }
 serde_repr = { version = "0.1", optional = true }
 futures = "0.3.30"
 bytes = "1.6.0"
+serde_with = "3.8.1"
 
 [dev-dependencies]
+appflowy-ai-client = { path = ".", features = ["dto", "client-api"] }
 tokio = { version = "1.37.0", features = ["macros", "test-util"] }
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json"] }
 uuid = { version = "1.6", features = ["v4"] }

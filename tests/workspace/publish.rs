@@ -12,13 +12,7 @@ async fn test_set_publish_namespace_set() {
       .await
       .err()
       .unwrap();
-
-    if format!("{:?}", err.code) != "PublishNamespaceNotSet" {
-      panic!(
-        "Expected PublishNamespaceNotSet, got: code {:?}, message {:?}",
-        err.code, err.message
-      );
-    }
+    assert_eq!(format!("{:?}", err.code), "PublishNamespaceNotSet");
   }
 
   let namespace = uuid::Uuid::new_v4().to_string();

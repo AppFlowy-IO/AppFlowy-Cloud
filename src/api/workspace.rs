@@ -959,7 +959,7 @@ async fn get_publish_namespace_handler(
 ) -> Result<Json<AppResponse<String>>> {
   let workspace_id = workspace_id.into_inner();
   let namespace =
-    biz::workspace::ops::get_workspace_namespace(&state.pg_pool, &workspace_id).await?;
+    biz::workspace::ops::get_workspace_publish_namespace(&state.pg_pool, &workspace_id).await?;
   Ok(Json(AppResponse::Ok().with_data(namespace)))
 }
 

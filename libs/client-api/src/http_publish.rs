@@ -29,6 +29,25 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  pub async fn get_workspace_publish_namespace(
+    &self,
+    workspace_id: &str,
+  ) -> Result<String, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/publish-namespace",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .get(&url)
+      .send()
+      .await?;
+    AppResponse::<String>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn publish_collab<T>(
     &self,
     workspace_id: &str,
@@ -95,20 +114,6 @@ impl Client {
 
 // Guest API (no login required)
 impl Client {
-  pub async fn get_workspace_publish_namespace(
-    &self,
-    workspace_id: &str,
-  ) -> Result<String, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/publish-namespace",
-      self.base_url, workspace_id
-    );
-    let resp = self.cloud_client.get(&url).send().await?;
-    AppResponse::<String>::from_response(resp)
-      .await?
-      .into_data()
-  }
-
   pub async fn get_published_collab<T>(
     &self,
     publish_namespace: &str,

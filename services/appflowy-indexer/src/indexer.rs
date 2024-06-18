@@ -138,7 +138,7 @@ impl PostgresIndexer {
       .embeddings(EmbeddingRequest {
         input: EmbeddingInput::StringArray(inputs),
         model: EmbeddingsModel::TextEmbedding3Small.to_string(),
-        chunk_size: 0,
+        chunk_size: 2000,
         encoding_format: EmbeddingEncodingFormat::Float,
         dimensions: 1536,
       })

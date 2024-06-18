@@ -24,7 +24,7 @@ pub async fn search_document(
     .embeddings(EmbeddingRequest {
       input: EmbeddingInput::String(request.query.clone()),
       model: EmbeddingsModel::TextEmbedding3Small.to_string(),
-      chunk_size: 0,
+      chunk_size: 500,
       encoding_format: EmbeddingEncodingFormat::Float,
       dimensions: 1536,
     })

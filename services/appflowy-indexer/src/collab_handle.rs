@@ -363,14 +363,14 @@ mod test {
 
     assert_eq!(contents.len(), 1);
 
-    let tokens: i64 = sqlx::query(
+    let tokens = sqlx::query_scalar!(
       "SELECT index_tokens_consumed from af_workspace_ai_usage WHERE workspace_id = $1",
+      workspace_id
     )
-    .bind(workspace_id)
     .fetch_one(&db)
     .await
     .unwrap()
-    .get(0);
+    .unwrap_or(0);
     assert_ne!(tokens, 0);
   }
 }

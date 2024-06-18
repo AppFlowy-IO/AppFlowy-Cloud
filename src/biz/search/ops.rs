@@ -1,10 +1,10 @@
 use crate::api::metrics::RequestMetrics;
 use app_error::ErrorCode;
-use database::index::{search_documents, SearchDocumentParams};
-use openai_dive::v1::models::EmbeddingsEngine;
-use openai_dive::v1::resources::embedding::{
-  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingParameters,
+use appflowy_ai_client::client::AppFlowyAIClient;
+use appflowy_ai_client::dto::{
+  EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingRequest, EmbeddingsModel,
 };
+use database::index::{search_documents, SearchDocumentParams};
 use shared_entity::dto::search_dto::{
   SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem,
 };
@@ -14,35 +14,29 @@ use uuid::Uuid;
 
 pub async fn search_document(
   pg_pool: &PgPool,
-  openai: &openai_dive::v1::api::Client,
+  openai: &AppFlowyAIClient,
   uid: i64,
   workspace_id: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
   let embeddings = openai
-    .embeddings()
-    .create(EmbeddingParameters {
+    .embeddings(EmbeddingRequest {
       input: EmbeddingInput::String(request.query.clone()),
-      model: EmbeddingsEngine::TextEmbedding3Small.to_string(),
-      encoding_format: Some(EmbeddingEncodingFormat::Float),
-      dimensions: Some(1536), // text-embedding-3-small default number of dimensions
-      user: None,
+      model: EmbeddingsModel::TextEmbedding3Small.to_string(),
+      chunk_size: 0,
+      encoding_format: EmbeddingEncodingFormat::Float,
+      dimensions: 1536,
     })
     .await
     .map_err(|e| AppResponseError::new(ErrorCode::Internal, e.to_string()))?;
-
-  let tokens_used = if let Some(usage) = embeddings.usage {
-    metrics.record_search_tokens_used(&workspace_id, usage.total_tokens);
-    tracing::info!(
-      "workspace {} OpenAI API search tokens used: {}",
-      workspace_id,
-      usage.total_tokens
-    );
-    usage.total_tokens
-  } else {
-    0
-  };
+  let total_tokens = embeddings.total_tokens as u32;
+  metrics.record_search_tokens_used(&workspace_id, total_tokens);
+  tracing::info!(
+    "workspace {} OpenAI API search tokens used: {}",
+    workspace_id,
+    total_tokens
+  );
 
   let embedding = embeddings
     .data
@@ -71,7 +65,7 @@ pub async fn search_document(
       preview: request.preview_size.unwrap_or(180) as i32,
       embedding,
     },
-    tokens_used,
+    total_tokens,
   )
   .await?;
   tx.commit().await?;

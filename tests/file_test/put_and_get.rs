@@ -1,6 +1,9 @@
 use super::TestBucket;
+
 use app_error::ErrorCode;
+
 use client_api_test::{generate_unique_registered_user_client, workspace_id_from_client};
+use database::file::{BucketClient, ResponseBlob};
 
 #[tokio::test]
 async fn get_but_not_exists() {
@@ -115,10 +118,8 @@ async fn put_and_delete_workspace() {
 
   {
     // blob exists in the bucket
-    let raw_data = test_bucket
-      .get_object(&workspace_id, &file_id)
-      .await
-      .unwrap();
+    let obj_key = format!("{}/{}", workspace_id, file_id);
+    let raw_data = test_bucket.get_blob(&obj_key).await.unwrap().to_blob();
     assert_eq!(blob_to_put, String::from_utf8_lossy(&raw_data));
   }
 
@@ -127,11 +128,9 @@ async fn put_and_delete_workspace() {
 
   {
     // blob does not exist in the bucket
-    let is_none = test_bucket
-      .get_object(&workspace_id, &file_id)
-      .await
-      .is_none();
-    assert!(is_none);
+    let obj_key = format!("{}/{}", workspace_id, file_id);
+    let err = test_bucket.get_blob(&obj_key).await.unwrap_err();
+    assert!(err.is_record_not_found());
   }
 }
 

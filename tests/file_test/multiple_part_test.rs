@@ -32,8 +32,9 @@ async fn multiple_part_put_and_get_test() {
     )
     .await
     .unwrap();
-  let chunked_bytes = ChunkedBytes::from_bytes(Bytes::from(text.clone())).unwrap();
+  let mut chunked_bytes = ChunkedBytes::from_bytes(Bytes::from(text.clone())).unwrap();
   assert_eq!(chunked_bytes.offsets.len(), 2);
+  chunked_bytes.set_chunk_size(5 * 1024 * 1024).unwrap();
 
   let mut completed_parts = Vec::new();
   let iter = chunked_bytes.iter().enumerate();
@@ -289,4 +290,68 @@ async fn perform_upload_test(
   let object = test_bucket.get_blob(&key.object_key()).await.unwrap();
   assert_eq!(object.len(), file_size, "Failed for {}", description);
   assert_eq!(object.to_blob(), blob, "Failed for {}", description);
+}
+
+#[tokio::test]
+async fn invalid_test() {
+  let (c1, _user1) = generate_unique_registered_user_client().await;
+  let workspace_id = workspace_id_from_client(&c1).await;
+  let parent_dir = workspace_id.clone();
+  let file_id = uuid::Uuid::new_v4().to_string();
+  let mime = mime::TEXT_PLAIN_UTF_8;
+
+  // test invalid create upload request
+  for request in vec![
+    CreateUploadRequest {
+      file_id: "".to_string(),
+      parent_dir: parent_dir.clone(),
+      content_type: mime.to_string(),
+    },
+    CreateUploadRequest {
+      file_id: file_id.clone(),
+      parent_dir: "".to_string(),
+      content_type: mime.to_string(),
+    },
+  ] {
+    let err = c1.create_upload(&workspace_id, request).await.unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+  }
+
+  // test invalid upload part request
+  let upload_id = uuid::Uuid::new_v4().to_string();
+  for request in vec![
+    // workspace_id, parent_dir, file_id, upload_id, part_number, body
+    (
+      "".to_string(),
+      parent_dir.clone(),
+      file_id.clone(),
+      upload_id.clone(),
+      1,
+      vec![1, 2, 3],
+    ),
+    (
+      workspace_id.clone(),
+      "".to_string(),
+      file_id.clone(),
+      upload_id.clone(),
+      1,
+      vec![1, 2, 3],
+    ),
+    (
+      workspace_id.clone(),
+      parent_dir.clone(),
+      "".to_string(),
+      upload_id.clone(),
+      1,
+      vec![1, 2, 3],
+    ),
+  ] {
+    let err = c1
+      .upload_part(
+        &request.0, &request.1, &request.2, &request.3, request.4, request.5,
+      )
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::Internal);
+  }
 }

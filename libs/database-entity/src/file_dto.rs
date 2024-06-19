@@ -18,7 +18,7 @@ impl Display for CreateUploadRequest {
   }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CreateUploadResponse {
   pub file_id: String,
   pub upload_id: String,

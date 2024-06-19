@@ -25,7 +25,7 @@ use actix_session::storage::RedisSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::middleware::NormalizePath;
-use actix_web::{dev::Server, web, web::Data, App, HttpServer};
+use actix_web::{dev::Server, web::Data, App, HttpServer};
 use anyhow::{Context, Error};
 use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_collaborate::actix_ws::server::RealtimeServerActor;
@@ -74,7 +74,7 @@ impl Application {
     let address = format!("{}:{}", config.application.host, config.application.port);
     let listener = TcpListener::bind(&address)?;
     let port = listener.local_addr().unwrap().port();
-    tracing::info!("Server started at {}", listener.local_addr().unwrap());
+    info!("Server started at {}", listener.local_addr().unwrap());
     let actix_server = run_actix_server(listener, state, config, rt_cmd_recv).await?;
 
     Ok(Self { port, actix_server })
@@ -94,7 +94,7 @@ pub async fn run_actix_server(
   state: AppState,
   config: Config,
   rt_cmd_recv: CLCommandReceiver,
-) -> Result<Server, anyhow::Error> {
+) -> Result<Server, Error> {
   let redis_store = RedisSessionStore::new(config.redis_uri.expose_secret())
     .await
     .map_err(|e| {
@@ -146,10 +146,6 @@ pub async fn run_actix_server(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
-      .app_data(web::JsonConfig::default().limit(10 * 1024 * 1024).error_handler(|err, req| {
-        error!("Failed to parse json: {:?} for request: {}", err, req.path());
-        actix_web::error::ErrorBadRequest("Invalid JSON")
-      }))
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())

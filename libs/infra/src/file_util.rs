@@ -61,6 +61,19 @@ impl ChunkedBytes {
     })
   }
 
+  pub fn set_chunk_size(&mut self, chunk_size: i32) -> Result<(), anyhow::Error> {
+    if chunk_size < MIN_CHUNK_SIZE as i32 {
+      return Err(anyhow!(
+        "Chunk size should be greater than or equal to {}",
+        MIN_CHUNK_SIZE
+      ));
+    }
+
+    self.chunk_size = chunk_size;
+    self.offsets = split_into_chunks(&self.data, chunk_size as usize);
+    Ok(())
+  }
+
   pub fn iter(&self) -> ChunkedBytesIterator {
     ChunkedBytesIterator {
       chunked_data: self,

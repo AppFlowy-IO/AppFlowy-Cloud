@@ -76,6 +76,14 @@ async fn create_upload(
   req: web::Json<CreateUploadRequest>,
 ) -> Result<JsonAppResponse<CreateUploadResponse>> {
   let req = req.into_inner();
+  if req.parent_dir.is_empty() {
+    return Err(AppError::InvalidRequest("parent_dir is empty".to_string()).into());
+  }
+
+  if req.file_id.is_empty() {
+    return Err(AppError::InvalidRequest("file_id is empty".to_string()).into());
+  }
+
   let key = BlobPathV1 {
     workspace_id: workspace_id.into_inner(),
     parent_dir: req.parent_dir.clone(),

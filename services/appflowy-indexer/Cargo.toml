@@ -20,7 +20,7 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 yrs.workspace = true
-openai_dive = { workspace = true, features = ["rustls-tls"] }
+appflowy-ai-client = { workspace = true, features = ["client-api"] }
 sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-rustls", "macros", "postgres", "uuid", "chrono"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "sync"] }
 tokio-util = { version = "0.7" }

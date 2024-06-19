@@ -116,6 +116,12 @@ pub enum AppError {
 
   #[error("{0}")]
   OverrideWithIncorrectData(String),
+
+  #[error("{0}")]
+  PublishNamespaceNotSet(String),
+
+  #[error("{0}")]
+  PublishNamespaceAlreadyTaken(String),
 }
 
 impl AppError {
@@ -174,6 +180,8 @@ impl AppError {
       AppError::NoRequiredData(_) => ErrorCode::NoRequiredData,
       AppError::OverrideWithIncorrectData(_) => ErrorCode::OverrideWithIncorrectData,
       AppError::Utf8Error(_) => ErrorCode::Internal,
+      AppError::PublishNamespaceNotSet(_) => ErrorCode::PublishNamespaceNotSet,
+      AppError::PublishNamespaceAlreadyTaken(_) => ErrorCode::PublishNamespaceAlreadyTaken,
     }
   }
 }
@@ -282,6 +290,8 @@ pub enum ErrorCode {
   WorkspaceMemberLimitExceeded = 1027,
   FileStorageLimitExceeded = 1028,
   OverrideWithIncorrectData = 1029,
+  PublishNamespaceNotSet = 1030,
+  PublishNamespaceAlreadyTaken = 1031,
 }
 
 impl ErrorCode {

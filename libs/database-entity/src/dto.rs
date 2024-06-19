@@ -278,6 +278,11 @@ pub struct CollabMemberIdentify {
   pub object_id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct UpdatePublishNamespace {
+  pub new_namespace: String,
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct QueryCollabMembers {
   #[validate(custom = "validate_not_empty_str")]

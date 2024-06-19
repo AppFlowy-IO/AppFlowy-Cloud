@@ -28,6 +28,7 @@ tokio = { workspace = true, features = [
     "sync",
     "fs",
     "time",
+    "full",
 ] }
 tokio-stream.workspace = true
 tokio-util = { version = "0.7.10", features = ["io"] }
@@ -47,7 +48,8 @@ validator = "0.16.1"
 bytes = "1.5.0"
 rcgen = { version = "0.10.0", features = ["pem", "x509-parser"] }
 mime = "0.3.17"
-rust-s3 = { version = "0.34.0-rc4", default-features = false, features = ["tokio-rustls-tls", "with-tokio", "no-verify-ssl"] }
+aws-sdk-s3 = { version = "1.36.0", features = ["behavior-version-latest", "rt-tokio"] }
+aws-config = { version = "1.5.1", features = ["behavior-version-latest"] }
 redis = { workspace = true, features = ["json", "tokio-comp", "connection-manager"] }
 tracing = { version = "0.1.40", features = ["log"] }
 tracing-subscriber = { version = "0.3.18", features = ["registry", "env-filter", "ansi", "json", "tracing-log"] }
@@ -70,6 +72,7 @@ tonic.workspace = true
 prost.workspace = true
 tonic-proto.workspace = true
 appflowy-collaborate = { path = "services/appflowy-collaborate" }
+percent-encoding = "2.3.1"
 
 # ai
 appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }
@@ -152,6 +155,7 @@ members = [
     "libs/wasm-test",
     "libs/client-api-wasm",
     "libs/appflowy-ai-client",
+    "libs/client-api-entity",
     # services
     "services/appflowy-history",
     "services/appflowy-indexer",
@@ -206,6 +210,7 @@ prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
 appflowy-ai-client = { path = "libs/appflowy-ai-client", default-features = false }
 pgvector = { version = "0.3", features = ["sqlx"] }
+client-api-entity = { path = "libs/client-api-entity" }
 
 # collaboration
 yrs = "0.18.7"

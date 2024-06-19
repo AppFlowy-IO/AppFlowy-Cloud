@@ -6,10 +6,10 @@ use anyhow::anyhow;
 use collab::core::awareness::{AwarenessUpdate, Event};
 use collab::core::collab::MutexCollab;
 
+use client_api_entity::{CollabObject, CollabType};
 use collab::core::collab_state::SyncState;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
-use collab_entity::{CollabObject, CollabType};
 use collab_rt_entity::{ClientCollabMessage, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
 

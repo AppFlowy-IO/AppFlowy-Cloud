@@ -207,6 +207,8 @@ where
       collab_type: collab_type.clone(),
       doc_state: encode_collab.doc_state.to_vec(),
     };
+    trace!("Send control event: {}", open_event);
+
     tokio::spawn(async move {
       if let Err(err) = cloned_control_event_stream
         .lock()

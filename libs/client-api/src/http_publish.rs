@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use database_entity::dto::UpdatePublishNamespace;
+use client_api_entity::UpdatePublishNamespace;
 use reqwest::{Body, Method};
 use shared_entity::response::{AppResponse, AppResponseError};
 

@@ -301,7 +301,7 @@ async fn invalid_test() {
   let mime = mime::TEXT_PLAIN_UTF_8;
 
   // test invalid create upload request
-  for request in vec![
+  for request in [
     CreateUploadRequest {
       file_id: "".to_string(),
       parent_dir: parent_dir.clone(),

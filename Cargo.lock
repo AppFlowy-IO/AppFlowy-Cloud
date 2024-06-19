@@ -637,7 +637,6 @@ dependencies = [
  "log",
  "mime",
  "once_cell",
- "openai_dive",
  "opener",
  "openssl",
  "pgvector",
@@ -772,6 +771,7 @@ dependencies = [
 name = "appflowy-indexer"
 version = "0.1.0"
 dependencies = [
+ "appflowy-ai-client",
  "async-stream",
  "async-trait",
  "axum 0.7.4",
@@ -790,7 +790,6 @@ dependencies = [
  "humantime",
  "lazy_static",
  "log",
- "openai_dive",
  "pgvector",
  "rand 0.8.5",
  "redis 0.25.2",
@@ -4018,22 +4017,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "624a8340c38c1b80fd549087862da4ba43e08858af025b236e509b6649fc13d5"
 
 [[package]]
-name = "openai_dive"
-version = "0.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbd2a1afd7e033794a61cd3d7b35474347309660979a163d5a77d7db67863b4d"
-dependencies = [
- "bytes",
- "reqwest 0.12.4",
- "serde",
- "serde_json",
- "strum",
- "strum_macros",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "opener"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5076,7 +5059,6 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
- "mime_guess",
  "native-tls",
  "once_cell",
  "percent-encoding",
@@ -6206,25 +6188,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "strum"
-version = "0.26.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
-
-[[package]]
-name = "strum_macros"
-version = "0.26.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6cf59daf282c0a494ba14fd21610a0325f9f90ec9d1231dea26bcb1d696c946"
-dependencies = [
- "heck 0.4.1",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.48",
-]
 
 [[package]]
 name = "subtle"

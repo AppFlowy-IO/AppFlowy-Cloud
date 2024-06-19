@@ -48,7 +48,6 @@ pub struct AppState {
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: Mailer,
-  pub openai: Option<openai_dive::v1::api::Client>,
   pub ai_client: AppFlowyAIClient,
   pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,

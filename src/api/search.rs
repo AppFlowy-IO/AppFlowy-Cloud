@@ -1,9 +1,7 @@
 use actix_web::web::{Data, Query};
 use actix_web::{web, Scope};
-use anyhow::anyhow;
 use uuid::Uuid;
 
-use app_error::AppError;
 use authentication::jwt::Authorization;
 use shared_entity::dto::search_dto::{SearchDocumentRequest, SearchDocumentResponseItem};
 use shared_entity::response::{AppResponse, JsonAppResponse};
@@ -26,18 +24,15 @@ async fn document_search(
   let request = payload.into_inner();
   let user_uuid = auth.uuid()?;
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  let openai = match &state.openai {
-    Some(openai) => openai,
-    None => {
-      return Err(
-        AppError::Internal(anyhow!(
-          "Search API is not supported by this AppFlowy-Cloud instance"
-        ))
-        .into(),
-      )
-    },
-  };
   let metrics = &*state.metrics.request_metrics;
-  let resp = search_document(&state.pg_pool, openai, uid, workspace_id, request, metrics).await?;
+  let resp = search_document(
+    &state.pg_pool,
+    &state.ai_client,
+    uid,
+    workspace_id,
+    request,
+    metrics,
+  )
+  .await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }

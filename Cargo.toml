@@ -73,7 +73,6 @@ appflowy-collaborate = { path = "services/appflowy-collaborate" }
 
 # ai
 appflowy-ai-client = { workspace = true, features = ["dto", "client-api"] }
-openai_dive = { workspace = true, features = ["rustls-tls"] }
 pgvector = { workspace = true, features = ["sqlx"] }
 
 collab = { workspace = true }
@@ -206,7 +205,6 @@ tonic = "0.11"
 prost = "0.12"
 tonic-proto = { path = "libs/tonic-proto" }
 appflowy-ai-client = { path = "libs/appflowy-ai-client", default-features = false }
-openai_dive = { version = "0.4", features = ["rustls-tls"] }
 pgvector = { version = "0.3", features = ["sqlx"] }
 
 # collaboration

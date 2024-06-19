@@ -24,8 +24,11 @@ pub struct Config {
   #[clap(long, env = "APPFLOWY_INDEXER_REDIS_URL")]
   pub redis_url: String,
 
-  #[clap(long, env = "APPFLOWY_INDEXER_OPENAI_API_KEY")]
-  pub openai_api_key: String,
+  #[clap(long, env = "APPFLOWY_AI_SERVER_HOST", default_value = "localhost")]
+  pub appflowy_ai_host: String,
+
+  #[clap(long, env = "APPFLOWY_AI_SERVER_PORT", default_value = "5001")]
+  pub appflowy_ai_port: u16,
 
   #[clap(long, env = "APPFLOWY_INDEXER_DATABASE_URL")]
   pub database_url: String,
@@ -52,6 +55,12 @@ pub struct Config {
   pub preindex: bool,
 }
 
+impl Config {
+  pub fn appflowy_ai_url(&self) -> String {
+    format!("http://{}:{}", self.appflowy_ai_host, self.appflowy_ai_port)
+  }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
   dotenvy::dotenv().ok();
@@ -62,9 +71,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_server(config: Config) -> Result<(), Box<dyn std::error::Error>> {
+  let appflowy_ai_url = config.appflowy_ai_url();
   let redis_client = redis::Client::open(config.redis_url)?;
   let collab_stream = CollabRedisStream::new(redis_client).await?;
-  let indexer = PostgresIndexer::open(&config.openai_api_key, &config.database_url).await?;
+  let indexer = PostgresIndexer::open(&appflowy_ai_url, &config.database_url).await?;
   tracing::info!("Starting AppFlowy Indexer...");
   let consumer = OpenCollabConsumer::new(
     collab_stream,

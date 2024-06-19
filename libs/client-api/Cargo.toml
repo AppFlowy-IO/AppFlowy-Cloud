@@ -39,16 +39,15 @@ serde.workspace = true
 app-error = { workspace = true, features = ["tokio_error", "bincode_error"] }
 scraper = { version = "0.17.1", optional = true }
 
-collab-entity = { workspace = true }
-gotrue-entity = { workspace = true }
 shared-entity = { workspace = true }
 collab-rt-entity = { workspace = true }
-database-entity.workspace = true
+client-api-entity.workspace = true
 serde_urlencoded = "0.7.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio-retry = "0.3"
 tokio-util = "0.7"
+infra = { workspace = true, features = ["file_util"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies.tokio]
 workspace = true

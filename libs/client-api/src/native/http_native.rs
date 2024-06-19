@@ -6,21 +6,104 @@ use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
+
+use client_api_entity::{CollabParams, QueryCollabParams};
+use client_api_entity::{
+  CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
+};
 use collab_rt_entity::HttpRealtimeMessage;
-use database_entity::dto::{CollabParams, QueryCollabParams};
 use futures_util::stream;
 use prost::Message;
 use reqwest::{Body, Method};
 use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
+
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Retry, RetryIf};
-use tracing::{event, info, instrument};
+use tracing::{event, info, instrument, trace};
+
+pub use infra::file_util::ChunkedBytes;
 
 impl Client {
+  pub async fn create_upload(
+    &self,
+    workspace_id: &str,
+    req: CreateUploadRequest,
+  ) -> Result<CreateUploadResponse, AppResponseError> {
+    trace!("create_upload: {}", req);
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/create_upload",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<CreateUploadResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  /// Upload a part of a file. The part number should be 1-based.
+  ///
+  /// In Amazon S3, the minimum chunk size for multipart uploads is 5 MB,except for the last part,
+  /// which can be smaller.(https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html)
+  pub async fn upload_part(
+    &self,
+    workspace_id: &str,
+    parent_dir: &str,
+    file_id: &str,
+    upload_id: &str,
+    part_number: i32,
+    body: Vec<u8>,
+  ) -> Result<UploadPartResponse, AppResponseError> {
+    if body.is_empty() {
+      return Err(AppResponseError::from(AppError::InvalidRequest(
+        "Empty body".to_string(),
+      )));
+    }
+
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/upload_part/{parent_dir}/{file_id}/{upload_id}/{part_number}",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .body(body)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<UploadPartResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn complete_upload(
+    &self,
+    workspace_id: &str,
+    req: CompleteUploadRequest,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{}/complete_upload",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::PUT, &url)
+      .await?
+      .json(&req)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
   #[instrument(level = "debug", skip_all)]
   pub async fn get_collab(
     &self,

@@ -58,12 +58,19 @@ impl StreamGroup {
 
   /// Ensures the consumer group exists, creating it if necessary.
   pub async fn ensure_consumer_group(&mut self) -> Result<(), StreamError> {
-    let _: RedisResult<()> = self
-      .connection_manager
-       //Use '$' if you want new messages or '0' to read from the beginning.
-      .xgroup_create_mkstream(&self.stream_key, &self.group_name, "0")
-      .await;
-
+    let result: RedisResult<()> = self
+        .connection_manager
+        //Use '$' if you want new messages or '0' to read from the beginning.
+        .xgroup_create_mkstream(&self.stream_key, &self.group_name, "0")
+        .await;
+    if let Err(e) = result {
+      tracing::warn!(
+        "error when creating consumer group `{}` `{}`: {:?}",
+        self.stream_key,
+        self.group_name,
+        e
+      );
+    }
     Ok(())
   }
 

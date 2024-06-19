@@ -1,0 +1,18 @@
+[package]
+name = "client-api-entity"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+collab-entity = { workspace = true }
+gotrue-entity = { workspace = true }
+shared-entity = { workspace = true }
+collab-rt-entity = { workspace = true }
+database-entity.workspace = true
+
+infra = { workspace = true, optional = true }
+
+[features]
+file_util = ["infra/file_util"]

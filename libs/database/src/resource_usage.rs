@@ -8,7 +8,7 @@ use sqlx::{PgPool, Transaction};
 use tracing::instrument;
 use uuid::Uuid;
 
-#[instrument(level = "trace", skip_all, err)]
+#[instrument(level = "trace", skip_all)]
 #[inline]
 pub async fn is_blob_metadata_exists(
   pool: &PgPool,

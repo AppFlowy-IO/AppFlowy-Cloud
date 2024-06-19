@@ -1,6 +1,6 @@
 use crate::http::log_request_id;
 use crate::Client;
-use database_entity::dto::{
+use client_api_entity::{
   AFCollabMember, AFCollabMembers, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
   AFWorkspaceMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
   QueryWorkspaceMember, UpdateCollabMemberParams,

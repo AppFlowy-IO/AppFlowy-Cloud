@@ -178,8 +178,9 @@ impl CollabHandle {
           Err(err) => tracing::error!("failed to decode update event: {}", err),
         }
       }
-      txn.commit();
-    }
+    } else {
+      tracing::warn!("failed to obtain a collab lock");
+    };
     update_stream.ack_messages(&messages).await?;
 
     Ok(())
@@ -286,14 +287,14 @@ mod test {
   use collab::preclude::Collab;
   use collab_document::document::Document;
   use collab_entity::CollabType;
-  use sqlx::Row;
+  use sqlx::{Postgres, Row};
 
   use workspace_template::document::get_started::get_started_document_data;
 
   use crate::collab_handle::CollabHandle;
   use crate::indexer::{Indexer, PostgresIndexer};
   use crate::test_utils::{
-    collab_update_forwarder, db_pool, openai_client, redis_stream, setup_collab,
+    ai_client, collab_update_forwarder, db_pool, redis_stream, setup_collab,
   };
 
   #[tokio::test]
@@ -324,7 +325,7 @@ mod test {
 
     let object_id = object_id.to_string();
 
-    let openai = openai_client();
+    let openai = ai_client();
     let indexer: Arc<dyn Indexer> = Arc::new(PostgresIndexer::new(openai, db));
 
     let stream_group = redis_stream
@@ -362,13 +363,14 @@ mod test {
 
     assert_eq!(contents.len(), 1);
 
-    let tokens: i64 =
-      sqlx::query("SELECT index_token_usage from af_workspace WHERE workspace_id = $1")
-        .bind(workspace_id)
-        .fetch_one(&db)
-        .await
-        .unwrap()
-        .get(0);
+    let tokens: i64 = sqlx::query_scalar::<Postgres, Option<i64>>(
+      "SELECT index_tokens_consumed from af_workspace_ai_usage WHERE workspace_id = $1",
+    )
+    .bind(workspace_id)
+    .fetch_one(&db)
+    .await
+    .unwrap()
+    .unwrap_or(0);
     assert_ne!(tokens, 0);
   }
 }

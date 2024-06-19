@@ -44,7 +44,7 @@ where
   }
   pub async fn answer_response_stream(
     resp: reqwest::Response,
-  ) -> Result<impl Stream<Item = Result<StringOrMessage, AppResponseError>>, AppResponseError> {
+  ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
     let status_code = resp.status();
     if !status_code.is_success() {
       let body = resp.text().await?;
@@ -52,7 +52,7 @@ where
     }
 
     let stream = resp.bytes_stream().map_err(AppResponseError::from);
-    Ok(AnswerStream::new(stream))
+    Ok(stream)
   }
 }
 
@@ -228,7 +228,6 @@ impl Stream for AnswerStream {
           const NEW_LINE: &[u8; 1] = b"\n";
           if bytes.ends_with(NEW_LINE) {
             let bytes = &bytes[..bytes.len() - NEW_LINE.len()];
-
             return match String::from_utf8(bytes.to_vec()) {
               Ok(value) => Poll::Ready(Some(Ok(StringOrMessage::Left(value)))),
               Err(err) => Poll::Ready(Some(Err(AppResponseError::from(err)))),

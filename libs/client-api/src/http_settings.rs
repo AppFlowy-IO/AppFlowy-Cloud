@@ -1,7 +1,7 @@
 use reqwest::Method;
 use tracing::instrument;
 
-use database_entity::dto::AFWorkspaceSettings;
+use client_api_entity::AFWorkspaceSettings;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::http::log_request_id;

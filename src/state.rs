@@ -17,7 +17,8 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
-use database::file::bucket_s3_impl::S3BucketStorage;
+use database::file::s3_client_impl::S3BucketStorage;
+
 use database::user::{select_all_uid_uuid, select_uid_from_uuid};
 use gotrue::grant::{Grant, PasswordGrant};
 use snowflake::Snowflake;
@@ -48,7 +49,6 @@ pub struct AppState {
   pub metrics: AppMetrics,
   pub gotrue_admin: GoTrueAdmin,
   pub mailer: Mailer,
-  pub openai: Option<openai_dive::v1::api::Client>,
   pub ai_client: AppFlowyAIClient,
   pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,

@@ -1,12 +1,14 @@
 use crate::http::log_request_id;
 use crate::Client;
+
 use app_error::AppError;
 use bytes::Bytes;
-use futures_util::StreamExt;
+use futures_util::TryStreamExt;
 use mime::Mime;
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::{AppResponse, AppResponseError};
+
 use tracing::instrument;
 
 impl Client {
@@ -64,6 +66,66 @@ impl Client {
       .await?
       .into_data()
   }
+  pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
+    format!(
+      "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
+      self.base_url
+    )
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn get_blob_v1(
+    &self,
+    workspace_id: &str,
+    parent_dir: &str,
+    file_id: &str,
+  ) -> Result<(Mime, Vec<u8>), AppResponseError> {
+    let url = self.get_blob_url_v1(workspace_id, parent_dir, file_id);
+    self.get_blob(&url).await
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn delete_blob_v1(
+    &self,
+    workspace_id: &str,
+    parent_dir: &str,
+    file_id: &str,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  #[instrument(level = "info", skip_all)]
+  pub async fn get_blob_v1_metadata(
+    &self,
+    workspace_id: &str,
+    parent_dir: &str,
+    file_id: &str,
+  ) -> Result<BlobMetadata, AppResponseError> {
+    let url = format!(
+      "{}/api/file_storage/{workspace_id}/v1/metadata/{parent_dir}/{file_id}",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    log_request_id(&resp);
+    AppResponse::<BlobMetadata>::from_response(resp)
+      .await?
+      .into_data()
+  }
 
   /// Get the file with the given url. The url should be in the format of
   /// `https://appflowy.io/api/file_storage/<workspace_id>/<file_id>`.
@@ -77,42 +139,37 @@ impl Client {
     log_request_id(&resp);
 
     match resp.status() {
-      reqwest::StatusCode::OK => {
-        // get mime from resp header
-        let mime = {
-          match resp.headers().get(header::CONTENT_TYPE) {
-            Some(v) => match v.to_str() {
-              Ok(v) => match v.parse::<Mime>() {
-                Ok(v) => v,
-                Err(e) => {
-                  tracing::error!("failed to parse mime from header: {:?}", e);
-                  mime::TEXT_PLAIN
-                },
-              },
-              Err(e) => {
-                tracing::error!("failed to get mime from header: {:?}", e);
-                mime::TEXT_PLAIN
-              },
-            },
-            None => mime::TEXT_PLAIN,
-          }
-        };
+      StatusCode::OK => {
+        let mime = resp
+          .headers()
+          .get(header::CONTENT_TYPE)
+          .and_then(|v| v.to_str().ok())
+          .and_then(|v| v.parse::<Mime>().ok())
+          .unwrap_or(mime::TEXT_PLAIN);
 
-        let mut stream = resp.bytes_stream();
-        let mut acc: Vec<u8> = Vec::new();
-        while let Some(raw_bytes) = stream.next().await {
-          acc.extend_from_slice(&raw_bytes?);
-        }
-        Ok((mime, acc))
+        let bytes = resp
+          .bytes_stream()
+          .try_fold(Vec::new(), |mut acc, chunk| async move {
+            acc.extend_from_slice(&chunk);
+            Ok(acc)
+          })
+          .await?;
+
+        Ok((mime, bytes))
       },
-      reqwest::StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
+      StatusCode::NOT_FOUND => Err(AppResponseError::from(AppError::RecordNotFound(
         url.to_owned(),
       ))),
-      c => Err(AppResponseError::from(AppError::Unhandled(format!(
-        "status code: {}, message: {}",
-        c,
-        resp.text().await?
-      )))),
+      status => {
+        let message = resp
+          .text()
+          .await
+          .unwrap_or_else(|_| "Unknown error".to_string());
+        Err(AppResponseError::from(AppError::Unhandled(format!(
+          "status code: {}, message: {}",
+          status, message
+        ))))
+      },
     }
   }
 

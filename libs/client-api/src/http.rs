@@ -1,11 +1,11 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
-use collab_entity::CollabType;
+use client_api_entity::AuthProvider;
+use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
 use gotrue::grant::{Grant, RefreshTokenGrant};
 use gotrue::params::MagicLinkParams;
 use gotrue::params::{AdminUserParams, GenerateLinkParams};
-use gotrue_entity::dto::AuthProvider;
 use shared_entity::dto::workspace_dto::{CreateWorkspaceParam, PatchWorkspaceParam};
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "enable_brotli")]
@@ -15,7 +15,7 @@ use parking_lot::RwLock;
 use reqwest::Method;
 use reqwest::RequestBuilder;
 
-use database_entity::dto::{
+use client_api_entity::{
   AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaces,
   QuerySnapshotParams, SnapshotData,
 };
@@ -31,8 +31,8 @@ use tracing::{error, event, info, instrument, trace, warn};
 use url::Url;
 
 use crate::ws::ConnectInfo;
-use gotrue_entity::dto::SignUpResponse::{Authenticated, NotAuthenticated};
-use gotrue_entity::dto::{GotrueTokenResponse, UpdateGotrueUserParams, User};
+use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
+use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";

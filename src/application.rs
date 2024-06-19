@@ -41,7 +41,9 @@ use appflowy_collaborate::CollaborationServer;
 
 use aws_sdk_s3::config::{Credentials, Region, SharedCredentialsProvider};
 use aws_sdk_s3::operation::create_bucket::CreateBucketError;
-use aws_sdk_s3::types::{BucketInfo, BucketType, CreateBucketConfiguration};
+use aws_sdk_s3::types::{
+  BucketInfo, BucketLocationConstraint, BucketType, CreateBucketConfiguration,
+};
 use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use openssl::x509::X509;
 use secrecy::{ExposeSecret, Secret};
@@ -57,7 +59,7 @@ use tonic_proto::history::history_client::HistoryClient;
 use crate::api::ai::ai_completion_scope;
 use crate::api::search::search_scope;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
 
 pub struct Application {
@@ -382,7 +384,6 @@ async fn get_redis_client(redis_uri: &str) -> Result<redis::aio::ConnectionManag
 }
 
 pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Client, Error> {
-  trace!("Connecting to S3 with setting: {:?}", &s3_setting);
   let credentials = Credentials::new(
     s3_setting.access_key.clone(),
     s3_setting.secret_key.expose_secret().clone(),
@@ -397,33 +398,43 @@ pub async fn get_aws_s3_client(s3_setting: &S3Setting) -> Result<aws_sdk_s3::Cli
     .credentials_provider(shared_credentials)
     .force_path_style(true)
     .region(Region::new(s3_setting.region.clone()));
+
   let config = if s3_setting.use_minio {
     config_builder.endpoint_url(&s3_setting.minio_url).build()
   } else {
     config_builder.build()
   };
   let client = aws_sdk_s3::Client::from_conf(config);
-  create_bucket_if_not_exists(&client, &s3_setting.bucket).await?;
+  create_bucket_if_not_exists(&client, s3_setting).await?;
   Ok(client)
 }
 
 async fn create_bucket_if_not_exists(
   client: &aws_sdk_s3::Client,
-  bucket: &str,
+  s3_setting: &S3Setting,
 ) -> Result<(), Error> {
-  let bucket_cfg = CreateBucketConfiguration::builder()
-    .bucket(BucketInfo::builder().r#type(BucketType::Directory).build())
-    .build();
+  let bucket_cfg = if s3_setting.use_minio {
+    CreateBucketConfiguration::builder()
+      .bucket(BucketInfo::builder().r#type(BucketType::Directory).build())
+      .build()
+  } else {
+    CreateBucketConfiguration::builder()
+      .location_constraint(BucketLocationConstraint::from(s3_setting.region.as_str()))
+      .build()
+  };
 
   match client
     .create_bucket()
+    .bucket(&s3_setting.bucket)
     .create_bucket_configuration(bucket_cfg)
-    .bucket(bucket)
     .send()
     .await
   {
     Ok(_) => {
-      info!("bucket created successfully: {}", bucket);
+      info!(
+        "bucket created successfully: {}, region: {}",
+        s3_setting.bucket, s3_setting.region
+      );
       Ok(())
     },
     Err(err) => {
@@ -434,7 +445,10 @@ async fn create_bucket_if_not_exists(
             info!("Bucket already exists");
             Ok(())
           },
-          _ => Err(err.into()),
+          _ => {
+            error!("Unhandle s3 service error: {:?}", err);
+            Err(err.into())
+          },
         }
       } else {
         error!("Failed to create bucket: {:?}", err);

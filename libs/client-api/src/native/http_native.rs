@@ -341,7 +341,7 @@ where
     if self_mut.idx >= self_mut.items.len() {
       if !self_mut.done {
         self_mut.done = true;
-        return Poll::Ready(Some(Ok((0 as u32).to_le_bytes().to_vec().into())));
+        return Poll::Ready(Some(Ok((0_u32).to_le_bytes().to_vec().into())));
       }
       return Poll::Ready(None);
     }

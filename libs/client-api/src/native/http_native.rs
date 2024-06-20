@@ -315,6 +315,7 @@ where
 pub struct PublishCollabItemStream<Metadata, Data> {
   items: Vec<PublishCollabItem<Metadata, Data>>,
   idx: usize,
+  done: bool,
 }
 
 impl<Metadata, Data> PublishCollabItemStream<Metadata, Data> {
@@ -322,6 +323,7 @@ impl<Metadata, Data> PublishCollabItemStream<Metadata, Data> {
     PublishCollabItemStream {
       items: publish_collab_items,
       idx: 0,
+      done: false,
     }
   }
 }
@@ -337,6 +339,10 @@ where
     let mut self_mut = self.as_mut();
 
     if self_mut.idx >= self_mut.items.len() {
+      if !self_mut.done {
+        self_mut.done = true;
+        return Poll::Ready(Some(Ok((0 as u32).to_le_bytes().to_vec().into())));
+      }
       return Poll::Ready(None);
     }
 
@@ -357,9 +363,10 @@ where
 {
   let meta = serde_json::to_vec(&m)?;
 
-  let mut chunk = Vec::with_capacity(4 + meta.len() + d.len());
+  let mut chunk = Vec::with_capacity(8 + meta.len() + d.len());
   chunk.extend_from_slice(&(meta.len() as u32).to_le_bytes()); // Encode metadata length
   chunk.extend_from_slice(&meta);
+  chunk.extend_from_slice(&(d.len() as u32).to_le_bytes()); // Encode data length
   chunk.extend_from_slice(d);
 
   Ok(Bytes::from(chunk))

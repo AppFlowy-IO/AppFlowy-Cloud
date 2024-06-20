@@ -182,7 +182,7 @@ async fn test_publish_load_test() {
           title: format!("title{}", i),
         },
       },
-      data: vec![0; 1000_00], // 100 KB
+      data: vec![0; 100_000], // 100 KB
     })
     .collect();
 

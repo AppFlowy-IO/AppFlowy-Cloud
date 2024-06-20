@@ -1,3 +1,5 @@
+use std::io::{Cursor, Read};
+
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -18,6 +20,7 @@ use access_control::collab::CollabAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use authentication::jwt::UserUuid;
+use byteorder::{LittleEndian, ReadBytesExt};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -144,12 +147,8 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_publish_namespace_handler))
     )
     .service(
-      web::resource("/{workspace_id}/publish/{view_id}/blob")
-        .route(web::put().to(put_publish_collab_blob_handler))
-    )
-    .service(
       web::resource("/{workspace_id}/publish")
-        .route(web::put().to(put_publish_collab_handler))
+        .route(web::post().to(post_publish_collab_handler))
     )
     .service(
       web::resource("/{workspace_id}/publish/{view_id}")
@@ -1004,40 +1003,49 @@ async fn get_published_collab_info_handler(
   Ok(Json(AppResponse::Ok().with_data(collab_data)))
 }
 
-async fn put_publish_collab_handler(
+async fn post_publish_collab_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
-  metadata: Json<Vec<PublishItem<serde_json::Value>>>,
+  mut payload: Payload,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let workspace_id = workspace_id.into_inner();
 
-  biz::workspace::ops::publish_collabs(
-    &state.pg_pool,
-    &workspace_id,
-    &user_uuid,
-    &metadata.into_inner(),
-  )
-  .await?;
+  // PublishCollabItem
+  let mut accumulator = Vec::<PublishCollabItem<serde_json::Value, Vec<u8>>>::new();
 
-  Ok(Json(AppResponse::Ok()))
-}
+  while let Some(item) = payload.try_next().await? {
+    println!("Publishing collab item: {:#?}", item);
+    let item_len = item.len();
 
-async fn put_publish_collab_blob_handler(
-  path_param: web::Path<(Uuid, Uuid)>,
-  user_uuid: UserUuid,
-  collab_data: Bytes,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, view_id) = path_param.into_inner();
-  biz::workspace::ops::put_published_collab_blob(
-    &state.pg_pool,
-    &workspace_id,
-    &view_id,
-    &user_uuid,
-    &collab_data,
-  )
-  .await?;
+    let mut cursor = Cursor::new(item);
+    let meta: PublishCollabMetadata<serde_json::Value> = {
+      let meta_len = cursor.read_u32::<LittleEndian>()?;
+      if meta_len > 4 * 1024 * 1024 {
+        // 4MB Limit for metadata
+        return Err(AppError::InvalidRequest(String::from("metadata too large")).into());
+      }
+      let mut meta_buffer = vec![0; meta_len as usize];
+      cursor.read_exact(&mut meta_buffer)?;
+      serde_json::from_slice(&meta_buffer)?
+    };
+    let data: Vec<u8> = {
+      let remain_len = item_len - cursor.position() as usize;
+      let mut data_buffer = vec![0; remain_len];
+      cursor.read_exact(&mut data_buffer)?;
+      data_buffer
+    };
+    accumulator.push(PublishCollabItem { meta, data });
+
+    assert_eq!(
+      cursor.position() as usize,
+      cursor.get_ref().len(),
+      "Cursor is not empty after reading"
+    );
+  }
+
+  biz::workspace::ops::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, &accumulator)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

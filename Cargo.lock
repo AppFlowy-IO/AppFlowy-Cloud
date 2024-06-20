@@ -1975,6 +1975,7 @@ dependencies = [
  "infra",
  "mime",
  "parking_lot 0.12.1",
+ "percent-encoding",
  "pin-project",
  "prost",
  "reqwest 0.11.27",

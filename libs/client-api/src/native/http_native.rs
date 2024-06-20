@@ -267,8 +267,6 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .header("Content-Type", "octet-stream")
-      .header("Transfer-Encoding", "chunked")
       .body(Body::wrap_stream(publish_collab_stream))
       .send()
       .await?;

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::origin::CollabOrigin;
@@ -32,6 +33,9 @@ pub struct GroupManager<S, AC> {
   metrics_calculate: CollabMetricsCalculate,
   collab_redis_stream: Arc<CollabRedisStream>,
   control_event_stream: Arc<Mutex<StreamGroup>>,
+  persistence_interval: Duration,
+  edit_state_max_count: u32,
+  edit_state_max_secs: i64,
 }
 
 impl<S, AC> GroupManager<S, AC>
@@ -44,6 +48,9 @@ where
     access_control: Arc<AC>,
     metrics_calculate: CollabMetricsCalculate,
     collab_stream: CollabRedisStream,
+    persistence_interval: Duration,
+    edit_state_max_count: u32,
+    edit_state_max_secs: i64,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
     let control_event_stream = collab_stream
@@ -58,6 +65,9 @@ where
       metrics_calculate,
       collab_redis_stream: collab_stream,
       control_event_stream,
+      persistence_interval,
+      edit_state_max_count,
+      edit_state_max_secs,
     })
   }
 
@@ -239,6 +249,9 @@ where
         self.storage.clone(),
         is_new_collab,
         self.collab_redis_stream.clone(),
+        self.persistence_interval,
+        self.edit_state_max_count,
+        self.edit_state_max_secs,
       )
       .await?,
     );

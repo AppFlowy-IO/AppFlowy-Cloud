@@ -1,6 +1,6 @@
 use database_entity::dto::{
-  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, PublishInfo,
-  PublishItem,
+  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
+  PublishCollabItem, PublishInfo,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -892,27 +892,29 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
   executor: E,
   workspace_id: &Uuid,
   publisher_uuid: &Uuid,
-  publish_item: &[PublishItem<serde_json::Value>],
+  publish_item: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
 ) -> Result<(), AppError> {
-  let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.view_id).collect();
+  let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.meta.view_id).collect();
   let doc_names: Vec<String> = publish_item
     .iter()
-    .map(|item| item.doc_name.clone())
+    .map(|item| item.meta.doc_name.clone())
     .collect();
   let metadatas: Vec<serde_json::Value> = publish_item
     .iter()
-    .map(|item| item.metadata.clone())
+    .map(|item| item.meta.metadata.clone())
     .collect();
 
+  let blobs: Vec<Vec<u8>> = publish_item.iter().map(|item| item.data.clone()).collect();
   let res = sqlx::query!(
     r#"
-      INSERT INTO af_published_collab (workspace_id, view_id, doc_name, published_by, metadata)
+      INSERT INTO af_published_collab (workspace_id, view_id, doc_name, published_by, metadata, blob)
       SELECT * FROM UNNEST(
-        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $6))::uuid[],
+        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $7))::uuid[],
         $2::uuid[],
         $3::text[],
-        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $6))::bigint[],
-        $5::jsonb[]
+        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $7))::bigint[],
+        $5::jsonb[],
+        $6::bytea[]
       )
       ON CONFLICT (workspace_id, view_id) DO UPDATE
       SET metadata = EXCLUDED.metadata
@@ -922,6 +924,7 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
     &doc_names,
     publisher_uuid,
     &metadatas,
+    &blobs,
     publish_item.len() as i32,
   )
   .execute(executor)
@@ -983,37 +986,6 @@ pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
       view_id,
       res.rows_affected()
     );
-  }
-
-  Ok(())
-}
-
-#[inline]
-pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-  view_id: &Uuid,
-  blob: &[u8],
-) -> Result<(), AppError> {
-  let res = sqlx::query!(
-    r#"
-      UPDATE af_published_collab
-      SET blob = $1
-      WHERE workspace_id = $2
-        AND view_id = $3
-    "#,
-    blob,
-    workspace_id,
-    view_id,
-  )
-  .execute(executor)
-  .await?;
-
-  if res.rows_affected() != 1 {
-    tracing::error!(
-        "Failed to insert or replace published collab blob, workspace_id: {}, doc_name: {}, rows_affected: {}",
-        workspace_id, view_id, res.rows_affected()
-      );
   }
 
   Ok(())

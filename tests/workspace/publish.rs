@@ -1,4 +1,4 @@
-use client_api::entity::PublishItem;
+use client_api::entity::{PublishCollabItem, PublishCollabMetadata};
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 
 #[tokio::test]
@@ -73,23 +73,34 @@ async fn test_publish_doc() {
     .await
     .unwrap();
 
-  // &view_id,
-  // my_doc_name,
-  // Metadata {
-  //   title: "my_title".to_string(),
-  // },
-
-  let doc_name1 = "doc1";
+  let doc_name_1 = "doc1";
   let view_id_1 = uuid::Uuid::new_v4();
-  c.publish_collabs::<Metadata>(
+  let doc_name_2 = "doc2";
+  let view_id_2 = uuid::Uuid::new_v4();
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
-    &[PublishItem {
-      view_id: view_id_1,
-      doc_name: doc_name1.to_string(),
-      metadata: Metadata {
-        title: "my_title".to_string(),
+    vec![
+      PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: view_id_1,
+          doc_name: doc_name_1.to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_1".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_1".as_bytes(),
       },
-    }],
+      PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: view_id_2,
+          doc_name: doc_name_2.to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_2".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_2".as_bytes(),
+      },
+    ],
   )
   .await
   .unwrap();
@@ -98,38 +109,24 @@ async fn test_publish_doc() {
     // Non login user should be able to view the published collab
     let guest_client = localhost_client();
     let published_collab = guest_client
-      .get_published_collab::<Metadata>(&my_namespace, doc_name1)
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, doc_name_1)
       .await
       .unwrap();
-    assert_eq!(published_collab.title, "my_title");
+    assert_eq!(published_collab.title, "my_title_1");
 
     let publish_info = guest_client
       .get_published_collab_info(&view_id_1)
       .await
       .unwrap();
     assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
-    assert_eq!(publish_info.doc_name, doc_name1);
+    assert_eq!(publish_info.doc_name, doc_name_1);
     assert_eq!(publish_info.view_id, view_id_1);
 
-    let collab_data = guest_client
-      .get_published_collab_blob(&my_namespace, doc_name1)
+    let blob = guest_client
+      .get_published_collab_blob(&my_namespace, doc_name_1)
       .await
       .unwrap();
-    assert!(collab_data.is_empty()); // empty data because publisher need to set it
-  }
-
-  c.put_published_collab_blob(&workspace_id, &view_id_1, "some_collab_data")
-    .await
-    .unwrap();
-
-  {
-    // Non login user should be able to view the published collab data
-    let guest_client = localhost_client();
-    let collab_data = guest_client
-      .get_published_collab_blob(&my_namespace, doc_name1)
-      .await
-      .unwrap();
-    assert!(collab_data == "some_collab_data");
+    assert_eq!(blob, "yrs_encoded_data_1");
   }
 
   c.delete_published_collab(&workspace_id, &view_id_1)
@@ -140,7 +137,7 @@ async fn test_publish_doc() {
     // Deleted collab should not be accessible
     let guest_client = localhost_client();
     let err = guest_client
-      .get_published_collab::<Metadata>(&my_namespace, doc_name1)
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, doc_name_1)
       .await
       .err()
       .unwrap();
@@ -148,7 +145,7 @@ async fn test_publish_doc() {
 
     let guest_client = localhost_client();
     let err = guest_client
-      .get_published_collab_blob(&my_namespace, doc_name1)
+      .get_published_collab_blob(&my_namespace, doc_name_1)
       .await
       .err()
       .unwrap();
@@ -168,6 +165,6 @@ async fn get_first_workspace_string(c: &client_api::Client) -> String {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Metadata {
+struct MyCustomMetadata {
   title: String,
 }

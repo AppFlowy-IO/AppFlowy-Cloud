@@ -19,11 +19,11 @@ use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 
 use database::user::select_uid_from_email;
 use database::workspace::{
-  change_workspace_icon, delete_from_workspace, delete_published_collab, delete_workspace_members,
+  change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
   get_invitation_by_id, insert_or_replace_publish_collab_metas, insert_user_workspace,
   insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
   select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
-  select_user_is_collab_publisher, select_user_is_workspace_owner, select_workspace,
+  select_user_is_collab_publisher_for_all_views, select_user_is_workspace_owner, select_workspace,
   select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
   select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
   select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
@@ -184,11 +184,11 @@ pub async fn get_published_collab_info(
 pub async fn delete_published_workspace_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  view_id: &Uuid,
+  view_ids: &[Uuid],
   user_uuid: &Uuid,
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, view_id).await?;
-  delete_published_collab(pg_pool, workspace_id, view_id).await?;
+  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, view_ids).await?;
+  delete_published_collabs(pg_pool, workspace_id, view_ids).await?;
   Ok(())
 }
 
@@ -573,12 +573,13 @@ async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
-  view_id: &Uuid,
+  view_id: &[Uuid],
 ) -> Result<(), AppError> {
   let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   if !is_owner {
     let is_publisher =
-      select_user_is_collab_publisher(pg_pool, user_uuid, workspace_id, view_id).await?;
+      select_user_is_collab_publisher_for_all_views(pg_pool, user_uuid, workspace_id, view_id)
+        .await?;
     if !is_publisher {
       return Err(AppError::UserUnAuthorized(
         "User is not the owner of the workspace or the publisher of the document".to_string(),

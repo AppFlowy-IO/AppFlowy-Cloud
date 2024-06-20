@@ -1,6 +1,6 @@
 use crate::http::log_request_id;
 use crate::Client;
-use collab_entity::CollabType;
+use client_api_entity::CollabType;
 use reqwest::Method;
 use shared_entity::dto::history_dto::{RepeatedSnapshotMeta, SnapshotInfo};
 use shared_entity::response::{AppResponse, AppResponseError};

@@ -25,11 +25,10 @@ pin-project = "1.1.5"
 
 actix-web = { version = "4.4.1", default-features = false, features = ["http2"], optional = true }
 validator = { version = "0.16", features = ["validator_derive", "derive"], optional = true }
-rust-s3 = { version = "0.34.0-rc4", optional = true }
 futures = "0.3.30"
 bytes = "1.6.0"
 log = "0.4.21"
 
 
 [features]
-cloud = ["actix-web", "validator", "rust-s3"]
+cloud = ["actix-web", "validator"]

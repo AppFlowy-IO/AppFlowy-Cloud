@@ -14,9 +14,9 @@ futures-util = "0.3.30"
 anyhow = "1.0.79"
 reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies"] }
 tokio = { workspace = true, features = ["sync", "macros"] }
-infra = { path = "../infra" }
+infra = { path = "../infra", features = ["request_util"] }
 gotrue-entity = { path = "../gotrue-entity" }
 tracing = "0.1"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2", features = ["js"]}
+getrandom = { version = "0.2", features = ["js"] }

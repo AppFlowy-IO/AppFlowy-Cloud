@@ -23,12 +23,14 @@ pub(crate) struct GroupPersistence<S> {
   edit_state: Arc<EditState>,
   mutex_collab: WeakMutexCollab,
   collab_type: CollabType,
+  persistence_interval: Duration,
 }
 
 impl<S> GroupPersistence<S>
 where
   S: CollabStorage,
 {
+  #[allow(clippy::too_many_arguments)]
   pub fn new(
     workspace_id: String,
     object_id: String,
@@ -37,6 +39,7 @@ where
     edit_state: Arc<EditState>,
     mutex_collab: WeakMutexCollab,
     collab_type: CollabType,
+    persistence_interval: Duration,
   ) -> Self {
     Self {
       workspace_id,
@@ -46,11 +49,12 @@ where
       edit_state,
       mutex_collab,
       collab_type,
+      persistence_interval,
     }
   }
 
   pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<MutexCollab>) {
-    let mut interval = interval(Duration::from_secs(60));
+    let mut interval = interval(self.persistence_interval);
     // TODO(nathan): remove this sleep when creating a new collab, applying all the updates
     // workarounds for the issue that the collab doesn't contain the required data when first created
     sleep(Duration::from_secs(5)).await;

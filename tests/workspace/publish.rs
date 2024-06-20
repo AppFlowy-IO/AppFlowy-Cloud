@@ -153,6 +153,42 @@ async fn test_publish_doc() {
   }
 }
 
+#[tokio::test]
+async fn test_publish_load_test() {
+  let (c, _user) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&c).await;
+  let my_namespace = uuid::Uuid::new_v4().to_string();
+  c.set_workspace_publish_namespace(&workspace_id.to_string(), &my_namespace)
+    .await
+    .unwrap();
+
+  // publish nothing
+  c.publish_collabs::<(), &[u8]>(&workspace_id, vec![])
+    .await
+    .unwrap();
+
+  // publish nothing with metadata
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(&workspace_id, vec![])
+    .await
+    .unwrap();
+
+  // publish 1000 collabs
+  let collabs: Vec<PublishCollabItem<MyCustomMetadata, Vec<u8>>> = (0..1000)
+    .map(|i| PublishCollabItem {
+      meta: PublishCollabMetadata {
+        view_id: uuid::Uuid::new_v4(),
+        doc_name: format!("doc{}", i),
+        metadata: MyCustomMetadata {
+          title: format!("title{}", i),
+        },
+      },
+      data: vec![0; 1000_00], // 100 KB
+    })
+    .collect();
+
+  c.publish_collabs(&workspace_id, collabs).await.unwrap();
+}
+
 async fn get_first_workspace_string(c: &client_api::Client) -> String {
   c.get_workspaces()
     .await

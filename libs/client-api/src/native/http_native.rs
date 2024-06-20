@@ -19,6 +19,7 @@ use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
@@ -69,6 +70,8 @@ impl Client {
       )));
     }
 
+    // Encode the parent directory to ensure it's URL-safe.
+    let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     let url = format!(
       "{}/api/file_storage/{workspace_id}/upload_part/{parent_dir}/{file_id}/{upload_id}/{part_number}",
       self.base_url

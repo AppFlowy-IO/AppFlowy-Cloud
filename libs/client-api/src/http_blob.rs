@@ -5,6 +5,7 @@ use app_error::AppError;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
 use mime::Mime;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{header, Method, StatusCode};
 use shared_entity::dto::workspace_dto::{BlobMetadata, RepeatedBlobMetaData};
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -67,6 +68,7 @@ impl Client {
       .into_data()
   }
   pub fn get_blob_url_v1(&self, workspace_id: &str, parent_dir: &str, file_id: &str) -> String {
+    let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     format!(
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url
@@ -80,6 +82,7 @@ impl Client {
     parent_dir: &str,
     file_id: &str,
   ) -> Result<(Mime, Vec<u8>), AppResponseError> {
+    // Encode the parent directory to ensure it's URL-safe.
     let url = self.get_blob_url_v1(workspace_id, parent_dir, file_id);
     self.get_blob(&url).await
   }
@@ -91,6 +94,7 @@ impl Client {
     parent_dir: &str,
     file_id: &str,
   ) -> Result<(), AppResponseError> {
+    let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     let url = format!(
       "{}/api/file_storage/{workspace_id}/v1/blob/{parent_dir}/{file_id}",
       self.base_url
@@ -111,6 +115,7 @@ impl Client {
     parent_dir: &str,
     file_id: &str,
   ) -> Result<BlobMetadata, AppResponseError> {
+    let parent_dir = utf8_percent_encode(parent_dir, NON_ALPHANUMERIC).to_string();
     let url = format!(
       "{}/api/file_storage/{workspace_id}/v1/metadata/{parent_dir}/{file_id}",
       self.base_url

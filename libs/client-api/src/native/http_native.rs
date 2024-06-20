@@ -7,19 +7,24 @@ use anyhow::anyhow;
 use app_error::AppError;
 use async_trait::async_trait;
 
-use client_api_entity::{CollabParams, QueryCollabParams};
+use bytes::Bytes;
+use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams};
 use client_api_entity::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
 };
 use collab_rt_entity::HttpRealtimeMessage;
+use futures::Stream;
 use futures_util::stream;
 use prost::Message;
 use reqwest::{Body, Method};
+use serde::Serialize;
 use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
 use std::future::Future;
 
+use std::pin::Pin;
 use std::sync::atomic::Ordering;
+use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_retry::strategy::{ExponentialBackoff, FixedInterval};
 use tokio_retry::{Retry, RetryIf};
@@ -247,6 +252,28 @@ impl Client {
       },
     }
   }
+
+  pub async fn publish_collabs<Metadata, Data>(
+    &self,
+    workspace_id: &str,
+    items: Vec<PublishCollabItem<Metadata, Data>>,
+  ) -> Result<(), AppResponseError>
+  where
+    Metadata: serde::Serialize + Send + 'static + Unpin,
+    Data: AsRef<[u8]> + Send + 'static + Unpin,
+  {
+    let publish_collab_stream = PublishCollabItemStream::new(items);
+    let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id,);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .header("Content-Type", "octet-stream")
+      .header("Transfer-Encoding", "chunked")
+      .body(Body::wrap_stream(publish_collab_stream))
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
 }
 
 #[async_trait]
@@ -285,4 +312,57 @@ where
   T::Output: Send + 'static,
 {
   tokio::spawn(future)
+}
+
+pub struct PublishCollabItemStream<Metadata, Data> {
+  items: Vec<PublishCollabItem<Metadata, Data>>,
+  idx: usize,
+}
+
+impl<Metadata, Data> PublishCollabItemStream<Metadata, Data> {
+  pub fn new(publish_collab_items: Vec<PublishCollabItem<Metadata, Data>>) -> Self {
+    PublishCollabItemStream {
+      items: publish_collab_items,
+      idx: 0,
+    }
+  }
+}
+
+impl<Metadata, Data> Stream for PublishCollabItemStream<Metadata, Data>
+where
+  Metadata: Serialize + Send + 'static + Unpin,
+  Data: AsRef<[u8]> + Send + 'static + Unpin,
+{
+  type Item = Result<Bytes, std::io::Error>;
+
+  fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let mut self_mut = self.as_mut();
+
+    if self_mut.idx >= self_mut.items.len() {
+      return Poll::Ready(None);
+    }
+
+    let item = &self_mut.items[self_mut.idx];
+    match serialize_metadata_data(&item.meta, item.data.as_ref()) {
+      Err(e) => Poll::Ready(Some(Err(e))),
+      Ok(chunk) => {
+        self_mut.idx += 1;
+        Poll::Ready(Some(Ok::<bytes::Bytes, std::io::Error>(chunk)))
+      },
+    }
+  }
+}
+
+fn serialize_metadata_data<Metadata>(m: Metadata, d: &[u8]) -> Result<Bytes, std::io::Error>
+where
+  Metadata: Serialize,
+{
+  let meta = serde_json::to_vec(&m)?;
+
+  let mut chunk = Vec::with_capacity(4 + meta.len() + d.len());
+  chunk.extend_from_slice(&(meta.len() as u32).to_le_bytes()); // Encode metadata length
+  chunk.extend_from_slice(&meta);
+  chunk.extend_from_slice(d);
+
+  Ok(Bytes::from(chunk))
 }

@@ -10,7 +10,6 @@ use database::file::{BlobKey, BucketClient, ResponseBlob};
 use database_entity::file_dto::{
   CompleteUploadRequest, CompletedPartRequest, CreateUploadRequest, UploadPartData,
 };
-use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -358,7 +357,6 @@ async fn invalid_test() {
 }
 
 #[tokio::test]
-#[should_panic]
 async fn multiple_level_dir_upload_file_test() {
   // Test with smaller file (single part)
   let (c1, _user1) = generate_unique_registered_user_client().await;
@@ -366,7 +364,7 @@ async fn multiple_level_dir_upload_file_test() {
   let mime = mime::TEXT_PLAIN_UTF_8;
   let text = generate_random_string(1024);
   let file_id = Uuid::new_v4().to_string();
-  let parent_dir = utf8_percent_encode("file/image", NON_ALPHANUMERIC).to_string();
+  let parent_dir = "file/v1/image".to_string();
   let upload = c1
     .create_upload(
       &workspace_id,
@@ -378,7 +376,6 @@ async fn multiple_level_dir_upload_file_test() {
     )
     .await
     .unwrap();
-
   let chunked_bytes = ChunkedBytes::from_bytes(Bytes::from(text.clone())).unwrap();
   let mut completed_parts = Vec::new();
   let iter = chunked_bytes.iter().enumerate();
@@ -400,4 +397,20 @@ async fn multiple_level_dir_upload_file_test() {
       part_number: resp.part_num,
     });
   }
+  let req = CompleteUploadRequest {
+    file_id: file_id.clone(),
+    parent_dir: parent_dir.clone(),
+    upload_id: upload.upload_id,
+    parts: completed_parts,
+  };
+  c1.complete_upload(&workspace_id, req).await.unwrap();
+
+  let blob = c1
+    .get_blob_v1(&workspace_id, &parent_dir, &file_id)
+    .await
+    .unwrap()
+    .1;
+
+  let blob_text = String::from_utf8(blob.to_vec()).unwrap();
+  assert_eq!(blob_text, text);
 }

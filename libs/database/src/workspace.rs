@@ -144,30 +144,31 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
-pub async fn select_user_is_collab_publisher(
+pub async fn select_user_is_collab_publisher_for_all_views(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
-  view_id: &Uuid,
+  view_ids: &[Uuid],
 ) -> Result<bool, AppError> {
-  let exists = sqlx::query_scalar!(
+  let count = sqlx::query_scalar!(
     r#"
-      SELECT EXISTS(
-        SELECT 1
-        FROM af_published_collab
-        WHERE workspace_id = $1
-            AND view_id = $2
-            AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
-      );
+      SELECT COUNT(*)
+      FROM af_published_collab
+      WHERE workspace_id = $1
+        AND view_id = ANY($2)
+        AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
     "#,
     workspace_uuid,
-    view_id,
+    view_ids,
     user_uuid,
   )
   .fetch_one(pg_pool)
   .await?;
 
-  Ok(exists.unwrap_or(false))
+  match count {
+    Some(c) => Ok(c == view_ids.len() as i64),
+    None => Ok(false),
+  }
 }
 
 #[inline]
@@ -963,27 +964,28 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
 }
 
 #[inline]
-pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-  view_id: &Uuid,
+  view_ids: &[Uuid],
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
       DELETE FROM af_published_collab
-      WHERE workspace_id = $1 AND view_id = $2
+      WHERE workspace_id = $1
+        AND view_id = ANY($2)
     "#,
     workspace_id,
-    view_id,
+    view_ids,
   )
   .execute(executor)
   .await?;
 
-  if res.rows_affected() != 1 {
+  if res.rows_affected() != view_ids.len() as u64 {
     tracing::error!(
-      "Failed to delete published collab, workspace_id: {}, view_id: {}, rows_affected: {}",
+      "Failed to delete published collabs, workspace_id: {}, view_ids: {:?}, rows_affected: {}",
       workspace_id,
-      view_id,
+      view_ids,
       res.rows_affected()
     );
   }

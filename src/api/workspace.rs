@@ -148,11 +148,8 @@ pub fn workspace_scope() -> Scope {
     )
     .service(
       web::resource("/{workspace_id}/publish")
-        .route(web::post().to(post_publish_collab_handler))
-    )
-    .service(
-      web::resource("/{workspace_id}/publish/{view_id}")
-        .route(web::delete().to(delete_publish_collab_handler))
+        .route(web::post().to(post_publish_collabs_handler))
+        .route(web::delete().to(delete_published_collabs_handler))
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
@@ -1003,7 +1000,7 @@ async fn get_published_collab_info_handler(
   Ok(Json(AppResponse::Ok().with_data(collab_data)))
 }
 
-async fn post_publish_collab_handler(
+async fn post_publish_collabs_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
   mut payload: Payload,
@@ -1015,7 +1012,6 @@ async fn post_publish_collab_handler(
   let mut accumulator = Vec::<PublishCollabItem<serde_json::Value, Vec<u8>>>::new();
 
   while let Some(item) = payload.try_next().await? {
-    println!("Publishing collab item: {:#?}", item);
     let item_len = item.len();
 
     let mut cursor = Cursor::new(item);
@@ -1044,21 +1040,29 @@ async fn post_publish_collab_handler(
     );
   }
 
+  if accumulator.is_empty() {
+    return Ok(Json(AppResponse::Ok()));
+  }
   biz::workspace::ops::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, &accumulator)
     .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
-async fn delete_publish_collab_handler(
-  path_param: web::Path<(Uuid, Uuid)>,
+async fn delete_published_collabs_handler(
+  workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
   state: Data<AppState>,
+  view_ids: Json<Vec<Uuid>>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, view_id) = path_param.into_inner();
+  let workspace_id = workspace_id.into_inner();
+  let view_ids = view_ids.into_inner();
+  if view_ids.is_empty() {
+    return Ok(Json(AppResponse::Ok()));
+  }
   biz::workspace::ops::delete_published_workspace_collab(
     &state.pg_pool,
     &workspace_id,
-    &view_id,
+    &view_ids,
     &user_uuid,
   )
   .await?;

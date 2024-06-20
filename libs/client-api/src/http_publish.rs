@@ -76,18 +76,16 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn delete_published_collab(
+  pub async fn unpublish_collabs(
     &self,
     workspace_id: &str,
-    view_id: &uuid::Uuid,
+    view_ids: &[uuid::Uuid],
   ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/publish/{}",
-      self.base_url, workspace_id, view_id
-    );
+    let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?
+      .json(view_ids)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()

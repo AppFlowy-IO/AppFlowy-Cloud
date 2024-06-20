@@ -129,7 +129,7 @@ async fn test_publish_doc() {
     assert_eq!(blob, "yrs_encoded_data_1");
   }
 
-  c.delete_published_collab(&workspace_id, &view_id_1)
+  c.unpublish_collabs(&workspace_id, &[view_id_1])
     .await
     .unwrap();
 

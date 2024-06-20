@@ -1,5 +1,4 @@
-use std::io::{Cursor, Read};
-
+use crate::api::util::PayloadReader;
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -20,7 +19,6 @@ use access_control::collab::CollabAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use authentication::jwt::UserUuid;
-use byteorder::{LittleEndian, ReadBytesExt};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -1003,42 +1001,47 @@ async fn get_published_collab_info_handler(
 async fn post_publish_collabs_handler(
   workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
-  mut payload: Payload,
+  payload: Payload,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
   let workspace_id = workspace_id.into_inner();
 
-  // PublishCollabItem
   let mut accumulator = Vec::<PublishCollabItem<serde_json::Value, Vec<u8>>>::new();
+  let mut payload_reader: PayloadReader = PayloadReader::new(payload);
 
-  while let Some(item) = payload.next().await {
-    let item = item?;
-    let item_len = item.len();
-
-    let mut cursor = Cursor::new(item);
+  loop {
     let meta: PublishCollabMetadata<serde_json::Value> = {
-      let meta_len = cursor.read_u32::<LittleEndian>()?;
+      let meta_len = payload_reader.read_u32_little_endian().await?;
+      println!("meta_len: {}", meta_len);
       if meta_len > 4 * 1024 * 1024 {
         // 4MB Limit for metadata
         return Err(AppError::InvalidRequest(String::from("metadata too large")).into());
       }
+      if meta_len == 0 {
+        println!("meta_len is 0");
+        break;
+      }
+
       let mut meta_buffer = vec![0; meta_len as usize];
-      cursor.read_exact(&mut meta_buffer)?;
+      payload_reader.read_exact(&mut meta_buffer).await?;
       serde_json::from_slice(&meta_buffer)?
     };
-    let data: Vec<u8> = {
-      let remain_len = item_len - cursor.position() as usize;
-      let mut data_buffer = vec![0; remain_len];
-      cursor.read_exact(&mut data_buffer)?;
+    println!("meta: {:?}", meta);
+
+    let data = {
+      let data_len = payload_reader.read_u32_little_endian().await?;
+      println!("data_len: {}", data_len);
+      if data_len > 128 * 1024 * 1024 {
+        // 128MB Limit for data
+        return Err(AppError::InvalidRequest(String::from("data too large")).into());
+      }
+      let mut data_buffer = vec![0; data_len as usize];
+      payload_reader.read_exact(&mut data_buffer).await?;
       data_buffer
     };
-    accumulator.push(PublishCollabItem { meta, data });
+    println!("data: {:?}", data);
 
-    assert_eq!(
-      cursor.position() as usize,
-      cursor.get_ref().len(),
-      "Cursor is not empty after reading"
-    );
+    accumulator.push(PublishCollabItem { meta, data });
   }
 
   if accumulator.is_empty() {

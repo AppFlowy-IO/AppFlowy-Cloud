@@ -129,11 +129,6 @@ impl PayloadReader {
     while self.len() < min_len {
       let n = self.fill_buffer().await?;
       if n == 0 {
-        println!("min_len: {}", min_len);
-        println!("len: {}", self.len());
-        println!("buf_start: {}", self.buf_start);
-        println!("buf_end: {}", self.buf_end);
-        println!("buffer: {:?}", self.buffer.len());
         return Err(AppError::InvalidRequest("unexpected EOF".to_string()).into());
       }
     }

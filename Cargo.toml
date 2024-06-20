@@ -40,7 +40,7 @@ secrecy.workspace = true
 rand = { version = "0.8", features = ["std_rng"] }
 anyhow = "1.0.79"
 thiserror = "1.0.56"
-reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies"] }
+reqwest = { workspace = true, features = ["json", "rustls-tls", "cookies", "stream"] }
 unicode-segmentation = "1.10"
 lazy_static.workspace = true
 fancy-regex = "0.11.0"

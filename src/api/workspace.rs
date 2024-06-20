@@ -1011,7 +1011,8 @@ async fn post_publish_collabs_handler(
   // PublishCollabItem
   let mut accumulator = Vec::<PublishCollabItem<serde_json::Value, Vec<u8>>>::new();
 
-  while let Some(item) = payload.try_next().await? {
+  while let Some(item) = payload.next().await {
+    let item = item?;
     let item_len = item.len();
 
     let mut cursor = Cursor::new(item);

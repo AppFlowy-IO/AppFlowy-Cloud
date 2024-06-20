@@ -175,7 +175,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       .content_type(req.content_type)
       .send()
       .await
-      .map_err(|err| anyhow!("Failed to create upload: {}", err))?;
+      .map_err(|err| anyhow!(format!("Failed to create upload: {:?}", err)))?;
 
     match multipart_upload_res.upload_id {
       None => Err(anyhow!("Failed to create upload: upload_id is None").into()),
@@ -212,7 +212,7 @@ impl BucketClient for AwsS3BucketClientImpl {
       .body(body)
       .send()
       .await
-      .map_err(|err| anyhow!("Failed to upload part: {}", err))?;
+      .map_err(|err| anyhow!(format!("Failed to upload part: {:?}", err)))?;
 
     match upload_part_res.e_tag {
       None => Err(anyhow!("Failed to upload part: e_tag is None").into()),

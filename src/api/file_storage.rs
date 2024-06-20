@@ -26,7 +26,7 @@ use std::pin::Pin;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_stream::StreamExt;
 use tokio_util::io::StreamReader;
-use tracing::{error, event, instrument};
+use tracing::{error, event, instrument, trace};
 
 use crate::state::AppState;
 
@@ -115,6 +115,15 @@ async fn upload_part_handler(
   mut payload: Payload,
 ) -> Result<JsonAppResponse<UploadPartResponse>> {
   let path_params = path.into_inner();
+  trace!(
+    "upload part: workspace_id: {}, parent_dir: {}, file_id: {}, upload_id: {}, part_num: {}",
+    path_params.workspace_id,
+    path_params.parent_dir,
+    path_params.file_id,
+    path_params.upload_id,
+    path_params.part_num
+  );
+
   let content_length = content_length.into_inner().into_inner();
   let mut content = Vec::with_capacity(content_length);
   while let Some(chunk) = payload.try_next().await? {
@@ -277,7 +286,7 @@ async fn get_blob_by_object_key(
   // Get the metadata
   let result = state
     .bucket_storage
-    .get_blob_metadata(key.workspace_id(), key.meta_key())
+    .get_blob_metadata(key.workspace_id(), &key.meta_key())
     .await;
 
   if let Err(err) = result.as_ref() {
@@ -344,7 +353,7 @@ async fn get_blob_metadata_handler(
   // Get the metadata
   let metadata = state
     .bucket_storage
-    .get_blob_metadata(&path.workspace_id, path.meta_key())
+    .get_blob_metadata(&path.workspace_id, &path.meta_key())
     .await
     .map(|meta| BlobMetadata {
       workspace_id: meta.workspace_id,
@@ -368,7 +377,7 @@ async fn get_blob_metadata_v1_handler(
   // Get the metadata
   let metadata = state
     .bucket_storage
-    .get_blob_metadata(&path.workspace_id, path.meta_key())
+    .get_blob_metadata(&path.workspace_id, &path.meta_key())
     .await
     .map(|meta| BlobMetadata {
       workspace_id: meta.workspace_id,
@@ -443,8 +452,8 @@ impl BlobKey for BlobPathV0 {
     format!("{}/{}", self.workspace_id, self.file_id)
   }
 
-  fn meta_key(&self) -> &str {
-    &self.file_id
+  fn meta_key(&self) -> String {
+    self.file_id.clone()
   }
 
   fn e_tag(&self) -> &str {
@@ -469,8 +478,8 @@ impl BlobKey for BlobPathV1 {
     format!("{}/{}/{}", self.workspace_id, self.parent_dir, self.file_id)
   }
 
-  fn meta_key(&self) -> &str {
-    &self.file_id
+  fn meta_key(&self) -> String {
+    format!("{}_{}", self.parent_dir, self.file_id)
   }
 
   fn e_tag(&self) -> &str {

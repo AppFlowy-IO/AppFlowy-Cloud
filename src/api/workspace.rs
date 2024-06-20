@@ -1012,13 +1012,11 @@ async fn post_publish_collabs_handler(
   loop {
     let meta: PublishCollabMetadata<serde_json::Value> = {
       let meta_len = payload_reader.read_u32_little_endian().await?;
-      println!("meta_len: {}", meta_len);
       if meta_len > 4 * 1024 * 1024 {
         // 4MB Limit for metadata
         return Err(AppError::InvalidRequest(String::from("metadata too large")).into());
       }
       if meta_len == 0 {
-        println!("meta_len is 0");
         break;
       }
 
@@ -1026,11 +1024,9 @@ async fn post_publish_collabs_handler(
       payload_reader.read_exact(&mut meta_buffer).await?;
       serde_json::from_slice(&meta_buffer)?
     };
-    println!("meta: {:?}", meta);
 
     let data = {
       let data_len = payload_reader.read_u32_little_endian().await?;
-      println!("data_len: {}", data_len);
       if data_len > 128 * 1024 * 1024 {
         // 128MB Limit for data
         return Err(AppError::InvalidRequest(String::from("data too large")).into());
@@ -1039,7 +1035,6 @@ async fn post_publish_collabs_handler(
       payload_reader.read_exact(&mut data_buffer).await?;
       data_buffer
     };
-    println!("data: {:?}", data);
 
     accumulator.push(PublishCollabItem { meta, data });
   }

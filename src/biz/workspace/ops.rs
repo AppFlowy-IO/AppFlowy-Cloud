@@ -14,10 +14,9 @@ use access_control::workspace::WorkspaceAccessControl;
 use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
-use database::file::bucket_s3_impl::BucketClientS3Impl;
-use database::file::BucketStorage;
+use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
-use database::resource_usage::get_all_workspace_blob_metadata;
+
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_published_collab, delete_workspace_members,
@@ -49,20 +48,12 @@ use crate::state::GoTrueAdmin;
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  bucket_storage: &Arc<BucketStorage<BucketClientS3Impl>>,
+  bucket_storage: &Arc<S3BucketStorage>,
 ) -> Result<(), AppResponseError> {
   // remove files from s3
-
-  let blob_metadatas = get_all_workspace_blob_metadata(pg_pool, workspace_id)
-    .await
-    .context("Get all workspace blob metadata")?;
-
-  for blob_metadata in blob_metadatas {
-    bucket_storage
-      .delete_blob(workspace_id, blob_metadata.file_id.as_str())
-      .await
-      .context("Delete blob from s3")?;
-  }
+  bucket_storage
+    .remove_dir(workspace_id.to_string().as_str())
+    .await?;
 
   // remove from postgres
   delete_from_workspace(pg_pool, workspace_id).await?;

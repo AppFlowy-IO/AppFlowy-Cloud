@@ -65,10 +65,6 @@ pub enum AppError {
   #[error("{user}: do not have permissions to {action}")]
   NotEnoughPermissions { user: String, action: String },
 
-  #[cfg(feature = "s3_error")]
-  #[error(transparent)]
-  S3Error(#[from] s3::error::S3Error),
-
   #[error("s3 response error:{0}")]
   S3ResponseError(String),
 
@@ -163,8 +159,6 @@ impl AppError {
       AppError::InvalidRequest(_) => ErrorCode::InvalidRequest,
       AppError::NotLoggedIn(_) => ErrorCode::NotLoggedIn,
       AppError::NotEnoughPermissions { .. } => ErrorCode::NotEnoughPermissions,
-      #[cfg(feature = "s3_error")]
-      AppError::S3Error(_) => ErrorCode::S3Error,
       AppError::StorageSpaceNotEnough => ErrorCode::StorageSpaceNotEnough,
       AppError::PayloadTooLarge(_) => ErrorCode::PayloadTooLarge,
       AppError::Internal(_) => ErrorCode::Internal,
@@ -280,8 +274,6 @@ pub enum ErrorCode {
   InvalidOAuthProvider = 1009,
   NotLoggedIn = 1011,
   NotEnoughPermissions = 1012,
-  #[cfg(feature = "s3_error")]
-  S3Error = 1014,
   StorageSpaceNotEnough = 1015,
   PayloadTooLarge = 1016,
   Internal = 1017,

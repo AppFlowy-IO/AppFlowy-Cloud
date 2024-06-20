@@ -4,7 +4,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use database_entity::dto::{PublishCollabItem, PublishInfo, UpdatePublishNamespace};
+use client_api_entity::{PublishCollabItem, PublishInfo, UpdatePublishNamespace};
 use futures::Stream;
 use reqwest::{Body, Method};
 use serde::Serialize;

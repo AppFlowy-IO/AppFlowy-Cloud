@@ -1,5 +1,5 @@
 use anyhow::Error;
-use gotrue_entity::dto::GotrueTokenResponse;
+use client_api_entity::GotrueTokenResponse;
 use std::ops::{Deref, DerefMut};
 use tokio::sync::broadcast::{channel, Receiver, Sender};
 use tracing::{event, warn};

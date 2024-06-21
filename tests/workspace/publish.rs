@@ -73,9 +73,9 @@ async fn test_publish_doc() {
     .await
     .unwrap();
 
-  let publish_name_1 = "publish_name_1";
+  let publish_name_1 = "publish-name-1";
   let view_id_1 = uuid::Uuid::new_v4();
-  let publish_name_2 = "publish_name_2";
+  let publish_name_2 = "publish-name-2";
   let view_id_2 = uuid::Uuid::new_v4();
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
@@ -177,7 +177,7 @@ async fn test_publish_load_test() {
     .map(|i| PublishCollabItem {
       meta: PublishCollabMetadata {
         view_id: uuid::Uuid::new_v4(),
-        publish_name: format!("publish_name_{}", i),
+        publish_name: format!("publish-name-{}", i),
         metadata: MyCustomMetadata {
           title: format!("title_{}", i),
         },

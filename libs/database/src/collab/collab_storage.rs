@@ -2,8 +2,8 @@ use app_error::AppError;
 use async_trait::async_trait;
 
 use database_entity::dto::{
-  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
-  QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFCollabEmbeddings, AFSnapshotMeta, AFSnapshotMetas, CollabParams,
+  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 
 use collab::entity::EncodedCollab;
@@ -75,6 +75,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    embedding: Option<&AFCollabEmbeddings>,
     write_immediately: bool,
   ) -> AppResult<()>;
 
@@ -83,6 +84,7 @@ pub trait CollabStorage: Send + Sync + 'static {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    embeddings: Option<&AFCollabEmbeddings>,
   ) -> AppResult<()>;
 
   /// Insert a new collaboration in the storage.
@@ -173,11 +175,12 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    embedding: Option<&AFCollabEmbeddings>,
     write_immediately: bool,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_or_update_collab(workspace_id, uid, params, write_immediately)
+      .insert_or_update_collab(workspace_id, uid, params, embedding, write_immediately)
       .await
   }
 
@@ -186,10 +189,11 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
+    embeddings: Option<&AFCollabEmbeddings>,
   ) -> AppResult<()> {
     self
       .as_ref()
-      .insert_new_collab(workspace_id, uid, params)
+      .insert_new_collab(workspace_id, uid, params, embeddings)
       .await
   }
 

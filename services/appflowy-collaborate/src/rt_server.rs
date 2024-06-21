@@ -22,6 +22,7 @@ use crate::connect_state::ConnectState;
 use crate::error::RealtimeError;
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
+use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
 use crate::state::RedisConnectionManager;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
@@ -53,6 +54,7 @@ where
     group_persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
+    indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -71,6 +73,7 @@ where
         group_persistence_interval,
         edit_state_max_count,
         edit_state_max_secs,
+        indexer_provider,
       )
       .await?,
     );

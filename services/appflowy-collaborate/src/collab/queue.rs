@@ -14,7 +14,7 @@ use tracing::{error, instrument, trace, warn};
 
 use crate::collab::cache::CollabCache;
 use app_error::AppError;
-use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
+use database_entity::dto::{AFCollabEmbeddings, CollabParams, QueryCollab, QueryCollabResult};
 
 use crate::collab::queue_redis_ops::{
   get_pending_meta, remove_pending_meta, storage_cache_key, PendingWrite, WritePriority,
@@ -97,6 +97,7 @@ impl StorageQueue {
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
+    embedding: Option<&AFCollabEmbeddings>,
     priority: WritePriority,
   ) -> Result<(), AppError> {
     trace!("queuing {} object to pending write queue", params.object_id,);
@@ -146,7 +147,7 @@ impl StorageQueue {
         .map_err(AppError::from)?;
       self
         .collab_cache
-        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
+        .insert_encode_collab_data(workspace_id, uid, params, embedding, &mut transaction)
         .await?;
       transaction
         .commit()
@@ -448,7 +449,13 @@ async fn write_pending_to_disk(
       .execute(transaction.deref_mut())
       .await?;
     if let Err(_err) = collab_cache
-      .insert_encode_collab_in_disk(&record.workspace_id, &record.uid, params, &mut transaction)
+      .insert_encode_collab_in_disk(
+        &record.workspace_id,
+        &record.uid,
+        params,
+        embeddings,
+        &mut transaction,
+      )
       .await
     {
       sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
@@ -524,6 +531,7 @@ pub struct PendingWriteMeta {
   pub workspace_id: String,
   pub object_id: String,
   pub collab_type: CollabType,
+  pub should_index: bool,
 }
 
 impl From<&PendingWriteMeta> for QueryCollab {

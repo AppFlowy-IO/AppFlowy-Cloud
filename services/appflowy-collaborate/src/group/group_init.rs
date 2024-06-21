@@ -19,6 +19,7 @@ use futures_util::{SinkExt, StreamExt};
 
 use collab::entity::EncodedCollab;
 
+use crate::indexer::Indexer;
 use collab_stream::client::CollabRedisStream;
 use collab_stream::error::StreamError;
 use collab_stream::model::{CollabUpdateEvent, StreamBinary};
@@ -68,6 +69,7 @@ impl CollabGroup {
     persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
+    indexer: Option<Arc<dyn Indexer>>,
   ) -> Result<Self, StreamError>
   where
     S: CollabStorage,
@@ -96,6 +98,7 @@ impl CollabGroup {
         collab.downgrade(),
         collab_type.clone(),
         persistence_interval,
+        indexer,
       )
       .run(rx),
     );

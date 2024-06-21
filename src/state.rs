@@ -14,6 +14,7 @@ use app_error::AppError;
 use appflowy_collaborate::collab::access_control::CollabAccessControlImpl;
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::indexer::IndexerProvider;
 use appflowy_collaborate::metrics::CollabMetrics;
 use appflowy_collaborate::shared_state::RealtimeSharedState;
 use appflowy_collaborate::CollabRealtimeMetrics;
@@ -52,6 +53,7 @@ pub struct AppState {
   pub ai_client: AppFlowyAIClient,
   pub realtime_shared_state: RealtimeSharedState,
   pub grpc_history_client: Arc<Mutex<HistoryClient<tonic::transport::Channel>>>,
+  pub indexer_provider: Arc<IndexerProvider>,
 }
 
 impl AppState {

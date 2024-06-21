@@ -98,6 +98,12 @@ pub struct TranslateRowParams {
   pub data: TranslateRowData,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TagRowParams {
+  pub workspace_id: String,
+  pub data: TagRowData,
+}
+
 /// Represents different types of content that can be used to summarize a database row.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TranslateRowData {
@@ -114,6 +120,24 @@ pub struct TranslateItem {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct TranslateRowResponse {
   pub items: Vec<HashMap<String, String>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TagRowData {
+  pub existing_tags: Vec<String>,
+  pub items: Vec<TagItem>,
+  pub num_tags: i32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TagItem {
+  pub title: String,
+  pub content: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TagRowResponse {
+  pub tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

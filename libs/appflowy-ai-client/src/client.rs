@@ -1,7 +1,7 @@
 use crate::dto::{
   ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document, EmbeddingRequest,
   EmbeddingResponse, MessageData, RepeatedRelatedQuestion, SearchDocumentsRequest,
-  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  SummarizeRowResponse, TagRowData, TagRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -93,6 +93,18 @@ impl AppFlowyAIClient {
       .send()
       .await?;
     AIResponse::<TranslateRowResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn tag_row(&self, data: TagRowData) -> Result<TagRowResponse, AIError> {
+    let url = format!("{}/tag_row", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&data)
+      .send()
+      .await?;
+    AIResponse::<TagRowResponse>::from_response(resp)
       .await?
       .into_data()
   }

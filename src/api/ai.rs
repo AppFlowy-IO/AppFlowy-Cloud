@@ -2,7 +2,9 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, Scope};
 use app_error::AppError;
-use appflowy_ai_client::dto::{CompleteTextResponse, TranslateRowParams, TranslateRowResponse};
+use appflowy_ai_client::dto::{
+  CompleteTextResponse, TagRowParams, TagRowResponse, TranslateRowParams, TranslateRowResponse,
+};
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
@@ -14,6 +16,7 @@ pub fn ai_completion_scope() -> Scope {
     .service(web::resource("/complete_text").route(web::post().to(complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
+    .service(web::resource("/tag_row").route(web::post().to(tag_row_handler)))
 }
 
 async fn complete_text_handler(
@@ -80,6 +83,26 @@ async fn translate_row_handler(
       Ok(
         AppResponse::Ok()
           .with_data(TranslateRowResponse::default())
+          .into(),
+      )
+    },
+  }
+}
+
+#[instrument(level = "debug", skip(state, payload), err)]
+async fn tag_row_handler(
+  state: web::Data<AppState>,
+  payload: web::Json<TagRowParams>,
+) -> actix_web::Result<Json<AppResponse<TagRowResponse>>> {
+  let params = payload.into_inner();
+
+  match state.ai_client.tag_row(params.data).await {
+    Ok(resp) => Ok(AppResponse::Ok().with_data(resp).into()),
+    Err(err) => {
+      error!("Failed to tag row: {:?}", err);
+      Ok(
+        AppResponse::Ok()
+          .with_data(TagRowResponse::default())
           .into(),
       )
     },

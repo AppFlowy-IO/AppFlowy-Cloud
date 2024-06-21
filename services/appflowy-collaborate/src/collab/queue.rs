@@ -97,7 +97,6 @@ impl StorageQueue {
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
-    embedding: Option<&AFCollabEmbeddings>,
     priority: WritePriority,
   ) -> Result<(), AppError> {
     trace!("queuing {} object to pending write queue", params.object_id,);
@@ -147,7 +146,7 @@ impl StorageQueue {
         .map_err(AppError::from)?;
       self
         .collab_cache
-        .insert_encode_collab_data(workspace_id, uid, params, embedding, &mut transaction)
+        .insert_encode_collab_data(workspace_id, uid, params, &mut transaction)
         .await?;
       transaction
         .commit()
@@ -420,6 +419,7 @@ async fn write_pending_to_disk(
           object_id: meta.object_id.clone(),
           collab_type: meta.collab_type.clone(),
           encode_collab_v1,
+          embeddings,
         })
       } else {
         None
@@ -441,6 +441,7 @@ async fn write_pending_to_disk(
       object_id: record.object_id.clone(),
       collab_type: record.collab_type,
       encoded_collab_v1: record.encode_collab_v1,
+      embeddings: record.embeddings,
     };
     let savepoint_name = format!("sp_{}", index);
 
@@ -449,13 +450,7 @@ async fn write_pending_to_disk(
       .execute(transaction.deref_mut())
       .await?;
     if let Err(_err) = collab_cache
-      .insert_encode_collab_in_disk(
-        &record.workspace_id,
-        &record.uid,
-        params,
-        embeddings,
-        &mut transaction,
-      )
+      .insert_encode_collab_in_disk(&record.workspace_id, &record.uid, params, &mut transaction)
       .await
     {
       sqlx::query(&format!("ROLLBACK TO SAVEPOINT {}", savepoint_name))
@@ -525,13 +520,12 @@ pub async fn consume_pending_write(
     .collect()
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct PendingWriteMeta {
   pub uid: i64,
   pub workspace_id: String,
   pub object_id: String,
   pub collab_type: CollabType,
-  pub should_index: bool,
 }
 
 impl From<&PendingWriteMeta> for QueryCollab {
@@ -543,13 +537,14 @@ impl From<&PendingWriteMeta> for QueryCollab {
   }
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub struct PendingWriteData {
   pub uid: i64,
   pub workspace_id: String,
   pub object_id: String,
   pub collab_type: CollabType,
   pub encode_collab_v1: Vec<u8>,
+  pub embeddings: Option<AFCollabEmbeddings>,
 }
 
 impl From<PendingWriteData> for CollabParams {
@@ -558,6 +553,7 @@ impl From<PendingWriteData> for CollabParams {
       object_id: data.object_id,
       collab_type: data.collab_type,
       encoded_collab_v1: data.encode_collab_v1,
+      embeddings: data.embeddings,
     }
   }
 }

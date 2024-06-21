@@ -130,16 +130,11 @@ where
     .await;
 
     match result {
-      Ok(Ok(params)) => {
+      Ok(Ok(mut params)) => {
+        params.embeddings = collab_embedding;
         match self
           .storage
-          .insert_or_update_collab(
-            &self.workspace_id,
-            &self.uid,
-            params,
-            collab_embedding.as_ref(),
-            write_immediately,
-          )
+          .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
           .await
         {
           Ok(_) => {
@@ -213,6 +208,7 @@ fn get_encode_collab(
     object_id: object_id.to_string(),
     encoded_collab_v1: encoded_collab,
     collab_type: collab_type.clone(),
+    embeddings: None,
   };
   Ok(params)
 }

@@ -86,8 +86,6 @@ impl Indexer for DocumentIndexer {
       resp.total_tokens
     );
     Ok(AFCollabEmbeddings {
-      object_id,
-      collab_type: CollabType::Document,
       tokens_consumed: resp.total_tokens as u32,
       params,
     })

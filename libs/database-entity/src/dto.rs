@@ -45,6 +45,7 @@ impl CreateCollabParams {
         object_id: self.object_id,
         encoded_collab_v1: self.encoded_collab_v1,
         collab_type: self.collab_type,
+        embeddings: None,
       },
       self.workspace_id,
     )
@@ -67,6 +68,8 @@ pub struct CollabParams {
   #[validate(custom = "validate_not_empty_payload")]
   pub encoded_collab_v1: Vec<u8>,
   pub collab_type: CollabType,
+  #[serde(default)]
+  pub embeddings: Option<AFCollabEmbeddings>,
 }
 
 impl CollabParams {
@@ -80,6 +83,7 @@ impl CollabParams {
       object_id,
       collab_type,
       encoded_collab_v1,
+      embeddings: None,
     }
   }
 
@@ -246,7 +250,7 @@ impl AFBlobRecord {
   }
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum QueryCollabResult {
   Success { encode_collab_v1: Vec<u8> },
   Failed { error: String },
@@ -772,7 +776,7 @@ impl ChatAuthor {
   }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddingParams {
   pub fragment_id: String,
   pub object_id: String,
@@ -782,10 +786,8 @@ pub struct AFCollabEmbeddingParams {
   pub embedding: Option<Vec<f32>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddings {
-  pub object_id: String,
-  pub collab_type: CollabType,
   pub tokens_consumed: u32,
   pub params: Vec<AFCollabEmbeddingParams>,
 }

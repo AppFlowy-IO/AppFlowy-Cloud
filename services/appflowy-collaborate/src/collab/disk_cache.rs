@@ -16,7 +16,7 @@ use database::collab::{
 };
 use database::index::upsert_collab_embeddings;
 use database::pg_row::AFCollabRowMeta;
-use database_entity::dto::{AFCollabEmbeddings, CollabParams, QueryCollab, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 #[derive(Clone)]
 pub struct CollabDiskCache {
@@ -53,14 +53,13 @@ impl CollabDiskCache {
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
-    embeddings: Option<&AFCollabEmbeddings>,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> AppResult<()> {
     insert_into_af_collab(transaction, uid, workspace_id, params).await?;
-    if let Some(em) = embeddings {
+    if let Some(em) = &params.embeddings {
       tracing::info!(
         "saving collab {} embeddings (cost: {} tokens)",
-        em.object_id,
+        params.object_id,
         em.tokens_consumed
       );
       let workspace_id = Uuid::parse_str(workspace_id)?;

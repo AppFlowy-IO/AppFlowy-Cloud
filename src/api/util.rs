@@ -1,11 +1,14 @@
 use crate::domain::compression::{CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE};
 use actix_http::header::HeaderMap;
+use actix_web::web::Payload;
 use app_error::AppError;
 
 use async_trait::async_trait;
+use byteorder::{ByteOrder, LittleEndian};
 use collab_rt_protocol::validate_encode_collab;
 use database_entity::dto::CollabParams;
 use std::str::FromStr;
+use tokio_stream::StreamExt;
 
 #[inline]
 pub fn compress_type_from_header_value(headers: &HeaderMap) -> Result<CompressionType, AppError> {
@@ -73,4 +76,90 @@ impl CollabValidator for CollabParams {
       .await
       .map_err(|err| AppError::NoRequiredData(err.to_string()))
   }
+}
+
+pub struct PayloadReader {
+  payload: Payload,
+  buffer: Vec<u8>,
+  buf_start: usize,
+  buf_end: usize,
+}
+
+impl PayloadReader {
+  pub fn new(payload: Payload) -> Self {
+    Self {
+      payload,
+      buffer: Vec::new(),
+      buf_start: 0,
+      buf_end: 0,
+    }
+  }
+
+  pub async fn read_exact(&mut self, dest: &mut [u8]) -> actix_web::Result<()> {
+    let mut written = 0;
+    while written < dest.len() {
+      if self.buf_start == self.buf_end {
+        self.fill_buffer().await?;
+      }
+
+      let current_dest = &mut dest[written..];
+      let current_src = &self.buffer[self.buf_start..self.buf_end];
+      let n = copy_buffer(current_src, current_dest);
+      written += n;
+      self.buf_start += n;
+    }
+    Ok(())
+  }
+
+  pub async fn read_u32_little_endian(&mut self) -> actix_web::Result<u32> {
+    self.fill_at_least(4).await?;
+
+    let bytes: [u8; 4] = [
+      self.buffer[self.buf_start],
+      self.buffer[self.buf_start + 1],
+      self.buffer[self.buf_start + 2],
+      self.buffer[self.buf_start + 3],
+    ];
+    self.buf_start += 4;
+
+    Ok(LittleEndian::read_u32(&bytes))
+  }
+
+  async fn fill_at_least(&mut self, min_len: usize) -> actix_web::Result<()> {
+    while self.len() < min_len {
+      let n = self.fill_buffer().await?;
+      if n == 0 {
+        return Err(AppError::InvalidRequest("unexpected EOF".to_string()).into());
+      }
+    }
+    Ok(())
+  }
+
+  fn len(&self) -> usize {
+    self.buf_end - self.buf_start
+  }
+
+  async fn fill_buffer(&mut self) -> actix_web::Result<usize> {
+    if self.buf_start == self.buf_end {
+      self.buffer.clear();
+      self.buf_start = 0;
+      self.buf_end = 0;
+    }
+
+    let bytes = self.payload.try_next().await?;
+    match bytes {
+      Some(bytes) => {
+        self.buffer.extend_from_slice(&bytes);
+        self.buf_end += bytes.len();
+        Ok(bytes.len())
+      },
+      None => Ok(0),
+    }
+  }
+}
+
+fn copy_buffer(src: &[u8], dest: &mut [u8]) -> usize {
+  let bytes_to_copy = std::cmp::min(src.len(), dest.len());
+  dest[..bytes_to_copy].copy_from_slice(&src[..bytes_to_copy]);
+  bytes_to_copy
 }

@@ -21,6 +21,7 @@ use database_entity::dto::AFRole;
 
 use crate::api::workspace::{
   WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
+  WORKSPACE_PUBLISH_NAMESPACE_PATTERN,
 };
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use crate::state::UserCache;
@@ -62,6 +63,14 @@ where
           // Only the Owner can invite a user to the workspace
           ResourceDef::new(WORKSPACE_INVITE_PATTERN),
           [(Method::POST, AFRole::Owner)].into(),
+        ),
+        (
+          ResourceDef::new(WORKSPACE_PUBLISH_NAMESPACE_PATTERN),
+          [
+            (Method::PUT, AFRole::Owner),  // Only the Owner can change namespace
+            (Method::GET, AFRole::Member), // Any member can get the namespace
+          ]
+          .into(),
         ),
       ],
       access_control,

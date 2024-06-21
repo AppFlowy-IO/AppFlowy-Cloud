@@ -1,3 +1,4 @@
+use crate::api::util::PayloadReader;
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -43,6 +44,8 @@ pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member
 pub const WORKSPACE_INVITE_PATTERN: &str = "/api/workspace/{workspace_id}/invite";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
 pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{object_id}";
+pub const WORKSPACE_PUBLISH_NAMESPACE_PATTERN: &str =
+  "/api/workspace/{workspace_id}/publish-namespace";
 
 pub fn workspace_scope() -> Scope {
   web::scope("/api/workspace")
@@ -133,18 +136,18 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_published_collab_blob_handler))
     )
     .service(
+      web::resource("/published-info/{view_id}")
+        .route(web::get().to(get_published_collab_info_handler))
+    )
+    .service(
       web::resource("/{workspace_id}/publish-namespace")
         .route(web::put().to(put_publish_namespace_handler))
         .route(web::get().to(get_publish_namespace_handler))
     )
     .service(
-      web::resource("/{workspace_id}/publish/{doc_name}/blob")
-        .route(web::put().to(put_publish_collab_blob_handler))
-    )
-    .service(
-      web::resource("/{workspace_id}/publish/{doc_name}")
-        .route(web::put().to(put_publish_collab_handler))
-        .route(web::delete().to(delete_publish_collab_handler))
+      web::resource("/{workspace_id}/publish")
+        .route(web::post().to(post_publish_collabs_handler))
+        .route(web::delete().to(delete_published_collabs_handler))
     )
     .service(
       web::resource("/{workspace_id}/collab/{object_id}/member/list")
@@ -985,52 +988,80 @@ async fn get_published_collab_blob_handler(
   Ok(collab_data)
 }
 
-async fn put_publish_collab_handler(
-  path_param: web::Path<(Uuid, String)>,
+async fn get_published_collab_info_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<Json<AppResponse<PublishInfo>>> {
+  let view_id = view_id.into_inner();
+  let collab_data =
+    biz::workspace::ops::get_published_collab_info(&state.pg_pool, &view_id).await?;
+  Ok(Json(AppResponse::Ok().with_data(collab_data)))
+}
+
+async fn post_publish_collabs_handler(
+  workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
-  metadata: Json<serde_json::Value>,
+  payload: Payload,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
-  biz::workspace::ops::publish_collab(
-    &state.pg_pool,
-    &workspace_id,
-    &doc_name,
-    &user_uuid,
-    &metadata,
-  )
-  .await?;
+  let workspace_id = workspace_id.into_inner();
+
+  let mut accumulator = Vec::<PublishCollabItem<serde_json::Value, Vec<u8>>>::new();
+  let mut payload_reader: PayloadReader = PayloadReader::new(payload);
+
+  loop {
+    let meta: PublishCollabMetadata<serde_json::Value> = {
+      let meta_len = payload_reader.read_u32_little_endian().await?;
+      if meta_len > 4 * 1024 * 1024 {
+        // 4MB Limit for metadata
+        return Err(AppError::InvalidRequest(String::from("metadata too large")).into());
+      }
+      if meta_len == 0 {
+        break;
+      }
+
+      let mut meta_buffer = vec![0; meta_len as usize];
+      payload_reader.read_exact(&mut meta_buffer).await?;
+      serde_json::from_slice(&meta_buffer)?
+    };
+
+    let data = {
+      let data_len = payload_reader.read_u32_little_endian().await?;
+      if data_len > 128 * 1024 * 1024 {
+        // 128MB Limit for data
+        return Err(AppError::InvalidRequest(String::from("data too large")).into());
+      }
+      let mut data_buffer = vec![0; data_len as usize];
+      payload_reader.read_exact(&mut data_buffer).await?;
+      data_buffer
+    };
+
+    accumulator.push(PublishCollabItem { meta, data });
+  }
+
+  if accumulator.is_empty() {
+    return Ok(Json(AppResponse::Ok()));
+  }
+  biz::workspace::ops::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, &accumulator)
+    .await?;
   Ok(Json(AppResponse::Ok()))
 }
 
-async fn put_publish_collab_blob_handler(
-  path_param: web::Path<(Uuid, String)>,
-  user_uuid: UserUuid,
-  collab_data: Bytes,
-  state: Data<AppState>,
-) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
-  biz::workspace::ops::put_published_collab_blob(
-    &state.pg_pool,
-    &workspace_id,
-    &doc_name,
-    &user_uuid,
-    &collab_data,
-  )
-  .await?;
-  Ok(Json(AppResponse::Ok()))
-}
-
-async fn delete_publish_collab_handler(
-  path_param: web::Path<(Uuid, String)>,
+async fn delete_published_collabs_handler(
+  workspace_id: web::Path<Uuid>,
   user_uuid: UserUuid,
   state: Data<AppState>,
+  view_ids: Json<Vec<Uuid>>,
 ) -> Result<Json<AppResponse<()>>> {
-  let (workspace_id, doc_name) = path_param.into_inner();
+  let workspace_id = workspace_id.into_inner();
+  let view_ids = view_ids.into_inner();
+  if view_ids.is_empty() {
+    return Ok(Json(AppResponse::Ok()));
+  }
   biz::workspace::ops::delete_published_workspace_collab(
     &state.pg_pool,
     &workspace_id,
-    &doc_name,
+    &view_ids,
     &user_uuid,
   )
   .await?;

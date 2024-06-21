@@ -1,6 +1,6 @@
 use bytes::Bytes;
-use client_api_entity::UpdatePublishNamespace;
-use reqwest::{Body, Method};
+use client_api_entity::{PublishInfo, UpdatePublishNamespace};
+use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::Client;
@@ -47,64 +47,16 @@ impl Client {
       .into_data()
   }
 
-  pub async fn publish_collab<T>(
+  pub async fn unpublish_collabs(
     &self,
     workspace_id: &str,
-    doc_name: &str,
-    metadata: T,
-  ) -> Result<(), AppResponseError>
-  where
-    T: serde::Serialize,
-  {
-    let url = format!(
-      "{}/api/workspace/{}/publish/{}",
-      self.base_url, workspace_id, doc_name
-    );
-
-    let resp = self
-      .http_client_with_auth(Method::PUT, &url)
-      .await?
-      .json(&metadata)
-      .send()
-      .await?;
-
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  pub async fn put_published_collab_blob<T>(
-    &self,
-    workspace_id: &str,
-    doc_name: &str,
-    data: T,
-  ) -> Result<(), AppResponseError>
-  where
-    T: Into<Body>,
-  {
-    let url = format!(
-      "{}/api/workspace/{}/publish/{}/blob",
-      self.base_url, workspace_id, doc_name
-    );
-    let resp = self
-      .http_client_with_auth(Method::PUT, &url)
-      .await?
-      .body(data)
-      .send()
-      .await?;
-    AppResponse::<()>::from_response(resp).await?.into_error()
-  }
-
-  pub async fn delete_published_collab(
-    &self,
-    workspace_id: &str,
-    doc_name: &str,
+    view_ids: &[uuid::Uuid],
   ) -> Result<(), AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/publish/{}",
-      self.base_url, workspace_id, doc_name
-    );
+    let url = format!("{}/api/workspace/{}/publish", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::DELETE, &url)
       .await?
+      .json(view_ids)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
@@ -113,6 +65,18 @@ impl Client {
 
 // Guest API (no login required)
 impl Client {
+  pub async fn get_published_collab_info(
+    &self,
+    view_id: &uuid::Uuid,
+  ) -> Result<PublishInfo, AppResponseError> {
+    let url = format!("{}/api/workspace/published-info/{}", self.base_url, view_id,);
+
+    let resp = self.cloud_client.get(&url).send().await?;
+    AppResponse::<PublishInfo>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
   pub async fn get_published_collab<T>(
     &self,
     publish_namespace: &str,

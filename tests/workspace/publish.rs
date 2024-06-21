@@ -73,9 +73,9 @@ async fn test_publish_doc() {
     .await
     .unwrap();
 
-  let doc_name_1 = "doc1";
+  let publish_name_1 = "publish_name_1";
   let view_id_1 = uuid::Uuid::new_v4();
-  let doc_name_2 = "doc2";
+  let publish_name_2 = "publish_name_2";
   let view_id_2 = uuid::Uuid::new_v4();
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
@@ -83,7 +83,7 @@ async fn test_publish_doc() {
       PublishCollabItem {
         meta: PublishCollabMetadata {
           view_id: view_id_1,
-          doc_name: doc_name_1.to_string(),
+          publish_name: publish_name_1.to_string(),
           metadata: MyCustomMetadata {
             title: "my_title_1".to_string(),
           },
@@ -93,7 +93,7 @@ async fn test_publish_doc() {
       PublishCollabItem {
         meta: PublishCollabMetadata {
           view_id: view_id_2,
-          doc_name: doc_name_2.to_string(),
+          publish_name: publish_name_2.to_string(),
           metadata: MyCustomMetadata {
             title: "my_title_2".to_string(),
           },
@@ -109,7 +109,7 @@ async fn test_publish_doc() {
     // Non login user should be able to view the published collab
     let guest_client = localhost_client();
     let published_collab = guest_client
-      .get_published_collab::<MyCustomMetadata>(&my_namespace, doc_name_1)
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
       .await
       .unwrap();
     assert_eq!(published_collab.title, "my_title_1");
@@ -119,11 +119,11 @@ async fn test_publish_doc() {
       .await
       .unwrap();
     assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
-    assert_eq!(publish_info.doc_name, doc_name_1);
+    assert_eq!(publish_info.publish_name, publish_name_1);
     assert_eq!(publish_info.view_id, view_id_1);
 
     let blob = guest_client
-      .get_published_collab_blob(&my_namespace, doc_name_1)
+      .get_published_collab_blob(&my_namespace, publish_name_1)
       .await
       .unwrap();
     assert_eq!(blob, "yrs_encoded_data_1");
@@ -137,7 +137,7 @@ async fn test_publish_doc() {
     // Deleted collab should not be accessible
     let guest_client = localhost_client();
     let err = guest_client
-      .get_published_collab::<MyCustomMetadata>(&my_namespace, doc_name_1)
+      .get_published_collab::<MyCustomMetadata>(&my_namespace, publish_name_1)
       .await
       .err()
       .unwrap();
@@ -145,7 +145,7 @@ async fn test_publish_doc() {
 
     let guest_client = localhost_client();
     let err = guest_client
-      .get_published_collab_blob(&my_namespace, doc_name_1)
+      .get_published_collab_blob(&my_namespace, publish_name_1)
       .await
       .err()
       .unwrap();
@@ -177,9 +177,9 @@ async fn test_publish_load_test() {
     .map(|i| PublishCollabItem {
       meta: PublishCollabMetadata {
         view_id: uuid::Uuid::new_v4(),
-        doc_name: format!("doc{}", i),
+        publish_name: format!("publish_name_{}", i),
         metadata: MyCustomMetadata {
-          title: format!("title{}", i),
+          title: format!("title_{}", i),
         },
       },
       data: vec![0; 100_000], // 100 KB

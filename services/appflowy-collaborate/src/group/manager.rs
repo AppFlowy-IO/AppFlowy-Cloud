@@ -24,6 +24,7 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
 use crate::group::plugin::HistoryPlugin;
 use crate::group::state::GroupManagementState;
+use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
 
 pub struct GroupManager<S, AC> {
@@ -36,6 +37,7 @@ pub struct GroupManager<S, AC> {
   persistence_interval: Duration,
   edit_state_max_count: u32,
   edit_state_max_secs: i64,
+  indexer_provider: Arc<IndexerProvider>,
 }
 
 impl<S, AC> GroupManager<S, AC>
@@ -51,6 +53,7 @@ where
     persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
+    indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
     let control_event_stream = collab_stream
@@ -68,6 +71,7 @@ where
       persistence_interval,
       edit_state_max_count,
       edit_state_max_secs,
+      indexer_provider,
     })
   }
 
@@ -238,6 +242,11 @@ where
       collab_type
     );
 
+    let indexer = self
+      .indexer_provider
+      .indexer_for(workspace_id, collab_type.clone())
+      .await
+      .map_err(|err| RealtimeError::Internal(err.into()))?;
     let group = Arc::new(
       CollabGroup::new(
         user.uid,
@@ -252,6 +261,7 @@ where
         self.persistence_interval,
         self.edit_state_max_count,
         self.edit_state_max_secs,
+        indexer,
       )
       .await?,
     );

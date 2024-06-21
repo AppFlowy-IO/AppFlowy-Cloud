@@ -58,6 +58,7 @@ use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::ai::ai_completion_scope;
 use crate::api::search::search_scope;
+use appflowy_collaborate::indexer::IndexerProvider;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use tracing::{error, info, warn};
 use workspace_access::WorkspaceAccessControlImpl;
@@ -133,6 +134,7 @@ pub async fn run_actix_server(
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     config.collab.edit_state_max_count,
     config.collab.edit_state_max_secs,
+    state.indexer_provider.clone(),
   )
   .await
   .unwrap();
@@ -221,6 +223,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
+  let indexer_provider = IndexerProvider::new(pg_pool.clone(), appflowy_ai_client.clone());
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -310,6 +313,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     ai_client: appflowy_ai_client,
     grpc_history_client,
     realtime_shared_state,
+    indexer_provider,
   })
 }
 

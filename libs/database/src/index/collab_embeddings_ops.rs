@@ -5,14 +5,16 @@ use pgvector::Vector;
 use sqlx::{Error, Executor, Postgres, Transaction};
 use uuid::Uuid;
 
-use database_entity::dto::AFCollabEmbeddingParams;
+use database_entity::dto::{AFCollabEmbeddingParams, IndexingStatus};
 
-pub async fn get_index_status(
-  tx: &mut Transaction<'_, sqlx::Postgres>,
+pub async fn get_index_status<'a, E>(
+  tx: E,
   workspace_id: &Uuid,
   object_id: &str,
   partition_key: i32,
-) -> Result<Option<bool>, sqlx::Error> {
+) -> Result<IndexingStatus, sqlx::Error> 
+where
+  E: Executor<'a, Database = Postgres>, {
   let result = sqlx::query!(
     r#"
 SELECT
@@ -29,14 +31,17 @@ WHERE w.workspace_id = $1"#,
     object_id,
     partition_key
   )
-  .fetch_one(tx.deref_mut())
+  .fetch_one(tx)
   .await;
   match result {
     Ok(row) => {
       if row.disable_search_indexing.unwrap_or(false) {
-        return Ok(None);
+        Ok(IndexingStatus::Disabled)
+      } else if row.has_index.unwrap_or(false) {
+        Ok(IndexingStatus::Indexed)
+      } else {
+        Ok(IndexingStatus::NotIndexed)
       }
-      Ok(Some(row.has_index.unwrap_or(false)))
     },
     Err(Error::RowNotFound) => {
       tracing::warn!(
@@ -44,7 +49,7 @@ WHERE w.workspace_id = $1"#,
         workspace_id,
         object_id
       );
-      Ok(Some(false))
+      Ok(IndexingStatus::NotIndexed)
     },
     Err(e) => Err(e),
   }
@@ -54,7 +59,7 @@ pub async fn upsert_collab_embeddings(
   tx: &mut Transaction<'_, sqlx::Postgres>,
   workspace_id: &Uuid,
   tokens_used: u32,
-  records: Vec<AFCollabEmbeddingParams>,
+  records: &[AFCollabEmbeddingParams],
 ) -> Result<(), sqlx::Error> {
   if tokens_used > 0 {
     sqlx::query(r#"
@@ -75,12 +80,12 @@ pub async fn upsert_collab_embeddings(
         VALUES ($1, $2, $3, $4, $5, $6, NOW())
         ON CONFLICT (fragment_id) DO UPDATE SET content_type = $4, content = $5, embedding = $6, indexed_at = NOW()"#,
     )
-    .bind(r.fragment_id)
-    .bind(r.object_id)
-    .bind(r.collab_type as i32)
+    .bind(&r.fragment_id)
+    .bind(&r.object_id)
+    .bind(r.collab_type.clone() as i32)
     .bind(r.content_type as i32)
-    .bind(r.content)
-    .bind(r.embedding.map(Vector::from))
+    .bind(&r.content)
+    .bind(r.embedding.clone().map(Vector::from))
     .execute(tx.deref_mut())
     .await?;
   }

@@ -689,6 +689,7 @@ dependencies = [
  "actix-web-actors",
  "anyhow",
  "app-error",
+ "appflowy-ai-client",
  "async-stream",
  "async-trait",
  "authentication",
@@ -733,6 +734,7 @@ dependencies = [
  "uuid",
  "validator",
  "workspace-access",
+ "workspace-template",
  "yrs",
 ]
 

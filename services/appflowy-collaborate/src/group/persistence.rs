@@ -9,6 +9,7 @@ use database_entity::dto::CollabParams;
 
 use collab::core::collab::{MutexCollab, WeakMutexCollab};
 
+use crate::indexer::Indexer;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -24,6 +25,7 @@ pub(crate) struct GroupPersistence<S> {
   mutex_collab: WeakMutexCollab,
   collab_type: CollabType,
   persistence_interval: Duration,
+  indexer: Option<Arc<dyn Indexer>>,
 }
 
 impl<S> GroupPersistence<S>
@@ -40,6 +42,7 @@ where
     mutex_collab: WeakMutexCollab,
     collab_type: CollabType,
     persistence_interval: Duration,
+    ai_client: Option<Arc<dyn Indexer>>,
   ) -> Self {
     Self {
       workspace_id,
@@ -50,6 +53,7 @@ where
       mutex_collab,
       collab_type,
       persistence_interval,
+      indexer: ai_client,
     }
   }
 
@@ -94,10 +98,9 @@ where
     }
 
     // Check if conditions for saving to disk are not met
-    if !self.edit_state.should_save_to_disk() {
-      return Ok(());
+    if self.edit_state.should_save_to_disk() {
+      self.save(false).await?;
     }
-    self.save(false).await?;
     Ok(())
   }
 
@@ -111,6 +114,11 @@ where
       None => return Err(AppError::Internal(anyhow!("collab has been dropped"))),
     };
 
+    let collab_embedding = if let Some(indexer) = &self.indexer {
+      Some(indexer.index(collab.clone()).await?)
+    } else {
+      None
+    };
     let result = tokio::task::spawn_blocking(move || {
       // Attempt to lock the collab; skip saving if unable
       let lock_guard = collab
@@ -125,7 +133,13 @@ where
       Ok(Ok(params)) => {
         match self
           .storage
-          .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
+          .insert_or_update_collab(
+            &self.workspace_id,
+            &self.uid,
+            params,
+            collab_embedding.as_ref(),
+            write_immediately,
+          )
           .await
         {
           Ok(_) => {

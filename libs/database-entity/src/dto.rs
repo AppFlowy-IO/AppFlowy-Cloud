@@ -58,6 +58,8 @@ impl CreateCollabParams {
   }
 }
 
+pub struct CollabIndexParams {}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CollabParams {
   #[validate(custom = "validate_not_empty_str")]
@@ -770,7 +772,7 @@ impl ChatAuthor {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AFCollabEmbeddingParams {
   pub fragment_id: String,
   pub object_id: String,
@@ -778,6 +780,14 @@ pub struct AFCollabEmbeddingParams {
   pub content_type: EmbeddingContentType,
   pub content: String,
   pub embedding: Option<Vec<f32>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AFCollabEmbeddings {
+  pub object_id: String,
+  pub collab_type: CollabType,
+  pub tokens_consumed: u32,
+  pub params: Vec<AFCollabEmbeddingParams>,
 }
 
 /// Type of content stored by the embedding.
@@ -810,8 +820,13 @@ pub struct PublishCollabMetadata<Metadata> {
   pub metadata: Metadata,
 }
 
-#[derive(Debug)]
-pub struct PublishCollabItem<Meta, Data> {
-  pub meta: PublishCollabMetadata<Meta>,
-  pub data: Data,
+/// Indexing status of a document.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum IndexingStatus {
+  /// Indexing is disabled for that document.
+  Disabled,
+  /// Indexing is enabled, but the document has never been indexed.
+  NotIndexed,
+  /// Indexing is enabled and the document has been indexed.
+  Indexed,
 }

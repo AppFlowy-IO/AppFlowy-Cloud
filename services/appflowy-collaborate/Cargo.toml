@@ -24,6 +24,7 @@ dashmap.workspace = true
 dotenvy.workspace = true
 async-stream.workspace = true
 futures.workspace = true
+appflowy-ai-client = { workspace = true, features = ["client-api"] }
 tracing = "0.1.40"
 futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
@@ -67,6 +68,7 @@ workspace-access.workspace = true
 
 [dev-dependencies]
 rand = "0.8.5"
+workspace-template.workspace = true
 
 [features]
 collab-rt-multi-thread = []

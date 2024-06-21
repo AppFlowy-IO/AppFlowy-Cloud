@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,\n        doc_name,\n        view_id\n      FROM af_published_collab apc\n      WHERE view_id = $1\n    ",
+  "query": "\n      SELECT\n        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,\n        publish_name,\n        view_id\n      FROM af_published_collab apc\n      WHERE view_id = $1\n    ",
   "describe": {
     "columns": [
       {
@@ -10,7 +10,7 @@
       },
       {
         "ordinal": 1,
-        "name": "doc_name",
+        "name": "publish_name",
         "type_info": "Text"
       },
       {
@@ -30,5 +30,5 @@
       false
     ]
   },
-  "hash": "1b3c3fee0db2369b3626b34c241c995e623bf280a1b31ea1b935c69937e7d799"
+  "hash": "f8e631002ccbe616ab558a2025d892f7812dfa039276534664f60b37e3898c75"
 }

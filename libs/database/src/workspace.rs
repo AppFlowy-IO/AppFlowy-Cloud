@@ -896,9 +896,9 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
   publish_item: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
 ) -> Result<(), AppError> {
   let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.meta.view_id).collect();
-  let doc_names: Vec<String> = publish_item
+  let publish_names: Vec<String> = publish_item
     .iter()
-    .map(|item| item.meta.doc_name.clone())
+    .map(|item| item.meta.publish_name.clone())
     .collect();
   let metadatas: Vec<serde_json::Value> = publish_item
     .iter()
@@ -908,7 +908,7 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
   let blobs: Vec<Vec<u8>> = publish_item.iter().map(|item| item.data.clone()).collect();
   let res = sqlx::query!(
     r#"
-      INSERT INTO af_published_collab (workspace_id, view_id, doc_name, published_by, metadata, blob)
+      INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob)
       SELECT * FROM UNNEST(
         (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $7))::uuid[],
         $2::uuid[],
@@ -922,7 +922,7 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
     "#,
     workspace_id,
     &view_ids,
-    &doc_names,
+    &publish_names,
     publisher_uuid,
     &metadatas,
     &blobs,
@@ -945,17 +945,17 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
 pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   publish_namespace: &str,
-  doc_name: &str,
+  publish_name: &str,
 ) -> Result<serde_json::Value, AppError> {
   let res = sqlx::query!(
     r#"
     SELECT metadata
     FROM af_published_collab
     WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
-      AND doc_name = $2
+      AND publish_name = $2
     "#,
     publish_namespace,
-    doc_name,
+    publish_name,
   )
   .fetch_one(executor)
   .await?;
@@ -997,17 +997,17 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
 pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   publish_namespace: &str,
-  doc_name: &str,
+  publish_name: &str,
 ) -> Result<Vec<u8>, AppError> {
   let res = sqlx::query_scalar!(
     r#"
       SELECT blob
       FROM af_published_collab
       WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
-      AND doc_name = $2
+      AND publish_name = $2
     "#,
     publish_namespace,
-    doc_name,
+    publish_name,
   )
   .fetch_one(executor)
   .await?;
@@ -1024,7 +1024,7 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
     r#"
       SELECT
         (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,
-        doc_name,
+        publish_name,
         view_id
       FROM af_published_collab apc
       WHERE view_id = $1

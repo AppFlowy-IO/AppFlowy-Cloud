@@ -80,14 +80,14 @@ impl Client {
   pub async fn get_published_collab<T>(
     &self,
     publish_namespace: &str,
-    doc_name: &str,
+    publish_name: &str,
   ) -> Result<T, AppResponseError>
   where
     T: serde::de::DeserializeOwned,
   {
     let url = format!(
       "{}/api/workspace/published/{}/{}",
-      self.base_url, publish_namespace, doc_name
+      self.base_url, publish_namespace, publish_name
     );
 
     let resp = self
@@ -110,11 +110,11 @@ impl Client {
   pub async fn get_published_collab_blob(
     &self,
     publish_namespace: &str,
-    doc_name: &str,
+    publish_name: &str,
   ) -> Result<Bytes, AppResponseError> {
     let url = format!(
       "{}/api/workspace/published/{}/{}/blob",
-      self.base_url, publish_namespace, doc_name
+      self.base_url, publish_namespace, publish_name
     );
     let bytes = self
       .cloud_client

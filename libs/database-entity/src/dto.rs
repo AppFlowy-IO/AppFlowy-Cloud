@@ -309,7 +309,7 @@ pub struct AFCollabMember {
 #[derive(Serialize, Deserialize)]
 pub struct PublishInfo {
   pub namespace: Option<String>,
-  pub doc_name: String,
+  pub publish_name: String,
   pub view_id: Uuid,
 }
 
@@ -766,7 +766,7 @@ pub struct CreateAnswerMessageParams {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PublishCollabMetadata<Metadata> {
   pub view_id: uuid::Uuid,
-  pub doc_name: String,
+  pub publish_name: String,
   pub metadata: Metadata,
 }
 

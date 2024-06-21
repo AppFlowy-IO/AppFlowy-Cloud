@@ -150,7 +150,7 @@ pub async fn publish_collabs(
   publish_items: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
 ) -> Result<(), AppError> {
   for publish_item in publish_items {
-    check_collab_doc_name(publish_item.meta.doc_name.as_str())?;
+    check_collab_publish_name(publish_item.meta.publish_name.as_str())?;
   }
   insert_or_replace_publish_collab_metas(pg_pool, workspace_id, publisher_uuid, publish_items)
     .await?;
@@ -160,18 +160,18 @@ pub async fn publish_collabs(
 pub async fn get_published_collab(
   pg_pool: &PgPool,
   publish_namespace: &str,
-  doc_name: &str,
+  publish_name: &str,
 ) -> Result<serde_json::Value, AppError> {
-  let metadata = select_publish_collab_meta(pg_pool, publish_namespace, doc_name).await?;
+  let metadata = select_publish_collab_meta(pg_pool, publish_namespace, publish_name).await?;
   Ok(metadata)
 }
 
 pub async fn get_published_collab_blob(
   pg_pool: &PgPool,
   publish_namespace: &str,
-  doc_name: &str,
+  publish_name: &str,
 ) -> Result<Vec<u8>, AppError> {
-  select_published_collab_blob(pg_pool, publish_namespace, doc_name).await
+  select_published_collab_blob(pg_pool, publish_namespace, publish_name).await
 }
 
 pub async fn get_published_collab_info(
@@ -589,16 +589,16 @@ async fn check_workspace_owner_or_publisher(
   Ok(())
 }
 
-fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
+fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
   // Check len
-  if doc_name.len() > 20 {
+  if publish_name.len() > 20 {
     return Err(AppError::InvalidRequest(
       "Document name must be at most 20 characters long".to_string(),
     ));
   }
 
   // Only contain alphanumeric characters and hyphens
-  for c in doc_name.chars() {
+  for c in publish_name.chars() {
     if !c.is_alphanumeric() && c != '-' {
       return Err(AppError::InvalidRequest(
         "Document name must only contain alphanumeric characters and hyphens".to_string(),

@@ -189,7 +189,6 @@ impl CollabBroadcast {
     Stream: StreamExt<Item = MessageByObjectId> + Send + Sync + Unpin + 'static,
     <Sink as futures_util::Sink<CollabMessage>>::Error: std::error::Error + Send + Sync,
   {
-    let cloned_origin = subscriber_origin.clone();
     let sink_stop_tx = {
       let mut sink = sink.clone();
       let (stop_tx, mut stop_rx) = tokio::sync::mpsc::channel::<()>(1);
@@ -266,7 +265,6 @@ impl CollabBroadcast {
     };
 
     Subscription {
-      origin: cloned_origin,
       sink_stop_tx: Some(sink_stop_tx),
       stream_stop_tx: Some(stream_stop_tx),
     }
@@ -540,7 +538,6 @@ fn ack_code_from_error(error: &RTProtocolError) -> AckCode {
 /// connection error or closed connection).
 #[derive(Debug)]
 pub struct Subscription {
-  pub origin: CollabOrigin,
   sink_stop_tx: Option<tokio::sync::mpsc::Sender<()>>,
   stream_stop_tx: Option<tokio::sync::mpsc::Sender<()>>,
 }

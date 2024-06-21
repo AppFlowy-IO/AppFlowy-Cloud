@@ -11,7 +11,7 @@ use tracing::{error, event, Level};
 
 use app_error::AppError;
 use database::collab::CollabMetadata;
-use database_entity::dto::{AFCollabEmbeddings, CollabParams, QueryCollab, QueryCollabResult};
+use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
 use crate::collab::disk_cache::CollabDiskCache;
 use crate::collab::mem_cache::CollabMemCache;
@@ -149,14 +149,13 @@ impl CollabCache {
     workspace_id: &str,
     uid: &i64,
     params: &CollabParams,
-    embeddings: Option<&AFCollabEmbeddings>,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     let object_id = params.object_id.clone();
     let encode_collab_data = params.encoded_collab_v1.clone();
     self
       .disk_cache
-      .upsert_collab_with_transaction(workspace_id, uid, params, embeddings, transaction)
+      .upsert_collab_with_transaction(workspace_id, uid, params, transaction)
       .await?;
 
     // when the data is written to the disk cache but fails to be written to the memory cache
@@ -196,12 +195,11 @@ impl CollabCache {
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    embeddings: Option<&AFCollabEmbeddings>,
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     self
       .disk_cache
-      .upsert_collab_with_transaction(workspace_id, uid, &params, embeddings, transaction)
+      .upsert_collab_with_transaction(workspace_id, uid, &params, transaction)
       .await?;
     Ok(())
   }

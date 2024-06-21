@@ -19,8 +19,8 @@ use crate::shared_state::RealtimeSharedState;
 use app_error::AppError;
 use database::collab::{AppResult, CollabMetadata, CollabStorage, CollabStorageAccessControl};
 use database_entity::dto::{
-  AFAccessLevel, AFCollabEmbeddings, AFSnapshotMeta, AFSnapshotMetas, CollabParams,
-  InsertSnapshotParams, QueryCollab, QueryCollabParams, QueryCollabResult, SnapshotData,
+  AFAccessLevel, AFSnapshotMeta, AFSnapshotMetas, CollabParams, InsertSnapshotParams, QueryCollab,
+  QueryCollabParams, QueryCollabResult, SnapshotData,
 };
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -160,7 +160,6 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    embedding: Option<&AFCollabEmbeddings>,
     priority: WritePriority,
   ) -> Result<(), AppError> {
     if let Err(err) = params.check_encode_collab().await {
@@ -172,7 +171,7 @@ where
 
     self
       .queue
-      .push(workspace_id, uid, &params, embedding, priority)
+      .push(workspace_id, uid, &params, priority)
       .await
       .map_err(AppError::from)
   }
@@ -193,7 +192,6 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    embedding: Option<&AFCollabEmbeddings>,
     write_immediately: bool,
   ) -> AppResult<()> {
     params.validate()?;
@@ -224,7 +222,7 @@ where
       WritePriority::Low
     };
     self
-      .queue_insert_collab(workspace_id, uid, params, embedding, priority)
+      .queue_insert_collab(workspace_id, uid, params, priority)
       .await?;
     Ok(())
   }
@@ -234,7 +232,6 @@ where
     workspace_id: &str,
     uid: &i64,
     params: CollabParams,
-    embeddings: Option<&AFCollabEmbeddings>,
   ) -> AppResult<()> {
     params.validate()?;
 
@@ -246,7 +243,7 @@ where
       .update_policy(uid, &params.object_id, AFAccessLevel::FullAccess)
       .await?;
     self
-      .queue_insert_collab(workspace_id, uid, params, embeddings, WritePriority::High)
+      .queue_insert_collab(workspace_id, uid, params, WritePriority::High)
       .await?;
     Ok(())
   }
@@ -270,7 +267,7 @@ where
       .await?;
     self
       .cache
-      .insert_encode_collab_data(workspace_id, uid, &params, None, transaction)
+      .insert_encode_collab_data(workspace_id, uid, &params, transaction)
       .await?;
     Ok(())
   }

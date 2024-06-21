@@ -1,5 +1,6 @@
 use database_entity::dto::{
   AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
+  PublishCollabItem, PublishInfo,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -143,30 +144,31 @@ pub async fn select_user_is_workspace_owner(
   Ok(exists.unwrap_or(false))
 }
 
-pub async fn select_user_is_collab_publisher(
+pub async fn select_user_is_collab_publisher_for_all_views(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_uuid: &Uuid,
-  doc_name: &str,
+  view_ids: &[Uuid],
 ) -> Result<bool, AppError> {
-  let exists = sqlx::query_scalar!(
+  let count = sqlx::query_scalar!(
     r#"
-      SELECT EXISTS(
-        SELECT 1
-        FROM af_published_collab
-        WHERE workspace_id = $1
-            AND doc_name = $2
-            AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
-      );
+      SELECT COUNT(*)
+      FROM af_published_collab
+      WHERE workspace_id = $1
+        AND view_id = ANY($2)
+        AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
     "#,
     workspace_uuid,
-    doc_name,
+    view_ids,
     user_uuid,
   )
   .fetch_one(pg_pool)
   .await?;
 
-  Ok(exists.unwrap_or(false))
+  match count {
+    Some(c) => Ok(c == view_ids.len() as i64),
+    None => Ok(false),
+  }
 }
 
 #[inline]
@@ -887,32 +889,52 @@ pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = P
 }
 
 #[inline]
-pub async fn insert_or_replace_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-  doc_name: &str,
   publisher_uuid: &Uuid,
-  metadata: &serde_json::Value,
+  publish_item: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
 ) -> Result<(), AppError> {
+  let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.meta.view_id).collect();
+  let doc_names: Vec<String> = publish_item
+    .iter()
+    .map(|item| item.meta.doc_name.clone())
+    .collect();
+  let metadatas: Vec<serde_json::Value> = publish_item
+    .iter()
+    .map(|item| item.meta.metadata.clone())
+    .collect();
+
+  let blobs: Vec<Vec<u8>> = publish_item.iter().map(|item| item.data.clone()).collect();
   let res = sqlx::query!(
     r#"
-      INSERT INTO af_published_collab (doc_name, published_by, workspace_id, metadata)
-      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
-      ON CONFLICT (workspace_id, doc_name) DO UPDATE
-      SET metadata = $4
+      INSERT INTO af_published_collab (workspace_id, view_id, doc_name, published_by, metadata, blob)
+      SELECT * FROM UNNEST(
+        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $7))::uuid[],
+        $2::uuid[],
+        $3::text[],
+        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $7))::bigint[],
+        $5::jsonb[],
+        $6::bytea[]
+      )
+      ON CONFLICT (workspace_id, view_id) DO UPDATE
+      SET metadata = EXCLUDED.metadata
     "#,
-    doc_name,
-    publisher_uuid,
     workspace_id,
-    metadata,
+    &view_ids,
+    &doc_names,
+    publisher_uuid,
+    &metadatas,
+    &blobs,
+    publish_item.len() as i32,
   )
   .execute(executor)
   .await?;
 
-  if res.rows_affected() != 1 {
-    tracing::error!(
-      "Failed to insert or replace publish collab meta, workspace_id: {}, doc_name: {}, publisher_uuid: {}, rows_affected: {}",
-      workspace_id, doc_name, publisher_uuid, res.rows_affected()
+  if res.rows_affected() != publish_item.len() as u64 {
+    tracing::warn!(
+      "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}",
+      workspace_id, publisher_uuid, res.rows_affected()
     );
   }
 
@@ -942,59 +964,30 @@ pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>
 }
 
 #[inline]
-pub async fn delete_published_collab<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_ids: &[Uuid],
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
       DELETE FROM af_published_collab
-      WHERE workspace_id = $1 AND doc_name = $2
+      WHERE workspace_id = $1
+        AND view_id = ANY($2)
     "#,
     workspace_id,
-    doc_name,
+    view_ids,
   )
   .execute(executor)
   .await?;
 
-  if res.rows_affected() != 1 {
+  if res.rows_affected() != view_ids.len() as u64 {
     tracing::error!(
-      "Failed to delete published collab, workspace_id: {}, doc_name: {}, rows_affected: {}",
+      "Failed to delete published collabs, workspace_id: {}, view_ids: {:?}, rows_affected: {}",
       workspace_id,
-      doc_name,
+      view_ids,
       res.rows_affected()
     );
-  }
-
-  Ok(())
-}
-
-#[inline]
-pub async fn insert_or_replace_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
-  executor: E,
-  workspace_id: &Uuid,
-  doc_name: &str,
-  blob: &[u8],
-) -> Result<(), AppError> {
-  let res = sqlx::query!(
-    r#"
-      UPDATE af_published_collab
-      SET blob = $1
-      WHERE workspace_id = $2 AND doc_name = $3
-    "#,
-    blob,
-    workspace_id,
-    doc_name,
-  )
-  .execute(executor)
-  .await?;
-
-  if res.rows_affected() != 1 {
-    tracing::error!(
-        "Failed to insert or replace published collab blob, workspace_id: {}, doc_name: {}, rows_affected: {}",
-        workspace_id, doc_name, res.rows_affected()
-      );
   }
 
   Ok(())
@@ -1015,6 +1008,28 @@ pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgre
     "#,
     publish_namespace,
     doc_name,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<PublishInfo, AppError> {
+  let res = sqlx::query_as!(
+    PublishInfo,
+    r#"
+      SELECT
+        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,
+        doc_name,
+        view_id
+      FROM af_published_collab apc
+      WHERE view_id = $1
+    "#,
+    view_id,
   )
   .fetch_one(executor)
   .await?;

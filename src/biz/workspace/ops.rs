@@ -1,4 +1,7 @@
+use database_entity::dto::PublishCollabItem;
 use std::collections::HashMap;
+
+use database_entity::dto::PublishInfo;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
@@ -16,15 +19,14 @@ use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 
 use database::user::select_uid_from_email;
 use database::workspace::{
-  change_workspace_icon, delete_from_workspace, delete_published_collab, delete_workspace_members,
-  get_invitation_by_id, insert_or_replace_publish_collab_meta,
-  insert_or_replace_published_collab_blob, insert_user_workspace, insert_workspace_invitation,
-  rename_workspace, select_all_user_workspaces, select_publish_collab_meta,
-  select_published_collab_blob, select_user_is_collab_publisher, select_user_is_workspace_owner,
-  select_workspace, select_workspace_invitations_for_user, select_workspace_member,
-  select_workspace_member_list, select_workspace_publish_namespace,
-  select_workspace_publish_namespace_exists, select_workspace_settings,
-  select_workspace_total_collab_bytes, update_updated_at_of_workspace,
+  change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
+  get_invitation_by_id, insert_or_replace_publish_collab_metas, insert_user_workspace,
+  insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
+  select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
+  select_user_is_collab_publisher_for_all_views, select_user_is_workspace_owner, select_workspace,
+  select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
+  select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
+  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
   update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
   upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
@@ -141,29 +143,17 @@ pub async fn get_workspace_publish_namespace(
   Ok(namespace)
 }
 
-pub async fn publish_collab(
+pub async fn publish_collabs(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  doc_name: &str,
   publisher_uuid: &Uuid,
-  metadata: &serde_json::Value,
+  publish_items: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, doc_name).await?;
-  check_collab_doc_name(doc_name).await?;
-  insert_or_replace_publish_collab_meta(pg_pool, workspace_id, doc_name, publisher_uuid, metadata)
+  for publish_item in publish_items {
+    check_collab_doc_name(publish_item.meta.doc_name.as_str())?;
+  }
+  insert_or_replace_publish_collab_metas(pg_pool, workspace_id, publisher_uuid, publish_items)
     .await?;
-  Ok(())
-}
-
-pub async fn put_published_collab_blob(
-  pg_pool: &PgPool,
-  workspace_id: &Uuid,
-  doc_name: &str,
-  publisher_uuid: &Uuid,
-  collab_data: &[u8],
-) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, publisher_uuid, workspace_id, doc_name).await?;
-  insert_or_replace_published_collab_blob(pg_pool, workspace_id, doc_name, collab_data).await?;
   Ok(())
 }
 
@@ -184,14 +174,21 @@ pub async fn get_published_collab_blob(
   select_published_collab_blob(pg_pool, publish_namespace, doc_name).await
 }
 
+pub async fn get_published_collab_info(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+) -> Result<PublishInfo, AppError> {
+  select_published_collab_info(pg_pool, view_id).await
+}
+
 pub async fn delete_published_workspace_collab(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_ids: &[Uuid],
   user_uuid: &Uuid,
 ) -> Result<(), AppError> {
-  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
-  delete_published_collab(pg_pool, workspace_id, doc_name).await?;
+  check_workspace_owner_or_publisher(pg_pool, user_uuid, workspace_id, view_ids).await?;
+  delete_published_collabs(pg_pool, workspace_id, view_ids).await?;
   Ok(())
 }
 
@@ -576,12 +573,13 @@ async fn check_workspace_owner_or_publisher(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
-  doc_name: &str,
+  view_id: &[Uuid],
 ) -> Result<(), AppError> {
   let is_owner = select_user_is_workspace_owner(pg_pool, user_uuid, workspace_id).await?;
   if !is_owner {
     let is_publisher =
-      select_user_is_collab_publisher(pg_pool, user_uuid, workspace_id, doc_name).await?;
+      select_user_is_collab_publisher_for_all_views(pg_pool, user_uuid, workspace_id, view_id)
+        .await?;
     if !is_publisher {
       return Err(AppError::UserUnAuthorized(
         "User is not the owner of the workspace or the publisher of the document".to_string(),
@@ -591,7 +589,7 @@ async fn check_workspace_owner_or_publisher(
   Ok(())
 }
 
-async fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
+fn check_collab_doc_name(doc_name: &str) -> Result<(), AppError> {
   // Check len
   if doc_name.len() > 20 {
     return Err(AppError::InvalidRequest(

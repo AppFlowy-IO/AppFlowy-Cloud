@@ -198,16 +198,18 @@ impl Display for EmbeddingsModel {
 #[repr(u8)]
 pub enum AIModel {
   #[default]
-  GPT35 = 0,
-  GPT4o = 1,
-  Claude3Sonnet = 2,
-  Claude3Opus = 3,
-  Local = 4,
+  DefaultModel = 0,
+  GPT35 = 1,
+  GPT4o = 2,
+  Claude3Sonnet = 3,
+  Claude3Opus = 4,
+  Local = 5,
 }
 
 impl AIModel {
   pub fn to_str(&self) -> &str {
     match self {
+      AIModel::DefaultModel => "default-model",
       AIModel::GPT35 => "gpt-3.5-turbo",
       AIModel::GPT4o => "gpt-4o",
       AIModel::Claude3Sonnet => "claude-3-sonnet-20240229",
@@ -227,7 +229,7 @@ impl FromStr for AIModel {
       "claude-3-sonnet" => Ok(AIModel::Claude3Sonnet),
       "claude-3-opus" => Ok(AIModel::Claude3Opus),
       "local" => Ok(AIModel::Local),
-      _ => Ok(AIModel::GPT35),
+      _ => Ok(AIModel::DefaultModel),
     }
   }
 }

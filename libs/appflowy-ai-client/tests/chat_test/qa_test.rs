@@ -1,5 +1,6 @@
 use crate::appflowy_ai_client;
 
+use appflowy_ai_client::dto::AIModel;
 use futures::stream::StreamExt;
 
 #[tokio::test]
@@ -8,13 +9,13 @@ async fn qa_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let resp = client
-    .send_question(&chat_id, "I feel hungry")
+    .send_question(&chat_id, "I feel hungry", &AIModel::GPT35)
     .await
     .unwrap();
   assert!(!resp.content.is_empty());
 
   let questions = client
-    .get_related_question(&chat_id, &1)
+    .get_related_question(&chat_id, &1, &AIModel::GPT35)
     .await
     .unwrap()
     .items;
@@ -27,7 +28,7 @@ async fn stop_stream_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let mut stream = client
-    .stream_question(&chat_id, "I feel hungry")
+    .stream_question(&chat_id, "I feel hungry", &AIModel::GPT35)
     .await
     .unwrap();
 
@@ -49,7 +50,7 @@ async fn stream_test() {
   client.health_check().await.unwrap();
   let chat_id = uuid::Uuid::new_v4().to_string();
   let stream = client
-    .stream_question(&chat_id, "I feel hungry")
+    .stream_question(&chat_id, "I feel hungry", &AIModel::GPT35)
     .await
     .unwrap();
 

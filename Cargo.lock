@@ -2645,6 +2645,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "app-error",
+ "appflowy-ai-client",
  "bincode",
  "chrono",
  "collab-entity",

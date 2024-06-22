@@ -1,12 +1,14 @@
+use crate::api::util::ai_model_from_header;
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
-use actix_web::{web, Scope};
+use actix_web::{web, HttpRequest, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::{CompleteTextResponse, TranslateRowParams, TranslateRowResponse};
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
+
 use tracing::{error, instrument};
 
 pub fn ai_completion_scope() -> Scope {
@@ -19,11 +21,13 @@ pub fn ai_completion_scope() -> Scope {
 async fn complete_text_handler(
   state: Data<AppState>,
   payload: Json<CompleteTextParams>,
+  req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<CompleteTextResponse>> {
+  let ai_model = ai_model_from_header(&req);
   let params = payload.into_inner();
   let resp = state
     .ai_client
-    .completion_text(&params.text, params.completion_type)
+    .completion_text(&params.text, params.completion_type, ai_model)
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
   Ok(AppResponse::Ok().with_data(resp).into())
@@ -33,6 +37,7 @@ async fn complete_text_handler(
 async fn summarize_row_handler(
   state: Data<AppState>,
   payload: Json<SummarizeRowParams>,
+  req: HttpRequest,
 ) -> actix_web::Result<Json<AppResponse<SummarizeRowResponse>>> {
   let params = payload.into_inner();
   match params.data {
@@ -50,7 +55,8 @@ async fn summarize_row_handler(
         );
       }
 
-      let result = state.ai_client.summarize_row(&content).await;
+      let ai_model = ai_model_from_header(&req);
+      let result = state.ai_client.summarize_row(&content, ai_model).await;
       let resp = match result {
         Ok(resp) => SummarizeRowResponse { text: resp.text },
         Err(err) => {
@@ -70,10 +76,11 @@ async fn summarize_row_handler(
 async fn translate_row_handler(
   state: web::Data<AppState>,
   payload: web::Json<TranslateRowParams>,
+  req: HttpRequest,
 ) -> actix_web::Result<Json<AppResponse<TranslateRowResponse>>> {
   let params = payload.into_inner();
-
-  match state.ai_client.translate_row(params.data).await {
+  let ai_model = ai_model_from_header(&req);
+  match state.ai_client.translate_row(params.data, ai_model).await {
     Ok(resp) => Ok(AppResponse::Ok().with_data(resp).into()),
     Err(err) => {
       error!("Failed to translate row: {:?}", err);

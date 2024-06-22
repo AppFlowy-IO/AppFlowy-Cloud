@@ -1,7 +1,7 @@
 use crate::dto::{
-  ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document, EmbeddingRequest,
-  EmbeddingResponse, MessageData, RepeatedRelatedQuestion, SearchDocumentsRequest,
-  SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document,
+  EmbeddingRequest, EmbeddingResponse, MessageData, RepeatedRelatedQuestion,
+  SearchDocumentsRequest, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -11,9 +11,12 @@ use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
+
 use std::borrow::Cow;
 
 use tracing::{info, trace};
+
+const AI_MODEL_HEADER_KEY: &str = "ai-model";
 
 #[derive(Clone, Debug)]
 pub struct AppFlowyAIClient {
@@ -41,6 +44,7 @@ impl AppFlowyAIClient {
     &self,
     text: &str,
     completion_type: CompletionType,
+    model: AIModel,
   ) -> Result<CompleteTextResponse, AIError> {
     if text.is_empty() {
       return Err(AIError::InvalidRequest("Empty text".to_string()));
@@ -54,6 +58,7 @@ impl AppFlowyAIClient {
     let url = format!("{}/completion", self.url);
     let resp = self
       .http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&params)
       .send()
       .await?;
@@ -65,6 +70,7 @@ impl AppFlowyAIClient {
   pub async fn summarize_row(
     &self,
     params: &Map<String, Value>,
+    model: AIModel,
   ) -> Result<SummarizeRowResponse, AIError> {
     if params.is_empty() {
       return Err(AIError::InvalidRequest("Empty content".to_string()));
@@ -74,6 +80,7 @@ impl AppFlowyAIClient {
     trace!("summarize_row url: {}", url);
     let resp = self
       .http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(params)
       .send()
       .await?;
@@ -85,10 +92,12 @@ impl AppFlowyAIClient {
   pub async fn translate_row(
     &self,
     data: TranslateRowData,
+    model: AIModel,
   ) -> Result<TranslateRowResponse, AIError> {
     let url = format!("{}/translate_row", self.url);
     let resp = self
       .http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&data)
       .send()
       .await?;
@@ -139,7 +148,12 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
-  pub async fn send_question(&self, chat_id: &str, content: &str) -> Result<ChatAnswer, AIError> {
+  pub async fn send_question(
+    &self,
+    chat_id: &str,
+    content: &str,
+    model: &AIModel,
+  ) -> Result<ChatAnswer, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
       data: MessageData {
@@ -149,6 +163,7 @@ impl AppFlowyAIClient {
     let url = format!("{}/chat/message", self.url);
     let resp = self
       .http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&json)
       .send()
       .await?;
@@ -161,6 +176,7 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     content: &str,
+    model: &AIModel,
   ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
     let json = ChatQuestion {
       chat_id: chat_id.to_string(),
@@ -171,6 +187,7 @@ impl AppFlowyAIClient {
     let url = format!("{}/chat/message/stream", self.url);
     let resp = self
       .http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
       .json(&json)
       .send()
       .await?;
@@ -181,9 +198,14 @@ impl AppFlowyAIClient {
     &self,
     chat_id: &str,
     message_id: &i64,
+    model: &AIModel,
   ) -> Result<RepeatedRelatedQuestion, AIError> {
     let url = format!("{}/chat/{chat_id}/{message_id}/related_question", self.url);
-    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    let resp = self
+      .http_client(Method::GET, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .send()
+      .await?;
     AIResponse::<RepeatedRelatedQuestion>::from_response(resp)
       .await?
       .into_data()

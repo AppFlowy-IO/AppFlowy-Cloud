@@ -33,6 +33,7 @@ use url::Url;
 use crate::ws::ConnectInfo;
 use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
+use shared_entity::dto::ai_dto::AIModel;
 
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
@@ -99,6 +100,7 @@ pub struct Client {
   pub(crate) is_refreshing_token: Arc<AtomicBool>,
   pub(crate) refresh_ret_txs: Arc<RwLock<Vec<RefreshTokenSender>>>,
   pub(crate) config: ClientConfiguration,
+  pub(crate) ai_model: Arc<RwLock<AIModel>>,
 }
 
 pub(crate) type RefreshTokenSender = tokio::sync::oneshot::Sender<Result<(), AppResponseError>>;
@@ -144,6 +146,8 @@ impl Client {
       );
     }
 
+    let ai_model = Arc::new(RwLock::new(AIModel::GPT35));
+
     Self {
       base_url: base_url.to_string(),
       ws_addr: ws_addr.to_string(),
@@ -155,6 +159,7 @@ impl Client {
       config,
       device_id: device_id.to_string(),
       client_version,
+      ai_model,
     }
   }
 
@@ -168,6 +173,11 @@ impl Client {
 
   pub fn gotrue_url(&self) -> &str {
     &self.gotrue_client.base_url
+  }
+
+  pub fn set_ai_model(&self, model: AIModel) {
+    info!("using ai model: {:?}", model);
+    *self.ai_model.write() = model;
   }
 
   #[instrument(level = "debug", skip_all, err)]
@@ -812,6 +822,7 @@ impl Client {
       .header("client-version", self.client_version.to_string())
       .header("client-timestamp", ts_now.to_string())
       .header("device_id", self.device_id.clone())
+      .header("ai-model", self.ai_model.read().to_str())
       .bearer_auth(access_token);
     Ok(request_builder)
   }

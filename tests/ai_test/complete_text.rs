@@ -1,10 +1,12 @@
-use appflowy_ai_client::dto::CompletionType;
+use appflowy_ai_client::dto::{AIModel, CompletionType};
 use client_api_test::TestClient;
 use shared_entity::dto::ai_dto::CompleteTextParams;
 
 #[tokio::test]
 async fn improve_writing_test() {
   let test_client = TestClient::new_user().await;
+  test_client.api_client.set_ai_model(AIModel::Claude3Opus);
+
   let workspace_id = test_client.workspace_id().await;
   let params = CompleteTextParams {
     text: "I feel hungry".to_string(),

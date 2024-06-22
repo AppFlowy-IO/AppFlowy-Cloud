@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
@@ -189,6 +190,44 @@ impl Display for EmbeddingsModel {
       EmbeddingsModel::TextEmbedding3Small => write!(f, "text-embedding-3-small"),
       EmbeddingsModel::TextEmbedding3Large => write!(f, "text-embedding-3-large"),
       EmbeddingsModel::TextEmbeddingAda002 => write!(f, "text-embedding-ada-002"),
+    }
+  }
+}
+
+#[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum AIModel {
+  #[default]
+  GPT35 = 0,
+  GPT4o = 1,
+  Claude3Sonnet = 2,
+  Claude3Opus = 3,
+  Local = 4,
+}
+
+impl AIModel {
+  pub fn to_str(&self) -> &str {
+    match self {
+      AIModel::GPT35 => "gpt-3.5-turbo",
+      AIModel::GPT4o => "gpt-4o",
+      AIModel::Claude3Sonnet => "claude-3-sonnet-20240229",
+      AIModel::Claude3Opus => "claude-3-opus",
+      AIModel::Local => "local",
+    }
+  }
+}
+
+impl FromStr for AIModel {
+  type Err = anyhow::Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "gpt-3.5-turbo" => Ok(AIModel::GPT35),
+      "gpt-4o" => Ok(AIModel::GPT4o),
+      "claude-3-sonnet" => Ok(AIModel::Claude3Sonnet),
+      "claude-3-opus" => Ok(AIModel::Claude3Opus),
+      "local" => Ok(AIModel::Local),
+      _ => Ok(AIModel::GPT35),
     }
   }
 }

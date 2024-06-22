@@ -4,7 +4,7 @@ use crate::biz::chat::ops::{
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{web, HttpRequest, HttpResponse, Scope};
 
 use app_error::AppError;
 use appflowy_ai_client::dto::RepeatedRelatedQuestion;
@@ -27,6 +27,7 @@ use tokio::task;
 
 use database::chat;
 
+use crate::api::util::ai_model_from_header;
 use database::chat::chat_ops::insert_answer_message;
 use tracing::{instrument, trace};
 use validator::Validate;
@@ -91,6 +92,7 @@ async fn create_chat_message_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateChatMessageParams>,
   uuid: UserUuid,
+  req: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
   let (_workspace_id, chat_id) = path.into_inner();
   let params = payload.into_inner();
@@ -99,6 +101,7 @@ async fn create_chat_message_handler(
     return Ok(HttpResponse::from_error(AppError::from(err)));
   }
 
+  let ai_model = ai_model_from_header(&req);
   let uid = state.user_cache.get_user_uid(&uuid).await?;
   let message_stream = create_chat_message(
     &state.pg_pool,
@@ -106,6 +109,7 @@ async fn create_chat_message_handler(
     chat_id,
     params,
     state.ai_client.clone(),
+    ai_model,
   )
   .await;
 
@@ -119,20 +123,24 @@ async fn create_chat_message_handler(
 async fn update_chat_message_handler(
   state: Data<AppState>,
   payload: Json<UpdateChatMessageContentParams>,
+  req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<()>> {
   let params = payload.into_inner();
-  update_chat_message(&state.pg_pool, params, state.ai_client.clone()).await?;
+  let ai_model = ai_model_from_header(&req);
+  update_chat_message(&state.pg_pool, params, state.ai_client.clone(), ai_model).await?;
   Ok(AppResponse::Ok().into())
 }
 
 async fn get_related_message_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<RepeatedRelatedQuestion>> {
   let (_workspace_id, chat_id, message_id) = path.into_inner();
+  let ai_model = ai_model_from_header(&req);
   let resp = state
     .ai_client
-    .get_related_question(&chat_id, &message_id)
+    .get_related_question(&chat_id, &message_id, &ai_model)
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
   Ok(AppResponse::Ok().with_data(resp).into())
@@ -175,13 +183,16 @@ async fn create_answer_handler(
 async fn gen_answer_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
   let (_workspace_id, chat_id, message_id) = path.into_inner();
+  let ai_model = ai_model_from_header(&req);
   let message = generate_chat_message_answer(
     &state.pg_pool,
     state.ai_client.clone(),
     message_id,
     &chat_id,
+    ai_model,
   )
   .await?;
   Ok(AppResponse::Ok().with_data(message).into())
@@ -191,12 +202,14 @@ async fn gen_answer_handler(
 async fn answer_stream_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
+  req: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
   let (_workspace_id, chat_id, question_id) = path.into_inner();
   let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let ai_model = ai_model_from_header(&req);
   let answer_stream = state
     .ai_client
-    .stream_question(&chat_id, &content)
+    .stream_question(&chat_id, &content, &ai_model)
     .await
     .map_err(|err| AppError::Internal(err.into()))?;
 

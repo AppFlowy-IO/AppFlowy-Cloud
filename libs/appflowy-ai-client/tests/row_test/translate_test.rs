@@ -1,6 +1,6 @@
 use crate::appflowy_ai_client;
 
-use appflowy_ai_client::dto::{TranslateItem, TranslateRowData};
+use appflowy_ai_client::dto::{AIModel, TranslateItem, TranslateRowData};
 
 #[tokio::test]
 async fn translate_row_test() {
@@ -20,6 +20,6 @@ async fn translate_row_test() {
     include_header: false,
   };
 
-  let result = client.translate_row(data).await.unwrap();
+  let result = client.translate_row(data, AIModel::GPT35).await.unwrap();
   assert_eq!(result.items.len(), 2);
 }

@@ -1,4 +1,5 @@
 use crate::util::{validate_not_empty_payload, validate_not_empty_str};
+use appflowy_ai_client::dto::AIModel;
 use chrono::{DateTime, Utc};
 use collab_entity::CollabType;
 use serde::{Deserialize, Serialize};
@@ -601,6 +602,8 @@ pub struct UpdateChatMessageContentParams {
   pub chat_id: String,
   pub message_id: i64,
   pub content: String,
+  #[serde(default)]
+  pub model: AIModel,
 }
 
 #[derive(Debug, Clone, Default, Serialize_repr, Deserialize_repr)]

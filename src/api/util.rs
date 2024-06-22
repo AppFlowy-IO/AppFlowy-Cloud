@@ -3,6 +3,8 @@ use actix_http::header::HeaderMap;
 use actix_web::web::Payload;
 use app_error::AppError;
 
+use actix_web::HttpRequest;
+use appflowy_ai_client::dto::AIModel;
 use async_trait::async_trait;
 use byteorder::{ByteOrder, LittleEndian};
 use collab_rt_protocol::validate_encode_collab;
@@ -162,4 +164,16 @@ fn copy_buffer(src: &[u8], dest: &mut [u8]) -> usize {
   let bytes_to_copy = std::cmp::min(src.len(), dest.len());
   dest[..bytes_to_copy].copy_from_slice(&src[..bytes_to_copy]);
   bytes_to_copy
+}
+
+#[inline]
+pub(crate) fn ai_model_from_header(req: &HttpRequest) -> AIModel {
+  req
+    .headers()
+    .get("ai-model")
+    .and_then(|header| {
+      let header = header.to_str().ok()?;
+      AIModel::from_str(header).ok()
+    })
+    .unwrap_or(AIModel::GPT35)
 }

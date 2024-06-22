@@ -18,6 +18,7 @@ use futures::stream::Stream;
 use sqlx::PgPool;
 use tracing::error;
 
+use appflowy_ai_client::dto::AIModel;
 use validator::Validate;
 
 pub(crate) async fn create_chat(
@@ -44,6 +45,7 @@ pub async fn update_chat_message(
   pg_pool: &PgPool,
   params: UpdateChatMessageContentParams,
   ai_client: AppFlowyAIClient,
+  ai_model: AIModel,
 ) -> Result<(), AppError> {
   let mut txn = pg_pool.begin().await?;
   delete_answer_message_by_question_message_id(&mut txn, params.message_id).await?;
@@ -56,7 +58,7 @@ pub async fn update_chat_message(
   })?;
 
   let new_answer = ai_client
-    .send_question(&params.chat_id, &params.content)
+    .send_question(&params.chat_id, &params.content, &ai_model)
     .await?;
   let _answer = insert_answer_message(
     pg_pool,
@@ -75,9 +77,12 @@ pub async fn generate_chat_message_answer(
   ai_client: AppFlowyAIClient,
   question_message_id: i64,
   chat_id: &str,
+  ai_model: AIModel,
 ) -> Result<ChatMessage, AppError> {
   let content = chat::chat_ops::select_chat_message_content(pg_pool, question_message_id).await?;
-  let new_answer = ai_client.send_question(chat_id, &content).await?;
+  let new_answer = ai_client
+    .send_question(chat_id, &content, &ai_model)
+    .await?;
 
   // Save the answer to the database
   let mut txn = pg_pool.begin().await?;
@@ -105,6 +110,7 @@ pub async fn create_chat_message(
   chat_id: String,
   params: CreateChatMessageParams,
   ai_client: AppFlowyAIClient,
+  ai_model: AIModel,
 ) -> impl Stream<Item = Result<Bytes, AppError>> {
   let params = params.clone();
   let chat_id = chat_id.clone();
@@ -141,7 +147,7 @@ pub async fn create_chat_message(
       match params.message_type {
           ChatMessageType::System => {}
           ChatMessageType::User => {
-              let content = match ai_client.send_question(&chat_id, &params.content).await {
+              let content = match ai_client.send_question(&chat_id, &params.content, &ai_model).await {
                   Ok(response) => response.content,
                   Err(err) => {
                       error!("Failed to send question to AI: {}", err);

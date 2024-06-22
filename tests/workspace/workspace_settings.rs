@@ -48,9 +48,7 @@ async fn get_and_set_workspace_by_non_owner() {
   let resp = bob_client
     .update_workspace_settings(
       &alice_workspace_id.to_string(),
-      &AFWorkspaceSettings {
-        disable_indexing: true,
-      },
+      &AFWorkspaceSettings::new().disable_indexing(true),
     )
     .await;
   assert!(

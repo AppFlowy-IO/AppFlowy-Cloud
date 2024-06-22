@@ -515,6 +515,28 @@ pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 pub struct AFWorkspaceSettings {
   #[serde(default)]
   pub disable_indexing: bool,
+
+  #[serde(default)]
+  pub ai_model: String,
+}
+
+impl AFWorkspaceSettings {
+  pub fn new() -> Self {
+    Self::default()
+  }
+  pub fn disable_indexing(mut self, disable_indexing: bool) -> Self {
+    self.disable_indexing = disable_indexing;
+    self
+  }
+}
+
+impl Default for AFWorkspaceSettings {
+  fn default() -> Self {
+    Self {
+      disable_indexing: false,
+      ai_model: "".to_string(),
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize)]

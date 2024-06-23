@@ -32,7 +32,6 @@ pub struct CollaborationServer<S, AC> {
   group_manager: Arc<GroupManager<S, AC>>,
   connect_state: ConnectState,
   group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>>,
-  access_control: Arc<AC>,
   storage: Arc<S>,
   #[allow(dead_code)]
   metrics: Arc<CollabRealtimeMetrics>,
@@ -82,7 +81,6 @@ where
       group_manager,
       connect_state,
       group_sender_by_object_id,
-      access_control,
       metrics,
       metrics_calculate,
     })
@@ -168,7 +166,6 @@ where
     let group_sender_by_object_id = self.group_sender_by_object_id.clone();
     let client_msg_router_by_user = self.connect_state.client_message_routers.clone();
     let group_manager = self.group_manager.clone();
-    let access_control = self.access_control.clone();
 
     Box::pin(async move {
       for (object_id, collab_messages) in message_by_oid {
@@ -186,7 +183,6 @@ where
               let runner = GroupCommandRunner {
                 group_manager: group_manager.clone(),
                 msg_router_by_user: client_msg_router_by_user.clone(),
-                access_control: access_control.clone(),
                 recv: Some(recv),
               };
 

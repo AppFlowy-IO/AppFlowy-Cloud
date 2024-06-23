@@ -203,7 +203,7 @@ pub enum AIModel {
   GPT4o = 2,
   Claude3Sonnet = 3,
   Claude3Opus = 4,
-  Local = 5,
+  Local = 5, // work in progress
 }
 
 impl AIModel {

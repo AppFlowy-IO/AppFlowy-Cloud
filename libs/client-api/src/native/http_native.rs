@@ -32,8 +32,25 @@ use tokio_retry::{Retry, RetryIf};
 use tracing::{event, info, instrument, trace};
 
 pub use infra::file_util::ChunkedBytes;
+use shared_entity::dto::ai_dto::CompleteTextParams;
 
 impl Client {
+  pub async fn stream_completion_text(
+    &self,
+    workspace_id: &str,
+    params: CompleteTextParams,
+  ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
+    let url = format!("{}/api/ai/{}/complete/stream", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::answer_response_stream(resp).await
+  }
+
   pub async fn create_upload(
     &self,
     workspace_id: &str,

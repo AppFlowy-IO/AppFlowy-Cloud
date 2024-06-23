@@ -511,10 +511,47 @@ pub struct AFWorkspace {
 #[derive(Serialize, Deserialize)]
 pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AFWorkspaceSettings {
   #[serde(default)]
-  pub disable_indexing: bool,
+  pub disable_search_indexing: bool,
+
+  #[serde(default)]
+  pub ai_model: String,
+}
+
+impl Default for AFWorkspaceSettings {
+  fn default() -> Self {
+    Self {
+      disable_search_indexing: false,
+      ai_model: "".to_string(),
+    }
+  }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct AFWorkspaceSettingsChange {
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub disable_search_indexing: Option<bool>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub ai_model: Option<String>,
+}
+
+impl AFWorkspaceSettingsChange {
+  pub fn new() -> Self {
+    Self {
+      disable_search_indexing: None,
+      ai_model: None,
+    }
+  }
+  pub fn disable_search_indexing(mut self, disable_search_indexing: bool) -> Self {
+    self.disable_search_indexing = Some(disable_search_indexing);
+    self
+  }
+  pub fn ai_model(mut self, ai_model: String) -> Self {
+    self.ai_model = Some(ai_model);
+    self
+  }
 }
 
 #[derive(Serialize, Deserialize)]

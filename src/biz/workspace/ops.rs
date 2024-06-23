@@ -1,4 +1,4 @@
-use database_entity::dto::PublishCollabItem;
+use database_entity::dto::{AFWorkspaceSettingsChange, PublishCollabItem};
 use std::collections::HashMap;
 
 use database_entity::dto::PublishInfo;
@@ -517,8 +517,8 @@ pub async fn update_workspace_settings(
   workspace_access_control: &impl WorkspaceAccessControl,
   workspace_id: &Uuid,
   owner_uid: &i64,
-  workspace_settings: &AFWorkspaceSettings,
-) -> Result<(), AppResponseError> {
+  change: AFWorkspaceSettingsChange,
+) -> Result<AFWorkspaceSettings, AppResponseError> {
   let has_access = workspace_access_control
     .enforce_role(owner_uid, &workspace_id.to_string(), AFRole::Owner)
     .await?;
@@ -531,9 +531,21 @@ pub async fn update_workspace_settings(
   }
 
   let mut tx = pg_pool.begin().await?;
-  upsert_workspace_settings(&mut tx, workspace_id, workspace_settings).await?;
+  let mut setting = select_workspace_settings(tx.deref_mut(), workspace_id)
+    .await?
+    .unwrap_or_default();
+  if let Some(disable_indexing) = change.disable_search_indexing {
+    setting.disable_search_indexing = disable_indexing;
+  }
+
+  if let Some(ai_model) = change.ai_model {
+    setting.ai_model = ai_model;
+  }
+
+  // Update the workspace settings in the database
+  upsert_workspace_settings(&mut tx, workspace_id, &setting).await?;
   tx.commit().await?;
-  Ok(())
+  Ok(setting)
 }
 
 async fn check_workspace_owner(

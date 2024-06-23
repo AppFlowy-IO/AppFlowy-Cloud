@@ -819,7 +819,7 @@ impl Client {
       ("client-version", self.client_version.to_string()),
       ("client-timestamp", ts_now.to_string()),
       ("device_id", self.device_id.clone()),
-      ("ai-model", self.ai_model.read().unwrap().clone()),
+      ("ai-model", self.ai_model.read().await.clone()),
     ];
     trace!(
       "start request: {}, method: {}, headers: {:?}",

@@ -17,6 +17,7 @@ pub struct Config {
   pub s3: S3Setting,
   pub appflowy_ai: AppFlowyAISetting,
   pub grpc_history: GrpcHistorySetting,
+  pub collab: CollabSetting,
   pub mailer: MailerSetting,
 }
 
@@ -122,6 +123,13 @@ pub struct GrpcHistorySetting {
   pub addrs: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct CollabSetting {
+  pub group_persistence_interval_secs: u64,
+  pub edit_state_max_count: u32,
+  pub edit_state_max_secs: i64,
+}
+
 // Default values favor local development.
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let config = Config {
@@ -176,6 +184,15 @@ pub fn get_configuration() -> Result<Config, anyhow::Error> {
     },
     grpc_history: GrpcHistorySetting {
       addrs: get_env_var("APPFLOWY_GRPC_HISTORY_ADDRS", "http://localhost:50051"),
+    },
+    collab: CollabSetting {
+      group_persistence_interval_secs: get_env_var(
+        "APPFLOWY_COLLAB_GROUP_PERSISTENCE_INTERVAL",
+        "60",
+      )
+      .parse()?,
+      edit_state_max_count: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT", "100").parse()?,
+      edit_state_max_secs: get_env_var("APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS", "360").parse()?,
     },
     mailer: MailerSetting {
       smtp_host: get_env_var("APPFLOWY_MAILER_SMTP_HOST", "smtp.gmail.com"),

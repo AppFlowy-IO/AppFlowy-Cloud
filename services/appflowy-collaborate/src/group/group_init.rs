@@ -24,6 +24,7 @@ use collab_stream::error::StreamError;
 use collab_stream::model::{CollabUpdateEvent, StreamBinary};
 use collab_stream::stream_group::StreamGroup;
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, error, event, trace};
 use yrs::updates::decoder::Decode;
@@ -64,11 +65,18 @@ impl CollabGroup {
     storage: Arc<S>,
     is_new_collab: bool,
     collab_redis_stream: Arc<CollabRedisStream>,
+    persistence_interval: Duration,
+    edit_state_max_count: u32,
+    edit_state_max_secs: i64,
   ) -> Result<Self, StreamError>
   where
     S: CollabStorage,
   {
-    let edit_state = Arc::new(EditState::new(100, 360, is_new_collab));
+    let edit_state = Arc::new(EditState::new(
+      edit_state_max_count,
+      edit_state_max_secs,
+      is_new_collab,
+    ));
     let broadcast = CollabBroadcast::new(
       &object_id,
       10,
@@ -87,6 +95,7 @@ impl CollabGroup {
         edit_state.clone(),
         collab.downgrade(),
         collab_type.clone(),
+        persistence_interval,
       )
       .run(rx),
     );

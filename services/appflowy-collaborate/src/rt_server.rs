@@ -43,12 +43,16 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
+  #[allow(clippy::too_many_arguments)]
   pub async fn new(
     storage: Arc<S>,
     access_control: AC,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
     redis_connection_manager: RedisConnectionManager,
+    group_persistence_interval: Duration,
+    edit_state_max_count: u32,
+    edit_state_max_secs: i64,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -64,6 +68,9 @@ where
         access_control.clone(),
         metrics_calculate.clone(),
         collab_stream,
+        group_persistence_interval,
+        edit_state_max_count,
+        edit_state_max_secs,
       )
       .await?,
     );

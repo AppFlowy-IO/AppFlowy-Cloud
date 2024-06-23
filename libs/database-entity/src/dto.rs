@@ -529,7 +529,7 @@ impl Default for AFWorkspaceSettings {
   }
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct AFWorkspaceSettingsChange {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub disable_search_indexing: Option<bool>,

@@ -11,7 +11,7 @@ use sqlx::types::uuid;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::{error, event, instrument};
+use tracing::{error, event, instrument, trace};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -326,13 +326,15 @@ async fn post_workspace_settings_handler(
   workspace_id: web::Path<Uuid>,
   data: Json<AFWorkspaceSettingsChange>,
 ) -> Result<JsonAppResponse<AFWorkspaceSettings>> {
+  let data = data.into_inner();
+  trace!("workspace settings: {:?}", data);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let settings = workspace::ops::update_workspace_settings(
     &state.pg_pool,
     &state.workspace_access_control,
     &workspace_id,
     &uid,
-    data.into_inner(),
+    data,
   )
   .await?;
   Ok(AppResponse::Ok().with_data(settings).into())

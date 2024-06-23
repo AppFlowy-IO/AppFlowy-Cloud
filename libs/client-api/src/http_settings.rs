@@ -1,5 +1,5 @@
 use reqwest::Method;
-use tracing::instrument;
+use tracing::{instrument, trace};
 
 use client_api_entity::AFWorkspaceSettings;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -35,6 +35,7 @@ impl Client {
     workspace_id: T,
     changes: &AFWorkspaceSettingsChange,
   ) -> Result<AFWorkspaceSettings, AppResponseError> {
+    trace!("workspace settings: {:?}", changes);
     let url = format!(
       "{}/api/workspace/{}/settings",
       self.base_url,

@@ -324,18 +324,18 @@ async fn post_workspace_settings_handler(
   user_uuid: UserUuid,
   state: Data<AppState>,
   workspace_id: web::Path<Uuid>,
-  data: Json<AFWorkspaceSettings>,
-) -> Result<JsonAppResponse<()>> {
+  data: Json<AFWorkspaceSettingsChange>,
+) -> Result<JsonAppResponse<AFWorkspaceSettings>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
-  workspace::ops::update_workspace_settings(
+  let settings = workspace::ops::update_workspace_settings(
     &state.pg_pool,
     &state.workspace_access_control,
     &workspace_id,
     &uid,
-    &data.into_inner(),
+    data.into_inner(),
   )
   .await?;
-  Ok(AppResponse::Ok().into())
+  Ok(AppResponse::Ok().with_data(settings).into())
 }
 
 #[instrument(skip_all, err)]

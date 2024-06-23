@@ -4,6 +4,7 @@ use tracing::instrument;
 use client_api_entity::AFWorkspaceSettings;
 use shared_entity::response::{AppResponse, AppResponseError};
 
+use crate::entity::AFWorkspaceSettingsChange;
 use crate::http::log_request_id;
 use crate::Client;
 
@@ -32,8 +33,8 @@ impl Client {
   pub async fn update_workspace_settings<T: AsRef<str>>(
     &self,
     workspace_id: T,
-    settings: &AFWorkspaceSettings,
-  ) -> Result<(), AppResponseError> {
+    changes: &AFWorkspaceSettingsChange,
+  ) -> Result<AFWorkspaceSettings, AppResponseError> {
     let url = format!(
       "{}/api/workspace/{}/settings",
       self.base_url,
@@ -42,10 +43,11 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&settings)
+      .json(&changes)
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<()>::from_response(resp).await?.into_error()
+    let resp = AppResponse::<AFWorkspaceSettings>::from_response(resp).await?;
+    resp.into_data()
   }
 }

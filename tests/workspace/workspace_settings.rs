@@ -1,7 +1,7 @@
 use app_error::ErrorCode;
 use client_api::Client;
 use client_api_test::generate_unique_registered_user_client;
-use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus, AFWorkspaceSettings};
+use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus, AFWorkspaceSettingsChange};
 use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
 use uuid::Uuid;
 
@@ -13,17 +13,20 @@ async fn get_and_set_workspace_by_owner() {
 
   let mut settings = c.get_workspace_settings(&workspace_id).await.unwrap();
   assert!(
-    !settings.disable_indexing,
+    !settings.disable_search_indexing,
     "indexing should be enabled by default"
   );
 
-  settings.disable_indexing = true;
-  c.update_workspace_settings(&workspace_id, &settings)
-    .await
-    .unwrap();
+  settings.disable_search_indexing = true;
+  c.update_workspace_settings(
+    &workspace_id,
+    &AFWorkspaceSettingsChange::new().disable_search_indexing(true),
+  )
+  .await
+  .unwrap();
 
   let settings = c.get_workspace_settings(&workspace_id).await.unwrap();
-  assert!(settings.disable_indexing);
+  assert!(settings.disable_search_indexing);
 }
 
 #[tokio::test]
@@ -48,9 +51,7 @@ async fn get_and_set_workspace_by_non_owner() {
   let resp = bob_client
     .update_workspace_settings(
       &alice_workspace_id.to_string(),
-      &AFWorkspaceSettings {
-        disable_indexing: true,
-      },
+      &AFWorkspaceSettingsChange::new().disable_search_indexing(true),
     )
     .await;
   assert!(

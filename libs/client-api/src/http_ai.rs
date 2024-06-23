@@ -61,7 +61,7 @@ impl Client {
     workspace_id: &str,
     params: CompleteTextParams,
   ) -> Result<CompleteTextResponse, AppResponseError> {
-    let url = format!("{}/api/ai/{}/complete_text", self.base_url, workspace_id);
+    let url = format!("{}/api/ai/{}/complete", self.base_url, workspace_id);
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?

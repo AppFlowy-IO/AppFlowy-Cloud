@@ -203,7 +203,7 @@ pub enum AIModel {
   GPT4o = 2,
   Claude3Sonnet = 3,
   Claude3Opus = 4,
-  Local = 5,
+  Local = 5, // work in progress
 }
 
 impl AIModel {
@@ -212,7 +212,7 @@ impl AIModel {
       AIModel::DefaultModel => "default-model",
       AIModel::GPT35 => "gpt-3.5-turbo",
       AIModel::GPT4o => "gpt-4o",
-      AIModel::Claude3Sonnet => "claude-3-sonnet-20240229",
+      AIModel::Claude3Sonnet => "claude-3-sonnet",
       AIModel::Claude3Opus => "claude-3-opus",
       AIModel::Local => "local",
     }

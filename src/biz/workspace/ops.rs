@@ -531,24 +531,21 @@ pub async fn update_workspace_settings(
   }
 
   let mut tx = pg_pool.begin().await?;
-
-  match select_workspace_settings(tx.deref_mut(), workspace_id).await? {
-    None => Err(AppError::RecordNotFound("Workspace settings not found".to_string()).into()),
-    Some(mut setting) => {
-      if let Some(disable_indexing) = change.disable_search_indexing {
-        setting.disable_search_indexing = disable_indexing;
-      }
-
-      if let Some(ai_model) = change.ai_model {
-        setting.ai_model = ai_model;
-      }
-
-      // Update the workspace settings in the database
-      upsert_workspace_settings(&mut tx, workspace_id, &setting).await?;
-      tx.commit().await?;
-      Ok(setting)
-    },
+  let mut setting = select_workspace_settings(tx.deref_mut(), workspace_id)
+    .await?
+    .unwrap_or_default();
+  if let Some(disable_indexing) = change.disable_search_indexing {
+    setting.disable_search_indexing = disable_indexing;
   }
+
+  if let Some(ai_model) = change.ai_model {
+    setting.ai_model = ai_model;
+  }
+
+  // Update the workspace settings in the database
+  upsert_workspace_settings(&mut tx, workspace_id, &setting).await?;
+  tx.commit().await?;
+  Ok(setting)
 }
 
 async fn check_workspace_owner(

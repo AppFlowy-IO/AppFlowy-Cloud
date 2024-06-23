@@ -815,15 +815,27 @@ impl Client {
       .await?;
 
     let access_token = self.access_token()?;
-    trace!("start request: {}, method: {}", url, method);
-    let request_builder = self
+    let headers = [
+      ("client-version", self.client_version.to_string()),
+      ("client-timestamp", ts_now.to_string()),
+      ("device_id", self.device_id.clone()),
+      ("ai-model", self.ai_model.read().to_str().to_string()),
+    ];
+    trace!(
+      "start request: {}, method: {}, headers: {:?}",
+      url,
+      method,
+      headers
+    );
+
+    let mut request_builder = self
       .cloud_client
       .request(method, url)
-      .header("client-version", self.client_version.to_string())
-      .header("client-timestamp", ts_now.to_string())
-      .header("device_id", self.device_id.clone())
-      .header("ai-model", self.ai_model.read().to_str())
       .bearer_auth(access_token);
+
+    for header in headers {
+      request_builder = request_builder.header(header.0, header.1);
+    }
     Ok(request_builder)
   }
 

@@ -46,7 +46,6 @@ where
 {
   pub group_manager: Arc<GroupManager<S, AC>>,
   pub msg_router_by_user: Arc<DashMap<RealtimeUser, ClientMessageRouter>>,
-  pub access_control: Arc<AC>,
   pub recv: Option<GroupCommandReceiver>,
 }
 

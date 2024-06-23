@@ -39,7 +39,7 @@ impl Client {
         ("recurring_interval", recurring_interval.as_str()),
         (
           "workspace_subscription_plan",
-          &workspace_subscription_plan.as_str(),
+          workspace_subscription_plan.as_str(),
         ),
         ("success_url", success_url),
       ])

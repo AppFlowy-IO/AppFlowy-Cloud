@@ -64,7 +64,8 @@ impl Indexer for DocumentIndexer {
         encoding_format: EmbeddingEncodingFormat::Float,
         dimensions: 1536,
       })
-      .await?;
+      .await
+      .map_err(|e| AppError::Internal(e.into()))?;
 
     for embedding in resp.data {
       let param = &mut params[embedding.index as usize];

@@ -49,7 +49,7 @@ impl IndexerProvider {
     let uuid = Uuid::parse_str(workspace_id)?;
     let settings = select_workspace_settings(&self.db, &uuid).await?;
     match settings {
-      Some(settings) if settings.disable_indexing => Ok(None),
+      Some(settings) if settings.disable_search_indexing => Ok(None),
       _ => Ok(indexer),
     }
   }

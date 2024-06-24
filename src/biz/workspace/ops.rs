@@ -603,7 +603,7 @@ async fn check_workspace_owner_or_publisher(
 
 fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
   // Check len
-  if publish_name.len() > 20 {
+  if publish_name.len() > 50 {
     return Err(AppError::InvalidRequest(
       "Document name must be at most 20 characters long".to_string(),
     ));

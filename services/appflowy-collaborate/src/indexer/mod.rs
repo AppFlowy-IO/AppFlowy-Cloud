@@ -1,7 +1,7 @@
 mod document_indexer;
 mod ext;
-mod indexer;
+mod provider;
 
 pub use document_indexer::DocumentIndexer;
 pub use ext::DocumentDataExt;
-pub use indexer::*;
+pub use provider::*;

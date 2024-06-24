@@ -45,6 +45,7 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
+  #[allow(clippy::too_many_arguments)]
   pub async fn new(
     storage: Arc<S>,
     access_control: Arc<AC>,

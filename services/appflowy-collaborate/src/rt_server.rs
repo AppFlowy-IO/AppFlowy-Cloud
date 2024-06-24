@@ -73,7 +73,7 @@ where
         group_persistence_interval,
         edit_state_max_count,
         edit_state_max_secs,
-        indexer_provider,
+        indexer_provider.clone(),
       )
       .await?,
     );
@@ -85,6 +85,8 @@ where
     spawn_collaboration_command(command_recv, &group_sender_by_object_id);
 
     spawn_metrics(&metrics, &metrics_calculate, &storage);
+
+    spawn_handle_unindexed_collabs(indexer_provider);
 
     Ok(Self {
       storage,
@@ -249,6 +251,10 @@ where
       .get(user_device)
       .map(|entry| entry.value().clone())
   }
+}
+
+fn spawn_handle_unindexed_collabs(indexer_provider: Arc<IndexerProvider>) {
+  tokio::task::spawn_local(IndexerProvider::handle_unindexed_collabs(indexer_provider));
 }
 
 fn spawn_period_check_inactive_group<S, AC>(

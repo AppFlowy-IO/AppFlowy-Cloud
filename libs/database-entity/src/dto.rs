@@ -822,6 +822,12 @@ pub struct PublishCollabMetadata<Metadata> {
   pub metadata: Metadata,
 }
 
+#[derive(Debug)]
+pub struct PublishCollabItem<Meta, Data> {
+  pub meta: PublishCollabMetadata<Meta>,
+  pub data: Data,
+}
+
 /// Indexing status of a document.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum IndexingStatus {

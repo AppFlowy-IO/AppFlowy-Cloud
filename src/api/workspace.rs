@@ -609,7 +609,7 @@ async fn batch_create_collab_handler(
     {
       state
         .collab_access_control_storage
-        .insert_new_collab(&workspace_id, &uid, params, None)
+        .insert_new_collab(&workspace_id, &uid, params)
         .await?;
 
       state
@@ -854,7 +854,7 @@ async fn update_collab_handler(
   let (params, workspace_id) = create_params.split();
   state
     .collab_access_control_storage
-    .insert_or_update_collab(&workspace_id, &uid, params, None, false)
+    .insert_or_update_collab(&workspace_id, &uid, params, false)
     .await?;
   Ok(AppResponse::Ok().into())
 }

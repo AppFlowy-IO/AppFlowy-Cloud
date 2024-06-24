@@ -122,6 +122,7 @@ impl StorageQueue {
       workspace_id: workspace_id.to_string(),
       object_id: params.object_id.clone(),
       collab_type: params.collab_type.clone(),
+      embeddings: params.embeddings.clone(),
     };
 
     self
@@ -419,7 +420,7 @@ async fn write_pending_to_disk(
           object_id: meta.object_id.clone(),
           collab_type: meta.collab_type.clone(),
           encode_collab_v1,
-          embeddings,
+          embeddings: meta.embeddings.clone(),
         })
       } else {
         None
@@ -526,6 +527,8 @@ pub struct PendingWriteMeta {
   pub workspace_id: String,
   pub object_id: String,
   pub collab_type: CollabType,
+  #[serde(default)]
+  pub embeddings: Option<AFCollabEmbeddings>,
 }
 
 impl From<&PendingWriteMeta> for QueryCollab {

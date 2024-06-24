@@ -14,9 +14,9 @@ pub async fn get_index_status(
   let result = sqlx::query!(
     r#"
 SELECT
-  w.settings['disable_indexing']::boolean as disable_indexing,
+  w.settings['disable_search_indexing']::boolean as disable_search_indexing,
   CASE
-    WHEN w.settings['disable_indexing']::boolean THEN
+    WHEN w.settings['disable_search_indexing']::boolean THEN
       FALSE
     ELSE
       EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = c.partition_key AND m.oid = c.oid)
@@ -28,7 +28,7 @@ WHERE c.oid = $1"#,
   )
   .fetch_one(tx.deref_mut())
   .await?;
-  if result.disable_indexing.unwrap_or(false) {
+  if result.disable_search_indexing.unwrap_or(false) {
     return Ok(None);
   }
   Ok(Some(result.has_index.unwrap_or(false)))
@@ -94,7 +94,9 @@ where
     r#"
   select c.workspace_id, c.oid, c.partition_key
   from af_collab c
-  where not exists (
+  join af_workspace w on c.workspace_id = w.workspace_id
+  where not coalesce(w.settings['disable_search_indexding']::boolean, false)
+    and not exists (
     select 1
     from af_collab_embeddings em
     where em.oid = c.oid and em.partition_key = 0)"# // atm. get only documents

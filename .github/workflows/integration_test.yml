@@ -42,20 +42,17 @@ jobs:
 
       - name: Build Docker Images
         run: |
-          docker compose build appflowy_cloud appflowy_history appflowy_indexer
+          docker compose build appflowy_cloud appflowy_history
 
       - name: Push docker images to docker hub
         run: |
           docker tag appflowyinc/appflowy_cloud appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker tag appflowyinc/appflowy_history appflowyinc/appflowy_history:${GITHUB_SHA}
-          docker tag appflowyinc/appflowy_indexer appflowyinc/appflowy_indexer:${GITHUB_SHA}
           echo ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }} | docker login --username appflowyinc --password-stdin
           docker push appflowyinc/appflowy_cloud:${GITHUB_SHA}
           docker push appflowyinc/appflowy_history:${GITHUB_SHA}
-          docker push appflowyinc/appflowy_indexer:${GITHUB_SHA}
           APPFLOWY_HISTORY_VERSION=${GITHUB_SHA} 
           APPFLOWY_CLOUD_VERSION=0.1.1
-
 
   test:
     name: Integration Tests
@@ -65,11 +62,9 @@ jobs:
       matrix:
         include:
           - test_service: "appflowy_cloud"
-            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --exclude appflowy-indexer"
+            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client"
           - test_service: "appflowy_history"
             test_cmd: "-p appflowy-history"
-          - test_service: "appflowy_indexer"
-            test_cmd: "-p appflowy-indexer"
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@stable

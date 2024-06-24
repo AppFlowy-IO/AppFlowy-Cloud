@@ -534,8 +534,8 @@ pub async fn update_workspace_settings(
   let mut setting = select_workspace_settings(tx.deref_mut(), workspace_id)
     .await?
     .unwrap_or_default();
-  if let Some(disable_indexing) = change.disable_search_indexing {
-    setting.disable_search_indexing = disable_indexing;
+  if let Some(disable_search_indexing) = change.disable_search_indexing {
+    setting.disable_search_indexing = disable_search_indexing;
   }
 
   if let Some(ai_model) = change.ai_model {

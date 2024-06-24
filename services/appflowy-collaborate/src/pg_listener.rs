@@ -6,14 +6,12 @@ use sqlx::PgPool;
 use tokio::sync::broadcast;
 use workspace_access::notification::WorkspaceMemberNotification;
 
-#[allow(dead_code)]
 pub struct PgListeners {
   user_listener: UserListener,
   workspace_member_listener: WorkspaceMemberListener,
   collab_member_listener: CollabMemberListener,
 }
 
-#[allow(dead_code)]
 impl PgListeners {
   pub async fn new(pg_pool: &PgPool) -> Result<Self, Error> {
     let user_listener = UserListener::new(pg_pool, "af_user_channel").await?;
@@ -57,9 +55,6 @@ impl PgListeners {
   }
 }
 
-#[allow(dead_code)]
 pub type CollabMemberListener = PostgresDBListener<CollabMemberNotification>;
-#[allow(dead_code)]
 pub type UserListener = PostgresDBListener<AFUserNotification>;
-#[allow(dead_code)]
 pub type WorkspaceMemberListener = PostgresDBListener<WorkspaceMemberNotification>;

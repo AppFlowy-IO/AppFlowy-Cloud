@@ -1,7 +1,10 @@
 pub mod actix_ws;
+pub mod api;
+pub mod application;
 mod client;
 pub mod collab;
 pub mod command;
+pub mod config;
 pub mod connect_state;
 pub mod error;
 mod group;

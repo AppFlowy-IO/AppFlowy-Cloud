@@ -14,9 +14,13 @@ path = "src/lib.rs"
 [dependencies]
 access-control.workspace = true
 actix.workspace = true
+actix-web.workspace = true
+actix-http = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-web-actors = { version = "4.3" }
-app-error = { workspace = true, features = ["sqlx_error", "tokio_error"] }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
+authentication.workspace = true
 dashmap.workspace = true
+dotenvy.workspace = true
 async-stream.workspace = true
 futures.workspace = true
 tracing = "0.1.40"
@@ -51,6 +55,8 @@ prometheus-client = "0.22.1"
 indexmap = "2.2.5"
 semver = "1.0.22"
 redis = "0.25.2"
+secrecy.workspace = true
+shared-entity = { workspace = true, features = ["cloud"]}
 parking_lot = "0.12.1"
 lazy_static = "1.4.0"
 itertools = "0.12.0"

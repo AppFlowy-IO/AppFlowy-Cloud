@@ -19,11 +19,27 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use database::collab::select_blob_from_af_collab;
 use database::index::{get_collabs_without_embeddings, upsert_collab_embeddings};
 use database::workspace::select_workspace_settings;
-use database_entity::dto::AFCollabEmbeddings;
+use database_entity::dto::{AFCollabEmbeddings, CollabParams};
 
 #[async_trait]
 pub trait Indexer: Send + Sync {
   async fn index(&self, collab: MutexCollab) -> Result<AFCollabEmbeddings, AppError>;
+
+  async fn index_encoded(
+    &self,
+    object_id: &str,
+    encoded_collab: EncodedCollab,
+  ) -> Result<AFCollabEmbeddings, AppError> {
+    let collab = Collab::new_with_source(
+      CollabOrigin::Empty,
+      object_id,
+      DataSource::DocStateV1(encoded_collab.doc_state.into()),
+      vec![],
+      false,
+    )
+    .map_err(|e| AppError::Internal(e.into()))?;
+    self.index(MutexCollab::new(collab)).await
+  }
 }
 
 /// A structure responsible for resolving different [Indexer] types for different [CollabType]s,
@@ -43,24 +59,20 @@ impl IndexerProvider {
     })
   }
 
-  /// Returns indexer for a specific type of [Collab] object.
-  /// If collab of given type is not supported or workspace it belongs to has indexing disabled,
-  /// returns `None`.
-  pub async fn indexer_for(
-    &self,
-    workspace_id: &str,
-    collab_type: CollabType,
-  ) -> Result<Option<Arc<dyn Indexer>>, AppError> {
-    let indexer = self.indexer_cache.get(&collab_type).cloned();
-    if indexer.is_none() {
-      return Ok(None);
-    }
+  pub async fn can_index_workspace(&self, workspace_id: &str) -> Result<bool, AppError> {
     let uuid = Uuid::parse_str(workspace_id)?;
     let settings = select_workspace_settings(&self.db, &uuid).await?;
     match settings {
-      Some(settings) if settings.disable_search_indexing => Ok(None),
-      _ => Ok(indexer),
+      None => Ok(true),
+      Some(settings) => Ok(!settings.disable_search_indexing),
     }
+  }
+
+  /// Returns indexer for a specific type of [Collab] object.
+  /// If collab of given type is not supported or workspace it belongs to has indexing disabled,
+  /// returns `None`.
+  pub fn indexer_for(&self, collab_type: CollabType) -> Option<Arc<dyn Indexer>> {
+    self.indexer_cache.get(&collab_type).cloned()
   }
 
   fn get_unindexed_collabs(
@@ -139,6 +151,23 @@ impl IndexerProvider {
       tx.commit().await?;
     }
     Ok(())
+  }
+
+  pub async fn create_collab_embeddings(
+    &self,
+    params: &CollabParams,
+  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
+    if let Some(indexer) = self.indexer_for(params.collab_type.clone()) {
+      let embeddings = indexer
+        .index_encoded(
+          &params.object_id,
+          EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)?,
+        )
+        .await?;
+      Ok(Some(embeddings))
+    } else {
+      Ok(None)
+    }
   }
 }
 

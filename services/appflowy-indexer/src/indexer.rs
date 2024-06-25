@@ -26,7 +26,12 @@ use crate::error::Result;
 #[async_trait]
 pub trait Indexer: Send + Sync {
   /// Check if document with given id has been already a corresponding index entry.
-  async fn index_status(&self, object_id: &str) -> Result<IndexStatus>;
+  async fn index_status(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<IndexStatus>;
   async fn update_index(&self, workspace_id: &Uuid, documents: Vec<Fragment>) -> Result<()>;
   async fn remove(&self, ids: &[FragmentID]) -> Result<()>;
   /// Returns a list of object ids, that have not been indexed yet.
@@ -194,8 +199,19 @@ struct Embeddings {
 
 #[async_trait]
 impl Indexer for PostgresIndexer {
-  async fn index_status(&self, object_id: &str) -> Result<IndexStatus> {
-    let found = get_index_status(&mut self.db.begin().await?, object_id).await?;
+  async fn index_status(
+    &self,
+    workspace_id: &Uuid,
+    object_id: &str,
+    collab_type: CollabType,
+  ) -> Result<IndexStatus> {
+    let found = get_index_status(
+      &mut self.db.begin().await?,
+      workspace_id,
+      object_id,
+      collab_type as i32,
+    )
+    .await?;
     match found {
       None => Ok(IndexStatus::NotPermitted),
       Some(true) => Ok(IndexStatus::Indexed),

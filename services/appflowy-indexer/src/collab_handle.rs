@@ -51,7 +51,12 @@ impl CollabHandle {
     ingest_interval: Duration,
   ) -> Result<Option<Self>> {
     let closing = CancellationToken::new();
-    let was_indexed = match indexer.index_status(&object_id).await? {
+    let workspace_uuid =
+      Uuid::parse_str(&workspace_id).map_err(crate::error::Error::InvalidWorkspace)?;
+    let was_indexed = match indexer
+      .index_status(&workspace_uuid, &object_id, collab_type.clone())
+      .await?
+    {
       IndexStatus::Indexed => true,
       IndexStatus::NotIndexed => false,
       IndexStatus::NotPermitted => {
@@ -87,15 +92,13 @@ impl CollabHandle {
     if !messages.is_empty() {
       Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await?;
     }
-    let workspace_id =
-      Uuid::parse_str(&workspace_id).map_err(crate::error::Error::InvalidWorkspace)?;
 
     let mut tasks = JoinSet::new();
     tasks.spawn(Self::receive_collab_updates(
       update_stream,
       Arc::downgrade(&content),
       object_id.clone(),
-      workspace_id,
+      workspace_uuid,
       ingest_interval,
       closing.clone(),
     ));
@@ -103,7 +106,7 @@ impl CollabHandle {
       content.changes(),
       indexer,
       object_id,
-      workspace_id,
+      workspace_uuid,
       ingest_interval,
       closing.clone(),
     ));

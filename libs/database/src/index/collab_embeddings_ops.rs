@@ -2,14 +2,16 @@ use std::ops::DerefMut;
 
 use collab_entity::CollabType;
 use pgvector::Vector;
-use sqlx::{Executor, Postgres, Transaction};
+use sqlx::{Error, Executor, Postgres, Transaction};
 use uuid::Uuid;
 
 use database_entity::dto::AFCollabEmbeddingParams;
 
 pub async fn get_index_status(
   tx: &mut Transaction<'_, sqlx::Postgres>,
-  oid: &str,
+  workspace_id: &Uuid,
+  object_id: &str,
+  partition_key: i32,
 ) -> Result<Option<bool>, sqlx::Error> {
   let result = sqlx::query!(
     r#"
@@ -19,19 +21,33 @@ SELECT
     WHEN w.settings['disable_search_indexing']::boolean THEN
       FALSE
     ELSE
-      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = c.partition_key AND m.oid = c.oid)
+      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = $3 AND m.oid = $2)
   END as has_index
-FROM af_collab c
-JOIN af_workspace w ON c.workspace_id = w.workspace_id
-WHERE c.oid = $1"#,
-    oid
+FROM af_workspace w
+WHERE w.workspace_id = $1"#,
+    workspace_id,
+    object_id,
+    partition_key
   )
   .fetch_one(tx.deref_mut())
-  .await?;
-  if result.disable_search_indexing.unwrap_or(false) {
-    return Ok(None);
+  .await;
+  match result {
+    Ok(row) => {
+      if row.disable_search_indexing.unwrap_or(false) {
+        return Ok(None);
+      }
+      Ok(Some(row.has_index.unwrap_or(false)))
+    },
+    Err(Error::RowNotFound) => {
+      tracing::warn!(
+        "open-collab event for {}/{} arrived before its workspace was created",
+        workspace_id,
+        object_id
+      );
+      Ok(Some(false))
+    },
+    Err(e) => Err(e),
   }
-  Ok(Some(result.has_index.unwrap_or(false)))
 }
 
 pub async fn upsert_collab_embeddings(

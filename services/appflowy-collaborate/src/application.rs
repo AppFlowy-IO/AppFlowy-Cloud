@@ -10,14 +10,14 @@ use anyhow::{Context, Error};
 use secrecy::ExposeSecret;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::actix_ws::server::RealtimeServerActor;
 use access_control::access::AccessControl;
 use workspace_access::notification::spawn_listen_on_workspace_member_change;
 use workspace_access::WorkspaceAccessControlImpl;
 
-use crate::api::ws_scope;
+use crate::api::{collab_scope, ws_scope};
 use crate::collab::access_control::{
   CollabAccessControlImpl, CollabStorageAccessControlImpl, RealtimeCollabAccessControlImpl,
 };
@@ -27,6 +27,7 @@ use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting};
 use crate::pg_listener::PgListeners;
+use crate::shared_state::RealtimeSharedState;
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
 use crate::CollaborationServer;
@@ -85,6 +86,7 @@ pub async fn run_actix_server(
       .app_data(Data::new(state.config.gotrue.jwt_secret.clone()))
       .app_data(Data::new(realtime_server_actor.clone()))
       .service(ws_scope())
+      .service(collab_scope())
   });
   server = server.listen(listener)?;
 
@@ -97,8 +99,13 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   // User cache
   let user_cache = UserCache::new(pg_pool.clone()).await;
+
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
+  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
+  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
+    warn!("Failed to remove all connected users: {:?}", err);
+  }
 
   // Pg listeners
   info!("Setting up Pg listeners...");
@@ -146,6 +153,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     access_control,
     collab_access_control_storage: collab_storage,
     metrics,
+    realtime_shared_state,
   };
   Ok(app_state)
 }

@@ -19,6 +19,7 @@ actix-http = { workspace = true, default-features = false, features = ["openssl"
 actix-web-actors = { version = "4.3" }
 app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
 authentication.workspace = true
+brotli.workspace = true
 dashmap.workspace = true
 dotenvy.workspace = true
 async-stream.workspace = true
@@ -29,6 +30,7 @@ tokio-util = { version = "0.7", features = ["codec"] }
 tokio-stream = { version = "0.1.14", features = ["sync"] }
 tokio = { workspace = true, features = ["net", "sync", "macros", "rt-multi-thread"] }
 async-trait = "0.1.77"
+prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_repr.workspace = true

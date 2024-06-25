@@ -62,7 +62,7 @@ uuid = "1.6.1"
 tokio-tungstenite = { version = "0.20.1", features = ["native-tls"] }
 dotenvy.workspace = true
 url = "2.5.0"
-brotli = "3.4.0"
+brotli.workspace = true
 dashmap.workspace = true
 async-stream.workspace = true
 futures.workspace = true
@@ -179,6 +179,7 @@ workspace-access = { path = "libs/workspace-access" }
 app-error = { path = "libs/app-error" }
 async-trait = "0.1.77"
 prometheus-client = "0.22.0"
+brotli = "3.4.0"
 collab-stream = { path = "libs/collab-stream" }
 dotenvy = "0.15.7"
 secrecy = { version = "0.8", features = ["serde"] }

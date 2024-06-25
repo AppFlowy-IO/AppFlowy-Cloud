@@ -2,7 +2,7 @@ use std::ops::DerefMut;
 
 use collab_entity::CollabType;
 use pgvector::Vector;
-use sqlx::{Executor, Postgres, Transaction};
+use sqlx::{Error, Executor, Postgres, Transaction};
 use uuid::Uuid;
 
 use database_entity::dto::AFCollabEmbeddingParams;
@@ -27,11 +27,23 @@ WHERE c.oid = $1"#,
     oid
   )
   .fetch_one(tx.deref_mut())
-  .await?;
-  if result.disable_search_indexing.unwrap_or(false) {
-    return Ok(None);
+  .await;
+  match result {
+    Ok(row) => {
+      if row.disable_search_indexing.unwrap_or(false) {
+        return Ok(None);
+      }
+      Ok(Some(row.has_index.unwrap_or(false)))
+    },
+    Err(Error::RowNotFound) => {
+      tracing::warn!(
+        "open-collab event for {} arrived before its workspace was created",
+        oid
+      );
+      Ok(Some(false))
+    },
+    Err(e) => Err(e),
   }
-  Ok(Some(result.has_index.unwrap_or(false)))
 }
 
 pub async fn upsert_collab_embeddings(

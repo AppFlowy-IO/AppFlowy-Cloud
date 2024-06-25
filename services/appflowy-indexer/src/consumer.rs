@@ -240,8 +240,8 @@ impl OpenCollabConsumer {
             Err(e) => {
               tracing::error!(
                 "failed to open handle for {}/{}: {}",
-                object_id,
                 workspace_id,
+                object_id,
                 e
               );
             },

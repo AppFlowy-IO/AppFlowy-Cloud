@@ -9,7 +9,9 @@ use database_entity::dto::AFCollabEmbeddingParams;
 
 pub async fn get_index_status(
   tx: &mut Transaction<'_, sqlx::Postgres>,
-  oid: &str,
+  workspace_id: &Uuid,
+  object_id: &str,
+  partition_key: i32,
 ) -> Result<Option<bool>, sqlx::Error> {
   let result = sqlx::query!(
     r#"
@@ -19,12 +21,13 @@ SELECT
     WHEN w.settings['disable_search_indexing']::boolean THEN
       FALSE
     ELSE
-      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = c.partition_key AND m.oid = c.oid)
+      EXISTS (SELECT 1 FROM af_collab_embeddings m WHERE m.partition_key = $3 AND m.oid = $2)
   END as has_index
-FROM af_collab c
-JOIN af_workspace w ON c.workspace_id = w.workspace_id
-WHERE c.oid = $1"#,
-    oid
+FROM af_workspace w
+WHERE w.workspace_id = $1"#,
+    workspace_id,
+    object_id,
+    partition_key
   )
   .fetch_one(tx.deref_mut())
   .await;
@@ -37,8 +40,9 @@ WHERE c.oid = $1"#,
     },
     Err(Error::RowNotFound) => {
       tracing::warn!(
-        "open-collab event for {} arrived before its workspace was created",
-        oid
+        "open-collab event for {}/{} arrived before its workspace was created",
+        workspace_id,
+        object_id
       );
       Ok(Some(false))
     },

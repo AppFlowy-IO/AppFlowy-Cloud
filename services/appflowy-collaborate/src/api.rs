@@ -1,32 +1,52 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Duration;
 
 use actix::Addr;
-use actix_http::header::AUTHORIZATION;
-use actix_web::web::{Data, Payload};
+use actix_http::header::{HeaderMap, AUTHORIZATION};
+use actix_web::web::{Data, Json, Payload, PayloadConfig};
 use actix_web::{web, HttpRequest, HttpResponse, Result, Scope};
 use actix_web_actors::ws;
+use anyhow::anyhow;
+use bytes::{Bytes, BytesMut};
+use prost::Message;
 use secrecy::Secret;
 use semver::Version;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
-use tracing::{debug, error, instrument, trace};
+use tokio_stream::StreamExt;
+use tracing::{debug, error, event, instrument, trace};
 
 use app_error::AppError;
 use collab_rt_entity::user::{AFUserChange, RealtimeUser, UserMessage};
-use collab_rt_entity::RealtimeMessage;
-use shared_entity::response::AppResponseError;
+use collab_rt_entity::{HttpRealtimeMessage, RealtimeMessage};
+use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::actix_ws::client::RealtimeClient;
+use crate::actix_ws::entities::ClientStreamMessage;
 use crate::actix_ws::server::RealtimeServerActor;
 use crate::collab::access_control::RealtimeCollabAccessControlImpl;
 use crate::collab::storage::CollabAccessControlStorage;
+use crate::compression::{
+  decompress, CompressionType, X_COMPRESSION_BUFFER_SIZE, X_COMPRESSION_TYPE,
+};
 use crate::state::AppState;
 use authentication::jwt::{authorization_from_token, UserUuid};
 
 pub fn ws_scope() -> Scope {
   web::scope("/ws").service(web::resource("/v1").route(web::get().to(establish_ws_connection_v1)))
 }
+
+pub fn collab_scope() -> Scope {
+  web::scope("/api/realtime").service(
+    web::resource("post/stream")
+      .app_data(
+        PayloadConfig::new(10 * 1024 * 1024), // 10 MB
+      )
+      .route(web::post().to(post_realtime_message_stream_handler)),
+  )
+}
+
 const MAX_FRAME_SIZE: usize = 65_536; // 64 KiB
 
 pub type RealtimeServerAddr =
@@ -68,6 +88,147 @@ pub async fn establish_ws_connection_v1(
     connect_at,
   )
   .await
+}
+
+#[instrument(level = "info", skip_all, err)]
+async fn post_realtime_message_stream_handler(
+  user_uuid: UserUuid,
+  mut payload: Payload,
+  server: Data<RealtimeServerAddr>,
+  state: Data<AppState>,
+  req: HttpRequest,
+) -> Result<Json<AppResponse<()>>> {
+  // TODO(nathan): after upgrade the client application, then the device_id should not be empty
+  let device_id = device_id_from_headers(req.headers()).unwrap_or_else(|_| "".to_string());
+  let uid = state
+    .user_cache
+    .get_user_uid(&user_uuid)
+    .await
+    .map_err(AppResponseError::from)?;
+
+  let mut bytes = BytesMut::new();
+  while let Some(item) = payload.next().await {
+    bytes.extend_from_slice(&item?);
+  }
+
+  event!(tracing::Level::INFO, "message len: {}", bytes.len());
+  let device_id = device_id.to_string();
+  // Only send message to websocket server when the user is connected
+  if !state
+    .realtime_shared_state
+    .is_user_connected(&uid, &device_id)
+    .await
+    .unwrap_or(false)
+  {
+    return Ok(Json(AppResponse::Ok()));
+  }
+
+  let message = parser_realtime_msg(bytes.freeze(), req.clone()).await?;
+  let stream_message = ClientStreamMessage {
+    uid,
+    device_id,
+    message,
+  };
+
+  // When the server is under heavy load, try_send may fail. In client side, it will retry to send
+  // the message later.
+  match server.try_send(stream_message) {
+    Ok(_) => return Ok(Json(AppResponse::Ok())),
+    Err(err) => Err(
+      AppError::Internal(anyhow!(
+        "Failed to send message to websocket server, error:{}",
+        err
+      ))
+      .into(),
+    ),
+  }
+}
+
+fn device_id_from_headers(headers: &HeaderMap) -> std::result::Result<String, AppError> {
+  headers
+    .get("device_id")
+    .ok_or(AppError::InvalidRequest(
+      "Missing device_id header".to_string(),
+    ))
+    .and_then(|header| {
+      header
+        .to_str()
+        .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
+    })
+    .map(|s| s.to_string())
+}
+
+fn compress_type_from_header_value(
+  headers: &HeaderMap,
+) -> std::result::Result<CompressionType, AppError> {
+  let compression_type_str = headers
+    .get(X_COMPRESSION_TYPE)
+    .ok_or(AppError::InvalidRequest(
+      "Missing X-Compression-Type header".to_string(),
+    ))?
+    .to_str()
+    .map_err(|err| {
+      AppError::InvalidRequest(format!("Failed to parse X-Compression-Type: {}", err))
+    })?;
+  let buffer_size_str = headers
+    .get(X_COMPRESSION_BUFFER_SIZE)
+    .ok_or_else(|| {
+      AppError::InvalidRequest("Missing X-Compression-Buffer-Size header".to_string())
+    })?
+    .to_str()
+    .map_err(|err| {
+      AppError::InvalidRequest(format!(
+        "Failed to parse X-Compression-Buffer-Size: {}",
+        err
+      ))
+    })?;
+
+  let buffer_size = usize::from_str(buffer_size_str).map_err(|err| {
+    AppError::InvalidRequest(format!(
+      "X-Compression-Buffer-Size is not a valid usize: {}",
+      err
+    ))
+  })?;
+
+  match compression_type_str {
+    "brotli" => Ok(CompressionType::Brotli { buffer_size }),
+    s => Err(AppError::InvalidRequest(format!(
+      "Unknown compression type: {}",
+      s
+    ))),
+  }
+}
+
+async fn parser_realtime_msg(
+  payload: Bytes,
+  req: HttpRequest,
+) -> Result<RealtimeMessage, AppError> {
+  let HttpRealtimeMessage {
+    device_id: _,
+    payload,
+  } =
+    HttpRealtimeMessage::decode(payload.as_ref()).map_err(|err| AppError::Internal(err.into()))?;
+  let payload = match req.headers().get(X_COMPRESSION_TYPE) {
+    None => payload,
+    Some(_) => match compress_type_from_header_value(req.headers())? {
+      CompressionType::Brotli { buffer_size } => {
+        let decompressed_data = decompress(payload, buffer_size).await?;
+        event!(
+          tracing::Level::TRACE,
+          "Decompress realtime http message with len: {}",
+          decompressed_data.len()
+        );
+        decompressed_data
+      },
+    },
+  };
+  let realtime_msg = tokio::task::spawn_blocking(move || {
+    RealtimeMessage::decode(&payload)
+      .map_err(|err| AppError::InvalidRequest(format!("Failed to parse RealtimeMessage: {}", err)))
+  })
+  .await
+  .map_err(AppError::from)??;
+  Ok(realtime_msg)
 }
 
 #[allow(clippy::too_many_arguments)]

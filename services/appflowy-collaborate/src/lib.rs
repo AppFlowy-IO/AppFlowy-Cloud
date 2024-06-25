@@ -4,6 +4,7 @@ pub mod application;
 mod client;
 pub mod collab;
 pub mod command;
+pub mod compression;
 pub mod config;
 pub mod connect_state;
 pub mod error;

@@ -427,13 +427,18 @@ mod test {
     let document = Document::create_with_data(collab.clone(), doc_data).unwrap();
     let encoded_collab = document.encode_collab().unwrap();
 
-    let _workspace_id = setup_collab(&db, uid, object_id, &encoded_collab).await;
+    let workspace_id = setup_collab(&db, uid, object_id, &encoded_collab).await;
 
     {
       let mut tx = db.begin().await.unwrap();
-      let status = get_index_status(&mut tx, &object_id.to_string())
-        .await
-        .unwrap();
+      let status = get_index_status(
+        &mut tx,
+        &workspace_id,
+        &object_id.to_string(),
+        CollabType::Document as i32,
+      )
+      .await
+      .unwrap();
       assert_eq!(
         status,
         Some(false),
@@ -455,9 +460,14 @@ mod test {
 
     {
       let mut tx = db.begin().await.unwrap();
-      let status = get_index_status(&mut tx, &object_id.to_string())
-        .await
-        .unwrap();
+      let status = get_index_status(
+        &mut tx,
+        &workspace_id,
+        &object_id.to_string(),
+        CollabType::Document as i32,
+      )
+      .await
+      .unwrap();
       assert_eq!(status, Some(true), "collab should be indexed after start");
     }
   }

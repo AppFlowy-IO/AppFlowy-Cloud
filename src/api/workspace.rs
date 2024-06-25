@@ -5,6 +5,7 @@ use actix_web::{web, Scope};
 use actix_web::{HttpRequest, Result};
 use anyhow::{anyhow, Context};
 use bytes::BytesMut;
+use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use prost::Message as ProstMessage;
 use sqlx::types::uuid;
@@ -486,7 +487,7 @@ async fn create_collab_handler(
     },
   };
 
-  let (params, workspace_id) = params.split();
+  let (mut params, workspace_id) = params.split();
 
   if params.object_id == workspace_id {
     // Only the object with [CollabType::Folder] can have the same object_id as workspace_id. But
@@ -504,6 +505,17 @@ async fn create_collab_handler(
       ))
       .into(),
     );
+  }
+
+  if state
+    .indexer_provider
+    .can_index_workspace(&workspace_id)
+    .await?
+  {
+    params.embeddings = state
+      .indexer_provider
+      .create_collab_embeddings(&params)
+      .await?;
   }
 
   let mut transaction = state
@@ -597,7 +609,11 @@ async fn batch_create_collab_handler(
   if collab_params_list.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
-  for params in collab_params_list {
+  let can_index = state
+    .indexer_provider
+    .can_index_workspace(&workspace_id)
+    .await?;
+  for mut params in collab_params_list {
     let object_id = params.object_id.clone();
     if validate_encode_collab(
       &params.object_id,
@@ -607,6 +623,15 @@ async fn batch_create_collab_handler(
     .await
     .is_ok()
     {
+      params.embeddings = if can_index {
+        state
+          .indexer_provider
+          .create_collab_embeddings(&params)
+          .await?
+      } else {
+        None
+      };
+
       state
         .collab_access_control_storage
         .insert_new_collab(&workspace_id, &uid, params)
@@ -672,8 +697,18 @@ async fn create_collab_list_handler(
     .await
     .map_err(|err| AppError::Internal(anyhow!("Failed to start inserting collab: {}", err)))?;
 
-  for params in valid_items {
+  let can_index = state
+    .indexer_provider
+    .can_index_workspace(&workspace_id)
+    .await?;
+  for mut params in valid_items {
     let _object_id = params.object_id.clone();
+    if can_index {
+      params.embeddings = state
+        .indexer_provider
+        .create_collab_embeddings(&params)
+        .await?;
+    }
     state
       .collab_access_control_storage
       .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
@@ -851,7 +886,24 @@ async fn update_collab_handler(
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
 
   let create_params = CreateCollabParams::from((workspace_id.to_string(), params));
-  let (params, workspace_id) = create_params.split();
+  let (mut params, workspace_id) = create_params.split();
+  if let Some(indexer) = state
+    .indexer_provider
+    .indexer_for(params.collab_type.clone())
+  {
+    if state
+      .indexer_provider
+      .can_index_workspace(&workspace_id)
+      .await?
+    {
+      let encoded_collab = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)?;
+      params.embeddings = Some(
+        indexer
+          .index_encoded(&params.object_id, encoded_collab)
+          .await?,
+      );
+    }
+  }
   state
     .collab_access_control_storage
     .insert_or_update_collab(&workspace_id, &uid, params, false)

@@ -14,7 +14,7 @@ use tokio::select;
 use tokio::task::JoinSet;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
-use tracing::instrument;
+use tracing::{instrument, trace};
 use uuid::Uuid;
 
 use collab_stream::client::CollabRedisStream;
@@ -83,10 +83,10 @@ impl CollabHandle {
     };
 
     let group_name = format!("indexer_{}:{}", workspace_id, object_id);
+    trace!("init collab redis stream: {}", group_name);
     let mut update_stream = redis_stream
       .collab_update_stream(&workspace_id, &object_id, &group_name)
-      .await
-      .unwrap();
+      .await?;
 
     let messages = update_stream.get_unacked_messages(CONSUMER_NAME).await?;
     if !messages.is_empty() {
@@ -133,29 +133,32 @@ impl CollabHandle {
     loop {
       select! {
         _ = closing.cancelled() => {
-          tracing::trace!("document {}/{} watcher cancelled, stopping.", workspace_id, object_id);
+          trace!("document {}/{} watcher cancelled, stopping.", workspace_id, object_id);
           return;
         },
         _ = interval.tick() => {
-          let result = update_stream
-            .consumer_messages(CONSUMER_NAME, ReadOption::Count(100))
-            .await;
-          match result {
+          match update_stream.consumer_messages(CONSUMER_NAME, ReadOption::Count(100)).await {
             Ok(messages) => {
               if let Some(content) = content.upgrade() {
-                // check if we received empty message batch, if not: update the collab
-                if !messages.is_empty() {
-                  if let Err(err) = Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await {
-                    tracing::error!("document {}/{} watcher failed to handle updates: {}", workspace_id, object_id, err);
+                  if !messages.is_empty() {
+                      if let Err(err) = Self::handle_collab_updates(&mut update_stream, content.get_collab(), messages).await {
+                          tracing::error!("document {}/{} watcher failed to handle updates: {}", workspace_id, object_id, err);
+                      }
                   }
-                }
               } else {
-                tracing::trace!("collab dropped, stopping consumer");
-                return;
+                  trace!("collab dropped, stopping consumer");
+                  return;
               }
             },
             Err(err) => {
-              tracing::error!("document {}/{} watcher failed to receive messages: {}", workspace_id, object_id, err);
+              // we ensure that the stream exists by calling [CollabRedisStream::collab_update_stream]
+              // before spawning this task. So if the stream does not exist, it's a bug.
+              if err.is_stream_not_exist() {
+                tracing::error!("document {}/{} watcher failed to receive messages: {}", workspace_id, object_id, err);
+                return;
+              } else {
+                tracing::error!("document {}/{} watcher failed to receive messages: {}", workspace_id, object_id, err);
+              }
             },
           }
         }

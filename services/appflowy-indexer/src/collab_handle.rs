@@ -7,8 +7,7 @@ use collab::core::collab::TransactionMutExt;
 use collab::core::collab::{DataSource, MutexCollab};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::updates::decoder::Decode;
-use collab::preclude::Update;
-use collab_document::document::Document;
+use collab::preclude::{Collab, Update};
 use collab_entity::CollabType;
 use futures::{Stream, StreamExt};
 use tokio::select;
@@ -70,13 +69,14 @@ impl CollabHandle {
     };
     let content: Arc<dyn Indexable> = match collab_type {
       CollabType::Document => {
-        let content = Document::from_doc_state(
+        let collab = Arc::new(MutexCollab::new(Collab::new_with_source(
           CollabOrigin::Empty,
-          DataSource::DocStateV1(doc_state),
           &object_id,
+          DataSource::DocStateV1(doc_state),
           vec![],
-        )?;
-        let watcher = DocumentWatcher::new(object_id.clone(), content, !was_indexed)?;
+          false,
+        )?));
+        let watcher = DocumentWatcher::new(object_id.clone(), collab, !was_indexed)?;
         Arc::new(watcher)
       },
       _ => return Ok(None),

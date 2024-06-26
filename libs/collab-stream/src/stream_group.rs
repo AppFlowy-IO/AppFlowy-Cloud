@@ -6,12 +6,12 @@ use redis::streams::{
   StreamClaimOptions, StreamClaimReply, StreamMaxlen, StreamPendingData, StreamPendingReply,
   StreamReadOptions,
 };
-use redis::{pipe, AsyncCommands, RedisResult};
+use redis::{pipe, AsyncCommands, ErrorKind, RedisResult};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
-use tracing::{error, trace, warn};
+use tracing::{error, info, trace, warn};
 
 #[derive(Clone)]
 pub struct StreamGroup {
@@ -63,15 +63,41 @@ impl StreamGroup {
         //Use '$' if you want new messages or '0' to read from the beginning.
         .xgroup_create_mkstream(&self.stream_key, &self.group_name, "0")
         .await;
-    if let Err(e) = result {
-      tracing::warn!(
-        "error when creating consumer group `{}` `{}`: {:?}",
-        self.stream_key,
-        self.group_name,
-        e
-      );
+
+    match result {
+      Ok(_) => Ok(()),
+      Err(redis_error) => {
+        warn!(
+          "error when creating consumer group `{}` `{}`: {:?}",
+          self.stream_key, self.group_name, redis_error
+        );
+
+        return match redis_error.kind() {
+          ErrorKind::ExtensionError => match redis_error.code() {
+            None => Err(StreamError::from(redis_error)),
+            Some(code) => {
+              if code == "BUSYGROUP" {
+                Ok(())
+              } else {
+                Err(StreamError::from(redis_error))
+              }
+            },
+          },
+          _ => Err(StreamError::from(redis_error)),
+        };
+      },
     }
-    Ok(())
+  }
+
+  pub async fn destroy_group(&mut self) {
+    let result: RedisResult<bool> = self
+      .connection_manager
+      .xgroup_destroy::<&str, &str, bool>(&self.stream_key, &self.group_name)
+      .await;
+    match result {
+      Ok(_) => info!("destroy group success: {}", self.group_name),
+      Err(err) => error!("destroy group error: {:?}", err),
+    }
   }
 
   /// Acknowledges messages processed by a consumer.
@@ -231,7 +257,20 @@ impl StreamGroup {
     let map: StreamMessageByStreamKey = self
       .connection_manager
       .xread_options(&[&self.stream_key], &[message_id], &options)
-      .await?;
+      .await
+      .map_err(|redis_error| match redis_error.kind() {
+        ErrorKind::ExtensionError => match redis_error.code() {
+          None => StreamError::from(redis_error),
+          Some(code) => {
+            if code == "NOGROUP" {
+              StreamError::StreamNotExist(redis_error.to_string())
+            } else {
+              StreamError::from(redis_error)
+            }
+          },
+        },
+        _ => StreamError::from(redis_error),
+      })?;
 
     match map.0.into_iter().next() {
       None => Ok(Vec::with_capacity(0)),

@@ -1,4 +1,5 @@
 use crate::collab_stream_test::test_util::{random_i64, stream_client};
+use collab_stream::error::StreamError;
 use collab_stream::model::StreamBinary;
 use collab_stream::stream_group::ReadOption;
 use futures::future::join;
@@ -168,4 +169,32 @@ async fn read_all_message_test() {
       "Message data does not match expected pattern"
     );
   }
+}
+
+#[tokio::test]
+async fn group_already_exist_test() {
+  let oid = format!("o{}", random_i64());
+  let client = stream_client().await;
+
+  // create group
+  client.collab_update_stream("w1", &oid, "g2").await.unwrap();
+
+  // create same group
+  client.collab_update_stream("w1", &oid, "g2").await.unwrap();
+}
+
+#[tokio::test]
+async fn group_not_exist_test() {
+  let oid = format!("o{}", random_i64());
+  let client = stream_client().await;
+
+  // create group
+  let mut group = client.collab_update_stream("w1", &oid, "g2").await.unwrap();
+  group.destroy_group().await;
+
+  let err = group
+    .consumer_messages("consumer1", ReadOption::Count(15))
+    .await
+    .unwrap_err();
+  assert!(matches!(err, StreamError::StreamNotExist(_)));
 }

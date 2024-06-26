@@ -31,7 +31,7 @@ pub async fn search_documents(
       em.embedding <=> $3 AS score
     FROM af_collab_embeddings em
     JOIN af_collab collab ON em.oid = collab.oid AND em.partition_key = collab.partition_key
-    JOIN af_collab_member member ON collab.oid = member.oid
+    JOIN af_workspace_member member ON collab.workspace_id = member.workspace_id
     JOIN af_user u ON collab.owner_uid = u.uid
     WHERE member.uid = $1 AND collab.workspace_id = $2 AND collab.deleted_at IS NULL
     ORDER BY em.embedding <=> $3

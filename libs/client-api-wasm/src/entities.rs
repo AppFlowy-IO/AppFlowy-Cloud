@@ -2,8 +2,8 @@ use client_api::entity::AFUserProfile;
 use client_api::error::{AppResponseError, ErrorCode};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{
-  AFUserWorkspaceInfo, AFWorkspace, BatchQueryCollabResult, QueryCollab, QueryCollabParams,
-  QueryCollabResult,
+  AFUserWorkspaceInfo, AFWorkspace, BatchQueryCollabResult, QueryCollab,
+  QueryCollabParams, QueryCollabResult,
 };
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -237,3 +237,26 @@ impl From<BatchQueryCollabResult> for BatchClientEncodeCollab {
     BatchClientEncodeCollab(hash_map)
   }
 }
+
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct PublishViewMeta {
+  pub data: String,
+}
+
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct PublishViewPayload {
+  pub meta: PublishViewMeta,
+  /// The doc_state of the encoded collab.
+  pub data: Vec<u8>,
+}
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct PublishInfo {
+  pub namespace: Option<String>,
+  pub publish_name: String,
+}
+from_struct_for_jsvalue!(PublishViewMeta);
+from_struct_for_jsvalue!(PublishViewPayload);
+from_struct_for_jsvalue!(PublishInfo);

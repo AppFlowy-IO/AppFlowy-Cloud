@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use client_api_entity::{PublishInfo, UpdatePublishNamespace};
 use reqwest::Method;
+use tracing::instrument;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 use crate::Client;
@@ -65,6 +66,7 @@ impl Client {
 
 // Guest API (no login required)
 impl Client {
+  #[instrument(level = "debug", skip_all)]
   pub async fn get_published_collab_info(
     &self,
     view_id: &uuid::Uuid,
@@ -77,6 +79,7 @@ impl Client {
       .into_data()
   }
 
+  #[instrument(level = "debug", skip_all)]
   pub async fn get_published_collab<T>(
     &self,
     publish_namespace: &str,
@@ -85,6 +88,7 @@ impl Client {
   where
     T: serde::de::DeserializeOwned,
   {
+    tracing::debug!("get_published_collab: {} {}", publish_namespace, publish_name);
     let url = format!(
       "{}/api/workspace/published/{}/{}",
       self.base_url, publish_namespace, publish_name
@@ -104,14 +108,17 @@ impl Client {
     }
 
     let meta = serde_json::from_str::<T>(&txt)?;
+
     Ok(meta)
   }
 
+  #[instrument(level = "debug", skip_all)]
   pub async fn get_published_collab_blob(
     &self,
     publish_namespace: &str,
     publish_name: &str,
   ) -> Result<Bytes, AppResponseError> {
+    tracing::debug!("get_published_collab_blob: {} {}", publish_namespace, publish_name);
     let url = format!(
       "{}/api/workspace/published/{}/{}/blob",
       self.base_url, publish_namespace, publish_name

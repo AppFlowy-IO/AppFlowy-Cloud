@@ -35,13 +35,14 @@ pub async fn insert_chat(
 
   sqlx::query!(
     r#"
-       INSERT INTO af_chat (chat_id, name, workspace_id, rag_ids)
-       VALUES ($1, $2, $3, $4)
+       INSERT INTO af_chat (chat_id, name, workspace_id, rag_ids, meta_data)
+       VALUES ($1, $2, $3, $4, $5)
     "#,
     chat_id,
     params.name,
     workspace_id,
     rag_ids,
+    params.meta_data
   )
   .execute(txn.deref_mut())
   .await
@@ -75,6 +76,12 @@ pub async fn update_chat(
     query_parts.push(format!("rag_ids = ${}", current_param_pos));
     let rag_ids_json = json!(rag_ids);
     args.add(rag_ids_json);
+    current_param_pos += 1;
+  }
+
+  if let Some(meta_data) = params.meta_data {
+    query_parts.push(format!("meta_data = ${}", current_param_pos));
+    args.add(meta_data);
     current_param_pos += 1;
   }
 

@@ -12,7 +12,7 @@ use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{error, trace, warn};
 
 pub(crate) struct GroupPersistence<S> {
@@ -55,9 +55,6 @@ where
 
   pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<MutexCollab>) {
     let mut interval = interval(self.persistence_interval);
-    // TODO(nathan): remove this sleep when creating a new collab, applying all the updates
-    // workarounds for the issue that the collab doesn't contain the required data when first created
-    sleep(Duration::from_secs(5)).await;
     loop {
       tokio::select! {
         _ = interval.tick() => {

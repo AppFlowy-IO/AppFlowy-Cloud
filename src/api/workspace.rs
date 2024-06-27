@@ -666,14 +666,26 @@ async fn create_collab_list_handler(
   if valid_items.is_empty() {
     return Err(AppError::InvalidRequest("Empty collab params list".to_string()).into());
   }
+  let mut transaction = state
+    .pg_pool
+    .begin()
+    .await
+    .map_err(|err| AppError::Internal(anyhow!("Failed to start inserting collab: {}", err)))?;
 
   for params in valid_items {
     let _object_id = params.object_id.clone();
     state
       .collab_access_control_storage
-      .insert_new_collab(&workspace_id, &uid, params)
+      .insert_new_collab_with_transaction(&workspace_id, &uid, params, &mut transaction)
       .await?;
   }
+
+  transaction.commit().await.map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Failed to finish inserting list of collab: {}",
+      err
+    ))
+  })?;
 
   Ok(Json(AppResponse::Ok()))
 }

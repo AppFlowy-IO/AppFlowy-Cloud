@@ -670,8 +670,7 @@ async fn create_collab_list_handler(
     .pg_pool
     .begin()
     .await
-    .context("acquire transaction to upsert collab")
-    .map_err(AppError::from)?;
+    .map_err(|err| AppError::Internal(anyhow!("Failed to start inserting collab: {}", err)))?;
 
   for params in valid_items {
     let _object_id = params.object_id.clone();
@@ -681,10 +680,12 @@ async fn create_collab_list_handler(
       .await?;
   }
 
-  transaction
-    .commit()
-    .await
-    .context("fail to commit the transaction to upsert collab")?;
+  transaction.commit().await.map_err(|err| {
+    AppError::Internal(anyhow!(
+      "Failed to finish inserting list of collab: {}",
+      err
+    ))
+  })?;
 
   Ok(Json(AppResponse::Ok()))
 }

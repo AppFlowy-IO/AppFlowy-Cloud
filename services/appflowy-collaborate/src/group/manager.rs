@@ -244,16 +244,15 @@ where
     );
 
     let mut indexer = self.indexer_provider.indexer_for(collab_type.clone());
-    if indexer.is_some() {
-      if !self
+    if indexer.is_some()
+      && !self
         .indexer_provider
         .can_index_workspace(workspace_id)
         .await
         .map_err(|e| RealtimeError::Internal(e.into()))?
-      {
-        tracing::trace!("workspace {} indexing is disabled", workspace_id);
-        indexer = None;
-      }
+    {
+      tracing::trace!("workspace {} indexing is disabled", workspace_id);
+      indexer = None;
     }
     let group = Arc::new(
       CollabGroup::new(

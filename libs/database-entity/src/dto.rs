@@ -608,6 +608,8 @@ pub struct CreateChatParams {
   pub chat_id: String,
   pub name: String,
   pub rag_ids: Vec<String>,
+  #[serde(default)]
+  pub meta_data: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -619,6 +621,9 @@ pub struct UpdateChatParams {
   pub name: Option<String>,
 
   pub rag_ids: Option<Vec<String>>,
+
+  #[serde(default)]
+  pub meta_data: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

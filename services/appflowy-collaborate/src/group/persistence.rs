@@ -12,7 +12,7 @@ use collab::core::collab::{MutexCollab, WeakMutexCollab};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{error, trace, warn};
 
 pub(crate) struct GroupPersistence<S> {

@@ -47,9 +47,15 @@ impl DocumentIndexer {
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  async fn index(&self, collab: MutexCollab) -> Result<AFCollabEmbeddings, AppError> {
-    let (object_id, mut params) = Self::get_document_contents(Arc::new(collab))
-      .map_err(|e| AppError::OpenError(e.to_string()))?;
+  async fn index(&self, collab: MutexCollab) -> Result<Option<AFCollabEmbeddings>, AppError> {
+    let (object_id, mut params) = match Self::get_document_contents(Arc::new(collab)) {
+      Ok(result) => result,
+      Err(err) => {
+        tracing::warn!("failed to get document data: {}", err);
+        return Ok(None);
+      },
+    };
+
     let contents: Vec<_> = params
       .iter()
       .map(|fragment| fragment.content.clone())
@@ -64,8 +70,7 @@ impl Indexer for DocumentIndexer {
         encoding_format: EmbeddingEncodingFormat::Float,
         dimensions: 1536,
       })
-      .await
-      .map_err(|e| AppError::Internal(e.into()))?;
+      .await?;
 
     for embedding in resp.data {
       let param = &mut params[embedding.index as usize];
@@ -86,9 +91,9 @@ impl Indexer for DocumentIndexer {
       object_id,
       resp.total_tokens
     );
-    Ok(AFCollabEmbeddings {
+    Ok(Some(AFCollabEmbeddings {
       tokens_consumed: resp.total_tokens as u32,
       params,
-    })
+    }))
   }
 }

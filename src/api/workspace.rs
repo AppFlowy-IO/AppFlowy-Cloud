@@ -896,12 +896,11 @@ async fn update_collab_handler(
       .can_index_workspace(&workspace_id)
       .await?
     {
-      let encoded_collab = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)?;
-      params.embeddings = Some(
-        indexer
-          .index_encoded(&params.object_id, encoded_collab)
-          .await?,
-      );
+      let encoded_collab = EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)
+        .map_err(|e| AppError::Internal(e.into()))?;
+      params.embeddings = indexer
+        .index_encoded(&params.object_id, encoded_collab)
+        .await?;
     }
   }
   state

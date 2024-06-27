@@ -23,13 +23,13 @@ use database_entity::dto::{AFCollabEmbeddings, CollabParams};
 
 #[async_trait]
 pub trait Indexer: Send + Sync {
-  async fn index(&self, collab: MutexCollab) -> Result<AFCollabEmbeddings, AppError>;
+  async fn index(&self, collab: MutexCollab) -> Result<Option<AFCollabEmbeddings>, AppError>;
 
   async fn index_encoded(
     &self,
     object_id: &str,
     encoded_collab: EncodedCollab,
-  ) -> Result<AFCollabEmbeddings, AppError> {
+  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
     let collab = Collab::new_with_source(
       CollabOrigin::Empty,
       object_id,
@@ -139,16 +139,17 @@ impl IndexerProvider {
         )
         .map_err(|err| AppError::Internal(err.into()))?,
       );
-      let embeddings = indexer.index(collab).await?;
-      let mut tx = self.db.begin().await?;
-      upsert_collab_embeddings(
-        &mut tx,
-        &unindexed.workspace_id,
-        embeddings.tokens_consumed,
-        &embeddings.params,
-      )
-      .await?;
-      tx.commit().await?;
+      if let Some(embeddings) = indexer.index(collab).await? {
+        let mut tx = self.db.begin().await?;
+        upsert_collab_embeddings(
+          &mut tx,
+          &unindexed.workspace_id,
+          embeddings.tokens_consumed,
+          &embeddings.params,
+        )
+        .await?;
+        tx.commit().await?;
+      }
     }
     Ok(())
   }
@@ -164,7 +165,7 @@ impl IndexerProvider {
           EncodedCollab::decode_from_bytes(&params.encoded_collab_v1)?,
         )
         .await?;
-      Ok(Some(embeddings))
+      Ok(embeddings)
     } else {
       Ok(None)
     }

@@ -177,7 +177,7 @@ async fn test_publish_load_test() {
     .map(|i| PublishCollabItem {
       meta: PublishCollabMetadata {
         view_id: uuid::Uuid::new_v4(),
-        publish_name: format!("publish-name-{}", i),
+        publish_name: uuid::Uuid::new_v4().to_string(),
         metadata: MyCustomMetadata {
           title: format!("title_{}", i),
         },

@@ -12,9 +12,10 @@ pub async fn get_index_status<'a, E>(
   workspace_id: &Uuid,
   object_id: &str,
   partition_key: i32,
-) -> Result<IndexingStatus, sqlx::Error> 
+) -> Result<IndexingStatus, sqlx::Error>
 where
-  E: Executor<'a, Database = Postgres>, {
+  E: Executor<'a, Database = Postgres>,
+{
   let result = sqlx::query!(
     r#"
 SELECT

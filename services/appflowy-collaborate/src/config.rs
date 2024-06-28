@@ -3,10 +3,12 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use secrecy::Secret;
+use serde::Deserialize;
 use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
 #[derive(Clone, Debug)]
 pub struct Config {
+  pub app_env: Environment,
   pub application: ApplicationSetting,
   pub websocket: WebsocketSetting,
   pub db_settings: DatabaseSetting,
@@ -19,6 +21,36 @@ pub struct Config {
 pub struct ApplicationSetting {
   pub port: u16,
   pub host: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub enum Environment {
+  Local,
+  Production,
+}
+
+impl Environment {
+  pub fn as_str(&self) -> &'static str {
+    match self {
+      Environment::Local => "local",
+      Environment::Production => "production",
+    }
+  }
+}
+
+impl FromStr for Environment {
+  type Err = anyhow::Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s.to_lowercase().as_str() {
+      "local" => Ok(Self::Local),
+      "production" => Ok(Self::Production),
+      other => anyhow::bail!(
+        "{} is not a supported environment. Use either `local` or `production`.",
+        other
+      ),
+    }
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -60,7 +92,7 @@ impl DatabaseSetting {
   }
 }
 
-#[derive(serde::Deserialize, Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct GoTrueSetting {
   pub jwt_secret: Secret<String>,
 }
@@ -85,6 +117,9 @@ pub fn get_env_var(key: &str, default: &str) -> String {
 
 pub fn get_configuration() -> Result<Config, anyhow::Error> {
   let config = Config {
+    app_env: get_env_var("APPFLOWY_ENVIRONMENT", "local")
+      .parse()
+      .context("fail to get APPFLOWY_ENVIRONMENT")?,
     application: ApplicationSetting {
       port: get_env_var("APPFLOWY_COLLAB_SERVICE_PORT", "8001").parse()?,
       host: get_env_var("APPFLOWY_COLLAB_SERVICE_HOST", "0.0.0.0"),

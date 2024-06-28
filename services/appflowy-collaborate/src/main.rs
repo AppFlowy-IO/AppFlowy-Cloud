@@ -1,5 +1,6 @@
 use appflowy_collaborate::application::{init_state, Application};
 use appflowy_collaborate::config::get_configuration;
+use appflowy_collaborate::telemetry::init_subscriber;
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -8,6 +9,7 @@ async fn main() -> anyhow::Result<()> {
 
   let conf =
     get_configuration().map_err(|e| anyhow::anyhow!("Failed to read configuration: {}", e))?;
+  init_subscriber(&conf.app_env);
 
   let (tx, rx) = tokio::sync::mpsc::channel(1000);
   let state = init_state(&conf, tx)

@@ -46,6 +46,7 @@ pub fn chat_scope() -> Scope {
     )
     .service(
       web::resource("/{chat_id}/message")
+        // create_chat_message_handler is deprecated. No long used after frontend application v0.6.2
         .route(web::post().to(create_chat_message_handler))
         .route(web::put().to(update_chat_message_handler)),
     )

@@ -11,7 +11,10 @@ async fn redis_client() -> redis::Client {
 #[tokio::test]
 async fn connected_user_test() {
   let redis_client = redis_client().await;
-  let shared_state = RealtimeSharedState::new(redis_client.get_connection_manager().await.unwrap());
+  let shared_state = RealtimeSharedState::new(
+    redis_client.get_connection_manager().await.unwrap(),
+    "shared_state_prefix",
+  );
 
   let device_id = uuid::Uuid::new_v4().to_string();
   let is_connected = shared_state
@@ -46,7 +49,10 @@ async fn connected_user_test() {
 #[tokio::test]
 async fn remove_all_connected_user_test() {
   let redis_client = redis_client().await;
-  let shared_state = RealtimeSharedState::new(redis_client.get_connection_manager().await.unwrap());
+  let shared_state = RealtimeSharedState::new(
+    redis_client.get_connection_manager().await.unwrap(),
+    "shared_state_prefix",
+  );
 
   let device_id = uuid::Uuid::new_v4().to_string();
   shared_state

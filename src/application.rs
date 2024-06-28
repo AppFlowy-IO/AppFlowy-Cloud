@@ -35,7 +35,7 @@ use appflowy_collaborate::collab::access_control::{
 use appflowy_collaborate::collab::cache::CollabCache;
 use appflowy_collaborate::collab::storage::CollabStorageImpl;
 use appflowy_collaborate::command::{CLCommandReceiver, CLCommandSender};
-use appflowy_collaborate::shared_state::RealtimeSharedState;
+use appflowy_collaborate::shared_state::{RealtimeSharedState, REALTIME_SHARE_STATE_V0_PREFIX};
 use appflowy_collaborate::snapshot::SnapshotControl;
 use appflowy_collaborate::CollaborationServer;
 
@@ -218,6 +218,12 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
   // Redis
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
+  let shared_state_redis_key_prefix = REALTIME_SHARE_STATE_V0_PREFIX;
+  let realtime_shared_state =
+    RealtimeSharedState::new(redis_conn_manager.clone(), shared_state_redis_key_prefix);
+  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
+    warn!("Failed to remove all connected users: {:?}", err);
+  }
 
   info!("Setup AppFlowy AI: {}", config.appflowy_ai.url());
   let appflowy_ai_client = AppFlowyAIClient::new(&config.appflowy_ai.url());
@@ -264,6 +270,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     snapshot_control,
     rt_cmd_tx,
     redis_conn_manager.clone(),
+    shared_state_redis_key_prefix,
     metrics.collab_metrics.clone(),
   ));
 
@@ -284,10 +291,6 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     config.mailer.smtp_port,
   )
   .await?;
-  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
-  if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
-    warn!("Failed to remove all connected users: {:?}", err);
-  }
 
   info!("Application state initialized");
   Ok(AppState {

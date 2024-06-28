@@ -27,7 +27,7 @@ use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting};
 use crate::pg_listener::PgListeners;
-use crate::shared_state::RealtimeSharedState;
+use crate::shared_state::{RealtimeSharedState, REALTIME_SHARE_STATE_V1_PREFIX};
 use crate::snapshot::SnapshotControl;
 use crate::state::{AppMetrics, AppState, UserCache};
 use crate::CollaborationServer;
@@ -102,7 +102,9 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
 
   info!("Connecting to Redis...");
   let redis_conn_manager = get_redis_client(config.redis_uri.expose_secret()).await?;
-  let realtime_shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
+  let shared_state_redis_key_prefix = REALTIME_SHARE_STATE_V1_PREFIX;
+  let realtime_shared_state =
+    RealtimeSharedState::new(redis_conn_manager.clone(), shared_state_redis_key_prefix);
   if let Err(err) = realtime_shared_state.remove_all_connected_users().await {
     warn!("Failed to remove all connected users: {:?}", err);
   }
@@ -143,6 +145,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     snapshot_control,
     rt_cmd_tx,
     redis_conn_manager.clone(),
+    shared_state_redis_key_prefix,
     metrics.collab_metrics.clone(),
   ));
   let app_state = AppState {

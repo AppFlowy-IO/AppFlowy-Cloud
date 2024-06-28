@@ -17,20 +17,10 @@ on:
       package_version:
         description: 'Package version'
         required: true
-      prerelease_preid:
-        description: 'Preid for prerelease version (e.g., alpha, beta, rc)'
-        required: false
-        type: choice
-        default: ''
-        options:
-          - ''
-          - 'alpha'
-          - 'beta'
-          - 'rc'
 
 env:
   NODE_VERSION: '20.12.0'
-  RUST_TOOLCHAIN: "1.77"
+  RUST_TOOLCHAIN: "1.77.1"
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -51,10 +41,10 @@ jobs:
             AppFlowy-Cloud
 
       - name: Install wasm-pack
-        run: npm install -g wasm-pack
+        run: cargo install wasm-pack
 
       - name: Build with wasm-pack
-        run: wasm-pack build
+        run: wasm-pack build --release
         working-directory: ${{ github.event.inputs.working_directory }}
 
       - name: Update name
@@ -66,9 +56,6 @@ jobs:
         working-directory: ${{ github.event.inputs.working_directory }}/pkg
         run: |
           npm version ${{ github.event.inputs.package_version }}
-          if [ "${{ github.event.inputs.prerelease_preid }}" != "" ]; then
-            npm version prerelease --preid ${{ github.event.inputs.prerelease_preid }}
-          fi
 
       - name: Configure npm for wasm-pack
         run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ${{ github.event.inputs.working_directory }}/pkg/.npmrc

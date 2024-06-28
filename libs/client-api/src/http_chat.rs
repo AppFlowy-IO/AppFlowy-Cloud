@@ -11,6 +11,7 @@ use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {
+  /// Create a new chat
   pub async fn create_chat(
     &self,
     workspace_id: &str,
@@ -26,6 +27,8 @@ impl Client {
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
+
+  /// Delete a chat for given chat_id
   pub async fn delete_chat(
     &self,
     workspace_id: &str,
@@ -41,27 +44,8 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
-  pub async fn create_chat_qa_message(
-    &self,
-    workspace_id: &str,
-    chat_id: &str,
-    params: CreateChatMessageParams,
-  ) -> Result<impl Stream<Item = Result<ChatMessage, AppResponseError>>, AppResponseError> {
-    let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/message",
-      self.base_url
-    );
-    let resp = self
-      .http_client_with_auth(Method::POST, &url)
-      .await?
-      .json(&params)
-      .send()
-      .await?;
-    log_request_id(&resp);
-    AppResponse::<ChatMessage>::json_response_stream(resp).await
-  }
-
-  pub async fn create_question(
+  /// Save a question message to a chat
+  pub async fn save_question(
     &self,
     workspace_id: &str,
     chat_id: &str,
@@ -83,7 +67,8 @@ impl Client {
       .into_data()
   }
 
-  pub async fn create_answer(
+  /// save an answer message to a chat
+  pub async fn save_answer(
     &self,
     workspace_id: &str,
     chat_id: &str,
@@ -105,7 +90,8 @@ impl Client {
       .into_data()
   }
 
-  pub async fn stream_answer(
+  /// Ask AI with a question for given question's message_id
+  pub async fn ask_question(
     &self,
     workspace_id: &str,
     chat_id: &str,
@@ -124,8 +110,9 @@ impl Client {
     AppResponse::<()>::answer_response_stream(resp).await
   }
 
-  /// Returns the answer to a question message.
-  pub async fn get_answer(
+  /// Generate an answer for given question's message_id. The same as ask_question but return ChatMessage
+  /// instead of stream of Bytes
+  pub async fn generate_answer(
     &self,
     workspace_id: &str,
     chat_id: &str,
@@ -146,6 +133,8 @@ impl Client {
       .into_data()
   }
 
+  /// Update chat message content. It will override the content of the message.
+  /// A message can be a question or an answer
   pub async fn update_chat_message(
     &self,
     workspace_id: &str,
@@ -166,6 +155,7 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  /// Get related question for a chat message. The message_d should be the question's id
   pub async fn get_chat_related_question(
     &self,
     workspace_id: &str,
@@ -187,6 +177,7 @@ impl Client {
       .into_data()
   }
 
+  /// Return list of chat messages for a chat
   pub async fn get_chat_messages(
     &self,
     workspace_id: &str,
@@ -218,5 +209,26 @@ impl Client {
     AppResponse::<RepeatedChatMessage>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  /// It's no longer used in the frontend application since 0.6.0 version.
+  pub async fn create_question_answer(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    params: CreateChatMessageParams,
+  ) -> Result<impl Stream<Item = Result<ChatMessage, AppResponseError>>, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/message",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<ChatMessage>::json_response_stream(resp).await
   }
 }

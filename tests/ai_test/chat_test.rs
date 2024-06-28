@@ -25,7 +25,7 @@ async fn create_chat_and_create_messages_test() {
     let params = CreateChatMessageParams::new_system(format!("hello world {}", i));
     let message = test_client
       .api_client
-      .create_chat_qa_message(&workspace_id, &chat_id, params)
+      .create_question_answer(&workspace_id, &chat_id, params)
       .await
       .unwrap()
       .next()
@@ -111,7 +111,7 @@ async fn chat_qa_test() {
   let params = CreateChatMessageParams::new_user("where is singapore?");
   let stream = test_client
     .api_client
-    .create_chat_qa_message(&workspace_id, &chat_id, params)
+    .create_question_answer(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
@@ -146,7 +146,7 @@ async fn generate_chat_message_answer_test() {
   let params = CreateChatMessageParams::new_user("where is singapore?");
   let stream = test_client
     .api_client
-    .create_chat_qa_message(&workspace_id, &chat_id, params)
+    .create_question_answer(&workspace_id, &chat_id, params)
     .await
     .unwrap();
   let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
@@ -154,7 +154,7 @@ async fn generate_chat_message_answer_test() {
 
   let answer = test_client
     .api_client
-    .get_answer(&workspace_id, &chat_id, messages[0].message_id)
+    .generate_answer(&workspace_id, &chat_id, messages[0].message_id)
     .await
     .unwrap();
 
@@ -188,13 +188,13 @@ async fn generate_stream_answer_test() {
   let params = CreateChatMessageParams::new_user("Teach me how to write a article?");
   let question = test_client
     .api_client
-    .create_question(&workspace_id, &chat_id, params)
+    .save_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
   let mut answer_stream = test_client
     .api_client
-    .stream_answer(&workspace_id, &chat_id, question.message_id)
+    .ask_question(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
 

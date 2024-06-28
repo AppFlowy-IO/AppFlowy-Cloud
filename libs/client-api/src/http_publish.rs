@@ -1,8 +1,8 @@
 use bytes::Bytes;
 use client_api_entity::{PublishInfo, UpdatePublishNamespace};
 use reqwest::Method;
-use tracing::instrument;
 use shared_entity::response::{AppResponse, AppResponseError};
+use tracing::instrument;
 
 use crate::Client;
 
@@ -88,7 +88,11 @@ impl Client {
   where
     T: serde::de::DeserializeOwned,
   {
-    tracing::debug!("get_published_collab: {} {}", publish_namespace, publish_name);
+    tracing::debug!(
+      "get_published_collab: {} {}",
+      publish_namespace,
+      publish_name
+    );
     let url = format!(
       "{}/api/workspace/published/{}/{}",
       self.base_url, publish_namespace, publish_name
@@ -118,7 +122,11 @@ impl Client {
     publish_namespace: &str,
     publish_name: &str,
   ) -> Result<Bytes, AppResponseError> {
-    tracing::debug!("get_published_collab_blob: {} {}", publish_namespace, publish_name);
+    tracing::debug!(
+      "get_published_collab_blob: {} {}",
+      publish_namespace,
+      publish_name
+    );
     let url = format!(
       "{}/api/workspace/published/{}/{}/blob",
       self.base_url, publish_namespace, publish_name

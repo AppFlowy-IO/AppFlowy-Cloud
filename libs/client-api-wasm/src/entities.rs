@@ -2,8 +2,8 @@ use client_api::entity::AFUserProfile;
 use client_api::error::{AppResponseError, ErrorCode};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{
-  AFUserWorkspaceInfo, AFWorkspace, BatchQueryCollabResult, QueryCollab,
-  QueryCollabParams, QueryCollabResult,
+  AFUserWorkspaceInfo, AFWorkspace, BatchQueryCollabResult, QueryCollab, QueryCollabParams,
+  QueryCollabResult,
 };
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};

@@ -58,9 +58,11 @@ where
     snapshot_control: SnapshotControl,
     rt_cmd_sender: CLCommandSender,
     redis_conn_manager: RedisConnectionManager,
+    shared_state_redis_key_prefix: &str,
     metrics: Arc<CollabMetrics>,
   ) -> Self {
-    let shared_state = RealtimeSharedState::new(redis_conn_manager.clone());
+    let shared_state =
+      RealtimeSharedState::new(redis_conn_manager.clone(), shared_state_redis_key_prefix);
     let queue = Arc::new(StorageQueue::new_with_metrics(
       cache.clone(),
       redis_conn_manager,

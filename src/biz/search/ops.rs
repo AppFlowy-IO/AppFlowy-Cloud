@@ -4,23 +4,25 @@ use appflowy_ai_client::client::AppFlowyAIClient;
 use appflowy_ai_client::dto::{
   EmbeddingEncodingFormat, EmbeddingInput, EmbeddingOutput, EmbeddingRequest, EmbeddingsModel,
 };
+
 use database::index::{search_documents, SearchDocumentParams};
 use shared_entity::dto::search_dto::{
   SearchContentType, SearchDocumentRequest, SearchDocumentResponseItem,
 };
 use shared_entity::response::AppResponseError;
 use sqlx::PgPool;
+
 use uuid::Uuid;
 
 pub async fn search_document(
   pg_pool: &PgPool,
-  openai: &AppFlowyAIClient,
+  ai_client: &AppFlowyAIClient,
   uid: i64,
   workspace_id: Uuid,
   request: SearchDocumentRequest,
   metrics: &RequestMetrics,
 ) -> Result<Vec<SearchDocumentResponseItem>, AppResponseError> {
-  let embeddings = openai
+  let embeddings = ai_client
     .embeddings(EmbeddingRequest {
       input: EmbeddingInput::String(request.query.clone()),
       model: EmbeddingsModel::TextEmbedding3Small.to_string(),

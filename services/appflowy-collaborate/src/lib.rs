@@ -16,6 +16,7 @@ mod rt_server;
 pub mod shared_state;
 pub mod snapshot;
 mod state;
+pub mod telemetry;
 mod util;
 
 pub use metrics::*;

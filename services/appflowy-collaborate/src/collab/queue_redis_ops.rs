@@ -184,7 +184,7 @@ impl RedisSortedSet {
   }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PendingWrite {
   pub object_id: String,
   pub seq: i64,
@@ -201,7 +201,7 @@ impl PendingWrite {
   }
 }
 
-#[derive(Clone, Serialize_repr, Deserialize_repr)]
+#[derive(Clone, Serialize_repr, Deserialize_repr, Debug)]
 #[repr(u8)]
 pub enum WritePriority {
   High = 0,

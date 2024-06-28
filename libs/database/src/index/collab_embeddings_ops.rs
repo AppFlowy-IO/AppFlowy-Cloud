@@ -83,7 +83,7 @@ pub async fn upsert_collab_embeddings(
     )
     .bind(&r.fragment_id)
     .bind(&r.object_id)
-    .bind(r.collab_type.clone() as i32)
+    .bind(crate::collab::partition_key_from_collab_type(&r.collab_type))
     .bind(r.content_type as i32)
     .bind(&r.content)
     .bind(r.embedding.clone().map(Vector::from))

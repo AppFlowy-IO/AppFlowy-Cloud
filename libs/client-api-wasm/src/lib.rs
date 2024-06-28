@@ -8,9 +8,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use client_api::error::ErrorCode;
+use console_error_panic_hook;
 use database_entity::dto::QueryCollab;
 use wasm_bindgen::prelude::*;
-use console_error_panic_hook;
 
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -175,7 +175,7 @@ impl ClientAPI {
       .await
     {
       Ok(data) => Ok(PublishViewMeta {
-        data: data.to_string()
+        data: data.to_string(),
       }),
 
       Err(err) => Err(ClientResponse::from(err)),

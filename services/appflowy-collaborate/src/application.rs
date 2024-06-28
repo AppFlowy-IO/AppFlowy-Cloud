@@ -14,6 +14,7 @@ use tracing::{info, warn};
 
 use crate::actix_ws::server::RealtimeServerActor;
 use access_control::access::AccessControl;
+use appflowy_ai_client::client::AppFlowyAIClient;
 use workspace_access::notification::spawn_listen_on_workspace_member_change;
 use workspace_access::WorkspaceAccessControlImpl;
 
@@ -26,6 +27,7 @@ use crate::collab::notification::spawn_listen_on_collab_member_change;
 use crate::collab::storage::CollabStorageImpl;
 use crate::command::{CLCommandReceiver, CLCommandSender};
 use crate::config::{Config, DatabaseSetting};
+use crate::indexer::IndexerProvider;
 use crate::pg_listener::PgListeners;
 use crate::shared_state::RealtimeSharedState;
 use crate::snapshot::SnapshotControl;
@@ -76,6 +78,7 @@ pub async fn run_actix_server(
     Duration::from_secs(config.collab.group_persistence_interval_secs),
     config.collab.edit_state_max_count,
     config.collab.edit_state_max_secs,
+    state.indexer_provider.clone(),
   )
   .await
   .unwrap();
@@ -96,6 +99,8 @@ pub async fn run_actix_server(
 pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<AppState, Error> {
   let metrics = AppMetrics::new();
   let pg_pool = get_connection_pool(&config.db_settings).await?;
+  let ai_client = AppFlowyAIClient::new(&config.ai.url());
+  let indexer_provider = IndexerProvider::new(pg_pool.clone(), ai_client);
 
   // User cache
   let user_cache = UserCache::new(pg_pool.clone()).await;
@@ -154,6 +159,7 @@ pub async fn init_state(config: &Config, rt_cmd_tx: CLCommandSender) -> Result<A
     collab_access_control_storage: collab_storage,
     metrics,
     realtime_shared_state,
+    indexer_provider,
   };
   Ok(app_state)
 }

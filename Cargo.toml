@@ -159,7 +159,6 @@ members = [
     "libs/client-api-entity",
     # services
     "services/appflowy-history",
-    "services/appflowy-indexer",
     "services/appflowy-collaborate",
     # xtask
     "xtask",

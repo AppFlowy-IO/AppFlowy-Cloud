@@ -22,6 +22,7 @@ use crate::connect_state::ConnectState;
 use crate::error::RealtimeError;
 use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
+use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
 use crate::state::RedisConnectionManager;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
@@ -53,6 +54,7 @@ where
     group_persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
+    indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -71,6 +73,7 @@ where
         group_persistence_interval,
         edit_state_max_count,
         edit_state_max_secs,
+        indexer_provider.clone(),
       )
       .await?,
     );
@@ -82,6 +85,8 @@ where
     spawn_collaboration_command(command_recv, &group_sender_by_object_id);
 
     spawn_metrics(&metrics, &metrics_calculate, &storage);
+
+    spawn_handle_unindexed_collabs(indexer_provider);
 
     Ok(Self {
       storage,
@@ -246,6 +251,10 @@ where
       .get(user_device)
       .map(|entry| entry.value().clone())
   }
+}
+
+fn spawn_handle_unindexed_collabs(indexer_provider: Arc<IndexerProvider>) {
+  tokio::task::spawn_local(IndexerProvider::handle_unindexed_collabs(indexer_provider));
 }
 
 fn spawn_period_check_inactive_group<S, AC>(

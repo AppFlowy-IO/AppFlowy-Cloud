@@ -7,12 +7,14 @@ use collab_entity::CollabType;
 use sqlx::{PgPool, Transaction};
 use tokio::time::sleep;
 use tracing::{event, instrument, Level};
+use uuid::Uuid;
 
 use app_error::AppError;
 use database::collab::{
   batch_select_collab_blob, insert_into_af_collab, is_collab_exists, select_blob_from_af_collab,
   select_collab_meta_from_af_collab, AppResult,
 };
+use database::index::upsert_collab_embeddings;
 use database::pg_row::AFCollabRowMeta;
 use database_entity::dto::{CollabParams, QueryCollab, QueryCollabResult};
 
@@ -54,6 +56,17 @@ impl CollabDiskCache {
     transaction: &mut Transaction<'_, sqlx::Postgres>,
   ) -> AppResult<()> {
     insert_into_af_collab(transaction, uid, workspace_id, params).await?;
+    if let Some(em) = &params.embeddings {
+      tracing::info!(
+        "saving collab {} embeddings (cost: {} tokens)",
+        params.object_id,
+        em.tokens_consumed
+      );
+      let workspace_id = Uuid::parse_str(workspace_id)?;
+      upsert_collab_embeddings(transaction, &workspace_id, em.tokens_consumed, &em.params).await?;
+    } else if params.collab_type == CollabType::Document {
+      tracing::info!("no embeddings to save for collab {}", params.object_id);
+    }
     Ok(())
   }
 

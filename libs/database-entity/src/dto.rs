@@ -45,6 +45,7 @@ impl CreateCollabParams {
         object_id: self.object_id,
         encoded_collab_v1: self.encoded_collab_v1,
         collab_type: self.collab_type,
+        embeddings: None,
       },
       self.workspace_id,
     )
@@ -58,6 +59,8 @@ impl CreateCollabParams {
   }
 }
 
+pub struct CollabIndexParams {}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CollabParams {
   #[validate(custom = "validate_not_empty_str")]
@@ -65,6 +68,8 @@ pub struct CollabParams {
   #[validate(custom = "validate_not_empty_payload")]
   pub encoded_collab_v1: Vec<u8>,
   pub collab_type: CollabType,
+  #[serde(default)]
+  pub embeddings: Option<AFCollabEmbeddings>,
 }
 
 impl CollabParams {
@@ -78,6 +83,7 @@ impl CollabParams {
       object_id,
       collab_type,
       encoded_collab_v1,
+      embeddings: None,
     }
   }
 
@@ -244,7 +250,7 @@ impl AFBlobRecord {
   }
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum QueryCollabResult {
   Success { encode_collab_v1: Vec<u8> },
   Failed { error: String },
@@ -770,7 +776,7 @@ impl ChatAuthor {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AFCollabEmbeddingParams {
   pub fragment_id: String,
   pub object_id: String,
@@ -778,6 +784,12 @@ pub struct AFCollabEmbeddingParams {
   pub content_type: EmbeddingContentType,
   pub content: String,
   pub embedding: Option<Vec<f32>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AFCollabEmbeddings {
+  pub tokens_consumed: u32,
+  pub params: Vec<AFCollabEmbeddingParams>,
 }
 
 /// Type of content stored by the embedding.
@@ -814,4 +826,15 @@ pub struct PublishCollabMetadata<Metadata> {
 pub struct PublishCollabItem<Meta, Data> {
   pub meta: PublishCollabMetadata<Meta>,
   pub data: Data,
+}
+
+/// Indexing status of a document.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum IndexingStatus {
+  /// Indexing is disabled for that document.
+  Disabled,
+  /// Indexing is enabled, but the document has never been indexed.
+  NotIndexed,
+  /// Indexing is enabled and the document has been indexed.
+  Indexed,
 }

@@ -66,6 +66,7 @@ where
           object_id,
           encoded_collab_v1,
           collab_type: template.object_type,
+          embeddings: None,
         },
         txn,
       )
@@ -104,6 +105,7 @@ async fn create_workspace_database_collab(
         object_id: object_id.to_string(),
         encoded_collab_v1,
         collab_type,
+        embeddings: None,
       },
       txn,
     )

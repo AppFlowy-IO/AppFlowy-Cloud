@@ -24,6 +24,7 @@ use crate::error::{CreateGroupFailedReason, RealtimeError};
 use crate::group::group_init::CollabGroup;
 use crate::group::plugin::HistoryPlugin;
 use crate::group::state::GroupManagementState;
+use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
 
 pub struct GroupManager<S, AC> {
@@ -36,6 +37,7 @@ pub struct GroupManager<S, AC> {
   persistence_interval: Duration,
   edit_state_max_count: u32,
   edit_state_max_secs: i64,
+  indexer_provider: Arc<IndexerProvider>,
 }
 
 impl<S, AC> GroupManager<S, AC>
@@ -43,6 +45,7 @@ where
   S: CollabStorage,
   AC: RealtimeAccessControl,
 {
+  #[allow(clippy::too_many_arguments)]
   pub async fn new(
     storage: Arc<S>,
     access_control: Arc<AC>,
@@ -51,6 +54,7 @@ where
     persistence_interval: Duration,
     edit_state_max_count: u32,
     edit_state_max_secs: i64,
+    indexer_provider: Arc<IndexerProvider>,
   ) -> Result<Self, RealtimeError> {
     let collab_stream = Arc::new(collab_stream);
     let control_event_stream = collab_stream
@@ -68,6 +72,7 @@ where
       persistence_interval,
       edit_state_max_count,
       edit_state_max_secs,
+      indexer_provider,
     })
   }
 
@@ -238,6 +243,17 @@ where
       collab_type
     );
 
+    let mut indexer = self.indexer_provider.indexer_for(collab_type.clone());
+    if indexer.is_some()
+      && !self
+        .indexer_provider
+        .can_index_workspace(workspace_id)
+        .await
+        .map_err(|e| RealtimeError::Internal(e.into()))?
+    {
+      tracing::trace!("workspace {} indexing is disabled", workspace_id);
+      indexer = None;
+    }
     let group = Arc::new(
       CollabGroup::new(
         user.uid,
@@ -252,6 +268,7 @@ where
         self.persistence_interval,
         self.edit_state_max_count,
         self.edit_state_max_secs,
+        indexer,
       )
       .await?,
     );

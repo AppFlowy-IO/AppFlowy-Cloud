@@ -29,6 +29,7 @@ async fn insert_collab_sql_test(pool: PgPool) {
       object_id,
       collab_type: CollabType::Unknown,
       encoded_collab_v1,
+      embeddings: None,
     };
     insert_into_af_collab(&mut txn, &user.uid, &user.workspace_id, &params)
       .await

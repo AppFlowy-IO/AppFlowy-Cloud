@@ -17,13 +17,14 @@ actix.workspace = true
 actix-web.workspace = true
 actix-http = { workspace = true, default-features = false, features = ["openssl", "compress-brotli", "compress-gzip"] }
 actix-web-actors = { version = "4.3" }
-app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error"] }
+app-error = { workspace = true, features = ["sqlx_error", "actix_web_error", "tokio_error", "bincode_error", "appflowy_ai_error"] }
 authentication.workspace = true
 brotli.workspace = true
 dashmap.workspace = true
 dotenvy.workspace = true
 async-stream.workspace = true
 futures.workspace = true
+appflowy-ai-client = { workspace = true, features = ["client-api"] }
 tracing = "0.1.40"
 futures-util = "0.3.30"
 tokio-util = { version = "0.7", features = ["codec"] }
@@ -59,7 +60,7 @@ indexmap = "2.2.5"
 semver = "1.0.22"
 redis = "0.25.2"
 secrecy.workspace = true
-shared-entity = { workspace = true, features = ["cloud"]}
+shared-entity = { workspace = true, features = ["cloud"] }
 parking_lot = "0.12.1"
 lazy_static = "1.4.0"
 itertools = "0.12.0"
@@ -68,6 +69,7 @@ workspace-access.workspace = true
 
 [dev-dependencies]
 rand = "0.8.5"
+workspace-template.workspace = true
 
 [features]
 collab-rt-multi-thread = []

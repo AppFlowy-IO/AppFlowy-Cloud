@@ -151,20 +151,6 @@ services:
       - APPFLOWY_HISTORY_ENVIRONMENT=production
       - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
 
-  appflowy_indexer:
-    restart: on-failure
-    image: appflowyinc/appflowy_indexer:${APPFLOWY_INDEXER_VERSION:-latest}
-    build:
-      context: .
-      dockerfile: ./services/appflowy-indexer/Dockerfile
-    environment:
-      - RUST_LOG=${RUST_LOG:-info}
-      - APPFLOWY_INDEXER_REDIS_URL=redis://redis:6379
-      - APPFLOWY_INDEXER_ENVIRONMENT=production
-      - APPFLOWY_INDEXER_DATABASE_URL=${APPFLOWY_INDEXER_DATABASE_URL}
-      - APPFLOWY_AI_SERVER_HOST=${APPFLOWY_AI_SERVER_HOST}
-      - APPFLOWY_AI_SERVER_PORT=${APPFLOWY_AI_SERVER_PORT}
-
 volumes:
   postgres_data:
   minio_data:

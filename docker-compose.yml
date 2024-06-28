@@ -151,6 +151,25 @@ services:
       - APPFLOWY_HISTORY_ENVIRONMENT=production
       - APPFLOWY_HISTORY_DATABASE_URL=${APPFLOWY_HISTORY_DATABASE_URL}
 
+# Uncomment for experimental support for independent collaboration service
+#  appflowy_collaborate:
+#    restart: on-failure
+#    environment:
+#      - RUST_LOG=${RUST_LOG:-info}
+#      - APPFLOWY_ENVIRONMENT=production
+#      - APPFLOWY_DATABASE_URL=${APPFLOWY_DATABASE_URL}
+#      - APPFLOWY_REDIS_URI=redis://redis:6379
+#      - APPFLOWY_GOTRUE_JWT_SECRET=${GOTRUE_JWT_SECRET}
+#      - APPFLOWY_DATABASE_MAX_CONNECTIONS=${APPFLOWY_DATABASE_MAX_CONNECTIONS}
+#      - APPFLOWY_COLLAB_GROUP_PERSISTENCE_INTERVAL=${APPFLOWY_COLLAB_GROUP_PERSISTENCE_INTERVAL:-60}
+#      - APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT=${APPFLOWY_COLLAB_EDIT_STATE_MAX_COUNT:-100}
+#      - APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS=${APPFLOWY_COLLAB_EDIT_STATE_MAX_SECS:-60}
+#      - APPFLOWY_AI_SERVER_HOST=ai
+#      - APPFLOWY_AI_SERVER_PORT=5001
+#    build:
+#      context: .
+#      dockerfile: ./services/appflowy-collaborate/Dockerfile
+
 volumes:
   postgres_data:
   minio_data:

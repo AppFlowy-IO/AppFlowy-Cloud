@@ -887,7 +887,7 @@ pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = P
 pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   workspace_id: &Uuid,
-) -> Result<Option<String>, AppError> {
+) -> Result<String, AppError> {
   let res = sqlx::query_scalar!(
     r#"
       SELECT publish_namespace

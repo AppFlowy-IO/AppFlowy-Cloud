@@ -814,6 +814,20 @@ pub async fn upsert_workspace_settings(
   .execute(tx.deref_mut())
   .await?;
 
+  if settings.disable_search_indexing {
+    sqlx::query!(
+      r#"DELETE FROM af_collab_embeddings e WHERE e.oid in (
+        SELECT c.oid
+        FROM af_collab c
+        WHERE c.partition_key = e.partition_key
+          AND c.oid = e.oid
+          AND c.workspace_id = $1)"#,
+      workspace_id
+    )
+    .execute(tx.deref_mut())
+    .await?;
+  }
+
   Ok(())
 }
 

@@ -118,9 +118,6 @@ pub enum AppError {
   OverrideWithIncorrectData(String),
 
   #[error("{0}")]
-  PublishNamespaceNotSet(String),
-
-  #[error("{0}")]
   PublishNamespaceAlreadyTaken(String),
 }
 
@@ -180,7 +177,6 @@ impl AppError {
       AppError::NoRequiredData(_) => ErrorCode::NoRequiredData,
       AppError::OverrideWithIncorrectData(_) => ErrorCode::OverrideWithIncorrectData,
       AppError::Utf8Error(_) => ErrorCode::Internal,
-      AppError::PublishNamespaceNotSet(_) => ErrorCode::PublishNamespaceNotSet,
       AppError::PublishNamespaceAlreadyTaken(_) => ErrorCode::PublishNamespaceAlreadyTaken,
     }
   }

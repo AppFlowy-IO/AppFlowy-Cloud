@@ -932,7 +932,10 @@ pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database
         $6::bytea[]
       )
       ON CONFLICT (workspace_id, view_id) DO UPDATE
-      SET metadata = EXCLUDED.metadata
+      SET metadata = EXCLUDED.metadata,
+          blob = EXCLUDED.blob,
+          published_by = EXCLUDED.published_by,
+          publish_name = EXCLUDED.publish_name
     "#,
     workspace_id,
     &view_ids,

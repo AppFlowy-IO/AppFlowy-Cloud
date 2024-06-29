@@ -47,6 +47,7 @@ pub const WORKSPACE_MEMBER_PATTERN: &str = "/api/workspace/{workspace_id}/member
 pub const WORKSPACE_INVITE_PATTERN: &str = "/api/workspace/{workspace_id}/invite";
 pub const COLLAB_PATTERN: &str = "/api/workspace/{workspace_id}/collab/{object_id}";
 pub const V1_COLLAB_PATTERN: &str = "/api/workspace/v1/{workspace_id}/collab/{object_id}";
+pub const WORKSPACE_PUBLISH_PATTERN: &str = "/api/workspace/{workspace_id}/publish";
 pub const WORKSPACE_PUBLISH_NAMESPACE_PATTERN: &str =
   "/api/workspace/{workspace_id}/publish-namespace";
 

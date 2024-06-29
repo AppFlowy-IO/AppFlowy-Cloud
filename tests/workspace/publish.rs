@@ -1,4 +1,5 @@
-use client_api::entity::{PublishCollabItem, PublishCollabMetadata};
+use client_api::entity::{AFRole, PublishCollabItem, PublishCollabMetadata};
+use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
 
 #[tokio::test]
@@ -7,13 +8,11 @@ async fn test_set_publish_namespace_set() {
   let workspace_id = get_first_workspace_string(&c).await;
 
   {
-    // cannot get namespace if not set
-    let err = c
+    // can get namespace before setting, which is random string
+    let _ = c
       .get_workspace_publish_namespace(&workspace_id.to_string())
       .await
-      .err()
       .unwrap();
-    assert_eq!(format!("{:?}", err.code), "PublishNamespaceNotSet");
   }
 
   let namespace = uuid::Uuid::new_v4().to_string();
@@ -127,6 +126,20 @@ async fn test_publish_doc() {
       .await
       .unwrap();
     assert_eq!(blob, "yrs_encoded_data_1");
+
+    let publish_info = guest_client
+      .get_published_collab_info(&view_id_2)
+      .await
+      .unwrap();
+    assert_eq!(publish_info.namespace, Some(my_namespace.clone()));
+    assert_eq!(publish_info.publish_name, publish_name_2);
+    assert_eq!(publish_info.view_id, view_id_2);
+
+    let blob = guest_client
+      .get_published_collab_blob(&my_namespace, publish_name_2)
+      .await
+      .unwrap();
+    assert_eq!(blob, "yrs_encoded_data_2");
   }
 
   c.unpublish_collabs(&workspace_id, &[view_id_1])
@@ -198,6 +211,43 @@ async fn get_first_workspace_string(c: &client_api::Client) -> String {
     .unwrap()
     .workspace_id
     .to_string()
+}
+
+#[tokio::test]
+async fn workspace_member_publish_unpublish() {
+  let client_1 = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = client_1.workspace_id().await;
+  let client_2 = TestClient::new_user_without_ws_conn().await;
+  client_1
+    .invite_and_accepted_workspace_member(&workspace_id, &client_2, AFRole::Member)
+    .await
+    .unwrap();
+
+  let view_id = uuid::Uuid::new_v4();
+  // member can publish without owner setting namespace
+  client_2
+    .api_client
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id,
+          publish_name: "publish-name-1".to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_1".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_1".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+
+  client_2
+    .api_client
+    .unpublish_collabs(&workspace_id, &[view_id])
+    .await
+    .unwrap();
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

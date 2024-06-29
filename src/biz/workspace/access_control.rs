@@ -21,7 +21,7 @@ use database_entity::dto::AFRole;
 
 use crate::api::workspace::{
   WORKSPACE_INVITE_PATTERN, WORKSPACE_MEMBER_PATTERN, WORKSPACE_PATTERN,
-  WORKSPACE_PUBLISH_NAMESPACE_PATTERN,
+  WORKSPACE_PUBLISH_NAMESPACE_PATTERN, WORKSPACE_PUBLISH_PATTERN,
 };
 use crate::middleware::access_control_mw::{AccessResource, MiddlewareAccessControl};
 use crate::state::UserCache;
@@ -48,6 +48,10 @@ where
       ],
       // Require role for given resources
       require_role_rules: vec![
+        (
+          ResourceDef::new(WORKSPACE_PUBLISH_PATTERN),
+          [(Method::DELETE, AFRole::Member)].into(),
+        ),
         // Only the Owner can manager the workspace members
         (
           ResourceDef::new(WORKSPACE_MEMBER_PATTERN),

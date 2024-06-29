@@ -132,15 +132,7 @@ pub async fn get_workspace_publish_namespace(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
 ) -> Result<String, AppError> {
-  let namespace = match select_workspace_publish_namespace(pg_pool, workspace_id).await? {
-    Some(namespace) => namespace,
-    None => {
-      return Err(AppError::PublishNamespaceNotSet(
-        "publish namespace is not set for the workspace".to_string(),
-      ))
-    },
-  };
-  Ok(namespace)
+  select_workspace_publish_namespace(pg_pool, workspace_id).await
 }
 
 pub async fn publish_collabs(

@@ -142,6 +142,51 @@ async fn test_publish_doc() {
     assert_eq!(blob, "yrs_encoded_data_2");
   }
 
+  // updates data
+  c.publish_collabs::<MyCustomMetadata, &[u8]>(
+    &workspace_id,
+    vec![
+      PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: view_id_1,
+          publish_name: publish_name_1.to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_1".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_3".as_bytes(),
+      },
+      PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id: view_id_2,
+          publish_name: publish_name_2.to_string(),
+          metadata: MyCustomMetadata {
+            title: "my_title_2".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_4".as_bytes(),
+      },
+    ],
+  )
+  .await
+  .unwrap();
+
+  {
+    // should see updated data
+    let guest_client = localhost_client();
+    let blob = guest_client
+      .get_published_collab_blob(&my_namespace, publish_name_1)
+      .await
+      .unwrap();
+    assert_eq!(blob, "yrs_encoded_data_3");
+
+    let blob = guest_client
+      .get_published_collab_blob(&my_namespace, publish_name_2)
+      .await
+      .unwrap();
+    assert_eq!(blob, "yrs_encoded_data_4");
+  }
+
   c.unpublish_collabs(&workspace_id, &[view_id_1])
     .await
     .unwrap();

@@ -27,7 +27,7 @@ use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::Subscription as YrsSubscription;
+use yrs::{ReadTxn, Subscription as YrsSubscription};
 
 pub trait CollabUpdateStreaming: 'static + Send + Sync {
   fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
@@ -89,6 +89,20 @@ impl CollabBroadcast {
     this
   }
 
+  fn edits_count<T: ReadTxn>(txn: &T) -> u32 {
+    let snapshot = txn.snapshot();
+    let mut edits = 0;
+    for (_, &clock) in snapshot.state_map.iter() {
+      edits += clock;
+    }
+    for (_, ranges) in snapshot.delete_set.iter() {
+      for range in ranges.iter() {
+        edits += range.len() as u32;
+      }
+    }
+    edits
+  }
+
   fn observe_collab_changes(&mut self, collab: &MutexCollab) {
     let (doc_sub, awareness_sub) = {
       // Observer the document's update and broadcast it to all subscribers.
@@ -106,7 +120,8 @@ impl CollabBroadcast {
         .lock()
         .get_doc()
         .observe_update_v1(move |txn, event| {
-          let seq_num = edit_state.increment_edit_count() + 1;
+          let edits = Self::edits_count(txn);
+          let seq_num = edit_state.set_edit_count(edits);
           let origin = CollabOrigin::from(txn);
           trace!(
             "observe update with len:{}, origin: {}",

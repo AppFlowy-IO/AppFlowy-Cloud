@@ -561,6 +561,12 @@ async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> 
     ));
   }
 
+  if new_namespace.len() > 64 {
+    return Err(AppError::InvalidRequest(
+      "Namespace must be at most 32 characters long".to_string(),
+    ));
+  }
+
   // Only contain alphanumeric characters and hyphens
   for c in new_namespace.chars() {
     if !c.is_alphanumeric() && c != '-' {
@@ -569,6 +575,8 @@ async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> 
       ));
     }
   }
+
+  // TODO: add more checks for reserved words
 
   Ok(())
 }
@@ -595,9 +603,9 @@ async fn check_workspace_owner_or_publisher(
 
 fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
   // Check len
-  if publish_name.len() > 50 {
+  if publish_name.len() > 128 {
     return Err(AppError::InvalidRequest(
-      "Document name must be at most 50 characters long".to_string(),
+      "Publish name must be at most 128 characters long".to_string(),
     ));
   }
 
@@ -605,7 +613,7 @@ fn check_collab_publish_name(publish_name: &str) -> Result<(), AppError> {
   for c in publish_name.chars() {
     if !c.is_alphanumeric() && c != '-' {
       return Err(AppError::InvalidRequest(
-        "Document name must only contain alphanumeric characters and hyphens".to_string(),
+        "Publish name must only contain alphanumeric characters and hyphens".to_string(),
       ));
     }
   }

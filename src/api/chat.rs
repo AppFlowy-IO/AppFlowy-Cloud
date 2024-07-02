@@ -15,12 +15,12 @@ use database_entity::dto::{
   GetChatMessageParams, MessageCursor, RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use futures::Stream;
+use futures_util::stream;
 use futures_util::{FutureExt, TryStreamExt};
 use pin_project::pin_project;
 use shared_entity::response::{AppResponse, JsonAppResponse};
 use std::collections::HashMap;
 use std::pin::Pin;
-
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 use tokio::task;
@@ -28,6 +28,7 @@ use tokio::task;
 use database::chat;
 
 use crate::api::util::ai_model_from_header;
+
 use database::chat::chat_ops::insert_answer_message;
 use tracing::{instrument, trace};
 use validator::Validate;
@@ -208,18 +209,27 @@ async fn answer_stream_handler(
   let (_workspace_id, chat_id, question_id) = path.into_inner();
   let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
   let ai_model = ai_model_from_header(&req);
-  let answer_stream = state
+  match state
     .ai_client
     .stream_question(&chat_id, &content, &ai_model)
     .await
-    .map_err(|err| AppError::Internal(err.into()))?;
-
-  let new_answer_stream = answer_stream.map_err(AppError::from);
-  Ok(
-    HttpResponse::Ok()
-      .content_type("text/event-stream")
-      .streaming(new_answer_stream),
-  )
+  {
+    Ok(answer_stream) => {
+      let new_answer_stream = answer_stream.map_err(AppError::from);
+      Ok(
+        HttpResponse::Ok()
+          .content_type("text/event-stream")
+          .streaming(new_answer_stream),
+      )
+    },
+    Err(err) => Ok(
+      HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .streaming(stream::once(async move {
+          Err(AppError::AIServiceUnavailable(err.to_string()))
+        })),
+    ),
+  }
 }
 
 #[instrument(level = "debug", skip_all, err)]

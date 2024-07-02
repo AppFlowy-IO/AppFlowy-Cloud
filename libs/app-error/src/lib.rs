@@ -119,6 +119,9 @@ pub enum AppError {
 
   #[error("{0}")]
   PublishNamespaceAlreadyTaken(String),
+
+  #[error("{0}")]
+  AIServiceUnavailable(String),
 }
 
 impl AppError {
@@ -178,6 +181,7 @@ impl AppError {
       AppError::OverrideWithIncorrectData(_) => ErrorCode::OverrideWithIncorrectData,
       AppError::Utf8Error(_) => ErrorCode::Internal,
       AppError::PublishNamespaceAlreadyTaken(_) => ErrorCode::PublishNamespaceAlreadyTaken,
+      AppError::AIServiceUnavailable(_) => ErrorCode::AIServiceUnavailable,
     }
   }
 }
@@ -288,6 +292,7 @@ pub enum ErrorCode {
   OverrideWithIncorrectData = 1029,
   PublishNamespaceNotSet = 1030,
   PublishNamespaceAlreadyTaken = 1031,
+  AIServiceUnavailable = 1032,
 }
 
 impl ErrorCode {

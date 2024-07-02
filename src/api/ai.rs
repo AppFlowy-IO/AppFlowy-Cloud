@@ -1,10 +1,12 @@
 use crate::api::util::ai_model_from_header;
 use crate::state::AppState;
+
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use app_error::AppError;
 use appflowy_ai_client::dto::{CompleteTextResponse, TranslateRowParams, TranslateRowResponse};
-use futures_util::TryStreamExt;
+
+use futures_util::{stream, TryStreamExt};
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
@@ -42,16 +44,24 @@ async fn stream_complete_text_handler(
 ) -> actix_web::Result<HttpResponse> {
   let ai_model = ai_model_from_header(&req);
   let params = payload.into_inner();
-  let stream = state
+  match state
     .ai_client
     .stream_completion_text(&params.text, params.completion_type, ai_model)
     .await
-    .map_err(|err| AppError::Internal(err.into()))?;
-  Ok(
-    HttpResponse::Ok()
-      .content_type("text/event-stream")
-      .streaming(stream.map_err(AppError::from)),
-  )
+  {
+    Ok(stream) => Ok(
+      HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .streaming(stream.map_err(AppError::from)),
+    ),
+    Err(err) => Ok(
+      HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .streaming(stream::once(async move {
+          Err(AppError::AIServiceUnavailable(err.to_string()))
+        })),
+    ),
+  }
 }
 
 #[instrument(level = "debug", skip(state, payload), err)]

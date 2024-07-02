@@ -401,10 +401,10 @@ mod tests {
   #[test]
   fn edit_state_test() {
     let edit_state = EditState::new(10, 10, false);
-    edit_state.set_edit_count();
+    edit_state.set_edit_count(1);
 
-    for _ in 0..10 {
-      edit_state.set_edit_count();
+    for i in 1..12 {
+      edit_state.set_edit_count(i);
     }
     assert!(edit_state.should_save_to_disk());
     assert!(edit_state.should_save_to_disk());

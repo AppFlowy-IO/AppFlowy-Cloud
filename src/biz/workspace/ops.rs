@@ -561,7 +561,7 @@ async fn check_workspace_namespace(new_namespace: &str) -> Result<(), AppError> 
     ));
   }
 
-  if new_namespace.len() > 32 {
+  if new_namespace.len() > 64 {
     return Err(AppError::InvalidRequest(
       "Namespace must be at most 32 characters long".to_string(),
     ));

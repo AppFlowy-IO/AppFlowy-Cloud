@@ -265,14 +265,8 @@ impl EditState {
   }
 
   /// Increments the edit count and returns the old value
-  pub(crate) fn increment_edit_count(&self) -> u32 {
-    self
-      .edit_counter
-      .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current| {
-        Some(current + 1)
-      })
-      // safety: unwrap when returning the new value
-      .unwrap()
+  pub(crate) fn set_edit_count(&self, edits: u32) -> u32 {
+    self.edit_counter.swap(edits, Ordering::SeqCst)
   }
 
   pub(crate) fn tick(&self) {
@@ -407,10 +401,10 @@ mod tests {
   #[test]
   fn edit_state_test() {
     let edit_state = EditState::new(10, 10, false);
-    edit_state.increment_edit_count();
+    edit_state.set_edit_count();
 
     for _ in 0..10 {
-      edit_state.increment_edit_count();
+      edit_state.set_edit_count();
     }
     assert!(edit_state.should_save_to_disk());
     assert!(edit_state.should_save_to_disk());

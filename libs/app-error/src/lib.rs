@@ -293,6 +293,7 @@ pub enum ErrorCode {
   PublishNamespaceNotSet = 1030,
   PublishNamespaceAlreadyTaken = 1031,
   AIServiceUnavailable = 1032,
+  AIResponseLimitExceeded = 1033,
 }
 
 impl ErrorCode {

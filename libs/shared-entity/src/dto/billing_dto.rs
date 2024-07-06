@@ -83,3 +83,16 @@ pub struct WorkspaceUsageLimit {
   pub single_blob_size: usize,
   pub member_count: usize,
 }
+
+#[derive(Deserialize)]
+pub struct WorkspaceUsageAndLimit {
+  pub member_count: i64,
+  pub member_count_limit: i64,
+  pub total_blob_bytes: i64,
+  pub total_blob_bytes_limit: i64,
+  pub ai_responses_count: i64,
+  pub ai_responses_count_limit: i64,
+
+  pub local_ai: bool,
+  pub ai_responses_unlimited: bool,
+}

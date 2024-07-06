@@ -1,4 +1,5 @@
 use crate::Client;
+use client_api_entity::billing_dto::WorkspaceUsageAndLimit;
 use reqwest::Method;
 use serde_json::json;
 use shared_entity::{
@@ -134,15 +135,12 @@ impl Client {
     Ok(portal_url)
   }
 
+  // Deprecated
   async fn get_workspace_limits(
     &self,
     workspace_id: &str,
   ) -> Result<WorkspaceUsageLimit, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/{}/limit",
-      self.base_billing_url(),
-      workspace_id
-    );
+    let url = format!("{}/api/workspace/{}/limit", self.base_url, workspace_id);
     self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -150,6 +148,25 @@ impl Client {
       .await?
       .error_for_status()?
       .json::<AppResponse<WorkspaceUsageLimit>>()
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_workspace_usage_and_limit(
+    &self,
+    workspace_id: &str,
+  ) -> Result<WorkspaceUsageAndLimit, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/usage-and-limit",
+      self.base_url, workspace_id
+    );
+    self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?
+      .error_for_status()?
+      .json::<AppResponse<WorkspaceUsageAndLimit>>()
       .await?
       .into_data()
   }

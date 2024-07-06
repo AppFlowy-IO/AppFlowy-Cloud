@@ -9,9 +9,23 @@ use shared_entity::{
   response::{AppResponse, AppResponseError},
 };
 
+lazy_static::lazy_static! {
+  static ref BASE_BILLING_URL: Option<String> = match std::env::var("APPFLOWY_CLOUD_BASE_BILLING_URL") {
+    Ok(url) => Some(url),
+    Err(err) => {
+      tracing::warn!("std::env::var(APPFLOWY_CLOUD_BASE_BILLING_URL): {}", err);
+      None
+    },
+  };
+}
+
 impl Client {
+  pub fn base_billing_url(&self) -> &str {
+    BASE_BILLING_URL.as_deref().unwrap_or(&self.base_url)
+  }
+
   pub async fn customer_id(&self) -> Result<String, AppResponseError> {
-    let url = format!("{}/billing/api/v1/customer-id", &self.base_url);
+    let url = format!("{}/billing/api/v1/customer-id", self.base_billing_url());
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -30,7 +44,10 @@ impl Client {
     workspace_subscription_plan: SubscriptionPlan,
     success_url: &str,
   ) -> Result<String, AppResponseError> {
-    let url = format!("{}/billing/api/v1/subscription-link", &self.base_url,);
+    let url = format!(
+      "{}/billing/api/v1/subscription-link",
+      self.base_billing_url()
+    );
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -52,7 +69,10 @@ impl Client {
   }
 
   pub async fn cancel_subscription(&self, workspace_id: &str) -> Result<(), AppResponseError> {
-    let url = format!("{}/billing/api/v1/cancel-subscription", &self.base_url);
+    let url = format!(
+      "{}/billing/api/v1/cancel-subscription",
+      self.base_billing_url()
+    );
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
@@ -65,7 +85,10 @@ impl Client {
   pub async fn list_subscription(
     &self,
   ) -> Result<Vec<WorkspaceSubscriptionStatus>, AppResponseError> {
-    let url = format!("{}/billing/api/v1/subscription-status", &self.base_url,);
+    let url = format!(
+      "{}/billing/api/v1/subscription-status",
+      self.base_billing_url(),
+    );
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -95,7 +118,10 @@ impl Client {
   }
 
   pub async fn get_portal_session_link(&self) -> Result<String, AppResponseError> {
-    let url = format!("{}/billing/api/v1/portal-session-link", &self.base_url,);
+    let url = format!(
+      "{}/billing/api/v1/portal-session-link",
+      self.base_billing_url()
+    );
     let portal_url = self
       .http_client_with_auth(Method::GET, &url)
       .await?
@@ -112,7 +138,11 @@ impl Client {
     &self,
     workspace_id: &str,
   ) -> Result<WorkspaceUsageLimit, AppResponseError> {
-    let url = format!("{}/api/workspace/{}/limit", &self.base_url, workspace_id);
+    let url = format!(
+      "{}/api/workspace/{}/limit",
+      self.base_billing_url(),
+      workspace_id
+    );
     self
       .http_client_with_auth(Method::GET, &url)
       .await?

@@ -54,7 +54,7 @@ impl Client {
         ("recurring_interval", recurring_interval.as_str()),
         (
           "workspace_subscription_plan",
-          workspace_subscription_plan.as_str(),
+          workspace_subscription_plan.as_ref(),
         ),
         ("success_url", success_url),
       ])
@@ -66,7 +66,11 @@ impl Client {
       .into_data()
   }
 
-  pub async fn cancel_subscription(&self, workspace_id: &str) -> Result<(), AppResponseError> {
+  pub async fn cancel_subscription(
+    &self,
+    workspace_id: &str,
+    plan: &SubscriptionPlan,
+  ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/cancel-subscription",
       self.base_billing_url()
@@ -74,7 +78,10 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&json!({ "workspace_id": workspace_id }))
+      .json(&json!({
+          "workspace_id": workspace_id,
+          "plan": plan.as_ref(),
+      }))
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()

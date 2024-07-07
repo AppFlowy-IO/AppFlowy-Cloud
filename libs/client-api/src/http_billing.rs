@@ -3,10 +3,7 @@ use client_api_entity::billing_dto::WorkspaceUsageAndLimit;
 use reqwest::Method;
 use serde_json::json;
 use shared_entity::{
-  dto::billing_dto::{
-    RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus, WorkspaceUsage,
-    WorkspaceUsageLimit,
-  },
+  dto::billing_dto::{RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus},
   response::{AppResponse, AppResponseError},
 };
 
@@ -101,23 +98,6 @@ impl Client {
       .into_data()
   }
 
-  pub async fn get_billing_workspace_usage(
-    &self,
-    workspace_id: &str,
-  ) -> Result<WorkspaceUsage, AppResponseError> {
-    let num_members = self.get_workspace_members(workspace_id).await?.len();
-    let limits = self.get_workspace_limits(workspace_id).await?;
-    let doc_usage = self.get_workspace_usage(workspace_id).await?;
-
-    let workspace_usage = WorkspaceUsage {
-      member_count: num_members,
-      member_count_limit: limits.member_count,
-      total_blob_bytes: doc_usage.consumed_capacity as _,
-      total_blob_bytes_limit: limits.total_blob_size,
-    };
-    Ok(workspace_usage)
-  }
-
   pub async fn get_portal_session_link(&self) -> Result<String, AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/portal-session-link",
@@ -133,23 +113,6 @@ impl Client {
       .await?
       .into_data()?;
     Ok(portal_url)
-  }
-
-  // Deprecated
-  async fn get_workspace_limits(
-    &self,
-    workspace_id: &str,
-  ) -> Result<WorkspaceUsageLimit, AppResponseError> {
-    let url = format!("{}/api/workspace/{}/limit", self.base_url, workspace_id);
-    self
-      .http_client_with_auth(Method::GET, &url)
-      .await?
-      .send()
-      .await?
-      .error_for_status()?
-      .json::<AppResponse<WorkspaceUsageLimit>>()
-      .await?
-      .into_data()
   }
 
   pub async fn get_workspace_usage_and_limit(

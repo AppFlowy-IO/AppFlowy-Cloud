@@ -16,31 +16,31 @@ impl RecurringInterval {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum SubscriptionPlan {
-  Pro,
-  Team,
-}
-
-impl SubscriptionPlan {
-  pub fn as_str(&self) -> &str {
-    match self {
-      SubscriptionPlan::Pro => "pro",
-      SubscriptionPlan::Team => "team",
-    }
-  }
-}
-
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 #[repr(i16)]
-pub enum WorkspaceSubscriptionPlan {
+pub enum SubscriptionPlan {
   Unknown = -1,
 
   Free = 0,
   Pro = 1,
   Team = 2,
+
+  AIMax = 3,
+  AILocal = 4,
+}
+
+impl AsRef<str> for SubscriptionPlan {
+  fn as_ref(&self) -> &str {
+    match self {
+      SubscriptionPlan::Free => "free",
+      SubscriptionPlan::Pro => "pro",
+      SubscriptionPlan::Team => "team",
+      SubscriptionPlan::AIMax => "ai_max",
+      SubscriptionPlan::AILocal => "ai_local",
+      SubscriptionPlan::Unknown => "unknown",
+    }
+  }
 }
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -59,7 +59,7 @@ pub enum SubscriptionStatus {
 #[derive(Deserialize, Debug)]
 pub struct WorkspaceSubscriptionStatus {
   pub workspace_id: String,
-  pub workspace_plan: WorkspaceSubscriptionPlan,
+  pub workspace_plan: SubscriptionPlan,
   pub recurring_interval: RecurringInterval,
   pub subscription_status: SubscriptionStatus,
   pub subscription_quantity: u64,

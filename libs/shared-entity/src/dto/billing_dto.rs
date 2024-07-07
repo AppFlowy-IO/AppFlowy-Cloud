@@ -66,30 +66,13 @@ pub struct WorkspaceSubscriptionStatus {
   pub canceled_at: Option<i64>,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct WorkspaceUsage {
-  pub member_count: usize,
-  pub member_count_limit: usize,
-  pub total_blob_bytes: usize,
-  pub total_blob_bytes_limit: usize,
-  // TODO(AI):
-  // pub ai_responses: String,
-  // pub ai_responses_limit: String,
-}
-
-#[derive(Deserialize)]
-pub struct WorkspaceUsageLimit {
-  pub total_blob_size: usize,
-  pub single_blob_size: usize,
-  pub member_count: usize,
-}
-
 #[derive(Deserialize)]
 pub struct WorkspaceUsageAndLimit {
   pub member_count: i64,
   pub member_count_limit: i64,
-  pub total_blob_bytes: i64,
-  pub total_blob_bytes_limit: i64,
+  pub storage_bytes: i64,
+  pub storage_bytes_limit: i64,
+  pub storage_bytes_unlimited: bool,
   pub ai_responses_count: i64,
   pub ai_responses_count_limit: i64,
 

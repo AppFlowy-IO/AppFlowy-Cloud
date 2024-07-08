@@ -26,8 +26,8 @@ pub enum SubscriptionPlan {
   Pro = 1,
   Team = 2,
 
-  AIMax = 3,
-  AILocal = 4,
+  AiMax = 3,
+  AiLocal = 4,
 }
 
 impl AsRef<str> for SubscriptionPlan {
@@ -36,8 +36,8 @@ impl AsRef<str> for SubscriptionPlan {
       SubscriptionPlan::Free => "free",
       SubscriptionPlan::Pro => "pro",
       SubscriptionPlan::Team => "team",
-      SubscriptionPlan::AIMax => "ai_max",
-      SubscriptionPlan::AILocal => "ai_local",
+      SubscriptionPlan::AiMax => "ai_max",
+      SubscriptionPlan::AiLocal => "ai_local",
       SubscriptionPlan::Unknown => "unknown",
     }
   }

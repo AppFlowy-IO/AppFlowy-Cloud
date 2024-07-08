@@ -118,6 +118,52 @@ impl ClientAPI {
     }
   }
 
+  pub async fn sign_in_with_magic_link(
+    &self,
+    email: &str,
+    redirect_to: &str,
+  ) -> Result<(), ClientResponse> {
+    match self
+      .client
+      .sign_in_with_magic_link(email, Some(redirect_to.to_string()))
+      .await
+    {
+      Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn generate_oauth_url_with_provider(
+    &self,
+    provider: &str,
+    redirect_to: &str,
+  ) -> Result<OAuthURLResponse, ClientResponse> {
+    if provider.is_empty() {
+      return Err(ClientResponse {
+        code: ErrorCode::OAuthError,
+        message: "Provider is empty".to_string(),
+      });
+    }
+
+    let provider = parse_provider(provider);
+
+    match self
+      .client
+      .generate_url_with_provider_and_redirect_to(&provider, Some(redirect_to.to_string()))
+      .await
+    {
+      Ok(url) => Ok(OAuthURLResponse { url }),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
+  pub async fn sign_in_with_url(&self, url: &str) -> Result<(), ClientResponse> {
+    match self.client.sign_in_with_url(url).await {
+      Ok(_) => Ok(()),
+      Err(err) => Err(ClientResponse::from(err)),
+    }
+  }
+
   pub async fn get_user(&self) -> Result<User, ClientResponse> {
     match self.client.get_profile().await {
       Ok(profile) => Ok(User::from(profile)),

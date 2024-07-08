@@ -1,4 +1,4 @@
-use client_api::entity::AFUserProfile;
+use client_api::entity::{AFUserProfile, AuthProvider};
 use client_api::error::{AppResponseError, ErrorCode};
 use collab_entity::{CollabType, EncodedCollab};
 use database_entity::dto::{
@@ -260,3 +260,20 @@ pub struct PublishInfo {
 from_struct_for_jsvalue!(PublishViewMeta);
 from_struct_for_jsvalue!(PublishViewPayload);
 from_struct_for_jsvalue!(PublishInfo);
+
+pub fn parse_provider(provider: &str) -> AuthProvider {
+  match provider {
+    "google" => AuthProvider::Google,
+    "github" => AuthProvider::Github,
+    "discord" => AuthProvider::Discord,
+    _ => AuthProvider::Google,
+  }
+}
+
+#[derive(Tsify, Serialize, Deserialize, Default, Debug)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct OAuthURLResponse {
+  pub url: String,
+}
+
+from_struct_for_jsvalue!(OAuthURLResponse);

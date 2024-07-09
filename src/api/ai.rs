@@ -1,10 +1,13 @@
 use crate::api::util::ai_model_from_header;
 use crate::state::AppState;
+use std::collections::HashMap;
 
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 use app_error::AppError;
-use appflowy_ai_client::dto::{CompleteTextResponse, TranslateRowParams, TranslateRowResponse};
+use appflowy_ai_client::dto::{
+  CompleteTextResponse, LocalAIConfig, TranslateRowParams, TranslateRowResponse,
+};
 
 use futures_util::{stream, TryStreamExt};
 use shared_entity::dto::ai_dto::{
@@ -20,6 +23,7 @@ pub fn ai_completion_scope() -> Scope {
     .service(web::resource("/complete/stream").route(web::post().to(stream_complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
+    .service(web::resource("/local_ai/config").route(web::get().to(local_ai_config_handler)))
 }
 
 async fn complete_text_handler(
@@ -122,4 +126,27 @@ async fn translate_row_handler(
       )
     },
   }
+}
+
+#[instrument(level = "debug", skip(state), err)]
+async fn local_ai_config_handler(
+  state: web::Data<AppState>,
+  query: web::Query<String>,
+) -> actix_web::Result<Json<AppResponse<LocalAIConfig>>> {
+  let platform = match query.into_inner().as_str() {
+    "macos" => "macos",
+    "linux" => "ubuntu",
+    "ubuntu" => "ubuntu",
+    "windows" => "windows",
+    _ => {
+      return Err(AppError::InvalidRequest("Invalid platform".to_string()).into());
+    },
+  };
+
+  let config = state
+    .ai_client
+    .get_local_ai_config(platform)
+    .await
+    .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
+  Ok(AppResponse::Ok().with_data(config).into())
 }

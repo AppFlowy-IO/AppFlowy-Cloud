@@ -233,3 +233,25 @@ impl FromStr for AIModel {
     }
   }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RepeatedLocalAIPackage(pub Vec<LocalAIPackage>);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LocalAIPackage {
+  pub version: String,
+  pub url: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LLMConfig {
+  pub server_addrs: String,
+  pub embedding_models: Vec<String>,
+  pub llm_models: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LocalAIConfig {
+  pub llm_config: LLMConfig,
+  pub package: LocalAIPackage,
+}

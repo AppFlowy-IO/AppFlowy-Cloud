@@ -5,7 +5,7 @@ use shared_entity::dto::ai_dto::CompleteTextParams;
 #[tokio::test]
 async fn improve_writing_test() {
   let test_client = TestClient::new_user().await;
-  test_client.api_client.set_ai_model(AIModel::Claude3Opus);
+  test_client.api_client.set_ai_model(AIModel::GPT4o);
 
   let workspace_id = test_client.workspace_id().await;
   let params = CompleteTextParams {

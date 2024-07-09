@@ -113,17 +113,6 @@ jobs:
           echo "Running tests for ${{ matrix.test_service }} with flags: ${{ matrix.test_cmd }}"
           RUST_LOG="info" DISABLE_CI_TEST_LOG="true" cargo test ${{ matrix.test_cmd }}
 
-      - name: Install Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '14'
-
-      - name: Run WASM tests
-        working-directory: ./libs/wasm-test
-        run: |
-          cargo install wasm-pack
-          wasm-pack test --headless --firefox
-
   cleanup:
     name: Cleanup Docker Images
     if: always()

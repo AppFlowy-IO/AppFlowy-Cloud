@@ -28,16 +28,7 @@ impl TryFrom<i16> for RecurringInterval {
   }
 }
 
-impl From<RecurringInterval> for i16 {
-  fn from(value: RecurringInterval) -> Self {
-    match value {
-      RecurringInterval::Month => 0,
-      RecurringInterval::Year => 1,
-    }
-  }
-}
-
-#[derive(Deserialize, Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 #[repr(i16)]
 pub enum SubscriptionPlan {
@@ -60,18 +51,6 @@ impl TryFrom<i16> for SubscriptionPlan {
       3 => Ok(SubscriptionPlan::AiMax),
       4 => Ok(SubscriptionPlan::AiLocal),
       _ => Err(format!("Invalid SubscriptionPlan value: {}", value)),
-    }
-  }
-}
-
-impl From<SubscriptionPlan> for i16 {
-  fn from(value: SubscriptionPlan) -> Self {
-    match value {
-      SubscriptionPlan::Free => 0,
-      SubscriptionPlan::Pro => 1,
-      SubscriptionPlan::Team => 2,
-      SubscriptionPlan::AiMax => 3,
-      SubscriptionPlan::AiLocal => 4,
     }
   }
 }

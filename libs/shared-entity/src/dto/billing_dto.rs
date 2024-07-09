@@ -30,6 +30,19 @@ pub enum SubscriptionPlan {
   AiLocal = 4,
 }
 
+impl From<i16> for SubscriptionPlan {
+  fn from(value: i16) -> Self {
+    match value {
+      0 => SubscriptionPlan::Free,
+      1 => SubscriptionPlan::Pro,
+      2 => SubscriptionPlan::Team,
+      3 => SubscriptionPlan::AiMax,
+      4 => SubscriptionPlan::AiLocal,
+      _ => SubscriptionPlan::Unknown,
+    }
+  }
+}
+
 impl AsRef<str> for SubscriptionPlan {
   fn as_ref(&self) -> &str {
     match self {

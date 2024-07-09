@@ -28,9 +28,9 @@ impl TryFrom<i16> for RecurringInterval {
   }
 }
 
-impl Into<i16> for RecurringInterval {
-  fn into(self) -> i16 {
-    match self {
+impl From<RecurringInterval> for i16 {
+  fn from(value: RecurringInterval) -> Self {
+    match value {
       RecurringInterval::Month => 0,
       RecurringInterval::Year => 1,
     }
@@ -64,9 +64,9 @@ impl TryFrom<i16> for SubscriptionPlan {
   }
 }
 
-impl Into<i16> for SubscriptionPlan {
-  fn into(self) -> i16 {
-    match self {
+impl From<SubscriptionPlan> for i16 {
+  fn from(value: SubscriptionPlan) -> Self {
+    match value {
       SubscriptionPlan::Free => 0,
       SubscriptionPlan::Pro => 1,
       SubscriptionPlan::Team => 2,

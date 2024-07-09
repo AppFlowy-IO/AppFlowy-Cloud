@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum RecurringInterval {
-  Month,
-  Year,
+  Month = 0,
+  Year = 1,
 }
 
 impl RecurringInterval {
@@ -24,6 +24,15 @@ impl TryFrom<i16> for RecurringInterval {
       0 => Ok(RecurringInterval::Month),
       1 => Ok(RecurringInterval::Year),
       _ => Err(format!("Invalid RecurringInterval value: {}", value)),
+    }
+  }
+}
+
+impl Into<i16> for RecurringInterval {
+  fn into(self) -> i16 {
+    match self {
+      RecurringInterval::Month => 0,
+      RecurringInterval::Year => 1,
     }
   }
 }
@@ -51,6 +60,18 @@ impl TryFrom<i16> for SubscriptionPlan {
       3 => Ok(SubscriptionPlan::AiMax),
       4 => Ok(SubscriptionPlan::AiLocal),
       _ => Err(format!("Invalid SubscriptionPlan value: {}", value)),
+    }
+  }
+}
+
+impl Into<i16> for SubscriptionPlan {
+  fn into(self) -> i16 {
+    match self {
+      SubscriptionPlan::Free => 0,
+      SubscriptionPlan::Pro => 1,
+      SubscriptionPlan::Team => 2,
+      SubscriptionPlan::AiMax => 3,
+      SubscriptionPlan::AiLocal => 4,
     }
   }
 }

@@ -70,7 +70,7 @@ async fn stream_test() {
 async fn download_package_test() {
   let client = appflowy_ai_client();
   let packages = client.get_local_ai_package("macos").await.unwrap();
-  assert!(packages.0.len() > 0);
+  assert!(!packages.0.is_empty());
   println!("packages: {:?}", packages);
 }
 
@@ -78,8 +78,8 @@ async fn download_package_test() {
 async fn get_local_ai_config_test() {
   let client = appflowy_ai_client();
   let config = client.get_local_ai_config("macos").await.unwrap();
-  assert!(config.llm_config.embedding_models.len() > 0);
-  assert!(config.llm_config.llm_models.len() > 0);
-  assert!(config.package.url.len() > 0);
+  assert!(!config.llm_config.embedding_models.is_empty());
+  assert!(!config.llm_config.llm_models.is_empty());
+  assert!(!config.package.url.is_empty());
   println!("packages: {:?}", config);
 }

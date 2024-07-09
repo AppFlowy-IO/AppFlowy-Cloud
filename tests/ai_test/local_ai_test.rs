@@ -9,7 +9,7 @@ async fn get_local_ai_config_test() {
     .get_local_ai_config(&workspace_id, "macos")
     .await
     .unwrap();
-  assert!(config.llm_config.embedding_models.len() > 0);
-  assert!(config.llm_config.llm_models.len() > 0);
-  assert!(config.package.url.len() > 0);
+  assert!(!config.llm_config.embedding_models.is_empty());
+  assert!(!config.llm_config.llm_models.is_empty());
+  assert!(!config.package.url.is_empty());
 }

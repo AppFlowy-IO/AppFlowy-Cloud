@@ -1,6 +1,5 @@
 use crate::api::util::ai_model_from_header;
 use crate::state::AppState;
-use std::collections::HashMap;
 
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};

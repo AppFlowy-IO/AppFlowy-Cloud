@@ -16,12 +16,22 @@ impl RecurringInterval {
   }
 }
 
+impl TryFrom<i16> for RecurringInterval {
+  type Error = String;
+
+  fn try_from(value: i16) -> Result<Self, Self::Error> {
+    match value {
+      0 => Ok(RecurringInterval::Month),
+      1 => Ok(RecurringInterval::Year),
+      _ => Err(format!("Invalid RecurringInterval value: {}", value)),
+    }
+  }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 #[repr(i16)]
 pub enum SubscriptionPlan {
-  Unknown = -1,
-
   Free = 0,
   Pro = 1,
   Team = 2,
@@ -30,15 +40,17 @@ pub enum SubscriptionPlan {
   AiLocal = 4,
 }
 
-impl From<i16> for SubscriptionPlan {
-  fn from(value: i16) -> Self {
+impl TryFrom<i16> for SubscriptionPlan {
+  type Error = String;
+
+  fn try_from(value: i16) -> Result<Self, Self::Error> {
     match value {
-      0 => SubscriptionPlan::Free,
-      1 => SubscriptionPlan::Pro,
-      2 => SubscriptionPlan::Team,
-      3 => SubscriptionPlan::AiMax,
-      4 => SubscriptionPlan::AiLocal,
-      _ => SubscriptionPlan::Unknown,
+      0 => Ok(SubscriptionPlan::Free),
+      1 => Ok(SubscriptionPlan::Pro),
+      2 => Ok(SubscriptionPlan::Team),
+      3 => Ok(SubscriptionPlan::AiMax),
+      4 => Ok(SubscriptionPlan::AiLocal),
+      _ => Err(format!("Invalid SubscriptionPlan value: {}", value)),
     }
   }
 }
@@ -51,7 +63,6 @@ impl AsRef<str> for SubscriptionPlan {
       SubscriptionPlan::Team => "team",
       SubscriptionPlan::AiMax => "ai_max",
       SubscriptionPlan::AiLocal => "ai_local",
-      SubscriptionPlan::Unknown => "unknown",
     }
   }
 }

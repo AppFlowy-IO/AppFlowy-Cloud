@@ -16,7 +16,7 @@
   <div id="login-signin">
     <div id="login-splash">
       {% include "../assets/logo.html" %}
-      <h2>AppFlowy Cloud</h2>
+      <h2 style="padding: 16px;">AppFlowy Cloud</h2>
     </div>
 
     <h3>Email Login</h3>
@@ -70,7 +70,7 @@
           hx-target="#none"
           class="button purple"
           type="submit"
-          style="width: 100%; padding: 8px 8px"
+          style="width: 100%; padding: 8px 8px; color: white"
         >
           Sign Up
         </button>
@@ -102,7 +102,26 @@
           ></div>
         </a>
       </div>
-      {% endfor %} {% endif %}
+    </div>
+    {% endfor %} {% endif %}
+
+
+    <br />
+    <div style="max-width: 256px; display: flex; align-items: center">
+      <img src="https://cdn.prod.website-files.com/5c14e387dab576fe667689cf/61e1116779fc0a9bd5bdbcc7_Frame%206.png" alt="kofi" width="32" height="32">
+      <i>
+        &nbsp Support AppFlowy on <a href="https://ko-fi.com/appflowy">Ko-fi</a>
+      </i>
+    </div>
+
+    <br />
+    <br />
+    <div style="max-width: 256px">
+      <small style="color: #888; text-align: center;"><i>
+        By clicking logging in or signing up, you confirm that you have read, understood, and agreed to AppFlowy's
+        <a href="https://appflowy.io/terms">Terms</a> and
+        <a href="https://appflowy.io/privacy">Privacy Policy</a>.
+      </i></small>
     </div>
   </div>
 

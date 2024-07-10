@@ -339,7 +339,7 @@ async fn same_device_multiple_connect_in_order_test() {
     &object_id,
     &collab_type,
     10,
-    json!({"0":0.0,"1":1.0,"2":2.0}),
+    json!({"0":0,"1":1,"2":2}),
   )
   .await
   .unwrap();

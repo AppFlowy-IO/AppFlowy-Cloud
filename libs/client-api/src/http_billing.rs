@@ -161,4 +161,25 @@ impl Client {
       .await?
       .into_data()
   }
+
+  /// Query all active subscription, minimal information but faster
+  pub async fn get_active_workspace_subscriptions(
+    &self,
+    workspace_id: &str,
+  ) -> Result<Vec<SubscriptionPlan>, AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/active-subscription/{}",
+      self.base_billing_url(),
+      workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<Vec<SubscriptionPlan>>::from_response(resp)
+      .await?
+      .into_data()
+  }
 }

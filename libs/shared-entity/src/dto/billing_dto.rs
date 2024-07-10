@@ -67,6 +67,21 @@ impl AsRef<str> for SubscriptionPlan {
   }
 }
 
+impl TryFrom<&str> for SubscriptionPlan {
+  type Error = String;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    match value {
+      "free" => Ok(SubscriptionPlan::Free),
+      "pro" => Ok(SubscriptionPlan::Pro),
+      "team" => Ok(SubscriptionPlan::Team),
+      "ai_max" => Ok(SubscriptionPlan::AiMax),
+      "ai_local" => Ok(SubscriptionPlan::AiLocal),
+      _ => Err(format!("Invalid SubscriptionPlan value: {}", value)),
+    }
+  }
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionStatus {

@@ -140,4 +140,25 @@ impl Client {
       .await?
       .into_data()
   }
+
+  /// Query all subscription status for a workspace
+  pub async fn get_workspace_subscriptions(
+    &self,
+    workspace_id: &str,
+  ) -> Result<Vec<WorkspaceSubscriptionStatus>, AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/subscription-status/{}",
+      self.base_billing_url(),
+      workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<Vec<WorkspaceSubscriptionStatus>>::from_response(resp)
+      .await?
+      .into_data()
+  }
 }

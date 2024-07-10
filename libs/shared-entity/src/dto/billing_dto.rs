@@ -88,7 +88,7 @@ pub struct WorkspaceSubscriptionStatus {
   pub subscription_status: SubscriptionStatus,
   pub subscription_quantity: u64,
   pub cancel_at: Option<i64>,
-  pub current_end_date: i64,
+  pub current_period_end: i64,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -80,17 +80,18 @@ pub enum SubscriptionStatus {
   Unpaid,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WorkspaceSubscriptionStatus {
   pub workspace_id: String,
   pub workspace_plan: SubscriptionPlan,
   pub recurring_interval: RecurringInterval,
   pub subscription_status: SubscriptionStatus,
   pub subscription_quantity: u64,
-  pub canceled_at: Option<i64>,
+  pub cancel_at: Option<i64>,
+  pub current_end_date: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct WorkspaceUsageAndLimit {
   pub member_count: i64,
   pub member_count_limit: i64,

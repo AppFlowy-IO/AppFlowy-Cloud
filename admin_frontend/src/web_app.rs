@@ -122,16 +122,6 @@ async fn login_callback_query_handler(
     ))
     .await?;
 
-  // Do another round of refresh_token to consume and invalidate the old one
-  let token = state
-    .gotrue_client
-    .token(&gotrue::grant::Grant::RefreshToken(
-      gotrue::grant::RefreshTokenGrant {
-        refresh_token: token.refresh_token,
-      },
-    ))
-    .await?;
-
   verify_token_cloud(
     token.access_token.as_str(),
     state.appflowy_cloud_url.as_str(),

@@ -1886,6 +1886,7 @@ dependencies = [
  "getrandom 0.2.12",
  "gotrue",
  "infra",
+ "lazy_static",
  "mime",
  "parking_lot 0.12.1",
  "percent-encoding",

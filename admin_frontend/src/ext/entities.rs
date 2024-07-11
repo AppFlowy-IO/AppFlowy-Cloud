@@ -16,10 +16,8 @@ pub struct UserUsageLimit {
 pub struct WorkspaceUsageLimits {
   pub name: String,
   pub member_count: usize,
-  pub member_limit: String,
   pub total_doc_size: String,
   pub total_blob_size: String,
-  pub total_blob_limit: String,
 }
 
 #[derive(Deserialize)]

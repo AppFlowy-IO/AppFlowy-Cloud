@@ -5,7 +5,6 @@ pub struct Config {
   pub redis_url: String,
   pub gotrue_url: String,
   pub appflowy_cloud_url: String,
-  pub appflowy_cloud_gateway_url: String,
 }
 
 impl Config {
@@ -16,11 +15,6 @@ impl Config {
       appflowy_cloud_url: get_or_default(
         "ADMIN_FRONTEND_APPFLOWY_CLOUD_URL",
         "http://localhost:8000",
-      ),
-
-      appflowy_cloud_gateway_url: get_or_default(
-        "ADMIN_FRONTEND_APPFLOWY_CLOUD_GATEWAY_URL",
-        "http://localhost:8100",
       ),
     }
   }

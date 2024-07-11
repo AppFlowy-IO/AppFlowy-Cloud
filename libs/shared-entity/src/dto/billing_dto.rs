@@ -67,6 +67,21 @@ impl AsRef<str> for SubscriptionPlan {
   }
 }
 
+impl TryFrom<&str> for SubscriptionPlan {
+  type Error = String;
+
+  fn try_from(value: &str) -> Result<Self, Self::Error> {
+    match value {
+      "free" => Ok(SubscriptionPlan::Free),
+      "pro" => Ok(SubscriptionPlan::Pro),
+      "team" => Ok(SubscriptionPlan::Team),
+      "ai_max" => Ok(SubscriptionPlan::AiMax),
+      "ai_local" => Ok(SubscriptionPlan::AiLocal),
+      _ => Err(format!("Invalid SubscriptionPlan value: {}", value)),
+    }
+  }
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionStatus {
@@ -80,17 +95,18 @@ pub enum SubscriptionStatus {
   Unpaid,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WorkspaceSubscriptionStatus {
   pub workspace_id: String,
   pub workspace_plan: SubscriptionPlan,
   pub recurring_interval: RecurringInterval,
   pub subscription_status: SubscriptionStatus,
   pub subscription_quantity: u64,
-  pub canceled_at: Option<i64>,
+  pub cancel_at: Option<i64>,
+  pub current_period_end: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct WorkspaceUsageAndLimit {
   pub member_count: i64,
   pub member_count_limit: i64,

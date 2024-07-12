@@ -74,14 +74,14 @@ impl Client {
       .into_data()
   }
 
-  #[instrument(level = "info", skip_all)]
+  #[instrument(level = "info", skip_all, err)]
   pub async fn get_local_ai_config(
     &self,
     workspace_id: &str,
     platform: &str,
   ) -> Result<LocalAIConfig, AppResponseError> {
     let url = format!(
-      "{}/api/ai/{}/local_ai/config?platform={platform}",
+      "{}/api/ai/{}/local/config?platform={platform}",
       self.base_url, workspace_id
     );
     let resp = self

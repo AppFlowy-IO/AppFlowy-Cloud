@@ -9,6 +9,7 @@ use appflowy_ai_client::dto::{
 };
 
 use futures_util::{stream, TryStreamExt};
+use serde::Deserialize;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
@@ -22,7 +23,7 @@ pub fn ai_completion_scope() -> Scope {
     .service(web::resource("/complete/stream").route(web::post().to(stream_complete_text_handler)))
     .service(web::resource("/summarize_row").route(web::post().to(summarize_row_handler)))
     .service(web::resource("/translate_row").route(web::post().to(translate_row_handler)))
-    .service(web::resource("/local_ai/config").route(web::get().to(local_ai_config_handler)))
+    .service(web::resource("/local/config").route(web::get().to(local_ai_config_handler)))
 }
 
 async fn complete_text_handler(
@@ -127,12 +128,17 @@ async fn translate_row_handler(
   }
 }
 
-#[instrument(level = "debug", skip(state), err)]
+#[derive(Deserialize)]
+struct ConfigQuery {
+  platform: String,
+}
+#[instrument(level = "debug", skip_all, err)]
 async fn local_ai_config_handler(
   state: web::Data<AppState>,
-  query: web::Query<String>,
+  query: web::Query<ConfigQuery>,
+  // req: HttpRequest,
 ) -> actix_web::Result<Json<AppResponse<LocalAIConfig>>> {
-  let platform = match query.into_inner().as_str() {
+  let platform = match query.into_inner().platform.as_str() {
     "macos" => "macos",
     "linux" => "ubuntu",
     "ubuntu" => "ubuntu",
@@ -149,3 +155,17 @@ async fn local_ai_config_handler(
     .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
   Ok(AppResponse::Ok().with_data(config).into())
 }
+
+// fn device_info_from_headers(headers: &HeaderMap) -> std::result::Result<String, AppError> {
+//   headers
+//     .get("device_id")
+//     .ok_or(AppError::InvalidRequest(
+//       "Missing device_id header".to_string(),
+//     ))
+//     .and_then(|header| {
+//       header
+//         .to_str()
+//         .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
+//     })
+//     .map(|s| s.to_string())
+// }

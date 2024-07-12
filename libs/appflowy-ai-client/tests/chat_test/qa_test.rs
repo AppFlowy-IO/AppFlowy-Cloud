@@ -78,8 +78,12 @@ async fn download_package_test() {
 async fn get_local_ai_config_test() {
   let client = appflowy_ai_client();
   let config = client.get_local_ai_config("macos").await.unwrap();
-  assert!(!config.llm_config.embedding_models.is_empty());
-  assert!(!config.llm_config.llm_models.is_empty());
-  assert!(!config.package.url.is_empty());
+  assert!(!config.models.is_empty());
+
+  assert!(!config.models[0].embedding_model.download_url.is_empty());
+  assert!(!config.models[0].chat_model.download_url.is_empty());
+
+  assert!(!config.plugin.version.is_empty());
+  assert!(!config.plugin.url.is_empty());
   println!("packages: {:?}", config);
 }

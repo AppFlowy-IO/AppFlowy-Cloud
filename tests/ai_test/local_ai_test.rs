@@ -9,7 +9,16 @@ async fn get_local_ai_config_test() {
     .get_local_ai_config(&workspace_id, "macos")
     .await
     .unwrap();
-  assert!(!config.llm_config.embedding_models.is_empty());
-  assert!(!config.llm_config.llm_models.is_empty());
-  assert!(!config.package.url.is_empty());
+  {
+    assert!(!config.models.is_empty());
+    assert!(!config.models[0].embedding_model.download_url.is_empty());
+    assert!(config.models[0].embedding_model.file_size > 10);
+    assert!(!config.models[0].chat_model.download_url.is_empty());
+    assert!(config.models[0].chat_model.file_size > 10);
+
+    assert!(!config.plugin.version.is_empty());
+    assert!(!config.plugin.url.is_empty());
+    assert!(config.plugin.components.len() >= 2);
+    println!("config: {:?}", config);
+  }
 }

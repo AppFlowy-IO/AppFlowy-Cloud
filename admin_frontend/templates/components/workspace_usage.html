@@ -4,10 +4,8 @@
       <tr>
         <th>Workspace Name</th>
         <th>Members</th>
-        <th>Members Limit</th>
         <th>Document Storage</th>
         <th>Object Storage</th>
-        <th>Object Storage Limit</th>
       </tr>
     </thead>
 
@@ -15,12 +13,8 @@
       <tr>
         <td> {{ workspace_usage.name|escape }} </td>
         <td> {{ workspace_usage.member_count|escape }} </td>
-        <td> {{ workspace_usage.member_limit|escape }} </td>
         <td> {{ workspace_usage.total_doc_size|escape }} </td>
         <td> {{ workspace_usage.total_blob_size|escape }} </td>
-        <td> {{ workspace_usage.total_blob_limit|escape }} </td>
       </tr>
     {% endfor %}
-
-  </table>
 </div>

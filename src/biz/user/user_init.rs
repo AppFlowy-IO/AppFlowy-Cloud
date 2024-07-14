@@ -2,7 +2,7 @@ use app_error::AppError;
 
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::{Any, Collab, MapPrelim};
+use collab::preclude::{Any, Collab};
 use collab_entity::define::WORKSPACE_DATABASES;
 use collab_entity::CollabType;
 use database::collab::CollabStorage;
@@ -85,7 +85,7 @@ async fn create_workspace_database_collab(
   let collab_type = CollabType::WorkspaceDatabase;
   let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   let _ = collab.with_origin_transact_mut(|txn| {
-    collab.create_array_with_txn::<MapPrelim<Any>>(txn, WORKSPACE_DATABASES, vec![]);
+    collab.create_array_with_txn::<Any>(txn, WORKSPACE_DATABASES, vec![]);
     Ok::<(), AppError>(())
   });
 

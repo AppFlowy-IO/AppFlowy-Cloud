@@ -1,5 +1,7 @@
 use crate::Client;
-use client_api_entity::billing_dto::{SubscriptionCancelRequest, WorkspaceUsageAndLimit};
+use client_api_entity::billing_dto::{
+  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, WorkspaceUsageAndLimit,
+};
 use reqwest::Method;
 use shared_entity::{
   dto::billing_dto::{RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus},
@@ -176,5 +178,24 @@ impl Client {
     AppResponse::<Vec<SubscriptionPlan>>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  /// Set subscription recurring interval
+  pub async fn set_subscription_recurring_interval(
+    &self,
+    set_sub_recur: &SetSubscriptionRecurringInterval,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/subscription-recurring-interval",
+      self.base_billing_url(),
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(set_sub_recur)
+      .send()
+      .await?;
+
+    AppResponse::<()>::from_response(resp).await?.into_data()
   }
 }

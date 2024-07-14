@@ -126,3 +126,10 @@ pub struct SubscriptionCancelRequest {
   pub plan: SubscriptionPlan,
   pub sync: bool, // if true, this request will block until stripe has sent the cancelation webhook
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SetSubscriptionRecurringInterval {
+  pub workspace_id: String,
+  pub plan: SubscriptionPlan,
+  pub recurring_interval: RecurringInterval,
+}

@@ -18,7 +18,6 @@ async fn get_local_ai_config_test() {
 
     assert!(!config.plugin.version.is_empty());
     assert!(!config.plugin.url.is_empty());
-    assert!(config.plugin.components.len() >= 2);
     println!("config: {:?}", config);
   }
 }

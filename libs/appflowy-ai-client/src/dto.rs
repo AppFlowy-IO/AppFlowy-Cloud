@@ -240,7 +240,6 @@ pub struct RepeatedLocalAIPackage(pub Vec<AppFlowyAIPlugin>);
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct AppFlowyAIPlugin {
   pub name: String,
-  pub components: Vec<String>,
   pub version: String,
   pub url: String,
   pub etag: String,

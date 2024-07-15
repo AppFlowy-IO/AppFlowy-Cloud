@@ -2,8 +2,8 @@ use crate::http::log_request_id;
 use crate::Client;
 use reqwest::Method;
 use shared_entity::dto::ai_dto::{
-  CompleteTextParams, CompleteTextResponse, SummarizeRowParams, SummarizeRowResponse,
-  TranslateRowParams, TranslateRowResponse,
+  CompleteTextParams, CompleteTextResponse, LocalAIConfig, SummarizeRowParams,
+  SummarizeRowResponse, TranslateRowParams, TranslateRowResponse,
 };
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
@@ -70,6 +70,27 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<CompleteTextResponse>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_local_ai_config(
+    &self,
+    workspace_id: &str,
+    platform: &str,
+  ) -> Result<LocalAIConfig, AppResponseError> {
+    let url = format!(
+      "{}/api/ai/{}/local/config?platform={platform}",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<LocalAIConfig>::from_response(resp)
       .await?
       .into_data()
   }

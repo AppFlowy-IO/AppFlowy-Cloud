@@ -18,6 +18,35 @@ use tracing::error;
 use uuid::Uuid;
 use validator::Validate;
 
+pub enum SerializationType {
+  Bincode,
+  Protobuf,
+}
+
+impl FromStr for SerializationType {
+  type Err = EntityError;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "bincode" => Ok(SerializationType::Bincode),
+      "protobuf" => Ok(SerializationType::Protobuf),
+      _ => Err(InvalidData(format!(
+        "{} is not a supported serialization type",
+        s
+      ))),
+    }
+  }
+}
+
+impl Display for SerializationType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      SerializationType::Bincode => write!(f, "bincode"),
+      SerializationType::Protobuf => write!(f, "protobuf"),
+    }
+  }
+}
+
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
 pub struct CreateCollabParams {
   #[validate(custom = "validate_not_empty_str")]
@@ -107,11 +136,10 @@ impl CollabParams {
   pub fn from_proto(proto: proto::collab::CollabParams) -> Result<Self, EntityError> {
     let collab_type_proto = proto::collab::CollabType::try_from(proto.collab_type).unwrap();
     let collab_type = CollabType::from_proto(&collab_type_proto);
-    let embeddings = match proto.embeddings.map(AFCollabEmbeddings::from_proto) {
-      Some(Ok(embeddings)) => Some(embeddings),
-      Some(Err(err)) => return Err(InvalidData(err.to_string())),
-      None => None,
-    };
+    let embeddings = proto
+      .embeddings
+      .map(AFCollabEmbeddings::from_proto)
+      .transpose()?;
     Ok(Self {
       object_id: proto.object_id,
       encoded_collab_v1: proto.encoded_collab,
@@ -128,19 +156,20 @@ impl CollabParams {
     self.to_proto().encode_to_vec()
   }
 
-  pub fn from_protobuf_bytes(bytes: &[u8]) -> Result<Self, EntityError> {
+  fn from_protobuf_bytes(bytes: &[u8]) -> Result<Self, EntityError> {
     match proto::collab::CollabParams::decode(bytes) {
       Ok(proto) => Self::from_proto(proto),
       Err(err) => Err(DeserializationError(err.to_string())),
     }
   }
 
-  pub fn from_bytes(bytes: &[u8]) -> Result<Self, EntityError> {
+  fn from_bincode_bytes(bytes: &[u8]) -> Result<Self, EntityError> {
     match bincode::deserialize(bytes) {
       Ok(value) => Ok(value),
       Err(_) => {
         // fallback to deserialize into older version
-        let old: CollabParamsV0 = bincode::deserialize(bytes).map_err(|err: bincode::Error| DeserializationError(err.to_string()))?;
+        let old: CollabParamsV0 = bincode::deserialize(bytes)
+          .map_err(|err: bincode::Error| DeserializationError(err.to_string()))?;
         Ok(Self {
           object_id: old.object_id,
           encoded_collab_v1: old.encoded_collab_v1,
@@ -150,6 +179,16 @@ impl CollabParams {
       },
     }
     .map_err(|err: bincode::Error| DeserializationError(err.to_string()))
+  }
+
+  pub fn from_bytes(
+    bytes: &[u8],
+    serialization_type: &SerializationType,
+  ) -> Result<Self, EntityError> {
+    match serialization_type {
+      SerializationType::Bincode => Self::from_bincode_bytes(bytes),
+      SerializationType::Protobuf => Self::from_protobuf_bytes(bytes),
+    }
   }
 }
 #[derive(Serialize, Deserialize)]
@@ -979,7 +1018,8 @@ pub enum IndexingStatus {
 #[cfg(test)]
 mod test {
   use crate::dto::{
-    AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams, CollabParamsV0, EmbeddingContentType,
+    AFCollabEmbeddingParams, AFCollabEmbeddings, CollabParams, CollabParamsV0,
+    EmbeddingContentType, SerializationType,
   };
   use crate::error::EntityError;
   use collab_entity::{proto, CollabType};
@@ -1048,14 +1088,14 @@ mod test {
       ],
     };
     let data = bincode::serialize(&v0).unwrap();
-    let collab_params = CollabParams::from_bytes(&data).unwrap();
+    let collab_params = CollabParams::from_bytes(&data, &SerializationType::Bincode).unwrap();
     assert_eq!(collab_params.object_id, v0.object_id);
     assert_eq!(collab_params.collab_type, v0.collab_type);
     assert_eq!(collab_params.encoded_collab_v1, v0.encoded_collab_v1);
   }
 
   #[test]
-  fn deserialization_using_protobuf_and_bincode_as_fallback() {
+  fn deserialization_using_protobuf() {
     let collab_params_with_embeddings = CollabParams {
       object_id: "object_id".to_string(),
       collab_type: CollabType::Document,
@@ -1073,12 +1113,9 @@ mod test {
       }),
     };
 
-    let bincode_encoded = bincode::serialize(&collab_params_with_embeddings).unwrap();
-    let collab_params_decoded = CollabParams::from_bytes(&bincode_encoded).unwrap();
-    assert_eq!(collab_params_with_embeddings, collab_params_decoded);
-
     let protobuf_encoded = collab_params_with_embeddings.to_protobuf_bytes();
-    let collab_params_decoded = CollabParams::from_bytes(&protobuf_encoded).unwrap();
+    let collab_params_decoded =
+      CollabParams::from_bytes(&protobuf_encoded, &SerializationType::Protobuf).unwrap();
     assert_eq!(collab_params_with_embeddings, collab_params_decoded);
   }
 
@@ -1102,7 +1139,8 @@ mod test {
     };
 
     let protobuf_encoded = collab_params.to_protobuf_bytes();
-    let collab_params_decoded = CollabParams::from_bytes(&protobuf_encoded).unwrap();
+    let collab_params_decoded =
+      CollabParams::from_bytes(&protobuf_encoded, &SerializationType::Protobuf).unwrap();
     assert_eq!(collab_params, collab_params_decoded);
   }
 
@@ -1126,7 +1164,7 @@ mod test {
     }
     .encode_to_vec();
 
-    let result = CollabParams::from_bytes(&invalid_serialization);
+    let result = CollabParams::from_bytes(&invalid_serialization, &SerializationType::Protobuf);
     assert!(result.is_err());
     assert!(matches!(result, Err(EntityError::InvalidData(_))));
   }

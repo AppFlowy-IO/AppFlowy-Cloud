@@ -19,6 +19,7 @@ use client_api_entity::{
   AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaces,
   QuerySnapshotParams, SnapshotData,
 };
+use reqwest::header::HeaderValue;
 use semver::Version;
 use shared_entity::dto::auth_dto::SignInTokenResponse;
 use shared_entity::dto::auth_dto::UpdateUserParams;
@@ -30,6 +31,7 @@ use std::time::Duration;
 use tracing::{error, event, info, instrument, trace, warn};
 use url::Url;
 
+use crate::entity::SerializationType;
 use crate::ws::ConnectInfo;
 use client_api_entity::SignUpResponse::{Authenticated, NotAuthenticated};
 use client_api_entity::{GotrueTokenResponse, UpdateGotrueUserParams, User};
@@ -38,6 +40,7 @@ use shared_entity::dto::ai_dto::AIModel;
 pub const X_COMPRESSION_TYPE: &str = "X-Compression-Type";
 pub const X_COMPRESSION_BUFFER_SIZE: &str = "X-Compression-Buffer-Size";
 pub const X_COMPRESSION_TYPE_BROTLI: &str = "brotli";
+pub const X_SERIALIZATION_TYPE: &str = "X-Serialization-Type";
 
 #[derive(Clone)]
 pub struct ClientConfiguration {
@@ -844,9 +847,12 @@ impl Client {
     &self,
     method: Method,
     url: &str,
+    serialization_type: &SerializationType,
   ) -> Result<RequestBuilder, AppResponseError> {
     #[cfg(feature = "enable_brotli")]
     {
+      let serialization_type_header_value =
+        HeaderValue::from_str(serialization_type.to_string().as_str()).unwrap();
       self
         .http_client_with_auth(method, url)
         .await
@@ -860,6 +866,7 @@ impl Client {
               crate::http::X_COMPRESSION_BUFFER_SIZE,
               reqwest::header::HeaderValue::from(self.config.compression_buffer_size),
             )
+            .header(X_SERIALIZATION_TYPE, serialization_type_header_value)
         })
     }
 

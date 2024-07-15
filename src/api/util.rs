@@ -8,9 +8,30 @@ use appflowy_ai_client::dto::AIModel;
 use async_trait::async_trait;
 use byteorder::{ByteOrder, LittleEndian};
 use collab_rt_protocol::validate_encode_collab;
-use database_entity::dto::CollabParams;
+use database_entity::dto::{CollabParams, SerializationType};
+use reqwest::header::HeaderValue;
 use std::str::FromStr;
 use tokio_stream::StreamExt;
+
+const X_SERIALIZATION_TYPE: &str = "X-Serialization-Type";
+
+#[inline]
+pub fn payload_serialization_type_from_header_value(
+  headers: &HeaderMap,
+) -> Result<SerializationType, AppError> {
+  let header_value = headers
+    .get(X_SERIALIZATION_TYPE)
+    .map(HeaderValue::to_str)
+    .transpose()
+    .map_err(|err| {
+      AppError::InvalidRequest(format!("Failed to parse {}: {}", X_SERIALIZATION_TYPE, err))
+    })?;
+  header_value
+    .map(|s| SerializationType::from_str(s))
+    .transpose()
+    .map(|opt| opt.unwrap_or(SerializationType::Bincode))
+    .map_err(|err| AppError::InvalidRequest(format!("Unsupported serialization type: {}", err)))
+}
 
 #[inline]
 pub fn compress_type_from_header_value(headers: &HeaderMap) -> Result<CompressionType, AppError> {

@@ -3,7 +3,7 @@ use crate::{spawn_blocking_brotli_compress, Client};
 use app_error::AppError;
 use client_api_entity::{
   BatchQueryCollabParams, BatchQueryCollabResult, CreateCollabParams, DeleteCollabParams,
-  QueryCollab,
+  QueryCollab, SerializationType,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -29,7 +29,7 @@ impl Client {
 
     #[allow(unused_mut)]
     let mut builder = self
-      .http_client_with_auth_compress(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url, &SerializationType::Bincode)
       .await?;
 
     #[cfg(not(target_arch = "wasm32"))]

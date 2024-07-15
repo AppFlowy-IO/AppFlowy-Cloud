@@ -8,7 +8,7 @@ use app_error::AppError;
 use async_trait::async_trait;
 
 use bytes::Bytes;
-use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams};
+use client_api_entity::{CollabParams, PublishCollabItem, QueryCollabParams, SerializationType};
 use client_api_entity::{
   CompleteUploadRequest, CreateUploadRequest, CreateUploadResponse, UploadPartResponse,
 };
@@ -156,7 +156,7 @@ impl Client {
     let body = Body::wrap_stream(stream::iter(vec![Ok::<_, reqwest::Error>(msg)]));
     let url = format!("{}/api/realtime/post/stream", self.base_url);
     let resp = self
-      .http_client_with_auth_compress(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url, &SerializationType::Protobuf)
       .await?
       .body(body)
       .send()
@@ -211,7 +211,7 @@ impl Client {
     );
     let body = Body::wrap_stream(stream::once(async { Ok::<_, AppError>(framed_data) }));
     let resp = self
-      .http_client_with_auth_compress(Method::POST, &url)
+      .http_client_with_auth_compress(Method::POST, &url, &SerializationType::Protobuf)
       .await?
       .timeout(Duration::from_secs(60))
       .body(body)

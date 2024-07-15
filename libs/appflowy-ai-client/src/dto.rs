@@ -233,3 +233,38 @@ impl FromStr for AIModel {
     }
   }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RepeatedLocalAIPackage(pub Vec<AppFlowyAIPlugin>);
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct AppFlowyAIPlugin {
+  pub name: String,
+  pub version: String,
+  pub url: String,
+  pub etag: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct LLMModel {
+  pub llm_id: i64,
+  pub provider: String,
+  pub embedding_model: ModelInfo,
+  pub chat_model: ModelInfo,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct ModelInfo {
+  pub name: String,
+  pub file_name: String,
+  pub file_size: i64,
+  pub requirements: String,
+  pub download_url: String,
+  pub desc: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LocalAIConfig {
+  pub models: Vec<LLMModel>,
+  pub plugin: AppFlowyAIPlugin,
+}

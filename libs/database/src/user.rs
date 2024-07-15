@@ -1,7 +1,7 @@
 use futures_util::stream::BoxStream;
-use sqlx::{Arguments, Executor, PgPool, Postgres};
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
+use sqlx::{Arguments, Executor, PgPool, Postgres};
 use tracing::{instrument, warn};
 use uuid::Uuid;
 

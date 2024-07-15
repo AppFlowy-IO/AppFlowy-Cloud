@@ -124,7 +124,20 @@ impl Client {
     client_id: &str,
   ) -> Self {
     let reqwest_client = reqwest::Client::new();
-    let client_version = Version::parse(client_id).unwrap_or_else(|_| Version::new(0, 5, 0));
+    let client_version = Version::parse(client_id).unwrap_or_else(|_| {
+      warn!("Failed to parse client version, defaulting to 0.6.3");
+      Version::new(0, 6, 3)
+    });
+
+    // The latest version of appflowy frontend application is 0.6.3.
+    // Ensure the client version is at least 0.6.3. Just in case client passes a lower version.
+    let min_version = Version::new(0, 6, 3);
+    let client_version = if client_version < min_version {
+      warn!("Client version is less than 0.6.3, setting it to 0.6.3");
+      min_version
+    } else {
+      client_version
+    };
 
     #[cfg(debug_assertions)]
     {

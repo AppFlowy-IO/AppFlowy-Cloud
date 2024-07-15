@@ -196,6 +196,6 @@ impl Client {
       .send()
       .await?;
 
-    AppResponse::<()>::from_response(resp).await?.into_data()
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

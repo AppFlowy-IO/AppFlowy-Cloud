@@ -106,7 +106,7 @@ pub struct WorkspaceSubscriptionStatus {
   pub current_period_end: i64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WorkspaceUsageAndLimit {
   pub member_count: i64,
   pub member_count_limit: i64,
@@ -118,4 +118,18 @@ pub struct WorkspaceUsageAndLimit {
 
   pub local_ai: bool,
   pub ai_responses_unlimited: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubscriptionCancelRequest {
+  pub workspace_id: String,
+  pub plan: SubscriptionPlan,
+  pub sync: bool, // if true, this request will block until stripe has sent the cancelation webhook
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SetSubscriptionRecurringInterval {
+  pub workspace_id: String,
+  pub plan: SubscriptionPlan,
+  pub recurring_interval: RecurringInterval,
 }

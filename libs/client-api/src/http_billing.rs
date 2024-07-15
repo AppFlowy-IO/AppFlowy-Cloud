@@ -1,7 +1,8 @@
 use crate::Client;
-use client_api_entity::billing_dto::WorkspaceUsageAndLimit;
+use client_api_entity::billing_dto::{
+  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, WorkspaceUsageAndLimit,
+};
 use reqwest::Method;
-use serde_json::json;
 use shared_entity::{
   dto::billing_dto::{RecurringInterval, SubscriptionPlan, WorkspaceSubscriptionStatus},
   response::{AppResponse, AppResponseError},
@@ -68,8 +69,7 @@ impl Client {
 
   pub async fn cancel_subscription(
     &self,
-    workspace_id: &str,
-    plan: &SubscriptionPlan,
+    req: &SubscriptionCancelRequest,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/billing/api/v1/cancel-subscription",
@@ -78,10 +78,7 @@ impl Client {
     let resp = self
       .http_client_with_auth(Method::POST, &url)
       .await?
-      .json(&json!({
-          "workspace_id": workspace_id,
-          "plan": plan.as_ref(),
-      }))
+      .json(req)
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
@@ -181,5 +178,24 @@ impl Client {
     AppResponse::<Vec<SubscriptionPlan>>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  /// Set subscription recurring interval
+  pub async fn set_subscription_recurring_interval(
+    &self,
+    set_sub_recur: &SetSubscriptionRecurringInterval,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/billing/api/v1/subscription-recurring-interval",
+      self.base_billing_url(),
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(set_sub_recur)
+      .send()
+      .await?;
+
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

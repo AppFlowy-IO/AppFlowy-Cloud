@@ -23,27 +23,11 @@ pub async fn verify_token(access_token: &str, state: &AppState) -> Result<bool, 
   let user_uuid = uuid::Uuid::parse_str(&user.id)?;
   let name = name_from_user_metadata(&user.user_metadata);
 
-  let is_new = !is_user_exist(&state.pg_pool, &user_uuid).await?;
-  if !is_new {
-    return Ok(false);
-  }
-
   let mut txn = state
     .pg_pool
     .begin()
     .await
     .context("acquire transaction to verify token")?;
-
-  // To prevent concurrent creation of the same user with the same workspace resources, we lock
-  // the user row when `verify_token` is called. This means that if multiple requests try to
-  // create the same user simultaneously, the first request will acquire the lock, create the user,
-  // and any subsequent requests will wait for the lock to be released. After the lock is released,
-  // the other requests will proceed and return the result, ensuring that each user is created only once
-  // and avoiding duplicate entries.
-  let lock_key = user_uuid.as_u128() as i64;
-  sqlx::query!("SELECT pg_advisory_xact_lock($1)", lock_key)
-    .execute(txn.deref_mut())
-    .await?;
 
   let is_new = !is_user_exist(txn.deref_mut(), &user_uuid).await?;
   if is_new {

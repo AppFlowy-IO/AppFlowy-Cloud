@@ -1,11 +1,13 @@
-use crate::pg_row::AFUserIdRow;
-use app_error::AppError;
 use futures_util::stream::BoxStream;
+use sqlx::{Arguments, Executor, PgPool, Postgres};
 use sqlx::postgres::PgArguments;
 use sqlx::types::JsonValue;
-use sqlx::{Arguments, Executor, PgPool, Postgres};
 use tracing::{instrument, warn};
 use uuid::Uuid;
+
+use app_error::AppError;
+
+use crate::pg_row::AFUserIdRow;
 
 /// Updates the user's details in the `af_user` table.
 ///
@@ -104,7 +106,6 @@ pub async fn create_user<'a, E: Executor<'a, Database = Postgres>>(
     WITH ins_user AS (
         INSERT INTO af_user (uid, uuid, email, name)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT(email) DO NOTHING
         RETURNING uid
     ),
     owner_role AS (

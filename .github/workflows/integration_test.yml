@@ -62,7 +62,7 @@ jobs:
       matrix:
         include:
           - test_service: "appflowy_cloud"
-            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client"
+            test_cmd: "--workspace --exclude appflowy-history --exclude appflowy-ai-client --features ai-test-enabled"
           - test_service: "appflowy_history"
             test_cmd: "-p appflowy-history"
     steps:
@@ -79,18 +79,19 @@ jobs:
         run: |
           # log level
           sed -i 's|RUST_LOG=.*|RUST_LOG=trace|' .env
-          sed -i 's/GOTRUE_SMTP_USER=.*/GOTRUE_SMTP_USER=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
-          sed -i 's/GOTRUE_SMTP_PASS=.*/GOTRUE_SMTP_PASS=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
-          sed -i 's/GOTRUE_SMTP_ADMIN_EMAIL=.*/GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.CI_GOTRUE_SMTP_ADMIN_EMAIL }}/' .env
-          sed -i 's/GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*/GOTRUE_EXTERNAL_GOOGLE_ENABLED=true/' .env
-          sed -i 's/GOTRUE_MAILER_AUTOCONFIRM=.*/GOTRUE_MAILER_AUTOCONFIRM=false/' .env
-          sed -i 's/API_EXTERNAL_URL=http:\/\/your-host/API_EXTERNAL_URL=http:\/\/localhost/' .env
-          sed -i 's/GOTRUE_RATE_LIMIT_EMAIL_SENT=100/GOTRUE_RATE_LIMIT_EMAIL_SENT=1000/' .env
-          sed -i 's/APPFLOWY_MAILER_SMTP_USERNAME=.*/APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}/' .env
-          sed -i 's/APPFLOWY_MAILER_SMTP_PASSWORD=.*/APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}/' .env
-          sed -i 's/APPFLOWY_AI_OPENAI_API_KEY=.*/APPFLOWY_AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}/' .env
-          sed -i 's/APPFLOWY_INDEXER_REDIS_URL=.*/APPFLOWY_INDEXER_REDIS_URL=redis:\/\/localhost:6379/' .env
-          sed -i 's/APPFLOWY_INDEXER_DATABASE_URL=.*/APPFLOWY_INDEXER_DATABASE_URL=postgres:\/\/postgres:password@localhost:5432\/postgres/' .env
+          sed -i 's|GOTRUE_SMTP_USER=.*|GOTRUE_SMTP_USER=${{ secrets.CI_GOTRUE_SMTP_USER }}|' .env
+          sed -i 's|GOTRUE_SMTP_PASS=.*|GOTRUE_SMTP_PASS=${{ secrets.CI_GOTRUE_SMTP_PASS }}|' .env
+          sed -i 's|GOTRUE_SMTP_ADMIN_EMAIL=.*|GOTRUE_SMTP_ADMIN_EMAIL=${{ secrets.CI_GOTRUE_SMTP_ADMIN_EMAIL }}|' .env
+          sed -i 's|GOTRUE_EXTERNAL_GOOGLE_ENABLED=.*|GOTRUE_EXTERNAL_GOOGLE_ENABLED=true|' .env
+          sed -i 's|GOTRUE_MAILER_AUTOCONFIRM=.*|GOTRUE_MAILER_AUTOCONFIRM=false|' .env
+          sed -i 's|API_EXTERNAL_URL=http://your-host|API_EXTERNAL_URL=http://localhost|' .env
+          sed -i 's|GOTRUE_RATE_LIMIT_EMAIL_SENT=100|GOTRUE_RATE_LIMIT_EMAIL_SENT=1000|' .env
+          sed -i 's|APPFLOWY_MAILER_SMTP_USERNAME=.*|APPFLOWY_MAILER_SMTP_USERNAME=${{ secrets.CI_GOTRUE_SMTP_USER }}|' .env
+          sed -i 's|APPFLOWY_MAILER_SMTP_PASSWORD=.*|APPFLOWY_MAILER_SMTP_PASSWORD=${{ secrets.CI_GOTRUE_SMTP_PASS }}|' .env
+          sed -i 's|APPFLOWY_AI_OPENAI_API_KEY=.*|APPFLOWY_AI_OPENAI_API_KEY=${{ secrets.CI_OPENAI_API_KEY }}|' .env
+          sed -i 's|APPFLOWY_INDEXER_REDIS_URL=.*|APPFLOWY_INDEXER_REDIS_URL=redis://localhost:6379|' .env
+          sed -i 's|APPFLOWY_INDEXER_DATABASE_URL=.*|APPFLOWY_INDEXER_DATABASE_URL=postgres://postgres:password@localhost:5432/postgres|' .env
+        shell: bash
 
       - name: Update Nginx Configuration
         # the wasm-pack headless tests will run on random ports, so we need to allow all origins

@@ -1,7 +1,8 @@
 use crate::dto::{
   AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document,
-  EmbeddingRequest, EmbeddingResponse, MessageData, RepeatedRelatedQuestion,
-  SearchDocumentsRequest, SummarizeRowResponse, TranslateRowData, TranslateRowResponse,
+  EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData, RepeatedLocalAIPackage,
+  RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse, TranslateRowData,
+  TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -232,6 +233,25 @@ impl AppFlowyAIClient {
       .send()
       .await?;
     AIResponse::<RepeatedRelatedQuestion>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_local_ai_package(
+    &self,
+    platform: &str,
+  ) -> Result<RepeatedLocalAIPackage, AIError> {
+    let url = format!("{}/local_ai/version?platform={platform}", self.url);
+    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    AIResponse::<RepeatedLocalAIPackage>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_local_ai_config(&self, platform: &str) -> Result<LocalAIConfig, AIError> {
+    let url = format!("{}/local_ai/config?platform={platform}", self.url);
+    let resp = self.http_client(Method::GET, &url)?.send().await?;
+    AIResponse::<LocalAIConfig>::from_response(resp)
       .await?
       .into_data()
   }

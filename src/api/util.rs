@@ -27,7 +27,7 @@ pub fn payload_serialization_type_from_header_value(
       AppError::InvalidRequest(format!("Failed to parse {}: {}", X_SERIALIZATION_TYPE, err))
     })?;
   header_value
-    .map(|s| SerializationType::from_str(s))
+    .map(SerializationType::from_str)
     .transpose()
     .map(|opt| opt.unwrap_or(SerializationType::Bincode))
     .map_err(|err| AppError::InvalidRequest(format!("Unsupported serialization type: {}", err)))

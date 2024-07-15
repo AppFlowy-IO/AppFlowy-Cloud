@@ -1871,7 +1871,6 @@ dependencies = [
  "anyhow",
  "app-error",
  "async-trait",
- "bincode",
  "brotli",
  "bytes",
  "chrono",

@@ -4,4 +4,6 @@ pub enum EntityError {
   InvalidData(String),
   #[error("Deserialization error: {0}")]
   DeserializationError(String),
+  #[error("Serialization error: {0}")]
+  SerializationError(String),
 }

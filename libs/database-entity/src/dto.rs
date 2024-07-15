@@ -1,5 +1,5 @@
 use crate::error::EntityError;
-use crate::error::EntityError::{DeserializationError, InvalidData};
+use crate::error::EntityError::{DeserializationError, InvalidData, SerializationError};
 use crate::util::{validate_not_empty_payload, validate_not_empty_str};
 use appflowy_ai_client::dto::AIModel;
 use chrono::{DateTime, Utc};
@@ -148,12 +148,19 @@ impl CollabParams {
     })
   }
 
-  pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
-    bincode::serialize(self)
+  fn to_bincode_bytes(&self) -> Result<Vec<u8>, EntityError> {
+    bincode::serialize(self).map_err(|err| SerializationError(err.to_string()))
   }
 
-  pub fn to_protobuf_bytes(&self) -> Vec<u8> {
+  fn to_protobuf_bytes(&self) -> Vec<u8> {
     self.to_proto().encode_to_vec()
+  }
+
+  pub fn to_bytes(&self, serialization_type: &SerializationType) -> Result<Vec<u8>, EntityError> {
+    match serialization_type {
+      SerializationType::Bincode => self.to_bincode_bytes(),
+      SerializationType::Protobuf => Ok(self.to_protobuf_bytes()),
+    }
   }
 
   fn from_protobuf_bytes(bytes: &[u8]) -> Result<Self, EntityError> {

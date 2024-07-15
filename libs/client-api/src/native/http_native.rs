@@ -4,7 +4,7 @@ use crate::ws::{ConnectInfo, WSClientConnectURLProvider, WSClientHttpSender, WSE
 use crate::{spawn_blocking_brotli_compress, Client};
 use crate::{RefreshTokenAction, RefreshTokenRetryCondition};
 use anyhow::anyhow;
-use app_error::AppError;
+use app_error::{AppError, ErrorCode};
 use async_trait::async_trait;
 
 use bytes::Bytes;
@@ -16,7 +16,7 @@ use collab_rt_entity::HttpRealtimeMessage;
 use futures::Stream;
 use futures_util::stream;
 use prost::Message;
-use reqwest::{Body, Method};
+use reqwest::{Body, Method, StatusCode};
 use serde::Serialize;
 use shared_entity::dto::workspace_dto::CollabResponse;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -33,8 +33,28 @@ use tracing::{event, info, instrument, trace};
 
 pub use infra::file_util::ChunkedBytes;
 use shared_entity::dto::ai_dto::CompleteTextParams;
+use shared_entity::dto::server_info_dto::ServerInfoResponseItem;
 
 impl Client {
+  pub async fn get_server_info(&self) -> Result<ServerInfoResponseItem, AppResponseError> {
+    let url = format!("{}/api/server", self.base_url);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    if resp.status() == StatusCode::NOT_FOUND {
+      Err(AppResponseError::new(
+        ErrorCode::Unhandled,
+        "server info not implemented",
+      ))
+    } else {
+      AppResponse::<ServerInfoResponseItem>::from_response(resp)
+        .await?
+        .into_data()
+    }
+  }
+
   pub async fn stream_completion_text(
     &self,
     workspace_id: &str,
@@ -171,17 +191,26 @@ impl Client {
     workspace_id: &str,
     params_list: Vec<CollabParams>,
   ) -> Result<(), AppResponseError> {
+    let server_info = self.get_server_info().await;
+    let serialization_type = match server_info {
+      Ok(_) => Ok(SerializationType::Protobuf),
+      Err(err) if err.code == ErrorCode::Unhandled => Ok(SerializationType::Bincode),
+      Err(err) => Err(err),
+    }?;
     let url = self.batch_create_collab_url(workspace_id);
 
-    // Parallel compression
-    let compression_tasks: Vec<_> = params_list
+    let serialized_params_list: Vec<Vec<u8>> = params_list
       .into_iter()
-      .map(|params| {
+      .map(|params| params.to_bytes(&serialization_type).unwrap())
+      .collect();
+    // Parallel compression
+    let compression_tasks: Vec<_> = serialized_params_list
+      .into_iter()
+      .map(|serialized_params| {
         let config = self.config.clone();
         af_spawn(async move {
-          let data = params.to_bytes().map_err(AppError::from)?;
           spawn_blocking_brotli_compress(
-            data,
+            serialized_params,
             config.compression_quality,
             config.compression_buffer_size,
           )
@@ -211,7 +240,7 @@ impl Client {
     );
     let body = Body::wrap_stream(stream::once(async { Ok::<_, AppError>(framed_data) }));
     let resp = self
-      .http_client_with_auth_compress(Method::POST, &url, &SerializationType::Protobuf)
+      .http_client_with_auth_compress(Method::POST, &url, &serialization_type)
       .await?
       .timeout(Duration::from_secs(60))
       .body(body)

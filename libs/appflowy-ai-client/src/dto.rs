@@ -203,7 +203,6 @@ pub enum AIModel {
   GPT4o = 2,
   Claude3Sonnet = 3,
   Claude3Opus = 4,
-  Local = 5, // work in progress
 }
 
 impl AIModel {
@@ -214,7 +213,6 @@ impl AIModel {
       AIModel::GPT4o => "gpt-4o",
       AIModel::Claude3Sonnet => "claude-3-sonnet",
       AIModel::Claude3Opus => "claude-3-opus",
-      AIModel::Local => "local",
     }
   }
 }
@@ -228,7 +226,6 @@ impl FromStr for AIModel {
       "gpt-4o" => Ok(AIModel::GPT4o),
       "claude-3-sonnet" => Ok(AIModel::Claude3Sonnet),
       "claude-3-opus" => Ok(AIModel::Claude3Opus),
-      "local" => Ok(AIModel::Local),
       _ => Ok(AIModel::DefaultModel),
     }
   }

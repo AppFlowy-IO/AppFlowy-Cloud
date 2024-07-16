@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod chat;
 pub mod file_storage;
+pub mod server_info;
 
 pub mod history;
 pub mod metrics;

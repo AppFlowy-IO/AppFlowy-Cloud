@@ -58,6 +58,7 @@ use tonic_proto::history::history_client::HistoryClient;
 
 use crate::api::ai::ai_completion_scope;
 use crate::api::search::search_scope;
+use crate::api::server_info::server_info_scope;
 use appflowy_collaborate::indexer::IndexerProvider;
 use database::file::s3_client_impl::{AwsS3BucketClientImpl, S3BucketStorage};
 use tracing::{error, info, warn};
@@ -153,6 +154,7 @@ pub async fn run_actix_server(
       // .wrap(DecryptPayloadMiddleware)
       .wrap(access_control.clone())
       .wrap(RequestIdMiddleware)
+      .service(server_info_scope())
       .service(user_scope())
       .service(workspace_scope())
       .service(collab_scope())

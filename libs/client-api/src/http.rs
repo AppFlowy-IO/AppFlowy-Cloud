@@ -851,6 +851,8 @@ impl Client {
   ) -> Result<RequestBuilder, AppResponseError> {
     #[cfg(feature = "enable_brotli")]
     {
+      // safety: safe to unwrap as the serialization type enum in string format does not
+      // contain any invalid characters.
       let serialization_type_header_value =
         HeaderValue::from_str(serialization_type.to_string().as_str()).unwrap();
       self

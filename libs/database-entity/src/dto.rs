@@ -18,6 +18,9 @@ use tracing::error;
 use uuid::Uuid;
 use validator::Validate;
 
+const BINCODE_SERIALIZATION: &str = "bincode";
+const PROTOBUF_SERIALIZATION: &str = "protobuf";
+
 pub enum SerializationType {
   Bincode,
   Protobuf,
@@ -28,8 +31,8 @@ impl FromStr for SerializationType {
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
     match s {
-      "bincode" => Ok(SerializationType::Bincode),
-      "protobuf" => Ok(SerializationType::Protobuf),
+      BINCODE_SERIALIZATION => Ok(SerializationType::Bincode),
+      PROTOBUF_SERIALIZATION => Ok(SerializationType::Protobuf),
       _ => Err(InvalidData(format!(
         "{} is not a supported serialization type",
         s
@@ -41,8 +44,8 @@ impl FromStr for SerializationType {
 impl Display for SerializationType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
-      SerializationType::Bincode => write!(f, "bincode"),
-      SerializationType::Protobuf => write!(f, "protobuf"),
+      SerializationType::Bincode => write!(f, "{}", BINCODE_SERIALIZATION),
+      SerializationType::Protobuf => write!(f, "{}", PROTOBUF_SERIALIZATION),
     }
   }
 }

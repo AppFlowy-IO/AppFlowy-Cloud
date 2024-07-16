@@ -12,6 +12,7 @@ lazy_static! {
       password: std::env::var("GOTRUE_ADMIN_PASSWORD").unwrap_or("password".to_string()),
     }
   };
+  static ref ADMIN_SIGN_IN_MUTEX: tokio::sync::Mutex<()> = tokio::sync::Mutex::new(());
 }
 
 #[derive(Clone, Debug)]
@@ -32,7 +33,8 @@ pub async fn admin_user_client() -> Client {
     web_sys::console::log_1(&msg.into());
   }
 
-  admin_client
+  let _guard = ADMIN_SIGN_IN_MUTEX.lock().await;
+  let _is_new = admin_client
     .sign_in_password(&ADMIN_USER.email, &ADMIN_USER.password)
     .await
     .unwrap();

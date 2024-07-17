@@ -124,7 +124,8 @@ pub struct WorkspaceUsageAndLimit {
 pub struct SubscriptionCancelRequest {
   pub workspace_id: String,
   pub plan: SubscriptionPlan,
-  pub sync: bool, // if true, this request will block until stripe has sent the cancelation webhook
+  pub sync: bool, // if true, this request will block until stripe has sent the cancellation webhook
+  pub reason: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

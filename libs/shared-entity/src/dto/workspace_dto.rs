@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
-use collab_folder::{Folder, ViewIcon, ViewIdentifier};
+use collab_folder::{Folder, ViewIcon};
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, ops::Deref};
@@ -135,24 +135,25 @@ pub struct FolderView {
   pub name: String,
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
+  pub is_private: bool,
   pub children: Vec<FolderView>,
 }
 
 impl From<&Folder> for FolderView {
   fn from(folder: &Folder) -> Self {
-    let unviewable = {
-      let mut unviewable = HashSet::new();
-      for private_section in folder.get_all_private_sections() {
-        unviewable.insert(private_section.id);
-      }
-      for private_section in folder.get_my_private_sections() {
-        unviewable.remove(&private_section.id);
-      }
-      for trash_view in folder.get_all_trash_sections() {
-        unviewable.insert(trash_view.id);
-      }
-      unviewable
-    };
+    let mut unviewable = HashSet::new();
+    for private_section in folder.get_all_private_sections() {
+      unviewable.insert(private_section.id);
+    }
+    for trash_view in folder.get_all_trash_sections() {
+      unviewable.insert(trash_view.id);
+    }
+
+    let mut private_views = HashSet::new();
+    for private_section in folder.get_my_private_sections() {
+      unviewable.remove(&private_section.id);
+      private_views.insert(private_section.id);
+    }
 
     let workspace_id = folder.get_workspace_id();
     let root = match folder.views.get_view(&workspace_id) {
@@ -168,22 +169,38 @@ impl From<&Folder> for FolderView {
       name: root.name.clone(),
       icon: root.icon.clone(),
       is_space: false,
+      is_private: false,
       children: root
         .children
         .iter()
         .filter(|v| !unviewable.contains(&v.id))
-        .map(|v| FolderView::from((folder, v, &unviewable)))
+        .map(|v| {
+          let intermediate = FolderViewIntermediate {
+            folder,
+            view_id: &v.id,
+            unviewable: &unviewable,
+            private_views: &private_views,
+          };
+          FolderView::from(intermediate)
+        })
         .collect(),
     }
   }
 }
 
-impl From<(&Folder, &ViewIdentifier, &HashSet<String>)> for FolderView {
-  fn from((folder, view_id, unviewable): (&Folder, &ViewIdentifier, &HashSet<String>)) -> Self {
-    let view = match folder.views.get_view(&view_id.id) {
+struct FolderViewIntermediate<'a> {
+  folder: &'a Folder,
+  view_id: &'a str,
+  unviewable: &'a HashSet<String>,
+  private_views: &'a HashSet<String>,
+}
+
+impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
+  fn from(fv: FolderViewIntermediate) -> Self {
+    let view = match fv.folder.views.get_view(fv.view_id) {
       Some(view) => view,
       None => {
-        tracing::error!("failed to get view, view_id: {}", view_id.id);
+        tracing::error!("failed to get view, view_id: {}", fv.view_id);
         return Self::default();
       },
     };
@@ -193,11 +210,19 @@ impl From<(&Folder, &ViewIdentifier, &HashSet<String>)> for FolderView {
       name: view.name.clone(),
       icon: view.icon.clone(),
       is_space: view_is_space(&view),
+      is_private: fv.private_views.contains(&view.id),
       children: view
         .children
         .iter()
-        .filter(|v| !unviewable.contains(&v.id))
-        .map(|v| FolderView::from((folder, v, unviewable)))
+        .filter(|v| !fv.unviewable.contains(&v.id))
+        .map(|v| {
+          FolderView::from(FolderViewIntermediate {
+            folder: fv.folder,
+            view_id: &v.id,
+            unviewable: fv.unviewable,
+            private_views: fv.private_views,
+          })
+        })
         .collect(),
     }
   }

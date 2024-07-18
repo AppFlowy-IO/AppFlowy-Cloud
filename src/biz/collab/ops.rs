@@ -1,6 +1,11 @@
 use std::ops::DerefMut;
 
 use anyhow::Context;
+use collab::core::collab::DataSource;
+use collab_entity::{CollabType, EncodedCollab};
+use collab_folder::{CollabOrigin, Folder};
+use database::{collab::select_blob_from_af_collab, user::select_uid_from_uuid};
+use shared_entity::dto::workspace_dto::FolderView;
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
 use validator::Validate;
@@ -129,6 +134,7 @@ pub async fn delete_collab_member(
     .context("fail to commit the transaction to remove collab member")?;
   Ok(())
 }
+
 pub async fn get_collab_member_list(
   pg_pool: &PgPool,
   params: &QueryCollabMembers,
@@ -136,4 +142,24 @@ pub async fn get_collab_member_list(
   params.validate()?;
   let collab_member = database::collab::select_collab_members(&params.object_id, pg_pool).await?;
   Ok(collab_member)
+}
+
+pub async fn get_user_workspace_structure(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_id: &Uuid,
+) -> Result<FolderView, AppError> {
+  let uid = select_uid_from_uuid(pg_pool, user_uuid).await?;
+  let data =
+    select_blob_from_af_collab(pg_pool, &CollabType::Folder, &workspace_id.to_string()).await?;
+  let encoded_collab = EncodedCollab::decode_from_bytes(&data).unwrap();
+  let folder = Folder::from_collab_doc_state(
+    uid,
+    CollabOrigin::Empty,
+    DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+    "",
+    vec![],
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok((&folder).into())
 }

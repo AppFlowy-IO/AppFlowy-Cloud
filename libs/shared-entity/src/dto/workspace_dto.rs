@@ -1,8 +1,9 @@
 use chrono::{DateTime, Utc};
 use collab_entity::{CollabType, EncodedCollab};
+use collab_folder::{Folder, ViewIcon, ViewIdentifier};
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{collections::HashSet, ops::Deref};
 use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
@@ -119,4 +120,103 @@ pub struct CollabResponse {
   /// We can remove this 'serde(default)' after the 0325 version is stable.
   #[serde(default)]
   pub object_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedDuplicate {
+  pub published_collab_type: CollabType,
+  pub published_view_id: Uuid,
+  pub dest_view_id: Uuid,
+}
+
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+pub struct FolderView {
+  pub view_id: String,
+  pub name: String,
+  pub icon: Option<ViewIcon>,
+  pub is_space: bool,
+  pub children: Vec<FolderView>,
+}
+
+impl From<&Folder> for FolderView {
+  fn from(folder: &Folder) -> Self {
+    let unviewable = {
+      let mut unviewable = HashSet::new();
+      for private_section in folder.get_all_private_sections() {
+        unviewable.insert(private_section.id);
+      }
+      for private_section in folder.get_my_private_sections() {
+        unviewable.remove(&private_section.id);
+      }
+      for trash_view in folder.get_all_trash_sections() {
+        unviewable.insert(trash_view.id);
+      }
+      unviewable
+    };
+
+    let workspace_id = folder.get_workspace_id();
+    let root = match folder.views.get_view(&workspace_id) {
+      Some(root) => root,
+      None => {
+        tracing::error!("failed to get root view, workspace_id: {}", workspace_id);
+        return Self::default();
+      },
+    };
+
+    Self {
+      view_id: root.id.clone(),
+      name: root.name.clone(),
+      icon: root.icon.clone(),
+      is_space: false,
+      children: root
+        .children
+        .iter()
+        .filter(|v| !unviewable.contains(&v.id))
+        .map(|v| FolderView::from((folder, v, &unviewable)))
+        .collect(),
+    }
+  }
+}
+
+impl From<(&Folder, &ViewIdentifier, &HashSet<String>)> for FolderView {
+  fn from((folder, view_id, unviewable): (&Folder, &ViewIdentifier, &HashSet<String>)) -> Self {
+    let view = match folder.views.get_view(&view_id.id) {
+      Some(view) => view,
+      None => {
+        tracing::error!("failed to get view, view_id: {}", view_id.id);
+        return Self::default();
+      },
+    };
+
+    Self {
+      view_id: view.id.clone(),
+      name: view.name.clone(),
+      icon: view.icon.clone(),
+      is_space: view_is_space(&view),
+      children: view
+        .children
+        .iter()
+        .filter(|v| !unviewable.contains(&v.id))
+        .map(|v| FolderView::from((folder, v, unviewable)))
+        .collect(),
+    }
+  }
+}
+
+fn view_is_space(view: &collab_folder::View) -> bool {
+  let extra = match view.extra.as_ref() {
+    Some(extra) => extra,
+    None => return false,
+  };
+  let value = match serde_json::from_str::<serde_json::Value>(extra) {
+    Ok(v) => v,
+    Err(e) => {
+      tracing::error!("failed to parse extra field({}): {}", extra, e);
+      return false;
+    },
+  };
+  match value.get("is_space") {
+    Some(is_space_str) => is_space_str.as_bool().unwrap_or(false),
+    None => false,
+  }
 }

@@ -5957,6 +5957,7 @@ dependencies = [
  "bytes",
  "chrono",
  "collab-entity",
+ "collab-folder",
  "database-entity",
  "futures",
  "gotrue-entity",
@@ -5967,6 +5968,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "thiserror",
+ "tracing",
  "uuid",
  "validator",
 ]

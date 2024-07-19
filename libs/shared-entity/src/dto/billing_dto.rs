@@ -134,3 +134,16 @@ pub struct SetSubscriptionRecurringInterval {
   pub plan: SubscriptionPlan,
   pub recurring_interval: RecurringInterval,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SubscriptionPlanDetail {
+  pub currency: Currency,
+  pub price_cents: i64,
+  pub plan: SubscriptionPlan,
+}
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Default)]
+pub enum Currency {
+  #[default]
+  USD,
+}

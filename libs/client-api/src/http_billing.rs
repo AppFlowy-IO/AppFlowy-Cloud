@@ -206,7 +206,7 @@ impl Client {
   ) -> Result<Vec<SubscriptionPlanDetail>, AppResponseError> {
     let url = format!("{}/billing/api/v1/subscriptions", self.base_billing_url(),);
     let resp = self
-      .http_client_with_auth(Method::POST, &url)
+      .http_client_with_auth(Method::GET, &url)
       .await?
       .send()
       .await?;

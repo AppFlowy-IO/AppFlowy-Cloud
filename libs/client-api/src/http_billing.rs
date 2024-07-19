@@ -1,6 +1,7 @@
 use crate::Client;
 use client_api_entity::billing_dto::{
-  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, WorkspaceUsageAndLimit,
+  SetSubscriptionRecurringInterval, SubscriptionCancelRequest, SubscriptionPlanDetail,
+  WorkspaceUsageAndLimit,
 };
 use reqwest::Method;
 use shared_entity::{
@@ -197,5 +198,21 @@ impl Client {
       .await?;
 
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  /// get all subscription plan details
+  pub async fn get_subscription_plan_details(
+    &self,
+  ) -> Result<Vec<SubscriptionPlanDetail>, AppResponseError> {
+    let url = format!("{}/billing/api/v1/subscriptions", self.base_billing_url(),);
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .send()
+      .await?;
+
+    AppResponse::<Vec<SubscriptionPlanDetail>>::from_response(resp)
+      .await?
+      .into_data()
   }
 }

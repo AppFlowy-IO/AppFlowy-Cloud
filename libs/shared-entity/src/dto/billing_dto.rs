@@ -139,6 +139,7 @@ pub struct SetSubscriptionRecurringInterval {
 pub struct SubscriptionPlanDetail {
   pub currency: Currency,
   pub price_cents: i64,
+  pub recurring_interval: RecurringInterval,
   pub plan: SubscriptionPlan,
 }
 

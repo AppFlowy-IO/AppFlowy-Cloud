@@ -35,3 +35,4 @@ prost-build = "0.12.3"
 actix_message = ["actix"]
 tungstenite = ["tokio-tungstenite"]
 rt_compress = ["brotli"]
+verbose_log = []

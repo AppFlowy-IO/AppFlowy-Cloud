@@ -1,19 +1,20 @@
-use anyhow::{anyhow, Error};
-use bincode::{DefaultOptions, Options};
 use std::collections::HashMap;
-
-use crate::client_message::ClientCollabMessage;
-use crate::server_message::ServerCollabMessage;
-use crate::user::UserMessage;
-use crate::{AwarenessSync, BroadcastSync, CollabAck, InitSync, ServerInit, UpdateSync};
-#[cfg(feature = "rt_compress")]
-use brotli::{CompressorReader, Decompressor};
-use bytes::Bytes;
-use collab::core::origin::CollabOrigin;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 #[cfg(feature = "rt_compress")]
 use std::io::Read;
+
+use anyhow::{anyhow, Error};
+use bincode::{DefaultOptions, Options};
+#[cfg(feature = "rt_compress")]
+use brotli::{CompressorReader, Decompressor};
+use collab::core::origin::CollabOrigin;
+use serde::{Deserialize, Serialize};
+
+use crate::client_message::ClientCollabMessage;
+use crate::payload::Payload;
+use crate::server_message::ServerCollabMessage;
+use crate::user::UserMessage;
+use crate::{AwarenessSync, BroadcastSync, CollabAck, InitSync, ServerInit, UpdateSync};
 
 /// Maximum allowable size for a realtime message.
 ///
@@ -189,7 +190,7 @@ impl CollabMessage {
   pub fn len(&self) -> usize {
     self.payload().len()
   }
-  pub fn payload(&self) -> &Bytes {
+  pub fn payload(&self) -> &Payload {
     match self {
       CollabMessage::ClientInitSync(value) => &value.payload,
       CollabMessage::ClientUpdateSync(value) => &value.payload,

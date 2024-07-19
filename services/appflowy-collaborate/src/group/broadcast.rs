@@ -1,33 +1,32 @@
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use std::time::Duration;
+
+use anyhow::anyhow;
+use collab::core::collab::{MutexCollab, WeakMutexCollab};
+use collab::core::origin::CollabOrigin;
+use futures_util::{SinkExt, StreamExt};
+use tokio::select;
+use tokio::sync::broadcast::{channel, Sender};
+use tokio::time::{Instant, sleep};
+use tracing::{error, trace, warn};
+use yrs::encoding::write::Write;
+use yrs::Subscription as YrsSubscription;
+use yrs::updates::encoder::{Encoder, EncoderV1};
+
+use collab_rt_entity::{AckCode, MsgId, Payload};
+use collab_rt_entity::{
+  AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
+};
+use collab_rt_entity::MessageByObjectId;
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
+use collab_rt_protocol::{Message, MSG_SYNC, MSG_SYNC_UPDATE};
+
 use crate::error::RealtimeError;
 use crate::group::group_init::EditState;
 use crate::group::protocol::ServerSyncProtocol;
 use crate::metrics::CollabMetricsCalculate;
-use anyhow::anyhow;
-use bytes::Bytes;
-use collab::core::collab::{MutexCollab, WeakMutexCollab};
-use collab::core::origin::CollabOrigin;
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::MessageByObjectId;
-use collab_rt_entity::{AckCode, MsgId};
-use collab_rt_entity::{
-  AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
-};
-use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
-use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
-use futures_util::{SinkExt, StreamExt};
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::select;
-
-use tokio::sync::broadcast::{channel, Sender};
-
-use tokio::time::{sleep, Instant};
-use tracing::{error, trace, warn};
-use yrs::encoding::write::Write;
-use yrs::updates::decoder::DecoderV1;
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::Subscription as YrsSubscription;
 
 pub trait CollabUpdateStreaming: 'static + Send + Sync {
   fn send_update(&self, update: Vec<u8>) -> Result<(), RealtimeError>;
@@ -135,7 +134,7 @@ impl CollabBroadcast {
         .lock()
         .observe_awareness(move |awareness, event, _origin| {
           if let Ok(awareness_update) = awareness.update_with_clients(event.all_changes()) {
-            let payload = Message::Awareness(awareness_update).encode_v1();
+            let payload = Message::Awareness(awareness_update);
             let msg = AwarenessSync::new(cloned_oid.clone(), payload, CollabOrigin::Empty);
             if let Err(err) = broadcast_sink.send(msg.into()) {
               trace!("fail to broadcast awareness:{}", err);
@@ -407,7 +406,7 @@ async fn handle_one_message_payload(
   object_id: &str,
   message_origin: CollabOrigin,
   msg_id: MsgId,
-  payload: &Bytes,
+  payload: &Payload,
   collab: &MutexCollab,
   metrics_calculate: &CollabMetricsCalculate,
   seq_num: u32,
@@ -433,10 +432,8 @@ async fn handle_one_message_payload(
         return Err(RealtimeError::LockTimeout);
       },
     };
-    let mut decoder = DecoderV1::from(payload.as_ref());
-    let reader = MessageReader::new(&mut decoder);
     let mut ack_response = None;
-    for msg in reader {
+    for msg in payload.iter() {
       match msg {
         Ok(msg) => {
           match handle_message_follow_protocol(

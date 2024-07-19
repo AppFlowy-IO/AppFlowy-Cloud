@@ -1,11 +1,16 @@
-use crate::message::RealtimeMessage;
-use crate::{CollabMessage, MsgId};
+use std::fmt::{Display, Formatter};
+
 use anyhow::{anyhow, Error};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use serde::{Deserialize, Serialize};
 use serde_repr::Serialize_repr;
-use std::fmt::{Display, Formatter};
+
+use collab_rt_protocol::Message;
+
+use crate::message::RealtimeMessage;
+use crate::payload::Payload;
+use crate::{CollabMessage, MsgId};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum ServerCollabMessage {
@@ -34,7 +39,7 @@ impl ServerCollabMessage {
     }
   }
 
-  pub fn payload(&self) -> &Bytes {
+  pub fn payload(&self) -> &Payload {
     match self {
       ServerCollabMessage::ClientAck(value) => &value.payload,
       ServerCollabMessage::ServerInitSync(value) => &value.payload,
@@ -120,7 +125,7 @@ pub struct ServerInit {
   ///    ...
   ///   }
   /// ```
-  pub payload: Bytes,
+  pub payload: Payload,
 }
 
 impl ServerInit {
@@ -128,7 +133,7 @@ impl ServerInit {
     Self {
       origin,
       object_id,
-      payload: Bytes::from(payload),
+      payload: Bytes::from(payload).into(),
       msg_id,
     }
   }
@@ -159,7 +164,7 @@ pub struct CollabAck {
   pub object_id: String,
   #[deprecated(note = "since 0.2.18")]
   pub meta: AckMeta,
-  pub payload: Bytes,
+  pub payload: Payload,
   pub code: u8,
   pub msg_id: MsgId,
   seq_num: u32,
@@ -172,7 +177,7 @@ impl CollabAck {
       origin,
       object_id,
       meta: AckMeta::new(&msg_id),
-      payload: Bytes::from(vec![]),
+      payload: Payload::EMPTY,
       code: AckCode::Success as u8,
       msg_id,
       seq_num,
@@ -180,7 +185,7 @@ impl CollabAck {
   }
 
   pub fn with_payload<T: Into<Bytes>>(mut self, payload: T) -> Self {
-    self.payload = payload.into();
+    self.payload = payload.into().into();
     self
   }
 
@@ -267,7 +272,7 @@ pub struct BroadcastSync {
   pub(crate) object_id: String,
   /// "The payload is encoded using the `EncoderV1` with the `Message` struct.
   /// It can be parsed into: Message::Sync::(SyncMessage::Update(update))
-  pub(crate) payload: Bytes,
+  pub(crate) payload: Payload,
   pub seq_num: u32,
 }
 
@@ -276,7 +281,7 @@ impl BroadcastSync {
     Self {
       origin,
       object_id,
-      payload: Bytes::from(payload),
+      payload: Bytes::from(payload).into(),
       seq_num,
     }
   }
@@ -303,15 +308,15 @@ impl Display for BroadcastSync {
 #[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Hash)]
 pub struct AwarenessSync {
   pub(crate) object_id: String,
-  pub(crate) payload: Bytes,
+  pub(crate) payload: Payload,
   pub(crate) origin: CollabOrigin,
 }
 
 impl AwarenessSync {
-  pub fn new(object_id: String, payload: Vec<u8>, origin: CollabOrigin) -> Self {
+  pub fn new(object_id: String, payload: Message, origin: CollabOrigin) -> Self {
     Self {
       object_id,
-      payload: Bytes::from(payload),
+      payload: Payload::new(payload),
       origin,
     }
   }

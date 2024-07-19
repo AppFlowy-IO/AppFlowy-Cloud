@@ -71,6 +71,6 @@ again = { version = "0.1.2" }
 collab-sync = ["collab", "yrs"]
 test_util = ["scraper"]
 template = ["workspace-template"]
-sync_verbose_log = ["collab-rt-protocol/verbose_log"]
+sync_verbose_log = ["collab-rt-protocol/verbose_log", "collab-rt-entity/verbose_log"]
 test_fast_sync = []
 enable_brotli = ["brotli"]

@@ -1,18 +1,21 @@
-use crate::message::RealtimeMessage;
-use crate::server_message::ServerInit;
-use crate::{CollabMessage, MsgId};
+use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
+use std::hash::{Hash, Hasher};
+
 use anyhow::{anyhow, Error};
 use bytes::Bytes;
 use collab::core::origin::CollabOrigin;
 use collab_entity::CollabType;
-use collab_rt_protocol::{Message, MessageReader, SyncMessage};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
-use std::hash::{Hash, Hasher};
 use yrs::merge_updates_v1;
-use yrs::updates::decoder::DecoderV1;
-use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+
+use collab_rt_protocol::{Message, SyncMessage};
+
+use crate::message::RealtimeMessage;
+use crate::payload::Payload;
+use crate::server_message::ServerInit;
+use crate::{CollabMessage, MsgId};
+
 pub trait SinkMessage: Clone + Send + Sync + 'static + Ord + Display {
   fn payload_size(&self) -> usize;
   fn mergeable(&self) -> bool;
@@ -75,8 +78,8 @@ impl ClientCollabMessage {
       ClientCollabMessage::ClientCollabStateCheck(data) => &data.origin,
     }
   }
-  pub fn payload(&self) -> &Bytes {
-    static EMPTY_BYTES: Bytes = Bytes::from_static(b"");
+  pub fn payload(&self) -> &Payload {
+    static EMPTY_BYTES: Payload = Payload::EMPTY;
     match self {
       ClientCollabMessage::ClientInitSync { data, .. } => &data.payload,
       ClientCollabMessage::ClientUpdateSync { data, .. } => &data.payload,
@@ -248,7 +251,7 @@ pub struct InitSync {
   pub collab_type: CollabType,
   pub workspace_id: String,
   pub msg_id: MsgId,
-  pub payload: Bytes,
+  pub payload: Payload,
 }
 
 impl InitSync {
@@ -260,7 +263,7 @@ impl InitSync {
     msg_id: MsgId,
     payload: Vec<u8>,
   ) -> Self {
-    let payload = Bytes::from(payload);
+    let payload = Payload::from(Bytes::from(payload));
     Self {
       origin,
       object_id,
@@ -308,7 +311,7 @@ pub struct UpdateSync {
   ///   }
   /// ```
   ///
-  pub payload: Bytes,
+  pub payload: Payload,
 }
 
 impl UpdateSync {
@@ -316,7 +319,7 @@ impl UpdateSync {
     Self {
       origin,
       object_id,
-      payload: Bytes::from(payload),
+      payload: Bytes::from(payload).into(),
       msg_id,
     }
   }
@@ -330,9 +333,7 @@ impl UpdateSync {
     {
       let update = merge_updates_v1([left, right])?;
       let msg = Message::Sync(SyncMessage::Update(update));
-      let mut encoder = EncoderV1::new();
-      msg.encode(&mut encoder);
-      self.payload = Bytes::from(encoder.to_vec());
+      self.payload = Payload::new(msg);
       Ok(true)
     } else {
       Ok(false)
@@ -340,9 +341,8 @@ impl UpdateSync {
   }
 
   fn as_update(&self) -> Option<Message> {
-    let mut decoder = DecoderV1::from(self.payload.as_ref());
-    let mut reader = MessageReader::new(&mut decoder);
-    reader.next()?.ok()
+    let message = self.payload.iter().next()?;
+    message.ok()
   }
 }
 

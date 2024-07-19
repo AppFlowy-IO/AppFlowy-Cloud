@@ -1,26 +1,25 @@
-use crate::af_spawn;
-use crate::collab_sync::{
-  start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
-};
+use std::marker::PhantomData;
+use std::sync::{Arc, Weak};
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use client_api_entity::{validate_data_for_folder, CollabType};
 use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
-use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
-use collab_rt_protocol::{
-  handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,
-};
 use futures_util::{SinkExt, StreamExt};
-use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Weak};
 use tokio::select;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
-
 use tracing::{error, instrument, trace, warn};
-use yrs::encoding::read::Cursor;
-use yrs::updates::decoder::DecoderV1;
+
+use client_api_entity::{CollabType, validate_data_for_folder};
+use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
+use collab_rt_protocol::{
+  ClientSyncProtocol, handle_message_follow_protocol, Message, SyncMessage,
+};
+
+use crate::af_spawn;
+use crate::collab_sync::{
+  CollabSink, MissUpdateReason, start_sync, SyncError, SyncObject, SyncReason,
+};
 
 /// Use to continuously receive updates from remote.
 pub struct ObserveCollab<Sink, Stream> {
@@ -195,7 +194,7 @@ where
 
       if ack_code == AckCode::MissUpdate {
         return Err(SyncError::MissUpdates {
-          state_vector_v1: Some(ack.payload.to_vec()),
+          state_vector_v1: Some(ack.payload.as_ref().to_vec()),
           reason: MissUpdateReason::ServerMissUpdates,
         });
       }
@@ -267,9 +266,7 @@ where
     // workaround for panic when applying updates. It can be removed in the future
     let result = tokio::spawn(async move {
       if let Some(mut collab) = collab.try_lock() {
-        let mut decoder = DecoderV1::new(Cursor::new(&payload));
-        let reader = MessageReader::new(&mut decoder);
-        for yrs_message in reader {
+        for yrs_message in payload.iter() {
           let msg = yrs_message?;
 
           // When the client receives a SyncStep1 message, it indicates that the server is requesting

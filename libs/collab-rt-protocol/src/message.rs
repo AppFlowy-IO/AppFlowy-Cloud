@@ -1,12 +1,11 @@
-use collab::core::awareness::AwarenessUpdate;
-use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter};
 
+use collab::core::awareness::AwarenessUpdate;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-
-use yrs::updates::decoder::{Decode, Decoder};
-use yrs::updates::encoder::{Encode, Encoder};
 use yrs::StateVector;
+use yrs::updates::decoder::{Decode, Decoder, DecoderV1};
+use yrs::updates::encoder::{Encode, Encoder};
 
 /// Tag id for [Message::Sync].
 pub const MSG_SYNC: u8 = 0;
@@ -281,19 +280,19 @@ impl From<std::io::Error> for RTProtocolError {
 
 /// [MessageReader] can be used over the decoder to read these messages one by one in iterable
 /// fashion.
-pub struct MessageReader<'a, D: Decoder>(&'a mut D);
+pub struct MessageReader<'a>(DecoderV1<'a>);
 
-impl<'a, D: Decoder> MessageReader<'a, D> {
-  pub fn new(decoder: &'a mut D) -> Self {
+impl<'a> MessageReader<'a> {
+  pub fn new(decoder: DecoderV1<'a>) -> Self {
     MessageReader(decoder)
   }
 }
 
-impl<'a, D: Decoder> Iterator for MessageReader<'a, D> {
+impl<'a> Iterator for MessageReader<'a> {
   type Item = Result<Message, yrs::encoding::read::Error>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    match Message::decode(self.0) {
+    match Message::decode(&mut self.0) {
       Ok(msg) => Some(Ok(msg)),
       Err(yrs::encoding::read::Error::EndOfBuffer(_)) => None,
       Err(error) => Some(Err(error)),

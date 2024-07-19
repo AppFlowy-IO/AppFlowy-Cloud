@@ -1,3 +1,9 @@
+pub use client_message::*;
+pub use message::*;
+pub use payload::*;
+pub use realtime_proto::*;
+pub use server_message::*;
+
 mod message;
 pub mod user;
 
@@ -8,10 +14,6 @@ mod client_message;
 //  cargo clean
 //  cargo build
 // ```
+mod payload;
 pub mod realtime_proto;
 mod server_message;
-
-pub use client_message::*;
-pub use message::*;
-pub use realtime_proto::*;
-pub use server_message::*;

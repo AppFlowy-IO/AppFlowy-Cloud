@@ -1260,9 +1260,13 @@ async fn get_workspace_folder_handler(
   workspace_id: web::Path<Uuid>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<FolderView>>> {
-  let folder_view =
-    biz::collab::ops::get_user_workspace_structure(&state.pg_pool, &user_uuid, &workspace_id)
-      .await?;
+  let folder_view = biz::collab::ops::get_user_workspace_structure(
+    &state.user_cache,
+    &state.collab_cache,
+    &user_uuid,
+    &workspace_id,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok().with_data(folder_view)))
 }
 

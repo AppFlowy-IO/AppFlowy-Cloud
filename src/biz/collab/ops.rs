@@ -1,10 +1,10 @@
 use std::ops::DerefMut;
 
 use anyhow::Context;
+use appflowy_collaborate::collab::cache::CollabCache;
 use collab::core::collab::DataSource;
-use collab_entity::{CollabType, EncodedCollab};
+use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
-use database::{collab::select_blob_from_af_collab, user::select_uid_from_uuid};
 use shared_entity::dto::workspace_dto::FolderView;
 use sqlx::{types::Uuid, PgPool};
 use tracing::{event, trace};
@@ -12,10 +12,13 @@ use validator::Validate;
 
 use access_control::collab::CollabAccessControl;
 use app_error::AppError;
+use database_entity::dto::QueryCollab;
 use database_entity::dto::{
   AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
   UpdateCollabMemberParams,
 };
+
+use crate::state::UserCache;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -145,14 +148,22 @@ pub async fn get_collab_member_list(
 }
 
 pub async fn get_user_workspace_structure(
-  pg_pool: &PgPool,
+  user_cache: &UserCache,
+  collab_cache: &CollabCache,
   user_uuid: &Uuid,
   workspace_id: &Uuid,
 ) -> Result<FolderView, AppError> {
-  let uid = select_uid_from_uuid(pg_pool, user_uuid).await?;
-  let data =
-    select_blob_from_af_collab(pg_pool, &CollabType::Folder, &workspace_id.to_string()).await?;
-  let encoded_collab = EncodedCollab::decode_from_bytes(&data).unwrap();
+  let uid = user_cache.get_user_uid(user_uuid).await?;
+  let encoded_collab = collab_cache
+    .get_encode_collab(
+      &uid,
+      QueryCollab {
+        object_id: workspace_id.to_string(),
+        collab_type: CollabType::Folder,
+      },
+    )
+    .await?;
+
   let folder = Folder::from_collab_doc_state(
     uid,
     CollabOrigin::Empty,

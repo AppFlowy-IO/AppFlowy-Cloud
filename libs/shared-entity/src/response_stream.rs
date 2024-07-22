@@ -13,6 +13,8 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+use futures::stream::StreamExt;
+
 impl<T> AppResponse<T>
 where
   T: DeserializeOwned + 'static,
@@ -42,6 +44,7 @@ where
     let stream = resp.bytes_stream().map_err(AppResponseError::from);
     Ok(NewlineStream::new(stream))
   }
+
   pub async fn answer_response_stream(
     resp: reqwest::Response,
   ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
@@ -52,6 +55,7 @@ where
     }
 
     let stream = resp.bytes_stream().map_err(AppResponseError::from);
+    let stream = check_first_item_response_error(stream).await?;
     Ok(stream)
   }
 }
@@ -265,4 +269,19 @@ impl Stream for AnswerStream {
       }
     }
   }
+}
+
+async fn check_first_item_response_error(
+  stream: impl Stream<Item = Result<Bytes, AppResponseError>> + Unpin,
+) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
+  let mut stream = stream.peekable();
+  if let Some(first_item) = Pin::new(&mut stream).peek().await {
+    let first_item = first_item.as_ref().map_err(|e| e.clone())?;
+    if let Ok(app_err) = serde_json::from_slice::<AppResponseError>(first_item) {
+      if app_err.code != ErrorCode::Ok {
+        return Err(app_err);
+      }
+    };
+  }
+  Ok(stream)
 }

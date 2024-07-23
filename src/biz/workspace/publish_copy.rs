@@ -8,7 +8,7 @@ use collab_entity::CollabType;
 use collab_folder::{
   CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
 };
-use database::publish::select_published_collab_blob_for_view_id;
+use database::publish::select_published_collab_doc_state_for_view_id;
 use database_entity::dto::{CollabParams, QueryCollab};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -87,7 +87,7 @@ impl PublishCollabDuplicator {
     // new view after deep copy
     // this is the root of the document duplicated
     let mut root_view = match self
-      .deep_copy_txn(&mut txn, publish_view_id, collab_type)
+      .deep_copy_txn(&mut txn, publish_view_id, collab_type.clone())
       .await?
     {
       Some(v) => v,
@@ -106,7 +106,7 @@ impl PublishCollabDuplicator {
       .get_encode_collab(
         &self.dest_uid,
         QueryCollab {
-          object_id: self.dest_view_id.to_string(),
+          object_id: self.dest_workspace_id.to_string(),
           collab_type: CollabType::Folder,
         },
       )
@@ -120,12 +120,31 @@ impl PublishCollabDuplicator {
     )
     .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
+    // add all views required to the folder
     folder.insert_view(root_view, None);
     for view in self.views_to_add {
       folder.insert_view(view.clone(), None);
     }
 
-    // add the root view to the folder
+    // write back to collab cache
+    let encoded_folder_bin = folder
+      .encode_collab_v1()
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+      .encode_to_bytes()?;
+    self
+      .collab_cache
+      .insert_encode_collab_data(
+        &self.dest_workspace_id.to_string(),
+        &self.dest_uid,
+        &CollabParams {
+          object_id: self.dest_workspace_id.to_string(),
+          encoded_collab_v1: encoded_folder_bin,
+          collab_type,
+          embeddings: None,
+        },
+        &mut txn,
+      )
+      .await?;
 
     txn.commit().await?;
     Ok(())
@@ -142,8 +161,8 @@ impl PublishCollabDuplicator {
     collab_type: CollabType,
   ) -> Result<Option<View>, AppError> {
     // get doc_state bin data of collab
-    let state_bin_data: Vec<u8> =
-      match select_published_collab_blob_for_view_id(txn, &publish_view_id).await? {
+    let doc_state: Vec<u8> =
+      match select_published_collab_doc_state_for_view_id(txn, &publish_view_id).await? {
         Some(bin_data) => bin_data,
         None => {
           tracing::warn!(
@@ -158,7 +177,7 @@ impl PublishCollabDuplicator {
       CollabType::Document => {
         let doc = Document::from_doc_state(
           CollabOrigin::Empty,
-          DataSource::DocStateV1(state_bin_data.to_vec()),
+          DataSource::DocStateV1(doc_state.to_vec()),
           "",
           vec![],
         )

@@ -210,7 +210,7 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
 }
 
 #[inline]
-pub async fn select_published_collab_blob_for_view_id(
+pub async fn select_published_collab_doc_state_for_view_id(
   txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
   view_id: &Uuid,
 ) -> Result<Option<Vec<u8>>, AppError> {

@@ -273,9 +273,7 @@ impl PublishCollabDuplicator {
           if let Some(mut new_view) =
             Box::pin(self.deep_copy_txn(txn, publish_view_id, CollabType::Document)).await?
           {
-            // Not sure if we need this statement
             new_view.parent_view_id = ret_view.id.clone();
-
             ret_view.children.items.push(ViewIdentifier {
               id: new_view.id.clone(),
             });
@@ -283,6 +281,7 @@ impl PublishCollabDuplicator {
               .duplicated_refs
               .insert(page_id_str.to_string(), Some(new_view.id.clone()));
             self.views_to_add.push(new_view.clone());
+            *page_id = serde_json::json!(new_view.id);
           } else {
             self.duplicated_refs.insert(page_id_str.to_string(), None);
           }

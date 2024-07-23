@@ -206,6 +206,23 @@ impl PublishCollabDuplicator {
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     doc: Document,
   ) -> Result<View, AppError> {
+    // create a new view
+    let mut ret_view = View {
+      id: uuid::Uuid::new_v4().to_string(),
+      parent_view_id: "".to_string(), // to be filled by caller
+      name: "duplicated".to_string(), // TODO: get from metadata
+      desc: "".to_string(),           // TODO: get from metadata
+      children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
+      created_at: self.ts_now,
+      is_favorite: false,
+      layout: ViewLayout::Document,
+      icon: None, // TODO: get from metadata
+      created_by: Some(self.dest_uid),
+      last_edited_time: self.ts_now,
+      last_edited_by: Some(self.dest_uid),
+      extra: None, // to be filled by metadata
+    };
+
     let mut doc_data = doc
       .get_document_data()
       .map_err(|e| AppError::Unhandled(e.to_string()))?;
@@ -219,31 +236,12 @@ impl PublishCollabDuplicator {
       .flatten()
       .flat_map(|delta| delta.get_mut("attributes"))
       .flat_map(|attributes| attributes.get_mut("mention"))
-      .filter(|mention| match mention.get("type") {
-        Some(type_) => match type_.as_str() {
-          Some(type_) => type_ == "page",
-          None => false,
-        },
-        None => false,
+      .filter(|mention| {
+        mention.get("type").map_or(false, |type_| {
+          type_.as_str().map_or(false, |type_| type_ == "page")
+        })
       })
       .flat_map(|mention| mention.get_mut("page_id"));
-
-    // create a new view
-    let mut ret_view = View {
-      id: uuid::Uuid::new_v4().to_string(),
-      parent_view_id: "".to_string(), // to be filled by caller
-      name: "".to_string(),           // TODO: get from metadata
-      desc: "".to_string(),           // TODO: get from metadata
-      children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
-      created_at: self.ts_now,
-      is_favorite: false,
-      layout: ViewLayout::Document,
-      icon: None, // TODO: get from metadata
-      created_by: Some(self.dest_uid),
-      last_edited_time: self.ts_now,
-      last_edited_by: Some(self.dest_uid),
-      extra: None,
-    };
 
     // deep copy all the page_id references
     for page_id in page_ids {
@@ -286,6 +284,43 @@ impl PublishCollabDuplicator {
             self.duplicated_refs.insert(page_id_str.to_string(), None);
           }
         },
+      }
+    }
+
+    // update text map
+    if let Some(text_map) = doc_data.meta.text_map.as_mut() {
+      for (_key, value) in text_map.iter_mut() {
+        let mut js_val = match serde_json::from_str::<serde_json::Value>(value) {
+          Ok(js_val) => js_val,
+          Err(e) => {
+            tracing::error!("failed to parse text_map value({}): {}", value, e);
+            continue;
+          },
+        };
+        let js_array = match js_val.as_array_mut() {
+          Some(js_array) => js_array,
+          None => continue,
+        };
+        js_array
+          .iter_mut()
+          .flat_map(|js_val| js_val.get_mut("attributes"))
+          .flat_map(|attributes| attributes.get_mut("mention"))
+          .filter(|mention| {
+            mention.get("type").map_or(false, |type_| {
+              type_.as_str().map_or(false, |type_| type_ == "page")
+            })
+          })
+          .flat_map(|mention| mention.get_mut("page_id"))
+          .for_each(|page_id| {
+            let page_id_str = match page_id.as_str() {
+              Some(page_id_str) => page_id_str,
+              None => return,
+            };
+            if let Some(new_page_id) = self.duplicated_refs.get(page_id_str) {
+              *page_id = serde_json::json!(new_page_id);
+            }
+          });
+        *value = js_val.to_string();
       }
     }
 

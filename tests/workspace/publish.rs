@@ -1,6 +1,8 @@
-use client_api::entity::{AFRole, PublishCollabItem, PublishCollabMetadata};
+use app_error::ErrorCode;
+use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_set_publish_namespace_set() {
@@ -209,6 +211,81 @@ async fn test_publish_doc() {
       .unwrap();
     assert_eq!(format!("{:?}", err.code), "RecordNotFound");
   }
+}
+
+#[tokio::test]
+async fn test_publish_comments() {
+  let (page_owner_client, _) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&page_owner_client).await;
+  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  page_owner_client
+    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .await
+    .unwrap();
+
+  let publish_name = "published-view";
+  let view_id = uuid::Uuid::new_v4();
+  page_owner_client
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id,
+          publish_name: publish_name.to_string(),
+          metadata: MyCustomMetadata {
+            title: "some_title".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_1".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+  // TODO: replace the placeholder with actual comment id once the API implementation is completed
+  let place_holder_comment_id = Uuid::new_v4();
+  let published_view_comments: Vec<GlobalComment> = page_owner_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .0;
+  assert_eq!(published_view_comments.len(), 0);
+  page_owner_client
+    .create_comment_on_published_view(&view_id, "comment from page owner")
+    .await
+    .unwrap();
+  page_owner_client
+    .delete_comment_on_published_view(&view_id, &place_holder_comment_id)
+    .await
+    .unwrap();
+  let guest_client = localhost_client();
+  let published_view_comments: Vec<GlobalComment> = guest_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .0;
+  assert_eq!(published_view_comments.len(), 0);
+  let guest_client = localhost_client();
+  let result = guest_client
+    .create_comment_on_published_view(&view_id, "comment from anonymous")
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
+  let result = guest_client
+    .delete_comment_on_published_view(&view_id, &place_holder_comment_id)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
+
+  let (authenticated_user_client, _) = generate_unique_registered_user_client().await;
+  authenticated_user_client
+    .create_comment_on_published_view(&view_id, "comment from authenticated user")
+    .await
+    .unwrap();
+  let result = authenticated_user_client
+    .delete_comment_on_published_view(&view_id, &place_holder_comment_id)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::UserUnAuthorized)
 }
 
 #[tokio::test]

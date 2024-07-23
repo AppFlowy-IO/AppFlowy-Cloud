@@ -171,6 +171,29 @@ pub async fn select_user_is_collab_publisher_for_all_views(
   }
 }
 
+pub async fn select_user_is_collab_publisher_for_view(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  view_id: &Uuid,
+) -> Result<bool, AppError> {
+  let is_publisher_for_view = sqlx::query_scalar!(
+    r#"
+    SELECT EXISTS(
+      SELECT true
+      FROM af_published_collab
+      WHERE view_id = $1
+        AND published_by = (SELECT uid FROM af_user WHERE uuid = $2)
+    ) AS "exists";
+    "#,
+    view_id,
+    user_uuid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(is_publisher_for_view.unwrap_or(false))
+}
+
 #[inline]
 pub async fn select_user_role<'a, E: Executor<'a, Database = Postgres>>(
   exectuor: E,

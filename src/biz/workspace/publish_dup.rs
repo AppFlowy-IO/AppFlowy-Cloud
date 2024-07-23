@@ -11,15 +11,14 @@ use collab_folder::{
 use database::publish::select_published_collab_doc_state_for_view_id;
 use database_entity::dto::{CollabParams, QueryCollab};
 use sqlx::PgPool;
-use uuid::Uuid;
 
-pub async fn copy_published_collab_to_workspace(
+pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
   collab_cache: &CollabCache,
   dest_uid: i64,
-  publish_view_id: Uuid,
-  dest_workspace_id: Uuid,
-  dest_view_id: Uuid,
+  publish_view_id: String,
+  dest_workspace_id: String,
+  dest_view_id: String,
   collab_type: CollabType,
 ) -> Result<(), AppError> {
   let copier = PublishCollabDuplicator::new(
@@ -29,7 +28,7 @@ pub async fn copy_published_collab_to_workspace(
     dest_workspace_id,
     dest_view_id,
   );
-  copier.deep_copy(publish_view_id, collab_type).await?;
+  copier.deep_copy(&publish_view_id, collab_type).await?;
   Ok(())
 }
 
@@ -49,10 +48,10 @@ pub struct PublishCollabDuplicator {
   collab_cache: CollabCache,
   /// user initiating the duplication
   dest_uid: i64,
-  /// workspace to copy to
-  dest_workspace_id: Uuid,
-  /// view to copy to
-  dest_view_id: Uuid,
+  /// workspace to duplicate into
+  dest_workspace_id: String,
+  /// view of workspace to duplicate into
+  dest_view_id: String,
 }
 
 impl PublishCollabDuplicator {
@@ -60,8 +59,8 @@ impl PublishCollabDuplicator {
     pg_pool: PgPool,
     collab_cache: CollabCache,
     dest_uid: i64,
-    dest_workspace_id: Uuid,
-    dest_view_id: Uuid,
+    dest_workspace_id: String,
+    dest_view_id: String,
   ) -> Self {
     let ts_now = chrono::Utc::now().timestamp();
     Self {
@@ -79,7 +78,7 @@ impl PublishCollabDuplicator {
 
   pub async fn deep_copy(
     mut self,
-    publish_view_id: Uuid,
+    publish_view_id: &str,
     collab_type: CollabType,
   ) -> Result<(), AppError> {
     let mut txn = self.pg_pool.begin().await?;
@@ -98,7 +97,7 @@ impl PublishCollabDuplicator {
         ));
       },
     };
-    root_view.parent_view_id = self.dest_view_id.to_string();
+    root_view.parent_view_id = self.dest_view_id;
 
     // get folder for the destination view
     let folder_collab = self
@@ -115,7 +114,7 @@ impl PublishCollabDuplicator {
       0,
       CollabOrigin::Empty,
       DataSource::DocStateV1(folder_collab.doc_state.to_vec()),
-      &self.dest_workspace_id.to_string(),
+      &self.dest_workspace_id,
       vec![],
     )
     .map_err(|e| AppError::Unhandled(e.to_string()))?;
@@ -157,12 +156,12 @@ impl PublishCollabDuplicator {
   pub async fn deep_copy_txn(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    publish_view_id: Uuid,
+    publish_view_id: &str,
     collab_type: CollabType,
   ) -> Result<Option<View>, AppError> {
     // get doc_state bin data of collab
     let doc_state: Vec<u8> =
-      match select_published_collab_doc_state_for_view_id(txn, &publish_view_id).await? {
+      match select_published_collab_doc_state_for_view_id(txn, &publish_view_id.parse()?).await? {
         Some(bin_data) => bin_data,
         None => {
           tracing::warn!(
@@ -264,12 +263,9 @@ impl PublishCollabDuplicator {
           }
         },
         None => {
-          // Parsing Uuid from string
-          let publish_view_id = Uuid::parse_str(page_id_str)?;
-
           // Call deep_copy_txn_async_wrapper and await the result
           if let Some(mut new_view) =
-            Box::pin(self.deep_copy_txn(txn, publish_view_id, CollabType::Document)).await?
+            Box::pin(self.deep_copy_txn(txn, page_id_str, CollabType::Document)).await?
           {
             new_view.parent_view_id = ret_view.id.clone();
             ret_view.children.items.push(ViewIdentifier {

@@ -1091,9 +1091,23 @@ async fn get_published_collab_blob_handler(
 }
 
 async fn post_published_duplicate_handler(
-  _state: Data<AppState>,
-  _params: Json<PublishedDuplicate>,
+  user_uuid: UserUuid,
+  workspace_id: web::Path<String>,
+  state: Data<AppState>,
+  params: Json<PublishedDuplicate>,
 ) -> Result<Json<AppResponse<()>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
+  let params = params.into_inner();
+  biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
+    &state.pg_pool,
+    &state.collab_cache,
+    uid,
+    params.published_view_id,
+    workspace_id.into_inner(),
+    params.dest_view_id,
+    params.published_collab_type.clone(),
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

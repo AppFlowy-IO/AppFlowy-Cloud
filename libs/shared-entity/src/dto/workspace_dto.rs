@@ -125,8 +125,8 @@ pub struct CollabResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishedDuplicate {
   pub published_collab_type: CollabType,
-  pub published_view_id: Uuid,
-  pub dest_view_id: Uuid,
+  pub published_view_id: String,
+  pub dest_view_id: String,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

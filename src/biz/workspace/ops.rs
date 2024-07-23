@@ -23,16 +23,17 @@ use database::workspace::{
   get_invitation_by_id, insert_or_replace_publish_collab_metas, insert_user_workspace,
   insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
   select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
-  select_user_is_collab_publisher_for_all_views, select_user_is_workspace_owner, select_workspace,
-  select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
-  select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
-  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
+  select_user_is_collab_publisher_for_all_views, select_user_is_collab_publisher_for_view,
+  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
+  select_workspace_member, select_workspace_member_list, select_workspace_publish_namespace,
+  select_workspace_publish_namespace_exists, select_workspace_settings,
+  select_workspace_total_collab_bytes, update_updated_at_of_workspace,
   update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
   upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceSettings, WorkspaceUsage,
+  AFWorkspaceSettings, GlobalComment, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
@@ -171,6 +172,33 @@ pub async fn get_published_collab_info(
   view_id: &Uuid,
 ) -> Result<PublishInfo, AppError> {
   select_published_collab_info(pg_pool, view_id).await
+}
+
+pub async fn get_comments_on_published_view(
+  _pg_pool: &PgPool,
+  _view_id: &Uuid,
+) -> Result<Vec<GlobalComment>, AppError> {
+  Ok(vec![])
+}
+
+pub async fn create_comment_on_published_view(
+  _pg_pool: &PgPool,
+  _view_id: &Uuid,
+  _replay_comment_id: &Option<Uuid>,
+  _content: &str,
+  _user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  Ok(())
+}
+
+pub async fn delete_comment_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  _comment_id: &Uuid,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  check_if_user_is_publisher(pg_pool, user_uuid, view_id).await?;
+  Ok(())
 }
 
 pub async fn delete_published_workspace_collab(
@@ -597,6 +625,20 @@ async fn check_workspace_owner_or_publisher(
         "User is not the owner of the workspace or the publisher of the document".to_string(),
       ));
     }
+  }
+  Ok(())
+}
+
+async fn check_if_user_is_publisher(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  view_id: &Uuid,
+) -> Result<(), AppError> {
+  let is_publisher = select_user_is_collab_publisher_for_view(pg_pool, user_uuid, view_id).await?;
+  if !is_publisher {
+    return Err(AppError::UserUnAuthorized(
+      "User is not the publisher of the document".to_string(),
+    ));
   }
   Ok(())
 }

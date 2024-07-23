@@ -846,6 +846,31 @@ pub struct PublishCollabItem<Meta, Data> {
   pub data: Data,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GlobalComments(pub Vec<GlobalComment>);
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GlobalComment {
+  pub user: Option<AFWorkspaceMember>,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub content: String,
+  pub reply_comment_id: Option<Uuid>,
+  pub comment_id: Uuid,
+  pub is_deleted: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateGlobalCommentParams {
+  pub content: String,
+  pub reply_comment_id: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteGlobalCommentParams {
+  pub comment_id: Uuid,
+}
+
 /// Indexing status of a document.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum IndexingStatus {

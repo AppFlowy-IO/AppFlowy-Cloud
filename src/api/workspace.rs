@@ -1100,7 +1100,7 @@ async fn post_published_duplicate_handler(
   let params = params.into_inner();
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
     &state.pg_pool,
-    &state.collab_cache,
+    state.collab_access_control_storage.clone(),
     uid,
     params.published_view_id,
     workspace_id.into_inner(),
@@ -1271,14 +1271,14 @@ async fn get_workspace_usage_handler(
 
 async fn get_workspace_folder_handler(
   user_uuid: UserUuid,
-  workspace_id: web::Path<Uuid>,
+  workspace_id: web::Path<String>,
   state: Data<AppState>,
 ) -> Result<Json<AppResponse<FolderView>>> {
+  let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let folder_view = biz::collab::ops::get_user_workspace_structure(
-    &state.user_cache,
-    &state.collab_cache,
-    &user_uuid,
-    &workspace_id,
+    state.collab_access_control_storage.clone(),
+    uid,
+    workspace_id.into_inner(),
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(folder_view)))

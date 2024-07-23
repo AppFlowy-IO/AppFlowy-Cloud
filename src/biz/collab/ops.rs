@@ -1,24 +1,27 @@
-use std::ops::DerefMut;
+use std::sync::Arc;
 
-use anyhow::Context;
-use appflowy_collaborate::collab::cache::CollabCache;
+use app_error::AppError;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab_entity::CollabType;
 use collab_folder::{CollabOrigin, Folder};
+use database::collab::CollabStorage;
+use database_entity::dto::QueryCollab;
+use database_entity::dto::QueryCollabParams;
+use sqlx::PgPool;
+use std::ops::DerefMut;
+
+use anyhow::Context;
 use shared_entity::dto::workspace_dto::FolderView;
-use sqlx::{types::Uuid, PgPool};
+use sqlx::types::Uuid;
 use tracing::{event, trace};
 use validator::Validate;
 
 use access_control::collab::CollabAccessControl;
-use app_error::AppError;
-use database_entity::dto::QueryCollab;
 use database_entity::dto::{
   AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
   UpdateCollabMemberParams,
 };
-
-use crate::state::UserCache;
 
 /// Create a new collab member
 /// If the collab member already exists, return [AppError::RecordAlreadyExists]
@@ -148,19 +151,21 @@ pub async fn get_collab_member_list(
 }
 
 pub async fn get_user_workspace_structure(
-  user_cache: &UserCache,
-  collab_cache: &CollabCache,
-  user_uuid: &Uuid,
-  workspace_id: &Uuid,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: i64,
+  workspace_id: String,
 ) -> Result<FolderView, AppError> {
-  let uid = user_cache.get_user_uid(user_uuid).await?;
-  let encoded_collab = collab_cache
+  let encoded_collab = collab_storage
     .get_encode_collab(
       &uid,
-      QueryCollab {
-        object_id: workspace_id.to_string(),
-        collab_type: CollabType::Folder,
+      QueryCollabParams {
+        workspace_id: workspace_id.clone(),
+        inner: QueryCollab {
+          object_id: workspace_id,
+          collab_type: CollabType::Folder,
+        },
       },
+      true,
     )
     .await?;
 

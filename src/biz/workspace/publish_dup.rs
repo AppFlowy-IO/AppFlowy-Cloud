@@ -1,20 +1,21 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use app_error::AppError;
-use appflowy_collaborate::collab::cache::CollabCache;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{
   CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
 };
-use database::publish::select_published_collab_doc_state_for_view_id;
+use database::{collab::CollabStorage, publish::select_published_collab_doc_state_for_view_id};
+use database_entity::dto::QueryCollabParams;
 use database_entity::dto::{CollabParams, QueryCollab};
 use sqlx::PgPool;
 
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
-  collab_cache: &CollabCache,
+  collab_storage: Arc<CollabAccessControlStorage>,
   dest_uid: i64,
   publish_view_id: String,
   dest_workspace_id: String,
@@ -23,7 +24,7 @@ pub async fn duplicate_published_collab_to_workspace(
 ) -> Result<(), AppError> {
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
-    collab_cache.clone(),
+    collab_storage.clone(),
     dest_uid,
     dest_workspace_id,
     dest_view_id,
@@ -33,6 +34,9 @@ pub async fn duplicate_published_collab_to_workspace(
 }
 
 pub struct PublishCollabDuplicator {
+  /// for fetching and writing folder data
+  /// of dest workspace
+  collab_storage: Arc<CollabAccessControlStorage>,
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
   duplicated_refs: HashMap<String, Option<String>>,
@@ -43,11 +47,8 @@ pub struct PublishCollabDuplicator {
   /// for fetching published data
   /// and writing them to dest workspace
   pg_pool: PgPool,
-  /// for fetching and writing folder data
-  /// of dest workspace
-  collab_cache: CollabCache,
   /// user initiating the duplication
-  dest_uid: i64,
+  duplicator_uid: i64,
   /// workspace to duplicate into
   dest_workspace_id: String,
   /// view of workspace to duplicate into
@@ -57,7 +58,7 @@ pub struct PublishCollabDuplicator {
 impl PublishCollabDuplicator {
   pub fn new(
     pg_pool: PgPool,
-    collab_cache: CollabCache,
+    collab_storage: Arc<CollabAccessControlStorage>,
     dest_uid: i64,
     dest_workspace_id: String,
     dest_view_id: String,
@@ -69,8 +70,8 @@ impl PublishCollabDuplicator {
       views_to_add: Vec::new(),
 
       pg_pool,
-      collab_cache,
-      dest_uid,
+      collab_storage,
+      duplicator_uid: dest_uid,
       dest_workspace_id,
       dest_view_id,
     }
@@ -99,17 +100,21 @@ impl PublishCollabDuplicator {
     };
     root_view.parent_view_id = self.dest_view_id;
 
-    // get folder for the destination view
     let folder_collab = self
-      .collab_cache
+      .collab_storage
       .get_encode_collab(
-        &self.dest_uid,
-        QueryCollab {
-          object_id: self.dest_workspace_id.to_string(),
-          collab_type: CollabType::Folder,
+        &self.duplicator_uid,
+        QueryCollabParams {
+          workspace_id: self.dest_workspace_id.clone(),
+          inner: QueryCollab {
+            object_id: self.dest_workspace_id.clone(),
+            collab_type: collab_type.clone(),
+          },
         },
+        true,
       )
       .await?;
+
     let folder = Folder::from_collab_doc_state(
       0,
       CollabOrigin::Empty,
@@ -130,18 +135,19 @@ impl PublishCollabDuplicator {
       .encode_collab_v1()
       .map_err(|e| AppError::Unhandled(e.to_string()))?
       .encode_to_bytes()?;
+
     self
-      .collab_cache
-      .insert_encode_collab_data(
-        &self.dest_workspace_id.to_string(),
-        &self.dest_uid,
-        &CollabParams {
-          object_id: self.dest_workspace_id.to_string(),
+      .collab_storage
+      .insert_or_update_collab(
+        &self.dest_workspace_id,
+        &self.duplicator_uid,
+        CollabParams {
+          object_id: self.dest_workspace_id.clone(),
           encoded_collab_v1: encoded_folder_bin,
           collab_type,
           embeddings: None,
         },
-        &mut txn,
+        true,
       )
       .await?;
 
@@ -216,9 +222,9 @@ impl PublishCollabDuplicator {
       is_favorite: false,
       layout: ViewLayout::Document,
       icon: None, // TODO: get from metadata
-      created_by: Some(self.dest_uid),
+      created_by: Some(self.duplicator_uid),
       last_edited_time: self.ts_now,
-      last_edited_by: Some(self.dest_uid),
+      last_edited_by: Some(self.duplicator_uid),
       extra: None, // to be filled by metadata
     };
 
@@ -333,17 +339,17 @@ impl PublishCollabDuplicator {
 
     // insert document with modified page_id references
     self
-      .collab_cache
-      .insert_encode_collab_data(
-        &self.dest_workspace_id.to_string(),
-        &self.dest_uid,
-        &CollabParams {
+      .collab_storage
+      .insert_or_update_collab(
+        &self.dest_workspace_id,
+        &self.duplicator_uid,
+        CollabParams {
           object_id: ret_view.id.clone(),
           encoded_collab_v1: new_doc_data,
           collab_type: CollabType::Document,
           embeddings: None,
         },
-        txn,
+        true,
       )
       .await?;
 

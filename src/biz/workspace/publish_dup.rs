@@ -108,7 +108,7 @@ impl PublishCollabDuplicator {
           workspace_id: self.dest_workspace_id.clone(),
           inner: QueryCollab {
             object_id: self.dest_workspace_id.clone(),
-            collab_type: collab_type.clone(),
+            collab_type: CollabType::Folder,
           },
         },
         true,
@@ -144,7 +144,7 @@ impl PublishCollabDuplicator {
         CollabParams {
           object_id: self.dest_workspace_id.clone(),
           encoded_collab_v1: encoded_folder_bin,
-          collab_type,
+          collab_type: CollabType::Folder,
           embeddings: None,
         },
         true,

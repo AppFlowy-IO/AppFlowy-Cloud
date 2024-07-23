@@ -293,6 +293,17 @@ impl Client {
   }
 
   /// Returns an OAuth URL by constructing the authorization URL for the specified provider.
+  #[instrument(level = "debug", skip_all, err)]
+  pub async fn generate_oauth_url_with_provider(
+    &self,
+    provider: &AuthProvider,
+  ) -> Result<String, AppResponseError> {
+    self
+      .generate_url_with_provider_and_redirect_to(provider, None)
+      .await
+  }
+
+  /// Returns an OAuth URL by constructing the authorization URL for the specified provider and redirecting to the specified URL.
   ///
   /// This asynchronous function communicates with the GoTrue client to retrieve settings and
   /// validate the availability of the specified OAuth provider. If the provider is available,
@@ -303,19 +314,19 @@ impl Client {
   /// For example, the OAuth URL on Google looks like `https://appflowy.io/authorize?provider=google`.
   /// The deep link looks like `appflowy-flutter://#access_token=...&expires_in=3600&provider_token=...&refresh_token=...&token_type=bearer`.
   ///
-  /// The appflowy-flutter:// is a hardcoded schema in the frontend application
   ///
   /// # Parameters
   /// - `provider`: A reference to an `OAuthProvider` indicating which OAuth provider to use for login.
+  /// - `redirect_to`: An optional `String` containing the URL to redirect to after the user is authenticated.
   ///
   /// # Returns
   /// - `Ok(String)`: A `String` containing the constructed authorization URL if the specified provider is available.
   /// - `Err(AppResponseError)`: An `AppResponseError` indicating either the OAuth provider is invalid or other issues occurred while fetching settings.
   ///
-  #[instrument(level = "debug", skip_all, err)]
-  pub async fn generate_oauth_url_with_provider(
+  pub async fn generate_url_with_provider_and_redirect_to(
     &self,
     provider: &AuthProvider,
+    redirect_to: Option<String>,
   ) -> Result<String, AppResponseError> {
     let settings = self.gotrue_client.settings().await?;
     if !settings.external.has_provider(provider) {
@@ -328,7 +339,12 @@ impl Client {
     url
       .query_pairs_mut()
       .append_pair("provider", provider.as_str())
-      .append_pair("redirect_to", DESKTOP_CALLBACK_URL);
+      .append_pair(
+        "redirect_to",
+        redirect_to
+          .unwrap_or_else(|| DESKTOP_CALLBACK_URL.to_string())
+          .as_str(),
+      );
 
     if let AuthProvider::Google = provider {
       url

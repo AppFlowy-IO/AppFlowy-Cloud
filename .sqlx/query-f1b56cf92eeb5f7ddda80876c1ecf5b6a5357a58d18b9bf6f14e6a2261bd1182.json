@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n          uid, oid, access_level\n      FROM af_collab_member\n      INNER JOIN af_permissions\n          ON af_collab_member.permission_id = af_permissions.id\n    ",
+  "query": "\n      SELECT uid, oid, access_level\n      FROM af_collab_member\n      INNER JOIN af_permissions\n        ON af_collab_member.permission_id = af_permissions.id\n    ",
   "describe": {
     "columns": [
       {
@@ -28,5 +28,5 @@
       false
     ]
   },
-  "hash": "9eba47895808e9968529d789a02758807486054028990fffef62fb89ac047750"
+  "hash": "f1b56cf92eeb5f7ddda80876c1ecf5b6a5357a58d18b9bf6f14e6a2261bd1182"
 }

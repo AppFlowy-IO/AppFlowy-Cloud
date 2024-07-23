@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT EXISTS (SELECT 1 FROM af_collab_member WHERE oid = $1 AND uid = $2 LIMIT 1)\n        ",
+  "query": "\n      SELECT EXISTS (SELECT 1 FROM af_collab WHERE oid = $1 LIMIT 1)\n    ",
   "describe": {
     "columns": [
       {
@@ -11,13 +11,12 @@
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int8"
+        "Text"
       ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "7af4023278eea11cf5db92040bd8947bd14df72a93eded96658187d3f9dc0e81"
+  "hash": "d388782f755f0b164ef36c168af142baeb9bbd3cc2b8b7cd736b346580be8790"
 }

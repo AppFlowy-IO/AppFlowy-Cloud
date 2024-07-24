@@ -1,7 +1,7 @@
 use crate::api::util::PayloadReader;
 use crate::biz::workspace::ops::{
-  create_comment_on_published_view, delete_comment_on_published_view,
-  get_comments_on_published_view,
+  create_comment_on_published_view, get_comments_on_published_view,
+  remove_comment_on_published_view,
 };
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
@@ -1132,7 +1132,7 @@ async fn delete_published_collab_comment_handler(
   data: Json<DeleteGlobalCommentParams>,
 ) -> Result<JsonAppResponse<()>> {
   let view_id = view_id.into_inner();
-  delete_comment_on_published_view(&state.pg_pool, &view_id, &data.comment_id, &user_uuid).await?;
+  remove_comment_on_published_view(&state.pg_pool, &view_id, &data.comment_id, &user_uuid).await?;
   Ok(Json(AppResponse::Ok()))
 }
 

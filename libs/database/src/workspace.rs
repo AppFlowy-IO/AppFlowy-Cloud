@@ -1,6 +1,6 @@
 use database_entity::dto::{
-  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
-  PublishCollabItem, PublishInfo,
+  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
+  GlobalCommentCreator, PublishCollabItem, PublishInfo,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -171,10 +171,11 @@ pub async fn select_user_is_collab_publisher_for_all_views(
   }
 }
 
-pub async fn select_user_is_collab_publisher_for_view(
+pub async fn select_user_is_allowed_to_delete_comment(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
   view_id: &Uuid,
+  comment_id: &Uuid,
 ) -> Result<bool, AppError> {
   let is_publisher_for_view = sqlx::query_scalar!(
     r#"
@@ -183,10 +184,17 @@ pub async fn select_user_is_collab_publisher_for_view(
       FROM af_published_collab
       WHERE view_id = $1
         AND published_by = (SELECT uid FROM af_user WHERE uuid = $2)
+      UNION ALL
+      SELECT true
+      FROM af_published_view_comment
+      WHERE view_id = $1
+        AND comment_id = $3
+        AND created_by = (SELECT uid FROM af_user WHERE uuid = $2)
     ) AS "exists";
     "#,
     view_id,
     user_uuid,
+    comment_id,
   )
   .fetch_one(pg_pool)
   .await?;
@@ -1075,4 +1083,110 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
   .await?;
 
   Ok(res)
+}
+
+pub async fn select_comments_for_published_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<Vec<GlobalComment>, AppError> {
+  let rows = sqlx::query!(
+    r#"
+      SELECT
+        avc.comment_id,
+        avc.created_at,
+        avc.updated_at,
+        avc.content,
+        avc.reply_comment_id,
+        avc.is_deleted,
+        au.uuid AS "user_uuid?",
+        au.name AS "user_name?"
+      FROM af_published_view_comment avc
+      LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_all(executor)
+  .await?;
+  let result = rows
+    .iter()
+    .map(|row| {
+      let comment_creator = row.user_uuid.map(|uuid| GlobalCommentCreator {
+        uid: uuid,
+        name: row
+          .user_name
+          .as_ref()
+          .map(|s| s.to_string())
+          .unwrap_or("".to_string()),
+        avatar_url: None,
+      });
+      GlobalComment {
+        user: comment_creator,
+        comment_id: row.comment_id,
+        created_at: row.created_at,
+        last_updated_at: row.updated_at,
+        content: row.content.clone(),
+        reply_comment_id: row.reply_comment_id,
+        is_deleted: row.is_deleted,
+      }
+    })
+    .collect();
+
+  Ok(result)
+}
+
+pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+  user_uuid: &Uuid,
+  content: &str,
+  reply_comment_id: &Option<Uuid>,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_view_comment (view_id, created_by, content, reply_comment_id)
+      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
+    "#,
+    view_id,
+    user_uuid,
+    content,
+    reply_comment_id.clone(),
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert comment to published view, view_id: {}, user_id: {}, content: {}, rows_affected: {}",
+      view_id, user_uuid, content, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_published_view_comment
+      SET is_deleted = true
+      WHERE comment_id = $1
+    "#,
+    comment_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update deletion status for comment, comment_id: {}, rows_affected: {}",
+      comment_id,
+      res.rows_affected()
+    );
+  }
+
+  Ok(())
 }

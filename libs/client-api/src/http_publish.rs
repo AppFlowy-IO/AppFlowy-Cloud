@@ -70,6 +70,7 @@ impl Client {
     &self,
     view_id: &uuid::Uuid,
     comment_content: &str,
+    reply_comment_id: &Option<uuid::Uuid>,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/comment",
@@ -80,7 +81,7 @@ impl Client {
       .await?
       .json(&CreateGlobalCommentParams {
         content: comment_content.to_string(),
-        reply_comment_id: None,
+        reply_comment_id: *reply_comment_id,
       })
       .send()
       .await?;

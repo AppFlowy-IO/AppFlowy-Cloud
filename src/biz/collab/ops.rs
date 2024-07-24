@@ -165,7 +165,7 @@ pub async fn get_user_workspace_structure(
           collab_type: CollabType::Folder,
         },
       },
-      true,
+      false,
     )
     .await?;
 

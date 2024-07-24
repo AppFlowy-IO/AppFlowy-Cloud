@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use appflowy_collaborate::command::CollaborationCommand;
 use collab::core::collab::DataSource;
 use collab_document::document::Document;
 use collab_entity::CollabType;
@@ -45,7 +46,7 @@ pub struct PublishCollabDuplicator {
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
   duplicated_refs: HashMap<String, Option<String>>,
-  /// inform the changes
+  /// in case there's existing group, which contains the most updated collab data
   group_manager: AppStateGroupManager,
   /// A list of new views to be added to the folder
   views_to_add: Vec<View>,
@@ -127,7 +128,7 @@ impl PublishCollabDuplicator {
                 collab_type: CollabType::Folder,
               },
             },
-            true,
+            false,
           )
           .await?
       }
@@ -148,20 +149,22 @@ impl PublishCollabDuplicator {
       folder.insert_view(view.clone(), None);
     }
 
-    // close and remove the group
-    if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
-      group.stop().await;
-    }
-    self
-      .group_manager
-      .remove_group(&self.dest_workspace_id)
-      .await;
-
     // write back to collab cache
     let encoded_folder_bin = folder
       .encode_collab_v1()
       .map_err(|e| AppError::Unhandled(e.to_string()))?
       .encode_to_bytes()?;
+
+    // broadcast the changes
+    self
+      .collab_storage
+      .send_command(CollaborationCommand::SendEncodeCollab {
+        uid: self.duplicator_uid,
+        object_id: self.dest_workspace_id.clone(),
+        encoded_v1_bytes: encoded_folder_bin.clone().into(),
+      })
+      .await
+      .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
     self
       .collab_storage

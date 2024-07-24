@@ -2,17 +2,20 @@ use std::{collections::HashMap, sync::Arc};
 
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
-use collab::core::collab::DataSource;
+use collab::core::collab::{DataSource, MutexCollab};
+use collab::preclude::{Collab, ReadTxn};
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::{CollabOrigin, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout};
+use collab_folder::{
+  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
+};
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use database::{collab::CollabStorage, publish::select_published_collab_doc_state_for_view_id};
 use database_entity::dto::CollabParams;
 use sqlx::PgPool;
 
-use crate::biz::collab::ops::get_latest_collab_folder;
+use crate::biz::collab::ops::get_latest_folder_collab_encoded;
 use crate::state::AppStateGroupManager;
 
 #[allow(clippy::too_many_arguments)]
@@ -86,6 +89,7 @@ impl PublishCollabDuplicator {
     }
   }
 
+  #[allow(clippy::await_holding_lock)]
   pub async fn deep_copy(
     mut self,
     publish_view_id: &str,
@@ -109,13 +113,38 @@ impl PublishCollabDuplicator {
     };
     root_view.parent_view_id = self.dest_view_id;
 
-    let folder = get_latest_collab_folder(
+    // collab folder init
+    let encoded_collab = get_latest_folder_collab_encoded(
       self.group_manager.clone(),
       self.collab_storage.clone(),
       &self.duplicator_uid,
       &self.dest_workspace_id,
     )
     .await?;
+    let folder_data = Folder::from_collab_doc_state(
+      self.duplicator_uid,
+      CollabOrigin::Server,
+      DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+      &self.dest_workspace_id,
+      vec![],
+    )
+    .map_err(|e| AppError::Unhandled(e.to_string()))?
+    .get_folder_data(&self.dest_workspace_id)
+    .ok_or(AppError::RecordNotFound(
+      "folder data not found".to_string(),
+    ))?;
+    let collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      &self.dest_workspace_id,
+      DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+      vec![],
+      false,
+    )
+    .map_err(|e| AppError::Unhandled(e.to_string()))?;
+    let init_timestamp = collab.transact().state_vector();
+    let mutex_collab = Arc::new(MutexCollab::new(collab));
+    let folder =
+      collab_folder::Folder::create(self.duplicator_uid, mutex_collab.clone(), None, folder_data);
 
     // add all views required to the folder
     folder.insert_view(root_view, None);
@@ -123,61 +152,76 @@ impl PublishCollabDuplicator {
       folder.insert_view(view.clone(), None);
     }
 
-    // write back to collab cache
-    let encoded_folder_bin = folder
-      .encode_collab_v1()
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-      .encode_to_bytes()?;
+    let lock = mutex_collab.lock();
+    let data = lock.transact().encode_state_as_update_v1(&init_timestamp);
 
+    // sink.send(collab_msg).await;
     // broadcast to group
-    if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
-      let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
-      let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group
-        .subscribe(
-          &RealtimeUser {
-            uid: self.duplicator_uid,
-            device_id: uuid::Uuid::new_v4().to_string(),
-            connect_at: self.ts_now,
-            session_id: uuid::Uuid::new_v4().to_string(),
-            app_version: "".to_string(),
-          },
-          CollabOrigin::Server,
-          collab_message_sender,
-          message_by_oid_receiver,
-        )
-        .await;
-      let message = HashMap::from([(
-        self.dest_workspace_id.clone(),
-        vec![ClientCollabMessage::ClientUpdateSync {
-          data: UpdateSync {
-            origin: CollabOrigin::Server,
-            object_id: self.dest_workspace_id.clone(),
-            msg_id: self.ts_now as u64,
-            payload: encoded_folder_bin.clone().into(),
-          },
-        }],
-      )]);
-      if let Err(err) = message_by_oid_sender.try_send(message) {
-        tracing::error!("failed to send message to group: {}", err);
-      }
+    match self.group_manager.get_group(&self.dest_workspace_id).await {
+      Some(group) => {
+        tracing::info!(
+          "sending folder change message to collab group, dest_workspace_id: {}",
+          self.dest_workspace_id
+        );
+        let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
+        let (mut message_by_oid_sender, message_by_oid_receiver) =
+          futures::channel::mpsc::channel(1);
+        group
+          .subscribe(
+            &RealtimeUser {
+              uid: self.duplicator_uid,
+              device_id: uuid::Uuid::new_v4().to_string(),
+              connect_at: self.ts_now,
+              session_id: uuid::Uuid::new_v4().to_string(),
+              app_version: "".to_string(),
+            },
+            CollabOrigin::Server,
+            collab_message_sender,
+            message_by_oid_receiver,
+          )
+          .await;
+        let message = HashMap::from([(
+          self.dest_workspace_id.clone(),
+          vec![ClientCollabMessage::ClientUpdateSync {
+            data: UpdateSync {
+              origin: CollabOrigin::Server,
+              object_id: self.dest_workspace_id.clone(),
+              msg_id: self.ts_now as u64,
+              payload: data.into(),
+            },
+          }],
+        )]);
+        if let Err(err) = message_by_oid_sender.try_send(message) {
+          tracing::error!("failed to send message to group: {}", err);
+        }
+      },
+      None => {
+        tracing::info!(
+          "sending folder change message to collab storage, dest_workspace_id: {}",
+          self.dest_workspace_id
+        );
+        // write back to collab cache
+        let encoded_folder_bin = folder
+          .encode_collab_v1()
+          .map_err(|e| AppError::Unhandled(e.to_string()))?
+          .encode_to_bytes()?;
+        // put in storage
+        self
+          .collab_storage
+          .insert_or_update_collab(
+            &self.dest_workspace_id,
+            &self.duplicator_uid,
+            CollabParams {
+              object_id: self.dest_workspace_id.clone(),
+              encoded_collab_v1: encoded_folder_bin,
+              collab_type: CollabType::Folder,
+              embeddings: None,
+            },
+            true,
+          )
+          .await?;
+      },
     }
-
-    // put in storage
-    self
-      .collab_storage
-      .insert_or_update_collab(
-        &self.dest_workspace_id,
-        &self.duplicator_uid,
-        CollabParams {
-          object_id: self.dest_workspace_id.clone(),
-          encoded_collab_v1: encoded_folder_bin,
-          collab_type: CollabType::Folder,
-          embeddings: None,
-        },
-        true,
-      )
-      .await?;
 
     txn.commit().await?;
     Ok(())

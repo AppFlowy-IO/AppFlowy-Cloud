@@ -41,7 +41,7 @@ dependencies = [
  "futures-util",
  "log",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "pin-project-lite",
  "smallvec",
  "tokio",
@@ -671,7 +671,7 @@ dependencies = [
  "itertools 0.12.0",
  "lazy_static",
  "md5",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "prometheus-client",
  "prost",
  "rand 0.8.5",
@@ -714,7 +714,7 @@ dependencies = [
  "futures",
  "infra",
  "log",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "prost",
  "rand 0.8.5",
  "redis 0.25.2",
@@ -1732,7 +1732,7 @@ dependencies = [
  "getrandom 0.2.12",
  "mini-moka",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "petgraph",
  "regex",
  "rhai",
@@ -1888,7 +1888,7 @@ dependencies = [
  "infra",
  "lazy_static",
  "mime",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "percent-encoding",
  "pin-project",
  "prost",
@@ -2015,7 +2015,7 @@ dependencies = [
  "bytes",
  "chrono",
  "js-sys",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "serde",
  "serde_json",
  "serde_repr",
@@ -2038,7 +2038,7 @@ dependencies = [
  "collab-entity",
  "getrandom 0.2.12",
  "nanoid",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "serde",
  "serde_json",
  "thiserror",
@@ -2073,7 +2073,7 @@ dependencies = [
  "collab",
  "collab-entity",
  "getrandom 0.2.12",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "serde",
  "serde_json",
  "serde_repr",
@@ -2974,7 +2974,7 @@ checksum = "1d930c203dd0b6ff06e0201a4a2fe9149b43c684fd4420555b26d21b1a02956f"
 dependencies = [
  "futures-core",
  "lock_api",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
 ]
 
 [[package]]
@@ -3178,7 +3178,7 @@ dependencies = [
  "futures-timer",
  "no-std-compat",
  "nonzero_ext",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "portable-atomic",
  "quanta",
  "rand 0.8.5",
@@ -4388,9 +4388,9 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.12.1"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
+checksum = "f1bf18183cf54e8d6059647fc3063646a1801cf30896933ec2311622cc4b9a27"
 dependencies = [
  "lock_api",
  "parking_lot_core 0.9.9",
@@ -4819,7 +4819,7 @@ checksum = "6f87c10af16e0af74010d2a123d202e8363c04db5acfa91d8747f64a8524da3a"
 dependencies = [
  "dtoa",
  "itoa",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "prometheus-client-derive-encode",
 ]
 
@@ -5885,7 +5885,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "log",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "serial_test_derive",
 ]
 
@@ -6390,7 +6390,7 @@ checksum = "f91138e76242f575eb1d3b38b4f1362f10d3a43f47d182a5b359af488a02293b"
 dependencies = [
  "new_debug_unreachable",
  "once_cell",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "phf_shared 0.10.0",
  "precomputed-hash",
  "serde",
@@ -6649,7 +6649,7 @@ dependencies = [
  "libc",
  "mio",
  "num_cpus",
- "parking_lot 0.12.1",
+ "parking_lot 0.12.3",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",

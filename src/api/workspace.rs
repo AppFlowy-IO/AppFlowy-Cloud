@@ -1277,6 +1277,7 @@ async fn get_workspace_folder_handler(
 ) -> Result<Json<AppResponse<FolderView>>> {
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let folder_view = biz::collab::ops::get_user_workspace_structure(
+    state.group_manager.clone(),
     state.collab_access_control_storage.clone(),
     uid,
     workspace_id.into_inner(),

@@ -7,8 +7,6 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
-use tokio::sync::mpsc::error::SendError;
-use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tracing::{error, instrument, trace};
 use validator::Validate;
@@ -78,13 +76,6 @@ where
     }
   }
 
-  pub async fn send_command(
-    &self,
-    cmd: CollaborationCommand,
-  ) -> Result<(), SendError<CollaborationCommand>> {
-    self.rt_cmd_sender.send(cmd).await
-  }
-
   async fn check_write_workspace_permission(
     &self,
     workspace_id: &str,
@@ -129,7 +120,7 @@ where
 
   async fn get_encode_collab_from_editing(&self, object_id: &str) -> Option<EncodedCollab> {
     let object_id = object_id.to_string();
-    let (ret, rx) = oneshot::channel();
+    let (ret, rx) = tokio::sync::oneshot::channel();
     let timeout_duration = Duration::from_secs(5);
 
     // Attempt to send the command to the realtime server

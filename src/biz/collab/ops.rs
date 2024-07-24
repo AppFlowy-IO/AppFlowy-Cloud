@@ -1,3 +1,4 @@
+use crate::state::AppStateGroupManager;
 use std::sync::Arc;
 
 use app_error::AppError;
@@ -151,31 +152,48 @@ pub async fn get_collab_member_list(
 }
 
 pub async fn get_user_workspace_structure(
+  group_manager: AppStateGroupManager,
   collab_storage: Arc<CollabAccessControlStorage>,
   uid: i64,
   workspace_id: String,
 ) -> Result<FolderView, AppError> {
-  let encoded_collab = collab_storage
-    .get_encode_collab(
-      &uid,
-      QueryCollabParams {
-        workspace_id: workspace_id.clone(),
-        inner: QueryCollab {
-          object_id: workspace_id,
-          collab_type: CollabType::Folder,
-        },
-      },
-      false,
-    )
-    .await?;
+  let folder = get_latest_collab_folder(group_manager, collab_storage, &uid, &workspace_id).await?;
+  Ok((&folder).into())
+}
 
+pub async fn get_latest_collab_folder(
+  group_manager: AppStateGroupManager,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: &i64,
+  workspace_id: &str,
+) -> Result<Folder, AppError> {
+  let data = if let Some(group) = group_manager.get_group(workspace_id).await {
+    group
+      .encode_collab()
+      .await
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+  } else {
+    collab_storage
+      .get_encode_collab(
+        uid,
+        QueryCollabParams {
+          workspace_id: workspace_id.to_string(),
+          inner: QueryCollab {
+            object_id: workspace_id.to_string(),
+            collab_type: CollabType::Folder,
+          },
+        },
+        false,
+      )
+      .await?
+  };
   let folder = Folder::from_collab_doc_state(
     uid,
-    CollabOrigin::Empty,
-    DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
-    "",
+    CollabOrigin::Server,
+    DataSource::DocStateV1(data.doc_state.to_vec()),
+    workspace_id,
     vec![],
   )
   .map_err(|e| AppError::Unhandled(e.to_string()))?;
-  Ok((&folder).into())
+  Ok(folder)
 }

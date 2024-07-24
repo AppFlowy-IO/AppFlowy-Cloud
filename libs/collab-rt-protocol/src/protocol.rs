@@ -45,13 +45,21 @@ impl CollabSyncProtocol for ClientSyncProtocol {
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<(), RTProtocolError> {
+    tracing::trace!(
+      "handle_sync_step2, origin: {:?}, update: {:?}",
+      origin,
+      update
+    );
+
     let mut txn = awareness
       .doc()
       .try_transact_mut_with(origin.clone())
       .map_err(|err| {
+        tracing::error!("sync step2 transaction acquire: {}", err);
         RTProtocolError::YrsTransaction(format!("sync step2 transaction acquire: {}", err))
       })?;
     txn.try_apply_update(update).map_err(|err| {
+      tracing::error!("sync step2 apply update: {}", err);
       RTProtocolError::YrsApplyUpdate(format!("sync step2 apply update: {} ", err))
     })?;
 
@@ -59,6 +67,7 @@ impl CollabSyncProtocol for ClientSyncProtocol {
     // updates.
     match txn.store().pending_update() {
       Some(update) => {
+        tracing::trace!("pending update missing: {:?}", update);
         if cfg!(feature = "verbose_log") {
           tracing::trace!(
             "Did find pending update, missing: {}",
@@ -144,7 +153,15 @@ pub trait CollabSyncProtocol {
     origin: &CollabOrigin,
     awareness: &mut Awareness,
     update: Update,
-  ) -> Result<(), RTProtocolError>;
+  ) -> Result<(), RTProtocolError> {
+    tracing::trace!(
+      "handle_sync_step2, no implementation, origin: {:?}, update: {:?}, awareness: {:#?}",
+      origin,
+      update,
+      awareness
+    );
+    Ok(())
+  }
 
   /// Handle continuous update send from the client. By default just apply an update to a current
   /// `awareness` document instance.
@@ -154,6 +171,7 @@ pub trait CollabSyncProtocol {
     awareness: &mut Awareness,
     update: Update,
   ) -> Result<(), RTProtocolError> {
+    tracing::trace!("handle_update, origin: {:?}, update: {:?}", origin, update);
     self.handle_sync_step2(origin, awareness, update)
   }
 
@@ -197,6 +215,12 @@ pub fn handle_message_follow_protocol<P: CollabSyncProtocol>(
   collab: &mut Collab,
   msg: Message,
 ) -> Result<Option<Vec<u8>>, RTProtocolError> {
+  tracing::trace!(
+    "handle_message_follow_protocol, msg: {:?}, message_origin: {:?}",
+    msg,
+    message_origin
+  );
+
   match msg {
     Message::Sync(msg) => match msg {
       SyncMessage::SyncStep1(sv) => {

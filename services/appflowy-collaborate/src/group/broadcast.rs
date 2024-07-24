@@ -446,6 +446,10 @@ async fn handle_one_message_payload(
             msg,
           ) {
             Ok(payload) => {
+              trace!(
+                "handle_message_follow_protocol success: {}",
+                cloned_object_id
+              );
               metrics_calculate
                 .apply_update_count
                 .fetch_add(1, Ordering::Relaxed);
@@ -464,6 +468,11 @@ async fn handle_one_message_payload(
               }
             },
             Err(err) => {
+              tracing::error!(
+                "{} => handle_message_follow_protocol err: {:?}",
+                cloned_object_id,
+                err
+              );
               metrics_calculate
                 .apply_update_failed_count
                 .fetch_add(1, Ordering::Relaxed);

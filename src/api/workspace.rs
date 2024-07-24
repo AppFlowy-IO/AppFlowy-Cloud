@@ -1101,6 +1101,7 @@ async fn post_published_duplicate_handler(
   biz::workspace::publish_dup::duplicate_published_collab_to_workspace(
     &state.pg_pool,
     state.collab_access_control_storage.clone(),
+    state.group_manager.clone(),
     uid,
     params.published_view_id,
     workspace_id.into_inner(),

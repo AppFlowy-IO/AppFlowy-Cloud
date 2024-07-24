@@ -84,7 +84,7 @@ impl CollabRealtimeMetrics {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct CollabMetricsCalculate {
+pub struct CollabMetricsCalculate {
   pub(crate) connected_users: Arc<AtomicI64>,
   pub(crate) acquire_collab_lock_count: Arc<AtomicI64>,
   pub(crate) acquire_collab_lock_fail_count: Arc<AtomicI64>,

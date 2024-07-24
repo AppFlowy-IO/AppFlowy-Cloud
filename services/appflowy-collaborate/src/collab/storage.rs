@@ -7,6 +7,7 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use itertools::{Either, Itertools};
 use sqlx::Transaction;
+use tokio::sync::mpsc::error::SendError;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tracing::{error, instrument, trace};
@@ -75,6 +76,13 @@ where
       queue,
       shared_state,
     }
+  }
+
+  pub async fn send_command(
+    &self,
+    cmd: CollaborationCommand,
+  ) -> Result<(), SendError<CollaborationCommand>> {
+    self.rt_cmd_sender.send(cmd).await
   }
 
   async fn check_write_workspace_permission(

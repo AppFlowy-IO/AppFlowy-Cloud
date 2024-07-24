@@ -137,16 +137,6 @@ impl PublishCollabDuplicator {
       .encode_collab_v1()
       .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
-    // broadcast to group
-    // TODO(zack): broadcast update instead of stopping the group
-    if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
-      group.stop().await;
-      self
-        .group_manager
-        .remove_group(&self.dest_workspace_id)
-        .await;
-    }
-
     self
       .collab_storage
       .insert_or_update_collab(
@@ -161,6 +151,16 @@ impl PublishCollabDuplicator {
         true,
       )
       .await?;
+
+    // broadcast to group
+    // TODO(zack): broadcast update instead of stopping the group
+    if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
+      group.stop().await;
+      self
+        .group_manager
+        .remove_group(&self.dest_workspace_id)
+        .await;
+    }
 
     txn.commit().await?;
     Ok(())

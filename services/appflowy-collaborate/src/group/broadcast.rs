@@ -464,6 +464,7 @@ async fn handle_one_message_payload(
               }
             },
             Err(err) => {
+              tracing::error!("Error handling message: {}", err);
               metrics_calculate
                 .apply_update_failed_count
                 .fetch_add(1, Ordering::Relaxed);

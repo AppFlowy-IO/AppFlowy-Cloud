@@ -5,14 +5,14 @@ use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::{CollabOrigin, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout};
-use collab_rt_entity::user::RealtimeUser;
-use collab_rt_entity::{ClientCollabMessage, UpdateSync};
+use collab_folder::{
+  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
+};
 use database::{collab::CollabStorage, publish::select_published_collab_doc_state_for_view_id};
 use database_entity::dto::CollabParams;
 use sqlx::PgPool;
 
-use crate::biz::collab::ops::get_latest_collab_folder;
+use crate::biz::collab::ops::get_latest_collab_folder_encoded;
 use crate::state::AppStateGroupManager;
 
 #[allow(clippy::too_many_arguments)]
@@ -109,7 +109,7 @@ impl PublishCollabDuplicator {
     };
     root_view.parent_view_id = self.dest_view_id;
 
-    let folder = get_latest_collab_folder(
+    let collab_folder_encoded = get_latest_collab_folder_encoded(
       self.group_manager.clone(),
       self.collab_storage.clone(),
       &self.duplicator_uid,
@@ -117,53 +117,36 @@ impl PublishCollabDuplicator {
     )
     .await?;
 
+    let folder = Folder::from_collab_doc_state(
+      self.duplicator_uid,
+      CollabOrigin::Server,
+      DataSource::DocStateV1(collab_folder_encoded.doc_state.to_vec()),
+      &self.dest_workspace_id,
+      vec![],
+    )
+    .map_err(|e| AppError::Unhandled(e.to_string()))?;
+
     // add all views required to the folder
     folder.insert_view(root_view, None);
     for view in self.views_to_add {
       folder.insert_view(view.clone(), None);
     }
 
-    // write back to collab cache
-    let encoded_folder_bin = folder
+    // update folder collab
+    let updated_encoded_collab = folder
       .encode_collab_v1()
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-      .encode_to_bytes()?;
+      .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
     // broadcast to group
+    // TODO(zack): broadcast update instead of stopping the group
     if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
-      let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
-      let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
-      group
-        .subscribe(
-          &RealtimeUser {
-            uid: self.duplicator_uid,
-            device_id: uuid::Uuid::new_v4().to_string(),
-            connect_at: self.ts_now,
-            session_id: uuid::Uuid::new_v4().to_string(),
-            app_version: "".to_string(),
-          },
-          CollabOrigin::Server,
-          collab_message_sender,
-          message_by_oid_receiver,
-        )
+      group.stop().await;
+      self
+        .group_manager
+        .remove_group(&self.dest_workspace_id)
         .await;
-      let message = HashMap::from([(
-        self.dest_workspace_id.clone(),
-        vec![ClientCollabMessage::ClientUpdateSync {
-          data: UpdateSync {
-            origin: CollabOrigin::Server,
-            object_id: self.dest_workspace_id.clone(),
-            msg_id: self.ts_now as u64,
-            payload: encoded_folder_bin.clone().into(),
-          },
-        }],
-      )]);
-      if let Err(err) = message_by_oid_sender.try_send(message) {
-        tracing::error!("failed to send message to group: {}", err);
-      }
     }
 
-    // put in storage
     self
       .collab_storage
       .insert_or_update_collab(
@@ -171,7 +154,7 @@ impl PublishCollabDuplicator {
         &self.duplicator_uid,
         CollabParams {
           object_id: self.dest_workspace_id.clone(),
-          encoded_collab_v1: encoded_folder_bin,
+          encoded_collab_v1: updated_encoded_collab.encode_to_bytes()?,
           collab_type: CollabType::Folder,
           embeddings: None,
         },

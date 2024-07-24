@@ -5,6 +5,7 @@ use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
 use collab_entity::CollabType;
+use collab_entity::EncodedCollab;
 use collab_folder::{CollabOrigin, Folder};
 use database::collab::CollabStorage;
 use database_entity::dto::QueryCollab;
@@ -167,33 +168,44 @@ pub async fn get_latest_collab_folder(
   uid: &i64,
   workspace_id: &str,
 ) -> Result<Folder, AppError> {
-  let data = if let Some(group) = group_manager.get_group(workspace_id).await {
-    group
-      .encode_collab()
-      .await
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-  } else {
-    collab_storage
-      .get_encode_collab(
-        uid,
-        QueryCollabParams {
-          workspace_id: workspace_id.to_string(),
-          inner: QueryCollab {
-            object_id: workspace_id.to_string(),
-            collab_type: CollabType::Folder,
-          },
-        },
-        false,
-      )
-      .await?
-  };
+  let encoded_collab =
+    get_latest_collab_folder_encoded(group_manager, collab_storage, uid, workspace_id).await?;
   let folder = Folder::from_collab_doc_state(
     uid,
     CollabOrigin::Server,
-    DataSource::DocStateV1(data.doc_state.to_vec()),
+    DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
     workspace_id,
     vec![],
   )
   .map_err(|e| AppError::Unhandled(e.to_string()))?;
   Ok(folder)
+}
+
+pub async fn get_latest_collab_folder_encoded(
+  group_manager: AppStateGroupManager,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: &i64,
+  workspace_id: &str,
+) -> Result<EncodedCollab, AppError> {
+  match group_manager.get_group(workspace_id).await {
+    Some(group) => group
+      .encode_collab()
+      .await
+      .map_err(|e| AppError::Unhandled(e.to_string())),
+    None => {
+      collab_storage
+        .get_encode_collab(
+          uid,
+          QueryCollabParams {
+            workspace_id: workspace_id.to_string(),
+            inner: QueryCollab {
+              object_id: workspace_id.to_string(),
+              collab_type: CollabType::Folder,
+            },
+          },
+          false,
+        )
+        .await
+    },
+  }
 }

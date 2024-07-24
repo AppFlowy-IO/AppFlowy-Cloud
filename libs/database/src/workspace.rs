@@ -643,6 +643,39 @@ pub async fn select_all_user_workspaces<'a, E: Executor<'a, Database = Postgres>
   Ok(workspaces)
 }
 
+pub async fn select_member_count_for_workspaces<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_ids: &[Uuid],
+) -> Result<HashMap<Uuid, i64>, AppError> {
+  let query_res = sqlx::query!(
+    r#"
+      SELECT workspace_id, COUNT(*) AS member_count
+      FROM af_workspace_member
+      WHERE workspace_id = ANY($1)
+      GROUP BY workspace_id
+    "#,
+    workspace_ids
+  )
+  .fetch_all(executor)
+  .await?;
+
+  let mut ret = HashMap::with_capacity(workspace_ids.len());
+  for row in query_res {
+    let count = match row.member_count {
+      Some(c) => c,
+      None => continue,
+    };
+    ret.insert(row.workspace_id, count);
+  }
+  for workspace_id in workspace_ids.iter() {
+    if !ret.contains_key(workspace_id) {
+      ret.insert(*workspace_id, 0);
+    }
+  }
+
+  Ok(ret)
+}
+
 pub async fn select_permission(
   pool: &PgPool,
   permission_id: &i64,

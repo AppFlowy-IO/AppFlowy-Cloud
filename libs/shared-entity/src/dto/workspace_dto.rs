@@ -120,3 +120,8 @@ pub struct CollabResponse {
   #[serde(default)]
   pub object_id: String,
 }
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct QueryWorkspaceParam {
+  pub include_member_count: Option<bool>,
+}

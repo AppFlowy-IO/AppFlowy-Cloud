@@ -47,6 +47,7 @@ impl TryFrom<AFWorkspaceRow> for AFWorkspace {
       workspace_name,
       created_at,
       icon,
+      member_count: None,
     })
   }
 }

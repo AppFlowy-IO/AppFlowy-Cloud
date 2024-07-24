@@ -97,7 +97,7 @@ where
   }
 
   #[instrument(skip(self))]
-  async fn remove_group(&self, object_id: &str) {
+  pub async fn remove_group(&self, object_id: &str) {
     self.state.remove_group(object_id).await;
 
     let close_event = CollabControlEvent::Close {

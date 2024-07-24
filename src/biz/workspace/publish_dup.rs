@@ -13,9 +13,13 @@ use database_entity::dto::QueryCollabParams;
 use database_entity::dto::{CollabParams, QueryCollab};
 use sqlx::PgPool;
 
+use crate::state::AppStateGroupManager;
+
+#[allow(clippy::too_many_arguments)]
 pub async fn duplicate_published_collab_to_workspace(
   pg_pool: &PgPool,
   collab_storage: Arc<CollabAccessControlStorage>,
+  group_manager: AppStateGroupManager,
   dest_uid: i64,
   publish_view_id: String,
   dest_workspace_id: String,
@@ -25,6 +29,7 @@ pub async fn duplicate_published_collab_to_workspace(
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
     collab_storage.clone(),
+    group_manager,
     dest_uid,
     dest_workspace_id,
     dest_view_id,
@@ -40,6 +45,8 @@ pub struct PublishCollabDuplicator {
   /// A map to store the old view_id that was duplicated and new view_id assigned.
   /// If value is none, it means the view_id is not published.
   duplicated_refs: HashMap<String, Option<String>>,
+  /// inform the changes
+  group_manager: AppStateGroupManager,
   /// A list of new views to be added to the folder
   views_to_add: Vec<View>,
   /// time of duplication
@@ -59,6 +66,7 @@ impl PublishCollabDuplicator {
   pub fn new(
     pg_pool: PgPool,
     collab_storage: Arc<CollabAccessControlStorage>,
+    group_manager: AppStateGroupManager,
     dest_uid: i64,
     dest_workspace_id: String,
     dest_view_id: String,
@@ -71,6 +79,7 @@ impl PublishCollabDuplicator {
 
       pg_pool,
       collab_storage,
+      group_manager,
       duplicator_uid: dest_uid,
       dest_workspace_id,
       dest_view_id,
@@ -100,20 +109,29 @@ impl PublishCollabDuplicator {
     };
     root_view.parent_view_id = self.dest_view_id;
 
-    let folder_collab = self
-      .collab_storage
-      .get_encode_collab(
-        &self.duplicator_uid,
-        QueryCollabParams {
-          workspace_id: self.dest_workspace_id.clone(),
-          inner: QueryCollab {
-            object_id: self.dest_workspace_id.clone(),
-            collab_type: CollabType::Folder,
-          },
-        },
-        true,
-      )
-      .await?;
+    let folder_collab = {
+      if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
+        group
+          .encode_collab()
+          .await
+          .map_err(|e| AppError::Unhandled(e.to_string()))?
+      } else {
+        self
+          .collab_storage
+          .get_encode_collab(
+            &self.duplicator_uid,
+            QueryCollabParams {
+              workspace_id: self.dest_workspace_id.clone(),
+              inner: QueryCollab {
+                object_id: self.dest_workspace_id.clone(),
+                collab_type: CollabType::Folder,
+              },
+            },
+            true,
+          )
+          .await?
+      }
+    };
 
     let folder = Folder::from_collab_doc_state(
       0,
@@ -129,6 +147,15 @@ impl PublishCollabDuplicator {
     for view in self.views_to_add {
       folder.insert_view(view.clone(), None);
     }
+
+    // close and remove the group
+    if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
+      group.stop().await;
+    }
+    self
+      .group_manager
+      .remove_group(&self.dest_workspace_id)
+      .await;
 
     // write back to collab cache
     let encoded_folder_bin = folder

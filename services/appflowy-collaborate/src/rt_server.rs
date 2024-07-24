@@ -13,7 +13,6 @@ use tracing::{error, info, trace};
 use access_control::collab::RealtimeAccessControl;
 use collab_rt_entity::user::{RealtimeUser, UserDevice};
 use collab_rt_entity::MessageByObjectId;
-use collab_stream::client::CollabRedisStream;
 use database::collab::CollabStorage;
 
 use crate::client::client_msg_router::ClientMessageRouter;
@@ -24,7 +23,6 @@ use crate::group::cmd::{GroupCommand, GroupCommandRunner, GroupCommandSender};
 use crate::group::manager::GroupManager;
 use crate::indexer::IndexerProvider;
 use crate::metrics::CollabMetricsCalculate;
-use crate::state::RedisConnectionManager;
 use crate::{spawn_metrics, CollabRealtimeMetrics, RealtimeClientWebsocketSink};
 
 #[derive(Clone)]
@@ -47,14 +45,10 @@ where
   #[allow(clippy::too_many_arguments)]
   pub async fn new(
     storage: Arc<S>,
-    access_control: AC,
     metrics: Arc<CollabRealtimeMetrics>,
     command_recv: CLCommandReceiver,
-    redis_connection_manager: RedisConnectionManager,
-    group_persistence_interval: Duration,
-    edit_state_max_count: u32,
-    edit_state_max_secs: i64,
     indexer_provider: Arc<IndexerProvider>,
+    group_manager: Arc<GroupManager<S, AC>>,
   ) -> Result<Self, RealtimeError> {
     if cfg!(feature = "collab-rt-multi-thread") {
       info!("CollaborationServer with multi-thread feature enabled");
@@ -62,21 +56,6 @@ where
 
     let metrics_calculate = CollabMetricsCalculate::default();
     let connect_state = ConnectState::new();
-    let access_control = Arc::new(access_control);
-    let collab_stream = CollabRedisStream::new_with_connection_manager(redis_connection_manager);
-    let group_manager = Arc::new(
-      GroupManager::new(
-        storage.clone(),
-        access_control.clone(),
-        metrics_calculate.clone(),
-        collab_stream,
-        group_persistence_interval,
-        edit_state_max_count,
-        edit_state_max_secs,
-        indexer_provider.clone(),
-      )
-      .await?,
-    );
     let group_sender_by_object_id: Arc<DashMap<String, GroupCommandSender>> =
       Arc::new(Default::default());
 

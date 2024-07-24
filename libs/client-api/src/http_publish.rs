@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use client_api_entity::{PublishInfo, UpdatePublishNamespace};
+use client_api_entity::{workspace_dto::PublishedDuplicate, PublishInfo, UpdatePublishNamespace};
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 
@@ -130,5 +130,23 @@ impl Client {
     }
 
     Ok(bytes)
+  }
+
+  pub async fn duplicate_published_to_workspace(
+    &self,
+    workspace_id: &str,
+    publish_duplicate: &PublishedDuplicate,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/{}/published-duplicate",
+      self.base_url, workspace_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(publish_duplicate)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

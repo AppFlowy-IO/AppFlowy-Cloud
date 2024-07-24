@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use client_api_entity::workspace_dto::FolderView;
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
@@ -621,6 +622,23 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<AFWorkspaces>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  #[instrument(level = "info", skip_all, err)]
+  pub async fn get_workspace_folder(
+    &self,
+    workspace_id: &str,
+  ) -> Result<FolderView, AppResponseError> {
+    let url = format!("{}/api/workspace/{}/folder", self.base_url, workspace_id);
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<FolderView>::from_response(resp)
       .await?
       .into_data()
   }

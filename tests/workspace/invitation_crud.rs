@@ -1,6 +1,6 @@
 use client_api_test::generate_unique_registered_user_client;
 use database_entity::dto::{AFRole, AFWorkspaceInvitationStatus};
-use shared_entity::dto::workspace_dto::WorkspaceMemberInvitation;
+use shared_entity::dto::workspace_dto::{QueryWorkspaceParam, WorkspaceMemberInvitation};
 
 #[tokio::test]
 async fn invite_workspace_crud() {
@@ -9,7 +9,6 @@ async fn invite_workspace_crud() {
     .get_workspaces()
     .await
     .unwrap()
-    .0
     .first()
     .unwrap()
     .workspace_id;
@@ -67,4 +66,17 @@ async fn invite_workspace_crud() {
     .await
     .unwrap();
   assert_eq!(accepted_invs.len(), 1);
+
+  // workspace now have 2 members
+  let member_count = bob_client
+    .get_workspaces_opt(QueryWorkspaceParam {
+      include_member_count: Some(true),
+    })
+    .await
+    .unwrap()
+    .first()
+    .unwrap()
+    .member_count
+    .unwrap();
+  assert_eq!(member_count, 2);
 }

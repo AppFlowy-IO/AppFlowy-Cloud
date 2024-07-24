@@ -1,5 +1,6 @@
 use crate::notify::{ClientToken, TokenStateReceiver};
 use app_error::AppError;
+use client_api_entity::workspace_dto::QueryWorkspaceParam;
 use client_api_entity::AuthProvider;
 use client_api_entity::CollabType;
 use gotrue::grant::PasswordGrant;
@@ -16,7 +17,7 @@ use reqwest::Method;
 use reqwest::RequestBuilder;
 
 use client_api_entity::{
-  AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace, AFWorkspaces,
+  AFSnapshotMeta, AFSnapshotMetas, AFUserProfile, AFUserWorkspaceInfo, AFWorkspace,
   QuerySnapshotParams, SnapshotData,
 };
 use semver::Version;
@@ -627,16 +628,26 @@ impl Client {
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
 
+  pub async fn get_workspaces(&self) -> Result<Vec<AFWorkspace>, AppResponseError> {
+    self
+      .get_workspaces_opt(QueryWorkspaceParam::default())
+      .await
+  }
+
   #[instrument(level = "info", skip_all, err)]
-  pub async fn get_workspaces(&self) -> Result<AFWorkspaces, AppResponseError> {
+  pub async fn get_workspaces_opt(
+    &self,
+    param: QueryWorkspaceParam,
+  ) -> Result<Vec<AFWorkspace>, AppResponseError> {
     let url = format!("{}/api/workspace", self.base_url);
     let resp = self
       .http_client_with_auth(Method::GET, &url)
       .await?
+      .query(&param)
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<AFWorkspaces>::from_response(resp)
+    AppResponse::<Vec<AFWorkspace>>::from_response(resp)
       .await?
       .into_data()
   }

@@ -15,18 +15,19 @@ use app_error::{AppError, ErrorCode};
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::upsert_collab_member_with_txn;
 use database::file::s3_client_impl::S3BucketStorage;
-use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
+use database::pg_row::AFWorkspaceMemberRow;
 
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
   get_invitation_by_id, insert_or_replace_publish_collab_metas, insert_user_workspace,
   insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
-  select_user_is_collab_publisher_for_all_views, select_user_is_workspace_owner, select_workspace,
-  select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
-  select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
-  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
+  select_member_count_for_workspaces, select_publish_collab_meta, select_published_collab_blob,
+  select_published_collab_info, select_user_is_collab_publisher_for_all_views,
+  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
+  select_workspace_member, select_workspace_member_list, select_workspace_publish_namespace,
+  select_workspace_publish_namespace_exists, select_workspace_settings,
+  select_workspace_total_collab_bytes, update_updated_at_of_workspace,
   update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
   upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
 };
@@ -187,8 +188,32 @@ pub async fn delete_published_workspace_collab(
 pub async fn get_all_user_workspaces(
   pg_pool: &PgPool,
   user_uuid: &Uuid,
-) -> Result<Vec<AFWorkspaceRow>, AppResponseError> {
+  include_member_count: bool,
+) -> Result<Vec<AFWorkspace>, AppResponseError> {
   let workspaces = select_all_user_workspaces(pg_pool, user_uuid).await?;
+  let mut workspaces = workspaces
+    .into_iter()
+    .flat_map(|row| {
+      let result = AFWorkspace::try_from(row);
+      if let Err(err) = &result {
+        tracing::error!("Failed to convert workspace row to AFWorkspace: {:?}", err);
+      }
+      result
+    })
+    .collect::<Vec<_>>();
+  if include_member_count {
+    let ids = workspaces
+      .iter()
+      .map(|row| row.workspace_id)
+      .collect::<Vec<_>>();
+    let member_count_by_workspace_id = select_member_count_for_workspaces(pg_pool, &ids).await?;
+    for workspace in workspaces.iter_mut() {
+      if let Some(member_count) = member_count_by_workspace_id.get(&workspace.workspace_id) {
+        workspace.member_count = Some(*member_count);
+      }
+    }
+  }
+
   Ok(workspaces)
 }
 

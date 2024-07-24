@@ -231,28 +231,20 @@ async fn delete_workspace_handler(
   Ok(AppResponse::Ok().into())
 }
 
-// TODO: also get shared workspaces
+/// Get all user owned and shared workspaces
 #[instrument(skip_all, err)]
 async fn list_workspace_handler(
   uuid: UserUuid,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<AFWorkspaces>> {
-  let rows = workspace::ops::get_all_user_workspaces(&state.pg_pool, &uuid).await?;
-  let workspaces = rows
-    .into_iter()
-    .flat_map(|row| {
-      let result = AFWorkspace::try_from(row);
-      if let Err(err) = &result {
-        event!(
-          tracing::Level::ERROR,
-          "Failed to convert workspace row to AFWorkspace: {:?}",
-          err
-        );
-      }
-      result
-    })
-    .collect::<Vec<_>>();
-  Ok(AppResponse::Ok().with_data(AFWorkspaces(workspaces)).into())
+  query: web::Query<QueryWorkspaceParam>,
+) -> Result<JsonAppResponse<Vec<AFWorkspace>>> {
+  let workspaces = workspace::ops::get_all_user_workspaces(
+    &state.pg_pool,
+    &uuid,
+    query.into_inner().include_member_count.unwrap_or(false),
+  )
+  .await?;
+  Ok(AppResponse::Ok().with_data(workspaces).into())
 }
 
 #[instrument(skip(payload, state), err)]

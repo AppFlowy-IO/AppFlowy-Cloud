@@ -1,6 +1,6 @@
 use database_entity::dto::{
   AFRole, AFWebUser, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
-  GlobalComment, PublishCollabItem, PublishInfo,
+  GlobalComment, PublishCollabItem, PublishInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -1224,6 +1224,157 @@ pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postg
       res.rows_affected()
     );
   }
+
+  Ok(())
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct ReactionKey {
+  comment_id: Uuid,
+  reaction_type: String,
+}
+
+pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<Vec<Reaction>, AppError> {
+  let rows = sqlx::query!(
+    r#"
+      SELECT
+        avr.comment_id,
+        avr.reaction_type,
+        au.uuid AS user_uuid
+      FROM af_published_view_reaction avr
+      INNER JOIN af_user au ON avr.created_by = au.uid
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_all(executor)
+  .await?;
+  let reaction_to_users_map: HashMap<ReactionKey, Vec<Uuid>> = rows.iter().fold(
+    HashMap::new(),
+    |mut acc: HashMap<ReactionKey, Vec<Uuid>>, row| {
+      let users = acc
+        .entry(ReactionKey {
+          comment_id: row.comment_id,
+          reaction_type: row.reaction_type.clone(),
+        })
+        .or_default();
+      users.push(row.user_uuid);
+      acc
+    },
+  );
+  let reactions = reaction_to_users_map
+    .iter()
+    .map(
+      |(
+        ReactionKey {
+          comment_id,
+          reaction_type,
+        },
+        user_uuids,
+      )| Reaction {
+        comment_id: *comment_id,
+        reaction_type: reaction_type.clone(),
+        react_user_uids: user_uuids.clone(),
+      },
+    )
+    .collect();
+
+  Ok(reactions)
+}
+
+pub async fn select_reactions_for_comment<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+) -> Result<Vec<Reaction>, AppError> {
+  let rows = sqlx::query!(
+    r#"
+      SELECT
+        avr.comment_id,
+        avr.reaction_type,
+        au.uuid AS user_uuid
+      FROM af_published_view_reaction avr
+      INNER JOIN af_user au ON avr.created_by = au.uid
+      WHERE comment_id = $1
+    "#,
+    comment_id,
+  )
+  .fetch_all(executor)
+  .await?;
+  let reaction_type_to_users_map: HashMap<String, Vec<Uuid>> = rows.iter().fold(
+    HashMap::new(),
+    |mut acc: HashMap<String, Vec<Uuid>>, row| {
+      let users = acc.entry(row.reaction_type.clone()).or_default();
+      users.push(row.user_uuid);
+      acc
+    },
+  );
+  let reactions = reaction_type_to_users_map
+    .iter()
+    .map(|(reaction_type, user_uuids)| Reaction {
+      reaction_type: reaction_type.clone(),
+      react_user_uids: user_uuids.clone(),
+      comment_id: *comment_id,
+    })
+    .collect();
+
+  Ok(reactions)
+}
+
+pub async fn insert_reaction_on_comment<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+  view_id: &Uuid,
+  user_uuid: &Uuid,
+  reaction_type: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_view_reaction (comment_id, view_id, created_by, reaction_type)
+      VALUES ($1, $2, (SELECT uid FROM af_user WHERE uuid = $3), $4)
+    "#,
+    comment_id,
+    view_id,
+    user_uuid,
+    reaction_type,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert reaction to comment, comment_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
+      comment_id, user_uuid, reaction_type, res.rows_affected()
+    );
+  };
+
+  Ok(())
+}
+
+pub async fn delete_reaction_from_comment<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+  user_uuid: &Uuid,
+  reaction_type: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      DELETE FROM af_published_view_reaction
+      WHERE view_id = $1 AND created_by = (SELECT uid FROM af_user WHERE uuid = $2) AND reaction_type = $3
+    "#,
+    view_id,
+    user_uuid,
+    reaction_type,
+  ).execute(executor).await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to delete reaction from published view, view_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
+      view_id, user_uuid, reaction_type, res.rows_affected()
+    );
+  };
 
   Ok(())
 }

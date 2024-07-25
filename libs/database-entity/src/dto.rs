@@ -878,6 +878,30 @@ pub struct DeleteGlobalCommentParams {
   pub comment_id: Uuid,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Reactions {
+  pub reactions: Vec<Reaction>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Reaction {
+  pub reaction_type: String,
+  pub react_user_uids: Vec<Uuid>,
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateReactionParams {
+  pub reaction_type: String,
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteReactionParams {
+  pub reaction_type: String,
+  pub comment_id: Uuid,
+}
+
 /// Indexing status of a document.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum IndexingStatus {

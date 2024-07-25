@@ -1,7 +1,7 @@
 use crate::api::util::PayloadReader;
 use crate::biz::workspace::ops::{
-  create_comment_on_published_view, get_comments_on_published_view,
-  remove_comment_on_published_view,
+  create_comment_on_published_view, create_reaction_on_comment, get_comments_on_published_view,
+  get_reactions_on_published_view, remove_comment_on_published_view, remove_reaction_on_comment,
 };
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
@@ -13,6 +13,7 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
+use serde::Deserialize;
 use sqlx::types::uuid;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -152,6 +153,12 @@ pub fn workspace_scope() -> Scope {
         .route(web::get().to(get_published_collab_comment_handler))
         .route(web::post().to(post_published_collab_comment_handler))
         .route(web::delete().to(delete_published_collab_comment_handler))
+    )
+    .service(
+      web::resource("/published-info/{view_id}/reaction")
+        .route(web::get().to(get_published_collab_reaction_handler))
+        .route(web::post().to(post_published_collab_reaction_handler))
+        .route(web::delete().to(delete_published_collab_reaction_handler))
     )
     .service(
       web::resource("/{workspace_id}/publish-namespace")
@@ -1125,6 +1132,56 @@ async fn delete_published_collab_comment_handler(
 ) -> Result<JsonAppResponse<()>> {
   let view_id = view_id.into_inner();
   remove_comment_on_published_view(&state.pg_pool, &view_id, &data.comment_id, &user_uuid).await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+#[derive(Deserialize)]
+struct GetReactionQuery {
+  comment_id: Option<Uuid>,
+}
+
+async fn get_published_collab_reaction_handler(
+  view_id: web::Path<Uuid>,
+  query: web::Query<GetReactionQuery>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Reactions>> {
+  let view_id = view_id.into_inner();
+  let reactions =
+    get_reactions_on_published_view(&state.pg_pool, &view_id, &query.comment_id).await?;
+  let resp = Reactions { reactions };
+  Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn post_published_collab_reaction_handler(
+  user_uuid: UserUuid,
+  view_id: web::Path<Uuid>,
+  data: Json<CreateReactionParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Reactions>> {
+  let view_id = view_id.into_inner();
+  create_reaction_on_comment(
+    &state.pg_pool,
+    &data.comment_id,
+    &view_id,
+    &data.reaction_type,
+    &user_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_published_collab_reaction_handler(
+  user_uuid: UserUuid,
+  data: Json<DeleteReactionParams>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<Reactions>> {
+  remove_reaction_on_comment(
+    &state.pg_pool,
+    &data.comment_id,
+    &data.reaction_type,
+    &user_uuid,
+  )
+  .await?;
   Ok(Json(AppResponse::Ok()))
 }
 

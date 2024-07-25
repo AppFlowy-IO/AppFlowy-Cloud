@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use client_api_entity::{
-  CreateGlobalCommentParams, DeleteGlobalCommentParams, GlobalComments, PublishInfo,
-  UpdatePublishNamespace,
+  CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
+  GlobalComments, PublishInfo, Reactions, UpdatePublishNamespace,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -107,6 +107,50 @@ impl Client {
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
   }
+
+  pub async fn create_reaction_on_comment(
+    &self,
+    reaction_type: &str,
+    comment_id: &uuid::Uuid,
+    view_id: &uuid::Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/reaction",
+      self.base_url, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&CreateReactionParams {
+        reaction_type: reaction_type.to_string(),
+        comment_id: *comment_id,
+      })
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn delete_reaction_on_comment(
+    &self,
+    reaction_type: &str,
+    view_id: &uuid::Uuid,
+    comment_id: &uuid::Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/reaction",
+      self.base_url, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .json(&DeleteReactionParams {
+        reaction_type: reaction_type.to_string(),
+        comment_id: *comment_id,
+      })
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
 }
 
 // Guest API (no login required)
@@ -202,6 +246,26 @@ impl Client {
     );
     let resp = self.cloud_client.get(&url).send().await?;
     AppResponse::<GlobalComments>::from_response(resp)
+      .await?
+      .into_data()
+  }
+
+  pub async fn get_published_view_reactions(
+    &self,
+    view_id: &uuid::Uuid,
+    comment_id: &Option<uuid::Uuid>,
+  ) -> Result<Reactions, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/reaction",
+      self.base_url, view_id
+    );
+    let url = if let Some(comment_id) = comment_id {
+      format!("{}?comment_id={}", url, comment_id)
+    } else {
+      url
+    };
+    let resp = self.cloud_client.get(&url).send().await?;
+    AppResponse::<Reactions>::from_response(resp)
       .await?
       .into_data()
   }

@@ -1103,7 +1103,7 @@ async fn get_published_collab_comment_handler(
 ) -> Result<JsonAppResponse<GlobalComments>> {
   let view_id = view_id.into_inner();
   let comments = get_comments_on_published_view(&state.pg_pool, &view_id).await?;
-  let resp = GlobalComments(comments);
+  let resp = GlobalComments { comments };
   Ok(Json(AppResponse::Ok().with_data(resp)))
 }
 

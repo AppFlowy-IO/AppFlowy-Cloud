@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::Arc};
-
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
@@ -8,9 +6,15 @@ use collab_entity::CollabType;
 use collab_folder::{
   CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIcon, ViewIdentifier, ViewLayout,
 };
-use database::{collab::CollabStorage, publish::select_published_data_for_view_id};
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::{ClientCollabMessage, UpdateSync};
+use collab_rt_protocol::{Message, SyncMessage};
+use database::collab::CollabStorage;
+use database::publish::select_published_data_for_view_id;
 use database_entity::dto::CollabParams;
 use sqlx::PgPool;
+use std::{collections::HashMap, sync::Arc};
+use yrs::updates::encoder::Encode;
 
 use crate::biz::collab::ops::get_latest_collab_folder_encoded;
 use crate::state::AppStateGroupManager;
@@ -94,7 +98,7 @@ impl PublishCollabDuplicator {
     let mut txn = self.pg_pool.begin().await?;
 
     // new view after deep copy
-    // this is the root of the document duplicated
+    // this is the root of the document/database duplicated
     let mut root_view = match self
       .deep_copy_txn(
         &mut txn,
@@ -131,11 +135,13 @@ impl PublishCollabDuplicator {
     )
     .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
-    // add all views required to the folder
-    folder.insert_view(root_view, None);
-    for view in self.views_to_add {
-      folder.insert_view(view.clone(), None);
-    }
+    let encoded_update = folder.get_updates_for_op(|folder| {
+      // add all views required to the folder
+      folder.insert_view(root_view, None);
+      for view in self.views_to_add {
+        folder.insert_view(view, None);
+      }
+    });
 
     // update folder collab
     let updated_encoded_collab = folder
@@ -157,14 +163,39 @@ impl PublishCollabDuplicator {
       )
       .await?;
 
-    // broadcast to group
-    // TODO(zack): broadcast update instead of stopping the group
+    // broadcast to collab group if exists
     if let Some(group) = self.group_manager.get_group(&self.dest_workspace_id).await {
-      group.stop().await;
-      self
-        .group_manager
-        .remove_group(&self.dest_workspace_id)
+      let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);
+      let (mut message_by_oid_sender, message_by_oid_receiver) = futures::channel::mpsc::channel(1);
+      group
+        .subscribe(
+          &RealtimeUser {
+            uid: self.duplicator_uid,
+            device_id: uuid::Uuid::new_v4().to_string(),
+            connect_at: self.ts_now,
+            session_id: uuid::Uuid::new_v4().to_string(),
+            app_version: "".to_string(),
+          },
+          CollabOrigin::Server,
+          collab_message_sender,
+          message_by_oid_receiver,
+        )
         .await;
+      let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
+      let message = HashMap::from([(
+        self.dest_workspace_id.clone(),
+        vec![ClientCollabMessage::ClientUpdateSync {
+          data: UpdateSync {
+            origin: CollabOrigin::Server,
+            object_id: self.dest_workspace_id.clone(),
+            msg_id: self.ts_now as u64,
+            payload: payload.into(),
+          },
+        }],
+      )]);
+      if let Err(err) = message_by_oid_sender.try_send(message) {
+        tracing::error!("failed to send message to group: {}", err);
+      }
     }
 
     txn.commit().await?;

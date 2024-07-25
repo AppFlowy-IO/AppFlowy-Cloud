@@ -6,7 +6,7 @@ use collab::core::collab::DataSource;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{
-  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
+  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIcon, ViewIdentifier, ViewLayout,
 };
 use database::{collab::CollabStorage, publish::select_published_collab_doc_state_for_view_id};
 use database_entity::dto::CollabParams;
@@ -199,7 +199,12 @@ impl PublishCollabDuplicator {
         )
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
-        let new_doc_view = self.deep_copy_doc_txn(txn, doc).await?;
+        // get metadata for view
+        let metadata =
+          database::publish::select_publish_collab_meta_for_view_id(txn, &publish_view_id.parse()?)
+            .await?;
+
+        let new_doc_view = self.deep_copy_doc_txn(txn, doc, metadata).await?;
         Ok(Some(new_doc_view))
       },
       CollabType::Database => {
@@ -221,22 +226,36 @@ impl PublishCollabDuplicator {
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     doc: Document,
+    metadata: serde_json::Value,
   ) -> Result<View, AppError> {
+    let view_meta = metadata.get("view");
+    let name = view_meta
+      .and_then(|view| view.get("name"))
+      .and_then(|name| name.as_str())
+      .unwrap_or("Untitled Duplicated");
+    let icon = view_meta
+      .and_then(|view| view.get("icon"))
+      .and_then(|icon| icon.as_str())
+      .and_then(|icon| serde_json::from_str::<ViewIcon>(icon).ok());
+    let extra = view_meta
+      .and_then(|view| view.get("extra"))
+      .and_then(|name| name.as_str());
+
     // create a new view
     let mut ret_view = View {
       id: uuid::Uuid::new_v4().to_string(),
       parent_view_id: "".to_string(), // to be filled by caller
-      name: "duplicated".to_string(), // TODO: get from metadata
-      desc: "".to_string(),           // TODO: get from metadata
+      name: name.to_string(),
+      desc: "".to_string(), // unable to get from metadata
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
       created_at: self.ts_now,
       is_favorite: false,
       layout: ViewLayout::Document,
-      icon: None, // TODO: get from metadata
+      icon,
       created_by: Some(self.duplicator_uid),
       last_edited_time: self.ts_now,
       last_edited_by: Some(self.duplicator_uid),
-      extra: None, // to be filled by metadata
+      extra: extra.map(String::from),
     };
 
     let mut doc_data = doc
@@ -280,7 +299,7 @@ impl PublishCollabDuplicator {
           }
         },
         None => {
-          // Call deep_copy_txn_async_wrapper and await the result
+          // Call deep_copy_txn and await the result
           if let Some(mut new_view) =
             Box::pin(self.deep_copy_txn(txn, page_id_str, CollabType::Document)).await?
           {
@@ -294,6 +313,7 @@ impl PublishCollabDuplicator {
             self.views_to_add.push(new_view.clone());
             *page_id = serde_json::json!(new_view.id);
           } else {
+            // page is not published
             self.duplicated_refs.insert(page_id_str.to_string(), None);
           }
         },

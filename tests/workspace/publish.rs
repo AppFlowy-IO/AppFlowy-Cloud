@@ -1,6 +1,11 @@
-use client_api::entity::{AFRole, PublishCollabItem, PublishCollabMetadata};
+use std::thread::sleep;
+use std::time::Duration;
+
+use app_error::ErrorCode;
+use client_api::entity::{AFRole, GlobalComment, PublishCollabItem, PublishCollabMetadata};
 use client_api_test::TestClient;
 use client_api_test::{generate_unique_registered_user_client, localhost_client};
+use itertools::Itertools;
 
 #[tokio::test]
 async fn test_set_publish_namespace_set() {
@@ -209,6 +214,195 @@ async fn test_publish_doc() {
       .unwrap();
     assert_eq!(format!("{:?}", err.code), "RecordNotFound");
   }
+}
+
+#[tokio::test]
+async fn test_publish_comments() {
+  let (page_owner_client, page_owner) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&page_owner_client).await;
+  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  page_owner_client
+    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .await
+    .unwrap();
+
+  let publish_name = "published-view";
+  let view_id = uuid::Uuid::new_v4();
+  page_owner_client
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id,
+          publish_name: publish_name.to_string(),
+          metadata: MyCustomMetadata {
+            title: "some_title".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_1".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+
+  // Test if only authenticated users can create
+  let page_owner_comment_content = "comment from page owner";
+  page_owner_client
+    .create_comment_on_published_view(&view_id, page_owner_comment_content, &None)
+    .await
+    .unwrap();
+  let (first_user_client, first_user) = generate_unique_registered_user_client().await;
+  let first_user_comment_content = "comment from first authenticated user";
+  // This is to ensure that the second comment creation timestamp is later than the first one
+  sleep(Duration::from_millis(1));
+  first_user_client
+    .create_comment_on_published_view(&view_id, first_user_comment_content, &None)
+    .await
+    .unwrap();
+  let guest_client = localhost_client();
+  let result = guest_client
+    .create_comment_on_published_view(&view_id, "comment from anonymous", &None)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
+
+  // Test if only all users, authenticated or not, can view all the comments
+  let published_view_comments: Vec<GlobalComment> = page_owner_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  assert_eq!(published_view_comments.len(), 2);
+  let published_view_comments: Vec<GlobalComment> = first_user_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  assert_eq!(published_view_comments.len(), 2);
+  let mut published_view_comments: Vec<GlobalComment> = guest_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  assert_eq!(published_view_comments.len(), 2);
+  assert!(published_view_comments.iter().all(|c| !c.is_deleted));
+
+  // Test if the comments have the correct content when sorted by creation time
+  published_view_comments.sort_by_key(|c| c.created_at);
+  let comment_creators = published_view_comments
+    .iter()
+    .map(|c| {
+      c.user
+        .as_ref()
+        .map(|u| u.name.clone())
+        .unwrap_or("".to_string())
+    })
+    .collect_vec();
+  assert_eq!(
+    comment_creators,
+    vec![page_owner.email.clone(), first_user.email.clone()]
+  );
+  let comment_content = published_view_comments
+    .iter()
+    .map(|c| c.content.clone())
+    .collect_vec();
+  assert_eq!(
+    comment_content,
+    vec![page_owner_comment_content, first_user_comment_content]
+  );
+
+  // Test if it's possible to reply to another user's comment
+  let second_user_comment_content = "comment from second authenticated user";
+  let (second_user_client, second_user) = generate_unique_registered_user_client().await;
+  // User 2 reply to user 1
+  second_user_client
+    .create_comment_on_published_view(
+      &view_id,
+      second_user_comment_content,
+      &Some(published_view_comments[1].comment_id),
+    )
+    .await
+    .unwrap();
+  let mut published_view_comments: Vec<GlobalComment> = guest_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  published_view_comments.sort_by_key(|c| c.created_at);
+  let comment_creators = published_view_comments
+    .iter()
+    .map(|c| {
+      c.user
+        .as_ref()
+        .map(|u| u.name.clone())
+        .unwrap_or("".to_string())
+    })
+    .collect_vec();
+  assert_eq!(
+    comment_creators,
+    vec![
+      page_owner.email.clone(),
+      first_user.email.clone(),
+      second_user.email.clone()
+    ]
+  );
+  assert_eq!(
+    published_view_comments[2].reply_comment_id,
+    Some(published_view_comments[1].comment_id)
+  );
+
+  // Test if only the page owner or the comment creator can delete a comment
+  // User 1 attempt to delete page owner's comment
+  let result = first_user_client
+    .delete_comment_on_published_view(&view_id, &published_view_comments[0].comment_id)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::UserUnAuthorized);
+  // User 1 deletes own comment
+  first_user_client
+    .delete_comment_on_published_view(&view_id, &published_view_comments[1].comment_id)
+    .await
+    .unwrap();
+  // Guest client attempt to delete user 2's comment
+  let result = guest_client
+    .delete_comment_on_published_view(&view_id, &published_view_comments[2].comment_id)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
+  // Verify that the comments are not deleted from the database, only the is_deleted status changes.
+  let mut published_view_comments: Vec<GlobalComment> = guest_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  published_view_comments.sort_by_key(|c| c.created_at);
+  assert_eq!(
+    published_view_comments
+      .iter()
+      .map(|c| c.is_deleted)
+      .collect_vec(),
+    vec![false, true, false]
+  );
+  // Verify that the reference id is still preserved
+  assert_eq!(
+    published_view_comments[2].reply_comment_id,
+    Some(published_view_comments[1].comment_id)
+  );
+
+  for comment in &published_view_comments {
+    page_owner_client
+      .delete_comment_on_published_view(&view_id, &comment.comment_id)
+      .await
+      .unwrap();
+  }
+
+  let published_view_comments: Vec<GlobalComment> = guest_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  assert_eq!(published_view_comments.len(), 3);
+  assert!(published_view_comments.iter().all(|c| c.is_deleted));
 }
 
 #[tokio::test]

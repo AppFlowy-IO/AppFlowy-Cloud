@@ -228,18 +228,20 @@ impl PublishCollabDuplicator {
     doc: Document,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
-    let view_meta = metadata.get("view");
-    let name = view_meta
-      .and_then(|view| view.get("name"))
-      .and_then(|name| name.as_str())
-      .unwrap_or("Untitled Duplicated");
-    let icon = view_meta
-      .and_then(|view| view.get("icon"))
-      .and_then(|icon| icon.as_str())
-      .and_then(|icon| serde_json::from_str::<ViewIcon>(icon).ok());
-    let extra = view_meta
-      .and_then(|view| view.get("extra"))
-      .and_then(|name| name.as_str());
+    let (name, icon, extra) = match metadata.get("view") {
+      Some(view) => {
+        let name = view
+          .get("name")
+          .and_then(|name| name.as_str())
+          .unwrap_or("Untitled Duplicated");
+        let icon = view
+          .get("icon")
+          .and_then(|icon| serde_json::from_value::<ViewIcon>(icon.clone()).ok());
+        let extra = view.get("extra").and_then(|name| name.as_str());
+        (name, icon, extra)
+      },
+      None => ("Untitled Duplicated", None, None),
+    };
 
     // create a new view
     let mut ret_view = View {

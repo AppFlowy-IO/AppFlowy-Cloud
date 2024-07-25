@@ -99,6 +99,7 @@ shared-entity = { path = "libs/shared-entity", features = ["cloud"] }
 workspace-template = { workspace = true }
 collab-rt-entity.workspace = true
 collab-stream.workspace = true
+yrs.workspace = true
 
 tonic-build = "0.11.0"
 log = "0.4.20"

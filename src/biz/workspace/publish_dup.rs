@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::Arc};
-
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
@@ -10,10 +8,13 @@ use collab_folder::{
 };
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
+use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::CollabStorage;
 use database::publish::select_published_data_for_view_id;
 use database_entity::dto::CollabParams;
 use sqlx::PgPool;
+use std::{collections::HashMap, sync::Arc};
+use yrs::updates::encoder::Encode;
 
 use crate::biz::collab::ops::get_latest_collab_folder_encoded;
 use crate::state::AppStateGroupManager;
@@ -181,6 +182,7 @@ impl PublishCollabDuplicator {
           message_by_oid_receiver,
         )
         .await;
+      let payload = Message::Sync(SyncMessage::Update(encoded_update)).encode_v1();
       let message = HashMap::from([(
         self.dest_workspace_id.clone(),
         vec![ClientCollabMessage::ClientUpdateSync {
@@ -188,7 +190,7 @@ impl PublishCollabDuplicator {
             origin: CollabOrigin::Server,
             object_id: self.dest_workspace_id.clone(),
             msg_id: self.ts_now as u64,
-            payload: encoded_update.into(),
+            payload: payload.into(),
           },
         }],
       )]);

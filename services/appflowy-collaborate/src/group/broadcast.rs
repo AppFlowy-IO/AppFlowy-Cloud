@@ -214,10 +214,13 @@ impl CollabBroadcast {
 
                   trace!("[realtime]: send {} => {}", message, cloned_user.user_device());
                   if let Err(err) = sink.send(message).await {
-                    error!("fail to broadcast message:{}", err);
+                    tracing::error!("fail to broadcast message:{}", err);
                   }
                 }
-                Err(_) => break,
+                Err(e) => {
+                  error!("fail to receive message:{}", e);
+                  break;
+                },
               }
             },
           }
@@ -312,7 +315,7 @@ async fn handle_client_messages<Sink>(
         Ok(response) => {
           trace!("[realtime]: sending response: {}", response);
           match sink.send(response.into()).await {
-            Ok(_) => {},
+            Ok(()) => {},
             Err(err) => {
               trace!("[realtime]: send failed: {}", err);
               break;
@@ -395,9 +398,7 @@ async fn handle_one_client_message(
         trace!("Lock timeout, retrying... attempt: {}", attempt);
         sleep(Duration::from_millis(300)).await;
       },
-      Err(err) => {
-        return Err(err);
-      },
+      Err(err) => return Err(err),
     }
   }
 }

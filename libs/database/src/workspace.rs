@@ -1,6 +1,6 @@
 use database_entity::dto::{
-  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
-  GlobalCommentCreator, PublishCollabItem, PublishInfo,
+  AFRole, AFWebUser, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
+  GlobalComment, PublishCollabItem, PublishInfo,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -1111,7 +1111,7 @@ pub async fn select_comments_for_published_view<'a, E: Executor<'a, Database = P
   let result = rows
     .iter()
     .map(|row| {
-      let comment_creator = row.user_uuid.map(|uuid| GlobalCommentCreator {
+      let comment_creator = row.user_uuid.map(|uuid| AFWebUser {
         uid: uuid,
         name: row
           .user_name

@@ -850,7 +850,7 @@ pub struct PublishCollabItem<Meta, Data> {
 pub struct GlobalComments(pub Vec<GlobalComment>);
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GlobalCommentCreator {
+pub struct AFWebUser {
   pub uid: Uuid,
   pub name: String,
   pub avatar_url: Option<String>,
@@ -858,7 +858,7 @@ pub struct GlobalCommentCreator {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GlobalComment {
-  pub user: Option<GlobalCommentCreator>,
+  pub user: Option<AFWebUser>,
   pub created_at: DateTime<Utc>,
   pub last_updated_at: DateTime<Utc>,
   pub content: String,

@@ -8,7 +8,7 @@ use collab_entity::CollabType;
 use collab_folder::{
   CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIcon, ViewIdentifier, ViewLayout,
 };
-use database::{collab::CollabStorage, publish::select_published_collab_doc_state_for_view_id};
+use database::{collab::CollabStorage, publish::select_published_data_for_view_id};
 use database_entity::dto::CollabParams;
 use sqlx::PgPool;
 
@@ -96,7 +96,12 @@ impl PublishCollabDuplicator {
     // new view after deep copy
     // this is the root of the document duplicated
     let mut root_view = match self
-      .deep_copy_txn(&mut txn, publish_view_id, collab_type.clone())
+      .deep_copy_txn(
+        &mut txn,
+        uuid::Uuid::new_v4().to_string(),
+        publish_view_id,
+        collab_type.clone(),
+      )
       .await?
     {
       Some(v) => v,
@@ -173,13 +178,14 @@ impl PublishCollabDuplicator {
   pub async fn deep_copy_txn(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    new_view_id: String,
     publish_view_id: &str,
     collab_type: CollabType,
   ) -> Result<Option<View>, AppError> {
-    // get doc_state bin data of collab
-    let doc_state: Vec<u8> =
-      match select_published_collab_doc_state_for_view_id(txn, &publish_view_id.parse()?).await? {
-        Some(bin_data) => bin_data,
+    // attempt to get metadata and doc_state for published view
+    let (metadata, doc_state) =
+      match select_published_data_for_view_id(txn, &publish_view_id.parse()?).await? {
+        Some(published_data) => published_data,
         None => {
           tracing::warn!(
             "No published collab data found for view_id: {}",
@@ -188,6 +194,12 @@ impl PublishCollabDuplicator {
           return Ok(None);
         },
       };
+
+    // at this stage, we know that the view is published,
+    // so we insert this knowledge into the duplicated_refs
+    self
+      .duplicated_refs
+      .insert(publish_view_id.to_string(), new_view_id.clone().into());
 
     match collab_type {
       CollabType::Document => {
@@ -199,12 +211,9 @@ impl PublishCollabDuplicator {
         )
         .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
-        // get metadata for view
-        let metadata =
-          database::publish::select_publish_collab_meta_for_view_id(txn, &publish_view_id.parse()?)
-            .await?;
-
-        let new_doc_view = self.deep_copy_doc_txn(txn, doc, metadata).await?;
+        let new_doc_view = self
+          .deep_copy_doc_txn(txn, new_view_id, doc, metadata)
+          .await?;
         Ok(Some(new_doc_view))
       },
       CollabType::Database => {
@@ -225,6 +234,7 @@ impl PublishCollabDuplicator {
   pub async fn deep_copy_doc_txn<'a>(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    new_view_id: String,
     doc: Document,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
@@ -245,7 +255,7 @@ impl PublishCollabDuplicator {
 
     // create a new view
     let mut ret_view = View {
-      id: uuid::Uuid::new_v4().to_string(),
+      id: new_view_id,
       parent_view_id: "".to_string(), // to be filled by caller
       name: name.to_string(),
       desc: "".to_string(), // unable to get from metadata
@@ -302,8 +312,13 @@ impl PublishCollabDuplicator {
         },
         None => {
           // Call deep_copy_txn and await the result
-          if let Some(mut new_view) =
-            Box::pin(self.deep_copy_txn(txn, page_id_str, CollabType::Document)).await?
+          if let Some(mut new_view) = Box::pin(self.deep_copy_txn(
+            txn,
+            uuid::Uuid::new_v4().to_string(),
+            page_id_str,
+            CollabType::Document,
+          ))
+          .await?
           {
             new_view.parent_view_id = ret_view.id.clone();
             ret_view.children.items.push(ViewIdentifier {
@@ -315,7 +330,6 @@ impl PublishCollabDuplicator {
             self.views_to_add.push(new_view.clone());
             *page_id = serde_json::json!(new_view.id);
           } else {
-            // page is not published
             self.duplicated_refs.insert(page_id_str.to_string(), None);
           }
         },

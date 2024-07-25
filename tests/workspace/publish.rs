@@ -271,19 +271,19 @@ async fn test_publish_comments() {
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
-    .0;
+    .comments;
   assert_eq!(published_view_comments.len(), 2);
   let published_view_comments: Vec<GlobalComment> = first_user_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
-    .0;
+    .comments;
   assert_eq!(published_view_comments.len(), 2);
   let mut published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
-    .0;
+    .comments;
   assert_eq!(published_view_comments.len(), 2);
   assert!(published_view_comments.iter().all(|c| !c.is_deleted));
 
@@ -327,7 +327,7 @@ async fn test_publish_comments() {
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
-    .0;
+    .comments;
   published_view_comments.sort_by_key(|c| c.created_at);
   let comment_creators = published_view_comments
     .iter()
@@ -374,7 +374,7 @@ async fn test_publish_comments() {
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
-    .0;
+    .comments;
   published_view_comments.sort_by_key(|c| c.created_at);
   assert_eq!(
     published_view_comments
@@ -400,7 +400,7 @@ async fn test_publish_comments() {
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
-    .0;
+    .comments;
   assert_eq!(published_view_comments.len(), 3);
   assert!(published_view_comments.iter().all(|c| c.is_deleted));
 }

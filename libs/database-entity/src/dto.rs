@@ -847,7 +847,9 @@ pub struct PublishCollabItem<Meta, Data> {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GlobalComments(pub Vec<GlobalComment>);
+pub struct GlobalComments {
+  pub comments: Vec<GlobalComment>,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AFWebUser {

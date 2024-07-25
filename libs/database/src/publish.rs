@@ -158,25 +158,6 @@ pub async fn insert_or_replace_publish_collabs<'a, E: Executor<'a, Database = Po
 }
 
 #[inline]
-pub async fn select_publish_collab_meta_for_view_id(
-  txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-  view_id: &Uuid,
-) -> Result<serde_json::Value, AppError> {
-  let res = sqlx::query!(
-    r#"
-      SELECT metadata
-      FROM af_published_collab
-      WHERE view_id = $1
-    "#,
-    view_id,
-  )
-  .fetch_one(txn.as_mut())
-  .await?;
-  let metadata: serde_json::Value = res.metadata;
-  Ok(metadata)
-}
-
-#[inline]
 pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
   publish_namespace: &str,
@@ -229,13 +210,13 @@ pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
 }
 
 #[inline]
-pub async fn select_published_collab_doc_state_for_view_id(
+pub async fn select_published_data_for_view_id(
   txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
   view_id: &Uuid,
-) -> Result<Option<Vec<u8>>, AppError> {
-  let res = sqlx::query_scalar!(
+) -> Result<Option<(serde_json::Value, Vec<u8>)>, AppError> {
+  let res = sqlx::query!(
     r#"
-      SELECT blob
+      SELECT metadata, blob
       FROM af_published_collab
       WHERE view_id = $1
     "#,
@@ -243,7 +224,7 @@ pub async fn select_published_collab_doc_state_for_view_id(
   )
   .fetch_optional(txn.as_mut())
   .await?;
-  Ok(res)
+  Ok(res.map(|res| (res.metadata, res.blob)))
 }
 
 #[inline]

@@ -136,6 +136,7 @@ pub struct FolderView {
   pub icon: Option<ViewIcon>,
   pub is_space: bool,
   pub is_private: bool,
+  pub extra: Option<serde_json::Value>,
   pub children: Vec<FolderView>,
 }
 
@@ -164,12 +165,20 @@ impl From<&Folder> for FolderView {
       },
     };
 
+    let extra = root.extra.as_deref().map(|extra| {
+      serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
+        tracing::error!("failed to parse extra field({}): {}", extra, e);
+        serde_json::Value::Null
+      })
+    });
+
     Self {
       view_id: root.id.clone(),
       name: root.name.clone(),
       icon: root.icon.clone(),
       is_space: false,
       is_private: false,
+      extra,
       children: root
         .children
         .iter()
@@ -204,6 +213,12 @@ impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
         return Self::default();
       },
     };
+    let extra = view.extra.as_deref().map(|extra| {
+      serde_json::from_str::<serde_json::Value>(extra).unwrap_or_else(|e| {
+        tracing::error!("failed to parse extra field({}): {}", extra, e);
+        serde_json::Value::Null
+      })
+    });
 
     Self {
       view_id: view.id.clone(),
@@ -211,6 +226,7 @@ impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
       icon: view.icon.clone(),
       is_space: view_is_space(&view),
       is_private: fv.private_views.contains(&view.id),
+      extra,
       children: view
         .children
         .iter()

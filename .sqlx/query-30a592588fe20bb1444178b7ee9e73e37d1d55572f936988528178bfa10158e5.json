@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT EXISTS(\n      SELECT true\n      FROM af_published_collab\n      WHERE view_id = $1\n        AND published_by = (SELECT uid FROM af_user WHERE uuid = $2)\n      UNION ALL\n      SELECT true\n      FROM af_published_view_comment\n      WHERE view_id = $1\n        AND comment_id = $3\n        AND created_by = (SELECT uid FROM af_user WHERE uuid = $2)\n    ) AS \"exists\";\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "30a592588fe20bb1444178b7ee9e73e37d1d55572f936988528178bfa10158e5"
+}

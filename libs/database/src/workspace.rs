@@ -1,5 +1,6 @@
 use database_entity::dto::{
-  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
+  AFRole, AFWebUser, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
+  GlobalComment, PublishCollabItem, PublishInfo,
 };
 use futures_util::stream::BoxStream;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
@@ -141,6 +142,64 @@ pub async fn select_user_is_workspace_owner(
   .await?;
 
   Ok(exists.unwrap_or(false))
+}
+
+pub async fn select_user_is_collab_publisher_for_all_views(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  workspace_uuid: &Uuid,
+  view_ids: &[Uuid],
+) -> Result<bool, AppError> {
+  let count = sqlx::query_scalar!(
+    r#"
+      SELECT COUNT(*)
+      FROM af_published_collab
+      WHERE workspace_id = $1
+        AND view_id = ANY($2)
+        AND published_by = (SELECT uid FROM af_user WHERE uuid = $3)
+    "#,
+    workspace_uuid,
+    view_ids,
+    user_uuid,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  match count {
+    Some(c) => Ok(c == view_ids.len() as i64),
+    None => Ok(false),
+  }
+}
+
+pub async fn select_user_is_allowed_to_delete_comment(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  view_id: &Uuid,
+  comment_id: &Uuid,
+) -> Result<bool, AppError> {
+  let is_publisher_for_view = sqlx::query_scalar!(
+    r#"
+    SELECT EXISTS(
+      SELECT true
+      FROM af_published_collab
+      WHERE view_id = $1
+        AND published_by = (SELECT uid FROM af_user WHERE uuid = $2)
+      UNION ALL
+      SELECT true
+      FROM af_published_view_comment
+      WHERE view_id = $1
+        AND comment_id = $3
+        AND created_by = (SELECT uid FROM af_user WHERE uuid = $2)
+    ) AS "exists";
+    "#,
+    view_id,
+    user_uuid,
+    comment_id,
+  )
+  .fetch_one(pg_pool)
+  .await?;
+
+  Ok(is_publisher_for_view.unwrap_or(false))
 }
 
 #[inline]
@@ -798,6 +857,335 @@ pub async fn upsert_workspace_settings(
     )
     .execute(tx.deref_mut())
     .await?;
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_workspace_publish_namespace_exists<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  namespace: &str,
+) -> Result<bool, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT EXISTS(
+        SELECT 1
+        FROM af_workspace
+        WHERE workspace_id = $1
+          AND publish_namespace = $2
+      )
+    "#,
+    workspace_id,
+    namespace,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res.unwrap_or(false))
+}
+
+#[inline]
+pub async fn update_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  new_namespace: &str,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_workspace
+      SET publish_namespace = $1
+      WHERE workspace_id = $2
+    "#,
+    new_namespace,
+    workspace_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update workspace publish namespace, workspace_id: {}, new_namespace: {}, rows_affected: {}",
+      workspace_id, new_namespace, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_workspace_publish_namespace<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+) -> Result<String, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT publish_namespace
+      FROM af_workspace
+      WHERE workspace_id = $1
+    "#,
+    workspace_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+#[inline]
+pub async fn insert_or_replace_publish_collab_metas<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  publisher_uuid: &Uuid,
+  publish_item: &[PublishCollabItem<serde_json::Value, Vec<u8>>],
+) -> Result<(), AppError> {
+  let view_ids: Vec<Uuid> = publish_item.iter().map(|item| item.meta.view_id).collect();
+  let publish_names: Vec<String> = publish_item
+    .iter()
+    .map(|item| item.meta.publish_name.clone())
+    .collect();
+  let metadatas: Vec<serde_json::Value> = publish_item
+    .iter()
+    .map(|item| item.meta.metadata.clone())
+    .collect();
+
+  let blobs: Vec<Vec<u8>> = publish_item.iter().map(|item| item.data.clone()).collect();
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_collab (workspace_id, view_id, publish_name, published_by, metadata, blob)
+      SELECT * FROM UNNEST(
+        (SELECT array_agg((SELECT $1::uuid)) FROM generate_series(1, $7))::uuid[],
+        $2::uuid[],
+        $3::text[],
+        (SELECT array_agg((SELECT uid FROM af_user WHERE uuid = $4)) FROM generate_series(1, $7))::bigint[],
+        $5::jsonb[],
+        $6::bytea[]
+      )
+      ON CONFLICT (workspace_id, view_id) DO UPDATE
+      SET metadata = EXCLUDED.metadata,
+          blob = EXCLUDED.blob,
+          published_by = EXCLUDED.published_by,
+          publish_name = EXCLUDED.publish_name
+    "#,
+    workspace_id,
+    &view_ids,
+    &publish_names,
+    publisher_uuid,
+    &metadatas,
+    &blobs,
+    publish_item.len() as i32,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != publish_item.len() as u64 {
+    tracing::warn!(
+      "Failed to insert or replace publish collab meta batch, workspace_id: {}, publisher_uuid: {}, rows_affected: {}",
+      workspace_id, publisher_uuid, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_publish_collab_meta<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  publish_namespace: &str,
+  publish_name: &str,
+) -> Result<serde_json::Value, AppError> {
+  let res = sqlx::query!(
+    r#"
+    SELECT metadata
+    FROM af_published_collab
+    WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      AND publish_name = $2
+    "#,
+    publish_namespace,
+    publish_name,
+  )
+  .fetch_one(executor)
+  .await?;
+  let metadata: serde_json::Value = res.metadata;
+  Ok(metadata)
+}
+
+#[inline]
+pub async fn delete_published_collabs<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &Uuid,
+  view_ids: &[Uuid],
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      DELETE FROM af_published_collab
+      WHERE workspace_id = $1
+        AND view_id = ANY($2)
+    "#,
+    workspace_id,
+    view_ids,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != view_ids.len() as u64 {
+    tracing::error!(
+      "Failed to delete published collabs, workspace_id: {}, view_ids: {:?}, rows_affected: {}",
+      workspace_id,
+      view_ids,
+      res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+#[inline]
+pub async fn select_published_collab_blob<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  publish_namespace: &str,
+  publish_name: &str,
+) -> Result<Vec<u8>, AppError> {
+  let res = sqlx::query_scalar!(
+    r#"
+      SELECT blob
+      FROM af_published_collab
+      WHERE workspace_id = (SELECT workspace_id FROM af_workspace WHERE publish_namespace = $1)
+      AND publish_name = $2
+    "#,
+    publish_namespace,
+    publish_name,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<PublishInfo, AppError> {
+  let res = sqlx::query_as!(
+    PublishInfo,
+    r#"
+      SELECT
+        (SELECT publish_namespace FROM af_workspace aw WHERE aw.workspace_id = apc.workspace_id) AS namespace,
+        publish_name,
+        view_id
+      FROM af_published_collab apc
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res)
+}
+
+pub async fn select_comments_for_published_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<Vec<GlobalComment>, AppError> {
+  let rows = sqlx::query!(
+    r#"
+      SELECT
+        avc.comment_id,
+        avc.created_at,
+        avc.updated_at,
+        avc.content,
+        avc.reply_comment_id,
+        avc.is_deleted,
+        au.uuid AS "user_uuid?",
+        au.name AS "user_name?"
+      FROM af_published_view_comment avc
+      LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_all(executor)
+  .await?;
+  let result = rows
+    .iter()
+    .map(|row| {
+      let comment_creator = row.user_uuid.map(|uuid| AFWebUser {
+        uid: uuid,
+        name: row
+          .user_name
+          .as_ref()
+          .map(|s| s.to_string())
+          .unwrap_or("".to_string()),
+        avatar_url: None,
+      });
+      GlobalComment {
+        user: comment_creator,
+        comment_id: row.comment_id,
+        created_at: row.created_at,
+        last_updated_at: row.updated_at,
+        content: row.content.clone(),
+        reply_comment_id: row.reply_comment_id,
+        is_deleted: row.is_deleted,
+      }
+    })
+    .collect();
+
+  Ok(result)
+}
+
+pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+  user_uuid: &Uuid,
+  content: &str,
+  reply_comment_id: &Option<Uuid>,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      INSERT INTO af_published_view_comment (view_id, created_by, content, reply_comment_id)
+      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)
+    "#,
+    view_id,
+    user_uuid,
+    content,
+    reply_comment_id.clone(),
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to insert comment to published view, view_id: {}, user_id: {}, content: {}, rows_affected: {}",
+      view_id, user_uuid, content, res.rows_affected()
+    );
+  }
+
+  Ok(())
+}
+
+pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  comment_id: &Uuid,
+) -> Result<(), AppError> {
+  let res = sqlx::query!(
+    r#"
+      UPDATE af_published_view_comment
+      SET is_deleted = true
+      WHERE comment_id = $1
+    "#,
+    comment_id,
+  )
+  .execute(executor)
+  .await?;
+
+  if res.rows_affected() != 1 {
+    tracing::error!(
+      "Failed to update deletion status for comment, comment_id: {}, rows_affected: {}",
+      comment_id,
+      res.rows_affected()
+    );
   }
 
   Ok(())

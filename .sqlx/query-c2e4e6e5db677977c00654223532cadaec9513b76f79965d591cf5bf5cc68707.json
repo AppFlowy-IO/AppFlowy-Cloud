@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      SELECT\n        avc.comment_id,\n        avc.created_at,\n        avc.updated_at,\n        avc.content,\n        avc.reply_comment_id,\n        avc.is_deleted,\n        au.uuid AS \"user_uuid?\",\n        au.name AS \"user_name?\"\n      FROM af_published_view_comment avc\n      LEFT OUTER JOIN af_user au ON avc.created_by = au.uid\n      WHERE view_id = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "comment_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "reply_comment_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_deleted",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "user_uuid?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "user_name?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c2e4e6e5db677977c00654223532cadaec9513b76f79965d591cf5bf5cc68707"
+}

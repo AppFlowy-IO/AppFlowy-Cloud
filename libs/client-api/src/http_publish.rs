@@ -1,5 +1,8 @@
 use bytes::Bytes;
-use client_api_entity::{PublishInfo, UpdatePublishNamespace};
+use client_api_entity::{
+  CreateGlobalCommentParams, DeleteGlobalCommentParams, GlobalComments, PublishInfo,
+  UpdatePublishNamespace,
+};
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
 use tracing::instrument;
@@ -58,6 +61,48 @@ impl Client {
       .http_client_with_auth(Method::DELETE, &url)
       .await?
       .json(view_ids)
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn create_comment_on_published_view(
+    &self,
+    view_id: &uuid::Uuid,
+    comment_content: &str,
+    reply_comment_id: &Option<uuid::Uuid>,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/comment",
+      self.base_url, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&CreateGlobalCommentParams {
+        content: comment_content.to_string(),
+        reply_comment_id: *reply_comment_id,
+      })
+      .send()
+      .await?;
+    AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+
+  pub async fn delete_comment_on_published_view(
+    &self,
+    view_id: &uuid::Uuid,
+    comment_id: &uuid::Uuid,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/comment",
+      self.base_url, view_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::DELETE, &url)
+      .await?
+      .json(&DeleteGlobalCommentParams {
+        comment_id: *comment_id,
+      })
       .send()
       .await?;
     AppResponse::<()>::from_response(resp).await?.into_error()
@@ -145,5 +190,19 @@ impl Client {
     }
 
     Ok(bytes)
+  }
+
+  pub async fn get_published_view_comments(
+    &self,
+    view_id: &uuid::Uuid,
+  ) -> Result<GlobalComments, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/comment",
+      self.base_url, view_id
+    );
+    let resp = self.cloud_client.get(&url).send().await?;
+    AppResponse::<GlobalComments>::from_response(resp)
+      .await?
+      .into_data()
   }
 }

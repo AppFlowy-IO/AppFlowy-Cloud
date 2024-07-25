@@ -1,4 +1,8 @@
 use crate::api::util::PayloadReader;
+use crate::biz::workspace::ops::{
+  create_comment_on_published_view, get_comments_on_published_view,
+  remove_comment_on_published_view,
+};
 use actix_web::web::{Bytes, Payload};
 use actix_web::web::{Data, Json, PayloadConfig};
 use actix_web::{web, Scope};
@@ -142,6 +146,12 @@ pub fn workspace_scope() -> Scope {
     .service(
       web::resource("/published-info/{view_id}")
         .route(web::get().to(get_published_collab_info_handler))
+    )
+    .service(
+      web::resource("/published-info/{view_id}/comment")
+        .route(web::get().to(get_published_collab_comment_handler))
+        .route(web::post().to(post_published_collab_comment_handler))
+        .route(web::delete().to(delete_published_collab_comment_handler))
     )
     .service(
       web::resource("/{workspace_id}/publish-namespace")
@@ -1085,6 +1095,45 @@ async fn get_published_collab_info_handler(
   let collab_data =
     biz::workspace::ops::get_published_collab_info(&state.pg_pool, &view_id).await?;
   Ok(Json(AppResponse::Ok().with_data(collab_data)))
+}
+
+async fn get_published_collab_comment_handler(
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+) -> Result<JsonAppResponse<GlobalComments>> {
+  let view_id = view_id.into_inner();
+  let comments = get_comments_on_published_view(&state.pg_pool, &view_id).await?;
+  let resp = GlobalComments { comments };
+  Ok(Json(AppResponse::Ok().with_data(resp)))
+}
+
+async fn post_published_collab_comment_handler(
+  user_uuid: UserUuid,
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+  data: Json<CreateGlobalCommentParams>,
+) -> Result<JsonAppResponse<()>> {
+  let view_id = view_id.into_inner();
+  create_comment_on_published_view(
+    &state.pg_pool,
+    &view_id,
+    &data.reply_comment_id,
+    &data.content,
+    &user_uuid,
+  )
+  .await?;
+  Ok(Json(AppResponse::Ok()))
+}
+
+async fn delete_published_collab_comment_handler(
+  user_uuid: UserUuid,
+  view_id: web::Path<Uuid>,
+  state: Data<AppState>,
+  data: Json<DeleteGlobalCommentParams>,
+) -> Result<JsonAppResponse<()>> {
+  let view_id = view_id.into_inner();
+  remove_comment_on_published_view(&state.pg_pool, &view_id, &data.comment_id, &user_uuid).await?;
+  Ok(Json(AppResponse::Ok()))
 }
 
 async fn post_publish_collabs_handler(

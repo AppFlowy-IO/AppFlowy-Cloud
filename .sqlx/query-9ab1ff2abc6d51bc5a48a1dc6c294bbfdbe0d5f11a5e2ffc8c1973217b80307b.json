@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n      INSERT INTO af_published_view_comment (view_id, created_by, content, reply_comment_id)\n      VALUES ($1, (SELECT uid FROM af_user WHERE uuid = $2), $3, $4)\n    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9ab1ff2abc6d51bc5a48a1dc6c294bbfdbe0d5f11a5e2ffc8c1973217b80307b"
+}

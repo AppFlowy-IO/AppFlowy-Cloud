@@ -20,19 +20,21 @@ use database::pg_row::{AFWorkspaceMemberRow, AFWorkspaceRow};
 use database::user::select_uid_from_email;
 use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
-  get_invitation_by_id, insert_or_replace_publish_collab_metas, insert_user_workspace,
-  insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
+  get_invitation_by_id, insert_comment_to_published_view, insert_or_replace_publish_collab_metas,
+  insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
+  select_comments_for_published_view, select_publish_collab_meta, select_published_collab_blob,
+  select_published_collab_info, select_user_is_allowed_to_delete_comment,
   select_user_is_collab_publisher_for_all_views, select_user_is_workspace_owner, select_workspace,
   select_workspace_invitations_for_user, select_workspace_member, select_workspace_member_list,
   select_workspace_publish_namespace, select_workspace_publish_namespace_exists,
-  select_workspace_settings, select_workspace_total_collab_bytes, update_updated_at_of_workspace,
-  update_workspace_invitation_set_status_accepted, update_workspace_publish_namespace,
-  upsert_workspace_member, upsert_workspace_member_with_txn, upsert_workspace_settings,
+  select_workspace_settings, select_workspace_total_collab_bytes, update_comment_deletion_status,
+  update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
+  update_workspace_publish_namespace, upsert_workspace_member, upsert_workspace_member_with_txn,
+  upsert_workspace_settings,
 };
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceSettings, WorkspaceUsage,
+  AFWorkspaceSettings, GlobalComment, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
@@ -171,6 +173,36 @@ pub async fn get_published_collab_info(
   view_id: &Uuid,
 ) -> Result<PublishInfo, AppError> {
   select_published_collab_info(pg_pool, view_id).await
+}
+
+pub async fn get_comments_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+) -> Result<Vec<GlobalComment>, AppError> {
+  let comments = select_comments_for_published_view(pg_pool, view_id).await?;
+  Ok(comments)
+}
+
+pub async fn create_comment_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  reply_comment_id: &Option<Uuid>,
+  content: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  insert_comment_to_published_view(pg_pool, view_id, user_uuid, content, reply_comment_id).await?;
+  Ok(())
+}
+
+pub async fn remove_comment_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  comment_id: &Uuid,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  check_if_user_is_allowed_to_delete_comment(pg_pool, user_uuid, view_id, comment_id).await?;
+  update_comment_deletion_status(pg_pool, comment_id).await?;
+  Ok(())
 }
 
 pub async fn delete_published_workspace_collab(
@@ -597,6 +629,22 @@ async fn check_workspace_owner_or_publisher(
         "User is not the owner of the workspace or the publisher of the document".to_string(),
       ));
     }
+  }
+  Ok(())
+}
+
+async fn check_if_user_is_allowed_to_delete_comment(
+  pg_pool: &PgPool,
+  user_uuid: &Uuid,
+  view_id: &Uuid,
+  comment_id: &Uuid,
+) -> Result<(), AppError> {
+  let is_allowed =
+    select_user_is_allowed_to_delete_comment(pg_pool, user_uuid, view_id, comment_id).await?;
+  if !is_allowed {
+    return Err(AppError::UserUnAuthorized(
+      "User is not allowed to delete this comment".to_string(),
+    ));
   }
   Ok(())
 }

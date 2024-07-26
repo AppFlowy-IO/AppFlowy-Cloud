@@ -1118,7 +1118,10 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
   Ok(res)
 }
 
-pub async fn select_comments_for_published_view<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn select_comments_for_published_view_orderd_by_recency<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
   executor: E,
   view_id: &Uuid,
 ) -> Result<Vec<GlobalComment>, AppError> {
@@ -1136,6 +1139,7 @@ pub async fn select_comments_for_published_view<'a, E: Executor<'a, Database = P
       FROM af_published_view_comment avc
       LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
       WHERE view_id = $1
+      ORDER BY avc.created_at DESC
     "#,
     view_id,
   )

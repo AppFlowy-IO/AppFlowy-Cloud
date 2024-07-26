@@ -844,6 +844,16 @@ impl Client {
   }
 
   #[instrument(level = "debug", skip_all, err)]
+  pub async fn http_client_without_auth(
+    &self,
+    method: Method,
+    url: &str,
+  ) -> Result<RequestBuilder, AppResponseError> {
+    trace!("start request: {}, method: {}", url, method,);
+    Ok(self.cloud_client.request(method, url))
+  }
+
+  #[instrument(level = "debug", skip_all, err)]
   pub async fn http_client_with_auth(
     &self,
     method: Method,

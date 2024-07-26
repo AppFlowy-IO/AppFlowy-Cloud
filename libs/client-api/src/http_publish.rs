@@ -153,6 +153,29 @@ impl Client {
   }
 }
 
+// Optional login
+impl Client {
+  pub async fn get_published_view_comments(
+    &self,
+    view_id: &uuid::Uuid,
+  ) -> Result<GlobalComments, AppResponseError> {
+    let url = format!(
+      "{}/api/workspace/published-info/{}/comment",
+      self.base_url, view_id
+    );
+    let client = if let Ok(client) = self.http_client_with_auth(Method::GET, &url).await {
+      client
+    } else {
+      self.http_client_without_auth(Method::GET, &url).await?
+    };
+
+    let resp = client.send().await?;
+    AppResponse::<GlobalComments>::from_response(resp)
+      .await?
+      .into_data()
+  }
+}
+
 // Guest API (no login required)
 impl Client {
   #[instrument(level = "debug", skip_all)]
@@ -234,20 +257,6 @@ impl Client {
     }
 
     Ok(bytes)
-  }
-
-  pub async fn get_published_view_comments(
-    &self,
-    view_id: &uuid::Uuid,
-  ) -> Result<GlobalComments, AppResponseError> {
-    let url = format!(
-      "{}/api/workspace/published-info/{}/comment",
-      self.base_url, view_id
-    );
-    let resp = self.cloud_client.get(&url).send().await?;
-    AppResponse::<GlobalComments>::from_response(resp)
-      .await?
-      .into_data()
   }
 
   pub async fn get_published_view_reactions(

@@ -22,7 +22,7 @@ use database::workspace::{
   change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
   get_invitation_by_id, insert_comment_to_published_view, insert_or_replace_publish_collab_metas,
   insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_comments_for_published_view, select_member_count_for_workspaces,
+  select_comments_for_published_view_orderd_by_recency, select_member_count_for_workspaces,
   select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
   select_user_is_allowed_to_delete_comment, select_user_is_collab_publisher_for_all_views,
   select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
@@ -180,7 +180,7 @@ pub async fn get_comments_on_published_view(
   pg_pool: &PgPool,
   view_id: &Uuid,
 ) -> Result<Vec<GlobalComment>, AppError> {
-  let comments = select_comments_for_published_view(pg_pool, view_id).await?;
+  let comments = select_comments_for_published_view_orderd_by_recency(pg_pool, view_id).await?;
   Ok(comments)
 }
 

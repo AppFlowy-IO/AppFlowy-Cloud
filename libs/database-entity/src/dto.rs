@@ -530,10 +530,8 @@ pub struct AFWorkspace {
   pub workspace_name: String,
   pub created_at: DateTime<Utc>,
   pub icon: String,
+  pub member_count: Option<i64>,
 }
-
-#[derive(Serialize, Deserialize)]
-pub struct AFWorkspaces(pub Vec<AFWorkspace>);
 
 #[derive(Serialize, Deserialize)]
 pub struct AFWorkspaceSettings {

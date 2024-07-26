@@ -267,26 +267,35 @@ async fn test_publish_comments() {
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
 
-  // Test if only all users, authenticated or not, can view all the comments
+  // Test if only all users, authenticated or not, can view all the comments,
+  // and whether the `can_be_deleted` field is correctly set
   let published_view_comments: Vec<GlobalComment> = page_owner_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
     .comments;
   assert_eq!(published_view_comments.len(), 2);
+  assert!(published_view_comments.iter().all(|c| c.can_be_deleted));
   let published_view_comments: Vec<GlobalComment> = first_user_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
     .comments;
   assert_eq!(published_view_comments.len(), 2);
+  assert_eq!(
+    published_view_comments
+      .iter()
+      .map(|c| c.can_be_deleted)
+      .collect_vec(),
+    vec![true, false]
+  );
   let published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
     .comments;
   assert_eq!(published_view_comments.len(), 2);
-  assert!(published_view_comments.iter().all(|c| !c.is_deleted));
+  assert!(published_view_comments.iter().all(|c| !c.can_be_deleted));
 
   // Test if the comments are correctly sorted
   let comment_creators = published_view_comments
@@ -401,6 +410,7 @@ async fn test_publish_comments() {
     .comments;
   assert_eq!(published_view_comments.len(), 3);
   assert!(published_view_comments.iter().all(|c| c.is_deleted));
+  assert!(published_view_comments.iter().all(|c| !c.can_be_deleted));
 }
 
 #[tokio::test]

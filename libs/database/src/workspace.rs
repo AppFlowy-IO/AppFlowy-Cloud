@@ -1119,12 +1119,34 @@ pub async fn select_published_collab_info<'a, E: Executor<'a, Database = Postgre
   Ok(res)
 }
 
-pub async fn select_comments_for_published_view_orderd_by_recency<
+pub async fn select_owner_of_published_collab<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  view_id: &Uuid,
+) -> Result<Uuid, AppError> {
+  let res = sqlx::query!(
+    r#"
+      SELECT
+      af.uuid
+      FROM af_published_collab apc
+      JOIN af_user af ON af.uid = apc.published_by
+      WHERE view_id = $1
+    "#,
+    view_id,
+  )
+  .fetch_one(executor)
+  .await?;
+
+  Ok(res.uuid)
+}
+
+pub async fn select_comments_for_published_view_ordered_by_recency<
   'a,
   E: Executor<'a, Database = Postgres>,
 >(
   executor: E,
   view_id: &Uuid,
+  user_uuid: &Option<Uuid>,
+  page_owner_uuid: &Uuid,
 ) -> Result<Vec<GlobalComment>, AppError> {
   let rows = sqlx::query!(
     r#"
@@ -1158,6 +1180,8 @@ pub async fn select_comments_for_published_view_orderd_by_recency<
           .unwrap_or("".to_string()),
         avatar_url: None,
       });
+      let is_page_owner = user_uuid.as_ref() == Some(page_owner_uuid);
+      let is_comment_creator = user_uuid.as_ref() == comment_creator.as_ref().map(|u| &u.uuid);
       GlobalComment {
         user: comment_creator,
         comment_id: row.comment_id,
@@ -1166,6 +1190,7 @@ pub async fn select_comments_for_published_view_orderd_by_recency<
         content: row.content.clone(),
         reply_comment_id: row.reply_comment_id,
         is_deleted: row.is_deleted,
+        can_be_deleted: !row.is_deleted && (is_page_owner || is_comment_creator),
       }
     })
     .collect();

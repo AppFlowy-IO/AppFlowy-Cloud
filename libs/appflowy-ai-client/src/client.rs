@@ -241,7 +241,7 @@ impl AppFlowyAIClient {
     &self,
     platform: &str,
   ) -> Result<RepeatedLocalAIPackage, AIError> {
-    let url = format!("{}/local_ai/version?platform={platform}", self.url);
+    let url = format!("{}/local_ai/plugin?platform={platform}", self.url);
     let resp = self.http_client(Method::GET, &url)?.send().await?;
     AIResponse::<RepeatedLocalAIPackage>::from_response(resp)
       .await?

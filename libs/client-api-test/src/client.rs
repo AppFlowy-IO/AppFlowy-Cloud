@@ -72,7 +72,6 @@ pub async fn workspace_id_from_client(c: &Client) -> String {
   c.get_workspaces()
     .await
     .unwrap()
-    .0
     .first()
     .unwrap()
     .workspace_id

@@ -8,7 +8,7 @@ use shared_entity::dto::workspace_dto::PatchWorkspaceParam;
 async fn add_and_delete_workspace_for_user() {
   let (c, _user) = generate_unique_registered_user_client().await;
   let workspaces = c.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.0.len(), 1);
+  assert_eq!(workspaces.len(), 1);
   let newly_added_workspace = c
     .create_workspace(CreateWorkspaceParam {
       workspace_name: Some("my_workspace".to_string()),
@@ -16,10 +16,9 @@ async fn add_and_delete_workspace_for_user() {
     .await
     .unwrap();
   let workspaces = c.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.0.len(), 2);
+  assert_eq!(workspaces.len(), 2);
 
   let _ = workspaces
-    .0
     .iter()
     .find(|w| {
       w.workspace_name == "my_workspace" && w.workspace_id == newly_added_workspace.workspace_id
@@ -39,7 +38,7 @@ async fn add_and_delete_workspace_for_user() {
 
   c.delete_workspace(&workspace_id).await.unwrap();
   let workspaces = c.get_workspaces().await.unwrap();
-  assert_eq!(workspaces.0.len(), 1);
+  assert_eq!(workspaces.len(), 1);
 }
 
 #[tokio::test]
@@ -49,7 +48,6 @@ async fn test_workspace_rename_and_icon_change() {
     .get_workspaces()
     .await
     .unwrap()
-    .0
     .first()
     .unwrap()
     .workspace_id;
@@ -66,7 +64,6 @@ async fn test_workspace_rename_and_icon_change() {
 
     let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
     let actual_new_name = &workspaces
-      .0
       .first()
       .expect("No workspace found")
       .workspace_name;
@@ -83,7 +80,6 @@ async fn test_workspace_rename_and_icon_change() {
     .expect("Failed to rename workspace");
     let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
     let actual_new_name = &workspaces
-      .0
       .first()
       .expect("No workspace found")
       .workspace_name;
@@ -98,7 +94,7 @@ async fn test_workspace_rename_and_icon_change() {
     .await
     .expect("Failed to change icon");
     let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
-    let icon = &workspaces.0.first().expect("No workspace found").icon;
+    let icon = &workspaces.first().expect("No workspace found").icon;
     assert_eq!(icon, "icon123");
   }
   {
@@ -110,7 +106,7 @@ async fn test_workspace_rename_and_icon_change() {
     .await
     .expect("Failed to change icon");
     let workspaces = c.get_workspaces().await.expect("Failed to get workspaces");
-    let workspace = workspaces.0.first().expect("No workspace found");
+    let workspace = workspaces.first().expect("No workspace found");
 
     let icon = workspace.icon.as_str();
     let name = workspace.workspace_name.as_str();

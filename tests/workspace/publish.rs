@@ -279,7 +279,7 @@ async fn test_publish_comments() {
     .unwrap()
     .comments;
   assert_eq!(published_view_comments.len(), 2);
-  let mut published_view_comments: Vec<GlobalComment> = guest_client
+  let published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
@@ -287,8 +287,7 @@ async fn test_publish_comments() {
   assert_eq!(published_view_comments.len(), 2);
   assert!(published_view_comments.iter().all(|c| !c.is_deleted));
 
-  // Test if the comments have the correct content when sorted by creation time
-  published_view_comments.sort_by_key(|c| c.created_at);
+  // Test if the comments are correctly sorted
   let comment_creators = published_view_comments
     .iter()
     .map(|c| {
@@ -300,7 +299,7 @@ async fn test_publish_comments() {
     .collect_vec();
   assert_eq!(
     comment_creators,
-    vec![page_owner.email.clone(), first_user.email.clone()]
+    vec![first_user.email.clone(), page_owner.email.clone()]
   );
   let comment_content = published_view_comments
     .iter()
@@ -308,7 +307,7 @@ async fn test_publish_comments() {
     .collect_vec();
   assert_eq!(
     comment_content,
-    vec![page_owner_comment_content, first_user_comment_content]
+    vec![first_user_comment_content, page_owner_comment_content]
   );
 
   // Test if it's possible to reply to another user's comment
@@ -319,16 +318,15 @@ async fn test_publish_comments() {
     .create_comment_on_published_view(
       &view_id,
       second_user_comment_content,
-      &Some(published_view_comments[1].comment_id),
+      &Some(published_view_comments[0].comment_id),
     )
     .await
     .unwrap();
-  let mut published_view_comments: Vec<GlobalComment> = guest_client
+  let published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
     .comments;
-  published_view_comments.sort_by_key(|c| c.created_at);
   let comment_creators = published_view_comments
     .iter()
     .map(|c| {
@@ -341,20 +339,20 @@ async fn test_publish_comments() {
   assert_eq!(
     comment_creators,
     vec![
-      page_owner.email.clone(),
+      second_user.email.clone(),
       first_user.email.clone(),
-      second_user.email.clone()
+      page_owner.email.clone()
     ]
   );
   assert_eq!(
-    published_view_comments[2].reply_comment_id,
+    published_view_comments[0].reply_comment_id,
     Some(published_view_comments[1].comment_id)
   );
 
   // Test if only the page owner or the comment creator can delete a comment
   // User 1 attempt to delete page owner's comment
   let result = first_user_client
-    .delete_comment_on_published_view(&view_id, &published_view_comments[0].comment_id)
+    .delete_comment_on_published_view(&view_id, &published_view_comments[2].comment_id)
     .await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::UserUnAuthorized);
@@ -365,17 +363,16 @@ async fn test_publish_comments() {
     .unwrap();
   // Guest client attempt to delete user 2's comment
   let result = guest_client
-    .delete_comment_on_published_view(&view_id, &published_view_comments[2].comment_id)
+    .delete_comment_on_published_view(&view_id, &published_view_comments[0].comment_id)
     .await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
   // Verify that the comments are not deleted from the database, only the is_deleted status changes.
-  let mut published_view_comments: Vec<GlobalComment> = guest_client
+  let published_view_comments: Vec<GlobalComment> = guest_client
     .get_published_view_comments(&view_id)
     .await
     .unwrap()
     .comments;
-  published_view_comments.sort_by_key(|c| c.created_at);
   assert_eq!(
     published_view_comments
       .iter()
@@ -385,7 +382,7 @@ async fn test_publish_comments() {
   );
   // Verify that the reference id is still preserved
   assert_eq!(
-    published_view_comments[2].reply_comment_id,
+    published_view_comments[0].reply_comment_id,
     Some(published_view_comments[1].comment_id)
   );
 

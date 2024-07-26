@@ -31,8 +31,6 @@ use shared_entity::dto::workspace_dto::{
 };
 use shared_entity::response::AppResponseError;
 use std::collections::HashMap;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout, Duration};
@@ -391,7 +389,6 @@ impl TestClient {
       .get_workspaces()
       .await
       .unwrap()
-      .0
       .first()
       .unwrap()
       .workspace_id
@@ -952,32 +949,4 @@ pub async fn get_collab_json_from_server(
   )
   .unwrap()
   .to_json_value()
-}
-
-pub struct TestTempFile(PathBuf);
-
-impl TestTempFile {
-  fn cleanup(dir: &PathBuf) {
-    let _ = std::fs::remove_dir_all(dir);
-  }
-}
-
-impl AsRef<Path> for TestTempFile {
-  fn as_ref(&self) -> &Path {
-    &self.0
-  }
-}
-
-impl Deref for TestTempFile {
-  type Target = PathBuf;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl Drop for TestTempFile {
-  fn drop(&mut self) {
-    Self::cleanup(&self.0)
-  }
 }

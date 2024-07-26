@@ -261,3 +261,8 @@ fn view_is_space(view: &collab_folder::View) -> bool {
     None => false,
   }
 }
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct QueryWorkspaceParam {
+  pub include_member_count: Option<bool>,
+}

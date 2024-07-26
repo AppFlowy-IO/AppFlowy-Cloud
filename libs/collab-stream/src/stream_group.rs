@@ -226,11 +226,11 @@ impl StreamGroup {
   /// forward and don't need to process historical messages.
   ///
   /// >: This symbol is used with the XREADGROUP command in the context of consumer groups. When a
-  /// consumer group reads from a stream using >, it tells Redis to deliver only messages that have
-  /// not yet been acknowledged by any consumer in the group. This allows different consumers in the
-  /// group to read and process different messages concurrently, without receiving messages that have
-  /// already been processed by another consumer. It's a way to distribute the workload of processing
-  /// stream messages across multiple consumers.
+  /// > consumer group reads from a stream using >, it tells Redis to deliver only messages that have
+  /// > not yet been acknowledged by any consumer in the group. This allows different consumers in the
+  /// > group to read and process different messages concurrently, without receiving messages that have
+  /// > already been processed by another consumer. It's a way to distribute the workload of processing
+  /// > stream messages across multiple consumers.
   pub async fn consumer_messages(
     &mut self,
     consumer_name: &str,

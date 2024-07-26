@@ -445,7 +445,6 @@ async fn get_first_workspace_string(c: &client_api::Client) -> String {
   c.get_workspaces()
     .await
     .unwrap()
-    .0
     .first()
     .unwrap()
     .workspace_id

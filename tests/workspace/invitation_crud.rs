@@ -68,7 +68,7 @@ async fn invite_workspace_crud() {
   assert_eq!(accepted_invs.len(), 1);
 
   // workspace now have 2 members
-  let member_count = bob_client
+  let member_count = alice_client
     .get_workspaces_opt(QueryWorkspaceParam {
       include_member_count: Some(true),
     })

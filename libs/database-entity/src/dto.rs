@@ -849,7 +849,7 @@ pub struct GlobalComments {
   pub comments: Vec<GlobalComment>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AFWebUser {
   pub uid: Uuid,
   pub name: String,
@@ -886,7 +886,7 @@ pub struct Reactions {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Reaction {
   pub reaction_type: String,
-  pub react_user_uids: Vec<Uuid>,
+  pub react_users: Vec<AFWebUser>,
   pub comment_id: Uuid,
 }
 

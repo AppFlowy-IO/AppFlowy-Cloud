@@ -1243,7 +1243,8 @@ pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = 
       SELECT
         avr.comment_id,
         avr.reaction_type,
-        au.uuid AS user_uuid
+        au.uuid AS user_uuid,
+        au.name AS user_name
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE view_id = $1
@@ -1252,16 +1253,20 @@ pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = 
   )
   .fetch_all(executor)
   .await?;
-  let reaction_to_users_map: HashMap<ReactionKey, Vec<Uuid>> = rows.iter().fold(
+  let reaction_to_users_map: HashMap<ReactionKey, Vec<AFWebUser>> = rows.iter().fold(
     HashMap::new(),
-    |mut acc: HashMap<ReactionKey, Vec<Uuid>>, row| {
+    |mut acc: HashMap<ReactionKey, Vec<AFWebUser>>, row| {
       let users = acc
         .entry(ReactionKey {
           comment_id: row.comment_id,
           reaction_type: row.reaction_type.clone(),
         })
         .or_default();
-      users.push(row.user_uuid);
+      users.push(AFWebUser {
+        uid: row.user_uuid.clone(),
+        name: row.user_name.clone(),
+        avatar_url: None,
+      });
       acc
     },
   );
@@ -1273,11 +1278,11 @@ pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = 
           comment_id,
           reaction_type,
         },
-        user_uuids,
+        users,
       )| Reaction {
         comment_id: *comment_id,
         reaction_type: reaction_type.clone(),
-        react_user_uids: user_uuids.clone(),
+        react_users: users.clone(),
       },
     )
     .collect();
@@ -1294,7 +1299,8 @@ pub async fn select_reactions_for_comment<'a, E: Executor<'a, Database = Postgre
       SELECT
         avr.comment_id,
         avr.reaction_type,
-        au.uuid AS user_uuid
+        au.uuid AS user_uuid,
+        au.name AS user_name
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE comment_id = $1
@@ -1303,19 +1309,23 @@ pub async fn select_reactions_for_comment<'a, E: Executor<'a, Database = Postgre
   )
   .fetch_all(executor)
   .await?;
-  let reaction_type_to_users_map: HashMap<String, Vec<Uuid>> = rows.iter().fold(
+  let reaction_type_to_users_map: HashMap<String, Vec<AFWebUser>> = rows.iter().fold(
     HashMap::new(),
-    |mut acc: HashMap<String, Vec<Uuid>>, row| {
+    |mut acc: HashMap<String, Vec<AFWebUser>>, row| {
       let users = acc.entry(row.reaction_type.clone()).or_default();
-      users.push(row.user_uuid);
+      users.push(AFWebUser {
+        uid: row.user_uuid,
+        name: row.user_name.clone(),
+        avatar_url: None,
+      });
       acc
     },
   );
   let reactions = reaction_type_to_users_map
     .iter()
-    .map(|(reaction_type, user_uuids)| Reaction {
+    .map(|(reaction_type, users)| Reaction {
       reaction_type: reaction_type.clone(),
-      react_user_uids: user_uuids.clone(),
+      react_users: users.clone(),
       comment_id: *comment_id,
     })
     .collect();

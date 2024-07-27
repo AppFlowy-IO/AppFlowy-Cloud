@@ -481,7 +481,7 @@ async fn test_publish_reactions() {
     .reactions;
   let reaction_count: HashMap<String, i32> = reactions
     .iter()
-    .map(|r| (r.reaction_type.clone(), r.react_user_uids.len() as i32))
+    .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
     .collect();
   assert_eq!(reaction_count.len(), 2);
   assert_eq!(*reaction_count.get(like_emoji).unwrap(), 2);
@@ -505,7 +505,7 @@ async fn test_publish_reactions() {
     .reactions;
   let reaction_count: HashMap<String, i32> = reactions
     .iter()
-    .map(|r| (r.reaction_type.clone(), r.react_user_uids.len() as i32))
+    .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
     .collect();
   assert_eq!(reaction_count.len(), 2);
   assert_eq!(*reaction_count.get(like_emoji).unwrap(), 1);
@@ -519,7 +519,7 @@ async fn test_publish_reactions() {
     .reactions;
   let reaction_count: HashMap<String, i32> = reactions
     .iter()
-    .map(|r| (r.reaction_type.clone(), r.react_user_uids.len() as i32))
+    .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
     .collect();
   assert_eq!(reaction_count.len(), 1);
   assert_eq!(*reaction_count.get(like_emoji).unwrap(), 1);

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n      SELECT\n        avc.comment_id,\n        avc.created_at,\n        avc.updated_at,\n        avc.content,\n        avc.reply_comment_id,\n        avc.is_deleted,\n        au.uuid AS \"user_uuid?\",\n        au.name AS \"user_name?\"\n      FROM af_published_view_comment avc\n      LEFT OUTER JOIN af_user au ON avc.created_by = au.uid\n      WHERE view_id = $1\n    ",
+  "query": "\n      SELECT\n        avc.comment_id,\n        avc.created_at,\n        avc.updated_at,\n        avc.content,\n        avc.reply_comment_id,\n        avc.is_deleted,\n        au.uuid AS \"user_uuid?\",\n        au.name AS \"user_name?\"\n      FROM af_published_view_comment avc\n      LEFT OUTER JOIN af_user au ON avc.created_by = au.uid\n      WHERE view_id = $1\n      ORDER BY avc.created_at DESC\n    ",
   "describe": {
     "columns": [
       {
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "c2e4e6e5db677977c00654223532cadaec9513b76f79965d591cf5bf5cc68707"
+  "hash": "ba86638be27dfdf52e157e07e3e22ccb5547a7815b8313b241b8b535a83e6ff1"
 }

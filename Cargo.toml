@@ -83,6 +83,7 @@ collab-document = { workspace = true }
 collab-entity = { workspace = true }
 collab-folder = { workspace = true }
 collab-rt-protocol.workspace = true
+collab-database = { workspace = true }
 
 #Local crate
 snowflake = { path = "libs/snowflake" }
@@ -221,6 +222,7 @@ collab = { version = "0.2.0" }
 collab-entity = { version = "0.2.0" }
 collab-folder = { version = "0.2.0" }
 collab-document = { version = "0.2.0" }
+collab-database = { version = "0.2.0" }
 
 [profile.release]
 lto = true
@@ -238,6 +240,7 @@ collab = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "11386e
 collab-entity = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "11386e6499eeef4cf10a6a15e317a97d69c25017" }
 collab-folder = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "11386e6499eeef4cf10a6a15e317a97d69c25017" }
 collab-document = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "11386e6499eeef4cf10a6a15e317a97d69c25017" }
+collab-database = { git = "https://github.com/AppFlowy-IO/AppFlowy-Collab", rev = "11386e6499eeef4cf10a6a15e317a97d69c25017" }
 
 [features]
 history = []

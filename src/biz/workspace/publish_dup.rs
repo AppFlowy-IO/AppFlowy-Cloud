@@ -1,6 +1,9 @@
 use app_error::AppError;
 use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::collab::DataSource;
+use collab::preclude::Collab;
+use collab_database::database::Database;
+use collab_database::views::ViewMap;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{
@@ -90,7 +93,7 @@ impl PublishCollabDuplicator {
     }
   }
 
-  pub async fn deep_copy(
+  async fn deep_copy(
     mut self,
     publish_view_id: &str,
     collab_type: CollabType,
@@ -206,7 +209,7 @@ impl PublishCollabDuplicator {
   /// If None is returned, it means the view is not published.
   /// If Some is returned, a new view is created but without parent_view_id set.
   /// Caller should set the parent_view_id to the parent view.
-  pub async fn deep_copy_txn(
+  async fn deep_copy_txn(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
@@ -214,7 +217,7 @@ impl PublishCollabDuplicator {
     collab_type: CollabType,
   ) -> Result<Option<View>, AppError> {
     // attempt to get metadata and doc_state for published view
-    let (metadata, doc_state) =
+    let (metadata, published_blob) =
       match select_published_data_for_view_id(txn, &publish_view_id.parse()?).await? {
         Some(published_data) => published_data,
         None => {
@@ -236,7 +239,7 @@ impl PublishCollabDuplicator {
       CollabType::Document => {
         let doc = Document::from_doc_state(
           CollabOrigin::Empty,
-          DataSource::DocStateV1(doc_state.to_vec()),
+          DataSource::DocStateV1(published_blob.to_vec()),
           "",
           vec![],
         )
@@ -248,8 +251,11 @@ impl PublishCollabDuplicator {
         Ok(Some(new_doc_view))
       },
       CollabType::Database => {
-        // TODO
-        Ok(None)
+        let db_json_obj = serde_json::from_slice::<serde_json::Value>(&published_blob).unwrap();
+        let new_db_view = self
+          .deep_copy_database_txn(txn, new_view_id, db_json_obj, metadata)
+          .await?;
+        Ok(Some(new_db_view))
       },
       CollabType::DatabaseRow => {
         // TODO
@@ -262,44 +268,14 @@ impl PublishCollabDuplicator {
     }
   }
 
-  pub async fn deep_copy_doc_txn<'a>(
+  async fn deep_copy_doc_txn<'a>(
     &mut self,
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
     doc: Document,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
-    let (name, icon, extra) = match metadata.get("view") {
-      Some(view) => {
-        let name = view
-          .get("name")
-          .and_then(|name| name.as_str())
-          .unwrap_or("Untitled Duplicated");
-        let icon = view
-          .get("icon")
-          .and_then(|icon| serde_json::from_value::<ViewIcon>(icon.clone()).ok());
-        let extra = view.get("extra").and_then(|name| name.as_str());
-        (name, icon, extra)
-      },
-      None => ("Untitled Duplicated", None, None),
-    };
-
-    // create a new view
-    let mut ret_view = View {
-      id: new_view_id,
-      parent_view_id: "".to_string(), // to be filled by caller
-      name: name.to_string(),
-      desc: "".to_string(), // unable to get from metadata
-      children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
-      created_at: self.ts_now,
-      is_favorite: false,
-      layout: ViewLayout::Document,
-      icon,
-      created_by: Some(self.duplicator_uid),
-      last_edited_time: self.ts_now,
-      last_edited_by: Some(self.duplicator_uid),
-      extra: extra.map(String::from),
-    };
+    let mut ret_view = self.new_view(new_view_id.clone(), &metadata);
 
     let mut doc_data = doc
       .get_document_data()
@@ -425,6 +401,167 @@ impl PublishCollabDuplicator {
           object_id: ret_view.id.clone(),
           encoded_collab_v1: new_doc_data,
           collab_type: CollabType::Document,
+          embeddings: None,
+        },
+        true,
+      )
+      .await?;
+
+    Ok(ret_view)
+  }
+
+  fn new_view(&self, new_view_id: String, metadata: &serde_json::Value) -> View {
+    let (name, icon, extra) = match metadata.get("view") {
+      Some(view) => {
+        let name = view
+          .get("name")
+          .and_then(|name| name.as_str())
+          .unwrap_or("Untitled Duplicated");
+        let icon = view
+          .get("icon")
+          .and_then(|icon| serde_json::from_value::<ViewIcon>(icon.clone()).ok());
+        let extra = view.get("extra").and_then(|name| name.as_str());
+        (name, icon, extra)
+      },
+      None => ("Untitled Duplicated", None, None),
+    };
+
+    View {
+      id: new_view_id,
+      parent_view_id: "".to_string(), // to be filled by caller
+      name: name.to_string(),
+      desc: "".to_string(), // unable to get from metadata
+      children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
+      created_at: self.ts_now,
+      is_favorite: false,
+      layout: ViewLayout::Document,
+      icon,
+      created_by: Some(self.duplicator_uid),
+      last_edited_time: self.ts_now,
+      last_edited_by: Some(self.duplicator_uid),
+      extra: extra.map(String::from),
+    }
+  }
+
+  async fn deep_copy_database_txn<'a>(
+    &mut self,
+    _txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    new_db_view_id: String,
+    published_db: serde_json::Value,
+    metadata: serde_json::Value,
+  ) -> Result<View, AppError> {
+    // create a new view to be returned to the caller
+    let ret_view = self.new_view(new_db_view_id.clone(), &metadata);
+
+    let db_collab = {
+      let db_bin_data = published_db
+        .get("database_collab")
+        .ok_or_else(|| AppError::RecordNotFound("database_collab not found".to_string()))?
+        .as_array()
+        .ok_or_else(|| AppError::RecordNotFound("database_collab not an array".to_string()))?
+        .iter()
+        .map(|v| v.as_number().unwrap().as_u64().unwrap())
+        .map(|v| v as u8)
+        .collect::<Vec<_>>();
+      Collab::new_with_source(
+        CollabOrigin::Server,
+        &new_db_view_id,
+        DataSource::DocStateV1(db_bin_data),
+        vec![],
+        false,
+      )
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+    };
+
+    let published_rows = published_db
+      .get("database_row_collabs")
+      .ok_or_else(|| AppError::RecordNotFound("database_row_collabs not found".to_string()))?;
+
+    let mut txn = db_collab.origin_transact_mut();
+
+    // Set the database id
+    if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "fields"]) {
+      container.insert_with_txn(&mut txn, "id", new_db_view_id.clone());
+    }
+
+    // Set the row_id references
+    if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "views"]) {
+      let view_change_tx = tokio::sync::broadcast::channel(1).0;
+      let views = ViewMap::new(container, view_change_tx);
+      let reset_views = views.get_all_views_with_txn(txn.txn());
+      for db_view in &reset_views {
+        for row_order in &db_view.row_orders {
+          let row = published_rows.get(row_order.id.as_str()).unwrap();
+          let bin_data = row
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_number().unwrap().as_u64().unwrap())
+            .map(|v| v as u8)
+            .collect::<Vec<_>>();
+
+          let db_row_collab = Collab::new_with_source(
+            CollabOrigin::Server,
+            row_order.id.as_str(),
+            DataSource::DocStateV1(bin_data),
+            vec![],
+            false,
+          )
+          .unwrap();
+
+          db_row_collab.with_origin_transact_mut(|txn| {
+            if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
+              // TODO(Zack): deep copy row data
+              // container.insert_with_txn(txn, "id", "new_id".to_string());
+              container.insert_with_txn(txn, "database_id", new_db_view_id.clone());
+            }
+          });
+
+          match db_row_collab.encode_collab_v1(Database::validate) {
+            Ok(ec) => match ec.encode_to_bytes() {
+              Ok(db_row_ec_bytes) => {
+                self
+                  .collab_storage
+                  .insert_or_update_collab(
+                    &self.dest_workspace_id,
+                    &self.duplicator_uid,
+                    CollabParams {
+                      object_id: ret_view.id.clone(),
+                      encoded_collab_v1: db_row_ec_bytes,
+                      collab_type: CollabType::DatabaseRow,
+                      embeddings: None,
+                    },
+                    true,
+                  )
+                  .await?;
+              },
+              Err(e) => tracing::error!("failed to encode db_row_collab: {}", e),
+            },
+            Err(e) => tracing::error!("failed to encode db_row_collab: {}", e),
+          }
+        }
+      }
+
+      for view in reset_views {
+        views.insert_view_with_txn(&mut txn, view);
+      }
+    }
+
+    let db_encoded_collab = db_collab
+      .encode_collab_v1(Database::validate)
+      .map_err(|e| AppError::Unhandled(e.to_string()))?
+      .encode_to_bytes()?;
+
+    // insert database with modified row_id references
+    self
+      .collab_storage
+      .insert_or_update_collab(
+        &self.dest_workspace_id,
+        &self.duplicator_uid,
+        CollabParams {
+          object_id: ret_view.id.clone(),
+          encoded_collab_v1: db_encoded_collab,
+          collab_type: CollabType::Database,
           embeddings: None,
         },
         true,

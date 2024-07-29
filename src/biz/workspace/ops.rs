@@ -198,8 +198,14 @@ pub async fn get_reactions_on_published_view(
   comment_id: &Option<Uuid>,
 ) -> Result<Vec<Reaction>, AppError> {
   let reaction = match comment_id {
-    Some(comment_id) => select_reactions_for_comment(pg_pool, comment_id).await?,
-    None => select_reactions_for_published_view(pg_pool, view_id).await?,
+    Some(comment_id) => {
+      select_reactions_for_comment_ordered_by_reaction_type_creation_time(pg_pool, comment_id)
+        .await?
+    },
+    None => {
+      select_reactions_for_published_view_ordered_by_reaction_type_creation_time(pg_pool, view_id)
+        .await?
+    },
   };
   Ok(reaction)
 }

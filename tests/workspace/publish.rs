@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -400,6 +401,128 @@ async fn test_publish_comments() {
     .comments;
   assert_eq!(published_view_comments.len(), 3);
   assert!(published_view_comments.iter().all(|c| c.is_deleted));
+}
+
+#[tokio::test]
+async fn test_publish_reactions() {
+  let (page_owner_client, _) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&page_owner_client).await;
+  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  page_owner_client
+    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .await
+    .unwrap();
+
+  let publish_name = "published-view";
+  let view_id = uuid::Uuid::new_v4();
+  page_owner_client
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id,
+          publish_name: publish_name.to_string(),
+          metadata: MyCustomMetadata {
+            title: "some_title".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_1".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+  page_owner_client
+    .create_comment_on_published_view(&view_id, "likable comment", &None)
+    .await
+    .unwrap();
+  // This is to ensure that the second comment creation timestamp is later than the first one
+  sleep(Duration::from_millis(1));
+  page_owner_client
+    .create_comment_on_published_view(&view_id, "party comment", &None)
+    .await
+    .unwrap();
+  let mut comments = page_owner_client
+    .get_published_view_comments(&view_id)
+    .await
+    .unwrap()
+    .comments;
+  comments.sort_by_key(|c| c.created_at);
+  // Test if the reactions are created correctly based on view and comment id
+  let likable_comment_id = comments[0].comment_id;
+  let party_comment_id = comments[1].comment_id;
+
+  let like_emoji = "👍";
+  let party_emoji = "🎉";
+  page_owner_client
+    .create_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .await
+    .unwrap();
+  let guest_client = localhost_client();
+  let result = guest_client
+    .create_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
+
+  let (user_client, _) = generate_unique_registered_user_client().await;
+  user_client
+    .create_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .await
+    .unwrap();
+  user_client
+    .create_reaction_on_comment(party_emoji, &party_comment_id, &view_id)
+    .await
+    .unwrap();
+
+  let reactions = guest_client
+    .get_published_view_reactions(&view_id, &None)
+    .await
+    .unwrap()
+    .reactions;
+  let reaction_count: HashMap<String, i32> = reactions
+    .iter()
+    .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
+    .collect();
+  assert_eq!(reaction_count.len(), 2);
+  assert_eq!(*reaction_count.get(like_emoji).unwrap(), 2);
+  assert_eq!(*reaction_count.get(party_emoji).unwrap(), 1);
+
+  // Test if the reactions are deleted correctly based on view and comment id
+  let result = guest_client
+    .delete_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .await;
+  assert!(result.is_err());
+  assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
+  user_client
+    .delete_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .await
+    .unwrap();
+
+  let reactions = guest_client
+    .get_published_view_reactions(&view_id, &None)
+    .await
+    .unwrap()
+    .reactions;
+  let reaction_count: HashMap<String, i32> = reactions
+    .iter()
+    .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
+    .collect();
+  assert_eq!(reaction_count.len(), 2);
+  assert_eq!(*reaction_count.get(like_emoji).unwrap(), 1);
+  assert_eq!(*reaction_count.get(party_emoji).unwrap(), 1);
+
+  // Test if we can filter the reactions by comment id
+  let reactions = guest_client
+    .get_published_view_reactions(&view_id, &Some(likable_comment_id))
+    .await
+    .unwrap()
+    .reactions;
+  let reaction_count: HashMap<String, i32> = reactions
+    .iter()
+    .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
+    .collect();
+  assert_eq!(reaction_count.len(), 1);
+  assert_eq!(*reaction_count.get(like_emoji).unwrap(), 1);
 }
 
 #[tokio::test]

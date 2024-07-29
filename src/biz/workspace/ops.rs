@@ -18,24 +18,10 @@ use database::file::s3_client_impl::S3BucketStorage;
 use database::pg_row::AFWorkspaceMemberRow;
 
 use database::user::select_uid_from_email;
-use database::workspace::{
-  change_workspace_icon, delete_from_workspace, delete_published_collabs, delete_workspace_members,
-  get_invitation_by_id, insert_comment_to_published_view, insert_or_replace_publish_collab_metas,
-  insert_user_workspace, insert_workspace_invitation, rename_workspace, select_all_user_workspaces,
-  select_comments_for_published_view_orderd_by_recency, select_member_count_for_workspaces,
-  select_publish_collab_meta, select_published_collab_blob, select_published_collab_info,
-  select_user_is_allowed_to_delete_comment, select_user_is_collab_publisher_for_all_views,
-  select_user_is_workspace_owner, select_workspace, select_workspace_invitations_for_user,
-  select_workspace_member, select_workspace_member_list, select_workspace_publish_namespace,
-  select_workspace_publish_namespace_exists, select_workspace_settings,
-  select_workspace_total_collab_bytes, update_comment_deletion_status,
-  update_updated_at_of_workspace, update_workspace_invitation_set_status_accepted,
-  update_workspace_publish_namespace, upsert_workspace_member, upsert_workspace_member_with_txn,
-  upsert_workspace_settings,
-};
+use database::workspace::*;
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFWorkspace, AFWorkspaceInvitation, AFWorkspaceInvitationStatus,
-  AFWorkspaceSettings, GlobalComment, WorkspaceUsage,
+  AFWorkspaceSettings, GlobalComment, Reaction, WorkspaceUsage,
 };
 use gotrue::params::{GenerateLinkParams, GenerateLinkType};
 use shared_entity::dto::workspace_dto::{
@@ -203,6 +189,39 @@ pub async fn remove_comment_on_published_view(
 ) -> Result<(), AppError> {
   check_if_user_is_allowed_to_delete_comment(pg_pool, user_uuid, view_id, comment_id).await?;
   update_comment_deletion_status(pg_pool, comment_id).await?;
+  Ok(())
+}
+
+pub async fn get_reactions_on_published_view(
+  pg_pool: &PgPool,
+  view_id: &Uuid,
+  comment_id: &Option<Uuid>,
+) -> Result<Vec<Reaction>, AppError> {
+  let reaction = match comment_id {
+    Some(comment_id) => select_reactions_for_comment(pg_pool, comment_id).await?,
+    None => select_reactions_for_published_view(pg_pool, view_id).await?,
+  };
+  Ok(reaction)
+}
+
+pub async fn create_reaction_on_comment(
+  pg_pool: &PgPool,
+  comment_id: &Uuid,
+  view_id: &Uuid,
+  reaction_type: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  insert_reaction_on_comment(pg_pool, comment_id, view_id, user_uuid, reaction_type).await?;
+  Ok(())
+}
+
+pub async fn remove_reaction_on_comment(
+  pg_pool: &PgPool,
+  comment_id: &Uuid,
+  reaction_type: &str,
+  user_uuid: &Uuid,
+) -> Result<(), AppError> {
+  delete_reaction_from_comment(pg_pool, comment_id, user_uuid, reaction_type).await?;
   Ok(())
 }
 

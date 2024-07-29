@@ -849,7 +849,7 @@ pub struct GlobalComments {
   pub comments: Vec<GlobalComment>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AFWebUser {
   pub uid: Uuid,
   pub name: String,
@@ -875,6 +875,35 @@ pub struct CreateGlobalCommentParams {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DeleteGlobalCommentParams {
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Reactions {
+  pub reactions: Vec<Reaction>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Reaction {
+  pub reaction_type: String,
+  pub react_users: Vec<AFWebUser>,
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetReactionQueryParams {
+  pub comment_id: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateReactionParams {
+  pub reaction_type: String,
+  pub comment_id: Uuid,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DeleteReactionParams {
+  pub reaction_type: String,
   pub comment_id: Uuid,
 }
 

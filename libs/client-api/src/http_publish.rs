@@ -111,8 +111,8 @@ impl Client {
   pub async fn create_reaction_on_comment(
     &self,
     reaction_type: &str,
-    comment_id: &uuid::Uuid,
     view_id: &uuid::Uuid,
+    comment_id: &uuid::Uuid,
   ) -> Result<(), AppResponseError> {
     let url = format!(
       "{}/api/workspace/published-info/{}/reaction",

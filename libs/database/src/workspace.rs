@@ -1365,24 +1365,24 @@ pub async fn insert_reaction_on_comment<'a, E: Executor<'a, Database = Postgres>
 
 pub async fn delete_reaction_from_comment<'a, E: Executor<'a, Database = Postgres>>(
   executor: E,
-  view_id: &Uuid,
+  comment_id: &Uuid,
   user_uuid: &Uuid,
   reaction_type: &str,
 ) -> Result<(), AppError> {
   let res = sqlx::query!(
     r#"
       DELETE FROM af_published_view_reaction
-      WHERE view_id = $1 AND created_by = (SELECT uid FROM af_user WHERE uuid = $2) AND reaction_type = $3
+      WHERE comment_id = $1 AND created_by = (SELECT uid FROM af_user WHERE uuid = $2) AND reaction_type = $3
     "#,
-    view_id,
+    comment_id,
     user_uuid,
     reaction_type,
   ).execute(executor).await?;
 
   if res.rows_affected() != 1 {
     tracing::error!(
-      "Failed to delete reaction from published view, view_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
-      view_id, user_uuid, reaction_type, res.rows_affected()
+      "Failed to delete reaction from published comment, comment_id: {}, user_id: {}, reaction_type: {}, rows_affected: {}",
+      comment_id, user_uuid, reaction_type, res.rows_affected()
     );
   };
 

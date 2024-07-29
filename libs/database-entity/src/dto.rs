@@ -865,6 +865,7 @@ pub struct GlobalComment {
   pub reply_comment_id: Option<Uuid>,
   pub comment_id: Uuid,
   pub is_deleted: bool,
+  pub can_be_deleted: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

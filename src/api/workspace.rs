@@ -25,7 +25,7 @@ use access_control::collab::CollabAccessControl;
 use app_error::AppError;
 use appflowy_collaborate::actix_ws::entities::ClientStreamMessage;
 use appflowy_collaborate::indexer::IndexerProvider;
-use authentication::jwt::UserUuid;
+use authentication::jwt::{OptionalUserUuid, UserUuid};
 use collab_rt_entity::realtime_proto::HttpRealtimeMessage;
 use collab_rt_entity::RealtimeMessage;
 use collab_rt_protocol::validate_encode_collab;
@@ -1097,10 +1097,12 @@ async fn get_published_collab_info_handler(
 
 async fn get_published_collab_comment_handler(
   view_id: web::Path<Uuid>,
+  optional_user_uuid: OptionalUserUuid,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<GlobalComments>> {
   let view_id = view_id.into_inner();
-  let comments = get_comments_on_published_view(&state.pg_pool, &view_id).await?;
+  let comments =
+    get_comments_on_published_view(&state.pg_pool, &view_id, &optional_user_uuid).await?;
   let resp = GlobalComments { comments };
   Ok(Json(AppResponse::Ok().with_data(resp)))
 }

@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use client_api_entity::{
   CreateGlobalCommentParams, CreateReactionParams, DeleteGlobalCommentParams, DeleteReactionParams,
-  GlobalComments, PublishInfo, Reactions, UpdatePublishNamespace,
+  GetReactionQueryParams, GlobalComments, PublishInfo, Reactions, UpdatePublishNamespace,
 };
 use reqwest::Method;
 use shared_entity::response::{AppResponse, AppResponseError};
@@ -259,12 +259,14 @@ impl Client {
       "{}/api/workspace/published-info/{}/reaction",
       self.base_url, view_id
     );
-    let url = if let Some(comment_id) = comment_id {
-      format!("{}?comment_id={}", url, comment_id)
-    } else {
-      url
-    };
-    let resp = self.cloud_client.get(&url).send().await?;
+    let resp = self
+      .cloud_client
+      .get(url)
+      .query(&GetReactionQueryParams {
+        comment_id: *comment_id,
+      })
+      .send()
+      .await?;
     AppResponse::<Reactions>::from_response(resp)
       .await?
       .into_data()

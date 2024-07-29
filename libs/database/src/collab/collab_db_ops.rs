@@ -623,3 +623,22 @@ pub async fn is_collab_exists<'a, E: Executor<'a, Database = Postgres>>(
   .await;
   transform_record_not_found_error(result)
 }
+
+pub async fn select_workspace_database_oid<'a, E: Executor<'a, Database = Postgres>>(
+  executor: E,
+  workspace_id: &str,
+) -> Result<String, sqlx::Error> {
+  let partition_key = partition_key_from_collab_type(&CollabType::WorkspaceDatabase);
+  sqlx::query_scalar!(
+    r#"
+      SELECT oid
+      FROM af_collab
+      WHERE oid = $1
+        AND partition_key = $2
+    "#,
+    &workspace_id,
+    &partition_key,
+  )
+  .fetch_one(executor)
+  .await
+}

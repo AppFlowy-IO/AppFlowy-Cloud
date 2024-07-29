@@ -168,8 +168,15 @@ pub async fn get_latest_collab_folder(
   uid: &i64,
   workspace_id: &str,
 ) -> Result<Folder, AppError> {
-  let encoded_collab =
-    get_latest_collab_folder_encoded(group_manager, collab_storage, uid, workspace_id).await?;
+  let encoded_collab = get_latest_collab_encoded(
+    group_manager,
+    collab_storage,
+    uid,
+    workspace_id,
+    workspace_id,
+    CollabType::Folder,
+  )
+  .await?;
   let folder = Folder::from_collab_doc_state(
     uid,
     CollabOrigin::Server,
@@ -181,13 +188,15 @@ pub async fn get_latest_collab_folder(
   Ok(folder)
 }
 
-pub async fn get_latest_collab_folder_encoded(
+pub async fn get_latest_collab_encoded(
   group_manager: AppStateGroupManager,
   collab_storage: Arc<CollabAccessControlStorage>,
   uid: &i64,
   workspace_id: &str,
+  oid: &str,
+  collab_type: CollabType,
 ) -> Result<EncodedCollab, AppError> {
-  match group_manager.get_group(workspace_id).await {
+  match group_manager.get_group(oid).await {
     Some(group) => group
       .encode_collab()
       .await
@@ -199,8 +208,8 @@ pub async fn get_latest_collab_folder_encoded(
           QueryCollabParams {
             workspace_id: workspace_id.to_string(),
             inner: QueryCollab {
-              object_id: workspace_id.to_string(),
-              collab_type: CollabType::Folder,
+              object_id: oid.to_string(),
+              collab_type,
             },
           },
           false,

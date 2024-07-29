@@ -465,12 +465,13 @@ async fn test_publish_reactions() {
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
 
   let (user_client, _) = generate_unique_registered_user_client().await;
+  sleep(Duration::from_millis(1));
   user_client
-    .create_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
+    .create_reaction_on_comment(party_emoji, &view_id, &party_comment_id)
     .await
     .unwrap();
   user_client
-    .create_reaction_on_comment(party_emoji, &view_id, &party_comment_id)
+    .create_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
     .await
     .unwrap();
 
@@ -479,6 +480,8 @@ async fn test_publish_reactions() {
     .await
     .unwrap()
     .reactions;
+  assert_eq!(reactions[0].reaction_type, like_emoji);
+  assert_eq!(reactions[1].reaction_type, party_emoji);
   let reaction_count: HashMap<String, i32> = reactions
     .iter()
     .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))

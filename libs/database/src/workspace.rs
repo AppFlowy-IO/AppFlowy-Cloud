@@ -3,6 +3,7 @@ use database_entity::dto::{
   GlobalComment, PublishCollabItem, PublishInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
+use serde::Serialize;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
 use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
@@ -1228,13 +1229,16 @@ pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postg
   Ok(())
 }
 
-#[derive(PartialEq, Eq, Hash)]
-struct ReactionKey {
-  comment_id: Uuid,
-  reaction_type: String,
+#[derive(sqlx::Type, Serialize, Debug)]
+struct AFWebUserRow {
+  uuid: Uuid,
+  name: String,
 }
 
-pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creation_time<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
   executor: E,
   view_id: &Uuid,
 ) -> Result<Vec<Reaction>, AppError> {
@@ -1243,89 +1247,76 @@ pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = 
       SELECT
         avr.comment_id,
         avr.reaction_type,
-        au.uuid AS user_uuid,
-        au.name AS user_name
+        MIN(avr.created_at) AS reaction_type_creation_at,
+        ARRAY_AGG((au.uuid, au.name)) AS "users!: Vec<AFWebUserRow>"
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE view_id = $1
+      GROUP BY comment_id, reaction_type
+      ORDER BY reaction_type_creation_at
     "#,
     view_id,
   )
   .fetch_all(executor)
   .await?;
-  let reaction_to_users_map: HashMap<ReactionKey, Vec<AFWebUser>> = rows.iter().fold(
-    HashMap::new(),
-    |mut acc: HashMap<ReactionKey, Vec<AFWebUser>>, row| {
-      let users = acc
-        .entry(ReactionKey {
-          comment_id: row.comment_id,
-          reaction_type: row.reaction_type.clone(),
-        })
-        .or_default();
-      users.push(AFWebUser {
-        uid: row.user_uuid,
-        name: row.user_name.clone(),
-        avatar_url: None,
-      });
-      acc
-    },
-  );
-  let reactions = reaction_to_users_map
+
+  let reactions = rows
     .iter()
-    .map(
-      |(
-        ReactionKey {
-          comment_id,
-          reaction_type,
-        },
-        users,
-      )| Reaction {
-        comment_id: *comment_id,
-        reaction_type: reaction_type.clone(),
-        react_users: users.clone(),
-      },
-    )
+    .map(|r| Reaction {
+      reaction_type: r.reaction_type.clone(),
+      react_users: r
+        .users
+        .iter()
+        .map(|u| AFWebUser {
+          uid: u.uuid,
+          name: u.name.clone(),
+          avatar_url: None,
+        })
+        .collect(),
+      comment_id: r.comment_id,
+    })
     .collect();
 
   Ok(reactions)
 }
 
-pub async fn select_reactions_for_comment<'a, E: Executor<'a, Database = Postgres>>(
+pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time<
+  'a,
+  E: Executor<'a, Database = Postgres>,
+>(
   executor: E,
   comment_id: &Uuid,
 ) -> Result<Vec<Reaction>, AppError> {
   let rows = sqlx::query!(
     r#"
       SELECT
-        avr.comment_id,
         avr.reaction_type,
-        au.uuid AS user_uuid,
-        au.name AS user_name
+        MIN(avr.created_at) AS reaction_type_creation_at,
+        ARRAY_AGG((au.uuid, au.name)) AS "users!: Vec<AFWebUserRow>"
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE comment_id = $1
+      GROUP BY reaction_type
+      ORDER BY reaction_type_creation_at
     "#,
     comment_id,
   )
   .fetch_all(executor)
   .await?;
-  let reaction_type_to_users_map: HashMap<String, Vec<AFWebUser>> = rows.iter().fold(
-    HashMap::new(),
-    |mut acc: HashMap<String, Vec<AFWebUser>>, row| {
-      let users = acc.entry(row.reaction_type.clone()).or_default();
-      users.push(AFWebUser {
-        uid: row.user_uuid,
-        name: row.user_name.clone(),
-        avatar_url: None,
-      });
-      acc
-    },
-  );
-  let reactions = reaction_type_to_users_map
+
+  let reactions = rows
     .iter()
-    .map(|(reaction_type, users)| Reaction {
-      reaction_type: reaction_type.clone(),
-      react_users: users.clone(),
+    .map(|r| Reaction {
+      reaction_type: r.reaction_type.clone(),
+      react_users: r
+        .users
+        .iter()
+        .map(|u| AFWebUser {
+          uid: u.uuid,
+          name: u.name.clone(),
+          avatar_url: None,
+        })
+        .collect(),
       comment_id: *comment_id,
     })
     .collect();

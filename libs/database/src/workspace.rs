@@ -1150,7 +1150,7 @@ pub async fn select_comments_for_published_view_orderd_by_recency<
     .iter()
     .map(|row| {
       let comment_creator = row.user_uuid.map(|uuid| AFWebUser {
-        uid: uuid,
+        uuid,
         name: row
           .user_name
           .as_ref()
@@ -1268,7 +1268,7 @@ pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creati
         .users
         .iter()
         .map(|u| AFWebUser {
-          uid: u.uuid,
+          uuid: u.uuid,
           name: u.name.clone(),
           avatar_url: None,
         })
@@ -1312,7 +1312,7 @@ pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time
         .users
         .iter()
         .map(|u| AFWebUser {
-          uid: u.uuid,
+          uuid: u.uuid,
           name: u.name.clone(),
           avatar_url: None,
         })

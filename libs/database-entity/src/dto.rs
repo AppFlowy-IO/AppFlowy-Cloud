@@ -851,7 +851,7 @@ pub struct GlobalComments {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AFWebUser {
-  pub uid: Uuid,
+  pub uuid: Uuid,
   pub name: String,
   pub avatar_url: Option<String>,
 }

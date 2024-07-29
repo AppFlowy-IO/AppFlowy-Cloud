@@ -232,11 +232,12 @@ impl FromStr for AIModel {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RepeatedLocalAIPackage(pub Vec<AppFlowyAIPlugin>);
+pub struct RepeatedLocalAIPackage(pub Vec<AppFlowyOfflineAI>);
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct AppFlowyAIPlugin {
-  pub name: String,
+pub struct AppFlowyOfflineAI {
+  pub app_name: String,
+  pub ai_plugin_name: String,
   pub version: String,
   pub url: String,
   pub etag: String,
@@ -263,5 +264,5 @@ pub struct ModelInfo {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LocalAIConfig {
   pub models: Vec<LLMModel>,
-  pub plugin: AppFlowyAIPlugin,
+  pub plugin: AppFlowyOfflineAI,
 }

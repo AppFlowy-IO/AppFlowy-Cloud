@@ -57,6 +57,8 @@ pub struct PublishCollabDuplicator {
   group_manager: AppStateGroupManager,
   /// A list of new views to be added to the folder
   views_to_add: Vec<View>,
+  /// A list of database linked views to be added to workspace database
+  workspace_databases: HashMap<String, Vec<String>>,
   /// time of duplication
   ts_now: i64,
   /// for fetching published data
@@ -84,6 +86,7 @@ impl PublishCollabDuplicator {
       ts_now,
       duplicated_refs: HashMap::new(),
       views_to_add: Vec::new(),
+      workspace_databases: HashMap::new(),
 
       pg_pool,
       collab_storage,
@@ -169,48 +172,52 @@ impl PublishCollabDuplicator {
       .await;
 
     // update database if any
-    let ws_w_db_collab = {
-      let ws_database_oid =
-        select_workspace_database_oid(&self.pg_pool, &self.dest_workspace_id).await?;
-      let ws_database_ec = get_latest_collab_encoded(
-        self.group_manager.clone(),
-        self.collab_storage.clone(),
-        &self.duplicator_uid,
-        &self.dest_workspace_id,
-        &ws_database_oid,
-        CollabType::WorkspaceDatabase,
-      )
-      .await?;
-      Collab::new_with_source(
-        CollabOrigin::Server,
-        &ws_database_oid,
-        DataSource::DocStateV1(ws_database_ec.doc_state.to_vec()),
-        vec![],
-        false,
-      )
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-    };
+    if !self.workspace_databases.is_empty() {
+      let ws_db_oid = select_workspace_database_oid(&self.pg_pool, &self.dest_workspace_id).await?;
+      let ws_db_collab = {
+        let ws_database_ec = get_latest_collab_encoded(
+          self.group_manager.clone(),
+          self.collab_storage.clone(),
+          &self.duplicator_uid,
+          &self.dest_workspace_id,
+          &ws_db_oid,
+          CollabType::WorkspaceDatabase,
+        )
+        .await?;
+        Collab::new_with_source(
+          CollabOrigin::Server,
+          &ws_db_oid,
+          DataSource::DocStateV1(ws_database_ec.doc_state.to_vec()),
+          vec![],
+          false,
+        )
+        .map_err(|e| AppError::Unhandled(e.to_string()))?
+      };
 
-    let db_meta_list = DatabaseMetaList::from_collab(&ws_w_db_collab);
-    let updates = {
-      let mut txn_wrapper = ws_w_db_collab.origin_transact_mut();
-      db_meta_list.add_database_with_txn(&mut txn_wrapper, "new_db_id", vec!["refs_1".to_string()]);
-      txn_wrapper.encode_update_v1()
-    };
-    self
-      .broadcast_update(&self.dest_workspace_id, updates)
-      .await;
-
-    let updated_ws_w_db_collab = ws_w_db_collab
-      .encode_collab_v1(WorkspaceDatabase::validate)
-      .map_err(|e| AppError::Unhandled(e.to_string()))?;
-    self
-      .insert_collab_for_duplicator(
-        &ws_w_db_collab.object_id,
-        updated_ws_w_db_collab.encode_to_bytes()?,
-        CollabType::WorkspaceDatabase,
-      )
-      .await?;
+      let ws_db_meta_list = DatabaseMetaList::from_collab(&ws_db_collab);
+      let ws_db_updates = {
+        let mut txn_wrapper = ws_db_collab.origin_transact_mut();
+        for (db_collab_id, linked_views) in &self.workspace_databases {
+          ws_db_meta_list.add_database_with_txn(
+            &mut txn_wrapper,
+            db_collab_id,
+            linked_views.clone(),
+          );
+        }
+        txn_wrapper.encode_update_v1()
+      };
+      self.broadcast_update(&ws_db_oid, ws_db_updates).await;
+      let updated_ws_w_db_collab = ws_db_collab
+        .encode_collab_v1(WorkspaceDatabase::validate)
+        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+      self
+        .insert_collab_for_duplicator(
+          &ws_db_collab.object_id,
+          updated_ws_w_db_collab.encode_to_bytes()?,
+          CollabType::WorkspaceDatabase,
+        )
+        .await?;
+    }
 
     txn.commit().await?;
     Ok(())
@@ -446,12 +453,12 @@ impl PublishCollabDuplicator {
   async fn deep_copy_database_txn<'a>(
     &mut self,
     _txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    new_db_view_id: String,
+    new_view_id: String,
     published_db: serde_json::Value,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
     // create a new view to be returned to the caller
-    let ret_view = self.new_view(new_db_view_id.clone(), &metadata);
+    let ret_view = self.new_view(new_view_id.clone(), &metadata);
 
     let db_collab = {
       let db_bin_data = published_db
@@ -465,7 +472,7 @@ impl PublishCollabDuplicator {
         .collect::<Vec<_>>();
       Collab::new_with_source(
         CollabOrigin::Server,
-        &new_db_view_id,
+        &new_view_id,
         DataSource::DocStateV1(db_bin_data),
         vec![],
         false,
@@ -479,10 +486,16 @@ impl PublishCollabDuplicator {
 
     let mut txn = db_collab.origin_transact_mut();
 
-    // Set the database id
+    // create new identity for database
+    let new_db_uuid = uuid::Uuid::new_v4().to_string();
     if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "fields"]) {
-      container.insert_with_txn(&mut txn, "id", new_db_view_id.clone());
+      container.insert_with_txn(&mut txn, "id", new_db_uuid.clone());
     }
+
+    // Add this database as linked view
+    self
+      .workspace_databases
+      .insert(new_db_uuid.clone(), vec![new_view_id]);
 
     // Set the row_id references
     if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "views"]) {
@@ -514,7 +527,7 @@ impl PublishCollabDuplicator {
             if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
               // TODO(Zack): deep copy row data ?
               container.insert_with_txn(txn, "id", new_row_uuid.clone());
-              container.insert_with_txn(txn, "database_id", new_db_view_id.clone());
+              container.insert_with_txn(txn, "database_id", new_db_uuid.clone());
             }
           });
 

@@ -454,23 +454,24 @@ async fn test_publish_reactions() {
   let like_emoji = "👍";
   let party_emoji = "🎉";
   page_owner_client
-    .create_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .create_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
     .await
     .unwrap();
   let guest_client = localhost_client();
   let result = guest_client
-    .create_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .create_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
     .await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
 
   let (user_client, _) = generate_unique_registered_user_client().await;
+  sleep(Duration::from_millis(1));
   user_client
-    .create_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .create_reaction_on_comment(party_emoji, &view_id, &party_comment_id)
     .await
     .unwrap();
   user_client
-    .create_reaction_on_comment(party_emoji, &party_comment_id, &view_id)
+    .create_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
     .await
     .unwrap();
 
@@ -479,6 +480,8 @@ async fn test_publish_reactions() {
     .await
     .unwrap()
     .reactions;
+  assert_eq!(reactions[0].reaction_type, like_emoji);
+  assert_eq!(reactions[1].reaction_type, party_emoji);
   let reaction_count: HashMap<String, i32> = reactions
     .iter()
     .map(|r| (r.reaction_type.clone(), r.react_users.len() as i32))
@@ -489,12 +492,12 @@ async fn test_publish_reactions() {
 
   // Test if the reactions are deleted correctly based on view and comment id
   let result = guest_client
-    .delete_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .delete_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
     .await;
   assert!(result.is_err());
   assert_eq!(result.unwrap_err().code, ErrorCode::NotLoggedIn);
   user_client
-    .delete_reaction_on_comment(like_emoji, &likable_comment_id, &view_id)
+    .delete_reaction_on_comment(like_emoji, &view_id, &likable_comment_id)
     .await
     .unwrap();
 

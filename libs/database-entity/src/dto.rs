@@ -891,6 +891,11 @@ pub struct Reaction {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct GetReactionQueryParams {
+  pub comment_id: Option<Uuid>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CreateReactionParams {
   pub reaction_type: String,
   pub comment_id: Uuid,

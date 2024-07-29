@@ -13,7 +13,6 @@ use collab::entity::EncodedCollab;
 use collab_entity::CollabType;
 use futures_util::future::try_join_all;
 use prost::Message as ProstMessage;
-use serde::Deserialize;
 use sqlx::types::uuid;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
@@ -1135,14 +1134,9 @@ async fn delete_published_collab_comment_handler(
   Ok(Json(AppResponse::Ok()))
 }
 
-#[derive(Deserialize)]
-struct GetReactionQuery {
-  comment_id: Option<Uuid>,
-}
-
 async fn get_published_collab_reaction_handler(
   view_id: web::Path<Uuid>,
-  query: web::Query<GetReactionQuery>,
+  query: web::Query<GetReactionQueryParams>,
   state: Data<AppState>,
 ) -> Result<JsonAppResponse<Reactions>> {
   let view_id = view_id.into_inner();

@@ -1263,7 +1263,7 @@ pub async fn select_reactions_for_published_view<'a, E: Executor<'a, Database = 
         })
         .or_default();
       users.push(AFWebUser {
-        uid: row.user_uuid.clone(),
+        uid: row.user_uuid,
         name: row.user_name.clone(),
         avatar_url: None,
       });

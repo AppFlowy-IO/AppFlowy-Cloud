@@ -1,3 +1,4 @@
+use authentication::jwt::OptionalUserUuid;
 use database_entity::dto::{AFWorkspaceSettingsChange, PublishCollabItem};
 use std::collections::HashMap;
 
@@ -165,8 +166,16 @@ pub async fn get_published_collab_info(
 pub async fn get_comments_on_published_view(
   pg_pool: &PgPool,
   view_id: &Uuid,
+  optional_user_uuid: &OptionalUserUuid,
 ) -> Result<Vec<GlobalComment>, AppError> {
-  let comments = select_comments_for_published_view_orderd_by_recency(pg_pool, view_id).await?;
+  let page_owner_uuid = select_owner_of_published_collab(pg_pool, view_id).await?;
+  let comments = select_comments_for_published_view_ordered_by_recency(
+    pg_pool,
+    view_id,
+    &optional_user_uuid.as_uuid(),
+    &page_owner_uuid,
+  )
+  .await?;
   Ok(comments)
 }
 

@@ -39,20 +39,26 @@ pub async fn update_user(
   if let Some(n) = name {
     args_num += 1;
     set_clauses.push(format!("name = ${}", args_num));
-    args.add(n);
+    args
+      .add(n)
+      .map_err(|err| AppError::SqlxError(err.to_string()))?;
   }
 
   if let Some(e) = email {
     args_num += 1;
     set_clauses.push(format!("email = ${}", args_num));
-    args.add(e);
+    args
+      .add(e)
+      .map_err(|err| AppError::SqlxError(err.to_string()))?;
   }
 
   if let Some(m) = metadata {
     args_num += 1;
     // Merge existing metadata with new metadata
     set_clauses.push(format!("metadata = metadata || ${}", args_num));
-    args.add(m);
+    args
+      .add(m)
+      .map_err(|err| AppError::SqlxError(err.to_string()))?;
   }
 
   if set_clauses.is_empty() {
@@ -67,7 +73,9 @@ pub async fn update_user(
     set_clauses.join(", "),
     args_num
   );
-  args.add(user_uuid);
+  args
+    .add(user_uuid)
+    .map_err(|err| AppError::SqlxError(err.to_string()))?;
 
   sqlx::query_with(&query, args).execute(pool).await?;
   Ok(())

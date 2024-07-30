@@ -68,19 +68,25 @@ pub async fn update_chat(
 
   if let Some(ref name) = params.name {
     query_parts.push(format!("name = ${}", current_param_pos));
-    args.add(name);
+    args
+      .add(name)
+      .map_err(|err| AppError::SqlxError(err.to_string()))?;
     current_param_pos += 1;
   }
 
   if let Some(ref rag_ids) = params.rag_ids {
     query_parts.push(format!("rag_ids = ${}", current_param_pos));
     let rag_ids_json = json!(rag_ids);
-    args.add(rag_ids_json);
+    args
+      .add(rag_ids_json)
+      .map_err(|err| AppError::SqlxError(err.to_string()))?;
     current_param_pos += 1;
   }
 
   query_parts.push(format!("WHERE chat_id = ${}", current_param_pos));
-  args.add(chat_id);
+  args
+    .add(chat_id)
+    .map_err(|err| AppError::SqlxError(err.to_string()))?;
 
   let query = query_parts.join(", ") + ";";
   let query = sqlx::query_with(&query, args);
@@ -313,7 +319,9 @@ pub async fn select_chat_messages(
   .to_string();
 
   let mut args = PgArguments::default();
-  args.add(&chat_id);
+  args
+    .add(&chat_id)
+    .map_err(|err| AppError::SqlxError(err.to_string()))?;
 
   // Message IDs:   1    2    3    4    5
   // AfterMessageId(3, 5):   [4]  [5]  has_more = false
@@ -322,24 +330,38 @@ pub async fn select_chat_messages(
   match params.cursor {
     MessageCursor::AfterMessageId(after_message_id) => {
       query += " AND message_id > $2";
-      args.add(after_message_id);
+      args
+        .add(after_message_id)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
       query += " ORDER BY message_id DESC LIMIT $3";
-      args.add(params.limit as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
     },
     MessageCursor::Offset(offset) => {
       query += " ORDER BY message_id ASC LIMIT $2 OFFSET $3";
-      args.add(params.limit as i64);
-      args.add(offset as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
+      args
+        .add(offset as i64)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
     },
     MessageCursor::BeforeMessageId(before_message_id) => {
       query += " AND message_id < $2";
-      args.add(before_message_id);
+      args
+        .add(before_message_id)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
       query += " ORDER BY message_id DESC LIMIT $3";
-      args.add(params.limit as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
     },
     MessageCursor::NextBack => {
       query += " ORDER BY message_id DESC LIMIT $2";
-      args.add(params.limit as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxError(err.to_string()))?;
     },
   }
 

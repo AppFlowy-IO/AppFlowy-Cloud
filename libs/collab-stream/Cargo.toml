@@ -19,6 +19,7 @@ collab-entity.workspace = true
 serde_json.workspace = true
 chrono = "0.4"
 tokio-util = { version = "0.7" }
+prost.workspace = true
 
 
 [dev-dependencies]

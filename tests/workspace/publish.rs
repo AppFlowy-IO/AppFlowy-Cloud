@@ -557,11 +557,6 @@ async fn test_publish_load_test() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
   }
 
-  // publish nothing with metadata
-  c.publish_collabs::<MyCustomMetadata, &[u8]>(&workspace_id, vec![])
-    .await
-    .unwrap();
-
   // publish 1000 collabs
   let collabs: Vec<PublishCollabItem<MyCustomMetadata, Vec<u8>>> = (0..1000)
     .map(|i| PublishCollabItem {

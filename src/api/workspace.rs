@@ -1258,7 +1258,9 @@ async fn post_publish_collabs_handler(
   }
 
   if accumulator.is_empty() {
-    return Ok(Json(AppResponse::Ok()));
+    return Err(
+      AppError::InvalidRequest(String::from("did not receive any data to publish")).into(),
+    );
   }
   biz::workspace::publish::publish_collabs(&state.pg_pool, &workspace_id, &user_uuid, &accumulator)
     .await?;

@@ -82,6 +82,7 @@ async fn test_publish_doc() {
   let view_id_1 = uuid::Uuid::new_v4();
   let publish_name_2 = "publish-name-2";
   let view_id_2 = uuid::Uuid::new_v4();
+
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
     vec![
@@ -547,15 +548,14 @@ async fn test_publish_load_test() {
     .await
     .unwrap();
 
-  // publish nothing
-  c.publish_collabs::<(), &[u8]>(&workspace_id, vec![])
-    .await
-    .unwrap();
-
-  // publish nothing with metadata
-  c.publish_collabs::<MyCustomMetadata, &[u8]>(&workspace_id, vec![])
-    .await
-    .unwrap();
+  {
+    // cannot publish nothing
+    let err = c
+      .publish_collabs::<(), &[u8]>(&workspace_id, vec![])
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+  }
 
   // publish 1000 collabs
   let collabs: Vec<PublishCollabItem<MyCustomMetadata, Vec<u8>>> = (0..1000)

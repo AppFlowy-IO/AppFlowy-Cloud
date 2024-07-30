@@ -1158,7 +1158,8 @@ pub async fn select_comments_for_published_view_ordered_by_recency<
         avc.reply_comment_id,
         avc.is_deleted,
         au.uuid AS "user_uuid?",
-        au.name AS "user_name?"
+        au.name AS "user_name?",
+        au.metadata ->> 'icon_url' AS "avatar_url?"
       FROM af_published_view_comment avc
       LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
       WHERE view_id = $1
@@ -1178,7 +1179,7 @@ pub async fn select_comments_for_published_view_ordered_by_recency<
           .as_ref()
           .map(|s| s.to_string())
           .unwrap_or("".to_string()),
-        avatar_url: None,
+        avatar_url: row.avatar_url.clone(),
       });
       let is_page_owner = user_uuid.as_ref() == Some(page_owner_uuid);
       let is_comment_creator = user_uuid.as_ref() == comment_creator.as_ref().map(|u| &u.uuid);
@@ -1258,6 +1259,7 @@ pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postg
 struct AFWebUserRow {
   uuid: Uuid,
   name: String,
+  avatar_url: Option<String>,
 }
 
 pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creation_time<
@@ -1273,7 +1275,7 @@ pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creati
         avr.comment_id,
         avr.reaction_type,
         MIN(avr.created_at) AS reaction_type_creation_at,
-        ARRAY_AGG((au.uuid, au.name)) AS "users!: Vec<AFWebUserRow>"
+        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "users!: Vec<AFWebUserRow>"
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE view_id = $1
@@ -1295,7 +1297,7 @@ pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creati
         .map(|u| AFWebUser {
           uuid: u.uuid,
           name: u.name.clone(),
-          avatar_url: None,
+          avatar_url: u.avatar_url.clone(),
         })
         .collect(),
       comment_id: r.comment_id,
@@ -1317,7 +1319,7 @@ pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time
       SELECT
         avr.reaction_type,
         MIN(avr.created_at) AS reaction_type_creation_at,
-        ARRAY_AGG((au.uuid, au.name)) AS "users!: Vec<AFWebUserRow>"
+        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "users!: Vec<AFWebUserRow>"
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE comment_id = $1
@@ -1339,7 +1341,7 @@ pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time
         .map(|u| AFWebUser {
           uuid: u.uuid,
           name: u.name.clone(),
-          avatar_url: None,
+          avatar_url: u.avatar_url.clone(),
         })
         .collect(),
       comment_id: *comment_id,

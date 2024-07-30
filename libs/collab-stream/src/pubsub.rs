@@ -1,6 +1,8 @@
 use crate::error::StreamError;
+use collab_entity::proto;
 use futures::stream::BoxStream;
 use futures::StreamExt;
+use prost::Message;
 #[allow(deprecated)]
 use redis::aio::{Connection, ConnectionManager};
 use redis::{AsyncCommands, RedisWrite, ToRedisArgs};
@@ -53,16 +55,36 @@ impl CollabStreamPub {
   }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PubSubMessage {
   pub workspace_id: String,
   pub oid: String,
 }
 
 impl PubSubMessage {
+  #[allow(dead_code)]
+  fn to_proto(&self) -> proto::collab::ActiveCollabId {
+    proto::collab::ActiveCollabId {
+      workspace_id: self.workspace_id.clone(),
+      oid: self.oid.clone(),
+    }
+  }
+
+  fn from_proto(proto: &proto::collab::ActiveCollabId) -> Self {
+    Self {
+      workspace_id: proto.workspace_id.clone(),
+      oid: proto.oid.clone(),
+    }
+  }
+
   pub fn from_vec(vec: &[u8]) -> Result<Self, StreamError> {
-    let message = bincode::deserialize(vec)?;
-    Ok(message)
+    match Message::decode(vec) {
+      Ok(proto) => Ok(Self::from_proto(&proto)),
+      Err(_) => match bincode::deserialize(vec) {
+        Ok(event) => Ok(event),
+        Err(e) => Err(StreamError::BinCodeSerde(e)),
+      },
+    }
   }
 }
 
@@ -73,5 +95,24 @@ impl ToRedisArgs for PubSubMessage {
   {
     let json = bincode::serialize(self).unwrap();
     json.write_redis_args(out);
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use prost::Message;
+
+  #[test]
+  fn test_pubsub_message_decoding() {
+    let message = super::PubSubMessage {
+      workspace_id: "1".to_string(),
+      oid: "o1".to_string(),
+    };
+    let bincode_encoded = bincode::serialize(&message).unwrap();
+    let protobuf_encoded = message.to_proto().encode_to_vec();
+    let decoded_from_bincode = super::PubSubMessage::from_vec(&bincode_encoded).unwrap();
+    let decoded_from_protobuf = super::PubSubMessage::from_vec(&protobuf_encoded).unwrap();
+    assert_eq!(message, decoded_from_bincode);
+    assert_eq!(message, decoded_from_protobuf);
   }
 }

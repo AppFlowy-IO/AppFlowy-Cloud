@@ -82,6 +82,16 @@ async fn test_publish_doc() {
   let view_id_1 = uuid::Uuid::new_v4();
   let publish_name_2 = "publish-name-2";
   let view_id_2 = uuid::Uuid::new_v4();
+
+  {
+    // cannot publish nothing
+    let err = c
+      .publish_collabs::<MyCustomMetadata, &[u8]>(&workspace_id, vec![])
+      .await
+      .unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+  }
+
   c.publish_collabs::<MyCustomMetadata, &[u8]>(
     &workspace_id,
     vec![

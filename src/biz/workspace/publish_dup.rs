@@ -562,14 +562,18 @@ impl PublishCollabDuplicator {
         container.insert_with_txn(&mut txn, "id", new_db_id.clone());
       }
 
+      if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database"]) {
+        container.insert_with_txn(&mut txn, "id", new_db_id.clone());
+      }
+
       // accumulate list of database views (Board, Cal, ...) to be linked to the database
       let mut new_db_view_ids: Vec<String> = vec![];
 
       // Set the row_id references
       if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "views"]) {
         let view_change_tx = tokio::sync::broadcast::channel(1).0;
-        let views = ViewMap::new(container, view_change_tx);
-        let mut db_views = views.get_all_views_with_txn(txn.txn());
+        let view_map = ViewMap::new(container, view_change_tx);
+        let mut db_views = view_map.get_all_views_with_txn(txn.txn());
         if db_views.is_empty() {
           return Err(AppError::RecordNotFound(
             "no views found in database".to_string(),
@@ -610,8 +614,9 @@ impl PublishCollabDuplicator {
         }
 
         // insert updated views back to db
+        view_map.clear_with_txn(&mut txn);
         for view in db_views {
-          views.insert_view_with_txn(&mut txn, view);
+          view_map.insert_view_with_txn(&mut txn, view);
         }
       }
 
@@ -627,12 +632,7 @@ impl PublishCollabDuplicator {
       .map_err(|e| AppError::Unhandled(e.to_string()))?
       .encode_to_bytes()?;
     self
-      .insert_collab_for_duplicator(
-        &new_db_id,
-        db_encoded_collab,
-        CollabType::Database,
-        pg_txn,
-      )
+      .insert_collab_for_duplicator(&new_db_id, db_encoded_collab, CollabType::Database, pg_txn)
       .await?;
 
     Ok(ret_view)

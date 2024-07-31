@@ -468,7 +468,9 @@ impl PublishCollabDuplicator {
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
     // create a new view to be returned to the caller
+    // new_view_id needs to be the first view of database
     let ret_view = self.new_view(new_view_id.clone(), &metadata, ViewLayout::Grid);
+
     // create new identity for database
     let new_db_id = uuid::Uuid::new_v4().to_string();
 
@@ -486,7 +488,7 @@ impl PublishCollabDuplicator {
         .collect::<Vec<_>>();
       Collab::new_with_source(
         CollabOrigin::Server,
-        &new_view_id,
+        &new_db_id,
         DataSource::DocStateV1(db_bin_data),
         vec![],
         false,
@@ -576,17 +578,9 @@ impl PublishCollabDuplicator {
 
         // first db view is the main view
         let db_main_view = &mut db_views[0];
-        let db_main_view_id = uuid::Uuid::new_v4().to_string();
-        db_main_view.id = db_main_view_id.clone();
+        db_main_view.id = new_view_id.clone();
         db_main_view.database_id = new_db_id.clone();
-        let mut db_main_folder_view = self.new_view(
-          db_main_view_id.clone(),
-          &metadata,
-          db_layout_to_view_layout(db_main_view.layout),
-        );
-        db_main_folder_view.parent_view_id = new_view_id;
-        self.views_to_add.push(db_main_folder_view);
-        new_db_view_ids.push(db_main_view_id.clone());
+        new_db_view_ids.push(new_view_id.clone());
 
         // rest of the views are child of main db view
         for other_view in db_views[1..].iter_mut() {
@@ -599,7 +593,7 @@ impl PublishCollabDuplicator {
             &metadata,
             db_layout_to_view_layout(other_view.layout),
           );
-          other_folder_view.parent_view_id = db_main_view_id.clone();
+          other_folder_view.parent_view_id = new_view_id.clone();
           self.views_to_add.push(other_folder_view);
         }
 
@@ -634,7 +628,7 @@ impl PublishCollabDuplicator {
       .encode_to_bytes()?;
     self
       .insert_collab_for_duplicator(
-        &ret_view.id,
+        &new_db_id,
         db_encoded_collab,
         CollabType::Database,
         pg_txn,

@@ -522,7 +522,7 @@ impl PublishCollabDuplicator {
           .collect::<Vec<_>>();
         let db_row_collab = Collab::new_with_source(
           CollabOrigin::Server,
-          &new_db_id,
+          &new_row_id,
           DataSource::DocStateV1(row_bin_data),
           vec![],
           false,

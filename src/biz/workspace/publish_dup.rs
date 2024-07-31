@@ -584,7 +584,7 @@ impl PublishCollabDuplicator {
           &metadata,
           db_layout_to_view_layout(db_main_view.layout),
         );
-        db_main_folder_view.parent_view_id = self.dest_view_id.clone();
+        db_main_folder_view.parent_view_id = new_view_id;
         self.views_to_add.push(db_main_folder_view);
         new_db_view_ids.push(db_main_view_id.clone());
 

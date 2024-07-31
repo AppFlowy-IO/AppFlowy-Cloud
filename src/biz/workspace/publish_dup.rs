@@ -174,7 +174,8 @@ impl PublishCollabDuplicator {
 
     // update database if any
     if !self.workspace_databases.is_empty() {
-      let ws_db_oid = select_workspace_database_oid(&self.pg_pool, &self.dest_workspace_id).await?;
+      let ws_db_oid =
+        select_workspace_database_oid(&self.pg_pool, &self.dest_workspace_id.parse()?).await?;
       let ws_db_collab = {
         let ws_database_ec = get_latest_collab_encoded(
           self.group_manager.clone(),
@@ -582,6 +583,12 @@ impl PublishCollabDuplicator {
     encoded_collab: Vec<u8>,
     collab_type: CollabType,
   ) -> Result<(), AppError> {
+    tracing::info!(
+      "inserting collab for duplicator: {} {} {}",
+      oid,
+      collab_type,
+      encoded_collab.len()
+    );
     self
       .collab_storage
       .insert_or_update_collab(
@@ -601,6 +608,7 @@ impl PublishCollabDuplicator {
 
   /// broadcast updates to collab group if exists
   async fn broadcast_update(&self, oid: &str, encoded_update: Vec<u8>) {
+    tracing::info!("broadcasting update to group: {}", oid);
     match self.group_manager.get_group(oid).await {
       Some(group) => {
         let (collab_message_sender, _collab_message_receiver) = futures::channel::mpsc::channel(1);

@@ -164,6 +164,7 @@ impl PublishCollabDuplicator {
         &self.dest_workspace_id.clone(),
         updated_encoded_collab.encode_to_bytes()?,
         CollabType::Folder,
+        &mut txn,
       )
       .await?;
 
@@ -217,6 +218,7 @@ impl PublishCollabDuplicator {
           &ws_db_collab.object_id,
           updated_ws_w_db_collab.encode_to_bytes()?,
           CollabType::WorkspaceDatabase,
+          &mut txn,
         )
         .await?;
     }
@@ -414,7 +416,7 @@ impl PublishCollabDuplicator {
 
     // insert document with modified page_id references
     self
-      .insert_collab_for_duplicator(&ret_view.id, new_doc_data, CollabType::Document)
+      .insert_collab_for_duplicator(&ret_view.id, new_doc_data, CollabType::Document, txn)
       .await?;
 
     Ok(ret_view)
@@ -460,14 +462,17 @@ impl PublishCollabDuplicator {
 
   async fn deep_copy_database_txn<'a>(
     &mut self,
-    _txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    pg_txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
     published_db: serde_json::Value,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
     // create a new view to be returned to the caller
     let ret_view = self.new_view(new_view_id.clone(), &metadata, ViewLayout::Grid);
+    // create new identity for database
+    let new_db_id = uuid::Uuid::new_v4().to_string();
 
+    // collab of database
     let db_collab = {
       let db_bin_data = published_db
         .get("database_collab")
@@ -489,76 +494,124 @@ impl PublishCollabDuplicator {
       .map_err(|e| AppError::Unhandled(e.to_string()))?
     };
 
-    let published_rows = published_db
-      .get("database_row_collabs")
-      .ok_or_else(|| AppError::RecordNotFound("database_row_collabs not found".to_string()))?;
+    // collabs of rows
+    // key: old_row_id -> Collab (with new_id and database_id)
+    let publish_row_by_id = {
+      let mut published_row_by_id: HashMap<&str, Collab> = HashMap::new();
+      let published_rows = published_db
+        .get("database_row_collabs")
+        .ok_or_else(|| AppError::RecordNotFound("database_row_collabs not found".to_string()))?
+        .as_object()
+        .ok_or_else(|| {
+          AppError::RecordNotFound("database_row_collabs not an object".to_string())
+        })?;
+
+      for (old_id, v) in published_rows {
+        // assign a new id for the row
+        let new_row_id = uuid::Uuid::new_v4().to_string();
+
+        let row_bin_data = v
+          .as_array()
+          .ok_or_else(|| AppError::RecordNotFound("row_collab not an array".to_string()))?
+          .iter()
+          .flat_map(|v| v.as_number())
+          .flat_map(|v| v.as_u64())
+          .map(|v| v as u8)
+          .collect::<Vec<_>>();
+        let db_row_collab = Collab::new_with_source(
+          CollabOrigin::Server,
+          &new_db_id,
+          DataSource::DocStateV1(row_bin_data),
+          vec![],
+          false,
+        )
+        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+
+        db_row_collab.with_origin_transact_mut(|txn| {
+          if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
+            // TODO(Zack): deep copy row data ?
+            container.insert_with_txn(txn, "id", new_row_id.clone());
+            container.insert_with_txn(txn, "database_id", new_db_id.clone());
+          }
+        });
+
+        let db_row_ec_bytes = db_row_collab
+          .encode_collab_v1(DatabaseRow::validate)
+          .map_err(|e| AppError::Unhandled(e.to_string()))?
+          .encode_to_bytes()?;
+        self
+          .insert_collab_for_duplicator(
+            &new_row_id,
+            db_row_ec_bytes,
+            CollabType::DatabaseRow,
+            pg_txn,
+          )
+          .await?;
+        published_row_by_id.insert(old_id, db_row_collab);
+      }
+      published_row_by_id
+    };
 
     {
       // create a txn that will be drop at the end of the block
       let mut txn = db_collab.origin_transact_mut();
 
-      // create new identity for database
-      let new_db_id = uuid::Uuid::new_v4().to_string();
       if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "fields"]) {
         container.insert_with_txn(&mut txn, "id", new_db_id.clone());
       }
 
-      // Add this database as linked view
-      self
-        .workspace_databases
-        .insert(new_db_id.clone(), vec![new_view_id]);
+      // accumulate list of database views (Board, Cal, ...) to be linked to the database
+      let mut new_db_view_ids: Vec<String> = vec![];
 
       // Set the row_id references
       if let Some(container) = db_collab.get_map_with_txn(txn.txn(), vec!["database", "views"]) {
         let view_change_tx = tokio::sync::broadcast::channel(1).0;
         let views = ViewMap::new(container, view_change_tx);
         let mut db_views = views.get_all_views_with_txn(txn.txn());
+        if db_views.len() == 0 {
+          return Err(AppError::RecordNotFound(
+            "no views found in database".to_string(),
+          ));
+        }
+
+        // first db view is the main view
+        let db_main_view = &mut db_views[0];
+        let db_main_view_id = uuid::Uuid::new_v4().to_string();
+        db_main_view.id = db_main_view_id.clone();
+        db_main_view.database_id = new_db_id.clone();
+        let mut db_main_folder_view = self.new_view(
+          db_main_view_id.clone(),
+          &metadata,
+          db_layout_to_view_layout(db_main_view.layout),
+        );
+        db_main_folder_view.parent_view_id = self.dest_view_id.clone();
+        self.views_to_add.push(db_main_folder_view);
+        new_db_view_ids.push(db_main_view_id.clone());
+
+        // rest of the views are child of main db view
+        for other_view in db_views[1..].iter_mut() {
+          let other_view_id = uuid::Uuid::new_v4().to_string();
+          new_db_view_ids.push(other_view_id.clone());
+          other_view.id = other_view_id.clone();
+          other_view.database_id = new_db_id.clone();
+          let mut other_folder_view = self.new_view(
+            other_view_id,
+            &metadata,
+            db_layout_to_view_layout(other_view.layout),
+          );
+          other_folder_view.parent_view_id = db_main_view_id.clone();
+          self.views_to_add.push(other_folder_view);
+        }
+
+        // update all views's row's id
         for db_view in db_views.iter_mut() {
-          db_view.database_id = new_db_id.clone();
           for row_order in db_view.row_orders.iter_mut() {
-            let row = published_rows.get(row_order.id.as_str()).unwrap();
-            let bin_data = row
-              .as_array()
-              .unwrap()
-              .iter()
-              .flat_map(|v| v.as_number())
-              .flat_map(|v| v.as_u64())
-              .map(|v| v as u8)
-              .collect::<Vec<_>>();
-
-            let new_row_uuid = uuid::Uuid::new_v4().to_string();
-            let db_row_collab = Collab::new_with_source(
-              CollabOrigin::Server,
-              new_row_uuid.as_str(),
-              DataSource::DocStateV1(bin_data),
-              vec![],
-              false,
-            )
-            .unwrap();
-
-            db_row_collab.with_origin_transact_mut(|txn| {
-              if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
-                // TODO(Zack): deep copy row data ?
-                container.insert_with_txn(txn, "id", new_row_uuid.clone());
-                container.insert_with_txn(txn, "database_id", new_db_id.clone());
-              }
-            });
-
-            match db_row_collab.encode_collab_v1(DatabaseRow::validate) {
-              Ok(ec) => match ec.encode_to_bytes() {
-                Ok(db_row_ec_bytes) => {
-                  self
-                    .insert_collab_for_duplicator(
-                      &new_row_uuid,
-                      db_row_ec_bytes,
-                      CollabType::DatabaseRow,
-                    )
-                    .await?;
-                },
-                Err(e) => tracing::error!("failed to encode db_row_collab: {}", e),
-              },
-              Err(e) => tracing::error!("failed to encode db_row_collab: {}", e),
-            }
+            row_order.id = publish_row_by_id
+              .get(row_order.id.as_str())
+              .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", row_order.id)))?
+              .object_id
+              .clone()
+              .into();
           }
         }
 
@@ -567,16 +620,25 @@ impl PublishCollabDuplicator {
           views.insert_view_with_txn(&mut txn, view);
         }
       }
+
+      // Add this database as linked view
+      self
+        .workspace_databases
+        .insert(new_db_id.clone(), new_db_view_ids);
     }
 
+    // insert database with modified row_id references
     let db_encoded_collab = db_collab
       .encode_collab_v1(Database::validate)
       .map_err(|e| AppError::Unhandled(e.to_string()))?
       .encode_to_bytes()?;
-
-    // insert database with modified row_id references
     self
-      .insert_collab_for_duplicator(&ret_view.id, db_encoded_collab, CollabType::Database)
+      .insert_collab_for_duplicator(
+        &ret_view.id,
+        db_encoded_collab,
+        CollabType::Database,
+        pg_txn,
+      )
       .await?;
 
     Ok(ret_view)
@@ -587,6 +649,7 @@ impl PublishCollabDuplicator {
     oid: &str,
     encoded_collab: Vec<u8>,
     collab_type: CollabType,
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
   ) -> Result<(), AppError> {
     tracing::info!(
       "inserting collab for duplicator: {} {} {}",
@@ -596,7 +659,7 @@ impl PublishCollabDuplicator {
     );
     self
       .collab_storage
-      .insert_or_update_collab(
+      .insert_new_collab_with_transaction(
         &self.dest_workspace_id,
         &self.duplicator_uid,
         CollabParams {
@@ -605,7 +668,7 @@ impl PublishCollabDuplicator {
           collab_type,
           embeddings: None,
         },
-        true,
+        txn,
       )
       .await?;
     Ok(())
@@ -652,5 +715,13 @@ impl PublishCollabDuplicator {
       },
       None => tracing::warn!("group not found for oid: {}", oid),
     }
+  }
+}
+
+fn db_layout_to_view_layout(layout: collab_database::views::DatabaseLayout) -> ViewLayout {
+  match layout {
+    collab_database::views::DatabaseLayout::Grid => ViewLayout::Grid,
+    collab_database::views::DatabaseLayout::Board => ViewLayout::Board,
+    collab_database::views::DatabaseLayout::Calendar => ViewLayout::Calendar,
   }
 }

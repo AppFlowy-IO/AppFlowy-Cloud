@@ -568,7 +568,7 @@ impl PublishCollabDuplicator {
         let view_change_tx = tokio::sync::broadcast::channel(1).0;
         let views = ViewMap::new(container, view_change_tx);
         let mut db_views = views.get_all_views_with_txn(txn.txn());
-        if db_views.len() == 0 {
+        if db_views.is_empty() {
           return Err(AppError::RecordNotFound(
             "no views found in database".to_string(),
           ));

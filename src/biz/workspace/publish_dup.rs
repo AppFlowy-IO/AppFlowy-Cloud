@@ -296,7 +296,7 @@ impl PublishCollabDuplicator {
     doc: Document,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
-    let mut ret_view = self.new_view(new_view_id.clone(), &metadata);
+    let mut ret_view = self.new_view(new_view_id.clone(), &metadata, ViewLayout::Document);
 
     let mut doc_data = doc
       .get_document_data()
@@ -420,7 +420,12 @@ impl PublishCollabDuplicator {
     Ok(ret_view)
   }
 
-  fn new_view(&self, new_view_id: String, metadata: &serde_json::Value) -> View {
+  fn new_view(
+    &self,
+    new_view_id: String,
+    metadata: &serde_json::Value,
+    layout: ViewLayout,
+  ) -> View {
     let (name, icon, extra) = match metadata.get("view") {
       Some(view) => {
         let name = view
@@ -444,7 +449,7 @@ impl PublishCollabDuplicator {
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
       created_at: self.ts_now,
       is_favorite: false,
-      layout: ViewLayout::Document,
+      layout,
       icon,
       created_by: Some(self.duplicator_uid),
       last_edited_time: self.ts_now,
@@ -461,7 +466,7 @@ impl PublishCollabDuplicator {
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
     // create a new view to be returned to the caller
-    let ret_view = self.new_view(new_view_id.clone(), &metadata);
+    let ret_view = self.new_view(new_view_id.clone(), &metadata, ViewLayout::Grid);
 
     let db_collab = {
       let db_bin_data = published_db

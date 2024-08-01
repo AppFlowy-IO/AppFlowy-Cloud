@@ -298,7 +298,11 @@ impl PublishCollabDuplicator {
     doc: Document,
     metadata: serde_json::Value,
   ) -> Result<View, AppError> {
-    let mut ret_view = self.new_view(new_view_id.clone(), &metadata, ViewLayout::Document);
+    let mut ret_view = self.new_folder_view(
+      new_view_id.clone(),
+      metadata.get("view"),
+      ViewLayout::Document,
+    );
 
     let mut doc_data = doc
       .get_document_data()
@@ -422,44 +426,6 @@ impl PublishCollabDuplicator {
     Ok(ret_view)
   }
 
-  fn new_view(
-    &self,
-    new_view_id: String,
-    metadata: &serde_json::Value,
-    layout: ViewLayout,
-  ) -> View {
-    let (name, icon, extra) = match metadata.get("view") {
-      Some(view) => {
-        let name = view
-          .get("name")
-          .and_then(|name| name.as_str())
-          .unwrap_or("Untitled Duplicated");
-        let icon = view
-          .get("icon")
-          .and_then(|icon| serde_json::from_value::<ViewIcon>(icon.clone()).ok());
-        let extra = view.get("extra").and_then(|name| name.as_str());
-        (name, icon, extra)
-      },
-      None => ("Untitled Duplicated", None, None),
-    };
-
-    View {
-      id: new_view_id,
-      parent_view_id: "".to_string(), // to be filled by caller
-      name: name.to_string(),
-      desc: "".to_string(), // unable to get from metadata
-      children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
-      created_at: self.ts_now,
-      is_favorite: false,
-      layout,
-      icon,
-      created_by: Some(self.duplicator_uid),
-      last_edited_time: self.ts_now,
-      last_edited_by: Some(self.duplicator_uid),
-      extra: extra.map(String::from),
-    }
-  }
-
   async fn deep_copy_database_txn<'a>(
     &mut self,
     pg_txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -469,6 +435,21 @@ impl PublishCollabDuplicator {
   ) -> Result<View, AppError> {
     // create new identity for database
     let new_db_id = uuid::Uuid::new_v4().to_string();
+
+    // metadata for non-main view of database
+    let _empty_vec = Vec::new();
+    let child_meta_by_old_view_id = metadata
+      .get("child_views")
+      .and_then(|v| v.as_array())
+      .unwrap_or(&_empty_vec)
+      .iter()
+      .map(|value| {
+        (
+          value.get("view_id").and_then(|v| v.as_str()).unwrap_or(""),
+          value,
+        )
+      })
+      .collect::<HashMap<_, _>>();
 
     // collab of database
     let db_collab = {
@@ -586,21 +567,24 @@ impl PublishCollabDuplicator {
       db_main_view.id = new_view_id.clone();
       db_main_view.database_id = new_db_id.clone();
       new_db_view_ids.push(new_view_id.clone());
-      let main_view = self.new_view(
+      let main_view = self.new_folder_view(
         new_view_id.clone(),
-        &metadata,
+        metadata.get("view"),
         db_layout_to_view_layout(db_main_view.layout),
       );
 
       // rest of the views are child of main db view
       for other_view in db_views[1..].iter_mut() {
+        let other_view_meta = child_meta_by_old_view_id
+          .get(other_view.id.as_str())
+          .copied();
         let other_view_id = uuid::Uuid::new_v4().to_string();
         new_db_view_ids.push(other_view_id.clone());
         other_view.id = other_view_id.clone();
         other_view.database_id = new_db_id.clone();
-        let mut other_folder_view = self.new_view(
+        let mut other_folder_view = self.new_folder_view(
           other_view_id,
-          &metadata,
+          other_view_meta,
           db_layout_to_view_layout(other_view.layout),
         );
         other_folder_view.parent_view_id = new_view_id.clone();
@@ -643,6 +627,44 @@ impl PublishCollabDuplicator {
       .await?;
 
     Ok(ret_view)
+  }
+
+  fn new_folder_view(
+    &self,
+    new_view_id: String,
+    metadata: Option<&serde_json::Value>,
+    layout: ViewLayout,
+  ) -> View {
+    let (name, icon, extra) = match metadata {
+      Some(meta) => {
+        let name = meta
+          .get("name")
+          .and_then(|name| name.as_str())
+          .unwrap_or("Untitled Duplicated");
+        let icon = meta
+          .get("icon")
+          .and_then(|icon| serde_json::from_value::<ViewIcon>(icon.clone()).ok());
+        let extra = meta.get("extra").and_then(|name| name.as_str());
+        (name, icon, extra)
+      },
+      None => ("Untitled Duplicated", None, None),
+    };
+
+    View {
+      id: new_view_id,
+      parent_view_id: "".to_string(), // to be filled by caller
+      name: name.to_string(),
+      desc: "".to_string(), // unable to get from metadata
+      children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
+      created_at: self.ts_now,
+      is_favorite: false,
+      layout,
+      icon,
+      created_by: Some(self.duplicator_uid),
+      last_edited_time: self.ts_now,
+      last_edited_by: Some(self.duplicator_uid),
+      extra: extra.map(String::from),
+    }
   }
 
   async fn insert_collab_for_duplicator(

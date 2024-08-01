@@ -122,6 +122,9 @@ pub enum AppError {
 
   #[error("{0}")]
   AIServiceUnavailable(String),
+
+  #[error("{0}")]
+  StringLengthLimitReached(String),
 }
 
 impl AppError {
@@ -182,6 +185,7 @@ impl AppError {
       AppError::Utf8Error(_) => ErrorCode::Internal,
       AppError::PublishNamespaceAlreadyTaken(_) => ErrorCode::PublishNamespaceAlreadyTaken,
       AppError::AIServiceUnavailable(_) => ErrorCode::AIServiceUnavailable,
+      AppError::StringLengthLimitReached(_) => ErrorCode::StringLengthLimitReached,
     }
   }
 }
@@ -294,6 +298,7 @@ pub enum ErrorCode {
   PublishNamespaceAlreadyTaken = 1031,
   AIServiceUnavailable = 1032,
   AIResponseLimitExceeded = 1033,
+  StringLengthLimitReached = 1034,
 }
 
 impl ErrorCode {

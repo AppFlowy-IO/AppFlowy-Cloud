@@ -415,6 +415,42 @@ async fn test_publish_comments() {
 }
 
 #[tokio::test]
+async fn test_excessive_comment_length() {
+  let (client, _) = generate_unique_registered_user_client().await;
+  let workspace_id = get_first_workspace_string(&client).await;
+  let published_view_namespace = uuid::Uuid::new_v4().to_string();
+  client
+    .set_workspace_publish_namespace(&workspace_id.to_string(), &published_view_namespace)
+    .await
+    .unwrap();
+
+  let publish_name = "published-view";
+  let view_id = uuid::Uuid::new_v4();
+  client
+    .publish_collabs::<MyCustomMetadata, &[u8]>(
+      &workspace_id,
+      vec![PublishCollabItem {
+        meta: PublishCollabMetadata {
+          view_id,
+          publish_name: publish_name.to_string(),
+          metadata: MyCustomMetadata {
+            title: "some_title".to_string(),
+          },
+        },
+        data: "yrs_encoded_data_1".as_bytes(),
+      }],
+    )
+    .await
+    .unwrap();
+
+  let resp = client
+    .create_comment_on_published_view(&view_id, "a".repeat(5001).as_str(), &None)
+    .await;
+  assert!(resp.is_err());
+  assert_eq!(resp.unwrap_err().code, ErrorCode::StringLengthLimitReached);
+}
+
+#[tokio::test]
 async fn test_publish_reactions() {
   let (page_owner_client, _) = generate_unique_registered_user_client().await;
   let workspace_id = get_first_workspace_string(&page_owner_client).await;

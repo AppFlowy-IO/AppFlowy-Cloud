@@ -6,6 +6,7 @@ use collab_database::database::Database;
 use collab_database::rows::DatabaseRow;
 use collab_database::views::ViewMap;
 use collab_database::workspace_database::{DatabaseMetaList, WorkspaceDatabase};
+use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{
@@ -308,6 +309,39 @@ impl PublishCollabDuplicator {
       .get_document_data()
       .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
+    self
+      .deep_copy_doc_pages(txn, &mut doc_data, &mut ret_view)
+      .await?;
+
+    self
+      .deep_copy_doc_databases(txn, &mut doc_data, &mut ret_view)
+      .await?;
+
+    // doc_data into binary data
+    let new_doc_data = {
+      let collab = doc.get_collab().clone();
+      let new_doc = Document::create_with_data(collab, doc_data)
+        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+      let encoded_collab = new_doc
+        .encode_collab()
+        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+      encoded_collab.encode_to_bytes()?
+    };
+
+    // insert document with modified page_id references
+    self
+      .insert_collab_for_duplicator(&ret_view.id, new_doc_data, CollabType::Document, txn)
+      .await?;
+
+    Ok(ret_view)
+  }
+
+  async fn deep_copy_doc_pages(
+    &mut self,
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    doc_data: &mut DocumentData,
+    ret_view: &mut View,
+  ) -> Result<(), AppError> {
     let page_ids = doc_data
       .blocks
       .values_mut()
@@ -407,23 +441,53 @@ impl PublishCollabDuplicator {
       }
     }
 
-    // doc_data into binary data
-    let new_doc_data = {
-      let collab = doc.get_collab().clone();
-      let new_doc = Document::create_with_data(collab, doc_data)
-        .map_err(|e| AppError::Unhandled(e.to_string()))?;
-      let encoded_collab = new_doc
-        .encode_collab()
-        .map_err(|e| AppError::Unhandled(e.to_string()))?;
-      encoded_collab.encode_to_bytes()?
-    };
+    Ok(())
+  }
 
-    // insert document with modified page_id references
-    self
-      .insert_collab_for_duplicator(&ret_view.id, new_doc_data, CollabType::Document, txn)
-      .await?;
+  async fn deep_copy_doc_databases(
+    &mut self,
+    txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    doc_data: &mut DocumentData,
+    ret_view: &mut View,
+  ) -> Result<(), AppError> {
+    let db_blocks = doc_data
+      .blocks
+      .iter_mut()
+      .filter(|(_, b)| b.ty == "grid" || b.ty == "board" || b.ty == "calendar");
 
-    Ok(ret_view)
+    for (_block_id, block) in db_blocks {
+      let block_view_id = block
+        .data
+        .get_mut("view_id")
+        .ok_or_else(|| AppError::RecordNotFound("view_id not found in block data".to_string()))?;
+      let view_id_str = block_view_id
+        .as_str()
+        .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
+
+      if let Some((metadata, published_blob)) =
+        select_published_data_for_view_id(txn, &view_id_str.parse()?).await?
+      {
+        let db_json_obj = serde_json::from_slice::<serde_json::Value>(&published_blob)
+          .map_err(|e| AppError::Unhandled(format!("failed to parse database json: {}", e)))?;
+        let new_folder_db_view_id = uuid::Uuid::new_v4().to_string();
+        let mut new_folder_db_view = self
+          .deep_copy_database_txn(txn, new_folder_db_view_id.clone(), db_json_obj, metadata)
+          .await?;
+        new_folder_db_view.parent_view_id = ret_view.id.clone();
+        ret_view.children.push(ViewIdentifier {
+          id: new_folder_db_view_id.clone(),
+        });
+        self.views_to_add.push(new_folder_db_view);
+
+        *block_view_id = serde_json::json!(new_folder_db_view_id); // TODO: get specific view of db
+        let block_parent_id = block.data.get_mut("parent_id").ok_or_else(|| {
+          AppError::RecordNotFound("parent_id not found in block data".to_string())
+        })?;
+        *block_parent_id = serde_json::json!(new_folder_db_view_id);
+      }
+    }
+
+    Ok(())
   }
 
   async fn deep_copy_database_txn<'a>(

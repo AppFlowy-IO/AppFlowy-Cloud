@@ -270,6 +270,7 @@ pub struct LocalAIConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateTextChatContext {
   pub chat_id: String,
+  /// Only support "txt" and "md" for now
   pub content_type: String,
   pub text: String,
   pub chunk_size: i32,

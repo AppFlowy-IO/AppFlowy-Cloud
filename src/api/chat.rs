@@ -134,7 +134,7 @@ async fn create_chat_context_handler(
   let params = payload.into_inner();
   state
     .ai_client
-    .create_chat_context(params)
+    .create_chat_text_context(params)
     .await
     .map_err(AppError::from)?;
   Ok(AppResponse::Ok().into())

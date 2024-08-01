@@ -12,7 +12,7 @@ async fn create_chat_context_test() {
     chunk_overlap: 20,
     metadata: Default::default(),
   };
-  client.create_chat_context(context).await.unwrap();
+  client.create_chat_text_context(context).await.unwrap();
   let resp = client
     .send_question(&chat_id, "Where I live?", &AIModel::GPT35)
     .await

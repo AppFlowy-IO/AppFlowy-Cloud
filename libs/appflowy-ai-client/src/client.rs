@@ -174,7 +174,10 @@ impl AppFlowyAIClient {
       .into_data()
   }
 
-  pub async fn create_chat_context(&self, context: CreateTextChatContext) -> Result<(), AIError> {
+  pub async fn create_chat_text_context(
+    &self,
+    context: CreateTextChatContext,
+  ) -> Result<(), AIError> {
     let url = format!("{}/chat/context/text", self.url);
     let resp = self
       .http_client(Method::POST, &url)?

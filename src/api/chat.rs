@@ -7,7 +7,7 @@ use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 
 use app_error::AppError;
-use appflowy_ai_client::dto::RepeatedRelatedQuestion;
+use appflowy_ai_client::dto::{CreateTextChatContext, RepeatedRelatedQuestion};
 use authentication::jwt::UserUuid;
 use bytes::Bytes;
 use database_entity::dto::{
@@ -66,6 +66,10 @@ pub fn chat_scope() -> Scope {
       web::resource("/{chat_id}/{message_id}/answer/stream")
         .route(web::get().to(answer_stream_handler)),
     )
+      .service(
+        web::resource("/{chat_id}/context/text")
+            .route(web::post().to(create_chat_context_handler))
+      )
 }
 async fn create_chat_handler(
   path: web::Path<String>,
@@ -120,6 +124,20 @@ async fn create_chat_message_handler(
       .content_type("application/json")
       .streaming(message_stream),
   )
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn create_chat_context_handler(
+  state: Data<AppState>,
+  payload: Json<CreateTextChatContext>,
+) -> actix_web::Result<JsonAppResponse<()>> {
+  let params = payload.into_inner();
+  state
+    .ai_client
+    .create_chat_context(params)
+    .await
+    .map_err(AppError::from)?;
+  Ok(AppResponse::Ok().into())
 }
 
 async fn update_chat_message_handler(

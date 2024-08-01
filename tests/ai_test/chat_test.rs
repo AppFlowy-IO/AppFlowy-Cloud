@@ -1,3 +1,4 @@
+use appflowy_ai_client::dto::CreateTextChatContext;
 use client_api_test::TestClient;
 use database_entity::dto::{ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor};
 use futures_util::StreamExt;
@@ -205,6 +206,54 @@ async fn generate_stream_answer_test() {
     answer.push_str(&s);
   }
   assert!(!answer.is_empty());
+}
+
+#[tokio::test]
+async fn create_chat_context_test() {
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "context chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  let context = CreateTextChatContext {
+    chat_id: chat_id.clone(),
+    content_type: "txt".to_string(),
+    text: "I have lived in the US for five years".to_string(),
+    chunk_size: 1000,
+    chunk_overlap: 20,
+    metadata: Default::default(),
+  };
+
+  test_client
+    .api_client
+    .create_chat_context(&workspace_id, context)
+    .await
+    .unwrap();
+
+  let params = CreateChatMessageParams::new_user("Where I live?");
+  let question = test_client
+    .api_client
+    .save_question(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+
+  let answer = test_client
+    .api_client
+    .generate_answer(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  assert!(answer.content.contains("US"));
+  println!("answer: {:?}", answer);
 }
 
 // #[tokio::test]

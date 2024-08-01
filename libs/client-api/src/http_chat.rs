@@ -7,7 +7,7 @@ use client_api_entity::{
 };
 use futures_core::Stream;
 use reqwest::Method;
-use shared_entity::dto::ai_dto::RepeatedRelatedQuestion;
+use shared_entity::dto::ai_dto::{CreateTextChatContext, RepeatedRelatedQuestion};
 use shared_entity::response::{AppResponse, AppResponseError};
 
 impl Client {
@@ -230,5 +230,24 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<ChatMessage>::json_response_stream(resp).await
+  }
+
+  pub async fn create_chat_context(
+    &self,
+    workspace_id: &str,
+    params: CreateTextChatContext,
+  ) -> Result<(), AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{}/context/text",
+      self.base_url, params.chat_id
+    );
+    let resp = self
+      .http_client_with_auth(Method::POST, &url)
+      .await?
+      .json(&params)
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<()>::from_response(resp).await?.into_error()
   }
 }

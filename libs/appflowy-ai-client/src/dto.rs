@@ -266,3 +266,13 @@ pub struct LocalAIConfig {
   pub models: Vec<LLMModel>,
   pub plugin: AppFlowyOfflineAI,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateTextChatContext {
+  pub chat_id: String,
+  pub content_type: String,
+  pub text: String,
+  pub chunk_size: i32,
+  pub chunk_overlap: i32,
+  pub metadata: HashMap<String, serde_json::Value>,
+}

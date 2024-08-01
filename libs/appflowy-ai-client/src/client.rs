@@ -1,8 +1,8 @@
 use crate::dto::{
-  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, Document,
-  EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData, RepeatedLocalAIPackage,
-  RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse, TranslateRowData,
-  TranslateRowResponse,
+  AIModel, ChatAnswer, ChatQuestion, CompleteTextResponse, CompletionType, CreateTextChatContext,
+  Document, EmbeddingRequest, EmbeddingResponse, LocalAIConfig, MessageData,
+  RepeatedLocalAIPackage, RepeatedRelatedQuestion, SearchDocumentsRequest, SummarizeRowResponse,
+  TranslateRowData, TranslateRowResponse,
 };
 use crate::error::AIError;
 
@@ -172,6 +172,17 @@ impl AppFlowyAIClient {
     AIResponse::<Vec<Document>>::from_response(resp)
       .await?
       .into_data()
+  }
+
+  pub async fn create_chat_context(&self, context: CreateTextChatContext) -> Result<(), AIError> {
+    let url = format!("{}/chat/context/text", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .json(&context)
+      .send()
+      .await?;
+    let _ = AIResponse::<()>::from_response(resp).await?;
+    Ok(())
   }
 
   pub async fn send_question(

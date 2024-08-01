@@ -35,6 +35,8 @@ use crate::biz::user::user_init::initialize_workspace_for_user;
 use crate::mailer::{Mailer, WorkspaceInviteMailerParam};
 use crate::state::GoTrueAdmin;
 
+const MAX_COMMENT_LENGTH: usize = 5000;
+
 pub async fn delete_workspace_for_user(
   pg_pool: &PgPool,
   workspace_id: &Uuid,
@@ -186,6 +188,11 @@ pub async fn create_comment_on_published_view(
   content: &str,
   user_uuid: &Uuid,
 ) -> Result<(), AppError> {
+  if content.len() > MAX_COMMENT_LENGTH {
+    return Err(AppError::StringLengthLimitReached(
+      "comment content exceed limit".to_string(),
+    ));
+  }
   insert_comment_to_published_view(pg_pool, view_id, user_uuid, content, reply_comment_id).await?;
   Ok(())
 }

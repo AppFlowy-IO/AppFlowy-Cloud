@@ -1,27 +1,27 @@
-use crate::af_spawn;
-use crate::collab_sync::collab_stream::ObserveCollab;
-use crate::collab_sync::{
-  CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
-  SyncObject,
-};
-
-use collab::core::awareness::Awareness;
-use collab::core::collab::MutexCollab;
-use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
-use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
-use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
-use futures_util::{SinkExt, StreamExt};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::{broadcast, watch};
 
+use collab::core::awareness::Awareness;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
+use futures_util::{SinkExt, StreamExt};
+use tokio::sync::{broadcast, RwLock, watch};
 use tracing::{instrument, trace};
+use yrs::{ReadTxn, StateVector};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
-use yrs::{ReadTxn, StateVector};
+
+use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
+use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
+
+use crate::af_spawn;
+use crate::collab_sync::{
+  CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
+  SyncObject,
+};
+use crate::collab_sync::collab_stream::ObserveCollab;
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 
@@ -59,7 +59,7 @@ where
     sink: Sink,
     sink_config: SinkConfig,
     stream: Stream,
-    collab: Weak<MutexCollab>,
+    collab: Weak<RwLock<Collab>>,
   ) -> Self {
     let protocol = ClientSyncProtocol;
     let (notifier, notifier_rx) = watch::channel(SinkSignal::Proceed);

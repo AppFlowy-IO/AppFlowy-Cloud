@@ -1,12 +1,11 @@
-use client_api_test::*;
+use std::time::Duration;
 
 use collab_entity::CollabType;
-
-use database_entity::dto::AFRole;
 use serde_json::json;
-
-use std::time::Duration;
 use tokio::time::sleep;
+
+use client_api_test::*;
+use database_entity::dto::AFRole;
 
 #[tokio::test]
 async fn edit_workspace_without_permission() {
@@ -21,8 +20,9 @@ async fn edit_workspace_without_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "AppFlowy");
   client_1
     .wait_object_sync_complete(&workspace_id)
@@ -58,8 +58,9 @@ async fn init_sync_workspace_with_member_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "AppFlowy");
   owner
     .wait_object_sync_complete(&workspace_id)
@@ -101,8 +102,9 @@ async fn edit_workspace_with_guest_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "zack");
   owner
     .wait_object_sync_complete(&workspace_id)
@@ -118,8 +120,9 @@ async fn edit_workspace_with_guest_permission() {
     .collabs
     .get_mut(&workspace_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "nathan");
 
   assert_client_collab_include_value(&mut owner, &workspace_id, json!({"name": "zack"}))

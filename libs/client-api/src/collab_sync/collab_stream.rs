@@ -1,32 +1,34 @@
-use crate::af_spawn;
-use crate::collab_sync::{
-  start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
-};
-
-use client_api_entity::{validate_data_for_folder, CollabType};
-use collab::core::collab::MutexCollab;
-use collab::core::origin::CollabOrigin;
-use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
-use collab_rt_protocol::{
-  handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,
-};
-use futures_util::{SinkExt, StreamExt};
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
-use tokio::select;
-use tokio::sync::Mutex;
-use tokio_util::sync::CancellationToken;
+use std::sync::atomic::{AtomicU32, Ordering};
 
+use arc_swap::ArcSwap;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
+use futures_util::{SinkExt, StreamExt};
+use tokio::select;
+use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
+
+use client_api_entity::{CollabType, validate_data_for_folder};
+use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
+use collab_rt_protocol::{
+    ClientSyncProtocol, handle_message_follow_protocol, Message, MessageReader, SyncMessage,
+};
+
+use crate::af_spawn;
+use crate::collab_sync::{
+    CollabSink, MissUpdateReason, start_sync, SyncError, SyncObject, SyncReason,
+};
 
 /// Use to continuously receive updates from remote.
 pub struct ObserveCollab<Sink, Stream> {
   object_id: String,
   #[allow(dead_code)]
-  weak_collab: Weak<MutexCollab>,
+  weak_collab: Weak<RwLock<Collab>>,
   phantom_sink: PhantomData<Sink>,
   phantom_stream: PhantomData<Stream>,
   // Use sequence number to check if the received updates/broadcasts are continuous.
@@ -51,14 +53,14 @@ where
     origin: CollabOrigin,
     object: SyncObject,
     stream: Stream,
-    weak_collab: Weak<MutexCollab>,
+    weak_collab: Weak<RwLock<Collab>>,
     sink: Weak<CollabSink<Sink>>,
   ) -> Self {
     let object_id = object.object_id.clone();
     let cloned_weak_collab = weak_collab.clone();
     let seq_num_counter = Arc::new(SeqNumCounter::default());
     let cloned_seq_num_counter = seq_num_counter.clone();
-    let init_sync_cancel_token = Arc::new(Mutex::new(CancellationToken::new()));
+    let init_sync_cancel_token = ArcSwap::new(Arc::new(CancellationToken::new()));
     let arc_object = Arc::new(object);
     af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
       origin,
@@ -83,10 +85,10 @@ where
     origin: CollabOrigin,
     object: Arc<SyncObject>,
     mut stream: Stream,
-    weak_collab: Weak<MutexCollab>,
+    weak_collab: Weak<RwLock<Collab>>,
     weak_sink: Weak<CollabSink<Sink>>,
     seq_num_counter: Arc<SeqNumCounter>,
-    cancel_token: Arc<Mutex<CancellationToken>>,
+    cancel_token: ArcSwap<CancellationToken>,
   ) {
     while let Some(collab_message_result) = stream.next().await {
       let collab = match weak_collab.upgrade() {
@@ -125,11 +127,9 @@ where
             state_vector_v1,
             reason,
           } => {
-            let mut cancel_token_lock = cancel_token.lock().await;
-            cancel_token_lock.cancel();
-            let new_cancel_token = CancellationToken::new();
-            *cancel_token_lock = new_cancel_token.clone();
-            drop(cancel_token_lock);
+            let new_cancel_token = Arc::new(CancellationToken::new());
+            let old_cancel_token = cancel_token.swap(new_cancel_token.clone());
+            old_cancel_token.cancel();
 
             let cloned_origin = origin.clone();
             let cloned_object = object.clone();
@@ -150,16 +150,15 @@ where
             });
           },
           SyncError::CannotApplyUpdate => {
-            if let Some(lock_guard) = collab.try_lock() {
-              if let Err(err) = start_sync(
-                origin.clone(),
-                &object,
-                &lock_guard,
-                &sink,
-                SyncReason::ServerCannotApplyUpdate,
-              ) {
-                error!("Error while start sync: {}", err);
-              }
+            let lock = collab.read().await;
+            if let Err(err) = start_sync(
+              origin.clone(),
+              &object,
+              &lock,
+              &sink,
+              SyncReason::ServerCannotApplyUpdate,
+            ) {
+              error!("Error while start sync: {}", err);
             }
           },
           SyncError::OverrideWithIncorrectData(_) => {
@@ -177,7 +176,7 @@ where
   /// Continuously handle messages from the remote doc
   async fn process_remote_message(
     object: &SyncObject,
-    collab: &Arc<MutexCollab>,
+    collab: &Arc<RwLock<Collab>>,
     sink: &Arc<CollabSink<Sink>>,
     msg: ServerCollabMessage,
     seq_num_counter: &Arc<SeqNumCounter>,
@@ -232,26 +231,25 @@ where
   async fn pull_missing_updates(
     origin: &CollabOrigin,
     object: &SyncObject,
-    collab: &Arc<MutexCollab>,
+    collab: &Arc<RwLock<Collab>>,
     sink: &Arc<CollabSink<Sink>>,
     state_vector_v1: Option<Vec<u8>>,
     reason: MissUpdateReason,
   ) {
-    if let Some(lock_guard) = collab.try_lock() {
-      let reason = SyncReason::MissUpdates {
-        state_vector_v1,
-        reason,
-      };
-      if let Err(err) = start_sync(origin.clone(), object, &lock_guard, sink, reason) {
-        error!("Error while start sync: {}", err);
-      }
+    let lock = collab.read().await;
+    let reason = SyncReason::MissUpdates {
+      state_vector_v1,
+      reason,
+    };
+    if let Err(err) = start_sync(origin.clone(), object, &lock, sink, reason) {
+      error!("Error while start sync: {}", err);
     }
   }
 
   async fn process_message_follow_protocol(
     sync_object: &SyncObject,
     msg: &ServerCollabMessage,
-    collab: &Arc<MutexCollab>,
+    collab: &Arc<RwLock<Collab>>,
     sink: &Arc<CollabSink<Sink>>,
   ) -> Result<(), SyncError> {
     if msg.payload().is_empty() {
@@ -266,47 +264,46 @@ where
 
     // workaround for panic when applying updates. It can be removed in the future
     let result = tokio::spawn(async move {
-      if let Some(mut collab) = collab.try_lock() {
-        let mut decoder = DecoderV1::new(Cursor::new(&payload));
-        let reader = MessageReader::new(&mut decoder);
-        for yrs_message in reader {
-          let msg = yrs_message?;
+      let mut decoder = DecoderV1::new(Cursor::new(&payload));
+      let reader = MessageReader::new(&mut decoder);
+      for yrs_message in reader {
+        let msg = yrs_message?;
 
-          // When the client receives a SyncStep1 message, it indicates that the server is requesting
-          // the client to send updates that the server is missing. This typically occurs when the client
-          // has been editing offline, resulting in the client's version of the collaboration object
-          // being ahead of the server's version. In response, the client prepares to send the missing updates.
-          let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
+        // When the client receives a SyncStep1 message, it indicates that the server is requesting
+        // the client to send updates that the server is missing. This typically occurs when the client
+        // has been editing offline, resulting in the client's version of the collaboration object
+        // being ahead of the server's version. In response, the client prepares to send the missing updates.
+        let is_server_sync_step_1 = matches!(msg, Message::Sync(SyncMessage::SyncStep1(_)));
 
-          // If the collaboration object is of type [CollabType::Folder], data validation is required
-          // before sending the SyncStep1 to the server.
-          if is_server_sync_step_1 && sync_object.collab_type == CollabType::Folder {
-            validate_data_for_folder(&collab, &sync_object.workspace_id)
-              .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
-          }
+        // If the collaboration object is of type [CollabType::Folder], data validation is required
+        // before sending the SyncStep1 to the server.
+        if is_server_sync_step_1 && sync_object.collab_type == CollabType::Folder {
+          let lock = collab.read().await;
+          validate_data_for_folder(&lock, &sync_object.workspace_id)
+            .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
+        }
 
-          if let Some(return_payload) =
-            handle_message_follow_protocol(&message_origin, &ClientSyncProtocol, &mut collab, msg)?
-          {
-            let object_id = sync_object.object_id.clone();
-            sink.queue_msg(|msg_id| {
-              if is_server_sync_step_1 {
-                ClientCollabMessage::new_server_init_sync(ServerInit::new(
-                  message_origin.clone(),
-                  object_id,
-                  return_payload,
-                  msg_id,
-                ))
-              } else {
-                ClientCollabMessage::new_update_sync(UpdateSync::new(
-                  message_origin.clone(),
-                  object_id,
-                  return_payload,
-                  msg_id,
-                ))
-              }
-            });
-          }
+        if let Some(return_payload) =
+          handle_message_follow_protocol(&message_origin, &ClientSyncProtocol, &collab, msg).await?
+        {
+          let object_id = sync_object.object_id.clone();
+          sink.queue_msg(|msg_id| {
+            if is_server_sync_step_1 {
+              ClientCollabMessage::new_server_init_sync(ServerInit::new(
+                message_origin.clone(),
+                object_id,
+                return_payload,
+                msg_id,
+              ))
+            } else {
+              ClientCollabMessage::new_update_sync(UpdateSync::new(
+                message_origin.clone(),
+                object_id,
+                return_payload,
+                msg_id,
+              ))
+            }
+          });
         }
       }
       Ok::<_, SyncError>(())

@@ -1,11 +1,11 @@
-use client_api_test::TestClient;
-use collab::core::collab::MutexCollab;
+use std::time::Duration;
+
 use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::time::sleep;
+
+use client_api_test::TestClient;
 use workspace_template::document::get_started::get_started_document_data;
 
 #[ignore]
@@ -19,14 +19,14 @@ async fn test_document_indexing_and_search() {
   let collab_type = CollabType::Document;
   let encoded_collab = {
     let document_data = get_started_document_data().unwrap();
-    let collab = Arc::new(MutexCollab::new(Collab::new(
+    let collab = Collab::new(
       test_client.uid().await,
       object_id.clone(),
       test_client.device_id.clone(),
       vec![],
       false,
-    )));
-    let document = Document::create_with_data(collab, document_data).unwrap();
+    );
+    let document = Document::open_with(collab, Some(document_data)).unwrap();
     document.encode_collab().unwrap()
   };
   test_client

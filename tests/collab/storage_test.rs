@@ -1,13 +1,13 @@
-use collab::core::transaction::DocTransactionExtension;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use collab::core::transaction::DocTransactionExtension;
 use collab::entity::EncodedCollab;
-use collab::preclude::Doc;
+use collab::preclude::{Doc, Transact};
 use collab_entity::CollabType;
-use sqlx::types::Uuid;
 use sqlx::PgPool;
+use sqlx::types::Uuid;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
@@ -372,7 +372,11 @@ async fn insert_invalid_data_test() {
   let object_id = uuid::Uuid::new_v4().to_string();
 
   let doc = Doc::new();
-  let encoded_collab_v1 = doc.get_encoded_collab_v1().encode_to_bytes().unwrap();
+  let encoded_collab_v1 = doc
+    .transact()
+    .get_encoded_collab_v1()
+    .encode_to_bytes()
+    .unwrap();
   for collab_type in [
     CollabType::Folder,
     CollabType::Document,

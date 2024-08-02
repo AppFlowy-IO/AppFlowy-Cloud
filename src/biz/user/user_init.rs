@@ -1,16 +1,17 @@
-use app_error::AppError;
+use std::sync::Arc;
 
-use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::{Any, Collab};
-use collab_entity::define::WORKSPACE_DATABASES;
+use collab::preclude::{ArrayPrelim, Collab, Map};
 use collab_entity::CollabType;
+use collab_entity::define::WORKSPACE_DATABASES;
+use sqlx::Transaction;
+use tracing::{debug, instrument};
+
+use app_error::AppError;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
 use database::collab::CollabStorage;
 use database::pg_row::AFWorkspaceRow;
 use database_entity::dto::CollabParams;
-use sqlx::Transaction;
-use std::sync::Arc;
-use tracing::{debug, instrument};
 use workspace_template::{WorkspaceTemplate, WorkspaceTemplateBuilder};
 
 /// This function generates templates for a workspace and stores them in the database.
@@ -83,11 +84,13 @@ async fn create_workspace_database_collab(
   txn: &mut Transaction<'_, sqlx::Postgres>,
 ) -> Result<(), AppError> {
   let collab_type = CollabType::WorkspaceDatabase;
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
-  let _ = collab.with_origin_transact_mut(|txn| {
-    collab.create_array_with_txn::<Any>(txn, WORKSPACE_DATABASES, vec![]);
-    Ok::<(), AppError>(())
-  });
+  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+  {
+    let mut txn = collab.context.transact_mut();
+    collab
+      .data
+      .insert(&mut txn, WORKSPACE_DATABASES, ArrayPrelim::default());
+  };
 
   let encode_collab = collab
     .encode_collab_v1(|collab| collab_type.validate_require_data(collab))

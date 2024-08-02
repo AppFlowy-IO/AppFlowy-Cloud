@@ -1,21 +1,21 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
+use assert_json_diff::assert_json_eq;
+use collab::core::origin::CollabOrigin;
+use collab_entity::CollabType;
+use serde_json::json;
+use tokio::time::sleep;
+use uuid::Uuid;
+
+use client_api_test::*;
+use collab_rt_entity::{CollabMessage, MAXIMUM_REALTIME_MESSAGE_SIZE, RealtimeMessage, UpdateSync};
+use database_entity::dto::AFAccessLevel;
+
 use crate::collab::util::{
   generate_random_bytes, generate_random_string, make_big_collab_doc_state,
 };
-use assert_json_diff::assert_json_eq;
-use client_api_test::*;
-use collab_entity::CollabType;
-use database_entity::dto::AFAccessLevel;
-use serde_json::json;
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use collab::core::origin::CollabOrigin;
-use std::time::Duration;
-
-use tokio::time::sleep;
-
-use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
-use uuid::Uuid;
 
 #[tokio::test]
 async fn realtime_write_single_collab_test() {
@@ -35,8 +35,9 @@ async fn realtime_write_single_collab_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await
       .insert(&i.to_string(), i.to_string());
   }
 
@@ -83,8 +84,9 @@ async fn collab_write_small_chunk_of_data_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await
       .insert(&i.to_string(), i.to_string());
 
     expected_json.insert(i.to_string(), i.to_string());
@@ -123,8 +125,9 @@ async fn collab_write_big_chunk_of_data_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("big_text", s.clone());
 
   test_client
@@ -198,8 +201,9 @@ async fn realtime_write_multiple_collab_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .mutex_collab
-        .lock()
+        .collab
+        .write()
+        .await
         .insert(&i.to_string(), i.to_string());
     }
 
@@ -248,8 +252,9 @@ async fn second_connect_override_first_connect_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("1", "a");
 
   // Sleep one second for the doc observer the update. Otherwise, the
@@ -268,8 +273,9 @@ async fn second_connect_override_first_connect_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("2", "b");
   new_client
     .wait_object_sync_complete(&object_id)
@@ -323,8 +329,9 @@ async fn same_device_multiple_connect_in_order_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await
       .insert(&i.to_string(), i);
     sleep(Duration::from_millis(500)).await;
     new_client
@@ -375,8 +382,9 @@ async fn two_direction_peer_sync_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "AppFlowy");
   client_1
     .wait_object_sync_complete(&object_id)
@@ -387,8 +395,9 @@ async fn two_direction_peer_sync_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("support platform", "macOS, Windows, Linux, iOS, Android");
   client_2
     .wait_object_sync_complete(&object_id)
@@ -432,8 +441,9 @@ async fn multiple_collab_edit_test() {
     .collabs
     .get_mut(&object_id_1)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("title", "I am client 1");
   client_1
     .wait_object_sync_complete(&object_id_1)
@@ -444,8 +454,9 @@ async fn multiple_collab_edit_test() {
     .collabs
     .get_mut(&object_id_2)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("title", "I am client 2");
   client_2
     .wait_object_sync_complete(&object_id_2)
@@ -498,8 +509,9 @@ async fn simulate_multiple_user_edit_collab_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .mutex_collab
-        .lock()
+        .collab
+        .write()
+        .await
         .insert("string", random_str.clone());
       let expected_json = json!({
         "string": random_str
@@ -514,8 +526,9 @@ async fn simulate_multiple_user_edit_collab_test() {
         .collabs
         .get(&object_id)
         .unwrap()
-        .mutex_collab
-        .lock()
+        .collab
+        .write()
+        .await
         .to_json_value();
 
       (expected_json, json)
@@ -655,8 +668,9 @@ async fn simulate_10_offline_user_connect_and_then_sync_document_test() {
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .mutex_collab
-          .lock()
+          .collab
+          .write()
+          .await
           .insert(&i.to_string(), i.to_string());
         sleep(Duration::from_millis(60)).await;
       }

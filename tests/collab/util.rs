@@ -1,12 +1,12 @@
+use std::time::Duration;
+
 use anyhow::Context;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
-
+use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
 use redis::aio::ConnectionManager;
-use std::time::Duration;
 use tokio::time::sleep;
 
 #[allow(dead_code)]
@@ -30,7 +30,7 @@ pub fn generate_random_string(len: usize) -> String {
 }
 
 pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> Vec<u8> {
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   collab.insert(key, value);
   collab
     .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))
@@ -40,7 +40,7 @@ pub fn make_big_collab_doc_state(object_id: &str, key: &str, value: String) -> V
 }
 
 pub fn test_encode_collab_v1(object_id: &str, key: &str, value: &str) -> EncodedCollab {
-  let collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
+  let mut collab = Collab::new_with_origin(CollabOrigin::Empty, object_id, vec![], false);
   collab.insert(key, value);
   collab
     .encode_collab_v1(|_| Ok::<(), anyhow::Error>(()))

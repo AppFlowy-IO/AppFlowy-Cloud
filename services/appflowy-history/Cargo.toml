@@ -36,7 +36,6 @@ sqlx = { workspace = true, default-features = false, features = ["runtime-tokio-
 dashmap = "5.5.3"
 infra.workspace = true
 database.workspace = true
-parking_lot = "0.12.1"
 bincode.workspace = true
 tonic.workspace = true
 tonic-proto.workspace = true

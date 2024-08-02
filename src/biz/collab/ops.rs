@@ -1,12 +1,25 @@
+use crate::state::AppStateGroupManager;
+use std::sync::Arc;
+
+use app_error::AppError;
+use appflowy_collaborate::collab::storage::CollabAccessControlStorage;
+use collab::core::collab::DataSource;
+use collab_entity::CollabType;
+use collab_entity::EncodedCollab;
+use collab_folder::{CollabOrigin, Folder};
+use database::collab::CollabStorage;
+use database_entity::dto::QueryCollab;
+use database_entity::dto::QueryCollabParams;
+use sqlx::PgPool;
 use std::ops::DerefMut;
 
 use anyhow::Context;
-use sqlx::{types::Uuid, PgPool};
+use shared_entity::dto::workspace_dto::FolderView;
+use sqlx::types::Uuid;
 use tracing::{event, trace};
 use validator::Validate;
 
 use access_control::collab::CollabAccessControl;
-use app_error::AppError;
 use database_entity::dto::{
   AFCollabMember, CollabMemberIdentify, InsertCollabMemberParams, QueryCollabMembers,
   UpdateCollabMemberParams,
@@ -129,6 +142,7 @@ pub async fn delete_collab_member(
     .context("fail to commit the transaction to remove collab member")?;
   Ok(())
 }
+
 pub async fn get_collab_member_list(
   pg_pool: &PgPool,
   params: &QueryCollabMembers,
@@ -136,4 +150,71 @@ pub async fn get_collab_member_list(
   params.validate()?;
   let collab_member = database::collab::select_collab_members(&params.object_id, pg_pool).await?;
   Ok(collab_member)
+}
+
+pub async fn get_user_workspace_structure(
+  group_manager: AppStateGroupManager,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: i64,
+  workspace_id: String,
+) -> Result<FolderView, AppError> {
+  let folder = get_latest_collab_folder(group_manager, collab_storage, &uid, &workspace_id).await?;
+  Ok((&folder).into())
+}
+
+pub async fn get_latest_collab_folder(
+  group_manager: AppStateGroupManager,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: &i64,
+  workspace_id: &str,
+) -> Result<Folder, AppError> {
+  let encoded_collab = get_latest_collab_encoded(
+    group_manager,
+    collab_storage,
+    uid,
+    workspace_id,
+    workspace_id,
+    CollabType::Folder,
+  )
+  .await?;
+  let folder = Folder::from_collab_doc_state(
+    uid,
+    CollabOrigin::Server,
+    DataSource::DocStateV1(encoded_collab.doc_state.to_vec()),
+    workspace_id,
+    vec![],
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(folder)
+}
+
+pub async fn get_latest_collab_encoded(
+  group_manager: AppStateGroupManager,
+  collab_storage: Arc<CollabAccessControlStorage>,
+  uid: &i64,
+  workspace_id: &str,
+  oid: &str,
+  collab_type: CollabType,
+) -> Result<EncodedCollab, AppError> {
+  match group_manager.get_group(oid).await {
+    Some(group) => group
+      .encode_collab()
+      .await
+      .map_err(|e| AppError::Unhandled(e.to_string())),
+    None => {
+      collab_storage
+        .get_encode_collab(
+          uid,
+          QueryCollabParams {
+            workspace_id: workspace_id.to_string(),
+            inner: QueryCollab {
+              object_id: oid.to_string(),
+              collab_type,
+            },
+          },
+          false,
+        )
+        .await
+    },
+  }
 }

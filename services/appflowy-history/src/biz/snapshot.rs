@@ -1,9 +1,9 @@
 use std::ops::Deref;
-use std::sync::{Arc, Weak};
 use std::sync::atomic::AtomicU32;
+use std::sync::{Arc, Weak};
 
-use collab::preclude::{Collab, ReadTxn, Snapshot, StateVector};
 use collab::preclude::updates::encoder::Encode;
+use collab::preclude::{Collab, ReadTxn, Snapshot, StateVector};
 use collab_entity::CollabType;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{trace, warn};

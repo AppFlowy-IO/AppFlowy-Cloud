@@ -4,8 +4,8 @@ use anyhow::Context;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
-use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use redis::aio::ConnectionManager;
 use tokio::time::sleep;
 

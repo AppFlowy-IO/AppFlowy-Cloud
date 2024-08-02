@@ -10,7 +10,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use client_api_test::*;
-use collab_rt_entity::{CollabMessage, MAXIMUM_REALTIME_MESSAGE_SIZE, RealtimeMessage, UpdateSync};
+use collab_rt_entity::{CollabMessage, RealtimeMessage, UpdateSync, MAXIMUM_REALTIME_MESSAGE_SIZE};
 use database_entity::dto::AFAccessLevel;
 
 use crate::collab::util::{

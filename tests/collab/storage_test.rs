@@ -6,8 +6,8 @@ use collab::core::transaction::DocTransactionExtension;
 use collab::entity::EncodedCollab;
 use collab::preclude::{Doc, Transact};
 use collab_entity::CollabType;
-use sqlx::PgPool;
 use sqlx::types::Uuid;
+use sqlx::PgPool;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 

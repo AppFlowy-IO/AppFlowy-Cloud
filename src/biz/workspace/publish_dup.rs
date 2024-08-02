@@ -10,7 +10,7 @@ use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
 use collab_folder::{
-  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIcon, ViewIdentifier, ViewLayout,
+  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
 };
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
@@ -18,6 +18,7 @@ use collab_rt_protocol::{Message, SyncMessage};
 use database::collab::{select_workspace_database_oid, CollabStorage};
 use database::publish::select_published_data_for_view_id;
 use database_entity::dto::CollabParams;
+use shared_entity::dto::publish_dto::{PublishDatabaseData, PublishViewInfo, PublishViewMetaData};
 use sqlx::PgPool;
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
@@ -242,7 +243,7 @@ impl PublishCollabDuplicator {
   ) -> Result<Option<View>, AppError> {
     // attempt to get metadata and doc_state for published view
     let (metadata, published_blob) =
-      match select_published_data_for_view_id(txn, &publish_view_id.parse()?).await? {
+      match get_published_data_for_view_id(txn, &publish_view_id.parse()?).await? {
         Some(published_data) => published_data,
         None => {
           tracing::warn!(
@@ -275,16 +276,18 @@ impl PublishCollabDuplicator {
         Ok(Some(new_doc_view))
       },
       CollabType::Database => {
-        let db_json_obj = serde_json::from_slice::<serde_json::Value>(&published_blob)
-          .map_err(|e| AppError::Unhandled(format!("failed to parse database json: {}", e)))?;
+        let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
         let new_db_view = self
-          .deep_copy_database_txn(txn, publish_view_id, new_view_id, db_json_obj, metadata)
+          .deep_copy_database_txn(
+            txn,
+            publish_view_id,
+            new_view_id,
+            uuid::Uuid::new_v4().to_string(),
+            db_payload,
+            metadata,
+          )
           .await?;
         Ok(Some(new_db_view))
-      },
-      CollabType::DatabaseRow => {
-        // TODO
-        Ok(None)
       },
       t => {
         tracing::warn!("collab type not supported: {:?}", t);
@@ -298,13 +301,10 @@ impl PublishCollabDuplicator {
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
     doc: Document,
-    metadata: serde_json::Value,
+    metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
-    let mut ret_view = self.new_folder_view(
-      new_view_id.clone(),
-      metadata.get("view"),
-      ViewLayout::Document,
-    );
+    let mut ret_view =
+      self.new_folder_view(new_view_id.clone(), &metadata.view, ViewLayout::Document);
 
     let mut doc_data = doc
       .get_document_data()
@@ -466,31 +466,51 @@ impl PublishCollabDuplicator {
         .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
 
       if let Some((metadata, published_blob)) =
-        select_published_data_for_view_id(txn, &view_id_str.parse()?).await?
+        get_published_data_for_view_id(txn, &view_id_str.parse()?).await?
       {
-        let db_json_obj = serde_json::from_slice::<serde_json::Value>(&published_blob)
-          .map_err(|e| AppError::Unhandled(format!("failed to parse database json: {}", e)))?;
-        let new_folder_db_view_id = uuid::Uuid::new_v4().to_string();
+        let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
+
+        // TODO:
+        // db_json_obj.get("ancestor"
+
+        let new_db_folder_view_id = uuid::Uuid::new_v4().to_string();
+        let new_db_id = uuid::Uuid::new_v4().to_string();
         let mut new_folder_db_view = self
           .deep_copy_database_txn(
             txn,
             view_id_str,
-            new_folder_db_view_id.clone(),
-            db_json_obj,
+            new_db_folder_view_id.clone(),
+            new_db_id.clone(),
+            db_payload,
             metadata,
           )
           .await?;
         new_folder_db_view.parent_view_id = ret_view.id.clone();
-        ret_view.children.push(ViewIdentifier {
-          id: new_folder_db_view_id.clone(),
-        });
-        self.views_to_add.push(new_folder_db_view);
 
-        *block_view_id = serde_json::json!(new_folder_db_view_id); // TODO: get specific view of db
+        // let new_block_view_id = uuid::Uuid::new_v4().to_string();
+
+        self
+          .workspace_databases
+          .get_mut(&new_db_id)
+          .ok_or_else(|| AppError::RecordNotFound("workspace database not found".to_string()))?
+          .push(new_db_folder_view_id.clone());
+        *block_view_id = serde_json::Value::String(new_db_folder_view_id.clone());
+
         let block_parent_id = block.data.get_mut("parent_id").ok_or_else(|| {
           AppError::RecordNotFound("parent_id not found in block data".to_string())
         })?;
-        *block_parent_id = serde_json::json!(new_folder_db_view_id);
+        *block_parent_id = serde_json::Value::String(new_db_folder_view_id.clone());
+
+        // attach main database view to be a child of the document
+        // ret_view.children.push(ViewIdentifier {
+        //   id: new_db_folder_view_id.clone(),
+        // });
+        self.views_to_add.push(new_folder_db_view);
+
+        // let mut new_view_for_doc =
+        //   self.new_folder_view(new_block_view_id, None, new_folder_db_view.layout.clone());
+        // new_view_for_doc.parent_view_id = new_db_folder_view_id.clone();
+        // self.views_to_add.push(new_view_for_doc);
       }
     }
 
@@ -502,77 +522,40 @@ impl PublishCollabDuplicator {
     pg_txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     old_view_id: &str,
     new_view_id: String,
-    published_db: serde_json::Value,
-    metadata: serde_json::Value,
+    new_db_id: String,
+    published_db: PublishDatabaseData,
+    metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
-    // create new identity for database
-    let new_db_id = uuid::Uuid::new_v4().to_string();
-
     // metadata for non-main view of database
-    let _empty_vec = Vec::new();
     let child_meta_by_old_view_id = metadata
-      .get("child_views")
-      .and_then(|v| v.as_array())
-      .unwrap_or(&_empty_vec)
+      .child_views
       .iter()
-      .map(|value| {
-        (
-          value.get("view_id").and_then(|v| v.as_str()).unwrap_or(""),
-          value,
-        )
-      })
+      .map(|value| (value.view_id.as_str(), value))
       .collect::<HashMap<_, _>>();
 
     // collab of database
-    let db_collab = {
-      let db_bin_data = published_db
-        .get("database_collab")
-        .ok_or_else(|| AppError::RecordNotFound("database_collab not found".to_string()))?
-        .as_array()
-        .ok_or_else(|| AppError::RecordNotFound("database_collab not an array".to_string()))?
-        .iter()
-        .flat_map(|v| v.as_number())
-        .flat_map(|v| v.as_u64())
-        .map(|v| v as u8)
-        .collect::<Vec<_>>();
-      Collab::new_with_source(
-        CollabOrigin::Server,
-        &new_db_id,
-        DataSource::DocStateV1(db_bin_data),
-        vec![],
-        false,
-      )
-      .map_err(|e| AppError::Unhandled(e.to_string()))?
-    };
+    let db_collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      &new_db_id,
+      DataSource::DocStateV1(published_db.database_collab),
+      vec![],
+      false,
+    )
+    .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
     // collabs of rows
     // key: old_row_id -> Collab (with new_id and database_id)
     let publish_row_by_id = {
       let mut published_row_by_id: HashMap<&str, Collab> = HashMap::new();
-      let published_rows = published_db
-        .get("database_row_collabs")
-        .ok_or_else(|| AppError::RecordNotFound("database_row_collabs not found".to_string()))?
-        .as_object()
-        .ok_or_else(|| {
-          AppError::RecordNotFound("database_row_collabs not an object".to_string())
-        })?;
 
-      for (old_id, v) in published_rows {
+      for (old_id, v) in &published_db.database_row_collabs {
         // assign a new id for the row
         let new_row_id = uuid::Uuid::new_v4().to_string();
 
-        let row_bin_data = v
-          .as_array()
-          .ok_or_else(|| AppError::RecordNotFound("row_collab not an array".to_string()))?
-          .iter()
-          .flat_map(|v| v.as_number())
-          .flat_map(|v| v.as_u64())
-          .map(|v| v as u8)
-          .collect::<Vec<_>>();
         let db_row_collab = Collab::new_with_source(
           CollabOrigin::Server,
           &new_row_id,
-          DataSource::DocStateV1(row_bin_data),
+          DataSource::DocStateV1(v.to_vec()),
           vec![],
           false,
         )
@@ -627,13 +610,10 @@ impl PublishCollabDuplicator {
       // Set the row_id references
       let view_change_tx = tokio::sync::broadcast::channel(1).0;
       let view_map = ViewMap::new(container, view_change_tx);
-
       let visible_database_view_ids = published_db
-        .get("visible_database_view_ids")
-        .and_then(|v| v.as_array())
-        .unwrap_or(&_empty_vec)
+        .visible_database_view_ids
         .iter()
-        .flat_map(|v| v.as_str())
+        .map(|v| v.as_str())
         .collect::<HashSet<_>>();
 
       let mut db_views = view_map
@@ -658,11 +638,15 @@ impl PublishCollabDuplicator {
             new_db_view_ids.push(new_view_id.clone());
             selected_view = Some(self.new_folder_view(
               new_view_id.clone(),
-              metadata.get("view"),
+              &metadata.view,
               db_layout_to_view_layout(db_view.layout),
             ));
           } else {
-            let other_view_meta = child_meta_by_old_view_id.get(db_view.id.as_str()).copied();
+            let other_view_meta = child_meta_by_old_view_id
+              .get(db_view.id.as_str())
+              .ok_or_else(|| {
+                AppError::RecordNotFound(format!("metadata not found for view: {}", db_view.id))
+              })?;
             let other_view_id = uuid::Uuid::new_v4().to_string();
             new_db_view_ids.push(other_view_id.clone());
             db_view.id = other_view_id.clone();
@@ -719,38 +703,23 @@ impl PublishCollabDuplicator {
   fn new_folder_view(
     &self,
     new_view_id: String,
-    metadata: Option<&serde_json::Value>,
+    view_info: &PublishViewInfo,
     layout: ViewLayout,
   ) -> View {
-    let (name, icon, extra) = match metadata {
-      Some(meta) => {
-        let name = meta
-          .get("name")
-          .and_then(|name| name.as_str())
-          .unwrap_or("Untitled Duplicated");
-        let icon = meta
-          .get("icon")
-          .and_then(|icon| serde_json::from_value::<ViewIcon>(icon.clone()).ok());
-        let extra = meta.get("extra").and_then(|name| name.as_str());
-        (name, icon, extra)
-      },
-      None => ("Untitled Duplicated", None, None),
-    };
-
     View {
-      id: new_view_id,
+      id: new_view_id.clone(),
       parent_view_id: "".to_string(), // to be filled by caller
-      name: name.to_string(),
+      name: view_info.name.clone(),
       desc: "".to_string(), // unable to get from metadata
       children: RepeatedViewIdentifier { items: vec![] }, // fill in while iterating children
       created_at: self.ts_now,
       is_favorite: false,
       layout,
-      icon,
+      icon: view_info.icon.clone(),
       created_by: Some(self.duplicator_uid),
       last_edited_time: self.ts_now,
       last_edited_by: Some(self.duplicator_uid),
-      extra: extra.map(String::from),
+      extra: view_info.extra.clone(),
     }
   }
 
@@ -833,5 +802,19 @@ fn db_layout_to_view_layout(layout: collab_database::views::DatabaseLayout) -> V
     collab_database::views::DatabaseLayout::Grid => ViewLayout::Grid,
     collab_database::views::DatabaseLayout::Board => ViewLayout::Board,
     collab_database::views::DatabaseLayout::Calendar => ViewLayout::Calendar,
+  }
+}
+
+#[inline]
+pub async fn get_published_data_for_view_id(
+  txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+  view_id: &uuid::Uuid,
+) -> Result<Option<(PublishViewMetaData, Vec<u8>)>, AppError> {
+  match select_published_data_for_view_id(txn, view_id).await? {
+    Some((js_val, blob)) => {
+      let metadata = serde_json::from_value(js_val)?;
+      Ok(Some((metadata, blob)))
+    },
+    None => Ok(None),
   }
 }

@@ -1,45 +1,47 @@
 use crate::{load_env, localhost_client_with_device_id, setup_log};
+use std::collections::HashMap;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
 use anyhow::{anyhow, Error};
 use assert_json_diff::{
   assert_json_eq, assert_json_include, assert_json_matches_no_panic, CompareMode, Config,
 };
 use bytes::Bytes;
-#[cfg(feature = "collab-sync")]
-use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
-use client_api::entity::QueryWorkspaceMember;
-use client_api::ws::{WSClient, WSClientConfig};
-use collab::core::collab::{DataSource, MutexCollab};
+use collab::core::collab::DataSource;
 use collab::core::collab_state::SyncState;
 use collab::core::origin::{CollabClient, CollabOrigin};
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
-
 use collab_entity::CollabType;
 use collab_folder::Folder;
+use mime::Mime;
+use serde::Deserialize;
+use serde_json::{json, Value};
+use tokio::sync::{Mutex, RwLock};
+use tokio::time::{Duration, sleep, timeout};
+use tokio_stream::StreamExt;
+use tracing::trace;
+use uuid::Uuid;
+
+#[cfg(feature = "collab-sync")]
+use client_api::collab_sync::{SinkConfig, SyncObject, SyncPlugin};
+use client_api::entity::QueryWorkspaceMember;
+use client_api::ws::{WSClient, WSClientConfig};
 use database_entity::dto::{
   AFAccessLevel, AFRole, AFSnapshotMeta, AFSnapshotMetas, AFUserWorkspaceInfo, AFWorkspace,
   AFWorkspaceInvitationStatus, AFWorkspaceMember, BatchQueryCollabResult, CollabParams,
   CreateCollabParams, InsertCollabMemberParams, QueryCollab, QueryCollabParams,
   QuerySnapshotParams, SnapshotData, UpdateCollabMemberParams,
 };
-use mime::Mime;
-use serde::Deserialize;
-use serde_json::{json, Value};
 use shared_entity::dto::workspace_dto::{
   BlobMetadata, CollabResponse, WorkspaceMemberChangeset, WorkspaceMemberInvitation,
   WorkspaceSpaceUsage,
 };
 use shared_entity::response::AppResponseError;
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::time::{sleep, timeout, Duration};
-use tokio_stream::StreamExt;
-use tracing::trace;
-use uuid::Uuid;
 
+use crate::{localhost_client_with_device_id, setup_log};
 use crate::user::{generate_unique_registered_user, User};
 
 pub struct TestClient {
@@ -52,7 +54,7 @@ pub struct TestClient {
 pub struct TestCollab {
   #[allow(dead_code)]
   pub origin: CollabOrigin,
-  pub mutex_collab: Arc<MutexCollab>,
+  pub collab: Arc<RwLock<Collab>>,
 }
 impl TestClient {
   pub async fn new(registered_user: User, start_ws_conn: bool) -> Self {
@@ -116,12 +118,8 @@ impl TestClient {
       pub uid: i64,
     }
 
-    self
-      .collabs
-      .get(object_id)
-      .unwrap()
-      .mutex_collab
-      .lock()
+    let lock = self.collabs.get(object_id).unwrap().collab.read().await;
+    lock
       .get_awareness()
       .clients()
       .iter()
@@ -132,23 +130,25 @@ impl TestClient {
       .collect()
   }
 
-  pub fn clean_awareness_state(&self, object_id: &str) {
+  pub async fn clean_awareness_state(&self, object_id: &str) {
     self
       .collabs
       .get(object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await
       .clean_awareness_state();
   }
 
-  pub fn emit_awareness_state(&self, object_id: &str) {
+  pub async fn emit_awareness_state(&self, object_id: &str) {
     self
       .collabs
       .get(object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await
       .emit_awareness_state();
   }
 
@@ -343,8 +343,9 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .read()
+      .await
       .subscribe_sync_state();
 
     let duration = Duration::from_secs(secs);
@@ -521,34 +522,25 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = match encoded_collab_v1 {
-      None => Arc::new(MutexCollab::new(Collab::new_with_origin(
+    let mut collab = match encoded_collab_v1 {
+      None => Collab::new_with_origin(origin.clone(), object_id, vec![], false),
+      Some(data) => Collab::new_with_source(
         origin.clone(),
         object_id,
+        DataSource::DocStateV1(data.doc_state.to_vec()),
         vec![],
         false,
-      ))),
-      Some(data) => Arc::new(MutexCollab::new(
-        Collab::new_with_source(
-          origin.clone(),
-          object_id,
-          DataSource::DocStateV1(data.doc_state.to_vec()),
-          vec![],
-          false,
-        )
-        .unwrap(),
-      )),
+      )
+      .unwrap(),
     };
 
     let encoded_collab_v1 = {
-      let mut lock_guard = collab.lock();
-      lock_guard.emit_awareness_state();
-      let data = lock_guard
+      collab.emit_awareness_state();
+      let data = collab
         .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
         .unwrap()
         .encode_to_bytes()
         .unwrap();
-      drop(lock_guard);
       data
     };
 
@@ -563,6 +555,7 @@ impl TestClient {
       .await
       .unwrap();
 
+    let collab = Arc::new(RwLock::new(collab));
     #[cfg(feature = "collab-sync")]
     {
       let handler = self
@@ -582,13 +575,10 @@ impl TestClient {
         Some(handler),
         ws_connect_state,
       );
-      collab.lock().add_plugin(Box::new(sync_plugin));
+      collab.read().await.add_plugin(Box::new(sync_plugin));
     }
-    collab.lock().initialize();
-    let test_collab = TestCollab {
-      origin,
-      mutex_collab: collab,
-    };
+    collab.write().await.initialize();
+    let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.to_string(), test_collab);
     self.wait_object_sync_complete(object_id).await.unwrap();
   }
@@ -621,17 +611,16 @@ impl TestClient {
   ) {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
-    let collab = Arc::new(MutexCollab::new(
-      Collab::new_with_source(
-        origin.clone(),
-        object_id,
-        DataSource::DocStateV1(doc_state),
-        vec![],
-        false,
-      )
-      .unwrap(),
-    ));
-    collab.lock().emit_awareness_state();
+    let mut collab = Collab::new_with_source(
+      origin.clone(),
+      object_id,
+      DataSource::DocStateV1(doc_state),
+      vec![],
+      false,
+    )
+    .unwrap();
+    collab.emit_awareness_state();
+    let collab = Arc::new(RwLock::new(collab));
 
     #[cfg(feature = "collab-sync")]
     {
@@ -653,13 +642,10 @@ impl TestClient {
         ws_connect_state,
       );
 
-      collab.lock().add_plugin(Box::new(sync_plugin));
+      collab.read().await.add_plugin(Box::new(sync_plugin));
     }
-    collab.lock().initialize();
-    let test_collab = TestCollab {
-      origin,
-      mutex_collab: collab,
-    };
+    collab.write().await.initialize();
+    let test_collab = TestCollab { origin, collab };
     self.collabs.insert(object_id.to_string(), test_collab);
   }
 
@@ -674,32 +660,23 @@ impl TestClient {
     // Subscribe to object
     let origin = CollabOrigin::Client(CollabClient::new(self.uid().await, self.device_id.clone()));
     let collab = match encoded_collab_v1 {
-      None => Arc::new(MutexCollab::new(Collab::new_with_origin(
+      None => Collab::new_with_origin(origin.clone(), &object_id, vec![], false),
+      Some(data) => Collab::new_with_source(
         origin.clone(),
         &object_id,
+        DataSource::DocStateV1(data.doc_state.to_vec()),
         vec![],
         false,
-      ))),
-      Some(data) => Arc::new(MutexCollab::new(
-        Collab::new_with_source(
-          origin.clone(),
-          &object_id,
-          DataSource::DocStateV1(data.doc_state.to_vec()),
-          vec![],
-          false,
-        )
-        .unwrap(),
-      )),
+      )
+      .unwrap(),
     };
 
     let encoded_collab_v1 = {
-      let lock_guard = collab.lock();
-      let data = lock_guard
+      let data = collab
         .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
         .unwrap()
         .encode_to_bytes()
         .unwrap();
-      drop(lock_guard);
       data
     };
 
@@ -736,8 +713,9 @@ impl TestClient {
       .collabs
       .get(object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .read()
+      .await
       .to_json_value()
   }
 }
@@ -877,8 +855,9 @@ pub async fn assert_client_collab_within_secs(
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .mutex_collab
-          .lock()
+          .collab
+          .read()
+          .await
           .to_json_value()
       } => {
         retry_count += 1;
@@ -913,8 +892,9 @@ pub async fn assert_client_collab_include_value(
           .collabs
           .get_mut(&object_id)
           .unwrap()
-          .mutex_collab
-          .lock()
+          .collab
+          .read()
+          .await
           .to_json_value()
       } => {
         retry_count += 1;

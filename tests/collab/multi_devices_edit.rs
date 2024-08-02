@@ -1,11 +1,13 @@
-use client_api_test::*;
+use std::time::Duration;
+
 use collab_entity::CollabType;
-use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 use serde_json::json;
 use sqlx::types::uuid;
-use std::time::Duration;
 use tokio::time::sleep;
 use tracing::trace;
+
+use client_api_test::*;
+use database_entity::dto::{AFAccessLevel, QueryCollabParams};
 
 #[tokio::test]
 async fn sync_collab_content_after_reconnect_test() {
@@ -25,8 +27,9 @@ async fn sync_collab_content_after_reconnect_test() {
       .collabs
       .get_mut(&object_id)
       .unwrap()
-      .mutex_collab
-      .lock()
+      .collab
+      .write()
+      .await
       .insert(&i.to_string(), i.to_string());
   }
 
@@ -86,8 +89,9 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "workspace1");
   client_1
     .wait_object_sync_complete(&object_id)
@@ -122,8 +126,9 @@ async fn same_client_with_diff_devices_edit_same_collab_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "workspace2");
   client_2.reconnect().await;
   client_2
@@ -163,8 +168,9 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .collabs
     .get_mut(&object_id_1)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "object 1");
   device_1
     .wait_object_sync_complete(&object_id_1)
@@ -176,8 +182,9 @@ async fn same_client_with_diff_devices_edit_diff_collab_test() {
     .collabs
     .get_mut(&object_id_2)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("name", "object 2");
   device_2
     .wait_object_sync_complete(&object_id_2)
@@ -248,16 +255,18 @@ async fn edit_document_with_both_clients_offline_then_online_sync_test() {
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .mutex_collab
-        .lock()
+        .collab
+        .write()
+        .await
         .insert(&i.to_string(), format!("Task {}", i));
     } else {
       client_2
         .collabs
         .get_mut(&object_id)
         .unwrap()
-        .mutex_collab
-        .lock()
+        .collab
+        .write()
+        .await
         .insert(&i.to_string(), format!("Task {}", i));
     }
   }

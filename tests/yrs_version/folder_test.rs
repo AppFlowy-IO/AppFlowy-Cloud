@@ -1,8 +1,9 @@
-use crate::yrs_version::util::read_bytes_from_file;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_folder::Folder;
+
+use crate::yrs_version::util::read_bytes_from_file;
 
 /// Load collaboration data that was encoded using Yjs version 0.17.
 /// folder structure:
@@ -30,7 +31,7 @@ fn load_yrs_0172_version_folder_using_current_yrs_version() {
   )
   .unwrap();
 
-  let workspace_id = folder.get_workspace_id();
+  let workspace_id = folder.get_workspace_id().unwrap();
   let views = folder.get_views_belong_to(&workspace_id);
   assert_eq!(views.len(), 3);
   assert_eq!(views[0].name, "person-document2");

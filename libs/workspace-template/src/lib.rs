@@ -1,20 +1,21 @@
-pub mod document;
-mod hierarchy_builder;
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
 pub use anyhow::Result;
 use async_trait::async_trait;
-use collab::core::collab::MutexCollab;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
-  timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
+  Folder, FolderData, RepeatedViewIdentifier, timestamp, ViewIdentifier, ViewLayout, Workspace,
 };
-use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
+
+use crate::hierarchy_builder::{FlattedViews, WorkspaceViewBuilder};
+
+pub mod document;
+mod hierarchy_builder;
 
 #[async_trait]
 pub trait WorkspaceTemplate {
@@ -121,14 +122,9 @@ impl WorkspaceTemplateBuilder {
         private: Default::default(),
       };
 
-      let collab = Arc::new(MutexCollab::new(Collab::new_with_origin(
-        CollabOrigin::Empty,
-        &workspace_id,
-        vec![],
-        false,
-      )));
-      let folder = Folder::create(uid, collab, None, folder_data);
-      let data = folder.encode_collab_v1()?;
+      let collab = Collab::new_with_origin(CollabOrigin::Empty, &workspace_id, vec![], false);
+      let folder = Folder::open_with(uid, collab, None, Some(folder_data));
+      let data = folder.encode_collab()?;
       Ok::<_, anyhow::Error>(TemplateData {
         object_id: workspace_id,
         object_type: CollabType::Folder,

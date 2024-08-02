@@ -1,6 +1,9 @@
-use anyhow::anyhow;
+use std::sync::Arc;
+
 use async_trait::async_trait;
-use collab::core::collab::MutexCollab;
+use collab::core::collab::DataSource;
+use collab::core::origin::CollabOrigin;
+use collab::preclude::Collab;
 use collab_document::document::Document;
 use collab_document::error::DocumentError;
 use collab_entity::CollabType;
@@ -25,18 +28,9 @@ impl DocumentIndexer {
   }
 
   fn get_document_contents(
-    collab: Arc<MutexCollab>,
-  ) -> Result<(String, Vec<AFCollabEmbeddingParams>), DocumentError> {
-    let object_id = collab
-      .try_lock()
-      .ok_or_else(|| {
-        DocumentError::Internal(anyhow!(
-          "Failed to lock collab when trying to get document content".to_string()
-        ))
-      })?
-      .object_id
-      .clone();
-    let document = Document::open(collab)?;
+    document: &Document,
+  ) -> Result<Vec<AFCollabEmbeddingParams>, DocumentError> {
+    let object_id = document.object_id().to_string();
     let document_data = document.get_document_data()?;
     let content = document_data.to_plain_text();
 
@@ -49,14 +43,27 @@ impl DocumentIndexer {
       embedding: None,
     };
 
-    Ok((object_id, vec![plain_text_param]))
+    Ok(vec![plain_text_param])
   }
 }
 
 #[async_trait]
 impl Indexer for DocumentIndexer {
-  async fn index(&self, collab: MutexCollab) -> Result<Option<AFCollabEmbeddings>, AppError> {
-    let (object_id, mut params) = match Self::get_document_contents(Arc::new(collab)) {
+  async fn index(
+    &self,
+    object_id: &str,
+    doc_state: Vec<u8>,
+  ) -> Result<Option<AFCollabEmbeddings>, AppError> {
+    let collab = Collab::new_with_source(
+      CollabOrigin::Server,
+      object_id,
+      DataSource::DocStateV1(doc_state),
+      vec![],
+      false,
+    )
+    .map_err(|e| AppError::Internal(e.into()))?;
+    let document = Document::open(collab).map_err(|e| AppError::Internal(e.into()))?;
+    let mut params = match Self::get_document_contents(&document) {
       Ok(result) => result,
       Err(err) => {
         tracing::warn!("failed to get document data: {}", err);

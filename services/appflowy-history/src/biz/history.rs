@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
+use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -11,7 +11,7 @@ use tracing::trace;
 use database::history::ops::get_snapshot_meta_list;
 use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
 
-use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState, gen_snapshot, SnapshotGenerator};
+use crate::biz::snapshot::{gen_snapshot, CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
 use crate::error::HistoryError;
 
 pub struct CollabHistory {

@@ -1,5 +1,5 @@
-use std::sync::{Arc, Weak};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Weak};
 
 use collab::preclude::{Collab, CollabPlugin};
 use collab_entity::CollabType;

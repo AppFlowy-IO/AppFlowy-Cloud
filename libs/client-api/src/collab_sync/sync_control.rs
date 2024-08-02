@@ -7,21 +7,21 @@ use collab::core::awareness::Awareness;
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{broadcast, RwLock, watch};
+use tokio::sync::{broadcast, watch, RwLock};
 use tracing::{instrument, trace};
-use yrs::{ReadTxn, StateVector};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::{ReadTxn, StateVector};
 
 use collab_rt_entity::{ClientCollabMessage, InitSync, ServerCollabMessage, UpdateSync};
 use collab_rt_protocol::{ClientSyncProtocol, CollabSyncProtocol, Message, SyncMessage};
 
 use crate::af_spawn;
+use crate::collab_sync::collab_stream::ObserveCollab;
 use crate::collab_sync::{
   CollabSink, CollabSinkRunner, CollabSyncState, MissUpdateReason, SinkSignal, SyncError,
   SyncObject,
 };
-use crate::collab_sync::collab_stream::ObserveCollab;
 
 pub const DEFAULT_SYNC_TIMEOUT: u64 = 10;
 

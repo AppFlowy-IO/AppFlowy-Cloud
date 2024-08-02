@@ -1,7 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Weak};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -11,8 +11,8 @@ use collab::core::origin::CollabOrigin;
 use collab::preclude::{Collab, CollabPlugin};
 use futures_util::SinkExt;
 use tokio::sync::RwLock;
-use tokio_retry::{Action, Condition, RetryIf};
 use tokio_retry::strategy::FixedInterval;
+use tokio_retry::{Action, Condition, RetryIf};
 use tokio_stream::StreamExt;
 use tracing::{error, trace};
 use yrs::updates::encoder::Encode;

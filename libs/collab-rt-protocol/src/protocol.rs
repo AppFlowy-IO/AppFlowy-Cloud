@@ -3,9 +3,9 @@ use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
 use tokio::sync::RwLock;
-use yrs::{ReadTxn, StateVector, Transact, Update};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
+use yrs::{ReadTxn, StateVector, Transact, Update};
 
 use crate::message::{CustomMessage, Message, RTProtocolError, SyncMessage, SyncMeta};
 

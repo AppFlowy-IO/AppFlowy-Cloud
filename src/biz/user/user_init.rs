@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use collab::core::origin::CollabOrigin;
 use collab::preclude::{ArrayPrelim, Collab, Map};
-use collab_entity::CollabType;
 use collab_entity::define::WORKSPACE_DATABASES;
+use collab_entity::CollabType;
 use sqlx::Transaction;
 use tracing::{debug, instrument};
 

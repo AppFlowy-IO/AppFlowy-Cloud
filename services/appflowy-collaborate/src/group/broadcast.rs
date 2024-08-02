@@ -1,5 +1,5 @@
-use std::sync::{Arc, Weak};
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Weak};
 
 use anyhow::anyhow;
 use bytes::Bytes;
@@ -12,16 +12,16 @@ use tokio::sync::RwLock;
 use tokio::time::Instant;
 use tracing::{error, trace, warn};
 use yrs::encoding::write::Write;
-use yrs::Subscription as YrsSubscription;
 use yrs::updates::decoder::DecoderV1;
 use yrs::updates::encoder::{Encode, Encoder, EncoderV1};
+use yrs::Subscription as YrsSubscription;
 
+use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::MessageByObjectId;
 use collab_rt_entity::{AckCode, MsgId};
 use collab_rt_entity::{
   AwarenessSync, BroadcastSync, ClientCollabMessage, CollabAck, CollabMessage,
 };
-use collab_rt_entity::MessageByObjectId;
-use collab_rt_entity::user::RealtimeUser;
 use collab_rt_protocol::{handle_message_follow_protocol, RTProtocolError};
 use collab_rt_protocol::{Message, MessageReader, MSG_SYNC, MSG_SYNC_UPDATE};
 
@@ -364,29 +364,23 @@ async fn handle_one_client_message(
     message_origin
   );
 
-  // calling the handle_one_message_payload in a loop to handle the lock timeout error. It will retry
-  // 3 times before returning an error.
-  loop {
-    match handle_one_message_payload(
-      object_id,
-      message_origin.clone(),
-      msg_id,
-      collab_msg.payload(),
-      collab,
-      metrics_calculate,
-      seq_num,
-    )
-    .await
-    {
-      Ok(ack) => {
-        let mut collab = collab.write().await;
-        collab.set_last_sync_at(chrono::Utc::now().timestamp());
-        return Ok(ack);
-      },
-      Err(err) => {
-        return Err(err);
-      },
-    }
+  match handle_one_message_payload(
+    object_id,
+    message_origin.clone(),
+    msg_id,
+    collab_msg.payload(),
+    collab,
+    metrics_calculate,
+    seq_num,
+  )
+  .await
+  {
+    Ok(ack) => {
+      let mut collab = collab.write().await;
+      collab.set_last_sync_at(chrono::Utc::now().timestamp());
+      Ok(ack)
+    },
+    Err(err) => Err(err),
   }
 }
 
@@ -410,7 +404,7 @@ async fn handle_one_message_payload(
     &payload,
     &message_origin,
     collab,
-    &metrics_calculate,
+    metrics_calculate,
     object_id,
     msg_id,
     seq_num,
@@ -444,8 +438,7 @@ async fn handle_message(
   for msg in reader {
     match msg {
       Ok(msg) => {
-        match handle_message_follow_protocol(message_origin, &ServerSyncProtocol, &collab, msg)
-          .await
+        match handle_message_follow_protocol(message_origin, &ServerSyncProtocol, collab, msg).await
         {
           Ok(payload) => {
             metrics_calculate

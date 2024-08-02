@@ -10,9 +10,9 @@ use collab_entity::CollabType;
 use collab_folder::ViewLayout;
 use tokio::sync::RwLock;
 
-use crate::{TemplateData, WorkspaceTemplate};
 use crate::document::parser::JsonToDocumentParser;
 use crate::hierarchy_builder::WorkspaceViewBuilder;
+use crate::{TemplateData, WorkspaceTemplate};
 
 /// This template generates a document containing a 'read me' guide.
 /// It ensures that at least one view is created for the document.

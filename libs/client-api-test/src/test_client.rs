@@ -19,7 +19,7 @@ use mime::Mime;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{Duration, sleep, timeout};
+use tokio::time::{sleep, timeout, Duration};
 use tokio_stream::StreamExt;
 use tracing::trace;
 use uuid::Uuid;
@@ -40,8 +40,8 @@ use shared_entity::dto::workspace_dto::{
 };
 use shared_entity::response::AppResponseError;
 
-use crate::{localhost_client_with_device_id, setup_log};
 use crate::user::{generate_unique_registered_user, User};
+use crate::{localhost_client_with_device_id, setup_log};
 
 pub struct TestClient {
   pub user: User,
@@ -532,15 +532,12 @@ impl TestClient {
       .unwrap(),
     };
 
-    let encoded_collab_v1 = {
-      collab.emit_awareness_state();
-      let data = collab
-        .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-        .unwrap()
-        .encode_to_bytes()
-        .unwrap();
-      data
-    };
+    collab.emit_awareness_state();
+    let encoded_collab_v1 = collab
+      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+      .unwrap()
+      .encode_to_bytes()
+      .unwrap();
 
     self
       .api_client
@@ -669,14 +666,11 @@ impl TestClient {
       .unwrap(),
     };
 
-    let encoded_collab_v1 = {
-      let data = collab
-        .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
-        .unwrap()
-        .encode_to_bytes()
-        .unwrap();
-      data
-    };
+    let encoded_collab_v1 = collab
+      .encode_collab_v1(|collab| collab_type.validate_require_data(collab))
+      .unwrap()
+      .encode_to_bytes()
+      .unwrap();
 
     self
       .api_client

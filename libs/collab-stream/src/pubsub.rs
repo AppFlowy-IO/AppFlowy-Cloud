@@ -93,8 +93,8 @@ impl ToRedisArgs for PubSubMessage {
   where
     W: ?Sized + RedisWrite,
   {
-    let json = bincode::serialize(self).unwrap();
-    json.write_redis_args(out);
+    let proto = self.to_proto().encode_to_vec();
+    proto.write_redis_args(out);
   }
 }
 

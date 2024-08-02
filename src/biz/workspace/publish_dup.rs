@@ -369,10 +369,6 @@ impl PublishCollabDuplicator {
         Some((_old_view_id, new_view_id)) => {
           if let Some(vid) = new_view_id {
             *page_id = serde_json::json!(vid);
-            ret_view
-              .children
-              .items
-              .push(ViewIdentifier { id: vid.clone() });
           } else {
             // ref view_id is not published
             // TODO: handle this case to
@@ -390,9 +386,6 @@ impl PublishCollabDuplicator {
           .await?
           {
             new_view.parent_view_id = ret_view.id.clone();
-            ret_view.children.items.push(ViewIdentifier {
-              id: new_view.id.clone(),
-            });
             self
               .duplicated_refs
               .insert(page_id_str.to_string(), Some(new_view.id.clone()));

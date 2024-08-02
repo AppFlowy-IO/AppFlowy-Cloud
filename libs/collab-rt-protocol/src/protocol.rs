@@ -2,10 +2,10 @@ use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
 use collab::preclude::Collab;
-
+use tokio::sync::RwLock;
+use yrs::{ReadTxn, StateVector, Transact, Update};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
-use yrs::{ReadTxn, StateVector, Transact, Update};
 
 use crate::message::{CustomMessage, Message, RTProtocolError, SyncMessage, SyncMeta};
 
@@ -191,40 +191,45 @@ pub trait CollabSyncProtocol {
 }
 
 /// Handles incoming messages from the client/server
-pub fn handle_message_follow_protocol<P: CollabSyncProtocol>(
+pub async fn handle_message_follow_protocol<P: CollabSyncProtocol>(
   message_origin: &CollabOrigin,
   protocol: &P,
-  collab: &mut Collab,
+  collab: &RwLock<Collab>,
   msg: Message,
 ) -> Result<Option<Vec<u8>>, RTProtocolError> {
   match msg {
     Message::Sync(msg) => match msg {
       SyncMessage::SyncStep1(sv) => {
         // calculate missing updates base on the input state vector
-        let update = protocol.handle_sync_step1(collab.get_awareness(), sv)?;
+        let lock = collab.read().await;
+        let update = protocol.handle_sync_step1(lock.get_awareness(), sv)?;
         Ok(update)
       },
       SyncMessage::SyncStep2(update) => {
-        protocol.handle_sync_step2(
-          message_origin,
-          collab.get_mut_awareness(),
-          Update::decode_v1(&update)?,
-        )?;
+        let update = Update::decode_v1(&update)?;
+        let mut lock = collab.write().await;
+        protocol.handle_sync_step2(message_origin, lock.get_mut_awareness(), update)?;
         Ok(None)
       },
       SyncMessage::Update(update) => {
-        protocol.handle_update(
-          message_origin,
-          collab.get_mut_awareness(),
-          Update::decode_v1(&update)?,
-        )?;
+        let update = Update::decode_v1(&update)?;
+        let mut lock = collab.write().await;
+        protocol.handle_update(message_origin, lock.get_mut_awareness(), update)?;
         Ok(None)
       },
     },
-    Message::Auth(reason) => protocol.handle_auth(collab.get_awareness(), reason),
-    Message::Awareness(update) => {
-      protocol.handle_awareness_update(message_origin, collab.get_mut_awareness(), update)
+    Message::Auth(reason) => {
+      let lock = collab.read().await;
+      protocol.handle_auth(lock.get_awareness(), reason)
     },
-    Message::Custom(msg) => protocol.handle_custom_message(collab.get_mut_awareness(), msg),
+    //FIXME: where is the QueryAwareness protocol?
+    Message::Awareness(update) => {
+      let mut lock = collab.write().await;
+      protocol.handle_awareness_update(message_origin, lock.get_mut_awareness(), update)
+    },
+    Message::Custom(msg) => {
+      let mut lock = collab.write().await;
+      protocol.handle_custom_message(lock.get_mut_awareness(), msg)
+    },
   }
 }

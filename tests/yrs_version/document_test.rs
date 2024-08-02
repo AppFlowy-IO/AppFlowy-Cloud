@@ -1,8 +1,9 @@
-use crate::yrs_version::util::read_bytes_from_file;
 use collab::core::collab::DataSource;
 use collab::core::origin::CollabOrigin;
 use collab::entity::EncodedCollab;
 use collab_document::document::Document;
+
+use crate::yrs_version::util::read_bytes_from_file;
 
 /// Load collaboration data that was encoded using Yjs version 0.17.
 #[test]
@@ -10,7 +11,7 @@ fn load_yrs_0172_version_get_started_document_using_current_yrs_version() {
   let data = read_bytes_from_file("get_started_encode_collab_0172");
   let encode_collab = EncodedCollab::decode_from_bytes(&data).unwrap();
 
-  let document = Document::from_doc_state(
+  let document = Document::open_with_options(
     CollabOrigin::Empty,
     DataSource::DocStateV1(encode_collab.doc_state.to_vec()),
     "fake_id",

@@ -1,104 +1,99 @@
-use crate::biz::snapshot::{gen_snapshot, CollabSnapshot, CollabSnapshotState, SnapshotGenerator};
+use std::sync::Arc;
 
-use crate::error::HistoryError;
-use collab::core::collab::MutexCollab;
+use collab::preclude::{Collab, CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab::preclude::updates::encoder::{Encoder, EncoderV2};
-use collab::preclude::{CollabPlugin, ReadTxn, Snapshot, StateVector, TransactionMut};
 use collab_entity::CollabType;
-use database::history::ops::get_snapshot_meta_list;
 use serde_json::Value;
 use sqlx::PgPool;
-use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
+use tokio::sync::RwLock;
 use tracing::trace;
+
+use database::history::ops::get_snapshot_meta_list;
+use tonic_proto::history::{RepeatedSnapshotMetaPb, SnapshotMetaPb};
+
+use crate::biz::snapshot::{CollabSnapshot, CollabSnapshotState, gen_snapshot, SnapshotGenerator};
+use crate::error::HistoryError;
 
 pub struct CollabHistory {
   object_id: String,
-  mutex_collab: MutexCollab,
+  collab: Arc<RwLock<Collab>>,
   collab_type: CollabType,
   snapshot_generator: SnapshotGenerator,
 }
 
 impl CollabHistory {
-  pub fn new(
-    object_id: &str,
-    mutex_collab: MutexCollab,
-    collab_type: CollabType,
-  ) -> Result<Self, HistoryError> {
+  pub async fn new(object_id: &str, collab: Arc<RwLock<Collab>>, collab_type: CollabType) -> Self {
     let snapshot_generator =
-      SnapshotGenerator::new(object_id, mutex_collab.downgrade(), collab_type.clone());
+      SnapshotGenerator::new(object_id, Arc::downgrade(&collab), collab_type.clone());
 
-    mutex_collab.lock().add_plugin(Box::new(CountUpdatePlugin {
+    collab.read().await.add_plugin(Box::new(CountUpdatePlugin {
       snapshot_generator: snapshot_generator.clone(),
     }));
 
-    Ok(Self {
+    Self {
       object_id: object_id.to_string(),
       snapshot_generator,
-      mutex_collab,
+      collab,
       collab_type,
-    })
+    }
   }
 
   #[cfg(debug_assertions)]
   /// Generate a snapshot of the current state of the collab
   /// Only for testing purposes. We use [SnapshotGenerator] to generate snapshot
-  pub fn gen_snapshot(&self, _uid: i64) -> Result<CollabSnapshot, HistoryError> {
-    gen_snapshot(&self.mutex_collab, &self.object_id)
+  pub async fn gen_snapshot(&self, _uid: i64) -> CollabSnapshot {
+    let lock = self.collab.read().await;
+    gen_snapshot(&lock, &self.object_id)
   }
 
   pub async fn gen_snapshot_context(&self) -> Result<Option<SnapshotContext>, HistoryError> {
-    let mutex_collab = self.mutex_collab.clone();
+    let collab = self.collab.clone();
     let snapshot_generator = self.snapshot_generator.clone();
     let object_id = self.object_id.clone();
     let collab_type = self.collab_type.clone();
 
-    tokio::task::spawn_blocking(move || {
-      let timestamp = chrono::Utc::now().timestamp();
-      let snapshots: Vec<CollabSnapshot> = snapshot_generator.take_pending_snapshots()
+    let timestamp = chrono::Utc::now().timestamp();
+    let snapshots: Vec<CollabSnapshot> = snapshot_generator.take_pending_snapshots().await
           .into_iter()
           // Remove the snapshots which created_at is bigger than the current timestamp
           .filter(|snapshot| snapshot.created_at <= timestamp)
           .collect();
 
-      // If there are no snapshots, we don't need to generate a new snapshot
-      if snapshots.is_empty() {
-        return Ok(None);
-      }
-      trace!("[History] prepare to save snapshots to disk");
-      let (doc_state, state_vector) = {
-        let lock_guard = mutex_collab.lock();
-        let txn = lock_guard.try_transaction()?;
-        // TODO(nathan): reduce the size of doc_state_v2 by encoding the previous [CollabStateSnapshot] doc_state_v2
-        let doc_state_v2 = txn.encode_state_as_update_v2(&StateVector::default());
-        let state_vector = txn.state_vector();
-        drop(txn);
-        (doc_state_v2, state_vector)
-      };
+    // If there are no snapshots, we don't need to generate a new snapshot
+    if snapshots.is_empty() {
+      return Ok(None);
+    }
+    trace!("[History] prepare to save snapshots to disk");
+    let (doc_state, state_vector) = {
+      let lock = collab.read().await;
+      let txn = lock.transact();
+      // TODO(nathan): reduce the size of doc_state_v2 by encoding the previous [CollabStateSnapshot] doc_state_v2
+      let doc_state_v2 = txn.encode_state_as_update_v2(&StateVector::default());
+      let state_vector = txn.state_vector();
+      (doc_state_v2, state_vector)
+    };
 
-      let state = CollabSnapshotState::new(
-        object_id,
-        doc_state,
-        2,
-        state_vector,
-        chrono::Utc::now().timestamp(),
-      );
-      Ok(Some(SnapshotContext {
-        collab_type,
-        state,
-        snapshots,
-      }))
-    })
-    .await
-    .map_err(|err| HistoryError::Internal(err.into()))?
+    let state = CollabSnapshotState::new(
+      object_id,
+      doc_state,
+      2,
+      state_vector,
+      chrono::Utc::now().timestamp(),
+    );
+    Ok(Some(SnapshotContext {
+      collab_type,
+      state,
+      snapshots,
+    }))
   }
 
   /// Encode the state of the collab as Update.
   /// We encode the collaboration state as an update using the v2 format, chosen over the v1 format
   /// due to its reduced data size. This optimization helps in minimizing the storage and
   /// transmission overhead, making the process more efficient.
-  pub fn encode_update_v2(&self, snapshot: &Snapshot) -> Result<Vec<u8>, HistoryError> {
-    let lock_guard = self.mutex_collab.lock();
-    let txn = lock_guard.try_transaction()?;
+  pub async fn encode_update_v2(&self, snapshot: &Snapshot) -> Result<Vec<u8>, HistoryError> {
+    let lock = self.collab.read().await;
+    let txn = lock.transact();
     let mut encoder = EncoderV2::new();
     txn
       .encode_state_from_snapshot(snapshot, &mut encoder)
@@ -107,8 +102,8 @@ impl CollabHistory {
   }
 
   #[cfg(debug_assertions)]
-  pub fn json(&self) -> Value {
-    let lock_guard = self.mutex_collab.lock();
+  pub async fn json(&self) -> Value {
+    let lock_guard = self.collab.read().await;
     lock_guard.to_json_value()
   }
 }

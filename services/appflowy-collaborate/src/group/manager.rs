@@ -11,8 +11,8 @@ use tracing::{error, instrument, trace};
 
 use access_control::collab::RealtimeAccessControl;
 use app_error::AppError;
-use collab_rt_entity::CollabMessage;
 use collab_rt_entity::user::RealtimeUser;
+use collab_rt_entity::CollabMessage;
 use collab_stream::client::{CollabRedisStream, CONTROL_STREAM_KEY};
 use collab_stream::model::CollabControlEvent;
 use collab_stream::stream_group::StreamGroup;

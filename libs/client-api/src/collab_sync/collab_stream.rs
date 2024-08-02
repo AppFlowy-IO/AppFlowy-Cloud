@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
-use std::sync::{Arc, Weak};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Weak};
 
 use arc_swap::ArcSwap;
 use collab::core::origin::CollabOrigin;
@@ -13,15 +13,15 @@ use tracing::{error, instrument, trace, warn};
 use yrs::encoding::read::Cursor;
 use yrs::updates::decoder::DecoderV1;
 
-use client_api_entity::{CollabType, validate_data_for_folder};
+use client_api_entity::{validate_data_for_folder, CollabType};
 use collab_rt_entity::{AckCode, ClientCollabMessage, ServerCollabMessage, ServerInit, UpdateSync};
 use collab_rt_protocol::{
-    ClientSyncProtocol, handle_message_follow_protocol, Message, MessageReader, SyncMessage,
+  handle_message_follow_protocol, ClientSyncProtocol, Message, MessageReader, SyncMessage,
 };
 
 use crate::af_spawn;
 use crate::collab_sync::{
-    CollabSink, MissUpdateReason, start_sync, SyncError, SyncObject, SyncReason,
+  start_sync, CollabSink, MissUpdateReason, SyncError, SyncObject, SyncReason,
 };
 
 /// Use to continuously receive updates from remote.

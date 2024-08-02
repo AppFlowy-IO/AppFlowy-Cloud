@@ -8,7 +8,7 @@ use collab::entity::EncodedCollab;
 use collab::preclude::Collab;
 use collab_entity::CollabType;
 use collab_folder::{
-  Folder, FolderData, RepeatedViewIdentifier, timestamp, ViewIdentifier, ViewLayout, Workspace,
+  timestamp, Folder, FolderData, RepeatedViewIdentifier, ViewIdentifier, ViewLayout, Workspace,
 };
 use tokio::sync::RwLock;
 

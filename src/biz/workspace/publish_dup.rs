@@ -9,9 +9,7 @@ use collab_database::workspace_database::{DatabaseMetaList, WorkspaceDatabase};
 use collab_document::blocks::DocumentData;
 use collab_document::document::Document;
 use collab_entity::CollabType;
-use collab_folder::{
-  CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewIdentifier, ViewLayout,
-};
+use collab_folder::{CollabOrigin, Folder, RepeatedViewIdentifier, View, ViewLayout};
 use collab_rt_entity::user::RealtimeUser;
 use collab_rt_entity::{ClientCollabMessage, UpdateSync};
 use collab_rt_protocol::{Message, SyncMessage};
@@ -473,7 +471,6 @@ impl PublishCollabDuplicator {
           .ok_or_else(|| AppError::RecordNotFound("ancestor_views not found".to_string()))?;
 
         // create a new view for the database
-        let new_block_view_id = uuid::Uuid::new_v4().to_string();
         let new_db_folder_view_id = uuid::Uuid::new_v4().to_string();
         let new_db_id = uuid::Uuid::new_v4().to_string();
         let mut new_folder_db_view = self
@@ -490,27 +487,28 @@ impl PublishCollabDuplicator {
         self.views_to_add.push(new_folder_db_view);
 
         // create view for block referencing the database
-        let mut db_view_in_doc = self.new_folder_view(
-          new_block_view_id.clone(),
-          &metadata.view,
-          metadata.view.layout.clone(),
-        );
-        db_view_in_doc.parent_view_id = new_db_folder_view_id.clone();
-        self.views_to_add.push(db_view_in_doc);
+        // let new_block_view_id = uuid::Uuid::new_v4().to_string();
+        // let mut db_view_in_doc = self.new_folder_view(
+        //   new_block_view_id.clone(),
+        //   &metadata.view,
+        //   metadata.view.layout.clone(),
+        // );
+        // db_view_in_doc.parent_view_id = new_db_folder_view_id.clone();
+        // self.views_to_add.push(db_view_in_doc);
 
         // update workspace database map
-        self
-          .workspace_databases
-          .get_mut(&new_db_id)
-          .ok_or_else(|| AppError::RecordNotFound("workspace database not found".to_string()))?
-          .push(new_block_view_id.clone());
+        // self
+        //   .workspace_databases
+        //   .get_mut(&new_db_id)
+        //   .ok_or_else(|| AppError::RecordNotFound("workspace database not found".to_string()))?
+        //   .push(new_block_view_id.clone());
 
         // update block views ids
-        *block_view_id = serde_json::Value::String(new_block_view_id.clone());
+        *block_view_id = serde_json::Value::String(new_db_folder_view_id.clone());
         let block_parent_id = block.data.get_mut("parent_id").ok_or_else(|| {
           AppError::RecordNotFound("parent_id not found in block data".to_string())
         })?;
-        *block_parent_id = serde_json::Value::String(new_db_folder_view_id.clone());
+        *block_parent_id = serde_json::Value::String(second_last.view_id.clone());
       }
     }
 
@@ -630,25 +628,25 @@ impl PublishCollabDuplicator {
         // rest of the views are child of main db view
         for db_view in db_views.iter_mut() {
           db_view.database_id = new_db_id.clone();
+          let db_view_meta = view_info_by_id.get(&db_view.id).ok_or_else(|| {
+            AppError::RecordNotFound(format!("metadata not found for view: {}", db_view.id))
+          })?;
           if old_view_id == db_view.id.as_str() {
             // main view that is duplicated
             db_view.id = new_view_id.clone();
             new_db_view_ids.push(new_view_id.clone());
             selected_view = Some(self.new_folder_view(
               new_view_id.clone(),
-              &metadata.view,
+              db_view_meta,
               db_layout_to_view_layout(db_view.layout),
             ));
           } else {
-            let other_view_meta = view_info_by_id.get(&db_view.id).ok_or_else(|| {
-              AppError::RecordNotFound(format!("metadata not found for view: {}", db_view.id))
-            })?;
             let other_view_id = uuid::Uuid::new_v4().to_string();
             new_db_view_ids.push(other_view_id.clone());
             db_view.id = other_view_id.clone();
             let mut other_folder_view = self.new_folder_view(
               other_view_id,
-              other_view_meta,
+              db_view_meta,
               db_layout_to_view_layout(db_view.layout),
             );
             other_folder_view.parent_view_id = new_view_id.clone();

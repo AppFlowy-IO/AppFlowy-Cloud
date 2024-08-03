@@ -2,8 +2,8 @@ use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::CreateTextChatContext;
 use client_api_test::TestClient;
 use database_entity::dto::{
-  ChatContextData, ChatMessage, ChatMessageContext, CreateChatMessageParams, CreateChatParams,
-  MessageCursor,
+  ChatContextData, ChatMessage, ChatMessageContext, ChatMessageMetadata, CreateChatMessageParams,
+  CreateChatParams, MessageCursor,
 };
 use futures_util::StreamExt;
 use serde_json::json;
@@ -120,9 +120,12 @@ async fn chat_qa_test() {
     id: "123".to_string(),
     name: "test context".to_string(),
   };
-  let metadata = json!({"context": context});
+  let metadata = ChatMessageMetadata {
+    contexts: vec![context],
+  };
 
-  let params = CreateChatMessageParams::new_user("where is tom live in?").with_metadata(metadata);
+  let params =
+    CreateChatMessageParams::new_user("where is tom live in?").with_metadata(json!(metadata));
   let question = test_client
     .api_client
     .save_question(&workspace_id, &chat_id, params)

@@ -653,6 +653,10 @@ pub struct CreateChatMessageParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageMetadata {
+  pub contexts: Vec<ChatMessageContext>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessageContext {
   pub data: ChatContextData,
   pub id: String,

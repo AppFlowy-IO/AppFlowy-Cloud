@@ -1,7 +1,12 @@
+use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::CreateTextChatContext;
 use client_api_test::TestClient;
-use database_entity::dto::{ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor};
+use database_entity::dto::{
+  ChatContextData, ChatMessage, ChatMessageContext, CreateChatMessageParams, CreateChatParams,
+  MessageCursor,
+};
 use futures_util::StreamExt;
+use serde_json::json;
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -99,7 +104,7 @@ async fn chat_qa_test() {
   let chat_id = uuid::Uuid::new_v4().to_string();
   let params = CreateChatParams {
     chat_id: chat_id.clone(),
-    name: "my second chat".to_string(),
+    name: "new chat".to_string(),
     rag_ids: vec![],
   };
 
@@ -109,19 +114,31 @@ async fn chat_qa_test() {
     .await
     .unwrap();
 
-  let params = CreateChatMessageParams::new_user("where is singapore?");
-  let stream = test_client
+  let content = read_text_from_asset("my_profile.txt");
+  let context = ChatMessageContext {
+    data: ChatContextData::new_text(content),
+    id: "123".to_string(),
+    name: "test context".to_string(),
+  };
+  let metadata = json!({"context": context});
+
+  let params = CreateChatMessageParams::new_user("where is tom live in?").with_metadata(metadata);
+  let question = test_client
     .api_client
-    .create_question_answer(&workspace_id, &chat_id, params)
+    .save_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
-  let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
-  assert_eq!(messages.len(), 2);
+  let answer = test_client
+    .api_client
+    .generate_answer(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  assert!(answer.content.contains("Singapore"));
 
   let related_questions = test_client
     .api_client
-    .get_chat_related_question(&workspace_id, &chat_id, messages[1].message_id)
+    .get_chat_related_question(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
   assert_eq!(related_questions.items.len(), 3);

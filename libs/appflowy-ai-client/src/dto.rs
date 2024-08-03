@@ -277,3 +277,15 @@ pub struct CreateTextChatContext {
   pub chunk_overlap: i32,
   pub metadata: HashMap<String, serde_json::Value>,
 }
+
+impl Display for CreateTextChatContext {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "Create Chat context: {{ chat_id: {}, content_type: {}, content size: {},  metadata: {:?} }}",
+      self.chat_id,
+      self.content_type,
+      self.text.len(),
+      self.metadata
+    ))
+  }
+}

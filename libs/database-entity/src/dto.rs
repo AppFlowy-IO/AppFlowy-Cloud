@@ -648,6 +648,33 @@ pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
   pub message_type: ChatMessageType,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub meta_data: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageContext {
+  pub data: ChatContextData,
+  pub id: String,
+  pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatContextData {
+  content: String,
+  pub content_type: String,
+  size: i64,
+}
+
+impl ChatContextData {
+  pub fn new_text(content: String) -> Self {
+    let size = content.len();
+    Self {
+      content,
+      content_type: "text".to_string(),
+      size: size as i64,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -678,6 +705,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
+      meta_data: None,
     }
   }
 
@@ -685,7 +713,13 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
+      meta_data: None,
     }
+  }
+
+  pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
+    self.meta_data = Some(metadata);
+    self
   }
 }
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]

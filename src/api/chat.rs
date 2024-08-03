@@ -1,6 +1,6 @@
 use crate::biz::chat::ops::{
-  create_chat, create_chat_message, create_chat_question, delete_chat,
-  generate_chat_message_answer, get_chat_messages, update_chat_message,
+  create_chat, create_chat_message, create_chat_message_stream, delete_chat, extract_chat_context,
+  generate_chat_message_answer, get_chat_messages, update_chat_message, ExtractChatContext,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -52,24 +52,28 @@ pub fn chat_scope() -> Scope {
         .route(web::put().to(update_chat_message_handler)),
     )
     .service(
-      // Create a question for given chat
+      // Creating a [ChatMessage] for given content.
+      // When client asks a question, it will use this API to create a chat message
       web::resource("/{chat_id}/message/question").route(web::post().to(create_question_handler)),
     )
-      // create an answer for given chat
-    .service(web::resource("/{chat_id}/message/answer").route(web::post().to(create_answer_handler)))
+      // Writing the final answer for a given chat.
+      // After the streaming is finished, the client will use this API to save the message to disk.
+    .service(web::resource("/{chat_id}/message/answer").route(web::post().to(save_answer_handler)))
     .service(
-      // Generate answer for given question.
-      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(gen_answer_handler)),
+      // Use AI to generate a response for a specified message ID.
+      // To generate an answer for a given question, use "/answer/stream" to receive the answer in a stream.
+      web::resource("/{chat_id}/{message_id}/answer").route(web::get().to(answer_handler)),
     )
-      // Stream the answer for given question.
+      // Use AI to generate a response for a specified message ID. This response will be return as a stream.
     .service(
       web::resource("/{chat_id}/{message_id}/answer/stream")
         .route(web::get().to(answer_stream_handler)),
     )
-      .service(
-        web::resource("/{chat_id}/context/text")
-            .route(web::post().to(create_chat_context_handler))
-      )
+    .service(
+      // Create chat context for a given chat.
+      web::resource("/{chat_id}/context/text")
+          .route(web::post().to(create_chat_context_handler))
+    )
 }
 async fn create_chat_handler(
   path: web::Path<String>,
@@ -109,7 +113,7 @@ async fn create_chat_message_handler(
 
   let ai_model = ai_model_from_header(&req);
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let message_stream = create_chat_message(
+  let message_stream = create_chat_message_stream(
     &state.pg_pool,
     uid,
     chat_id,
@@ -173,14 +177,35 @@ async fn create_question_handler(
   uuid: UserUuid,
 ) -> actix_web::Result<JsonAppResponse<ChatMessage>> {
   let (_workspace_id, chat_id) = path.into_inner();
-  let params = payload.into_inner();
+  let mut params = payload.into_inner();
+
+  if let Some(extract_context) = extract_chat_context(&mut params) {
+    match extract_context {
+      ExtractChatContext::Text { text, metadata } => {
+        let context = CreateTextChatContext {
+          chat_id: chat_id.clone(),
+          content_type: "txt".to_string(),
+          text,
+          chunk_size: 2000,
+          chunk_overlap: 20,
+          metadata,
+        };
+        trace!("create chat context: {}", context);
+        state
+          .ai_client
+          .create_chat_text_context(context)
+          .await
+          .map_err(AppError::from)?;
+      },
+    }
+  }
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;
-  let resp = create_chat_question(&state.pg_pool, uid, chat_id, params).await?;
+  let resp = create_chat_message(&state.pg_pool, uid, chat_id, params).await?;
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
-async fn create_answer_handler(
+async fn save_answer_handler(
   path: web::Path<(String, String)>,
   payload: Json<CreateAnswerMessageParams>,
   state: Data<AppState>,
@@ -200,7 +225,7 @@ async fn create_answer_handler(
 
   Ok(AppResponse::Ok().with_data(message).into())
 }
-async fn gen_answer_handler(
+async fn answer_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
   req: HttpRequest,

@@ -11,6 +11,7 @@ use database_entity::dto::{
 
 use serde_json::json;
 use sqlx::postgres::PgArguments;
+use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -257,17 +258,20 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: Option<JsonValue>,
 ) -> Result<ChatMessage, AppError> {
+  let meta_data = metadata.unwrap_or_else(|| json!({}));
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
     r#"
-        INSERT INTO af_chat_messages (chat_id, author, content)
-        VALUES ($1, $2, $3)
+        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)
+        VALUES ($1, $2, $3, $4)
         RETURNING message_id, created_at
         "#,
     chat_id,
     json!(author),
     &content,
+    &meta_data,
   )
   .fetch_one(executor)
   .await
@@ -278,7 +282,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     message_id: row.message_id,
     content,
     created_at: row.created_at,
-    meta_data: Default::default(),
+    meta_data,
     reply_message_id: None,
   };
   Ok(chat_message)

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use client_api::error::ErrorCode;
-use console_error_panic_hook;
+
 use database_entity::dto::QueryCollab;
 use wasm_bindgen::prelude::*;
 

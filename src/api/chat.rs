@@ -1,7 +1,7 @@
 use crate::biz::chat::ops::{
   create_chat, create_chat_message, create_chat_message_stream, delete_chat,
-  extract_chat_message_context, generate_chat_message_answer, get_chat_messages,
-  update_chat_message, ExtractChatContext,
+  extract_chat_message_metadata, generate_chat_message_answer, get_chat_messages,
+  update_chat_message, ExtractChatMetadata,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -180,9 +180,9 @@ async fn create_question_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let mut params = payload.into_inner();
 
-  for extract_context in extract_chat_message_context(&mut params) {
+  for extract_context in extract_chat_message_metadata(&mut params) {
     match extract_context {
-      ExtractChatContext::Text { text, metadata } => {
+      ExtractChatMetadata::Text { text, metadata } => {
         let context = CreateTextChatContext {
           chat_id: chat_id.clone(),
           content_type: "txt".to_string(),

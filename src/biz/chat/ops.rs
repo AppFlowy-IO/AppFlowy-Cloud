@@ -121,7 +121,7 @@ pub async fn create_chat_message(
     ChatAuthor::new(uid, ChatAuthorType::Human),
     &chat_id,
     params.content.clone(),
-    params.meta_data,
+    params.context,
   )
   .await?;
   Ok(question)
@@ -134,7 +134,7 @@ enum ContextType {
 
 /// Extracts the chat context from the metadata. Currently, we only support text as a context. In
 /// the future, we will support other types of context.
-pub(crate) enum ExtractChatContext {
+pub(crate) enum ExtractChatMetadata {
   Text {
     text: String,
     metadata: HashMap<String, Value>,
@@ -159,10 +159,12 @@ pub(crate) enum ExtractChatContext {
 ///
 /// # Returns
 /// - `Option<(String, HashMap<String, serde_json::Value>)>`: A tuple containing the removed content and the updated metadata, otherwise `None`.
-fn extract_message_context(message_context: &mut serde_json::Value) -> Option<ExtractChatContext> {
-  trace!("Extracting chat context: {:?}", message_context);
+fn extract_message_metadata(
+  message_metadata: &mut serde_json::Value,
+) -> Option<ExtractChatMetadata> {
+  trace!("Extracting chat context: {:?}", message_metadata);
 
-  if let Value::Object(message_context) = message_context {
+  if let Value::Object(message_context) = message_metadata {
     let mut context_type = ContextType::Unknown;
     if let Some(Value::Object(data)) = message_context.get("data") {
       if let Some(ty) = data.get("content_type").and_then(|v| v.as_str()) {
@@ -209,7 +211,7 @@ fn extract_message_context(message_context: &mut serde_json::Value) -> Option<Ex
           }
         }
 
-        return text.map(|text| ExtractChatContext::Text {
+        return text.map(|text| ExtractChatMetadata::Text {
           text,
           metadata: message_context.clone().into_iter().collect(),
         });
@@ -220,22 +222,22 @@ fn extract_message_context(message_context: &mut serde_json::Value) -> Option<Ex
   None
 }
 
-pub(crate) fn extract_chat_message_context(
+pub(crate) fn extract_chat_message_metadata(
   params: &mut CreateChatMessageParams,
-) -> Vec<ExtractChatContext> {
-  let mut extract_contexts = vec![];
-  if let Some(Value::Object(ref mut meta_data)) = params.meta_data {
-    trace!("Extracting chat context from metadata: {:?}", meta_data);
-    if let Some(Value::Array(contexts)) = meta_data.get_mut("contexts") {
-      for context in contexts {
-        if let Some(extract_context) = extract_message_context(context) {
-          extract_contexts.push(extract_context);
+) -> Vec<ExtractChatMetadata> {
+  let mut extract_metadatas = vec![];
+  if let Some(Value::Object(ref mut context)) = params.context {
+    trace!("Extracting chat context from metadata: {:?}", context);
+    if let Some(Value::Array(metadatas)) = context.get_mut("metadatas") {
+      for metadata in metadatas {
+        if let Some(extract_context) = extract_message_metadata(metadata) {
+          extract_metadatas.push(extract_context);
         }
       }
     }
   }
 
-  extract_contexts
+  extract_metadatas
 }
 
 pub async fn create_chat_message_stream(
@@ -256,7 +258,7 @@ pub async fn create_chat_message_stream(
           ChatAuthor::new(uid, ChatAuthorType::Human),
           &chat_id,
           params.content.clone(),
-          params.meta_data,
+          params.context,
       ).await {
           Ok(question) => question,
           Err(err) => {

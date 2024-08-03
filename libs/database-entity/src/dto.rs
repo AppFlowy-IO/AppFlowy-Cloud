@@ -649,28 +649,30 @@ pub struct CreateChatMessageParams {
   pub content: String,
   pub message_type: ChatMessageType,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub meta_data: Option<serde_json::Value>,
+  pub context: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessageMetadata {
-  pub contexts: Vec<ChatMessageContext>,
+pub struct ChatMessageContext {
+  /// Don't rename this field, it's used [ops::extract_chat_message_metadata]
+  pub metadatas: Vec<ChatMessageMetadata>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessageContext {
-  pub data: ChatContextData,
+pub struct ChatMessageMetadata {
+  pub data: ChatMetadataData,
   pub id: String,
   pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatContextData {
+pub struct ChatMetadataData {
+  /// Don't rename this field, it's used [ops::extract_chat_message_metadata]
   content: String,
   pub content_type: String,
   size: i64,
 }
 
-impl ChatContextData {
+impl ChatMetadataData {
   pub fn new_text(content: String) -> Self {
     let size = content.len();
     Self {
@@ -709,7 +711,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
-      meta_data: None,
+      context: None,
     }
   }
 
@@ -717,12 +719,12 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
-      meta_data: None,
+      context: None,
     }
   }
 
   pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
-    self.meta_data = Some(metadata);
+    self.context = Some(metadata);
     self
   }
 }

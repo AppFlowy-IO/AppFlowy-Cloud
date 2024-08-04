@@ -128,7 +128,7 @@ async fn chat_qa_test() {
     CreateChatMessageParams::new_user("where is tom live in?").with_metadata(json!(vec![metadata]));
   let question = test_client
     .api_client
-    .save_question(&workspace_id, &chat_id, params)
+    .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
@@ -219,7 +219,7 @@ async fn generate_stream_answer_test() {
   let params = CreateChatMessageParams::new_user("Teach me how to write a article?");
   let question = test_client
     .api_client
-    .save_question(&workspace_id, &chat_id, params)
+    .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
@@ -290,7 +290,7 @@ async fn create_chat_context_test() {
   let params = CreateChatMessageParams::new_user("Where I live?");
   let question = test_client
     .api_client
-    .save_question(&workspace_id, &chat_id, params)
+    .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 

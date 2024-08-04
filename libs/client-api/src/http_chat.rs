@@ -52,7 +52,7 @@ impl Client {
   }
 
   /// Save a question message to a chat
-  pub async fn save_question(
+  pub async fn create_question(
     &self,
     workspace_id: &str,
     chat_id: &str,

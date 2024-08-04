@@ -98,14 +98,14 @@ impl Client {
   }
 
   /// Ask AI with a question for given question's message_id
-  pub async fn ask_question(
+  pub async fn stream_answer(
     &self,
     workspace_id: &str,
     chat_id: &str,
-    message_id: i64,
+    question_message_id: i64,
   ) -> Result<impl Stream<Item = Result<Bytes, AppResponseError>>, AppResponseError> {
     let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer/stream",
+      "{}/api/chat/{workspace_id}/{chat_id}/{question_message_id}/answer/stream",
       self.base_url
     );
     let resp = self
@@ -117,14 +117,14 @@ impl Client {
     AppResponse::<()>::answer_response_stream(resp).await
   }
 
-  pub async fn ask_question_v2(
+  pub async fn stream_answer_v2(
     &self,
     workspace_id: &str,
     chat_id: &str,
-    message_id: i64,
+    question_message_id: i64,
   ) -> Result<QuestionStream, AppResponseError> {
     let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/v2/answer/stream",
+      "{}/api/chat/{workspace_id}/{chat_id}/{question_message_id}/v2/answer/stream",
       self.base_url
     );
     let resp = self
@@ -139,14 +139,14 @@ impl Client {
 
   /// Generate an answer for given question's message_id. The same as ask_question but return ChatMessage
   /// instead of stream of Bytes
-  pub async fn generate_answer(
+  pub async fn get_answer(
     &self,
     workspace_id: &str,
     chat_id: &str,
-    message_id: i64,
+    question_message_id: i64,
   ) -> Result<ChatMessage, AppResponseError> {
     let url = format!(
-      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/answer",
+      "{}/api/chat/{workspace_id}/{chat_id}/{question_message_id}/answer",
       self.base_url
     );
     let resp = self

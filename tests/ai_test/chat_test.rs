@@ -134,7 +134,7 @@ async fn chat_qa_test() {
 
   let answer = test_client
     .api_client
-    .generate_answer(&workspace_id, &chat_id, question.message_id)
+    .get_answer(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
   assert!(answer.content.contains("Singapore"));
@@ -185,7 +185,7 @@ async fn generate_chat_message_answer_test() {
 
   let answer = test_client
     .api_client
-    .generate_answer(&workspace_id, &chat_id, messages[0].message_id)
+    .get_answer(&workspace_id, &chat_id, messages[0].message_id)
     .await
     .unwrap();
 
@@ -226,7 +226,7 @@ async fn generate_stream_answer_test() {
   // test v1 api endpoint
   let mut answer_stream = test_client
     .api_client
-    .ask_question(&workspace_id, &chat_id, question.message_id)
+    .stream_answer(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
   let mut answer_v1 = String::new();
@@ -240,7 +240,7 @@ async fn generate_stream_answer_test() {
   // test v2 api endpoint
   let mut answer_stream = test_client
     .api_client
-    .ask_question_v2(&workspace_id, &chat_id, question.message_id)
+    .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
   let mut answer_v2 = String::new();
@@ -296,7 +296,7 @@ async fn create_chat_context_test() {
 
   let answer = test_client
     .api_client
-    .generate_answer(&workspace_id, &chat_id, question.message_id)
+    .get_answer(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
   assert!(answer.content.contains("US"));

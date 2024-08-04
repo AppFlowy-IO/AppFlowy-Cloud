@@ -5,10 +5,17 @@ use client_api_entity::{
   ChatMessage, CreateAnswerMessageParams, CreateChatMessageParams, CreateChatParams, MessageCursor,
   RepeatedChatMessage, UpdateChatMessageContentParams,
 };
-use futures_core::Stream;
+use futures_core::{ready, Stream};
+use pin_project::pin_project;
 use reqwest::Method;
-use shared_entity::dto::ai_dto::{CreateTextChatContext, RepeatedRelatedQuestion};
+use serde_json::Value;
+use shared_entity::dto::ai_dto::{
+  CreateTextChatContext, RepeatedRelatedQuestion, STEAM_ANSWER_KEY, STEAM_METADATA_KEY,
+};
 use shared_entity::response::{AppResponse, AppResponseError};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use tracing::error;
 
 impl Client {
   /// Create a new chat
@@ -115,7 +122,7 @@ impl Client {
     workspace_id: &str,
     chat_id: &str,
     message_id: i64,
-  ) -> Result<impl Stream<Item = Result<serde_json::Value, AppResponseError>>, AppResponseError> {
+  ) -> Result<QuestionStream, AppResponseError> {
     let url = format!(
       "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/v2/answer/stream",
       self.base_url
@@ -126,7 +133,8 @@ impl Client {
       .send()
       .await?;
     log_request_id(&resp);
-    AppResponse::<serde_json::Value>::json_response_stream(resp).await
+    let stream = AppResponse::<serde_json::Value>::json_response_stream(resp).await?;
+    Ok(QuestionStream::new(stream))
   }
 
   /// Generate an answer for given question's message_id. The same as ask_question but return ChatMessage
@@ -268,5 +276,59 @@ impl Client {
       .await?;
     log_request_id(&resp);
     AppResponse::<()>::from_response(resp).await?.into_error()
+  }
+}
+
+#[pin_project]
+pub struct QuestionStream {
+  stream: Pin<Box<dyn Stream<Item = Result<serde_json::Value, AppResponseError>> + Send>>,
+  buffer: Vec<u8>,
+}
+
+impl QuestionStream {
+  pub fn new<S>(stream: S) -> Self
+  where
+    S: Stream<Item = Result<serde_json::Value, AppResponseError>> + Send + 'static,
+  {
+    QuestionStream {
+      stream: Box::pin(stream),
+      buffer: Vec::new(),
+    }
+  }
+}
+
+pub enum QuestionStreamValue {
+  Answer { value: String },
+  Metadata { value: serde_json::Value },
+}
+
+impl Stream for QuestionStream {
+  type Item = Result<QuestionStreamValue, AppResponseError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let this = self.project();
+
+    loop {
+      match ready!(this.stream.as_mut().poll_next(cx)) {
+        Some(Ok(value)) => {
+          if let Value::Object(mut value) = value {
+            if let Some(metadata) = value.remove(STEAM_METADATA_KEY) {
+              return Poll::Ready(Some(Ok(QuestionStreamValue::Metadata { value: metadata })));
+            }
+
+            if let Some(answer) = value
+              .remove(STEAM_ANSWER_KEY)
+              .and_then(|s| s.as_str().map(ToString::to_string))
+            {
+              return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: answer })));
+            }
+
+            error!("Invalid streaming value: {:?}", value);
+          }
+        },
+        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
+        None => return Poll::Ready(None),
+      }
+    }
   }
 }

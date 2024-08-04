@@ -1,6 +1,7 @@
 use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::CreateTextChatContext;
 use assert_json_diff::assert_json_eq;
+use client_api::QuestionStreamValue;
 use client_api_test::TestClient;
 use database_entity::dto::{
   ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,
@@ -222,19 +223,36 @@ async fn generate_stream_answer_test() {
     .await
     .unwrap();
 
+  // test v1 api endpoint
   let mut answer_stream = test_client
     .api_client
     .ask_question(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
-
-  let mut answer = String::new();
+  let mut answer_v1 = String::new();
   while let Some(message) = answer_stream.next().await {
     let message = message.unwrap();
     let s = String::from_utf8(message.to_vec()).unwrap();
-    answer.push_str(&s);
+    answer_v1.push_str(&s);
   }
-  assert!(!answer.is_empty());
+  assert!(!answer_v1.is_empty());
+
+  // test v2 api endpoint
+  let mut answer_stream = test_client
+    .api_client
+    .ask_question_v2(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  let mut answer_v2 = String::new();
+  while let Some(value) = answer_stream.next().await {
+    match value.unwrap() {
+      QuestionStreamValue::Answer { value } => {
+        answer_v2.push_str(&value);
+      },
+      QuestionStreamValue::Metadata { .. } => {},
+    }
+  }
+  assert!(!answer_v2.is_empty());
 }
 
 #[tokio::test]

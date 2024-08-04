@@ -1,7 +1,7 @@
 use crate::appflowy_ai_client;
 
 use appflowy_ai_client::client::JsonStream;
-use appflowy_ai_client::dto::AIModel;
+use appflowy_ai_client::dto::{AIModel, STEAM_ANSWER_KEY};
 use futures::stream::StreamExt;
 
 #[tokio::test]
@@ -60,7 +60,7 @@ async fn stream_test() {
     .filter_map(|item| async {
       match item {
         Ok(value) => value
-          .get("1")
+          .get(STEAM_ANSWER_KEY)
           .and_then(|s| s.as_str().map(ToString::to_string)),
         Err(_) => None,
       }

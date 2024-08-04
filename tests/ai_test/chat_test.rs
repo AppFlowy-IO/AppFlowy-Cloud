@@ -1,9 +1,10 @@
 use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::CreateTextChatContext;
+use assert_json_diff::assert_json_eq;
 use client_api_test::TestClient;
 use database_entity::dto::{
-  ChatMessage, ChatMessageContext, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams,
-  CreateChatParams, MessageCursor,
+  ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,
+  MessageCursor,
 };
 use futures_util::StreamExt;
 use serde_json::json;
@@ -119,13 +120,11 @@ async fn chat_qa_test() {
     data: ChatMetadataData::new_text(content),
     id: "123".to_string(),
     name: "test context".to_string(),
-  };
-  let context = ChatMessageContext {
-    metadatas: vec![metadata],
+    source: "user added".to_string(),
   };
 
   let params =
-    CreateChatMessageParams::new_user("where is tom live in?").with_metadata(json!(context));
+    CreateChatMessageParams::new_user("where is tom live in?").with_metadata(json!(vec![metadata]));
   let question = test_client
     .api_client
     .save_question(&workspace_id, &chat_id, params)
@@ -138,6 +137,16 @@ async fn chat_qa_test() {
     .await
     .unwrap();
   assert!(answer.content.contains("Singapore"));
+  assert_json_eq!(
+    answer.meta_data,
+    json!([
+      {
+        "id": "123",
+        "name": "test context",
+        "source": "user added",
+      }
+    ])
+  );
 
   let related_questions = test_client
     .api_client

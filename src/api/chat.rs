@@ -70,6 +70,10 @@ pub fn chat_scope() -> Scope {
       web::resource("/{chat_id}/{message_id}/answer/stream")
         .route(web::get().to(answer_stream_handler)),
     )
+      .service(
+        web::resource("/{chat_id}/{message_id}/v2/answer/stream")
+            .route(web::get().to(answer_stream_v2_handler)),
+      )
     .service(
       // Create chat context for a given chat.
       web::resource("/{chat_id}/context/text")
@@ -220,6 +224,7 @@ async fn save_answer_handler(
     ChatAuthor::ai(),
     &chat_id,
     payload.content,
+    payload.metadata,
     payload.question_message_id,
   )
   .await?;
@@ -244,7 +249,7 @@ async fn answer_handler(
   Ok(AppResponse::Ok().with_data(message).into())
 }
 
-#[instrument(level = "info", skip_all, err)]
+#[instrument(level = "debug", skip_all, err)]
 async fn answer_stream_handler(
   path: web::Path<(String, String, i64)>,
   state: Data<AppState>,
@@ -256,6 +261,38 @@ async fn answer_stream_handler(
   match state
     .ai_client
     .stream_question(&chat_id, &content, &ai_model)
+    .await
+  {
+    Ok(answer_stream) => {
+      let new_answer_stream = answer_stream.map_err(AppError::from);
+      Ok(
+        HttpResponse::Ok()
+          .content_type("text/event-stream")
+          .streaming(new_answer_stream),
+      )
+    },
+    Err(err) => Ok(
+      HttpResponse::Ok()
+        .content_type("text/event-stream")
+        .streaming(stream::once(async move {
+          Err(AppError::AIServiceUnavailable(err.to_string()))
+        })),
+    ),
+  }
+}
+
+#[instrument(level = "debug", skip_all, err)]
+async fn answer_stream_v2_handler(
+  path: web::Path<(String, String, i64)>,
+  state: Data<AppState>,
+  req: HttpRequest,
+) -> actix_web::Result<HttpResponse> {
+  let (_workspace_id, chat_id, question_id) = path.into_inner();
+  let content = chat::chat_ops::select_chat_message_content(&state.pg_pool, question_id).await?;
+  let ai_model = ai_model_from_header(&req);
+  match state
+    .ai_client
+    .stream_question_v2(&chat_id, &content, &ai_model)
     .await
   {
     Ok(answer_stream) => {

@@ -110,6 +110,25 @@ impl Client {
     AppResponse::<()>::answer_response_stream(resp).await
   }
 
+  pub async fn ask_question_v2(
+    &self,
+    workspace_id: &str,
+    chat_id: &str,
+    message_id: i64,
+  ) -> Result<impl Stream<Item = Result<serde_json::Value, AppResponseError>>, AppResponseError> {
+    let url = format!(
+      "{}/api/chat/{workspace_id}/{chat_id}/{message_id}/v2/answer/stream",
+      self.base_url
+    );
+    let resp = self
+      .http_client_with_auth(Method::GET, &url)
+      .await?
+      .send()
+      .await?;
+    log_request_id(&resp);
+    AppResponse::<serde_json::Value>::json_response_stream(resp).await
+  }
+
   /// Generate an answer for given question's message_id. The same as ask_question but return ChatMessage
   /// instead of stream of Bytes
   pub async fn generate_answer(

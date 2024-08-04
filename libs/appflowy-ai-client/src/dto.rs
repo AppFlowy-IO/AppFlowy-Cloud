@@ -23,6 +23,8 @@ pub struct MessageData {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatAnswer {
   pub content: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

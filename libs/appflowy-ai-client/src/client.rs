@@ -7,14 +7,21 @@ use crate::dto::{
 use crate::error::AIError;
 
 use bytes::Bytes;
-use futures::{Stream, StreamExt};
+use futures::{ready, Stream, StreamExt, TryStreamExt};
 use reqwest;
 use reqwest::{Method, RequestBuilder, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Map, StreamDeserializer, Value};
 
+use anyhow::anyhow;
+use pin_project::pin_project;
+use serde::de::DeserializeOwned;
+use serde_json::de::SliceRead;
 use std::borrow::Cow;
+use std::marker::PhantomData;
+use std::pin::Pin;
 
+use std::task::{Context, Poll};
 use tracing::{info, trace};
 
 const AI_MODEL_HEADER_KEY: &str = "ai-model";
@@ -234,6 +241,28 @@ impl AppFlowyAIClient {
     AIResponse::<()>::stream_response(resp).await
   }
 
+  pub async fn stream_question_v2(
+    &self,
+    chat_id: &str,
+    content: &str,
+    model: &AIModel,
+  ) -> Result<impl Stream<Item = Result<Bytes, AIError>>, AIError> {
+    let json = ChatQuestion {
+      chat_id: chat_id.to_string(),
+      data: MessageData {
+        content: content.to_string(),
+      },
+    };
+    let url = format!("{}/v2/chat/message/stream", self.url);
+    let resp = self
+      .http_client(Method::POST, &url)?
+      .header(AI_MODEL_HEADER_KEY, model.to_str())
+      .json(&json)
+      .send()
+      .await?;
+    AIResponse::<()>::stream_response(resp).await
+  }
+
   pub async fn get_related_question(
     &self,
     chat_id: &str,
@@ -321,6 +350,19 @@ where
       .map(|item| item.map_err(|err| AIError::Internal(err.into())));
     Ok(stream)
   }
+
+  pub async fn json_stream_response(
+    resp: reqwest::Response,
+  ) -> Result<impl Stream<Item = Result<T, AIError>>, AIError> {
+    let status_code = resp.status();
+    if !status_code.is_success() {
+      let body = resp.text().await?;
+      return Err(AIError::Internal(anyhow!(body)));
+    }
+
+    let stream = resp.bytes_stream().map_err(AIError::from);
+    Ok(JsonStream::new(stream))
+  }
 }
 impl From<reqwest::Error> for AIError {
   fn from(error: reqwest::Error) -> Self {
@@ -336,5 +378,70 @@ impl From<reqwest::Error> for AIError {
       };
     }
     AIError::Internal(error.into())
+  }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum AnswerOrMetadata {
+  Metadata { value: serde_json::Value },
+  Answer { value: String },
+}
+
+#[pin_project]
+pub struct JsonStream<T> {
+  stream: Pin<Box<dyn Stream<Item = Result<Bytes, AIError>> + Send>>,
+  buffer: Vec<u8>,
+  _marker: PhantomData<T>,
+}
+
+impl<T> JsonStream<T> {
+  pub fn new<S>(stream: S) -> Self
+  where
+    S: Stream<Item = Result<Bytes, AIError>> + Send + 'static,
+  {
+    JsonStream {
+      stream: Box::pin(stream),
+      buffer: Vec::new(),
+      _marker: PhantomData,
+    }
+  }
+}
+
+impl<T> Stream for JsonStream<T>
+where
+  T: DeserializeOwned,
+{
+  type Item = Result<T, AIError>;
+
+  fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    let this = self.project();
+
+    loop {
+      match ready!(this.stream.as_mut().poll_next(cx)) {
+        Some(Ok(bytes)) => {
+          this.buffer.extend_from_slice(&bytes);
+          let de = StreamDeserializer::new(SliceRead::new(this.buffer));
+          let mut iter = de.into_iter();
+          if let Some(result) = iter.next() {
+            match result {
+              Ok(value) => {
+                let remaining = iter.byte_offset();
+                this.buffer.drain(0..remaining);
+                return Poll::Ready(Some(Ok(value)));
+              },
+              Err(err) => {
+                if err.is_eof() {
+                  continue;
+                } else {
+                  return Poll::Ready(Some(Err(AIError::Internal(err.into()))));
+                }
+              },
+            }
+          }
+        },
+        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
+        None => return Poll::Ready(None),
+      }
+    }
   }
 }

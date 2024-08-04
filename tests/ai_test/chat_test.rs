@@ -1,7 +1,7 @@
 use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::CreateTextChatContext;
 use assert_json_diff::assert_json_eq;
-use client_api::QuestionStreamValue;
+use client_api::entity::QuestionStreamValue;
 use client_api_test::TestClient;
 use database_entity::dto::{
   ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,

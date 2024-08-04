@@ -27,8 +27,6 @@ pub use wasm::*;
 #[cfg(not(target_arch = "wasm32"))]
 mod http_chat;
 
-#[cfg(not(target_arch = "wasm32"))]
-pub use http_chat::{QuestionStream, QuestionStreamValue};
 mod http_search;
 mod http_settings;
 pub mod ws;
@@ -40,6 +38,8 @@ pub mod error {
 
 // Export all dto entities that will be used in the frontend application
 pub mod entity {
+  #[cfg(not(target_arch = "wasm32"))]
+  pub use crate::http_chat::{QuestionStream, QuestionStreamValue};
   pub use client_api_entity::*;
 }
 

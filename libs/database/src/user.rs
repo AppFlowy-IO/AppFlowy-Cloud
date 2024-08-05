@@ -39,20 +39,29 @@ pub async fn update_user(
   if let Some(n) = name {
     args_num += 1;
     set_clauses.push(format!("name = ${}", args_num));
-    args.add(n);
+    args.add(n).map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode user name for user {}", user_uuid),
+      err,
+    })?;
   }
 
   if let Some(e) = email {
     args_num += 1;
     set_clauses.push(format!("email = ${}", args_num));
-    args.add(e);
+    args.add(e).map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode email for user {}", user_uuid),
+      err,
+    })?;
   }
 
   if let Some(m) = metadata {
     args_num += 1;
     // Merge existing metadata with new metadata
     set_clauses.push(format!("metadata = metadata || ${}", args_num));
-    args.add(m);
+    args.add(m).map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode metadata for user {}", user_uuid),
+      err,
+    })?;
   }
 
   if set_clauses.is_empty() {
@@ -67,7 +76,12 @@ pub async fn update_user(
     set_clauses.join(", "),
     args_num
   );
-  args.add(user_uuid);
+  args
+    .add(user_uuid)
+    .map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode user uuid {}", user_uuid),
+      err,
+    })?;
 
   sqlx::query_with(&query, args).execute(pool).await?;
   Ok(())

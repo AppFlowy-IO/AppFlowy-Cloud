@@ -3,6 +3,7 @@ pub mod gotrue;
 
 #[cfg(feature = "gotrue_error")]
 use crate::gotrue::GoTrueError;
+use std::error::Error as StdError;
 use std::string::FromUtf8Error;
 
 #[cfg(feature = "appflowy_ai_error")]
@@ -83,6 +84,13 @@ pub enum AppError {
   #[cfg(feature = "sqlx_error")]
   #[error("{0}")]
   SqlxError(String),
+
+  #[cfg(feature = "sqlx_error")]
+  #[error("{desc}: {err}")]
+  SqlxArgEncodingError {
+    desc: String,
+    err: Box<dyn StdError + 'static + Send + Sync>,
+  },
 
   #[cfg(feature = "validation_error")]
   #[error(transparent)]
@@ -169,6 +177,8 @@ impl AppError {
       AppError::IOError(_) => ErrorCode::IOError,
       #[cfg(feature = "sqlx_error")]
       AppError::SqlxError(_) => ErrorCode::SqlxError,
+      #[cfg(feature = "sqlx_error")]
+      AppError::SqlxArgEncodingError { .. } => ErrorCode::SqlxArgEncodingError,
       #[cfg(feature = "validation_error")]
       AppError::ValidatorError(_) => ErrorCode::InvalidRequest,
       AppError::S3ResponseError(_) => ErrorCode::S3ResponseError,
@@ -299,6 +309,8 @@ pub enum ErrorCode {
   AIServiceUnavailable = 1032,
   AIResponseLimitExceeded = 1033,
   StringLengthLimitReached = 1034,
+  #[cfg(feature = "sqlx_error")]
+  SqlxArgEncodingError = 1035,
 }
 
 impl ErrorCode {

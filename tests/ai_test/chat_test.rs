@@ -1,6 +1,14 @@
+use crate::ai_test::util::read_text_from_asset;
+use appflowy_ai_client::dto::CreateTextChatContext;
+use assert_json_diff::assert_json_eq;
+use client_api::entity::QuestionStreamValue;
 use client_api_test::TestClient;
-use database_entity::dto::{ChatMessage, CreateChatMessageParams, CreateChatParams, MessageCursor};
+use database_entity::dto::{
+  ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,
+  MessageCursor,
+};
 use futures_util::StreamExt;
+use serde_json::json;
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
@@ -98,7 +106,7 @@ async fn chat_qa_test() {
   let chat_id = uuid::Uuid::new_v4().to_string();
   let params = CreateChatParams {
     chat_id: chat_id.clone(),
-    name: "my second chat".to_string(),
+    name: "new chat".to_string(),
     rag_ids: vec![],
   };
 
@@ -108,19 +116,42 @@ async fn chat_qa_test() {
     .await
     .unwrap();
 
-  let params = CreateChatMessageParams::new_user("where is singapore?");
-  let stream = test_client
+  let content = read_text_from_asset("my_profile.txt");
+  let metadata = ChatMessageMetadata {
+    data: ChatMetadataData::new_text(content),
+    id: "123".to_string(),
+    name: "test context".to_string(),
+    source: "user added".to_string(),
+  };
+
+  let params =
+    CreateChatMessageParams::new_user("Where lucas live?").with_metadata(json!(vec![metadata]));
+  let question = test_client
     .api_client
-    .create_question_answer(&workspace_id, &chat_id, params)
+    .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
-  let messages: Vec<ChatMessage> = stream.map(|message| message.unwrap()).collect().await;
-  assert_eq!(messages.len(), 2);
+  let answer = test_client
+    .api_client
+    .get_answer(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  assert!(answer.content.contains("Singapore"));
+  assert_json_eq!(
+    answer.meta_data,
+    json!([
+      {
+        "id": "123",
+        "name": "test context",
+        "source": "user added",
+      }
+    ])
+  );
 
   let related_questions = test_client
     .api_client
-    .get_chat_related_question(&workspace_id, &chat_id, messages[1].message_id)
+    .get_chat_related_question(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
   assert_eq!(related_questions.items.len(), 3);
@@ -154,7 +185,7 @@ async fn generate_chat_message_answer_test() {
 
   let answer = test_client
     .api_client
-    .generate_answer(&workspace_id, &chat_id, messages[0].message_id)
+    .get_answer(&workspace_id, &chat_id, messages[0].message_id)
     .await
     .unwrap();
 
@@ -188,23 +219,88 @@ async fn generate_stream_answer_test() {
   let params = CreateChatMessageParams::new_user("Teach me how to write a article?");
   let question = test_client
     .api_client
-    .save_question(&workspace_id, &chat_id, params)
+    .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
 
+  // test v1 api endpoint
   let mut answer_stream = test_client
     .api_client
-    .ask_question(&workspace_id, &chat_id, question.message_id)
+    .stream_answer(&workspace_id, &chat_id, question.message_id)
     .await
     .unwrap();
-
-  let mut answer = String::new();
+  let mut answer_v1 = String::new();
   while let Some(message) = answer_stream.next().await {
     let message = message.unwrap();
     let s = String::from_utf8(message.to_vec()).unwrap();
-    answer.push_str(&s);
+    answer_v1.push_str(&s);
   }
-  assert!(!answer.is_empty());
+  assert!(!answer_v1.is_empty());
+
+  // test v2 api endpoint
+  let mut answer_stream = test_client
+    .api_client
+    .stream_answer_v2(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  let mut answer_v2 = String::new();
+  while let Some(value) = answer_stream.next().await {
+    match value.unwrap() {
+      QuestionStreamValue::Answer { value } => {
+        answer_v2.push_str(&value);
+      },
+      QuestionStreamValue::Metadata { .. } => {},
+    }
+  }
+  assert!(!answer_v2.is_empty());
+}
+
+#[tokio::test]
+async fn create_chat_context_test() {
+  let test_client = TestClient::new_user_without_ws_conn().await;
+  let workspace_id = test_client.workspace_id().await;
+  let chat_id = uuid::Uuid::new_v4().to_string();
+  let params = CreateChatParams {
+    chat_id: chat_id.clone(),
+    name: "context chat".to_string(),
+    rag_ids: vec![],
+  };
+
+  test_client
+    .api_client
+    .create_chat(&workspace_id, params)
+    .await
+    .unwrap();
+
+  let context = CreateTextChatContext {
+    chat_id: chat_id.clone(),
+    content_type: "txt".to_string(),
+    text: "I have lived in the US for five years".to_string(),
+    chunk_size: 1000,
+    chunk_overlap: 20,
+    metadata: Default::default(),
+  };
+
+  test_client
+    .api_client
+    .create_chat_context(&workspace_id, context)
+    .await
+    .unwrap();
+
+  let params = CreateChatMessageParams::new_user("Where I live?");
+  let question = test_client
+    .api_client
+    .create_question(&workspace_id, &chat_id, params)
+    .await
+    .unwrap();
+
+  let answer = test_client
+    .api_client
+    .get_answer(&workspace_id, &chat_id, question.message_id)
+    .await
+    .unwrap();
+  assert!(answer.content.contains("US"));
+  println!("answer: {:?}", answer);
 }
 
 // #[tokio::test]

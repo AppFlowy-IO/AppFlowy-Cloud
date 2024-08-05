@@ -11,6 +11,7 @@ use database_entity::dto::{
 
 use serde_json::json;
 use sqlx::postgres::PgArguments;
+use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -135,6 +136,7 @@ pub async fn insert_answer_message_with_transaction(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: serde_json::Value,
   question_message_id: i64,
 ) -> Result<ChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
@@ -156,12 +158,14 @@ pub async fn insert_answer_message_with_transaction(
          UPDATE af_chat_messages
          SET content = $2,
              author = $3,
-             created_at = CURRENT_TIMESTAMP
+             created_at = CURRENT_TIMESTAMP,
+             meta_data = $4
          WHERE message_id = $1
       "#,
       reply_id,
       &content,
       json!(author),
+      metadata,
     )
     .execute(transaction.deref_mut())
     .await
@@ -193,13 +197,14 @@ pub async fn insert_answer_message_with_transaction(
     // Insert a new chat message
     let row = sqlx::query!(
       r#"
-        INSERT INTO af_chat_messages (chat_id, author, content)
-        VALUES ($1, $2, $3)
+        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)
+        VALUES ($1, $2, $3, $4)
         RETURNING message_id, created_at
       "#,
       chat_id,
       json!(author),
       &content,
+      &metadata,
     )
     .fetch_one(transaction.deref_mut())
     .await
@@ -224,7 +229,7 @@ pub async fn insert_answer_message_with_transaction(
       message_id: row.message_id,
       content,
       created_at: row.created_at,
-      meta_data: Default::default(),
+      meta_data: metadata,
       reply_message_id: None,
     };
 
@@ -237,12 +242,19 @@ pub async fn insert_answer_message(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: Option<serde_json::Value>,
   question_message_id: i64,
 ) -> Result<ChatMessage, AppError> {
   let mut txn = pg_pool.begin().await?;
-  let chat_message =
-    insert_answer_message_with_transaction(&mut txn, author, chat_id, content, question_message_id)
-      .await?;
+  let chat_message = insert_answer_message_with_transaction(
+    &mut txn,
+    author,
+    chat_id,
+    content,
+    metadata.unwrap_or_default(),
+    question_message_id,
+  )
+  .await?;
   txn.commit().await.map_err(|err| {
     AppError::Internal(anyhow!(
       "Failed to commit transaction to insert answer message: {}",
@@ -257,17 +269,20 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: Option<JsonValue>,
 ) -> Result<ChatMessage, AppError> {
+  let metadata = metadata.unwrap_or_else(|| json!({}));
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
     r#"
-        INSERT INTO af_chat_messages (chat_id, author, content)
-        VALUES ($1, $2, $3)
+        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)
+        VALUES ($1, $2, $3, $4)
         RETURNING message_id, created_at
         "#,
     chat_id,
     json!(author),
     &content,
+    &metadata,
   )
   .fetch_one(executor)
   .await
@@ -278,7 +293,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     message_id: row.message_id,
     content,
     created_at: row.created_at,
-    meta_data: Default::default(),
+    meta_data: metadata,
     reply_message_id: None,
   };
   Ok(chat_message)

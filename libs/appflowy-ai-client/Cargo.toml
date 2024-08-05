@@ -15,6 +15,7 @@ tracing = { version = "0.1", optional = true }
 serde_repr = { version = "0.1", optional = true }
 futures = "0.3.30"
 bytes = "1.6.0"
+pin-project = "1.1.5"
 
 [dev-dependencies]
 appflowy-ai-client = { path = ".", features = ["dto", "client-api"] }

@@ -1,5 +1,6 @@
 use actix_web::web::Bytes;
 use anyhow::anyhow;
+use std::collections::HashMap;
 
 use app_error::AppError;
 use appflowy_ai_client::client::AppFlowyAIClient;
@@ -15,8 +16,9 @@ use database_entity::dto::{
   CreateChatParams, GetChatMessageParams, RepeatedChatMessage, UpdateChatMessageContentParams,
 };
 use futures::stream::Stream;
+use serde_json::Value;
 use sqlx::PgPool;
-use tracing::error;
+use tracing::{error, info, trace};
 
 use appflowy_ai_client::dto::AIModel;
 use validator::Validate;
@@ -65,6 +67,7 @@ pub async fn update_chat_message(
     ChatAuthor::ai(),
     &params.chat_id,
     new_answer.content,
+    new_answer.metadata,
     params.message_id,
   )
   .await?;
@@ -84,6 +87,7 @@ pub async fn generate_chat_message_answer(
     .send_question(chat_id, &content, &ai_model)
     .await?;
 
+  info!("new_answer: {:?}", new_answer);
   // Save the answer to the database
   let mut txn = pg_pool.begin().await?;
   let message = insert_answer_message_with_transaction(
@@ -91,6 +95,7 @@ pub async fn generate_chat_message_answer(
     ChatAuthor::ai(),
     chat_id,
     new_answer.content,
+    new_answer.metadata.unwrap_or_default(),
     question_message_id,
   )
   .await?;
@@ -109,6 +114,136 @@ pub async fn create_chat_message(
   uid: i64,
   chat_id: String,
   params: CreateChatMessageParams,
+) -> Result<ChatMessage, AppError> {
+  let params = params.clone();
+  let chat_id = chat_id.clone();
+  let pg_pool = pg_pool.clone();
+
+  let question = insert_question_message(
+    &pg_pool,
+    ChatAuthor::new(uid, ChatAuthorType::Human),
+    &chat_id,
+    params.content.clone(),
+    params.metadata,
+  )
+  .await?;
+  Ok(question)
+}
+
+enum ContextType {
+  Unknown,
+  Text,
+}
+
+/// Extracts the chat context from the metadata. Currently, we only support text as a context. In
+/// the future, we will support other types of context.
+pub(crate) enum ExtractChatMetadata {
+  Text {
+    text: String,
+    metadata: HashMap<String, Value>,
+  },
+}
+/// Removes the "content" field from the metadata if the "ty" field is equal to "text".
+/// The metadata struct is shown below:
+/// {
+///   "data": {
+///       "content": "hello world"
+///       "size": 122,
+///       "content_type": "text",
+///   },
+///   "id": "id",
+///   "name": "name"
+/// }
+///
+/// # Parameters
+/// - `params`: A mutable reference to `CreateChatMessageParams` which contains metadata.
+///
+/// # Returns
+/// - `Option<(String, HashMap<String, serde_json::Value>)>`: A tuple containing the removed content and the updated metadata, otherwise `None`.
+fn extract_message_metadata(
+  message_metadata: &mut serde_json::Value,
+) -> Option<ExtractChatMetadata> {
+  trace!("Extracting metadata: {:?}", message_metadata);
+
+  if let Value::Object(message_metadata) = message_metadata {
+    let mut context_type = ContextType::Unknown;
+    if let Some(Value::Object(data)) = message_metadata.get("data") {
+      if let Some(ty) = data.get("content_type").and_then(|v| v.as_str()) {
+        match ty {
+          "text" => context_type = ContextType::Text,
+          _ => context_type = ContextType::Unknown,
+        }
+      }
+    }
+
+    match context_type {
+      ContextType::Unknown => {
+        // do nothing
+      },
+      ContextType::Text => {
+        // remove the "data" field from the context if the "ty" field is equal to "text"
+        let mut text = None;
+        if let Some(Value::Object(ref mut data)) = message_metadata.remove("data") {
+          let content = data
+            .remove("content")
+            .and_then(|value| {
+              if let Value::String(s) = value {
+                Some(s)
+              } else {
+                None
+              }
+            })
+            .unwrap_or_default();
+
+          let content_size = data
+            .remove("size")
+            .and_then(|value| {
+              if let Value::Number(n) = value {
+                n.as_i64()
+              } else {
+                None
+              }
+            })
+            .unwrap_or(0);
+
+          // If the content is not empty and the content size is equal to the length of the content
+          if !content.is_empty() && content.len() == content_size as usize {
+            text = Some(content);
+          }
+        }
+
+        return text.map(|text| ExtractChatMetadata::Text {
+          text,
+          metadata: message_metadata.clone().into_iter().collect(),
+        });
+      },
+    }
+  }
+
+  None
+}
+
+pub(crate) fn extract_chat_message_metadata(
+  params: &mut CreateChatMessageParams,
+) -> Vec<ExtractChatMetadata> {
+  let mut extract_metadatas = vec![];
+  if let Some(Value::Array(ref mut list)) = params.metadata {
+    trace!("Extracting chat metadata: {:?}", list);
+    for metadata in list {
+      if let Some(extract_context) = extract_message_metadata(metadata) {
+        extract_metadatas.push(extract_context);
+      }
+    }
+  }
+
+  extract_metadatas
+}
+
+pub async fn create_chat_message_stream(
+  pg_pool: &PgPool,
+  uid: i64,
+  chat_id: String,
+  params: CreateChatMessageParams,
   ai_client: AppFlowyAIClient,
   ai_model: AIModel,
 ) -> impl Stream<Item = Result<Bytes, AppError>> {
@@ -121,7 +256,8 @@ pub async fn create_chat_message(
           &pg_pool,
           ChatAuthor::new(uid, ChatAuthorType::Human),
           &chat_id,
-          params.content.clone()
+          params.content.clone(),
+          params.metadata,
       ).await {
           Ok(question) => question,
           Err(err) => {
@@ -147,8 +283,8 @@ pub async fn create_chat_message(
       match params.message_type {
           ChatMessageType::System => {}
           ChatMessageType::User => {
-              let content = match ai_client.send_question(&chat_id, &params.content, &ai_model).await {
-                  Ok(response) => response.content,
+              let answer = match ai_client.send_question(&chat_id, &params.content, &ai_model).await {
+                  Ok(response) => response,
                   Err(err) => {
                       error!("Failed to send question to AI: {}", err);
                       yield Err(AppError::from(err));
@@ -156,7 +292,7 @@ pub async fn create_chat_message(
                   }
               };
 
-              let answer = match insert_answer_message(&pg_pool, ChatAuthor::ai(), &chat_id, content.clone(),question_id).await {
+              let answer = match insert_answer_message(&pg_pool, ChatAuthor::ai(), &chat_id, answer.content, answer.metadata,question_id).await {
                   Ok(answer) => answer,
                   Err(err) => {
                       error!("Failed to insert answer message: {}", err);
@@ -193,23 +329,4 @@ pub async fn get_chat_messages(
   let messages = select_chat_messages(&mut txn, chat_id, params).await?;
   txn.commit().await?;
   Ok(messages)
-}
-
-pub async fn create_chat_question(
-  pg_pool: &PgPool,
-  uid: i64,
-  chat_id: String,
-  params: CreateChatMessageParams,
-) -> Result<ChatMessage, AppError> {
-  let params = params.clone();
-  let chat_id = chat_id.clone();
-  let pg_pool = pg_pool.clone();
-  let question = insert_question_message(
-    &pg_pool,
-    ChatAuthor::new(uid, ChatAuthorType::Human),
-    &chat_id,
-    params.content.clone(),
-  )
-  .await?;
-  Ok(question)
 }

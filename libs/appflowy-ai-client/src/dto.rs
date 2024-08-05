@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
+pub const STEAM_METADATA_KEY: &str = "0";
+pub const STEAM_ANSWER_KEY: &str = "1";
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SummarizeRowResponse {
   pub text: String,
@@ -23,6 +25,8 @@ pub struct MessageData {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatAnswer {
   pub content: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -265,4 +269,27 @@ pub struct ModelInfo {
 pub struct LocalAIConfig {
   pub models: Vec<LLMModel>,
   pub plugin: AppFlowyOfflineAI,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateTextChatContext {
+  pub chat_id: String,
+  /// Only support "txt" and "md" for now
+  pub content_type: String,
+  pub text: String,
+  pub chunk_size: i32,
+  pub chunk_overlap: i32,
+  pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl Display for CreateTextChatContext {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+      "Create Chat context: {{ chat_id: {}, content_type: {}, content size: {},  metadata: {:?} }}",
+      self.chat_id,
+      self.content_type,
+      self.text.len(),
+      self.metadata
+    ))
+  }
 }

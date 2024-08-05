@@ -275,7 +275,7 @@ async fn create_chat_context_test() {
   let context = CreateTextChatContext {
     chat_id: chat_id.clone(),
     content_type: "txt".to_string(),
-    text: "I have lived in the US for five years".to_string(),
+    text: "Lacus have lived in the US for five years".to_string(),
     chunk_size: 1000,
     chunk_overlap: 20,
     metadata: Default::default(),
@@ -287,7 +287,7 @@ async fn create_chat_context_test() {
     .await
     .unwrap();
 
-  let params = CreateChatMessageParams::new_user("Where I live?");
+  let params = CreateChatMessageParams::new_user("Where Lacus live?");
   let question = test_client
     .api_client
     .create_question(&workspace_id, &chat_id, params)

@@ -134,7 +134,7 @@ impl CollabBroadcast {
       // Observer the awareness's update and broadcast it to all subscribers.
       let awareness_sub = collab
         .get_awareness()
-        .on_change(move |awareness, event, _origin| {
+        .on_update(move |awareness, event, _origin| {
           if let Ok(awareness_update) = awareness.update_with_clients(event.all_changes()) {
             let payload = Message::Awareness(awareness_update).encode_v1();
             let msg = AwarenessSync::new(cloned_oid.clone(), payload, CollabOrigin::Empty);

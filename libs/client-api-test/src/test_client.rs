@@ -131,25 +131,15 @@ impl TestClient {
   }
 
   pub async fn clean_awareness_state(&self, object_id: &str) {
-    self
-      .collabs
-      .get(object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await
-      .clean_awareness_state();
+    let test_collab = self.collabs.get(object_id).unwrap();
+    let mut lock = test_collab.collab.write().await;
+    lock.clean_awareness_state();
   }
 
   pub async fn emit_awareness_state(&self, object_id: &str) {
-    self
-      .collabs
-      .get(object_id)
-      .unwrap()
-      .collab
-      .write()
-      .await
-      .emit_awareness_state();
+    let test_collab = self.collabs.get(object_id).unwrap();
+    let mut lock = test_collab.collab.write().await;
+    lock.emit_awareness_state();
   }
 
   pub async fn user_with_new_device(registered_user: User) -> Self {

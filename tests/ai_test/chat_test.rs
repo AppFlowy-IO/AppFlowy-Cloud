@@ -125,7 +125,7 @@ async fn chat_qa_test() {
   };
 
   let params =
-    CreateChatMessageParams::new_user("where is tom live in?").with_metadata(json!(vec![metadata]));
+    CreateChatMessageParams::new_user("Where lucas live?").with_metadata(json!(vec![metadata]));
   let question = test_client
     .api_client
     .create_question(&workspace_id, &chat_id, params)

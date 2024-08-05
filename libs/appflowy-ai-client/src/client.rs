@@ -381,12 +381,6 @@ impl From<reqwest::Error> for AIError {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum AnswerOrMetadata {
-  Metadata { value: serde_json::Value },
-  Answer { value: String },
-}
-
 #[pin_project]
 pub struct JsonStream<T> {
   stream: Pin<Box<dyn Stream<Item = Result<Bytes, AIError>> + Send>>,
@@ -416,32 +410,32 @@ where
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let this = self.project();
 
-    loop {
-      match ready!(this.stream.as_mut().poll_next(cx)) {
-        Some(Ok(bytes)) => {
-          this.buffer.extend_from_slice(&bytes);
-          let de = StreamDeserializer::new(SliceRead::new(this.buffer));
-          let mut iter = de.into_iter();
-          if let Some(result) = iter.next() {
-            match result {
-              Ok(value) => {
-                let remaining = iter.byte_offset();
-                this.buffer.drain(0..remaining);
-                return Poll::Ready(Some(Ok(value)));
-              },
-              Err(err) => {
-                if err.is_eof() {
-                  continue;
-                } else {
-                  return Poll::Ready(Some(Err(AIError::Internal(err.into()))));
-                }
-              },
-            }
+    match ready!(this.stream.as_mut().poll_next(cx)) {
+      Some(Ok(bytes)) => {
+        this.buffer.extend_from_slice(&bytes);
+        let de = StreamDeserializer::new(SliceRead::new(this.buffer));
+        let mut iter = de.into_iter();
+        if let Some(result) = iter.next() {
+          match result {
+            Ok(value) => {
+              let remaining = iter.byte_offset();
+              this.buffer.drain(0..remaining);
+              Poll::Ready(Some(Ok(value)))
+            },
+            Err(err) => {
+              if err.is_eof() {
+                Poll::Pending
+              } else {
+                Poll::Ready(Some(Err(AIError::Internal(err.into()))))
+              }
+            },
           }
-        },
-        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
-        None => return Poll::Ready(None),
-      }
+        } else {
+          Poll::Pending
+        }
+      },
+      Some(Err(err)) => Poll::Ready(Some(Err(err))),
+      None => Poll::Ready(None),
     }
   }
 }

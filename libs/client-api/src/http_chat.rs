@@ -301,34 +301,36 @@ pub enum QuestionStreamValue {
   Answer { value: String },
   Metadata { value: serde_json::Value },
 }
-
 impl Stream for QuestionStream {
   type Item = Result<QuestionStreamValue, AppResponseError>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let this = self.project();
 
-    loop {
-      match ready!(this.stream.as_mut().poll_next(cx)) {
-        Some(Ok(value)) => {
-          if let Value::Object(mut value) = value {
-            if let Some(metadata) = value.remove(STEAM_METADATA_KEY) {
-              return Poll::Ready(Some(Ok(QuestionStreamValue::Metadata { value: metadata })));
-            }
-
-            if let Some(answer) = value
-              .remove(STEAM_ANSWER_KEY)
-              .and_then(|s| s.as_str().map(ToString::to_string))
-            {
-              return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: answer })));
-            }
-
-            error!("Invalid streaming value: {:?}", value);
+    return match ready!(this.stream.as_mut().poll_next(cx)) {
+      Some(Ok(value)) => match value {
+        Value::Object(mut value) => {
+          if let Some(metadata) = value.remove(STEAM_METADATA_KEY) {
+            return Poll::Ready(Some(Ok(QuestionStreamValue::Metadata { value: metadata })));
           }
+
+          if let Some(answer) = value
+            .remove(STEAM_ANSWER_KEY)
+            .and_then(|s| s.as_str().map(ToString::to_string))
+          {
+            return Poll::Ready(Some(Ok(QuestionStreamValue::Answer { value: answer })));
+          }
+
+          error!("Invalid streaming value: {:?}", value);
+          Poll::Ready(None)
         },
-        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
-        None => return Poll::Ready(None),
-      }
-    }
+        _ => {
+          error!("Unexpected JSON value type: {:?}", value);
+          Poll::Ready(None)
+        },
+      },
+      Some(Err(err)) => Poll::Ready(Some(Err(err))),
+      None => Poll::Ready(None),
+    };
   }
 }

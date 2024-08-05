@@ -271,7 +271,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   content: String,
   metadata: Option<JsonValue>,
 ) -> Result<ChatMessage, AppError> {
-  let meta_data = metadata.unwrap_or_else(|| json!({}));
+  let metadata = metadata.unwrap_or_else(|| json!({}));
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
     r#"
@@ -282,7 +282,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     chat_id,
     json!(author),
     &content,
-    &meta_data,
+    &metadata,
   )
   .fetch_one(executor)
   .await
@@ -293,7 +293,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     message_id: row.message_id,
     content,
     created_at: row.created_at,
-    meta_data,
+    meta_data: metadata,
     reply_message_id: None,
   };
   Ok(chat_message)

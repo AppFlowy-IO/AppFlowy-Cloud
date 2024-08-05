@@ -530,6 +530,7 @@ dependencies = [
  "appflowy-ai-client",
  "bytes",
  "futures",
+ "pin-project",
  "reqwest 0.12.5",
  "serde",
  "serde_json",

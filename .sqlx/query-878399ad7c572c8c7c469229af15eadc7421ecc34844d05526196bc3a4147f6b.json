@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO af_chat_messages (chat_id, author, content)\n        VALUES ($1, $2, $3)\n        RETURNING message_id, created_at\n        ",
+  "query": "\n        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)\n        VALUES ($1, $2, $3, $4)\n        RETURNING message_id, created_at\n        ",
   "describe": {
     "columns": [
       {
@@ -18,7 +18,8 @@
       "Left": [
         "Uuid",
         "Jsonb",
-        "Text"
+        "Text",
+        "Jsonb"
       ]
     },
     "nullable": [
@@ -26,5 +27,5 @@
       false
     ]
   },
-  "hash": "95b4d7508569cac38c78d21a0a471772d3703e5678ee7ca0cd32d60f5343be91"
+  "hash": "878399ad7c572c8c7c469229af15eadc7421ecc34844d05526196bc3a4147f6b"
 }

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    SELECT\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      rank\n    FROM af_template_category\n    WHERE category_id = $1\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "bg_color",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "category_type: AFTemplateCategoryTypeColumn",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "rank",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4f8bb1345f524f5a11ae74357265d8e308eebb562117bb3f36c3b25f9e1c5e1b"
+}

@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n    INSERT INTO af_template_category (name, description, icon, bg_color, category_type, rank)\n    VALUES ($1, $2, $3, $4, $5, $6)\n    RETURNING\n      category_id AS id,\n      name,\n      description,\n      icon,\n      bg_color,\n      category_type AS \"category_type: AFTemplateCategoryTypeColumn\",\n      rank\n    ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "bg_color",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "category_type: AFTemplateCategoryTypeColumn",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "rank",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b9d4e564e23df7ab391c78848b6a9d51e30496c58e70b26f14dfe55b6a0d2e69"
+}

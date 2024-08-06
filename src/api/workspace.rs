@@ -1153,7 +1153,7 @@ async fn post_published_collab_reaction_handler(
   view_id: web::Path<Uuid>,
   data: Json<CreateReactionParams>,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<Reactions>> {
+) -> Result<JsonAppResponse<()>> {
   let view_id = view_id.into_inner();
   create_reaction_on_comment(
     &state.pg_pool,
@@ -1170,7 +1170,7 @@ async fn delete_published_collab_reaction_handler(
   user_uuid: UserUuid,
   data: Json<DeleteReactionParams>,
   state: Data<AppState>,
-) -> Result<JsonAppResponse<Reactions>> {
+) -> Result<JsonAppResponse<()>> {
   remove_reaction_on_comment(
     &state.pg_pool,
     &data.comment_id,

@@ -640,7 +640,7 @@ pub struct UpdateChatParams {
   #[validate(custom = "validate_not_empty_str")]
   pub name: Option<String>,
 
-  pub rag_ids: Option<Vec<String>>,
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -652,10 +652,15 @@ pub struct CreateChatMessageParams {
   pub metadata: Option<serde_json::Value>,
 }
 
+/// [ChatMessageMetadata] is used when creating a new question message.
+/// All the properties of [ChatMessageMetadata] except [ChatMetadataData] will be stored as a
+/// metadata for specific [ChatMessage]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessageMetadata {
   pub data: ChatMetadataData,
+  /// The id for the metadata. It can be a file_id, view_id
   pub id: String,
+  /// The name for the metadata. For example, @xxx, @xx.txt
   pub name: String,
   pub source: String,
 }

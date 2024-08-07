@@ -12,8 +12,9 @@ use database::chat::chat_ops::{
   select_chat_messages,
 };
 use database_entity::dto::{
-  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, CreateChatMessageParams,
-  CreateChatParams, GetChatMessageParams, RepeatedChatMessage, UpdateChatMessageContentParams,
+  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, ChatMetadataData,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+  UpdateChatMessageContentParams,
 };
 use futures::stream::Stream;
 use serde_json::Value;
@@ -155,11 +156,8 @@ pub(crate) enum ExtractChatMetadata {
 ///   "name": "name"
 /// }
 ///
-/// # Parameters
-/// - `params`: A mutable reference to `CreateChatMessageParams` which contains metadata.
-///
-/// # Returns
-/// - `Option<(String, HashMap<String, serde_json::Value>)>`: A tuple containing the removed content and the updated metadata, otherwise `None`.
+/// the root json is point to the struct [database_entity::dto::ChatMessageMetadata]
+/// data is point to the struct [database_entity::dto::ChatMetadataData]
 fn extract_message_metadata(
   message_metadata: &mut serde_json::Value,
 ) -> Option<ExtractChatMetadata> {
@@ -227,6 +225,7 @@ pub(crate) fn extract_chat_message_metadata(
   params: &mut CreateChatMessageParams,
 ) -> Vec<ExtractChatMetadata> {
   let mut extract_metadatas = vec![];
+  trace!("chat metadata: {:?}", params.metadata);
   if let Some(Value::Array(ref mut list)) = params.metadata {
     trace!("Extracting chat metadata: {:?}", list);
     for metadata in list {

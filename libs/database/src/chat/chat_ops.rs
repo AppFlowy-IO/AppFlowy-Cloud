@@ -77,13 +77,12 @@ pub async fn update_chat(
     current_param_pos += 1;
   }
 
-  if let Some(ref rag_ids) = params.rag_ids {
-    query_parts.push(format!("rag_ids = ${}", current_param_pos));
-    let rag_ids_json = json!(rag_ids);
+  if let Some(ref metadata) = params.metadata {
+    query_parts.push(format!("metadata = metadata || ${}", current_param_pos));
     args
-      .add(rag_ids_json)
+      .add(json!(metadata))
       .map_err(|err| AppError::SqlxArgEncodingError {
-        desc: format!("unable to encode rag ids json for chat id {}", chat_id),
+        desc: format!("unable to encode metadata json for chat id {}", chat_id),
         err,
       })?;
     current_param_pos += 1;

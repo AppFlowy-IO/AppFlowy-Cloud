@@ -175,6 +175,7 @@ async fn get_related_message_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
+#[instrument(level = "debug", skip_all, err)]
 async fn create_question_handler(
   state: Data<AppState>,
   path: web::Path<(String, String)>,
@@ -184,6 +185,8 @@ async fn create_question_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let mut params = payload.into_inner();
 
+  // When create a question, we will extract the metadata from the question content.
+  // metadata might include user mention file,page,or user. For example, @Get started.
   for extract_context in extract_chat_message_metadata(&mut params) {
     match extract_context {
       ExtractChatMetadata::Text { text, metadata } => {

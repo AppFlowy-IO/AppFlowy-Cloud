@@ -298,8 +298,17 @@ impl QuestionStream {
 }
 
 pub enum QuestionStreamValue {
-  Answer { value: String },
-  Metadata { value: serde_json::Value },
+  Answer {
+    value: String,
+  },
+  /// Metadata is a JSON array object. its structure as below:
+  /// ```json
+  /// [
+  ///   {"id": "xx", "source": "", "name": "" }
+  /// ]
+  Metadata {
+    value: serde_json::Value,
+  },
 }
 impl Stream for QuestionStream {
   type Item = Result<QuestionStreamValue, AppResponseError>;

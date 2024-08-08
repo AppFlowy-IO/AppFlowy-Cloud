@@ -682,7 +682,8 @@ impl ChatMetadataData {
     match self.content_type {
       ChatMetadataContentType::Text => self.content.len() == self.size as usize,
       ChatMetadataContentType::Markdown => self.content.len() == self.size as usize,
-      _ => true,
+      ChatMetadataContentType::Unknown => false,
+      ChatMetadataContentType::PDF => false,
     }
   }
 }
@@ -692,8 +693,7 @@ pub enum ChatMetadataContentType {
   Unknown,
   Text,
   Markdown,
-  Pdf,
-  Custom(String),
+  PDF,
 }
 
 impl Display for ChatMetadataContentType {
@@ -702,8 +702,7 @@ impl Display for ChatMetadataContentType {
       ChatMetadataContentType::Unknown => write!(f, "unknown"),
       ChatMetadataContentType::Text => write!(f, "txt"),
       ChatMetadataContentType::Markdown => write!(f, "markdown"),
-      ChatMetadataContentType::Pdf => write!(f, "pdf"),
-      ChatMetadataContentType::Custom(custom) => write!(f, "{}", custom),
+      ChatMetadataContentType::PDF => write!(f, "pdf"),
     }
   }
 }

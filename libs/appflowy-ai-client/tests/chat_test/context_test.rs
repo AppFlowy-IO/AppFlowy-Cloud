@@ -7,7 +7,7 @@ async fn create_chat_context_test() {
   let context = CreateTextChatContext {
     chat_id: chat_id.clone(),
     content_type: "txt".to_string(),
-    text: "I have lived in the US for five years".to_string(),
+    content: "I have lived in the US for five years".to_string(),
     chunk_size: 1000,
     chunk_overlap: 20,
     metadata: Default::default(),

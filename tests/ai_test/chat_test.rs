@@ -122,6 +122,7 @@ async fn chat_qa_test() {
     id: "123".to_string(),
     name: "test context".to_string(),
     source: "user added".to_string(),
+    extract: Some(json!({"created_at": 123})),
   };
 
   let params =
@@ -131,6 +132,19 @@ async fn chat_qa_test() {
     .create_question(&workspace_id, &chat_id, params)
     .await
     .unwrap();
+  assert_json_eq!(
+    question.meta_data,
+    json!([
+      {
+        "id": "123",
+        "name": "test context",
+        "source": "user added",
+        "extract": {
+            "created_at": 123
+        }
+      }
+    ])
+  );
 
   let answer = test_client
     .api_client
@@ -275,7 +289,7 @@ async fn create_chat_context_test() {
   let context = CreateTextChatContext {
     chat_id: chat_id.clone(),
     content_type: "txt".to_string(),
-    text: "Lacus have lived in the US for five years".to_string(),
+    content: "Lacus have lived in the US for five years".to_string(),
     chunk_size: 1000,
     chunk_overlap: 20,
     metadata: Default::default(),

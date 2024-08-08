@@ -1,7 +1,8 @@
+use std::borrow::BorrowMut;
+
 use collab::core::awareness::{Awareness, AwarenessUpdate};
 use collab::core::collab::{TransactionExt, TransactionMutExt};
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
 use tokio::sync::RwLock;
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::{Encode, Encoder};
@@ -191,45 +192,55 @@ pub trait CollabSyncProtocol {
 }
 
 /// Handles incoming messages from the client/server
-pub async fn handle_message_follow_protocol<P: CollabSyncProtocol>(
+pub async fn handle_message_follow_protocol<P, C>(
   message_origin: &CollabOrigin,
   protocol: &P,
-  collab: &RwLock<Collab>,
+  collab: &RwLock<C>,
   msg: Message,
-) -> Result<Option<Vec<u8>>, RTProtocolError> {
+) -> Result<Option<Vec<u8>>, RTProtocolError>
+where
+  P: CollabSyncProtocol,
+  C: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
+{
   match msg {
     Message::Sync(msg) => match msg {
       SyncMessage::SyncStep1(sv) => {
         // calculate missing updates base on the input state vector
         let lock = collab.read().await;
-        let update = protocol.handle_sync_step1(lock.get_awareness(), sv)?;
+        let collab = lock.borrow();
+        let update = protocol.handle_sync_step1(collab.get_awareness(), sv)?;
         Ok(update)
       },
       SyncMessage::SyncStep2(update) => {
         let update = Update::decode_v1(&update)?;
         let mut lock = collab.write().await;
-        protocol.handle_sync_step2(message_origin, lock.get_mut_awareness(), update)?;
+        let collab = (*lock).borrow_mut();
+        protocol.handle_sync_step2(message_origin, collab.get_mut_awareness(), update)?;
         Ok(None)
       },
       SyncMessage::Update(update) => {
         let update = Update::decode_v1(&update)?;
         let mut lock = collab.write().await;
-        protocol.handle_update(message_origin, lock.get_mut_awareness(), update)?;
+        let collab = (*lock).borrow_mut();
+        protocol.handle_update(message_origin, collab.get_mut_awareness(), update)?;
         Ok(None)
       },
     },
     Message::Auth(reason) => {
       let lock = collab.read().await;
-      protocol.handle_auth(lock.get_awareness(), reason)
+      let collab = lock.borrow();
+      protocol.handle_auth(collab.get_awareness(), reason)
     },
     //FIXME: where is the QueryAwareness protocol?
     Message::Awareness(update) => {
       let mut lock = collab.write().await;
-      protocol.handle_awareness_update(message_origin, lock.get_mut_awareness(), update)
+      let collab = (*lock).borrow_mut();
+      protocol.handle_awareness_update(message_origin, collab.get_mut_awareness(), update)
     },
     Message::Custom(msg) => {
       let mut lock = collab.write().await;
-      protocol.handle_custom_message(lock.get_mut_awareness(), msg)
+      let collab = (*lock).borrow_mut();
+      protocol.handle_custom_message(collab.get_mut_awareness(), msg)
     },
   }
 }

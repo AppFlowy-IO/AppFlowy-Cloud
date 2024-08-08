@@ -1,9 +1,11 @@
-use client_api_test::{assert_client_collab_include_value, TestClient};
-use collab_entity::CollabType;
-use database_entity::dto::AFAccessLevel;
-use serde_json::{json, Value};
 use std::time::Duration;
+
+use collab_entity::CollabType;
+use serde_json::{json, Value};
 use tokio::time::sleep;
+
+use client_api_test::{assert_client_collab_include_value, TestClient};
+use database_entity::dto::AFAccessLevel;
 
 #[tokio::test]
 async fn client_apply_update_find_missing_update_test() {
@@ -13,8 +15,9 @@ async fn client_apply_update_find_missing_update_test() {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("content", "hello world");
 
   expected_json["content"] = Value::String("hello world".to_string());
@@ -71,8 +74,9 @@ async fn make_clients() -> (TestClient, TestClient, String, Value) {
     .collabs
     .get_mut(&object_id)
     .unwrap()
-    .mutex_collab
-    .lock()
+    .collab
+    .write()
+    .await
     .insert("title", "hello world");
   client_1
     .wait_object_sync_complete(&object_id)

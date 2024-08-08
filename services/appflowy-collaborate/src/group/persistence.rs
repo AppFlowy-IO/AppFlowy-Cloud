@@ -1,20 +1,19 @@
-use crate::group::group_init::EditState;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 
 use anyhow::anyhow;
-use app_error::AppError;
 use collab::preclude::Collab;
 use collab_entity::{validate_data_for_folder, CollabType};
+use tokio::sync::{mpsc, RwLock};
+use tokio::time::interval;
+use tracing::{trace, warn};
+
+use app_error::AppError;
 use database::collab::CollabStorage;
 use database_entity::dto::CollabParams;
 
-use collab::core::collab::{MutexCollab, WeakMutexCollab};
-
+use crate::group::group_init::EditState;
 use crate::indexer::Indexer;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::time::interval;
-use tracing::{error, trace, warn};
 
 pub(crate) struct GroupPersistence<S> {
   workspace_id: String,
@@ -22,7 +21,7 @@ pub(crate) struct GroupPersistence<S> {
   storage: Arc<S>,
   uid: i64,
   edit_state: Arc<EditState>,
-  mutex_collab: WeakMutexCollab,
+  collab: Weak<RwLock<Collab>>,
   collab_type: CollabType,
   persistence_interval: Duration,
   indexer: Option<Arc<dyn Indexer>>,
@@ -39,7 +38,7 @@ where
     uid: i64,
     storage: Arc<S>,
     edit_state: Arc<EditState>,
-    mutex_collab: WeakMutexCollab,
+    collab: Weak<RwLock<Collab>>,
     collab_type: CollabType,
     persistence_interval: Duration,
     ai_client: Option<Arc<dyn Indexer>>,
@@ -50,14 +49,14 @@ where
       uid,
       storage,
       edit_state,
-      mutex_collab,
+      collab,
       collab_type,
       persistence_interval,
       indexer: ai_client,
     }
   }
 
-  pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<MutexCollab>) {
+  pub async fn run(self, mut destroy_group_rx: mpsc::Receiver<Arc<RwLock<Collab>>>) {
     let mut interval = interval(self.persistence_interval);
     loop {
       tokio::select! {
@@ -105,64 +104,31 @@ where
   }
 
   async fn save(&self, write_immediately: bool) -> Result<(), AppError> {
-    let mutex_collab = self.mutex_collab.clone();
     let object_id = self.object_id.clone();
     let workspace_id = self.workspace_id.clone();
     let collab_type = self.collab_type.clone();
-    let collab = match mutex_collab.upgrade() {
+    let collab = match self.collab.upgrade() {
       Some(collab) => collab,
       None => return Err(AppError::Internal(anyhow!("collab has been dropped"))),
     };
 
-    let collab_embedding = if let Some(indexer) = &self.indexer {
-      indexer.index(collab.clone()).await?
-    } else {
-      None
+    let mut params = {
+      let lock = collab.read().await;
+      get_encode_collab(&workspace_id, &object_id, &lock, &collab_type)?
     };
-    let result = tokio::task::spawn_blocking(move || {
-      // Attempt to lock the collab; skip saving if unable
-      let lock_guard = collab
-        .try_lock()
-        .ok_or_else(|| AppError::Internal(anyhow!("required lock failed")))?;
-      let params = get_encode_collab(&workspace_id, &object_id, &lock_guard, &collab_type)?;
-      Ok::<_, AppError>(params)
-    })
-    .await;
-
-    match result {
-      Ok(Ok(mut params)) => {
-        params.embeddings = collab_embedding;
-        match self
-          .storage
-          .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
-          .await
-        {
-          Ok(_) => {
-            // Update the edit state on successful save
-            self.edit_state.tick();
-          },
-          Err(err) => warn!("fail to save collab to disk: {:?}", err),
-        }
-      },
-      Ok(Err(err)) => {
-        if matches!(err, AppError::OverrideWithIncorrectData(_)) {
-          return Err(err);
-        }
-        // omits the other errors
-      },
-      Err(err) => {
-        if err.is_panic() {
-          // reason:
-          // 1. Couldn't get item's parent
-          warn!(
-            "encode collab panic:{}:{}=>{:?}",
-            self.object_id, self.collab_type, err
-          );
-        } else {
-          error!("fail to spawn a task to get encode collab: {:?}", err)
-        }
-      },
+    if let Some(indexer) = &self.indexer {
+      let embeddings = indexer
+        .index(&object_id, params.encoded_collab_v1.clone())
+        .await?;
+      params.embeddings = embeddings;
     }
+
+    self
+      .storage
+      .insert_or_update_collab(&self.workspace_id, &self.uid, params, write_immediately)
+      .await?;
+    // Update the edit state on successful save
+    self.edit_state.tick();
     Ok(())
   }
 }
@@ -182,7 +148,7 @@ fn get_encode_collab(
 ) -> Result<CollabParams, AppError> {
   // Attempt to encode collaboration data to version 1 bytes and validate required data.
   let encoded_collab = collab
-    .try_encode_collab_v1(|c| collab_type.validate_require_data(c))
+    .encode_collab_v1(|c| collab_type.validate_require_data(c))
     .map_err(|err| {
       AppError::Internal(anyhow!(
         "Failed to encode collaboration to bytes: {:?}",

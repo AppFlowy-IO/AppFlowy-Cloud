@@ -1,8 +1,10 @@
-use client_api_test::TestClient;
-use collab_entity::CollabType;
-use database_entity::dto::{AFAccessLevel, AFRole};
 use std::time::Duration;
+
+use collab_entity::CollabType;
 use tokio::time::sleep;
+
+use client_api_test::TestClient;
+use database_entity::dto::{AFAccessLevel, AFRole};
 
 #[tokio::test]
 async fn viewing_document_editing_users_test() {
@@ -51,7 +53,7 @@ async fn viewing_document_editing_users_test() {
   assert_eq!(clients.len(), 2);
   assert_eq!(clients, expected_clients);
   // simulate the guest close the collab
-  guest.clean_awareness_state(&object_id);
+  guest.clean_awareness_state(&object_id).await;
   // sleep 5 second to make sure the awareness observe callback is called
   sleep(Duration::from_secs(5)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();
@@ -60,7 +62,7 @@ async fn viewing_document_editing_users_test() {
   assert_eq!(clients[0], owner_uid);
 
   // simulate the guest open the collab again
-  guest.emit_awareness_state(&object_id);
+  guest.emit_awareness_state(&object_id).await;
   // sleep 2 second to make sure the awareness observe callback is called
   sleep(Duration::from_secs(2)).await;
   guest.wait_object_sync_complete(&object_id).await.unwrap();

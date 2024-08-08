@@ -12,9 +12,9 @@ use database::chat::chat_ops::{
   select_chat_messages,
 };
 use database_entity::dto::{
-  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType,
-  ChatMetadataData, CreateChatMessageParams, CreateChatParams, GetChatMessageParams,
-  RepeatedChatMessage, UpdateChatMessageContentParams,
+  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, ChatMetadataData,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+  UpdateChatMessageContentParams,
 };
 use futures::stream::Stream;
 use serde_json::Value;

@@ -665,6 +665,8 @@ pub struct ChatMessageMetadata {
   /// The name for the metadata. For example, @xxx, @xx.txt
   pub name: String,
   pub source: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub extract: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -698,7 +700,7 @@ impl Display for ChatMetadataContentType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       ChatMetadataContentType::Unknown => write!(f, "unknown"),
-      ChatMetadataContentType::Text => write!(f, "text"),
+      ChatMetadataContentType::Text => write!(f, "txt"),
       ChatMetadataContentType::Markdown => write!(f, "markdown"),
       ChatMetadataContentType::Pdf => write!(f, "pdf"),
       ChatMetadataContentType::Custom(custom) => write!(f, "{}", custom),

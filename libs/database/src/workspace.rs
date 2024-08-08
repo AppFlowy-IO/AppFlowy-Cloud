@@ -1,18 +1,16 @@
 use database_entity::dto::{
-  AFRole, AFWebUser, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings,
-  GlobalComment, PublishCollabItem, PublishInfo, Reaction,
+  AFRole, AFWorkspaceInvitation, AFWorkspaceInvitationStatus, AFWorkspaceSettings, GlobalComment,
+  PublishCollabItem, PublishInfo, Reaction,
 };
 use futures_util::stream::BoxStream;
-use serde::Serialize;
 use sqlx::{types::uuid, Executor, PgPool, Postgres, Transaction};
 use std::{collections::HashMap, ops::DerefMut};
 use tracing::{event, instrument};
 use uuid::Uuid;
 
-use crate::pg_row::AFWorkspaceMemberPermRow;
 use crate::pg_row::{
-  AFPermissionRow, AFUserProfileRow, AFWorkspaceInvitationMinimal, AFWorkspaceMemberRow,
-  AFWorkspaceRow,
+  AFGlobalCommentRow, AFPermissionRow, AFReactionRow, AFUserProfileRow, AFWebUserType,
+  AFWorkspaceInvitationMinimal, AFWorkspaceMemberPermRow, AFWorkspaceMemberRow, AFWorkspaceRow,
 };
 use crate::user::select_uid_from_email;
 use app_error::AppError;
@@ -1148,54 +1146,33 @@ pub async fn select_comments_for_published_view_ordered_by_recency<
   user_uuid: &Option<Uuid>,
   page_owner_uuid: &Uuid,
 ) -> Result<Vec<GlobalComment>, AppError> {
-  let rows = sqlx::query!(
+  let user_uuid = user_uuid.unwrap_or(Uuid::nil());
+  let is_page_owner = user_uuid == *page_owner_uuid;
+  let comment_rows = sqlx::query_as!(
+    AFGlobalCommentRow,
     r#"
       SELECT
         avc.comment_id,
         avc.created_at,
-        avc.updated_at,
+        avc.updated_at AS last_updated_at,
         avc.content,
         avc.reply_comment_id,
         avc.is_deleted,
-        au.uuid AS "user_uuid?",
-        au.name AS "user_name?"
+        (au.uuid, au.name, au.metadata ->> 'icon_url') AS "user: AFWebUserType",
+        (NOT avc.is_deleted AND ($2 OR au.uuid = $3)) AS "can_be_deleted!"
       FROM af_published_view_comment avc
       LEFT OUTER JOIN af_user au ON avc.created_by = au.uid
       WHERE view_id = $1
       ORDER BY avc.created_at DESC
     "#,
     view_id,
+    is_page_owner,
+    user_uuid,
   )
   .fetch_all(executor)
   .await?;
-  let result = rows
-    .iter()
-    .map(|row| {
-      let comment_creator = row.user_uuid.map(|uuid| AFWebUser {
-        uuid,
-        name: row
-          .user_name
-          .as_ref()
-          .map(|s| s.to_string())
-          .unwrap_or("".to_string()),
-        avatar_url: None,
-      });
-      let is_page_owner = user_uuid.as_ref() == Some(page_owner_uuid);
-      let is_comment_creator = user_uuid.as_ref() == comment_creator.as_ref().map(|u| &u.uuid);
-      GlobalComment {
-        user: comment_creator,
-        comment_id: row.comment_id,
-        created_at: row.created_at,
-        last_updated_at: row.updated_at,
-        content: row.content.clone(),
-        reply_comment_id: row.reply_comment_id,
-        is_deleted: row.is_deleted,
-        can_be_deleted: !row.is_deleted && (is_page_owner || is_comment_creator),
-      }
-    })
-    .collect();
-
-  Ok(result)
+  let comments = comment_rows.into_iter().map(|row| row.into()).collect();
+  Ok(comments)
 }
 
 pub async fn insert_comment_to_published_view<'a, E: Executor<'a, Database = Postgres>>(
@@ -1254,12 +1231,6 @@ pub async fn update_comment_deletion_status<'a, E: Executor<'a, Database = Postg
   Ok(())
 }
 
-#[derive(sqlx::Type, Serialize, Debug)]
-struct AFWebUserRow {
-  uuid: Uuid,
-  name: String,
-}
-
 pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creation_time<
   'a,
   E: Executor<'a, Database = Postgres>,
@@ -1267,41 +1238,25 @@ pub async fn select_reactions_for_published_view_ordered_by_reaction_type_creati
   executor: E,
   view_id: &Uuid,
 ) -> Result<Vec<Reaction>, AppError> {
-  let rows = sqlx::query!(
+  let reaction_rows = sqlx::query_as!(
+    AFReactionRow,
     r#"
       SELECT
         avr.comment_id,
         avr.reaction_type,
-        MIN(avr.created_at) AS reaction_type_creation_at,
-        ARRAY_AGG((au.uuid, au.name)) AS "users!: Vec<AFWebUserRow>"
+        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserType>"
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE view_id = $1
       GROUP BY comment_id, reaction_type
-      ORDER BY reaction_type_creation_at
+      ORDER BY MIN(avr.created_at)
     "#,
     view_id,
   )
   .fetch_all(executor)
   .await?;
 
-  let reactions = rows
-    .iter()
-    .map(|r| Reaction {
-      reaction_type: r.reaction_type.clone(),
-      react_users: r
-        .users
-        .iter()
-        .map(|u| AFWebUser {
-          uuid: u.uuid,
-          name: u.name.clone(),
-          avatar_url: None,
-        })
-        .collect(),
-      comment_id: r.comment_id,
-    })
-    .collect();
-
+  let reactions = reaction_rows.into_iter().map(|x| x.into()).collect();
   Ok(reactions)
 }
 
@@ -1312,40 +1267,25 @@ pub async fn select_reactions_for_comment_ordered_by_reaction_type_creation_time
   executor: E,
   comment_id: &Uuid,
 ) -> Result<Vec<Reaction>, AppError> {
-  let rows = sqlx::query!(
+  let reaction_rows = sqlx::query_as!(
+    AFReactionRow,
     r#"
       SELECT
         avr.reaction_type,
-        MIN(avr.created_at) AS reaction_type_creation_at,
-        ARRAY_AGG((au.uuid, au.name)) AS "users!: Vec<AFWebUserRow>"
+        ARRAY_AGG((au.uuid, au.name, au.metadata ->> 'icon_url')) AS "react_users!: Vec<AFWebUserType>",
+        avr.comment_id
       FROM af_published_view_reaction avr
       INNER JOIN af_user au ON avr.created_by = au.uid
       WHERE comment_id = $1
-      GROUP BY reaction_type
-      ORDER BY reaction_type_creation_at
+      GROUP BY comment_id, reaction_type
+      ORDER BY MIN(avr.created_at)
     "#,
     comment_id,
   )
   .fetch_all(executor)
   .await?;
 
-  let reactions = rows
-    .iter()
-    .map(|r| Reaction {
-      reaction_type: r.reaction_type.clone(),
-      react_users: r
-        .users
-        .iter()
-        .map(|u| AFWebUser {
-          uuid: u.uuid,
-          name: u.name.clone(),
-          avatar_url: None,
-        })
-        .collect(),
-      comment_id: *comment_id,
-    })
-    .collect();
-
+  let reactions = reaction_rows.into_iter().map(|x| x.into()).collect();
   Ok(reactions)
 }
 

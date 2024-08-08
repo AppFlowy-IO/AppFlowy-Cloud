@@ -648,6 +648,8 @@ pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
   pub message_type: ChatMessageType,
+
+  /// metadata is json array object
   #[serde(skip_serializing_if = "Option::is_none")]
   pub metadata: Option<serde_json::Value>,
 }
@@ -668,9 +670,40 @@ pub struct ChatMessageMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMetadataData {
   /// Don't rename this field, it's used [ops::extract_chat_message_metadata]
-  content: String,
-  pub content_type: String,
-  size: i64,
+  pub content: String,
+  pub content_type: ChatMetadataContentType,
+  pub size: i64,
+}
+
+impl ChatMetadataData {
+  pub fn validate(&self) -> bool {
+    match self.content_type {
+      ChatMetadataContentType::Text => self.content.len() == self.size as usize,
+      ChatMetadataContentType::Markdown => self.content.len() == self.size as usize,
+      _ => true,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChatMetadataContentType {
+  Unknown,
+  Text,
+  Markdown,
+  Pdf,
+  Custom(String),
+}
+
+impl Display for ChatMetadataContentType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ChatMetadataContentType::Unknown => write!(f, "unknown"),
+      ChatMetadataContentType::Text => write!(f, "text"),
+      ChatMetadataContentType::Markdown => write!(f, "markdown"),
+      ChatMetadataContentType::Pdf => write!(f, "pdf"),
+      ChatMetadataContentType::Custom(custom) => write!(f, "{}", custom),
+    }
+  }
 }
 
 impl ChatMetadataData {
@@ -678,7 +711,7 @@ impl ChatMetadataData {
     let size = content.len();
     Self {
       content,
-      content_type: "text".to_string(),
+      content_type: ChatMetadataContentType::Text,
       size: size as i64,
     }
   }

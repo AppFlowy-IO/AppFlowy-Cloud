@@ -274,12 +274,30 @@ pub struct LocalAIConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateTextChatContext {
   pub chat_id: String,
-  /// Only support "txt" and "md" for now
+  /// Only support "txt" and "markdown" for now
   pub content_type: String,
-  pub text: String,
+  pub content: String,
   pub chunk_size: i32,
   pub chunk_overlap: i32,
   pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl CreateTextChatContext {
+  pub fn new(chat_id: String, content_type: String, text: String) -> Self {
+    CreateTextChatContext {
+      chat_id,
+      content_type,
+      content: text,
+      chunk_size: 2000,
+      chunk_overlap: 20,
+      metadata: HashMap::new(),
+    }
+  }
+
+  pub fn with_metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
+    self.metadata = metadata;
+    self
+  }
 }
 
 impl Display for CreateTextChatContext {
@@ -288,7 +306,7 @@ impl Display for CreateTextChatContext {
       "Create Chat context: {{ chat_id: {}, content_type: {}, content size: {},  metadata: {:?} }}",
       self.chat_id,
       self.content_type,
-      self.text.len(),
+      self.content.len(),
       self.metadata
     ))
   }

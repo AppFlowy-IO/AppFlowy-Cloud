@@ -1,7 +1,7 @@
 use crate::biz::chat::ops::{
   create_chat, create_chat_message, create_chat_message_stream, delete_chat,
   extract_chat_message_metadata, generate_chat_message_answer, get_chat_messages,
-  update_chat_message, ExtractChatMetadata,
+  update_chat_message,
 };
 use crate::state::AppState;
 use actix_web::web::{Data, Json};
@@ -175,6 +175,7 @@ async fn get_related_message_handler(
   Ok(AppResponse::Ok().with_data(resp).into())
 }
 
+#[instrument(level = "debug", skip_all, err)]
 async fn create_question_handler(
   state: Data<AppState>,
   path: web::Path<(String, String)>,
@@ -184,25 +185,21 @@ async fn create_question_handler(
   let (_workspace_id, chat_id) = path.into_inner();
   let mut params = payload.into_inner();
 
+  // When create a question, we will extract the metadata from the question content.
+  // metadata might include user mention file,page,or user. For example, @Get started.
   for extract_context in extract_chat_message_metadata(&mut params) {
-    match extract_context {
-      ExtractChatMetadata::Text { text, metadata } => {
-        let context = CreateTextChatContext {
-          chat_id: chat_id.clone(),
-          content_type: "txt".to_string(),
-          text,
-          chunk_size: 2000,
-          chunk_overlap: 20,
-          metadata,
-        };
-        trace!("create chat context: {}", context);
-        state
-          .ai_client
-          .create_chat_text_context(context)
-          .await
-          .map_err(AppError::from)?;
-      },
-    }
+    let context = CreateTextChatContext::new(
+      chat_id.clone(),
+      extract_context.content_type,
+      extract_context.content,
+    )
+    .with_metadata(extract_context.metadata);
+    trace!("create context for question: {}", context);
+    state
+      .ai_client
+      .create_chat_text_context(context)
+      .await
+      .map_err(AppError::from)?;
   }
 
   let uid = state.user_cache.get_user_uid(&uuid).await?;

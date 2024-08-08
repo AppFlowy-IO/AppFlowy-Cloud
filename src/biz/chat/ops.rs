@@ -12,8 +12,9 @@ use database::chat::chat_ops::{
   select_chat_messages,
 };
 use database_entity::dto::{
-  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, CreateChatMessageParams,
-  CreateChatParams, GetChatMessageParams, RepeatedChatMessage, UpdateChatMessageContentParams,
+  ChatAuthor, ChatAuthorType, ChatMessage, ChatMessageType, ChatMetadataData,
+  CreateChatMessageParams, CreateChatParams, GetChatMessageParams, RepeatedChatMessage,
+  UpdateChatMessageContentParams,
 };
 use futures::stream::Stream;
 use serde_json::Value;
@@ -130,19 +131,14 @@ pub async fn create_chat_message(
   Ok(question)
 }
 
-enum ContextType {
-  Unknown,
-  Text,
-}
-
 /// Extracts the chat context from the metadata. Currently, we only support text as a context. In
 /// the future, we will support other types of context.
-pub(crate) enum ExtractChatMetadata {
-  Text {
-    text: String,
-    metadata: HashMap<String, Value>,
-  },
+pub(crate) struct ExtractChatMetadata {
+  pub(crate) content: String,
+  pub(crate) content_type: String,
+  pub(crate) metadata: HashMap<String, Value>,
 }
+
 /// Removes the "content" field from the metadata if the "ty" field is equal to "text".
 /// The metadata struct is shown below:
 /// {
@@ -155,68 +151,25 @@ pub(crate) enum ExtractChatMetadata {
 ///   "name": "name"
 /// }
 ///
-/// # Parameters
-/// - `params`: A mutable reference to `CreateChatMessageParams` which contains metadata.
-///
-/// # Returns
-/// - `Option<(String, HashMap<String, serde_json::Value>)>`: A tuple containing the removed content and the updated metadata, otherwise `None`.
+/// the root json is point to the struct [database_entity::dto::ChatMessageMetadata]
 fn extract_message_metadata(
   message_metadata: &mut serde_json::Value,
 ) -> Option<ExtractChatMetadata> {
   trace!("Extracting metadata: {:?}", message_metadata);
 
   if let Value::Object(message_metadata) = message_metadata {
-    let mut context_type = ContextType::Unknown;
-    if let Some(Value::Object(data)) = message_metadata.get("data") {
-      if let Some(ty) = data.get("content_type").and_then(|v| v.as_str()) {
-        match ty {
-          "text" => context_type = ContextType::Text,
-          _ => context_type = ContextType::Unknown,
-        }
-      }
-    }
-
-    match context_type {
-      ContextType::Unknown => {
-        // do nothing
-      },
-      ContextType::Text => {
-        // remove the "data" field from the context if the "ty" field is equal to "text"
-        let mut text = None;
-        if let Some(Value::Object(ref mut data)) = message_metadata.remove("data") {
-          let content = data
-            .remove("content")
-            .and_then(|value| {
-              if let Value::String(s) = value {
-                Some(s)
-              } else {
-                None
-              }
-            })
-            .unwrap_or_default();
-
-          let content_size = data
-            .remove("size")
-            .and_then(|value| {
-              if let Value::Number(n) = value {
-                n.as_i64()
-              } else {
-                None
-              }
-            })
-            .unwrap_or(0);
-
-          // If the content is not empty and the content size is equal to the length of the content
-          if !content.is_empty() && content.len() == content_size as usize {
-            text = Some(content);
-          }
-        }
-
-        return text.map(|text| ExtractChatMetadata::Text {
-          text,
+    // remove the "data" field
+    if let Some(data) = message_metadata
+      .remove("data")
+      .and_then(|value| serde_json::from_value::<ChatMetadataData>(value.clone()).ok())
+    {
+      if data.validate() {
+        return Some(ExtractChatMetadata {
+          content: data.content,
+          content_type: data.content_type.to_string(),
           metadata: message_metadata.clone().into_iter().collect(),
         });
-      },
+      }
     }
   }
 
@@ -227,8 +180,8 @@ pub(crate) fn extract_chat_message_metadata(
   params: &mut CreateChatMessageParams,
 ) -> Vec<ExtractChatMetadata> {
   let mut extract_metadatas = vec![];
+  trace!("chat metadata: {:?}", params.metadata);
   if let Some(Value::Array(ref mut list)) = params.metadata {
-    trace!("Extracting chat metadata: {:?}", list);
     for metadata in list {
       if let Some(extract_context) = extract_message_metadata(metadata) {
         extract_metadatas.push(extract_context);

@@ -1,10 +1,10 @@
+use std::borrow::BorrowMut;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Weak};
 
 use arc_swap::ArcSwap;
 use collab::core::origin::CollabOrigin;
-use collab::preclude::Collab;
 use futures_util::{SinkExt, StreamExt};
 use tokio::select;
 use tokio::sync::RwLock;
@@ -25,7 +25,7 @@ use crate::collab_sync::{
 };
 
 /// Use to continuously receive updates from remote.
-pub struct ObserveCollab<Sink, Stream> {
+pub struct ObserveCollab<Sink, Stream, Collab> {
   object_id: String,
   #[allow(dead_code)]
   weak_collab: Weak<RwLock<Collab>>,
@@ -36,18 +36,19 @@ pub struct ObserveCollab<Sink, Stream> {
   seq_num_counter: Arc<SeqNumCounter>,
 }
 
-impl<Sink, Stream> Drop for ObserveCollab<Sink, Stream> {
+impl<Sink, Stream, Collab> Drop for ObserveCollab<Sink, Stream, Collab> {
   fn drop(&mut self) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("Drop SyncStream {}", self.object_id);
   }
 }
 
-impl<E, Sink, Stream> ObserveCollab<Sink, Stream>
+impl<E, Sink, Stream, Collab> ObserveCollab<Sink, Stream, Collab>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Collab: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
 {
   pub fn new(
     origin: CollabOrigin,
@@ -62,15 +63,17 @@ where
     let cloned_seq_num_counter = seq_num_counter.clone();
     let init_sync_cancel_token = ArcSwap::new(Arc::new(CancellationToken::new()));
     let arc_object = Arc::new(object);
-    af_spawn(ObserveCollab::<Sink, Stream>::observer_collab_message(
-      origin,
-      arc_object,
-      stream,
-      cloned_weak_collab,
-      sink,
-      cloned_seq_num_counter,
-      init_sync_cancel_token,
-    ));
+    af_spawn(
+      ObserveCollab::<Sink, Stream, Collab>::observer_collab_message(
+        origin,
+        arc_object,
+        stream,
+        cloned_weak_collab,
+        sink,
+        cloned_seq_num_counter,
+        init_sync_cancel_token,
+      ),
+    );
     Self {
       object_id,
       weak_collab,
@@ -113,7 +116,7 @@ where
         },
       };
 
-      if let Err(error) = ObserveCollab::<Sink, Stream>::process_remote_message(
+      if let Err(error) = ObserveCollab::<Sink, Stream, Collab>::process_remote_message(
         &object,
         &collab,
         &sink,
@@ -154,7 +157,7 @@ where
             if let Err(err) = start_sync(
               origin.clone(),
               &object,
-              &lock,
+              (*lock).borrow(),
               &sink,
               SyncReason::ServerCannotApplyUpdate,
             ) {
@@ -241,7 +244,7 @@ where
       state_vector_v1,
       reason,
     };
-    if let Err(err) = start_sync(origin.clone(), object, &lock, sink, reason) {
+    if let Err(err) = start_sync(origin.clone(), object, (*lock).borrow(), sink, reason) {
       error!("Error while start sync: {}", err);
     }
   }
@@ -279,7 +282,7 @@ where
         // before sending the SyncStep1 to the server.
         if is_server_sync_step_1 && sync_object.collab_type == CollabType::Folder {
           let lock = collab.read().await;
-          validate_data_for_folder(&lock, &sync_object.workspace_id)
+          validate_data_for_folder((*lock).borrow(), &sync_object.workspace_id)
             .map_err(|err| SyncError::OverrideWithIncorrectData(err.to_string()))?;
         }
 

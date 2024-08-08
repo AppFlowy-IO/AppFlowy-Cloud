@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::AtomicBool;
@@ -25,17 +26,17 @@ use crate::af_spawn;
 use crate::collab_sync::{CollabSyncState, SinkConfig, SyncControl, SyncReason};
 use crate::ws::{ConnectState, WSConnectStateReceiver};
 
-pub struct SyncPlugin<Sink, Stream, C> {
+pub struct SyncPlugin<Sink, Stream, Collab, Channel> {
   object: SyncObject,
-  sync_queue: Arc<SyncControl<Sink, Stream>>,
+  sync_queue: Arc<SyncControl<Sink, Stream, Collab>>,
   // Used to keep the lifetime of the channel
   #[allow(dead_code)]
-  channel: Option<Arc<C>>,
+  channel: Option<Arc<Channel>>,
   collab: Weak<RwLock<Collab>>,
   is_destroyed: Arc<AtomicBool>,
 }
 
-impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
+impl<Sink, Stream, Collab, Channel> Drop for SyncPlugin<Sink, Stream, Collab, Channel> {
   fn drop(&mut self) {
     #[cfg(feature = "sync_verbose_log")]
     trace!("Drop sync plugin: {}", self.object.object_id);
@@ -47,12 +48,13 @@ impl<Sink, Stream, C> Drop for SyncPlugin<Sink, Stream, C> {
   }
 }
 
-impl<E, Sink, Stream, C> SyncPlugin<Sink, Stream, C>
+impl<E, Sink, Stream, Collab, Channel> SyncPlugin<Sink, Stream, Collab, Channel>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
-  C: Send + Sync + 'static,
+  Channel: Send + Sync + 'static,
+  Collab: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
 {
   #[allow(clippy::too_many_arguments)]
   pub fn new(
@@ -62,7 +64,7 @@ where
     sink: Sink,
     sink_config: SinkConfig,
     stream: Stream,
-    channel: Option<Arc<C>>,
+    channel: Option<Arc<Channel>>,
     mut ws_connect_state: WSConnectStateReceiver,
   ) -> Self {
     let sync_queue = SyncControl::new(
@@ -84,7 +86,7 @@ where
             _ => SyncState::SyncFinished,
           };
           let lock = collab.read().await;
-          lock.get_state().set_sync_state(sync_state);
+          lock.borrow().get_state().set_sync_state(sync_state);
         } else {
           break;
         }
@@ -104,7 +106,7 @@ where
             {
               sync_queue.resume();
               let lock = local_collab.read().await;
-              let _ = sync_queue.init_sync(&lock, SyncReason::NetworkResume);
+              let _ = sync_queue.init_sync(lock.borrow(), SyncReason::NetworkResume);
             } else {
               break;
             }
@@ -132,12 +134,13 @@ where
   }
 }
 
-impl<E, Sink, Stream, C> CollabPlugin for SyncPlugin<Sink, Stream, C>
+impl<E, Sink, Stream, C, Channel> CollabPlugin for SyncPlugin<Sink, Stream, C, Channel>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
-  C: Send + Sync + 'static,
+  C: BorrowMut<Collab> + Send + Sync + 'static,
+  Channel: Send + Sync + 'static,
 {
   fn did_init(&self, _collab: &Collab, _object_id: &str, _last_sync_at: i64) {
     // Most of the time, it should be successful to queue init sync by 1st time.
@@ -197,7 +200,7 @@ where
     tokio::spawn(async move {
       if let Some(collab) = collab.upgrade() {
         let lock = collab.read().await;
-        if let Err(err) = sync_queue.init_sync(&lock, SyncReason::CollabInitialize) {
+        if let Err(err) = sync_queue.init_sync(lock.borrow(), SyncReason::CollabInitialize) {
           error!("Failed to start init sync: {}", err);
         }
       }
@@ -246,16 +249,17 @@ impl From<CollabObject> for SyncObject {
   }
 }
 
-pub(crate) struct InitSyncAction<Sink, Stream> {
-  sync_queue: Weak<SyncControl<Sink, Stream>>,
+pub(crate) struct InitSyncAction<Sink, Stream, Collab> {
+  sync_queue: Weak<SyncControl<Sink, Stream, Collab>>,
   collab: Weak<RwLock<Collab>>,
 }
 
-impl<E, Sink, Stream> Action for InitSyncAction<Sink, Stream>
+impl<E, Sink, Stream, Collab> Action for InitSyncAction<Sink, Stream, Collab>
 where
   E: Into<anyhow::Error> + Send + Sync + 'static,
   Sink: SinkExt<Vec<ClientCollabMessage>, Error = E> + Send + Sync + Unpin + 'static,
   Stream: StreamExt<Item = Result<ServerCollabMessage, E>> + Send + Sync + Unpin + 'static,
+  Collab: BorrowMut<collab::preclude::Collab> + Send + Sync + 'static,
 {
   type Future = Pin<Box<dyn Future<Output = Result<Self::Item, Self::Error>> + Send + Sync>>;
   type Item = ();
@@ -266,11 +270,12 @@ where
     let weak_collab = self.collab.clone();
     Box::pin(async move {
       if let (Some(queue), Some(collab)) = (weak_queue.upgrade(), weak_collab.upgrade()) {
-        let collab = collab.read().await;
         if queue.did_queue_init_sync() {
           return Ok(());
         }
-        let is_queue = queue.init_sync(&collab, SyncReason::CollabInitialize)?;
+        let lock = collab.read().await;
+        let collab = (*lock).borrow();
+        let is_queue = queue.init_sync(collab, SyncReason::CollabInitialize)?;
         if is_queue {
           return Ok(());
         } else {

@@ -741,6 +741,7 @@ impl ChatMetadataData {
     let size = content.len();
     Self {
       content,
+      url: None,
       content_type: ChatMetadataContentType::Text,
       size: size as i64,
     }

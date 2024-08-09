@@ -277,6 +277,15 @@ pub enum ChatContextLoader {
   Markdown,
 }
 
+impl Display for ChatContextLoader {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ChatContextLoader::Txt => write!(f, "txt"),
+      ChatContextLoader::Markdown => write!(f, "markdown"),
+    }
+  }
+}
+
 impl FromStr for ChatContextLoader {
   type Err = anyhow::Error;
 

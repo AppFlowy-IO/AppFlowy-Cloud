@@ -7,7 +7,6 @@ use crate::state::AppState;
 use actix_web::web::{Data, Json};
 use actix_web::{web, HttpRequest, HttpResponse, Scope};
 
-use anyhow::Error;
 use app_error::AppError;
 use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext, RepeatedRelatedQuestion};
 use authentication::jwt::UserUuid;

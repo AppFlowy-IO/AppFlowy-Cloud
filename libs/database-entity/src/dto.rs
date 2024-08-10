@@ -712,12 +712,14 @@ impl ChatMetadataData {
       ChatMetadataContentType::Text | ChatMetadataContentType::Markdown => {
         self.content.len() == self.size as usize
       },
-      ChatMetadataContentType::PDF | ChatMetadataContentType::Unknown => false,
+      ChatMetadataContentType::PDF => self.url.is_some(),
+      ChatMetadataContentType::Unknown => false,
     }
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ChatMetadataContentType {
   Unknown,
   Text,
@@ -729,7 +731,7 @@ impl Display for ChatMetadataContentType {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     match self {
       ChatMetadataContentType::Unknown => write!(f, "unknown"),
-      ChatMetadataContentType::Text => write!(f, "txt"),
+      ChatMetadataContentType::Text => write!(f, "text"),
       ChatMetadataContentType::Markdown => write!(f, "markdown"),
       ChatMetadataContentType::PDF => write!(f, "pdf"),
     }

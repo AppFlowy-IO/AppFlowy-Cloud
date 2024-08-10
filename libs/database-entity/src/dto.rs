@@ -676,13 +676,6 @@ pub struct ChatMetadataData {
   /// search and indexing purposes within the chat context.
   pub content: String,
 
-  /// The URL associated with the metadata. If the `content` field is empty, this field must be
-  /// populated with a valid URL. If both `content` is empty and `url` is `None`, the data is
-  /// considered invalid. The URL typically points to the source or location of the content
-  /// (e.g., a document, webpage, or file).
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub url: Option<String>,
-
   /// The type of content represented by this metadata. This could indicate the format or
   /// nature of the content (e.g., text, markdown, PDF). The `content_type` helps in
   /// processing or rendering the content appropriately.
@@ -702,19 +695,30 @@ impl ChatMetadataData {
   ///   require additional validation logic.
   ///
   /// Returns `true` if the data is valid according to its content type and the presence of content or URL, otherwise `false`.
-  pub fn validate(&self) -> bool {
-    // If content is empty, ensure the URL is not empty
-    if self.content.is_empty() {
-      return self.url.is_some();
-    }
-
+  pub fn validate(&self) -> Result<(), anyhow::Error> {
     match self.content_type {
       ChatMetadataContentType::Text | ChatMetadataContentType::Markdown => {
-        self.content.len() == self.size as usize
+        if self.content.len() != self.size as usize {
+          return Err(anyhow::anyhow!(
+            "Invalid content size: content size: {}, expected size: {}",
+            self.content.len(),
+            self.size
+          ));
+        }
       },
-      ChatMetadataContentType::PDF => self.url.is_some(),
-      ChatMetadataContentType::Unknown => false,
+      ChatMetadataContentType::PDF => {
+        if self.content.is_empty() {
+          return Err(anyhow::anyhow!("Invalid content: content is empty"));
+        }
+      },
+      ChatMetadataContentType::Unknown => {
+        return Err(anyhow::anyhow!(
+          "Unsupported content type: {:?}",
+          self.content_type
+        ));
+      },
     }
+    Ok(())
   }
 }
 
@@ -743,7 +747,6 @@ impl ChatMetadataData {
     let size = content.len();
     Self {
       content,
-      url: None,
       content_type: ChatMetadataContentType::Text,
       size: size as i64,
     }

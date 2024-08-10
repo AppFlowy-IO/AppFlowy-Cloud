@@ -163,7 +163,7 @@ fn extract_message_metadata(
       .remove("data")
       .and_then(|value| serde_json::from_value::<ChatMetadataData>(value.clone()).ok())
     {
-      if data.validate() {
+      if data.validate().is_ok() {
         return Some(ExtractChatMetadata {
           content: data.content,
           content_type: data.content_type.to_string(),

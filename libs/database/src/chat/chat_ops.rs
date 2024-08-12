@@ -11,6 +11,7 @@ use database_entity::dto::{
 
 use serde_json::json;
 use sqlx::postgres::PgArguments;
+use sqlx::types::JsonValue;
 use sqlx::{Arguments, Executor, PgPool, Postgres, Transaction};
 use std::ops::DerefMut;
 use std::str::FromStr;
@@ -67,19 +68,33 @@ pub async fn update_chat(
 
   if let Some(ref name) = params.name {
     query_parts.push(format!("name = ${}", current_param_pos));
-    args.add(name);
+    args
+      .add(name)
+      .map_err(|err| AppError::SqlxArgEncodingError {
+        desc: format!("unable to encode chat name for chat id {}", chat_id),
+        err,
+      })?;
     current_param_pos += 1;
   }
 
-  if let Some(ref rag_ids) = params.rag_ids {
-    query_parts.push(format!("rag_ids = ${}", current_param_pos));
-    let rag_ids_json = json!(rag_ids);
-    args.add(rag_ids_json);
+  if let Some(ref metadata) = params.metadata {
+    query_parts.push(format!("metadata = metadata || ${}", current_param_pos));
+    args
+      .add(json!(metadata))
+      .map_err(|err| AppError::SqlxArgEncodingError {
+        desc: format!("unable to encode metadata json for chat id {}", chat_id),
+        err,
+      })?;
     current_param_pos += 1;
   }
 
   query_parts.push(format!("WHERE chat_id = ${}", current_param_pos));
-  args.add(chat_id);
+  args
+    .add(chat_id)
+    .map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode chat id {}", chat_id),
+      err,
+    })?;
 
   let query = query_parts.join(", ") + ";";
   let query = sqlx::query_with(&query, args);
@@ -135,6 +150,7 @@ pub async fn insert_answer_message_with_transaction(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: serde_json::Value,
   question_message_id: i64,
 ) -> Result<ChatMessage, AppError> {
   let chat_id = Uuid::from_str(chat_id)?;
@@ -156,12 +172,14 @@ pub async fn insert_answer_message_with_transaction(
          UPDATE af_chat_messages
          SET content = $2,
              author = $3,
-             created_at = CURRENT_TIMESTAMP
+             created_at = CURRENT_TIMESTAMP,
+             meta_data = $4
          WHERE message_id = $1
       "#,
       reply_id,
       &content,
       json!(author),
+      metadata,
     )
     .execute(transaction.deref_mut())
     .await
@@ -193,13 +211,14 @@ pub async fn insert_answer_message_with_transaction(
     // Insert a new chat message
     let row = sqlx::query!(
       r#"
-        INSERT INTO af_chat_messages (chat_id, author, content)
-        VALUES ($1, $2, $3)
+        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)
+        VALUES ($1, $2, $3, $4)
         RETURNING message_id, created_at
       "#,
       chat_id,
       json!(author),
       &content,
+      &metadata,
     )
     .fetch_one(transaction.deref_mut())
     .await
@@ -224,7 +243,7 @@ pub async fn insert_answer_message_with_transaction(
       message_id: row.message_id,
       content,
       created_at: row.created_at,
-      meta_data: Default::default(),
+      meta_data: metadata,
       reply_message_id: None,
     };
 
@@ -237,12 +256,19 @@ pub async fn insert_answer_message(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: Option<serde_json::Value>,
   question_message_id: i64,
 ) -> Result<ChatMessage, AppError> {
   let mut txn = pg_pool.begin().await?;
-  let chat_message =
-    insert_answer_message_with_transaction(&mut txn, author, chat_id, content, question_message_id)
-      .await?;
+  let chat_message = insert_answer_message_with_transaction(
+    &mut txn,
+    author,
+    chat_id,
+    content,
+    metadata.unwrap_or_default(),
+    question_message_id,
+  )
+  .await?;
   txn.commit().await.map_err(|err| {
     AppError::Internal(anyhow!(
       "Failed to commit transaction to insert answer message: {}",
@@ -257,17 +283,20 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
   author: ChatAuthor,
   chat_id: &str,
   content: String,
+  metadata: Option<JsonValue>,
 ) -> Result<ChatMessage, AppError> {
+  let metadata = metadata.unwrap_or_else(|| json!({}));
   let chat_id = Uuid::from_str(chat_id)?;
   let row = sqlx::query!(
     r#"
-        INSERT INTO af_chat_messages (chat_id, author, content)
-        VALUES ($1, $2, $3)
+        INSERT INTO af_chat_messages (chat_id, author, content, meta_data)
+        VALUES ($1, $2, $3, $4)
         RETURNING message_id, created_at
         "#,
     chat_id,
     json!(author),
     &content,
+    &metadata,
   )
   .fetch_one(executor)
   .await
@@ -278,7 +307,7 @@ pub async fn insert_question_message<'a, E: Executor<'a, Database = Postgres>>(
     message_id: row.message_id,
     content,
     created_at: row.created_at,
-    meta_data: Default::default(),
+    meta_data: metadata,
     reply_message_id: None,
   };
   Ok(chat_message)
@@ -298,7 +327,12 @@ pub async fn select_chat_messages(
   .to_string();
 
   let mut args = PgArguments::default();
-  args.add(&chat_id);
+  args
+    .add(&chat_id)
+    .map_err(|err| AppError::SqlxArgEncodingError {
+      desc: format!("unable to encode chat id {}", chat_id),
+      err,
+    })?;
 
   // Message IDs:   1    2    3    4    5
   // AfterMessageId(3, 5):   [4]  [5]  has_more = false
@@ -307,24 +341,59 @@ pub async fn select_chat_messages(
   match params.cursor {
     MessageCursor::AfterMessageId(after_message_id) => {
       query += " AND message_id > $2";
-      args.add(after_message_id);
+      args
+        .add(after_message_id)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode message id {}", after_message_id),
+          err,
+        })?;
       query += " ORDER BY message_id DESC LIMIT $3";
-      args.add(params.limit as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
     },
     MessageCursor::Offset(offset) => {
       query += " ORDER BY message_id ASC LIMIT $2 OFFSET $3";
-      args.add(params.limit as i64);
-      args.add(offset as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
+      args
+        .add(offset as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode offset {}", offset as i64),
+          err,
+        })?;
     },
     MessageCursor::BeforeMessageId(before_message_id) => {
       query += " AND message_id < $2";
-      args.add(before_message_id);
+      args
+        .add(before_message_id)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode message id {}", before_message_id),
+          err,
+        })?;
       query += " ORDER BY message_id DESC LIMIT $3";
-      args.add(params.limit as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
     },
     MessageCursor::NextBack => {
       query += " ORDER BY message_id DESC LIMIT $2";
-      args.add(params.limit as i64);
+      args
+        .add(params.limit as i64)
+        .map_err(|err| AppError::SqlxArgEncodingError {
+          desc: format!("unable to encode row limit {}", params.limit as i64),
+          err,
+        })?;
     },
   }
 

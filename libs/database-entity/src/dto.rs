@@ -640,7 +640,7 @@ pub struct UpdateChatParams {
   #[validate(custom = "validate_not_empty_str")]
   pub name: Option<String>,
 
-  pub rag_ids: Option<Vec<String>>,
+  pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -648,6 +648,74 @@ pub struct CreateChatMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
   pub message_type: ChatMessageType,
+
+  /// metadata is json array object
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
+}
+
+/// [ChatMessageMetadata] is used when creating a new question message.
+/// All the properties of [ChatMessageMetadata] except [ChatMetadataData] will be stored as a
+/// metadata for specific [ChatMessage]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessageMetadata {
+  pub data: ChatMetadataData,
+  /// The id for the metadata. It can be a file_id, view_id
+  pub id: String,
+  /// The name for the metadata. For example, @xxx, @xx.txt
+  pub name: String,
+  pub source: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub extract: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMetadataData {
+  /// Don't rename this field, it's used [ops::extract_chat_message_metadata]
+  pub content: String,
+  pub content_type: ChatMetadataContentType,
+  pub size: i64,
+}
+
+impl ChatMetadataData {
+  pub fn validate(&self) -> bool {
+    match self.content_type {
+      ChatMetadataContentType::Text => self.content.len() == self.size as usize,
+      ChatMetadataContentType::Markdown => self.content.len() == self.size as usize,
+      ChatMetadataContentType::Unknown => false,
+      ChatMetadataContentType::PDF => false,
+    }
+  }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ChatMetadataContentType {
+  Unknown,
+  Text,
+  Markdown,
+  PDF,
+}
+
+impl Display for ChatMetadataContentType {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ChatMetadataContentType::Unknown => write!(f, "unknown"),
+      ChatMetadataContentType::Text => write!(f, "txt"),
+      ChatMetadataContentType::Markdown => write!(f, "markdown"),
+      ChatMetadataContentType::PDF => write!(f, "pdf"),
+    }
+  }
+}
+
+impl ChatMetadataData {
+  pub fn new_text(content: String) -> Self {
+    let size = content.len();
+    Self {
+      content,
+      content_type: ChatMetadataContentType::Text,
+      size: size as i64,
+    }
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -678,6 +746,7 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::System,
+      metadata: None,
     }
   }
 
@@ -685,7 +754,13 @@ impl CreateChatMessageParams {
     Self {
       content: content.to_string(),
       message_type: ChatMessageType::User,
+      metadata: None,
     }
+  }
+
+  pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
+    self.metadata = Some(metadata);
+    self
   }
 }
 #[derive(Debug, Clone, Validate, Serialize, Deserialize)]
@@ -827,6 +902,9 @@ pub struct UpdateChatMessageResponse {
 pub struct CreateAnswerMessageParams {
   #[validate(custom = "validate_not_empty_str")]
   pub content: String,
+
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub metadata: Option<serde_json::Value>,
 
   pub question_message_id: i64,
 }

@@ -6,6 +6,7 @@ use std::ops::Deref;
 use std::str::FromStr;
 
 use crate::error::{internal, StreamError};
+use prost::Message;
 use redis::streams::StreamId;
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
@@ -327,8 +328,8 @@ impl CollabUpdateEvent {
     }
   }
 
-  pub fn encode(&self) -> Result<Vec<u8>, bincode::Error> {
-    bincode::serialize(self)
+  pub fn encode(&self) -> Vec<u8> {
+    self.to_proto().encode_to_vec()
   }
 
   pub fn decode(data: &[u8]) -> Result<Self, StreamError> {
@@ -346,14 +347,13 @@ impl TryFrom<CollabUpdateEvent> for StreamBinary {
   type Error = StreamError;
 
   fn try_from(value: CollabUpdateEvent) -> Result<Self, Self::Error> {
-    let raw_data = value.encode()?;
+    let raw_data = value.encode();
     Ok(StreamBinary(raw_data))
   }
 }
 
 #[cfg(test)]
 mod test {
-  use prost::Message;
 
   #[test]
   fn test_collab_update_event_decoding() {
@@ -361,11 +361,8 @@ mod test {
     let event = super::CollabUpdateEvent::UpdateV1 {
       encode_update: encoded_update.clone(),
     };
-    let bincode_encoded = event.encode().unwrap();
-    let protobuf_encoded = event.to_proto().encode_to_vec();
-    let decoded_from_bincode = super::CollabUpdateEvent::decode(&bincode_encoded).unwrap();
-    let decoded_from_protobuf = super::CollabUpdateEvent::decode(&protobuf_encoded).unwrap();
-    assert_eq!(event, decoded_from_bincode);
-    assert_eq!(event, decoded_from_protobuf);
+    let encoded = event.encode();
+    let decoded = super::CollabUpdateEvent::decode(&encoded).unwrap();
+    assert_eq!(event, decoded);
   }
 }

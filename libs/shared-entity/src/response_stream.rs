@@ -89,32 +89,32 @@ where
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let this = self.project();
 
-    loop {
-      match ready!(this.stream.as_mut().poll_next(cx)) {
-        Some(Ok(bytes)) => {
-          this.buffer.extend_from_slice(&bytes);
-          let de = StreamDeserializer::new(SliceRead::new(this.buffer));
-          let mut iter = de.into_iter();
-          if let Some(result) = iter.next() {
-            match result {
-              Ok(value) => {
-                let remaining = iter.byte_offset();
-                this.buffer.drain(0..remaining);
-                return Poll::Ready(Some(Ok(value)));
-              },
-              Err(err) => {
-                if err.is_eof() {
-                  continue;
-                } else {
-                  return Poll::Ready(Some(Err(AppResponseError::from(err))));
-                }
-              },
-            }
-          }
-        },
-        Some(Err(err)) => return Poll::Ready(Some(Err(err))),
-        None => return Poll::Ready(None),
-      }
+    match ready!(this.stream.as_mut().poll_next(cx)) {
+      Some(Ok(bytes)) => {
+        this.buffer.extend_from_slice(&bytes);
+        let de = StreamDeserializer::new(SliceRead::new(this.buffer));
+        let mut iter = de.into_iter();
+        if let Some(result) = iter.next() {
+          return match result {
+            Ok(value) => {
+              let remaining = iter.byte_offset();
+              this.buffer.drain(0..remaining);
+              Poll::Ready(Some(Ok(value)))
+            },
+            Err(err) => {
+              if err.is_eof() {
+                Poll::Pending
+              } else {
+                Poll::Ready(Some(Err(AppResponseError::from(err))))
+              }
+            },
+          };
+        } else {
+          Poll::Pending
+        }
+      },
+      Some(Err(err)) => Poll::Ready(Some(Err(err))),
+      None => Poll::Ready(None),
     }
   }
 }

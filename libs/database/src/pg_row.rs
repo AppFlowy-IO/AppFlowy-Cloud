@@ -3,7 +3,8 @@ use app_error::AppError;
 use chrono::{DateTime, Utc};
 
 use database_entity::dto::{
-  AFAccessLevel, AFRole, AFUserProfile, AFWorkspace, AFWorkspaceInvitationStatus,
+  AFAccessLevel, AFRole, AFUserProfile, AFWebUser, AFWorkspace, AFWorkspaceInvitationStatus,
+  GlobalComment, Reaction,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -214,4 +215,63 @@ pub struct AFChatMessageRow {
   pub chat_id: Uuid,
   pub content: String,
   pub created_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::Type, Serialize, Debug)]
+pub struct AFWebUserType {
+  uuid: Uuid,
+  name: String,
+  avatar_url: Option<String>,
+}
+
+impl From<AFWebUserType> for AFWebUser {
+  fn from(val: AFWebUserType) -> Self {
+    AFWebUser {
+      uuid: val.uuid,
+      name: val.name,
+      avatar_url: val.avatar_url,
+    }
+  }
+}
+
+pub struct AFGlobalCommentRow {
+  pub user: Option<AFWebUserType>,
+  pub created_at: DateTime<Utc>,
+  pub last_updated_at: DateTime<Utc>,
+  pub content: String,
+  pub reply_comment_id: Option<Uuid>,
+  pub comment_id: Uuid,
+  pub is_deleted: bool,
+  pub can_be_deleted: bool,
+}
+
+impl From<AFGlobalCommentRow> for GlobalComment {
+  fn from(val: AFGlobalCommentRow) -> Self {
+    GlobalComment {
+      user: val.user.map(|x| x.into()),
+      created_at: val.created_at,
+      last_updated_at: val.last_updated_at,
+      content: val.content,
+      reply_comment_id: val.reply_comment_id,
+      comment_id: val.comment_id,
+      is_deleted: val.is_deleted,
+      can_be_deleted: val.can_be_deleted,
+    }
+  }
+}
+
+pub struct AFReactionRow {
+  pub reaction_type: String,
+  pub react_users: Vec<AFWebUserType>,
+  pub comment_id: Uuid,
+}
+
+impl From<AFReactionRow> for Reaction {
+  fn from(val: AFReactionRow) -> Self {
+    Reaction {
+      reaction_type: val.reaction_type,
+      react_users: val.react_users.into_iter().map(|x| x.into()).collect(),
+      comment_id: val.comment_id,
+    }
+  }
 }

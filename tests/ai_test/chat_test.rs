@@ -1,5 +1,5 @@
 use crate::ai_test::util::read_text_from_asset;
-use appflowy_ai_client::dto::CreateTextChatContext;
+use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext};
 use assert_json_diff::assert_json_eq;
 use client_api::entity::QuestionStreamValue;
 use client_api_test::TestClient;
@@ -288,7 +288,7 @@ async fn create_chat_context_test() {
 
   let context = CreateTextChatContext {
     chat_id: chat_id.clone(),
-    content_type: "txt".to_string(),
+    context_loader: ChatContextLoader::Txt,
     content: "Lacus have lived in the US for five years".to_string(),
     chunk_size: 1000,
     chunk_overlap: 20,

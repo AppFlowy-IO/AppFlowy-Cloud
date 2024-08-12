@@ -309,13 +309,19 @@ impl PublishCollabDuplicator {
       .get_document_data()
       .map_err(|e| AppError::Unhandled(e.to_string()))?;
 
-    self
+    if let Err(err) = self
       .deep_copy_doc_pages(txn, &mut doc_data, &mut ret_view)
-      .await?;
+      .await
+    {
+      tracing::error!("failed to deep copy doc pages: {}", err);
+    }
 
-    self
+    if let Err(err) = self
       .deep_copy_doc_databases(txn, &mut doc_data, &mut ret_view)
-      .await?;
+      .await
+    {
+      tracing::error!("failed to deep copy doc databases: {}", err);
+    };
 
     // doc_data into binary data
     let new_doc_data = {

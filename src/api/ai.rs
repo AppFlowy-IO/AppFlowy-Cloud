@@ -9,13 +9,14 @@ use appflowy_ai_client::dto::{
 };
 
 use futures_util::{stream, TryStreamExt};
+
 use serde::Deserialize;
 use shared_entity::dto::ai_dto::{
   CompleteTextParams, SummarizeRowData, SummarizeRowParams, SummarizeRowResponse,
 };
 use shared_entity::response::{AppResponse, JsonAppResponse};
 
-use tracing::{error, instrument};
+use tracing::{error, instrument, trace};
 
 pub fn ai_completion_scope() -> Scope {
   web::scope("/api/ai/{workspace_id}")
@@ -128,17 +129,19 @@ async fn translate_row_handler(
   }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct ConfigQuery {
   platform: String,
+  app_version: Option<String>,
 }
 #[instrument(level = "debug", skip_all, err)]
 async fn local_ai_config_handler(
   state: web::Data<AppState>,
   query: web::Query<ConfigQuery>,
-  // req: HttpRequest,
 ) -> actix_web::Result<Json<AppResponse<LocalAIConfig>>> {
-  let platform = match query.into_inner().platform.as_str() {
+  let query = query.into_inner();
+  trace!("query ai configuration: {:?}", query);
+  let platform = match query.platform.as_str() {
     "macos" => "macos",
     "linux" => "ubuntu",
     "ubuntu" => "ubuntu",
@@ -150,22 +153,8 @@ async fn local_ai_config_handler(
 
   let config = state
     .ai_client
-    .get_local_ai_config(platform)
+    .get_local_ai_config(platform, query.app_version)
     .await
     .map_err(|err| AppError::AIServiceUnavailable(err.to_string()))?;
   Ok(AppResponse::Ok().with_data(config).into())
 }
-
-// fn device_info_from_headers(headers: &HeaderMap) -> std::result::Result<String, AppError> {
-//   headers
-//     .get("device_id")
-//     .ok_or(AppError::InvalidRequest(
-//       "Missing device_id header".to_string(),
-//     ))
-//     .and_then(|header| {
-//       header
-//         .to_str()
-//         .map_err(|err| AppError::InvalidRequest(format!("Failed to parse device_id: {}", err)))
-//     })
-//     .map(|s| s.to_string())
-// }

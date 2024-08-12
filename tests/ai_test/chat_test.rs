@@ -2,7 +2,7 @@ use crate::ai_test::util::read_text_from_asset;
 use appflowy_ai_client::dto::{ChatContextLoader, CreateTextChatContext};
 use assert_json_diff::assert_json_eq;
 use client_api::entity::QuestionStreamValue;
-use client_api_test::TestClient;
+use client_api_test::{local_ai_test_enabled, TestClient};
 use database_entity::dto::{
   ChatMessage, ChatMessageMetadata, ChatMetadataData, CreateChatMessageParams, CreateChatParams,
   MessageCursor,
@@ -12,6 +12,10 @@ use serde_json::json;
 
 #[tokio::test]
 async fn create_chat_and_create_messages_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
+
   let test_client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = test_client.workspace_id().await;
 
@@ -101,6 +105,9 @@ async fn create_chat_and_create_messages_test() {
 
 #[tokio::test]
 async fn chat_qa_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
   let test_client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = test_client.workspace_id().await;
   let chat_id = uuid::Uuid::new_v4().to_string();
@@ -174,6 +181,9 @@ async fn chat_qa_test() {
 
 #[tokio::test]
 async fn generate_chat_message_answer_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
   let test_client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = test_client.workspace_id().await;
   let chat_id = uuid::Uuid::new_v4().to_string();
@@ -216,6 +226,9 @@ async fn generate_chat_message_answer_test() {
 
 #[tokio::test]
 async fn generate_stream_answer_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
   let test_client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = test_client.workspace_id().await;
   let chat_id = uuid::Uuid::new_v4().to_string();
@@ -271,6 +284,9 @@ async fn generate_stream_answer_test() {
 
 #[tokio::test]
 async fn create_chat_context_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
   let test_client = TestClient::new_user_without_ws_conn().await;
   let workspace_id = test_client.workspace_id().await;
   let chat_id = uuid::Uuid::new_v4().to_string();

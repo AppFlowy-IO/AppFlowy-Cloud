@@ -80,8 +80,9 @@ impl Client {
     workspace_id: &str,
     platform: &str,
   ) -> Result<LocalAIConfig, AppResponseError> {
+    let client_version = self.client_version.to_string();
     let url = format!(
-      "{}/api/ai/{}/local/config?platform={platform}",
+      "{}/api/ai/{}/local/config?platform={platform}&app_version={client_version}",
       self.base_url, workspace_id
     );
     let resp = self

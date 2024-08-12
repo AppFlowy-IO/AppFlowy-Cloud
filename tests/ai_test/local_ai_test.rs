@@ -1,7 +1,10 @@
-use client_api_test::TestClient;
+use client_api_test::{local_ai_test_enabled, TestClient};
 
 #[tokio::test]
 async fn get_local_ai_config_test() {
+  if !local_ai_test_enabled() {
+    return;
+  }
   let test_client = TestClient::new_user().await;
   let workspace_id = test_client.workspace_id().await;
   let config = test_client

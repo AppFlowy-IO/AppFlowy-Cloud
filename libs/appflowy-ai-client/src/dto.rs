@@ -280,7 +280,7 @@ pub enum ChatContextLoader {
 impl Display for ChatContextLoader {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
     match self {
-      ChatContextLoader::Txt => write!(f, "txt"),
+      ChatContextLoader::Txt => write!(f, "text"),
       ChatContextLoader::Markdown => write!(f, "markdown"),
     }
   }
@@ -291,7 +291,7 @@ impl FromStr for ChatContextLoader {
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
     match s {
-      "txt" => Ok(ChatContextLoader::Txt),
+      "text" => Ok(ChatContextLoader::Txt),
       "markdown" => Ok(ChatContextLoader::Markdown),
       _ => Err(anyhow::anyhow!("unknown context loader type")),
     }
@@ -303,7 +303,7 @@ impl Serialize for ChatContextLoader {
     S: Serializer,
   {
     match self {
-      ChatContextLoader::Txt => serializer.serialize_str("txt"),
+      ChatContextLoader::Txt => serializer.serialize_str("text"),
       ChatContextLoader::Markdown => serializer.serialize_str("markdown"),
     }
   }
@@ -316,7 +316,7 @@ impl<'de> Deserialize<'de> for ChatContextLoader {
   {
     let s = String::deserialize(deserializer)?;
     match s.as_str() {
-      "txt" => Ok(ChatContextLoader::Txt),
+      "text" => Ok(ChatContextLoader::Txt),
       "markdown" => Ok(ChatContextLoader::Markdown),
       _ => Err(serde::de::Error::custom("unknown value")),
     }

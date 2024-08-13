@@ -1,4 +1,3 @@
-#[cfg(feature = "ai-test-enabled")]
 mod ai_test;
 mod collab;
 mod collab_history;

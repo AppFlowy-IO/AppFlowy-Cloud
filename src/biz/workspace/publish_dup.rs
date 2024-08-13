@@ -132,14 +132,7 @@ impl PublishCollabDuplicator {
           CollabType::WorkspaceDatabase,
         )
         .await?;
-        Collab::new_with_source(
-          CollabOrigin::Server,
-          &ws_db_oid,
-          DataSource::DocStateV1(ws_database_ec.doc_state.to_vec()),
-          vec![],
-          false,
-        )
-        .map_err(|e| AppError::Unhandled(e.to_string()))?
+        collab_from_doc_state(ws_database_ec.doc_state.to_vec(), &ws_db_oid)?
       };
 
       let ws_db_meta_list = DatabaseMetaList::from_collab(&ws_db_collab);
@@ -515,14 +508,7 @@ impl PublishCollabDuplicator {
     let view_info_by_id = view_info_by_view_id(&metadata);
 
     // collab of database
-    let db_collab = Collab::new_with_source(
-      CollabOrigin::Server,
-      &new_db_id,
-      DataSource::DocStateV1(published_db.database_collab),
-      vec![],
-      false,
-    )
-    .map_err(|e| AppError::Unhandled(e.to_string()))?;
+    let db_collab = collab_from_doc_state(published_db.database_collab.clone(), &new_db_id)?;
 
     // collabs of rows
     // key: old_row_id -> Collab (with new_id and database_id)
@@ -533,14 +519,7 @@ impl PublishCollabDuplicator {
         // assign a new id for the row
         let new_row_id = uuid::Uuid::new_v4().to_string();
 
-        let db_row_collab = Collab::new_with_source(
-          CollabOrigin::Server,
-          &new_row_id,
-          DataSource::DocStateV1(v.to_vec()),
-          vec![],
-          false,
-        )
-        .map_err(|e| AppError::Unhandled(e.to_string()))?;
+        let db_row_collab = collab_from_doc_state(v.clone(), &new_row_id)?;
 
         db_row_collab.with_origin_transact_mut(|txn| {
           if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
@@ -823,4 +802,16 @@ fn view_info_map(acc: &mut HashMap<String, PublishViewInfo>, view_infos: &[Publi
       view_info_map(acc, child_views);
     }
   }
+}
+
+fn collab_from_doc_state(doc_state: Vec<u8>, object_id: &str) -> Result<Collab, AppError> {
+  let collab = Collab::new_with_source(
+    CollabOrigin::Server,
+    object_id,
+    DataSource::DocStateV1(doc_state),
+    vec![],
+    false,
+  )
+  .map_err(|e| AppError::Unhandled(e.to_string()))?;
+  Ok(collab)
 }

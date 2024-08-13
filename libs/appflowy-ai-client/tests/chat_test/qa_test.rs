@@ -82,7 +82,10 @@ async fn download_package_test() {
 #[tokio::test]
 async fn get_local_ai_config_test() {
   let client = appflowy_ai_client();
-  let config = client.get_local_ai_config("macos").await.unwrap();
+  let config = client
+    .get_local_ai_config("macos", Some("0.6.10".to_string()))
+    .await
+    .unwrap();
   assert!(!config.models.is_empty());
 
   assert!(!config.models[0].embedding_model.download_url.is_empty());

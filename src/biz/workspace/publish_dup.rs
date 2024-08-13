@@ -262,7 +262,7 @@ impl PublishCollabDuplicator {
       },
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
-        let (new_db_view, _) = self
+        let new_db_view = self
           .deep_copy_database(
             txn,
             new_view_id,
@@ -443,37 +443,34 @@ impl PublishCollabDuplicator {
         .as_str()
         .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
 
-      if let Some((metadata, published_blob)) =
-        get_published_data_for_view_id(txn, &view_id_str.parse()?).await?
+      if let Some(mut new_folder_db_view) =
+        Box::pin(self.deep_copy(txn, view_id_str.to_string(), view_id_str)).await?
       {
-        let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
-
-        // create a new view for the database
-        let new_db_folder_view_id = uuid::Uuid::new_v4().to_string();
-        let new_db_id = uuid::Uuid::new_v4().to_string();
-        let (mut new_folder_db_view, old_to_new_view_id) = self
-          .deep_copy_database(
-            txn,
-            new_db_folder_view_id.clone(),
-            new_db_id.clone(),
-            db_payload,
-            metadata.clone(),
-          )
-          .await?;
         new_folder_db_view.parent_view_id.clone_from(&ret_view.id);
         self.views_to_add.push(new_folder_db_view);
 
-        // update block views ids
-        *block_view_id = {
-          let new_block_view_id = old_to_new_view_id.get(view_id_str).ok_or_else(|| {
-            AppError::RecordNotFound("view_id not found in old_to_new_view_id".to_string())
-          })?;
-          serde_json::Value::String(new_block_view_id.clone())
-        };
+        // update view_id
+        if let Some(id) = self.old_to_new_view_id(view_id_str) {
+          *block_view_id = serde_json::Value::String(id);
+        } else {
+          tracing::warn!("view_id not found in old_to_new_view_id: {}", view_id_str);
+        }
+
+        // update parent_id
         let block_parent_id = block.data.get_mut("parent_id").ok_or_else(|| {
           AppError::RecordNotFound("parent_id not found in block data".to_string())
         })?;
-        *block_parent_id = serde_json::Value::String(new_db_folder_view_id.clone());
+        let parent_view_id_str = block_parent_id
+          .as_str()
+          .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
+        if let Some(new_id) = self.old_to_new_view_id(parent_view_id_str) {
+          *block_parent_id = serde_json::Value::String(new_id);
+        } else {
+          tracing::warn!(
+            "view_id not found in old_to_new_view_id: {}",
+            parent_view_id_str
+          );
+        }
       }
     }
 
@@ -489,7 +486,7 @@ impl PublishCollabDuplicator {
     new_db_id: String,
     published_db: PublishDatabaseData,
     metadata: PublishViewMetaData,
-  ) -> Result<(View, HashMap<String, String>), AppError> {
+  ) -> Result<View, AppError> {
     let pub_view_id = metadata.view.view_id.as_str();
 
     // flatten nested view info into a map
@@ -498,45 +495,39 @@ impl PublishCollabDuplicator {
     // collab of database
     let db_collab = collab_from_doc_state(published_db.database_collab.clone(), &new_db_id)?;
 
-    // collabs of rows
+    // duplicate collab rows
     // key: old_row_id -> Collab (with new_id and database_id)
-    let publish_row_by_id = {
-      let mut published_row_by_id: HashMap<&str, Collab> = HashMap::new();
+    for (old_id, v) in &published_db.database_row_collabs {
+      // assign a new id for the row
+      let new_row_id = uuid::Uuid::new_v4().to_string();
 
-      for (old_id, v) in &published_db.database_row_collabs {
-        // assign a new id for the row
-        let new_row_id = uuid::Uuid::new_v4().to_string();
+      let db_row_collab = collab_from_doc_state(v.clone(), &new_row_id)?;
 
-        let db_row_collab = collab_from_doc_state(v.clone(), &new_row_id)?;
+      db_row_collab.with_origin_transact_mut(|txn| {
+        if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
+          // TODO(Zack): deep copy row data ?
+          container.insert_with_txn(txn, "id", new_row_id.clone());
+          container.insert_with_txn(txn, "database_id", new_db_id.clone());
+        }
+      });
 
-        db_row_collab.with_origin_transact_mut(|txn| {
-          if let Some(container) = db_row_collab.get_map_with_txn(txn, vec!["data"]) {
-            // TODO(Zack): deep copy row data ?
-            container.insert_with_txn(txn, "id", new_row_id.clone());
-            container.insert_with_txn(txn, "database_id", new_db_id.clone());
-          }
-        });
+      let db_row_ec_bytes = db_row_collab
+        .encode_collab_v1(DatabaseRow::validate)
+        .map_err(|e| AppError::Unhandled(e.to_string()))?
+        .encode_to_bytes()?;
+      self
+        .insert_collab_for_duplicator(
+          &new_row_id,
+          db_row_ec_bytes,
+          CollabType::DatabaseRow,
+          pg_txn,
+        )
+        .await?;
 
-        let db_row_ec_bytes = db_row_collab
-          .encode_collab_v1(DatabaseRow::validate)
-          .map_err(|e| AppError::Unhandled(e.to_string()))?
-          .encode_to_bytes()?;
-        self
-          .insert_collab_for_duplicator(
-            &new_row_id,
-            db_row_ec_bytes,
-            CollabType::DatabaseRow,
-            pg_txn,
-          )
-          .await?;
-        published_row_by_id.insert(old_id, db_row_collab);
-      }
-      published_row_by_id
-    };
-
-    // old db view id to new db view id
-    // excluding selected view
-    let mut old_to_new_view: HashMap<String, String> = HashMap::new();
+      self
+        .duplicated_refs
+        .insert(old_id.clone(), Some(new_row_id));
+    }
 
     // create a new view to be returned to the caller
     // view_id is the main view of the database
@@ -605,7 +596,9 @@ impl PublishCollabDuplicator {
             ));
           } else {
             let other_view_id = uuid::Uuid::new_v4().to_string();
-            old_to_new_view.insert(db_view.id.clone(), other_view_id.clone());
+            self
+              .duplicated_refs
+              .insert(db_view.id.clone(), Some(other_view_id.clone()));
             new_db_view_ids.push(other_view_id.clone());
             db_view.id.clone_from(&other_view_id);
             let mut other_folder_view = self.new_folder_view(
@@ -623,12 +616,13 @@ impl PublishCollabDuplicator {
       // update all views's row's id
       for db_view in db_views.iter_mut() {
         for row_order in db_view.row_orders.iter_mut() {
-          row_order.id = publish_row_by_id
-            .get(row_order.id.as_str())
-            .ok_or_else(|| AppError::RecordNotFound(format!("row not found: {}", row_order.id)))?
-            .object_id
-            .clone()
-            .into();
+          if let Some(new_id) = self.old_to_new_view_id(row_order.id.as_str()) {
+            row_order.id = new_id.into();
+          } else {
+            // skip if row not found
+            tracing::warn!("row not found: {}", row_order.id);
+            continue;
+          }
         }
       }
 
@@ -655,7 +649,7 @@ impl PublishCollabDuplicator {
       .insert_collab_for_duplicator(&new_db_id, db_encoded_collab, CollabType::Database, pg_txn)
       .await?;
 
-    Ok((ret_view, old_to_new_view))
+    Ok(ret_view)
   }
 
   /// ceates a new folder view without parent_view_id set
@@ -753,6 +747,10 @@ impl PublishCollabDuplicator {
       },
       None => tracing::warn!("group not found for oid: {}", oid),
     }
+  }
+
+  fn old_to_new_view_id(&self, old_view_id: &str) -> Option<String> {
+    self.duplicated_refs.get(old_view_id).cloned().flatten()
   }
 }
 

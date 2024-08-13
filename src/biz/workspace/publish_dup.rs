@@ -263,13 +263,7 @@ impl PublishCollabDuplicator {
       ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
         let new_db_view = self
-          .deep_copy_database(
-            txn,
-            new_view_id,
-            uuid::Uuid::new_v4().to_string(),
-            db_payload,
-            metadata,
-          )
+          .deep_copy_database(txn, new_view_id, db_payload, metadata)
           .await?;
         Ok(Some(new_db_view))
       },
@@ -444,7 +438,7 @@ impl PublishCollabDuplicator {
         .ok_or_else(|| AppError::RecordNotFound("view_id not a string".to_string()))?;
 
       if let Some(mut new_folder_db_view) =
-        Box::pin(self.deep_copy(txn, view_id_str.to_string(), view_id_str)).await?
+        Box::pin(self.deep_copy(txn, uuid::Uuid::new_v4().to_string(), view_id_str)).await?
       {
         new_folder_db_view.parent_view_id.clone_from(&ret_view.id);
         self.views_to_add.push(new_folder_db_view);
@@ -483,7 +477,6 @@ impl PublishCollabDuplicator {
     &mut self,
     pg_txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
-    new_db_id: String,
     published_db: PublishDatabaseData,
     metadata: PublishViewMetaData,
   ) -> Result<View, AppError> {
@@ -491,6 +484,8 @@ impl PublishCollabDuplicator {
 
     // flatten nested view info into a map
     let view_info_by_id = view_info_by_view_id(&metadata);
+
+    let new_db_id = uuid::Uuid::new_v4().to_string();
 
     // collab of database
     let db_collab = collab_from_doc_state(published_db.database_collab.clone(), &new_db_id)?;

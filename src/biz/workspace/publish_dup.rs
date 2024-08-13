@@ -34,7 +34,6 @@ pub async fn duplicate_published_collab_to_workspace(
   publish_view_id: String,
   dest_workspace_id: String,
   dest_view_id: String,
-  collab_type: CollabType,
 ) -> Result<(), AppError> {
   let copier = PublishCollabDuplicator::new(
     pg_pool.clone(),
@@ -44,7 +43,7 @@ pub async fn duplicate_published_collab_to_workspace(
     dest_workspace_id,
     dest_view_id,
   );
-  copier.deep_copy(&publish_view_id, collab_type).await?;
+  copier.deep_copy(&publish_view_id).await?;
   Ok(())
 }
 
@@ -99,22 +98,13 @@ impl PublishCollabDuplicator {
     }
   }
 
-  async fn deep_copy(
-    mut self,
-    publish_view_id: &str,
-    collab_type: CollabType,
-  ) -> Result<(), AppError> {
+  async fn deep_copy(mut self, publish_view_id: &str) -> Result<(), AppError> {
     let mut txn = self.pg_pool.begin().await?;
 
     // new view after deep copy
     // this is the root of the document/database duplicated
     let mut root_view = match self
-      .deep_copy_txn(
-        &mut txn,
-        uuid::Uuid::new_v4().to_string(),
-        publish_view_id,
-        collab_type.clone(),
-      )
+      .deep_copy_txn(&mut txn, uuid::Uuid::new_v4().to_string(), publish_view_id)
       .await?
     {
       Some(v) => v,
@@ -238,8 +228,13 @@ impl PublishCollabDuplicator {
     txn: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     new_view_id: String,
     publish_view_id: &str,
-    collab_type: CollabType,
   ) -> Result<Option<View>, AppError> {
+    tracing::info!(
+      "deep_copy_txn: new_view_id: {}, publish_view_id: {}",
+      new_view_id,
+      publish_view_id,
+    );
+
     // attempt to get metadata and doc_state for published view
     let (metadata, published_blob) =
       match get_published_data_for_view_id(txn, &publish_view_id.parse()?).await? {
@@ -259,8 +254,8 @@ impl PublishCollabDuplicator {
       .duplicated_refs
       .insert(publish_view_id.to_string(), new_view_id.clone().into());
 
-    match collab_type {
-      CollabType::Document => {
+    match metadata.view.layout {
+      ViewLayout::Document => {
         let doc = Document::from_doc_state(
           CollabOrigin::Empty,
           DataSource::DocStateV1(published_blob.to_vec()),
@@ -274,7 +269,7 @@ impl PublishCollabDuplicator {
           .await?;
         Ok(Some(new_doc_view))
       },
-      CollabType::Database => {
+      ViewLayout::Grid | ViewLayout::Board | ViewLayout::Calendar => {
         let db_payload = serde_json::from_slice::<PublishDatabaseData>(&published_blob)?;
         let (new_db_view, _) = self
           .deep_copy_database_txn(
@@ -382,13 +377,8 @@ impl PublishCollabDuplicator {
         },
         None => {
           // Call deep_copy_txn and await the result
-          if let Some(mut new_view) = Box::pin(self.deep_copy_txn(
-            txn,
-            uuid::Uuid::new_v4().to_string(),
-            page_id_str,
-            CollabType::Document,
-          ))
-          .await?
+          if let Some(mut new_view) =
+            Box::pin(self.deep_copy_txn(txn, uuid::Uuid::new_v4().to_string(), page_id_str)).await?
           {
             new_view.parent_view_id.clone_from(&ret_view.id);
             self

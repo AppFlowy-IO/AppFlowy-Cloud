@@ -1114,7 +1114,6 @@ async fn post_published_duplicate_handler(
     params.published_view_id,
     workspace_id.into_inner(),
     params.dest_view_id,
-    params.published_collab_type.clone(),
   )
   .await?;
   Ok(Json(AppResponse::Ok()))

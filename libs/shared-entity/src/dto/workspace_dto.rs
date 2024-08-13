@@ -140,8 +140,8 @@ pub struct FolderView {
   pub children: Vec<FolderView>,
 }
 
-impl From<&Folder> for FolderView {
-  fn from(folder: &Folder) -> Self {
+impl FolderView {
+  pub fn from_folder(folder: &Folder, depth: u32) -> Self {
     let mut unviewable = HashSet::new();
     for private_section in folder.get_all_private_sections() {
       unviewable.insert(private_section.id);
@@ -179,20 +179,25 @@ impl From<&Folder> for FolderView {
       is_space: false,
       is_private: false,
       extra,
-      children: root
-        .children
-        .iter()
-        .filter(|v| !unviewable.contains(&v.id))
-        .map(|v| {
-          let intermediate = FolderViewIntermediate {
-            folder,
-            view_id: &v.id,
-            unviewable: &unviewable,
-            private_views: &private_views,
-          };
-          FolderView::from(intermediate)
-        })
-        .collect(),
+      children: if depth == 0 {
+        vec![]
+      } else {
+        root
+          .children
+          .iter()
+          .filter(|v| !unviewable.contains(&v.id))
+          .map(|v| {
+            let intermediate = FolderViewIntermediate {
+              folder,
+              view_id: &v.id,
+              unviewable: &unviewable,
+              private_views: &private_views,
+              depth,
+            };
+            FolderView::from(intermediate)
+          })
+          .collect()
+      },
     }
   }
 }
@@ -202,6 +207,7 @@ struct FolderViewIntermediate<'a> {
   view_id: &'a str,
   unviewable: &'a HashSet<String>,
   private_views: &'a HashSet<String>,
+  depth: u32,
 }
 
 impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
@@ -227,19 +233,24 @@ impl<'a> From<FolderViewIntermediate<'a>> for FolderView {
       is_space: view_is_space(&view),
       is_private: fv.private_views.contains(&view.id),
       extra,
-      children: view
-        .children
-        .iter()
-        .filter(|v| !fv.unviewable.contains(&v.id))
-        .map(|v| {
-          FolderView::from(FolderViewIntermediate {
-            folder: fv.folder,
-            view_id: &v.id,
-            unviewable: fv.unviewable,
-            private_views: fv.private_views,
+      children: if fv.depth == 1 {
+        vec![]
+      } else {
+        view
+          .children
+          .iter()
+          .filter(|v| !fv.unviewable.contains(&v.id))
+          .map(|v| {
+            FolderView::from(FolderViewIntermediate {
+              folder: fv.folder,
+              view_id: &v.id,
+              unviewable: fv.unviewable,
+              private_views: fv.private_views,
+              depth: fv.depth - 1,
+            })
           })
-        })
-        .collect(),
+          .collect()
+      },
     }
   }
 }
@@ -265,4 +276,9 @@ fn view_is_space(view: &collab_folder::View) -> bool {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct QueryWorkspaceParam {
   pub include_member_count: Option<bool>,
+}
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct QueryWorkspaceFolder {
+  pub depth: Option<u32>,
 }

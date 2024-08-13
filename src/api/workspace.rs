@@ -1370,13 +1370,16 @@ async fn get_workspace_folder_handler(
   user_uuid: UserUuid,
   workspace_id: web::Path<String>,
   state: Data<AppState>,
+  query: web::Query<QueryWorkspaceFolder>,
 ) -> Result<Json<AppResponse<FolderView>>> {
+  let depth = query.depth.unwrap_or(1);
   let uid = state.user_cache.get_user_uid(&user_uuid).await?;
   let folder_view = biz::collab::ops::get_user_workspace_structure(
     state.group_manager.clone(),
     state.collab_access_control_storage.clone(),
     uid,
     workspace_id.into_inner(),
+    depth,
   )
   .await?;
   Ok(Json(AppResponse::Ok().with_data(folder_view)))

@@ -157,9 +157,18 @@ pub async fn get_user_workspace_structure(
   collab_storage: Arc<CollabAccessControlStorage>,
   uid: i64,
   workspace_id: String,
+  depth: u32,
 ) -> Result<FolderView, AppError> {
+  let depth_limit = 10;
+  if depth > depth_limit {
+    return Err(AppError::InvalidRequest(format!(
+      "Depth {} is too large (limit: {})",
+      depth, depth_limit
+    )));
+  }
   let folder = get_latest_collab_folder(group_manager, collab_storage, &uid, &workspace_id).await?;
-  Ok((&folder).into())
+  let folder_view = FolderView::from_folder(&folder, depth);
+  Ok(folder_view)
 }
 
 pub async fn get_latest_collab_folder(
